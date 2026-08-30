@@ -291,4 +291,149 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       end
     end
   end
+
+  describe "rescanning a file that already carries a match and retry state" do
+    setup %{run: run, library_path: lp} do
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      relative_path = "Season 01/Bluey.S01E01.mkv"
+
+      future_retry =
+        DateTime.utc_now() |> DateTime.add(300, :second) |> DateTime.truncate(:second)
+
+      # Stamps the same shape `FileIngest.candidate_attrs/2` and
+      # `record_failure/2` would after a real match attempt: a provider match
+      # plus a failure history sitting alongside it, exactly what
+      # `candidate_scan_attrs/4`'s clearing branch has to blow away and its
+      # preserving branch has to leave alone.
+      {:ok, matched} =
+        ImportCandidates.upsert(%{
+          library_path_id: lp.id,
+          relative_path: relative_path,
+          provider_type: "tmdb",
+          provider_id: "603",
+          title: "Some Match",
+          year: 1999,
+          confidence: 0.5,
+          attempts: 2,
+          last_error: "no_match",
+          next_retry_at: future_retry
+        })
+
+      refute is_nil(matched.provider_id)
+
+      {:ok, relative_path: relative_path}
+    end
+
+    test "an unchanged file preserves the match and retry state on rescan", %{
+      run: run,
+      library_path: lp,
+      relative_path: relative_path
+    } do
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      reloaded = ImportCandidates.get_by_path(lp.id, relative_path)
+      assert reloaded.provider_id == "603"
+      assert reloaded.provider_type == "tmdb"
+      assert reloaded.title == "Some Match"
+      assert reloaded.confidence == 0.5
+      assert reloaded.attempts == 2
+      assert reloaded.last_error == "no_match"
+      refute is_nil(reloaded.next_retry_at)
+    end
+
+    test "a changed file size clears the match and retry state on rescan", %{
+      run: run,
+      dir: dir,
+      library_path: lp,
+      relative_path: relative_path
+    } do
+      # The setup files are all written as the single byte "x"; anything
+      # longer changes size without necessarily changing mtime precision,
+      # isolating the size half of content_changed?/3's `or`.
+      File.write!(Path.join(dir, relative_path), "a file that is no longer one byte")
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      reloaded = ImportCandidates.get_by_path(lp.id, relative_path)
+      assert is_nil(reloaded.provider_id)
+      assert is_nil(reloaded.provider_type)
+      assert is_nil(reloaded.title)
+      assert is_nil(reloaded.year)
+      assert is_nil(reloaded.confidence)
+      assert reloaded.attempts == 0
+      assert is_nil(reloaded.last_error)
+      assert is_nil(reloaded.next_retry_at)
+    end
+
+    test "a changed mtime alone, same size, also clears the match and retry state", %{
+      run: run,
+      dir: dir,
+      library_path: lp,
+      relative_path: relative_path
+    } do
+      # Same one-byte content as the original write -- only the mtime moves,
+      # isolating mtime_differs?/2 from the size comparison entirely.
+      File.touch!(Path.join(dir, relative_path), System.os_time(:second) + 3_600)
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      reloaded = ImportCandidates.get_by_path(lp.id, relative_path)
+      assert is_nil(reloaded.provider_id)
+      assert reloaded.attempts == 0
+      assert is_nil(reloaded.next_retry_at)
+    end
+
+    test "a dismissal survives a size-triggered clear of the match and retry state", %{
+      run: run,
+      dir: dir,
+      library_path: lp,
+      relative_path: relative_path
+    } do
+      candidate = ImportCandidates.get_by_path(lp.id, relative_path)
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page([candidate.anchor_key])
+      assert {:ok, 3} = ImportCandidates.dismiss(scope)
+
+      File.write!(Path.join(dir, relative_path), "a file that is no longer one byte")
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      reloaded = ImportCandidates.get_by_path(lp.id, relative_path)
+      refute is_nil(reloaded.dismissed_at)
+      assert is_nil(reloaded.provider_id)
+      assert reloaded.attempts == 0
+      assert is_nil(reloaded.last_error)
+      assert is_nil(reloaded.next_retry_at)
+    end
+
+    test "a candidate with no stored mtime is not treated as changed, so its match survives a rescan",
+         %{run: run, library_path: lp, relative_path: relative_path} do
+      # Mirrors a candidate written by a path that never set mtime (e.g.
+      # `ImportCandidates.demote_episode_files/1`): there is nothing to
+      # compare the real file's mtime against, so mtime_differs?/2 must not
+      # treat that absence as proof of a change.
+      {:ok, _} =
+        ImportCandidates.upsert(%{
+          library_path_id: lp.id,
+          relative_path: relative_path,
+          mtime: nil
+        })
+
+      before_rescan = ImportCandidates.get_by_path(lp.id, relative_path)
+      assert is_nil(before_rescan.mtime)
+      assert before_rescan.provider_id == "603"
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      reloaded = ImportCandidates.get_by_path(lp.id, relative_path)
+      assert reloaded.provider_id == "603"
+      assert reloaded.attempts == 2
+      assert reloaded.next_retry_at == before_rescan.next_retry_at
+
+      # Phase 1 always refreshes mtime in its base attrs, changed or not, so
+      # the backfill itself is real -- this isn't passing because nothing
+      # was written at all.
+      refute is_nil(reloaded.mtime)
+    end
+  end
 end
