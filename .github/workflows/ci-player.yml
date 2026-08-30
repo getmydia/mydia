@@ -61,8 +61,17 @@ jobs:
           changed=""
           case "$EVENT" in
             pull_request)
+              # A failed `changes` job reports every dependent job as skipped,
+              # not failed -- exactly the ambiguous state this job exists to
+              # avoid on `Build / Web` and `Test / Player`. A transient API
+              # failure here must run everything rather than abort the step.
               changed="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/files" \
-                           --paginate --jq '.[].filename')"
+                           --paginate --jq '.[].filename' || echo "")"
+              if [ -z "$changed" ]; then
+                echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "Could not compute the change set; running everything."
+                exit 0
+              fi
               ;;
             push)
               # `before` is all-zeros on a branch's first push and unreliable
