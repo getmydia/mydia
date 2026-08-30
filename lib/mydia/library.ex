@@ -1856,32 +1856,6 @@ defmodule Mydia.Library do
     {created_count, errors}
   end
 
-  @doc """
-  Returns orphaned media files (files without media_item_id or episode_id).
-
-  These files were scanned but failed to match to any media items.
-  They can be safely re-matched or deleted.
-
-  ## Options
-    - `:preload` - List of associations to preload
-  """
-  @spec list_orphaned_media_files(keyword()) :: [MediaFile.t()]
-  def list_orphaned_media_files(opts \\ []) do
-    MediaFile
-    |> where([f], is_nil(f.media_item_id) and is_nil(f.episode_id))
-    |> where([f], is_nil(f.trashed_at))
-    |> maybe_preload(opts[:preload])
-    |> Repo.all()
-  end
-
-  @doc """
-  Checks if a media file is orphaned (has no parent association).
-  """
-  @spec orphaned_media_file?(MediaFile.t()) :: boolean()
-  def orphaned_media_file?(%MediaFile{} = media_file) do
-    is_nil(media_file.media_item_id) and is_nil(media_file.episode_id)
-  end
-
   ## Private Functions
 
   # Calculates the relative path and library_path_id for an absolute file path

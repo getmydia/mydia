@@ -2,31 +2,35 @@ defmodule Mydia.Jobs.ImportRun do
   @moduledoc """
   Coordinates one user-started import of a library path.
 
-  Two phases. Phase 1 walks the tree and commits a `media_file` row for every
-  file found, in transactions of 100. It does no HTTP, so it is fast, and once
-  it has run every file on disk is durably recorded. Phase 2 matches the
-  outstanding files against the metadata provider in chunks, caching a
-  candidate for each and, in unattended mode, linking the confident ones.
+  Two phases. Phase 1 walks the tree and upserts a durable
+  `Mydia.Library.ImportCandidate` row (see `Mydia.ImportCandidates`) for every
+  path found, in transactions of 100. It does no HTTP, so it is fast, and once
+  it has run every file on disk is durably recorded, path-keyed, and not yet
+  owned by anything. Phase 2 matches the outstanding candidates against the
+  metadata provider in chunks, caching a match on each candidate and, in
+  unattended mode, promoting the confident ones into owned `media_files` via
+  `Library.CandidatePromotion`.
 
   Stopping is cooperative. Stop writes `:stopping` to the run row; the
   coordinator re-reads that row between chunks and drains. Nothing is rolled
   back, because every unit of work was committed as it completed.
 
   There is no resume cursor. A later run rediscovers the outstanding work by
-  querying for it: phase 1 skips paths that already have rows, and phase 2
-  skips files that already have a candidate or a parent. The database is the
-  cursor.
+  querying for it: phase 1 skips paths that already own a `media_file` (active
+  or trashed), and phase 2 (`Mydia.ImportCandidates.outstanding/3`) skips
+  candidates that already carry a provider match, a dismissal, or an
+  unexpired retry backoff. The database is the cursor.
 
   Phase 2's walk (`match_loop/5`) is a one-way keyset scan over `id`, so it
   always terminates on its own -- each chunk advances the cursor past
   whatever it just processed, and the table is finite -- regardless of
-  whether every file in a chunk actually left the outstanding set. Reaching
-  the end of the walk is therefore not the same as the phase having
+  whether every candidate in a chunk actually left the outstanding set.
+  Reaching the end of the walk is therefore not the same as the phase having
   succeeded: `Library.FileIngest`'s progress contract (documented on that
-  module) says every file must leave the outstanding set, and
+  module) says every candidate must leave the outstanding set, and
   `verify_match_phase_complete/2` is what actually checks that, once the walk
-  is done, failing the run rather than reporting success over files the walk
-  quietly passed by.
+  is done, failing the run rather than reporting success over candidates the
+  walk quietly passed by.
 
   Crash recovery is `reconcile_interrupted_runs/0`, called once at boot.
   `Oban.Plugins.Lifeline` is deliberately not configured: its `rescue_after`
@@ -48,14 +52,17 @@ defmodule Mydia.Jobs.ImportRun do
 
   require Logger
 
-  alias Mydia.ImportGroups
+  alias Mydia.ImportCandidates
   alias Mydia.Library
 
   alias Mydia.Library.{
     BatchMatcher,
     FileIngest,
+    ImportCandidate,
     ImportRun,
     MetadataMatcher,
+    PathAnchor,
+    ReleaseParser,
     SampleDetector,
     Scanner
   }
@@ -111,7 +118,6 @@ defmodule Mydia.Jobs.ImportRun do
     try do
       with :ok <- run_scan_phase(run),
            :ok <- run_match_phase(Library.get_import_run(run.id)) do
-        update_import_groups(run)
         finish(run, :done)
       else
         :stopped ->
@@ -193,53 +199,11 @@ defmodule Mydia.Jobs.ImportRun do
     :ok
   end
 
-  # Recomputes `import_groups` for this run's library path once both phases
-  # have genuinely finished, so the review page's own read path
-  # (`ImportGroups.page/2`) reflects what this run just found instead of only
-  # ever being populated once, at upgrade time, by the backfill migration
-  # (`priv/repo/migrations/20260817143638_backfill_import_groups.exs`). That
-  # migration is the only other caller of `upsert_for_library/2` in
-  # production code; without a second one here, a fresh install's review page
-  # says "Nothing to review" forever, no matter how large the inbox grows.
-  #
-  # Called only from the `:ok` branch of `execute/2`'s `with`, after both
-  # `run_scan_phase/2` and `run_match_phase/2` returned `:ok` -- never on
-  # `:stopped`. A run cut short mid-match has files the match phase never
-  # got to; grouping over that partial state would render half-finished
-  # rollups for no benefit, since the next run over the same library
-  # recomputes from scratch anyway once it actually completes.
-  #
-  # `upsert_for_library/2` is idempotent and chunked (see its doc), the same
-  # property that lets the migration run it once over the whole database --
-  # so running it here, scoped to one library path, on every successful run
-  # is the same operation, not a new one, and it holds no long transaction a
-  # run of this length could not already tolerate.
-  #
-  # Wrapped in its own rescue so a bug in group computation can never turn a
-  # real `:done` run into a `:failed` one: the run's own outcome (files
-  # found, matched, linked) already happened and is real, and losing that
-  # verdict over a failure in a second, derived computation would be worse
-  # than the review page being one run behind, which a later successful run
-  # (or a manual re-run of the migration's logic) still corrects.
-  defp update_import_groups(run) do
-    library_path = Settings.get_library_path!(run.library_path_id)
-    ImportGroups.upsert_for_library(library_path, import_run_id: run.id)
-    :ok
-  rescue
-    error ->
-      Logger.error("Could not compute import groups for a finished import run",
-        import_run_id: run.id,
-        library_path_id: run.library_path_id,
-        error: Exception.format(:error, error, __STACKTRACE__)
-      )
-
-      :ok
-  end
-
   ## Phase 1: scan
 
   @doc """
-  Walks the library path and commits a `media_file` row per discovered file.
+  Walks the library path and upserts a durable `ImportCandidate` row per
+  discovered path not already owned by a `media_file`.
 
   Returns `:ok` when the whole tree was scanned, or `:stopped` if a stop was
   requested partway through. A partial scan is valid state, not an error.
@@ -251,11 +215,11 @@ defmodule Mydia.Jobs.ImportRun do
 
   That list currently names every value of `LibraryPath`'s type enum, so the
   guard turns nothing away today. It is kept because nothing downstream would
-  catch a new type: `Library.inbox_base_query/1` has no type filter, and
-  `MediaFile.library_type_compatible?/3` falls through to `true` for any type
-  it has no clause for. Adding a library type whose files are not movies or
-  episodes has to come here first, or an unattended run will send them to the
-  relay and link whatever comes back.
+  catch a new type: neither `ImportCandidates.outstanding/3` nor
+  `MediaFile.library_type_compatible?/3` (which falls through to `true` for
+  any type it has no clause for) filters by library type. Adding a library
+  type whose files are not movies or episodes has to come here first, or an
+  unattended run will send them to the relay and link whatever comes back.
 
   ## Options
 
@@ -324,38 +288,7 @@ defmodule Mydia.Jobs.ImportRun do
   defp insert_batch(batch, library_path, run) do
     {:ok, inserted} =
       Repo.transaction(fn ->
-        Enum.count(batch, fn file_info ->
-          relative_path = Path.relative_to(file_info.path, library_path.path)
-
-          case Library.list_media_files_by_relative_path(library_path.id, relative_path,
-                 include_trashed: true
-               ) do
-            [] ->
-              case Library.create_scanned_media_file(%{
-                     library_path_id: library_path.id,
-                     relative_path: relative_path,
-                     size: file_info.size,
-                     verified_at: DateTime.utc_now()
-                   }) do
-                {:ok, _} -> true
-                {:error, _} -> false
-              end
-
-            existing ->
-              # A file is "already recorded" when any live row exists, even
-              # alongside a trashed duplicate -- restoring the trashed copy
-              # would resurrect a path that is already owned. Only when every
-              # row is trashed does a restore make sense.
-              case Enum.find(existing, &is_nil(&1.trashed_at)) do
-                nil ->
-                  match?({:ok, _}, Library.restore_media_file(List.first(existing)))
-
-                _live ->
-                  # Already recorded by an earlier run. This is the resume path.
-                  false
-              end
-          end
-        end)
+        Enum.count(batch, &upsert_candidate_for_file(&1, library_path))
       end)
 
     current_run = Library.get_import_run(run.id)
@@ -368,19 +301,139 @@ defmodule Mydia.Jobs.ImportRun do
     broadcast(updated)
   end
 
+  # Returns whether this path was newly discovered (had no candidate before),
+  # which is what `insert_batch/3` counts toward `files_discovered`. A path
+  # already owned by a live or trashed `media_file` is skipped entirely: no
+  # candidate is written for it, matching the invariant that a `media_file`
+  # can never be parentless (Task 1's `media_files` CHECK) and never was
+  # meant to be revisited by a user-started import once something else
+  # already owns it.
+  defp upsert_candidate_for_file(file_info, library_path) do
+    relative_path = Path.relative_to(file_info.path, library_path.path)
+
+    if owned_path?(library_path.id, relative_path) do
+      false
+    else
+      existing = ImportCandidates.get_by_path(library_path.id, relative_path)
+      attrs = candidate_scan_attrs(file_info, library_path, relative_path, existing)
+
+      case ImportCandidates.upsert(attrs) do
+        {:ok, _candidate} ->
+          is_nil(existing)
+
+        {:error, changeset} ->
+          Logger.warning("Could not upsert an import candidate during a scan",
+            library_path_id: library_path.id,
+            relative_path: relative_path,
+            errors: inspect(changeset.errors)
+          )
+
+          false
+      end
+    end
+  end
+
+  # Deliberately `list_media_files_by_relative_path/3` rather than
+  # `get_media_file_by_relative_path/3`: the latter raises
+  # `Ecto.MultipleResultsError` on a duplicate row for one path, exactly the
+  # data anomaly (two builds of the scanner, or a scanner racing this
+  # coordinator) that stranded a run before `list_media_files_by_relative_path/3`
+  # was written for this same "does it already exist" check. Any row at all --
+  # active or trashed -- means the path is owned and phase 1 has nothing to do
+  # with it.
+  defp owned_path?(library_path_id, relative_path) do
+    library_path_id
+    |> Library.list_media_files_by_relative_path(relative_path, include_trashed: true)
+    |> Enum.any?()
+  end
+
+  # `size`/`mtime`/`parsed_info`/`media_type` are refreshed on every scan --
+  # they are derived from the file and the path alone, never from a match, so
+  # overwriting them is always safe and keeps them current if the file on disk
+  # changed. `discovered_at` is the one exception that is NOT refreshed: it is
+  # first-seen time, so an existing candidate's is carried forward.
+  #
+  # `dismissed_at` never appears in these attrs, in either branch: leaving it
+  # out of the params `ImportCandidate.changeset/2` casts is what preserves a
+  # human's dismissal across a rescan (`ImportCandidates.upsert/1`'s own
+  # contract). The match/retry fields (`provider_type`, `provider_id`,
+  # `title`, `year`, `confidence`, `attempts`, `last_error`, `next_retry_at`)
+  # are preserved the same way -- left out of the attrs -- unless the file's
+  # size or mtime actually changed on disk, in which case they are explicitly
+  # cleared: a match cached against the old bytes is not trustworthy evidence
+  # about the new ones, and phase 2 has to re-earn it.
+  defp candidate_scan_attrs(file_info, library_path, relative_path, existing) do
+    mtime = DateTime.truncate(file_info.modified_at, :second)
+    parsed = ReleaseParser.parse_with_path(file_info.path)
+    anchor = PathAnchor.anchor_for(file_info.path, library_path.path)
+
+    base = %{
+      library_path_id: library_path.id,
+      relative_path: relative_path,
+      anchor_key: anchor.cluster_key,
+      size: file_info.size,
+      mtime: mtime,
+      media_type: to_string(parsed.type),
+      parsed_info: scan_parsed_info(parsed),
+      discovered_at: existing_discovered_at(existing)
+    }
+
+    if existing && content_changed?(existing, file_info.size, mtime) do
+      Map.merge(base, %{
+        provider_type: nil,
+        provider_id: nil,
+        title: nil,
+        year: nil,
+        confidence: nil,
+        attempts: 0,
+        last_error: nil,
+        next_retry_at: nil
+      })
+    else
+      base
+    end
+  end
+
+  defp existing_discovered_at(nil), do: DateTime.utc_now() |> DateTime.truncate(:second)
+  defp existing_discovered_at(existing), do: existing.discovered_at
+
+  defp content_changed?(existing, size, mtime) do
+    existing.size != size or mtime_differs?(existing.mtime, mtime)
+  end
+
+  # A missing mtime on either side (a candidate written by a path that never
+  # set it, such as `ImportCandidates.demote_episode_files/1`) means there is
+  # nothing to compare against, not proof that the file changed -- treating it
+  # as a change would clear a demoted candidate's deliberately preserved
+  # provider identity the moment a later scan revisits its path.
+  defp mtime_differs?(nil, _mtime), do: false
+  defp mtime_differs?(_mtime, nil), do: false
+  defp mtime_differs?(a, b), do: DateTime.compare(a, b) != :eq
+
+  defp scan_parsed_info(parsed) do
+    %{
+      "type" => to_string(parsed.type),
+      "season" => parsed.season,
+      "episodes" => parsed.episodes || [],
+      "is_sample" => parsed.is_sample || false,
+      "is_trailer" => parsed.is_trailer || false,
+      "is_extra" => parsed.is_extra || false
+    }
+  end
+
   ## Phase 2: match
 
   @doc """
-  Matches outstanding files in chunks, caching a candidate for each.
+  Matches outstanding candidates in chunks, caching a match on each.
 
-  In `:unattended` mode a match at or above the confidence threshold is linked
-  immediately. In `:review` mode nothing is linked from an external provider
-  match, though a file whose show already exists locally is still associated:
-  that needs no item creation and no human judgement.
+  In `:unattended` mode a match at or above the confidence threshold is
+  promoted into owned media immediately. In `:review` mode nothing is
+  promoted from an external provider match; the candidate stays for a human
+  to decide.
 
-  Returns `:ok` when no unmatched files remain, or `:stopped` if a stop was
-  requested. Between chunks the run row is re-read, which is the only place a
-  stop can take effect.
+  Returns `:ok` when no outstanding candidates remain, or `:stopped` if a stop
+  was requested. Between chunks the run row is re-read, which is the only
+  place a stop can take effect.
 
   ## Options
 
@@ -390,7 +443,7 @@ defmodule Mydia.Jobs.ImportRun do
       concurrently running async test that also resolves the default config).
     * `:matcher` - a `Mydia.Library.Matcher` implementation, defaults to
       `MetadataMatcher`. Same seam `BatchMatcher.match_paths/2` already takes;
-      exposed here too so a test can drive `FileIngest`'s decision (link,
+      exposed here too so a test can drive `FileIngest`'s decision (promote,
       candidate, or a genuine write failure) directly, without needing a
       Bypass payload shaped to provoke it.
     * `:after_chunk` - a 0-arity function invoked once a chunk has committed,
@@ -427,9 +480,7 @@ defmodule Mydia.Jobs.ImportRun do
     if Library.import_run_stopping?(run.id) do
       :stopped
     else
-      case Library.list_unmatched_media_file_paths(library_path.id, @match_chunk_size,
-             after_id: after_id
-           ) do
+      case ImportCandidates.outstanding(library_path.id, @match_chunk_size, after: after_id) do
         [] ->
           :ok
 
@@ -438,61 +489,68 @@ defmodule Mydia.Jobs.ImportRun do
             process_match_chunk(chunk, run, library_path, config, matcher, broadcast_state)
 
           after_chunk.()
-          {last_id, _path} = List.last(chunk)
+          last_id = chunk |> List.last() |> Map.fetch!(:id)
           match_loop(run, library_path, config, matcher, after_chunk, last_id, broadcast_state)
       end
     end
   end
 
-  # The keyset walk above can only prove it saw no unresolved row above its
-  # cursor; it cannot prove none remain below it. A `FileIngest` bug that
-  # leaves a file matching neither a parent nor a rank-0 candidate (breaking
-  # the progress contract documented on that module) keeps whatever `id` it
-  # already had, so once the walk's cursor passes it, the walk never selects
-  # that file again and still reports the phase done. This is the real
-  # backstop for that contract now. It is strictly better than the per-chunk
-  # equality check it replaces (deleted -- see this function's history if
-  # it's needed again): that guard only fired once the stuck rows happened to
-  # be the entire remaining window, in effect only once they sat at the head
-  # of what was left to scan, while this catches them wherever they are.
+  # The keyset walk above can only prove it saw no outstanding candidate above
+  # its cursor; it cannot prove none remain below it. A `FileIngest` bug that
+  # leaves a candidate with no match, no retry timestamp, no dismissal, and no
+  # promotion (breaking the progress contract documented on that module) keeps
+  # whatever `id` it already had, so once the walk's cursor passes it, the
+  # walk never selects that candidate again and still reports the phase done.
+  # This is the real backstop for that contract now. It is strictly better
+  # than a per-chunk equality check: that guard only fires once the stuck rows
+  # happen to be the entire remaining window, in effect only once they sit at
+  # the head of what was left to scan, while this catches them wherever they
+  # are.
   #
-  # Deliberately `Library.count_files_without_parent_or_candidate/1`, not a
-  # count over the same eligible-for-retry predicate the walk itself queries:
-  # that predicate is time-sensitive (a failure candidate's `next_retry_at`
-  # expires and re-enters the set on its own), so reusing it here would flag
-  # a perfectly healthy file -- one that already satisfied the contract via a
-  # rank-0 candidate -- as corrupted state the moment its backoff elapsed
-  # after this walk had already moved past it. See that function's doc.
+  # Deliberately re-runs `ImportCandidates.outstanding/3`'s own predicate
+  # (via `count_outstanding/1`) rather than a stricter "no candidate row at
+  # all" check: under this model every discovered path already IS a candidate
+  # row from phase 1 onward, so there is no separate "no candidate" state left
+  # to detect. A candidate whose backoff has not yet elapsed is healthy,
+  # expected steady state -- excluded from the count below the same way it is
+  # excluded from the walk -- and only a candidate the walk passed without
+  # leaving in ANY resolved state (matched, freshly retried, dismissed, or
+  # promoted away entirely) reappears here.
   defp verify_match_phase_complete(run, library_path) do
-    case Library.count_files_without_parent_or_candidate(library_path.id) do
+    case ImportCandidates.count_outstanding(library_path.id) do
       0 ->
         :ok
 
       count ->
-        sample_ids = Library.list_file_ids_without_parent_or_candidate(library_path.id, 5)
+        sample_ids =
+          library_path.id
+          |> ImportCandidates.outstanding(5)
+          |> Enum.map(& &1.id)
 
-        # `count:`/`media_file_ids:` (a comma-joined string, not a raw list)
+        # `count:`/`candidate_ids:` (a comma-joined string, not a raw list)
         # match `Library.drop_unresolvable_paths/1`'s convention for the same
         # reason: neither key is in `config :logger, :default_formatter`'s
         # metadata allowlist under those other names, so anything else here
         # renders nowhere -- silently, the same failure mode this whole check
         # exists to stop happening one layer up.
-        Logger.error("Import run finished matching but files are still outstanding",
+        Logger.error("Import run finished matching but candidates are still outstanding",
           import_run_id: run.id,
           library_path_id: library_path.id,
           count: count,
-          media_file_ids: Enum.map_join(sample_ids, ",", & &1)
+          candidate_ids: Enum.map_join(sample_ids, ",", & &1)
         )
 
         {:error,
-         {:files_outstanding,
+         {:candidates_outstanding,
           "The import finished but #{count} file(s) never got a match result and are still outstanding. This is a bug, please report it."}}
     end
   end
 
   defp process_match_chunk(chunk, run, library_path, config, matcher, broadcast_state) do
-    by_path = Map.new(chunk, fn {file_id, path} -> {path, file_id} end)
-    policy = policy_for(run.mode)
+    by_path =
+      Map.new(chunk, fn candidate -> {ImportCandidate.absolute_path(candidate), candidate} end)
+
+    policy = if run.mode == :unattended, do: :unattended, else: :review
 
     results =
       by_path
@@ -504,17 +562,17 @@ defmodule Mydia.Jobs.ImportRun do
         provider: library_path.tv_metadata_source
       )
 
-    linked =
+    promoted =
       results
       |> Enum.map(fn {path, result} -> ingest_result(by_path, path, result, policy, config) end)
-      |> Enum.count(&(&1 == :linked))
+      |> Enum.count(&match?({:promoted, _}, &1))
 
     latest = Library.get_import_run(run.id)
 
     {:ok, updated} =
       Library.update_import_run(latest, %{
         files_matched: latest.files_matched + length(results),
-        files_linked: latest.files_linked + linked
+        files_linked: latest.files_linked + promoted
       })
 
     broadcast(updated)
@@ -528,8 +586,7 @@ defmodule Mydia.Jobs.ImportRun do
   end
 
   defp ingest_result(by_path, path, result, policy, config) do
-    file_id = Map.fetch!(by_path, path)
-    media_file = Library.get_media_file!(file_id)
+    candidate = Map.fetch!(by_path, path)
 
     match =
       case result do
@@ -537,17 +594,8 @@ defmodule Mydia.Jobs.ImportRun do
         {:error, _reason} -> nil
       end
 
-    case FileIngest.ingest(media_file, match, policy: policy, config: config) do
-      {:linked, _item} -> :linked
-      _ -> :matched
-    end
+    FileIngest.ingest(candidate, match, policy: policy, config: config)
   end
-
-  # Review mode caches candidates and links nothing new from the relay, so the
-  # human decides. Unattended mode links anything confident enough and leaves
-  # the rest as a candidate.
-  defp policy_for(:review), do: :local_only
-  defp policy_for(:unattended), do: :create_items
 
   @broadcast_file_interval 1_000
   @broadcast_ms_interval 1_000

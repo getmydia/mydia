@@ -2,9 +2,14 @@ defmodule Mydia.Jobs.ImportRunJobTest do
   use Mydia.DataCase, async: false
 
   import Mydia.AccountsFixtures
+  import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.ImportCandidates
   alias Mydia.Library
+  alias Mydia.Library.ImportCandidate
+  alias Mydia.Library.MediaFile
+  alias Mydia.Library.SelectionScope
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
 
   setup do
@@ -46,11 +51,13 @@ defmodule Mydia.Jobs.ImportRunJobTest do
   end
 
   describe "phase 1: scanning" do
-    test "commits a media_file row for every discovered file", %{run: run, library_path: lp} do
+    test "upserts an import candidate for every discovered file, creating no media files", %{
+      run: run
+    } do
       assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 
-      files = Library.list_media_files(library_path_id: lp.id)
-      assert length(files) == 3
+      assert Repo.aggregate(ImportCandidate, :count) == 3
+      assert Repo.aggregate(MediaFile, :count) == 0
     end
 
     test "records the discovered count on the run", %{run: run} do
@@ -59,38 +66,63 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       assert Library.get_import_run(run.id).files_discovered == 3
     end
 
-    test "is idempotent, so a resumed run creates no duplicates", %{run: run, library_path: lp} do
+    test "is idempotent, so a resumed run creates no duplicates", %{run: run} do
       :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
       :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 
-      assert length(Library.list_media_files(library_path_id: lp.id)) == 3
+      assert Repo.aggregate(ImportCandidate, :count) == 3
     end
 
-    test "tolerates duplicate rows for one path without crashing or adding more", %{
-      run: run,
-      library_path: lp
-    } do
+    test "skips a path already owned by a parented media file", %{run: run, library_path: lp} do
+      # A real ownership decision made outside this run entirely (a prior
+      # accept, a local show, a scanner link) must not be revisited: the file
+      # already belongs to something, and `media_files` now enforces (via a
+      # database CHECK) that it can never go back to being parentless.
+      show = media_item_fixture(%{type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      {:ok, _parented} =
+        Library.create_media_file(%{
+          library_path_id: lp.id,
+          relative_path: "Season 01/Bluey.S01E01.mkv",
+          episode_id: episode.id,
+          size: 1_000
+        })
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+
+      assert Repo.aggregate(ImportCandidate, :count) == 2
+      assert ImportCandidates.get_by_path(lp.id, "Season 01/Bluey.S01E01.mkv") == nil
+      assert Library.get_import_run(run.id).files_discovered == 2
+    end
+
+    test "tolerates duplicate parented rows for one path without crashing, and still skips it",
+         %{run: run, library_path: lp} do
       # The data anomaly that used to strand a run: two builds of the scanner
       # (or a scanner racing the import coordinator) created two rows for the
-      # same relative path. get_media_file_by_relative_path/3 raised
-      # Ecto.MultipleResultsError here, which Oban discarded after retries,
-      # leaving the run row :running forever.
+      # same relative path. `get_media_file_by_relative_path/3` raises
+      # `Ecto.MultipleResultsError` on that shape, which Oban discarded after
+      # retries, leaving the run row :running forever -- this is why phase 1
+      # checks ownership with the duplicate-safe
+      # `list_media_files_by_relative_path/3` instead.
       relative_path = "Season 01/Bluey.S01E01.mkv"
+      show = media_item_fixture(%{type: "tv_show"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
 
       for _ <- 1..2 do
         {:ok, _} =
-          Library.create_scanned_media_file(%{
+          Library.create_media_file(%{
             library_path_id: lp.id,
             relative_path: relative_path,
-            size: 1,
-            verified_at: DateTime.utc_now()
+            episode_id: episode.id,
+            size: 1_000
           })
       end
 
       assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 
-      files = Library.list_media_files(library_path_id: lp.id)
-      assert Enum.count(files, &(&1.relative_path == relative_path)) == 2
+      assert Repo.aggregate(ImportCandidate, :count) == 2
+      assert ImportCandidates.get_by_path(lp.id, relative_path) == nil
     end
 
     test "stops when a stop was requested", %{run: run} do
@@ -99,7 +131,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       assert :stopped = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
     end
 
-    test "keeps rows a batch already committed when a stop lands mid-scan, and a resumed run finishes the rest",
+    test "keeps candidates a batch already committed when a stop lands mid-scan, and a resumed run finishes the rest",
          %{run: run, dir: dir, library_path: lp} do
       # @scan_batch_size is 100, so this forces a second reduce_while
       # iteration to exist: without it, a stop could only ever be observed
@@ -131,7 +163,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
                  after_batch: stop_after_first_batch
                )
 
-      partial_count = length(Library.list_media_files(library_path_id: lp.id))
+      partial_count = Repo.aggregate(ImportCandidate, :count)
 
       # Both halves matter: >0 proves the first batch's commit was not rolled
       # back, <total proves the stop actually cut the scan short rather than
@@ -158,7 +190,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
 
       assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(resumed_run.id))
 
-      final_count = length(Library.list_media_files(library_path_id: lp.id))
+      final_count = Repo.aggregate(ImportCandidate, :count)
       assert final_count == total_on_disk
     end
   end
@@ -209,7 +241,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
     # enum values that run_scan_phase/2 had to turn away, because nothing
     # downstream (inbox_base_query/1, MediaFile.library_type_compatible?/3)
     # restricts by library type, so an unattended run over one could link a
-    # track to a movie item. Those types are gone, and no constructible
+    # track to a movie. Those types are gone, and no constructible
     # library path is refused any more -- library_path_fixture cannot even
     # build one, since the changeset validates against the same enum.
     #
@@ -227,38 +259,36 @@ defmodule Mydia.Jobs.ImportRunJobTest do
     end
   end
 
-  describe "list_unmatched_media_file_paths/2" do
-    test "returns files with no candidate and no parent", %{run: run, library_path: lp} do
-      :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
-
-      assert length(Library.list_unmatched_media_file_paths(lp.id, 100)) == 3
-    end
-
-    test "excludes a file whose failure is still inside its retry window", %{
+  describe "a dismissed candidate survives a rescan" do
+    test "dismissed_at is preserved across the whole scan and match phases", %{
       run: run,
       library_path: lp
     } do
-      :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 
-      [{file_id, _path} | _] = Library.list_unmatched_media_file_paths(lp.id, 100)
+      candidate = ImportCandidates.get_by_path(lp.id, "Season 01/Bluey.S01E01.mkv")
 
-      # Mirrors what `FileIngest.record_failure/2` actually writes on a first
-      # attempt: a rank-0 candidate with `next_retry_at` in the future. A
-      # candidate with `next_retry_at` unset is a different case (a
-      # pre-existing failure predating the backoff, or one written outside
-      # `record_failure/2`) and is deliberately still eligible -- see
-      # `Library.list_unmatched_media_file_paths/2`'s moduledoc.
-      future = DateTime.utc_now() |> DateTime.add(300, :second) |> DateTime.truncate(:second)
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page([candidate.anchor_key])
+      assert {:ok, 3} = ImportCandidates.dismiss(scope)
 
-      {:ok, _} =
-        Library.upsert_match_candidate(%{
-          media_file_id: file_id,
-          rank: 0,
-          attempts: 1,
-          next_retry_at: future
-        })
+      # Rerunning phase 1 must not resurrect the dismissal, whether or not
+      # anything else about the path changed.
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 
-      assert length(Library.list_unmatched_media_file_paths(lp.id, 100)) == 2
+      for ep <- 1..3 do
+        reloaded = ImportCandidates.get_by_path(lp.id, "Season 01/Bluey.S01E0#{ep}.mkv")
+        refute is_nil(reloaded.dismissed_at)
+      end
+
+      # And phase 2 must never pick a dismissed candidate back up.
+      assert :ok = ImportRunJob.run_match_phase(Library.get_import_run(run.id))
+      assert Library.get_import_run(run.id).files_matched == 0
+
+      for ep <- 1..3 do
+        reloaded = ImportCandidates.get_by_path(lp.id, "Season 01/Bluey.S01E0#{ep}.mkv")
+        refute is_nil(reloaded.dismissed_at)
+        assert is_nil(reloaded.provider_id)
+      end
     end
   end
 end

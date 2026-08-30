@@ -451,6 +451,67 @@ defmodule Mydia.ImportCandidates do
     )
   end
 
+  # --- Match-phase discovery ------------------------------------------------
+
+  @doc """
+  Keyset page of candidates still needing a match attempt, for `Jobs.ImportRun`'s
+  match loop.
+
+  A candidate is outstanding when it is undismissed, carries no provider match
+  yet, and either has never failed before or its backoff (`next_retry_at`) has
+  already passed. A candidate leaves this set the moment `FileIngest` records a
+  match, a retry timestamp, or `dismiss/1` stamps it -- and it stops existing
+  at all once `CandidatePromotion` promotes it, so every one of the four exits
+  `Jobs.ImportRun`'s moduledoc promises removes a row from here for good (a
+  retry timestamp only removes it until the backoff elapses, which is the
+  intended, time-bounded re-entry, not a bug).
+
+  Returns `%ImportCandidate{}` structs with `:library_path` preloaded, so a
+  caller can build each one's absolute path via `ImportCandidate.absolute_path/1`
+  without a second query per row.
+
+  ## Options
+
+    * `:after` - keyset cursor. When set, only rows with `id` greater than
+      this are considered, matching the `:after_id` convention `Jobs.ImportRun`
+      already uses elsewhere.
+  """
+  @spec outstanding(binary(), pos_integer(), keyword()) :: [ImportCandidate.t()]
+  def outstanding(library_path_id, limit, opts \\ []) do
+    library_path_id
+    |> outstanding_query()
+    |> maybe_after_id(Keyword.get(opts, :after))
+    |> order_by([c], asc: c.id)
+    |> limit(^limit)
+    |> preload(:library_path)
+    |> Repo.all()
+  end
+
+  @doc """
+  Counts every outstanding candidate for one library path (see `outstanding/3`).
+
+  Deliberately not `length(outstanding(library_path_id, :infinity))`: this is
+  `Jobs.ImportRun.verify_match_phase_complete/2`'s completion backstop, run
+  once per match phase, and must stay a single aggregate query regardless of
+  how large the outstanding set is.
+  """
+  @spec count_outstanding(binary()) :: non_neg_integer()
+  def count_outstanding(library_path_id) do
+    library_path_id
+    |> outstanding_query()
+    |> Repo.aggregate(:count)
+  end
+
+  defp outstanding_query(library_path_id) do
+    now = now()
+
+    ImportCandidate
+    |> where([c], c.library_path_id == ^library_path_id)
+    |> where([c], is_nil(c.dismissed_at))
+    |> where([c], is_nil(c.provider_id))
+    |> where([c], is_nil(c.next_retry_at) or c.next_retry_at <= ^now)
+  end
+
   # Walks a whole group's undismissed candidates in keyset pages of
   # #{@member_page_size}, so a group the size of a full season tree is never
   # one unbounded allocation, while still handing callers (`accept/2`,

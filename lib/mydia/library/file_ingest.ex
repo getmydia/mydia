@@ -14,7 +14,6 @@ defmodule Mydia.Library.FileIngest do
   @type result ::
           {:promoted, [MediaFile.t()]}
           | {:candidate, ImportCandidate.t()}
-          | {:linked, Mydia.Media.MediaItem.t()}
           | :no_match
           | {:error, term()}
 

@@ -1,20 +1,33 @@
 defmodule Mydia.Jobs.ImportRunCreatesImportGroupsTest do
   @moduledoc """
-  Regression coverage for the whole-branch review's Critical 1: nothing in
-  production ever called `ImportGroups.upsert_for_library/2` except the
-  one-time backfill migration
-  (`priv/repo/migrations/20260817143638_backfill_import_groups.exs`). Every
-  real import run wrote `MatchCandidate` rows exactly as before and never
-  touched `import_groups`, so the review page -- which reads only
-  `import_groups` -- showed "Nothing to review" no matter how large the
-  inbox grew, on a fresh install permanently.
+  Regression coverage for the review page's read path after the candidate
+  split.
+
+  This file used to guard a materialization step
+  (`ImportGroups.upsert_for_library/2`) that `Jobs.ImportRun` had to call
+  once a run finished, because nothing else in production ever called it
+  except a one-time backfill migration
+  (`priv/repo/migrations/20260817143638_backfill_import_groups.exs`): every
+  real import run wrote `MatchCandidate` rows and never touched
+  `import_groups`, so the review page -- which read only `import_groups` --
+  showed "Nothing to review" no matter how large the inbox grew, on a fresh
+  install permanently.
+
+  That materialization step is gone now. `run_scan_phase/2` and
+  `run_match_phase/2` write durable `ImportCandidate` rows directly, and
+  `Mydia.ImportCandidates.page/2` groups them at query time on every read --
+  there is no separate rollup to keep in sync, so there is no analogous gap
+  to leave unclosed. What this file still guards is the same underlying risk
+  in its new shape: a real end-to-end run through `perform/1` has to leave
+  something the review page's actual read path can show, not silently
+  produce candidates a group query can't see.
 
   Deliberately drives the whole coordinator through `perform/1` (the actual
-  Oban entry point), not `run_scan_phase/2` and `run_match_phase/2` called
-  by hand the way most other coordinator tests do. Calling the phases
-  directly is exactly what let this gap ship unnoticed: every per-phase test
-  already passed, because the phases themselves were never the problem --
-  the missing call between them and `finish/2` was.
+  Oban entry point), not `run_scan_phase/2` and `run_match_phase/2` called by
+  hand the way most other coordinator tests do -- calling the phases directly
+  is exactly what let the original gap ship unnoticed: every per-phase test
+  already passed, because the phases themselves were never the problem, the
+  missing call between them and the review page's read path was.
   """
   use Mydia.DataCase, async: false
 
@@ -22,7 +35,7 @@ defmodule Mydia.Jobs.ImportRunCreatesImportGroupsTest do
   import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
-  alias Mydia.ImportGroups
+  alias Mydia.ImportCandidates
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
   alias Mydia.Library
   alias Mydia.MetadataStubProvider
@@ -52,7 +65,7 @@ defmodule Mydia.Jobs.ImportRunCreatesImportGroupsTest do
     })
   end
 
-  test "a real scan + match run through Jobs.ImportRun populates import_groups for the newly matched files" do
+  test "a real scan + match run through Jobs.ImportRun leaves a reviewable candidate group" do
     title = MetadataStubProvider.movie_title()
     lp = library_with("movies", ["#{title} (1999).mkv"])
 
@@ -60,33 +73,32 @@ defmodule Mydia.Jobs.ImportRunCreatesImportGroupsTest do
       Library.create_import_run(%{
         library_path_id: lp.id,
         user_id: user_fixture().id,
-        # Review mode: the match phase caches the relay's candidate instead
-        # of linking it, so the file stays unresolved and is exactly what
-        # ImportGroups.upsert_for_library/2 groups -- an unattended run
-        # would link a confident movie match immediately, leaving nothing
-        # unresolved to prove the grouping step ran at all.
+        # Review mode: the match phase caches the relay's match instead of
+        # promoting it, so the candidate stays around for review -- exactly
+        # what ImportCandidates.page/2 groups. An unattended run would
+        # promote a confident movie match immediately, deleting the
+        # candidate and leaving nothing behind to prove the review page's
+        # read path works at all.
         mode: :review
       })
 
     assert :ok = perform!(run)
     assert Library.get_import_run(run.id).status == :done
 
-    # This is the review page's own read path (ImportGroups.page/2 is what
-    # MydiaWeb.ImportMediaLive.Index.load_groups/1 calls), not a raw query
-    # against import_groups -- the gap this test guards against is specifically
-    # that page returning nothing.
-    {groups, cursor} = ImportGroups.page(lp.id)
+    # This is the review page's own read path (ImportCandidates.page/2 is
+    # what MydiaWeb.ImportMediaLive.Index.load_groups/1 calls), not a raw
+    # query against import_candidates -- the gap this test guards against is
+    # specifically that page returning nothing.
+    {groups, cursor} = ImportCandidates.page(lp.id)
 
     assert [group] = groups
     assert cursor == nil
     assert group.file_count == 1
-    assert group.unresolved_count == 1
-    assert group.import_run_id == run.id
     assert group.suggested_title == title
     assert group.provider_id != nil
   end
 
-  test "a stopped run leaves import_groups untouched" do
+  test "a stopped run leaves nothing to review" do
     title = MetadataStubProvider.movie_title()
     lp = library_with("movies", ["#{title} (1999).mkv"])
 
@@ -102,11 +114,11 @@ defmodule Mydia.Jobs.ImportRunCreatesImportGroupsTest do
     assert :ok = perform!(run)
     assert Library.get_import_run(run.id).status == :stopped
 
-    {groups, _cursor} = ImportGroups.page(lp.id)
+    {groups, _cursor} = ImportCandidates.page(lp.id)
     assert groups == []
   end
 
-  test "a second run over the same library refreshes groups instead of duplicating them" do
+  test "a second run over the same library does not duplicate the candidate group" do
     title = MetadataStubProvider.movie_title()
     lp = library_with("movies", ["#{title} (1999).mkv"])
 
@@ -128,12 +140,14 @@ defmodule Mydia.Jobs.ImportRunCreatesImportGroupsTest do
 
     assert :ok = perform!(second_run)
 
-    {groups, _cursor} = ImportGroups.page(lp.id)
+    {groups, _cursor} = ImportCandidates.page(lp.id)
 
-    # Still one group -- upsert_for_library/2 recomputes the existing row by
-    # its cluster key rather than inserting a second one -- but stamped with
-    # the run that most recently touched it.
+    # Still one group -- phase 1's upsert keyed on (library_path_id,
+    # relative_path) revisits the same candidate row rather than creating a
+    # second one, and phase 2 finds nothing outstanding to re-match once the
+    # first run already recorded a match -- so the group is neither
+    # duplicated nor disturbed by running the coordinator again.
     assert [group] = groups
-    assert group.import_run_id == second_run.id
+    assert group.file_count == 1
   end
 end
