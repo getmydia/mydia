@@ -1,376 +1,93 @@
 defmodule Mydia.Library.FileIngestTest do
-  @moduledoc """
-  The `:local_only` policy is a regression guard, not a new feature. It must
-  reproduce what `Jobs.LibraryScanner` did before the extraction: link a match
-  that came from the local database, and leave an external match orphaned with
-  its candidate cached for manual review.
-  """
   use Mydia.DataCase, async: true
 
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
-  alias Mydia.Library
-  alias Mydia.Library.FileIngest
-  alias Mydia.Library.MatchCandidate
-  alias Mydia.Library.MediaFile
-  alias Mydia.Library.ReleaseParser
-  alias Mydia.Library.Structs.ParsedFileInfo
-  alias Mydia.Library.Structs.Quality
-  alias Mydia.Settings.LibraryPath
+  alias Mydia.Library.{FileIngest, ImportCandidate, MediaFile}
+  alias Mydia.Repo
 
-  defp match(overrides) do
-    Map.merge(
-      %{
-        provider_id: "603",
-        provider_type: :tmdb,
-        title: "The Matrix",
-        year: 1999,
-        match_confidence: 0.95,
-        metadata: %{},
-        from_local_db: false,
-        parsed_info: %{type: :movie, season: nil, episodes: []}
-      },
-      Map.new(overrides)
-    )
-  end
-
-  defp local_tv_match(show, episodes) do
+  defp match(movie, confidence) do
     %{
-      provider_id: to_string(show.tvdb_id),
-      provider_type: :tvdb,
-      title: show.title,
-      year: show.year,
-      match_confidence: 0.95,
-      metadata: %{},
-      from_local_db: true,
-      parsed_info: %{type: :tv_show, season: 1, episodes: episodes}
+      provider_id: Integer.to_string(movie.tmdb_id),
+      provider_type: :tmdb,
+      title: movie.title,
+      year: movie.year,
+      match_confidence: confidence,
+      parsed_info: %{type: :movie, season: nil, episodes: []}
     }
   end
 
-  describe "ingest/3 with no match" do
-    test "returns :no_match and records the attempt" do
-      file = orphaned_media_file_fixture()
+  defp candidate do
+    library_path = library_path_fixture(%{type: "movies"})
 
-      assert :no_match = FileIngest.ingest(file, nil, policy: :create_items)
-
-      assert [candidate] = Library.list_match_candidates(file.id)
-      assert candidate.attempts == 1
-      assert is_nil(candidate.provider_id)
-    end
+    import_candidate_fixture(%{
+      library_path_id: library_path.id,
+      media_type: "movie",
+      parsed_info: %{"type" => "movie"}
+    })
   end
 
-  describe "ingest/3 with policy :local_only" do
-    test "caches a candidate and does not link an external match" do
-      file = orphaned_media_file_fixture()
+  test "review mode retains an otherwise promotable candidate" do
+    candidate = candidate()
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_301})
 
-      assert {:candidate, candidate} =
-               FileIngest.ingest(file, match(from_local_db: false), policy: :local_only)
+    assert {:candidate, %ImportCandidate{id: id}} =
+             FileIngest.ingest(candidate, match(movie, 1.0), policy: :review)
 
-      assert candidate.provider_id == "603"
-      assert candidate.confidence == 0.95
-
-      assert Library.get_media_file!(file.id).media_item_id == nil
-    end
-
-    test "caches a candidate for a high confidence external match too" do
-      file = orphaned_media_file_fixture()
-
-      assert {:candidate, _} =
-               FileIngest.ingest(file, match(from_local_db: false, match_confidence: 1.0),
-                 policy: :local_only
-               )
-
-      assert Library.get_media_file!(file.id).media_item_id == nil
-    end
+    assert id == candidate.id
+    assert Repo.get(ImportCandidate, candidate.id).confidence == 1.0
+    refute Repo.exists?(MediaFile)
   end
 
-  describe "ingest/3 with policy :create_items" do
-    test "caches a candidate below the confidence threshold" do
-      file = orphaned_media_file_fixture()
+  test "unattended mode promotes at the 0.85 boundary" do
+    candidate = candidate()
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_302})
 
-      assert {:candidate, candidate} =
-               FileIngest.ingest(file, match(match_confidence: 0.4), policy: :create_items)
+    assert {:promoted, [%MediaFile{media_item_id: media_item_id}]} =
+             FileIngest.ingest(candidate, match(movie, 0.85), policy: :unattended)
 
-      assert candidate.confidence == 0.4
-      assert Library.get_media_file!(file.id).media_item_id == nil
-    end
-
-    test "honours a caller supplied threshold" do
-      file = orphaned_media_file_fixture()
-
-      assert {:candidate, _} =
-               FileIngest.ingest(file, match(match_confidence: 0.85),
-                 policy: :create_items,
-                 threshold: 0.9
-               )
-    end
+    assert media_item_id == movie.id
+    refute Repo.get(ImportCandidate, candidate.id)
   end
 
-  describe "ingest/3 only reports a link when the file really got a parent" do
-    # A local-database match keeps this network-free: the show already exists
-    # and was created moments ago, so `MetadataEnricher.update_existing_media_item/5`
-    # takes its "recently enriched, skip the re-fetch" branch, and the show
-    # already having an episode row takes the fast association path. What is
-    # under test is the branch after that, where the target episode does not
-    # exist: `enrich/2` logs a warning and still returns `{:ok, media_item}`.
-    setup do
-      library_path = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
+  test "unattended mode retains a candidate below the threshold" do
+    candidate = candidate()
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_303})
 
-      show =
-        media_item_fixture(%{
-          type: "tv_show",
-          title: "Ingest Contract Show",
-          tvdb_id: System.unique_integer([:positive])
-        })
+    assert {:candidate, %ImportCandidate{id: id}} =
+             FileIngest.ingest(candidate, match(movie, 0.849), policy: :unattended)
 
-      _existing_episode =
-        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
-
-      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
-
-      %{media_file: file, show: show}
-    end
-
-    test "links when the target episode exists", %{media_file: file, show: show} do
-      assert {:linked, item} =
-               FileIngest.ingest(file, local_tv_match(show, [1]), policy: :local_only)
-
-      assert item.id == show.id
-      refute is_nil(Library.get_media_file!(file.id).episode_id)
-      assert Library.list_match_candidates(file.id) == []
-    end
-
-    test "does not link when the target episode does not exist", %{media_file: file, show: show} do
-      # The defect this pins: `enrich/2` returns `{:ok, show}` here even though
-      # it associated nothing. Reporting that as `{:linked, _}` and deleting
-      # the candidates leaves the file with no parent AND no candidate, which
-      # is exactly the set `Library.list_unmatched_media_file_paths/2` selects,
-      # so the import coordinator picks it up again on every single pass and
-      # the match phase never terminates.
-      refute match?(
-               {:linked, _},
-               FileIngest.ingest(file, local_tv_match(show, [99]), policy: :local_only)
-             )
-
-      reloaded = Library.get_media_file!(file.id)
-      assert is_nil(reloaded.episode_id)
-      assert is_nil(reloaded.media_item_id)
-
-      # A candidate must survive, otherwise the file is invisible in the inbox
-      # and invisible to the health check's orphan count while still being
-      # outstanding work.
-      assert [candidate] = Library.list_match_candidates(file.id)
-      assert candidate.last_error =~ show.title
-    end
+    assert id == candidate.id
+    assert Repo.get(ImportCandidate, candidate.id).provider_id == Integer.to_string(movie.tmdb_id)
+    refute Repo.exists?(MediaFile)
   end
 
-  describe "default_threshold/0" do
-    test "matches the review page's auto-accept threshold" do
-      assert FileIngest.default_threshold() == 0.85
-    end
+  test "a nil match records retry backoff on the same candidate" do
+    candidate = candidate()
+
+    assert :no_match = FileIngest.ingest(candidate, nil, policy: :unattended)
+
+    reloaded = Repo.get!(ImportCandidate, candidate.id)
+    assert reloaded.attempts == 1
+    assert reloaded.last_error == "no_match"
+    assert DateTime.compare(reloaded.next_retry_at, DateTime.utc_now()) == :gt
   end
 
-  describe "parsed_info round trip" do
-    test "atom-keyed, atom-valued parsed_info survives a real database round trip" do
-      file = orphaned_media_file_fixture()
+  test "review mode stores parsed information in the durable candidate" do
+    candidate = candidate()
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_304})
 
-      assert {:candidate, _candidate} =
-               FileIngest.ingest(
-                 file,
-                 match(
-                   match_confidence: 0.4,
-                   parsed_info: %{type: :tv_show, season: 2, episodes: [5, 6]}
-                 ),
-                 policy: :create_items
-               )
+    tv_match = %{
+      match(movie, 0.4)
+      | parsed_info: %{type: :tv_show, season: 2, episodes: [5, 6]}
+    }
 
-      # Re-read from the database rather than asserting on the struct
-      # `ingest/3` just handed back: that struct proves nothing about what
-      # JsonMapType actually persisted. A broken implementation that skips
-      # `storable_parsed_info/1` (or stringifies indiscriminately, turning
-      # `season` into "2") would build an identical-looking in-memory struct
-      # but fail this assertion once it comes back through the DB round trip.
-      assert [reloaded] = Library.list_match_candidates(file.id)
+    assert {:candidate, _} = FileIngest.ingest(candidate, tv_match, policy: :review)
 
-      assert reloaded.parsed_info["type"] == "tv_show"
-      assert reloaded.parsed_info["season"] == 2
-      assert reloaded.parsed_info["episodes"] == [5, 6]
-    end
-
-    test "a real %ParsedFileInfo{} with a nested %Quality{} struct survives ingest and the database round trip" do
-      file = orphaned_media_file_fixture()
-
-      # This is what production actually hands `ingest/3`: `MetadataMatcher`
-      # sets `match_result.parsed_info` from `ReleaseParser.parse_with_path/2`,
-      # never from a hand-built map. The struct carries a nested `%Quality{}`
-      # (no `Jason.Encoder`) plus parser internals that have no business in
-      # this column, which is exactly the shape the synthetic-map test above
-      # cannot exercise.
-      parsed = ReleaseParser.parse_with_path("/downloads/The.Mandalorian.S02E05.1080p.mkv")
-      assert %ParsedFileInfo{quality: %Quality{}} = parsed
-
-      assert {:candidate, _candidate} =
-               FileIngest.ingest(
-                 file,
-                 match(match_confidence: 0.4, parsed_info: parsed),
-                 policy: :create_items
-               )
-
-      # Re-read from the database, not the struct `ingest/3` returned.
-      assert [reloaded] = Library.list_match_candidates(file.id)
-
-      assert reloaded.parsed_info["type"] == "tv_show"
-      assert reloaded.parsed_info["season"] == 2
-      assert reloaded.parsed_info["episodes"] == [5]
-      assert reloaded.parsed_info["is_sample"] == false
-      assert reloaded.parsed_info["is_trailer"] == false
-      assert reloaded.parsed_info["is_extra"] == false
-    end
-  end
-
-  describe "retryable failures" do
-    test "a failed match records a future retry time with backoff" do
-      library_path = library_path_fixture(%{type: "series"})
-      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
-
-      assert :no_match = FileIngest.ingest(file, nil, policy: :create_items)
-
-      candidate = Repo.get_by!(MatchCandidate, media_file_id: file.id)
-      assert candidate.attempts == 1
-      assert candidate.next_retry_at
-      assert DateTime.compare(candidate.next_retry_at, DateTime.utc_now()) == :gt
-    end
-
-    test "a file whose retry time has passed is reselected as unmatched" do
-      library_path = library_path_fixture(%{type: "series"})
-      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
-
-      :no_match = FileIngest.ingest(file, nil, policy: :create_items)
-
-      past = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
-      Repo.update_all(MatchCandidate, set: [next_retry_at: past])
-
-      paths = Library.list_unmatched_media_file_paths(library_path.id, 10)
-      assert Enum.any?(paths, fn {id, _path} -> id == file.id end)
-    end
-
-    test "a file whose retry time is still in the future is not reselected" do
-      library_path = library_path_fixture(%{type: "series"})
-      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
-
-      :no_match = FileIngest.ingest(file, nil, policy: :create_items)
-
-      paths = Library.list_unmatched_media_file_paths(library_path.id, 10)
-      refute Enum.any?(paths, fn {id, _path} -> id == file.id end)
-    end
-
-    test "a pre-existing failed candidate with no next_retry_at is reselected as unmatched" do
-      # Simulates the entire backlog written before this change: every failed
-      # candidate created before the `next_retry_at` backoff shipped has that
-      # column NULL forever, since nothing ever goes back and backfills it.
-      # Under the old predicate (`not is_nil(c.next_retry_at) and
-      # c.next_retry_at <= now`), NULL made `NOT (NULL IS NULL)` false, so
-      # these rows were excluded and could never become eligible again --
-      # being excluded here is exactly what stops `record_failure/2` from
-      # ever running on the file a second time to populate the column. NULL
-      # must mean "eligible", not "not yet due".
-      library_path = library_path_fixture(%{type: "series"})
-      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
-
-      :no_match = FileIngest.ingest(file, nil, policy: :create_items)
-
-      Repo.update_all(MatchCandidate, set: [next_retry_at: nil])
-
-      paths = Library.list_unmatched_media_file_paths(library_path.id, 10)
-      assert Enum.any?(paths, fn {id, _path} -> id == file.id end)
-    end
-  end
-
-  describe "series-level match at the new threshold" do
-    # Pins the actual effect of Task 9's confidence bump, not just the
-    # constant: before this change, `try_series_level_match/3` in
-    # `MetadataMatcher` returned `match_confidence: 0.70`, which could never
-    # clear `FileIngest`'s (then 0.8) link threshold, so this whole code path
-    # was dead in unattended mode. At 0.85 it must reach `:link`. This test
-    # builds the exact match shape `try_series_level_match/3` produces
-    # (`match_type: :partial_match`, `partial_reason: :episode_not_found`,
-    # `match_confidence: 0.85`) rather than exercising the private function
-    # through a live search, mirroring how every other test in this file
-    # feeds `FileIngest.ingest/3` a hand-built match result.
-    setup do
-      library_path = Mydia.SettingsFixtures.library_path_fixture(%{type: "series"})
-
-      show =
-        media_item_fixture(%{
-          type: "tv_show",
-          title: "Series Level Show",
-          tvdb_id: System.unique_integer([:positive])
-        })
-
-      _existing_episode =
-        episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
-
-      file = orphaned_media_file_fixture(%{library_path_id: library_path.id})
-
-      %{media_file: file, show: show}
-    end
-
-    test "a series-level match links under :create_items instead of only caching a candidate",
-         %{media_file: file, show: show} do
-      series_level_match = %{
-        provider_id: to_string(show.tvdb_id),
-        provider_type: :tvdb,
-        title: show.title,
-        year: show.year,
-        match_confidence: 0.85,
-        match_type: :partial_match,
-        partial_reason: :episode_not_found,
-        metadata: %{},
-        from_local_db: false,
-        parsed_info: %{type: :tv_show, season: 1, episodes: [1]}
-      }
-
-      assert {:linked, item} = FileIngest.ingest(file, series_level_match, policy: :create_items)
-
-      assert item.id == show.id
-      refute is_nil(Library.get_media_file!(file.id).episode_id)
-    end
-  end
-
-  describe "auto-link threshold" do
-    test "links at 0.85 and holds below it" do
-      assert FileIngest.default_threshold() == 0.85
-    end
-  end
-
-  describe "policy_for/2" do
-    test "an auto-import library holding a regular file creates items" do
-      library_path = %LibraryPath{auto_import: true}
-      file = %MediaFile{extra_kind: nil}
-
-      assert FileIngest.policy_for(library_path, file) == :create_items
-    end
-
-    test "a library without auto-import keeps the historical local-only policy" do
-      assert FileIngest.policy_for(%LibraryPath{auto_import: false}, %MediaFile{}) ==
-               :local_only
-    end
-
-    test "a nil library path fails closed" do
-      assert FileIngest.policy_for(nil, %MediaFile{}) == :local_only
-    end
-
-    test "an extra is never auto-imported, even on an auto-import library" do
-      # The regression this clause exists for. Nothing filters extras out of
-      # the enrichment stream on the new-file branch, so without it a trailer
-      # with an above-threshold external match would create a MediaItem.
-      library_path = %LibraryPath{auto_import: true}
-
-      for kind <- [:trailer, :sample, :featurette, :behind_the_scenes] do
-        assert FileIngest.policy_for(library_path, %MediaFile{extra_kind: kind}) == :local_only,
-               "#{kind} must not be auto-imported"
-      end
-    end
+    assert %ImportCandidate{parsed_info: parsed_info} = Repo.get!(ImportCandidate, candidate.id)
+    assert parsed_info["type"] == "tv_show"
+    assert parsed_info["season"] == 2
+    assert parsed_info["episodes"] == [5, 6]
   end
 end

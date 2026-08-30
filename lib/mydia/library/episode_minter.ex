@@ -7,9 +7,9 @@ defmodule Mydia.Library.EpisodeMinter do
   TVDB 447978 sat five weeks behind its own broadcaster and stranded sixteen
   files exactly that way.
 
-  Whether minting is allowed at all is not decided here. `FileIngest` owns that
-  through its policy: an accepted import run is `:create_items` and may mint, a
-  scheduled scan is `:local_only` and never does. This module decides only
+  Whether minting is allowed at all is not decided here. Candidate promotion
+  owns that through its policy: an accepted unattended import may mint, while
+  review mode leaves the candidate for an operator. This module decides only
   whether a coordinate is *plausible* for this show.
 
   ## The anchor

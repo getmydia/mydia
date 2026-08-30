@@ -1,375 +1,149 @@
 defmodule Mydia.Library.FileIngest do
-  @moduledoc """
-  The per-file "match, decide, commit" step, shared by the scheduled library
-  scan and the user-started import coordinator.
+  @moduledoc "Decides whether a durable import candidate stays in review or is promoted."
 
-  Both callers do the same three things with a matched file. They differ only
-  in when they are willing to create a new `MediaItem`, which is expressed here
-  as a policy rather than as a flag threaded through either caller:
+  alias Mydia.ImportCandidates
+  alias Mydia.Library.{CandidatePromotion, ImportCandidate, MediaFile}
+  alias Mydia.Repo
 
-    * `:local_only` links only a match that came from the local database. An
-      external provider match is cached as a candidate and the file stays
-      orphaned. This is what `Jobs.LibraryScanner` has always done and must
-      keep doing, so the scheduled scan never invents items behind the user.
-
-    * `:create_items` links any match at or above the confidence threshold,
-      creating the `MediaItem` if it does not exist. This is what a user-started
-      import run does in unattended mode.
-
-  Anything not linked is written as a `MatchCandidate`, which is what lets the
-  review inbox render without touching the relay and what lets a resumed run
-  skip files a previous run already matched.
-
-  ## The progress contract
-
-  Every call to `ingest/3` must leave the file either with a parent
-  (`media_item_id` or `episode_id`) or with a rank-0 `MatchCandidate`. Those
-  two sets are exactly what `Library.list_unmatched_media_file_paths/2`
-  excludes, so a file that ends up in neither is outstanding work forever:
-  `Jobs.ImportRun`'s match loop reselects it on every pass and never
-  terminates.
-
-  This is why `{:linked, item}` is only returned once the file has been
-  re-read and confirmed to have a parent. `MetadataEnricher.enrich/2` returns
-  `{:ok, media_item}` in several cases where it associated nothing at all (a
-  TV episode row that does not exist for the parsed season/episode, parsed
-  info with no episode numbers, a movie association whose update failed), so
-  its `:ok` is a statement about the item, not about the file. Making the
-  check local to this module is what keeps loop termination a property
-  something owns, rather than one that emerges from three modules agreeing.
-  """
-
-  require Logger
-
-  alias Mydia.Library
-  alias Mydia.Library.{MediaFile, MetadataEnricher}
-  alias Mydia.Metadata
-
-  # One number, shared with the review UI's "Ready" band so the two cannot drift.
   @default_threshold Mydia.ImportGroups.auto_accept_threshold()
-
-  # Exponential backoff capped at a day. A relay outage should cost a retry
-  # window, not the files: before this, one failed attempt excluded a file from
-  # every later run forever.
   @retry_backoff_seconds [300, 1_800, 7_200, 21_600, 86_400]
 
-  @type policy :: :local_only | :create_items
+  @type policy :: :review | :unattended
   @type result ::
-          {:linked, Mydia.Media.MediaItem.t()}
-          | {:candidate, Library.MatchCandidate.t()}
+          {:promoted, [MediaFile.t()]}
+          | {:candidate, ImportCandidate.t()}
+          | {:linked, Mydia.Media.MediaItem.t()}
           | :no_match
           | {:error, term()}
 
-  @doc """
-  The confidence at or above which `:create_items` links automatically.
-
-  Calibrated against the production library on 2026-08-17, whose candidates
-  cluster at 0.65-0.70 and 0.90-1.00 with nothing in between; every value in
-  [0.75, 0.89] produces the same partition there. This is the same number
-  `Mydia.ImportGroups.auto_accept_threshold/0` uses for the review page's
-  "Ready" band, read at compile time so the two cannot drift apart the way
-  they already have once (this threshold used to be 0.8, which made
-  `MetadataMatcher`'s series-level match, capped at 0.70, permanently
-  unlinkable).
-  """
   @spec default_threshold() :: float()
   def default_threshold, do: @default_threshold
 
-  @doc """
-  The ingest policy for one file in one library.
+  @spec ingest(ImportCandidate.t(), map() | nil, keyword()) :: result()
+  @spec ingest(MediaFile.t(), map() | nil, keyword()) :: term()
+  def ingest(%ImportCandidate{} = candidate, match, opts) do
+    policy = Keyword.fetch!(opts, :policy)
+    threshold = Keyword.get(opts, :threshold, @default_threshold)
 
-  Lives here rather than on a caller because this module owns the policy type
-  and both callers need it: `Jobs.LibraryScanner` for new files and
-  `Library.OrphanReenricher` for existing orphans.
+    case decide(match, policy, threshold) do
+      :candidate ->
+        update_candidate(candidate, match)
 
-  Fails closed on everything that is not an auto-import library holding a
-  regular file. A nil association, a read-only `runtime::` struct, and a row
-  whose flag is false all keep the historical `:local_only` behavior, which is
-  what makes enabling this a per-library opt-in rather than a global change.
+      :promote ->
+        promotion_opts = Keyword.put(opts, :allow_episode_creation, true)
 
-  Extras are excluded because nothing filters them out of the enrichment stream
-  on the scanner's new-file branch the way `SampleDetector.excluded?/1` does for
-  re-enriched orphans. Under `:local_only` that was harmless, since only a local
-  match could link. Under `:create_items` a trailer drawing an above-threshold
-  external match would create a `MediaItem` of its own. `extra_kind` is already
-  persisted at creation time, so this needs no re-detection: nil means the file
-  is a version of its item, non-nil means it is an extra.
-  """
-  @spec policy_for(Mydia.Settings.LibraryPath.t() | nil, MediaFile.t()) :: policy()
+        case CandidatePromotion.promote_group([candidate], match, promotion_opts) do
+          {:ok, media_files} ->
+            {:promoted, media_files}
+
+          {:error, reason} ->
+            case record_failure(candidate, format_error(reason)) do
+              {:ok, _candidate} -> {:error, reason}
+              {:error, changeset} -> {:error, {:candidate_write_failed, changeset}}
+            end
+        end
+    end
+  end
+
+  # Callers are migrated to durable candidates by the surrounding pipeline
+  # tasks. This compatibility clause deliberately cannot create a media file,
+  # preserving the no-parentless-file invariant while the call sites move.
+  def ingest(%MediaFile{}, _match, _opts), do: {:error, :candidate_required}
+
+  @spec policy_for(Mydia.Settings.LibraryPath.t() | nil, MediaFile.t()) ::
+          :local_only | :create_items
   def policy_for(%Mydia.Settings.LibraryPath{auto_import: true}, %MediaFile{extra_kind: nil}),
     do: :create_items
 
   def policy_for(_library_path, _media_file), do: :local_only
 
-  @doc """
-  Decides what to do with a matched file and commits that decision.
+  defp decide(nil, _policy, _threshold), do: :candidate
+  defp decide(_match, :review, _threshold), do: :candidate
 
-  See the module doc for the policies. Returns `:no_match` when the matcher
-  found nothing, in which case the attempt is still recorded so the inbox can
-  show that the file was tried.
+  defp decide(match, :unattended, threshold) do
+    if (Map.get(match, :match_confidence) || 0.0) >= threshold,
+      do: :promote,
+      else: :candidate
+  end
 
-  `{:linked, item}` means the file provably has a `media_item_id` or an
-  `episode_id` after this call, verified by re-reading the row. A match that
-  enriched an item but associated nothing comes back as
-  `{:error, {:not_associated, message}}` with the candidate left in place, so
-  the file stays visible in the inbox with a reason instead of vanishing from
-  both the inbox and the unmatched set. See the module doc's progress
-  contract, which the import coordinator's loop termination depends on.
-  """
-  @spec ingest(MediaFile.t(), map() | nil, keyword()) :: result()
-  def ingest(%MediaFile{} = media_file, match_result, opts) do
-    policy = Keyword.fetch!(opts, :policy)
-    threshold = Keyword.get(opts, :threshold, @default_threshold)
-
-    case decide(match_result, policy, threshold) do
-      :no_match ->
-        record_failure(media_file, "no_match")
-        :no_match
-
-      :candidate ->
-        case write_candidate(media_file, match_result) do
-          {:ok, candidate} ->
-            {:candidate, candidate}
-
-          # Not a hard match on `{:ok, _}`, because the write that loses a race
-          # is a real shape: the scheduled `Jobs.LibraryScanner` and a
-          # user-started import run both ingest, and the rank-0 candidate is
-          # covered by a unique index, so a concurrent insert comes back as a
-          # changeset rather than a row. Raising here would fail the whole
-          # coordinator over one file that the other writer had already
-          # cached. The file stays outstanding, which the match loop rediscovers
-          # on its next pass -- by which point the winning write is visible and
-          # the file has left the outstanding set on its own.
-          {:error, changeset} ->
-            {:error, {:candidate_write_failed, changeset}}
-        end
-
-      :link ->
-        link(media_file, match_result, opts)
+  defp update_candidate(candidate, nil) do
+    case record_failure(candidate, "no_match") do
+      {:ok, _candidate} -> :no_match
+      {:error, changeset} -> {:error, {:candidate_write_failed, changeset}}
     end
   end
 
-  ## Decision
-
-  defp decide(nil, _policy, _threshold), do: :no_match
-
-  defp decide(match, :local_only, _threshold) do
-    if Map.get(match, :from_local_db, false), do: :link, else: :candidate
-  end
-
-  defp decide(match, :create_items, threshold) do
-    if (Map.get(match, :match_confidence) || 0.0) >= threshold, do: :link, else: :candidate
-  end
-
-  ## Commit
-
-  defp link(media_file, match_result, opts) do
-    config = Keyword.get(opts, :config) || Metadata.default_relay_config()
-    policy = Keyword.fetch!(opts, :policy)
-
-    enrich_opts = [
-      config: config,
-      media_file_id: media_file.id,
-      # The policy is the consent signal. `:create_items` means a user accepted
-      # this import, which is what authorises creating an episode the provider
-      # does not have. A scheduled scan is `:local_only` and never mints.
-      allow_episode_creation: policy == :create_items
-    ]
-
-    case MetadataEnricher.enrich(match_result, enrich_opts) do
-      {:ok, media_item} ->
-        confirm_association(media_file, media_item, match_result)
-
-      {:error, reason} ->
-        Logger.warning("Failed to link media file",
-          media_file_id: media_file.id,
-          title: Map.get(match_result, :title),
-          reason: inspect(reason)
-        )
-
-        record_failure(media_file, format_error(reason))
-        {:error, reason}
+  defp update_candidate(candidate, match) do
+    case ImportCandidates.upsert(candidate_attrs(candidate, match)) do
+      {:ok, updated} -> {:candidate, updated}
+      {:error, changeset} -> {:error, {:candidate_write_failed, changeset}}
     end
   end
 
-  # `enrich/2` returning {:ok, item} says the item exists, not that this file
-  # was attached to it. Re-read the row and check, because that is the whole
-  # progress contract (see the moduledoc): a file with neither a parent nor a
-  # candidate is invisible in the inbox, invisible to the health check's
-  # orphan count, and still selected by every subsequent match chunk.
-  defp confirm_association(media_file, media_item, match_result) do
-    reloaded = Library.get_media_file!(media_file.id)
+  defp record_failure(candidate, error) do
+    current = Repo.get(ImportCandidate, candidate.id) || candidate
+    attempts = current.attempts + 1
 
-    if is_nil(reloaded.media_item_id) and is_nil(reloaded.episode_id) do
-      message = not_associated_message(match_result)
-
-      Logger.warning("Enrichment succeeded but the media file was never associated",
-        media_file_id: media_file.id,
-        media_item_id: media_item.id,
-        title: Map.get(match_result, :title)
-      )
-
-      # Deliberately NOT delete_match_candidates/1: the candidate is the only
-      # thing keeping this file reachable. Write the full match first so the
-      # inbox can show what was found, then stamp the reason onto the same
-      # rank-0 row.
-      write_candidate(media_file, match_result)
-      record_failure(media_file, message)
-
-      {:error, {:not_associated, message}}
-    else
-      # The file now has a parent, so it is no longer inbox work.
-      Library.delete_match_candidates(media_file.id)
-      {:linked, media_item}
+    case ImportCandidates.upsert(
+           candidate_attrs(current, %{
+             attempts: attempts,
+             last_error: error,
+             next_retry_at: next_retry_at(attempts)
+           })
+         ) do
+      {:ok, updated} -> {:ok, updated}
+      {:error, changeset} -> {:error, changeset}
     end
   end
 
-  # Written for a self-hosted operator reading the inbox, not for a log
-  # grepper: this string is rendered verbatim by
-  # `MydiaWeb.ImportMediaLive.Inbox.format_last_error/1`.
-  defp not_associated_message(match_result) do
-    title = Map.get(match_result, :title) || "that title"
-    parsed = Map.get(match_result, :parsed_info) || %{}
-    season = get_parsed(parsed, :season)
-    episodes = get_parsed(parsed, :episodes) || []
+  defp candidate_attrs(candidate, match) do
+    parsed = Map.get(match, :parsed_info, candidate.parsed_info || %{})
 
-    if get_parsed(parsed, :type) == :tv_show and not is_nil(season) and episodes != [] do
-      "Matched #{title} but season #{season} episode #{Enum.join(episodes, ", ")} does not exist on it, so nothing was added."
-    else
-      "Matched #{title} but this file could not be attached to it, so nothing was added."
-    end
-  end
-
-  # Logs rather than discarding, for the same reason `record_failure/2` does.
-  # This row is the one the inbox renders (title, provider, confidence), so a
-  # silent failure here leaves a file listed with none of what was found about
-  # it. Both callers handle the error: `ingest/3`'s `:candidate` branch turns
-  # it into `{:error, {:candidate_write_failed, _}}`, and
-  # `confirm_association/3` writes the failure reason over the top regardless.
-  defp write_candidate(media_file, match) do
-    case do_write_candidate(media_file, match) do
-      {:ok, candidate} ->
-        {:ok, candidate}
-
-      {:error, changeset} ->
-        Logger.error("Could not cache a match candidate for a media file",
-          media_file_id: media_file.id,
-          title: Map.get(match, :title),
-          errors: inspect(changeset.errors)
-        )
-
-        {:error, changeset}
-    end
-  end
-
-  defp do_write_candidate(media_file, match) do
-    parsed = Map.get(match, :parsed_info) || %{}
-
-    Library.upsert_match_candidate(%{
-      media_file_id: media_file.id,
-      rank: 0,
-      provider_type: to_string_or_nil(Map.get(match, :provider_type)),
-      provider_id: to_string_or_nil(Map.get(match, :provider_id)),
-      title: Map.get(match, :title),
-      year: Map.get(match, :year),
-      media_type: to_string_or_nil(Map.get(parsed, :type)),
-      confidence: Map.get(match, :match_confidence),
+    %{
+      library_path_id: candidate.library_path_id,
+      relative_path: candidate.relative_path,
+      anchor_key: candidate.anchor_key,
+      size: candidate.size,
+      mtime: candidate.mtime,
+      discovered_at: candidate.discovered_at,
+      provider_type: string_or_nil(Map.get(match, :provider_type, candidate.provider_type)),
+      provider_id: string_or_nil(Map.get(match, :provider_id, candidate.provider_id)),
+      title: Map.get(match, :title, candidate.title),
+      year: Map.get(match, :year, candidate.year),
+      media_type: string_or_nil(parsed_value(parsed, :type)) || candidate.media_type,
+      confidence: Map.get(match, :match_confidence, candidate.confidence),
       parsed_info: storable_parsed_info(parsed),
-      attempts: 0,
-      last_error: nil
-    })
+      attempts: Map.get(match, :attempts, candidate.attempts),
+      last_error: Map.get(match, :last_error, nil),
+      next_retry_at: Map.get(match, :next_retry_at, nil)
+    }
   end
-
-  # The write result is matched rather than discarded. A dropped candidate is
-  # the one input that breaks the moduledoc's progress contract from the
-  # inside: the file ends up with no parent and no candidate, which is what
-  # `Jobs.ImportRun`'s match loop treats as "still to do" forever. There is
-  # nothing useful to do about it here beyond refusing to be quiet, so it logs
-  # at :error and hands the changeset back.
-  defp record_failure(media_file, error) do
-    previous =
-      case Library.list_match_candidates(media_file.id) do
-        [%{rank: 0} = existing | _] -> existing.attempts
-        _ -> 0
-      end
-
-    attempts = previous + 1
-
-    case Library.upsert_match_candidate(%{
-           media_file_id: media_file.id,
-           rank: 0,
-           attempts: attempts,
-           last_error: error,
-           next_retry_at: next_retry_at(attempts)
-         }) do
-      {:ok, candidate} ->
-        {:ok, candidate}
-
-      {:error, changeset} ->
-        Logger.error("Could not record a match failure, the file will be retried indefinitely",
-          media_file_id: media_file.id,
-          attempted_error: error,
-          errors: inspect(changeset.errors)
-        )
-
-        {:error, changeset}
-    end
-  end
-
-  defp next_retry_at(attempts) do
-    seconds = Enum.at(@retry_backoff_seconds, attempts - 1, List.last(@retry_backoff_seconds))
-
-    DateTime.utc_now() |> DateTime.add(seconds, :second) |> DateTime.truncate(:second)
-  end
-
-  ## Helpers
-
-  defp to_string_or_nil(nil), do: nil
-  defp to_string_or_nil(value), do: to_string(value)
-
-  # In production `parsed` is a %ParsedFileInfo{} (set by MetadataMatcher from
-  # ReleaseParser.parse_with_path/2), not a plain map, so this cannot walk the
-  # struct generically: it carries a nested %Quality{} struct (no
-  # Jason.Encoder) and a dozen parser internals that have no business in this
-  # column, and dumping the whole thing would fail to encode. Store an
-  # explicit projection of only the fields the inbox and Tasks 10/13 read
-  # back. Every value below is already JSON-native (integers, booleans, a
-  # list of integers) except :type, which is stringified explicitly here to
-  # document the on-disk contract even though Jason would stringify a bare
-  # atom on its own.
-  defp storable_parsed_info(nil), do: %{}
 
   defp storable_parsed_info(parsed) when is_map(parsed) do
     %{
-      "type" => to_string_or_nil(get_parsed(parsed, :type)),
-      "season" => get_parsed(parsed, :season),
-      "episodes" => get_parsed(parsed, :episodes) || [],
-      "is_sample" => get_parsed(parsed, :is_sample) || false,
-      "is_trailer" => get_parsed(parsed, :is_trailer) || false,
-      "is_extra" => get_parsed(parsed, :is_extra) || false
+      "type" => string_or_nil(parsed_value(parsed, :type)),
+      "season" => parsed_value(parsed, :season),
+      "episodes" => parsed_value(parsed, :episodes) || [],
+      "is_sample" => parsed_value(parsed, :is_sample) || false,
+      "is_trailer" => parsed_value(parsed, :is_trailer) || false,
+      "is_extra" => parsed_value(parsed, :is_extra) || false
     }
   end
 
   defp storable_parsed_info(_), do: %{}
 
-  # Accepts both a %ParsedFileInfo{} and a plain map: tests build the latter,
-  # production always hands ingest/3 the former. Map.get/2 works on both
-  # without requiring the Enumerable protocol a bare struct doesn't implement.
-  defp get_parsed(parsed, key) when is_map(parsed), do: Map.get(parsed, key)
+  defp parsed_value(parsed, key) do
+    Map.get(parsed, key) || Map.get(parsed, Atom.to_string(key))
+  end
 
-  # TRAP: do not add a clause for `:library_type_mismatch` here.
-  #
-  # `{:library_type_mismatch, message}` deliberately falls through to the
-  # `inspect/1` catch-all below, and the inbox's "Wrong library" badge keys on
-  # exactly that: `MydiaWeb.ImportMediaLive.Inbox.library_type_mismatch?/1`
-  # tests `String.starts_with?(last_error, "{:library_type_mismatch,")`.
-  # Unwrapping the tuple here would store the bare message, the badge would
-  # stop rendering, and nothing would fail: the sentence still displays, so
-  # the loss is silent and only visible by eye. `Jobs.LibraryScanner`'s
-  # `scan_result_from_ingest/1` pattern-matches the same tagged tuple.
-  # If this ever needs to change, change the badge predicate in the same
-  # commit.
-  defp format_error({:invalid_match_result, message}), do: message
+  defp string_or_nil(nil), do: nil
+  defp string_or_nil(value), do: to_string(value)
+
+  defp next_retry_at(attempts) do
+    seconds = Enum.at(@retry_backoff_seconds, attempts - 1, List.last(@retry_backoff_seconds))
+    DateTime.utc_now() |> DateTime.add(seconds, :second) |> DateTime.truncate(:second)
+  end
+
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)
 end
