@@ -81,8 +81,12 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   # Every request option that shapes the transcode output, mapped to the value
   # a Registry entry predating that option is assumed to have carried. A
   # session is reusable only when all of them agree.
+  #
+  # start_position is absent from this map deliberately: whether it
+  # discriminates depends on the playlist mode, and that is decided in
+  # session_matches?/2 below.
   @session_discriminators %{
-    start_position: 0,
+    playlist_mode: :window,
     max_bitrate: nil,
     max_height: nil,
     audio_language: nil,
@@ -94,9 +98,19 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   # existed is treated as carrying that field's default rather than as a
   # wildcard that matches every request.
   def session_matches?(metadata, request) do
-    Enum.all?(@session_discriminators, fn {key, default} ->
-      Map.get(metadata, key, default) == Map.get(request, key, default)
-    end)
+    shape_matches =
+      Enum.all?(@session_discriminators, fn {key, default} ->
+        Map.get(metadata, key, default) == Map.get(request, key, default)
+      end)
+
+    # A full session publishes a playlist covering the whole file and can move
+    # its encoder to any segment, so an offset mismatch is not a mismatch at
+    # all. A windowed one can only serve the range it started at, so it is.
+    offset_matches =
+      Map.get(metadata, :playlist_mode, :window) == :full or
+        Map.get(metadata, :start_position, 0) == Map.get(request, :start_position, 0)
+
+    shape_matches and offset_matches
   end
 
   @doc false
@@ -105,6 +119,7 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   # send the field at all, and a new one sending an empty list.
   def session_request(opts) do
     %{
+      playlist_mode: Keyword.get(opts, :playlist_mode, :window),
       start_position: Keyword.get(opts, :start_position, 0),
       max_bitrate: Keyword.get(opts, :max_bitrate),
       max_height: Keyword.get(opts, :max_height),

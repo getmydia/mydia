@@ -227,4 +227,42 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
       DynamicSupervisor.stop(sup)
     end
   end
+
+  describe "session_matches?/2 with a full playlist" do
+    alias Mydia.Streaming.HlsSessionSupervisor
+
+    test "a full session serves a request at a different offset" do
+      # The whole point of the full playlist: the running encoder can be moved
+      # to any segment, so a seek must not replace the session.
+      running = %{playlist_mode: :full, start_position: 0, max_bitrate: nil, max_height: nil}
+      request = %{playlist_mode: :full, start_position: 4200, max_bitrate: nil, max_height: nil}
+
+      assert HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "a windowed session is still replaced on an offset mismatch" do
+      running = %{playlist_mode: :window, start_position: 0, max_bitrate: nil, max_height: nil}
+      request = %{playlist_mode: :window, start_position: 4200, max_bitrate: nil, max_height: nil}
+
+      refute HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "a full session never serves a windowed request" do
+      # An old client expects FFmpeg to have started at its offset and reads
+      # positions relative to that. A full session's playlist would shift every
+      # position it derives.
+      running = %{playlist_mode: :full, start_position: 0, max_bitrate: nil, max_height: nil}
+      request = %{playlist_mode: :window, start_position: 0, max_bitrate: nil, max_height: nil}
+
+      refute HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "a full session is still replaced when the quality rung changes" do
+      # Segments already on disk were encoded at the old rung.
+      running = %{playlist_mode: :full, start_position: 0, max_bitrate: nil, max_height: nil}
+      request = %{playlist_mode: :full, start_position: 0, max_bitrate: nil, max_height: 720}
+
+      refute HlsSessionSupervisor.session_matches?(running, request)
+    end
+  end
 end
