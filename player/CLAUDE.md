@@ -2,6 +2,17 @@
 
 This is the Flutter web client for Mydia, built for streaming media playback.
 
+Deeper reference lives alongside this file in `player/docs/`:
+
+- `workflow.md` - codegen, running the suite, analyze, and the format hook that
+  drops your file out of its own commit. **Run `./dev player setup` first in any
+  new worktree.**
+- `testing.md` - the three ways a `StubLink` stub silently mis-scripts a screen
+  test, and why inline Dart GraphQL strings skip schema validation.
+- `riverpod.md` - writes from `dispose`, post-await `ref`, and testing a throwing
+  notifier.
+- `packaging.md` - Windows, iOS and fastlane.
+
 ## Project Overview
 
 - **Platform**: Flutter Web (served through Phoenix at `/player`)
@@ -251,7 +262,7 @@ For widgets with more than 2 parameters:
 MediaCard(
   title: movie.title,
   imageUrl: movie.posterUrl,
-  onTap: () => context.go('/movies/${movie.id}'),
+  onTap: () => context.go('/movie/${movie.id}'),
 )
 
 // BAD - positional parameters are hard to read
@@ -262,29 +273,28 @@ MediaCard(movie.title, movie.posterUrl, () => context.go(...))
 
 ### Route Paths
 
-Define routes as constants:
-
-```dart
-// core/router/routes.dart
-abstract class Routes {
-  static const home = '/';
-  static const movies = '/movies';
-  static String movieDetail(String id) => '/movies/$id';
-}
-```
-
-### Navigation Patterns
+There is no `Routes` helper class anywhere in `lib/`, and the established
+convention is raw string interpolation at the call site. Route paths in
+`app_router.dart` are **singular**: `/movie/:id`, `/show/:id`, `/episode/:id`.
 
 ```dart
 // Navigate to new screen
-context.go(Routes.movieDetail(movie.id));
+context.go('/movie/${movie.id}');
 
 // Push onto stack (keeps back button)
-context.push(Routes.movieDetail(movie.id));
+context.push('/movie/${movie.id}');
+context.push('/show/${show.id}');
 
 // Replace current screen
-context.replace(Routes.login);
+context.replace('/login');
 ```
+
+This is repeated verbatim in `home_screen.dart`, `library_screen.dart`,
+`recently_added_screen.dart`, `favorites_screen.dart`, `unwatched_screen.dart`,
+`collection_detail_screen.dart`, `episode_detail_screen.dart` and
+`search_result.dart`, dispatched off `RecentlyAddedItem.isMovie` / `.isShow` (or
+the raw `type` string). Do not introduce a `Routes` helper expecting it already
+exists.
 
 ## Testing Guidelines
 

@@ -271,6 +271,94 @@ git restore --staged file3.ex file4.ex
 git commit -m "message"
 ```
 
+**Verify every commit landed with `git show --stat`.**
+
+Two independent mechanisms cause a `git commit` to exit 0 having committed less
+than you asked for.
+
+The prek pre-commit hook stashes unstaged changes on every commit, runs `mix
+format` plus the cargo and dart checks, then restores. Anything left unstaged is
+excluded from the commit, which still exits 0. Stage everything intended for a
+commit before invoking `git commit` (`git add -A`, or name every path). A lone
+` M` in `git status --porcelain` right after a commit is the tell; fix with
+`git add <path> && git commit --amend --no-edit` while it is unpushed.
+
+That stash also briefly holds `.git/index.lock`, so back-to-back `git commit`s in
+a single shell command race the previous commit's still-running hook and fail with
+`fatal: Unable to create '.git/index.lock': File exists`. Run each commit in its
+own step. The lock is the hook's, not another session's. Only `rm -f
+.git/index.lock` after confirming it is stale, and never bypass the hook with
+`--no-verify`.
+
+`./dev shell -- <cmd>` and `./dev bash -c "<cmd>"` both silently discard the
+command you pass them: the `dev` script's `shell` case ignores its arguments and
+its `bash` case does not forward `"$@"`. `./dev shell -- git commit -m "msg"`
+prints normal-looking output and exits 0 having committed nothing. Use
+`devenv shell -- <cmd>` directly, and for commits
+`devenv shell -- git commit -F <msgfile>`. `./dev mix <args>` does forward
+correctly.
+
+**Worktrees**
+
+New worktrees branch from `origin/master`, which is often newer than the local
+main checkout, so the worktree can contain code the main checkout has never seen.
+Enter the worktree **before reading a single file**: the harness blocks writes to
+the shared checkout but never reads, so exploring first and entering later
+silently poisons everything already read. A plan built on stale reads looks
+perfectly implemented and can revert someone else's merged fix. Verify a finished
+diff against `origin/master`, not against your own plan, and treat a file the plan
+never mentioned appearing in `--stat` as the tell.
+
+`origin/master` also moves during long runs, and a sibling worktree may be
+building the same feature right now. Check `ls .claude/worktrees/` for an
+in-flight worktree matching your topic before writing a spec.
+
+A worktree can be **deleted mid-session**. The symptom is a sudden enormous
+failure count (one run reported 666 failures out of 9594, almost all
+`UndefinedFunctionError ... module is not available` plus `File.Error`) against a
+checkout that no longer exists. Commit and push each logical change as you finish
+it rather than batching; origin is the only durable copy. When a suite suddenly
+fails en masse that way, check `ls` of the worktree and `git worktree list` before
+debugging the code.
+
+**Migration filenames.** Migrations here are habitually stamped with round numbers
+(`20260811130000`), and with many parallel branches in flight two routinely pick
+the same version. `Ecto.Migrator` raises `migration version N is duplicated`, and
+because `lib/mydia/application.ex` starts `{Ecto.Migrator, ...}` in the
+supervision tree, a duplicate is a boot failure on every install. It only appears
+once both branches merge, so neither PR's CI catches it. Prefer a real timestamp,
+and check every remote branch before finalising a filename:
+
+```bash
+for b in $(git branch -r --format='%(refname:short)' | grep -v HEAD); do
+  git ls-tree -r --name-only "$b" -- priv/repo/migrations 2>/dev/null | xargs -r -n1 basename
+done | cut -d_ -f1 | sort | uniq -d
+```
+
+**Editing `./dev` itself.** The script starts with `set -e`, so
+`some_command; code=$?` dies before the assignment runs. Use
+`exit_code=0; some_command || exit_code=$?`.
+
+### Where the deeper notes live
+
+Hard-won specifics live next to the code they describe rather than in this file.
+Read the relevant one before working in that area:
+
+| Doc | Covers |
+| --- | --- |
+| `lib/mydia/media/README.md` | media_files/media_item invariants, scanning, monitoring, promotion |
+| `priv/repo/README.md` | SQLite vs PostgreSQL portability and Ecto gotchas |
+| `test/README.md` | running the suite, and the traps where passing is the bug |
+| `lib/mydia_web/schema/README.md` | the GraphQL contract and the Rust SDL parity gate |
+| `lib/mydia_web/components/README.md` | daisyUI, core components, CSS |
+| `lib/mydia/metadata/README.md` | what TVDB and TMDB actually send |
+| `lib/mydia/streaming/README.md` | where codec data lives, streaming candidates |
+| `lib/mydia/config/README.md` | layered config lifecycle |
+| `lib/mydia/downloads/README.md`, `lib/mydia/indexers/README.md` | trackerless releases, Torznab categories |
+| `native/README.md`, `plugins/README.md` | NIF crates, p2p, wasip2 guests |
+| `.github/README.md`, `.github/ci-flakes.md` | CI mechanics, releases, the flake catalogue |
+| `player/docs/` | player workflow, testing, Riverpod, packaging |
+
 ### Phoenix v1.8 guidelines
 
 - **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content
