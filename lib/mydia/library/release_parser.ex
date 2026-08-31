@@ -142,7 +142,7 @@ defmodule Mydia.Library.ReleaseParser do
   # Only an *unambiguous* boundary is stripped, in three forms:
   #
   #   (a) bracketed          `[ www.Torrenting.org ] Movie...`
-  #   (b) separator glyph    `www.UIndex.org    -    Dark Matter...`
+  #   (b) separator glyph    `www.SiteName.org    -    Example Show...`
   #   (c) bare `www.host.tld` then whitespace   `www.Torrenting.org Movie...`
   #
   # A greedy `(?:\.[\w-]+)*` label run with a mere "next char is a delimiter"

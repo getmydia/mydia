@@ -662,7 +662,7 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       # penalties let weak releases sink rather than vanish. In practice
       # nothing sits below them: there is no minimum score to grab, so the top
       # of an all-sub-floor list is still taken. That is how a 1080p-floor
-      # profile grabbed a 360p XviD of Dark Matter S02E01. :min_resolution is
+      # profile grabbed a 360p XviD of a monitored episode. :min_resolution is
       # now a floor, matching :excluded_sources.
       profile =
         build_quality_profile(%{

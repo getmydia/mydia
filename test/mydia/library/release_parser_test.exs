@@ -218,19 +218,19 @@ defmodule Mydia.Library.ReleaseParserTest do
 
   describe "parse/1 - indexer site-branding prefixes" do
     test "strips a `www.<host> - ` prefix from a TV release" do
-      # Regression: this exact title was returned by a live search for
-      # Dark Matter S02E01. The prefix was folded into the show title as
-      # "Www Uindex Org Dark Matter", whose Jaro distance to the expected
-      # "Dark Matter (2024)" was 0.40, below ReleaseRanker's 0.7 threshold.
-      # Every 1080p and 2160p candidate was hard-rejected as a title
-      # mismatch and a 360p XviD was grabbed instead.
+      # Regression: a title of this exact shape was returned by a live search.
+      # The prefix was folded into the show title as "Www Sitename Org Example
+      # Show", whose Jaro distance to the expected title was 0.40, below
+      # ReleaseRanker's 0.7 threshold. Every 1080p and 2160p candidate was
+      # hard-rejected as a title mismatch and a 360p XviD was grabbed instead.
+      # Names are anonymised; the shape is what matters.
       result =
         ReleaseParser.parse(
-          "www.UIndex.org    -    Dark Matter 2024 S02E01 A Quiet Life 1080p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune"
+          "www.SiteName.org    -    Example Show 2024 S02E01 Episode Title 1080p ATVP WEB-DL DDP5 1 Atmos H 264-GRP"
         )
 
       assert result.type == :tv_show
-      assert result.title == "Dark Matter"
+      assert result.title == "Example Show"
       assert result.year == 2024
       assert result.season == 2
       assert result.episodes == [1]
@@ -239,10 +239,10 @@ defmodule Mydia.Library.ReleaseParserTest do
     test "strips the prefix from the 2160p variant of the same release" do
       result =
         ReleaseParser.parse(
-          "www.UIndex.org    -    Dark Matter 2024 S02E01 A Quiet Life 2160p ATVP WEB-DL DDP5 1 Atmos DV HDR10Plus H 265-Kitsune"
+          "www.SiteName.org    -    Example Show 2024 S02E01 Episode Title 2160p ATVP WEB-DL DDP5 1 Atmos DV HDR10Plus H 265-GRP"
         )
 
-      assert result.title == "Dark Matter"
+      assert result.title == "Example Show"
       assert result.season == 2
       assert result.episodes == [1]
     end
@@ -279,11 +279,14 @@ defmodule Mydia.Library.ReleaseParserTest do
       # Only an unambiguous boundary (a bracket, a separator glyph, or a bare
       # www.domain.tld before whitespace) may be stripped.
       for title <- [
-            "www.example.com.The Matrix.1999.1080p",
-            "www.example.com.The Matrix 1999 1080p BluRay x264"
+            "www.example.com.The Sample Film.1999.1080p",
+            "www.example.com.The Sample Film 1999 1080p BluRay x264"
           ] do
         result = ReleaseParser.parse(title)
-        assert result.title =~ "The Matrix", "expected 'The Matrix' in #{inspect(result.title)}"
+
+        assert result.title =~ "The Sample",
+               "leading article was eaten: #{inspect(result.title)}"
+
         assert result.year == 1999
       end
     end

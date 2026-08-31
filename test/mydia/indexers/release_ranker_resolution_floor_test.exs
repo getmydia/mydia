@@ -5,8 +5,11 @@ defmodule Mydia.Indexers.ReleaseRankerResolutionFloorTest do
   Before this, `min_resolution` fed scoring and the upgrade-violation list but
   gated nothing, and there is no minimum score to grab, so the top of a bad
   list was taken regardless. Paired with an untagged release scoring a neutral
-  50 (better than an honestly-labelled out-of-range one at 25), that is how
-  Dark Matter S02E01 landed a 360p XviD on a 1080p-floor profile.
+  50 (better than an honestly-labelled out-of-range one at 25), that is how a
+  monitored episode landed a 360p XviD on a 1080p-floor profile.
+
+  Release names are anonymised; the shapes are what matter, and they are taken
+  from a real `search.completed` event.
   """
   use ExUnit.Case, async: true
 
@@ -51,19 +54,19 @@ defmodule Mydia.Indexers.ReleaseRankerResolutionFloorTest do
   end
 
   defp xvid_360p do
-    result("Dark.Matter.2024.S02E01.A.Quiet.Life.XviD-AFG[EZTVx.to].avi", 459.2, 0, "xvid")
+    result("Example.Show.2024.S02E01.Episode.Title.XviD-GRP[site.to].avi", 459.2, 0, "xvid")
   end
 
   defp x265_720p do
-    result("Dark.Matter.2024.S02E01.720p.10bit.WEBRip.2CH.x265.HEVC-PSA.mkv", 269.8, 11, "psa")
+    result("Example.Show.2024.S02E01.720p.10bit.WEBRip.2CH.x265.HEVC-GRP.mkv", 269.8, 11, "psa")
   end
 
   defp web_dl_1080p do
     result(
-      "www.UIndex.org    -    Dark Matter 2024 S02E01 A Quiet Life 1080p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune",
+      "www.SiteName.org    -    Example Show 2024 S02E01 Episode Title 1080p ATVP WEB-DL DDP5 1 Atmos H 264-GRP",
       4117.8,
       1,
-      "kitsune-1080p"
+      "webdl-1080p"
     )
   end
 
@@ -74,8 +77,8 @@ defmodule Mydia.Indexers.ReleaseRankerResolutionFloorTest do
         quality_profile: profile,
         preferred_qualities: ["1080p"],
         size_range: {1024, 7680},
-        search_query: "Dark Matter (2024) S02E01",
-        expected_title: "Dark Matter (2024)",
+        search_query: "Example Show (2024) S02E01",
+        expected_title: "Example Show (2024)",
         expected_season: 2,
         expected_episode: 1,
         custom_formats: []
@@ -100,7 +103,7 @@ defmodule Mydia.Indexers.ReleaseRankerResolutionFloorTest do
     end
 
     test "an at-floor release survives" do
-      assert %{result: %SearchResult{guid: "kitsune-1080p"}} =
+      assert %{result: %SearchResult{guid: "webdl-1080p"}} =
                ReleaseRanker.select_best_result(
                  [xvid_360p(), x265_720p(), web_dl_1080p()],
                  opts(hd_1080p())
