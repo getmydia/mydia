@@ -274,6 +274,54 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
     end
   end
 
+  describe "an out-of-range segment index" do
+    # base_state/1 builds a 600.0s / 4s plan, so valid indices run 0..149.
+    # request_segment must reject anything outside that before it ever
+    # reaches TranscodeWindow.decide/2: an out-of-range index has no
+    # corresponding segment, and decide/2 would otherwise relocate the
+    # running encoder to seek FFmpeg past end of file, stopping the
+    # playback the viewer is actually watching.
+    test "is rejected without relocating or parking a waiter" do
+      {:ok, backend_pid} = FakeBackend.start_transcoding([])
+      state = base_state(backend_pid: backend_pid)
+
+      assert {:reply, {:error, :out_of_range}, new_state} =
+               HlsSession.handle_call({:request_segment, 99_999}, fake_from(), state)
+
+      # The backend was not touched: no relocation, no new generation, no
+      # waiter parked on an index that will never arrive.
+      assert new_state.backend_pid == backend_pid
+      assert new_state.window_generation == state.window_generation
+      assert new_state.segment_waiters == %{}
+    end
+
+    test "also rejects a negative index" do
+      state = base_state()
+
+      assert {:reply, {:error, :out_of_range}, _state} =
+               HlsSession.handle_call({:request_segment, -1}, fake_from(), state)
+    end
+
+    test "the boundary index (count) is out of range, but count - 1 is not" do
+      state = base_state()
+      last_valid = state.segment_plan.count - 1
+
+      assert {:reply, {:error, :out_of_range}, _state} =
+               HlsSession.handle_call(
+                 {:request_segment, state.segment_plan.count},
+                 fake_from(),
+                 state
+               )
+
+      # last_valid (149) is not in `available` (only 0, 1, 2 are marked
+      # ready in base_state/1) and is past last_ready_index + wait_ahead, so
+      # it relocates rather than erroring -- proving the boundary itself,
+      # not every high index, is what gets rejected.
+      assert {:noreply, _state} =
+               HlsSession.handle_call({:request_segment, last_valid}, fake_from(), state)
+    end
+  end
+
   describe "a waiter parked across a relocation" do
     test "is answered once the relocated encoder reports the segment ready" do
       state = base_state()

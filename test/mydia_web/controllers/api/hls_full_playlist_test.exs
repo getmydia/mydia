@@ -128,6 +128,30 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
       assert json_response(conn, 503)["error"] =~ "not ready"
     end
 
+    test "an out-of-range segment index returns 404, not 503", %{
+      conn: conn,
+      token: token,
+      temp_dir: dir,
+      session_id: session_id
+    } do
+      {:ok, _pid} =
+        HlsSessionStub.start_link(session_id, %{media_file_id: "unused", temp_dir: dir}, %{
+          request_segment: {:error, :out_of_range}
+        })
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/hls/#{session_id}/segment_99999.ts")
+
+      # Unlike a timeout, an out-of-range segment will never exist, so a
+      # terminal 404 is correct here. A 503 with Retry-After would tell
+      # hls.js and mpv to keep retrying a request that can never succeed.
+      assert conn.status == 404
+      assert get_resp_header(conn, "retry-after") == []
+      assert json_response(conn, 404)["error"] =~ "not found"
+    end
+
     # If the controller mis-routed a subtitle name into request_segment/2,
     # this session would answer with a timeout and the response would be a
     # 503 rather than the materialized track.

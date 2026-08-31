@@ -290,6 +290,15 @@ defmodule MydiaWeb.Api.HlsController do
 
             {:error, :window_mode} ->
               serve_window_segment(conn, session_id, user_id, segment)
+
+            {:error, :out_of_range} ->
+              # Unlike :timeout, this segment will never exist: it falls
+              # outside the plan the session published. Retrying it is
+              # pointless, so a terminal 404 is the honest answer rather than
+              # a 503 that hls.js and mpv would keep retrying forever.
+              conn
+              |> put_status(:not_found)
+              |> json(%{error: "Segment not found"})
           end
         else
           :error ->

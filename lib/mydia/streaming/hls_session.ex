@@ -200,10 +200,14 @@ defmodule Mydia.Streaming.HlsSession do
   needed.
 
   Returns `{:error, :window_mode}` for a session that has no plan, whose
-  segments the caller must resolve by filename as before.
+  segments the caller must resolve by filename as before, and `{:error,
+  :out_of_range}` when `index` falls outside the plan's segment count.
   """
   @spec request_segment(pid(), non_neg_integer()) ::
-          {:ok, String.t()} | {:error, :timeout} | {:error, :window_mode}
+          {:ok, String.t()}
+          | {:error, :timeout}
+          | {:error, :window_mode}
+          | {:error, :out_of_range}
   def request_segment(pid, index) do
     GenServer.call(pid, {:request_segment, index}, @segment_wait_timeout + 2_000)
   catch
@@ -531,6 +535,18 @@ defmodule Mydia.Streaming.HlsSession do
 
   def handle_call({:request_segment, _index}, _from, %{segment_plan: nil} = state) do
     {:reply, {:error, :window_mode}, state}
+  end
+
+  # Out of range for the published plan. TranscodeWindow.decide/2 has no
+  # concept of the plan's bounds and would happily return {:relocate, index},
+  # which stops the encoder the viewer is actually watching to seek FFmpeg
+  # past end of file. Checked before decide/2 runs, so a bogus index never
+  # touches the running backend. A negative index cannot reach here through
+  # the controller (SegmentPlan.index_from_name/1's regex only matches
+  # digits), but the low end is bounded too since it costs nothing.
+  def handle_call({:request_segment, index}, _from, %{segment_plan: plan} = state)
+      when index < 0 or index >= plan.count do
+    {:reply, {:error, :out_of_range}, state}
   end
 
   def handle_call({:request_segment, index}, from, state) do
