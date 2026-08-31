@@ -45,7 +45,8 @@ pub async fn start(db: &Db, library_path_id: &str) -> Result<ScanRunRow, DbError
 
     let sql = format!("{SELECT_RUN} WHERE id = ?");
 
-    Ok(sqlx::query_as::<_, ScanRunRow>(&sql)
+    // Safe: fixed literal fragment; `id` is bound, not interpolated.
+    Ok(sqlx::query_as::<_, ScanRunRow>(sqlx::AssertSqlSafe(sql))
         .bind(&id)
         .fetch_one(db.pool())
         .await?)
@@ -120,7 +121,9 @@ pub async fn fail(db: &Db, run_id: &str, error: &str) -> Result<(), DbError> {
 pub async fn latest(db: &Db, library_path_id: &str) -> Result<Option<ScanRunRow>, DbError> {
     let sql = format!("{SELECT_RUN} WHERE library_path_id = ? ORDER BY started_at DESC LIMIT 1");
 
-    Ok(sqlx::query_as::<_, ScanRunRow>(&sql)
+    // Safe: fixed literal fragment; `library_path_id` is bound, not
+    // interpolated.
+    Ok(sqlx::query_as::<_, ScanRunRow>(sqlx::AssertSqlSafe(sql))
         .bind(library_path_id)
         .fetch_optional(db.pool())
         .await?)

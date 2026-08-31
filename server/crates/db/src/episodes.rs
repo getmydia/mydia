@@ -52,7 +52,10 @@ pub async fn upsert(db: &Db, new: NewEpisode) -> Result<EpisodeRow, DbError> {
 
     let sql = format!("{SELECT} WHERE show_id = ? AND season_number = ? AND episode_number = ?");
 
-    Ok(sqlx::query_as::<_, EpisodeRow>(&sql)
+    // Safe: `sql` is `SELECT` (a fixed const) plus a fixed literal WHERE
+    // fragment. Nothing in the string varies with input; the actual runtime
+    // values are bound as parameters below.
+    Ok(sqlx::query_as::<_, EpisodeRow>(sqlx::AssertSqlSafe(sql))
         .bind(&new.show_id)
         .bind(new.season_number)
         .bind(new.episode_number)
@@ -63,7 +66,8 @@ pub async fn upsert(db: &Db, new: NewEpisode) -> Result<EpisodeRow, DbError> {
 pub async fn find(db: &Db, id: &str) -> Result<Option<EpisodeRow>, DbError> {
     let sql = format!("{SELECT} WHERE id = ?");
 
-    Ok(sqlx::query_as::<_, EpisodeRow>(&sql)
+    // Safe: fixed literal fragment; `id` is bound, not interpolated.
+    Ok(sqlx::query_as::<_, EpisodeRow>(sqlx::AssertSqlSafe(sql))
         .bind(id)
         .fetch_optional(db.pool())
         .await?)
@@ -72,7 +76,8 @@ pub async fn find(db: &Db, id: &str) -> Result<Option<EpisodeRow>, DbError> {
 pub async fn list_for_show(db: &Db, show_id: &str) -> Result<Vec<EpisodeRow>, DbError> {
     let sql = format!("{SELECT} WHERE show_id = ? ORDER BY season_number, episode_number");
 
-    Ok(sqlx::query_as::<_, EpisodeRow>(&sql)
+    // Safe: fixed literal fragment; `show_id` is bound, not interpolated.
+    Ok(sqlx::query_as::<_, EpisodeRow>(sqlx::AssertSqlSafe(sql))
         .bind(show_id)
         .fetch_all(db.pool())
         .await?)
@@ -86,7 +91,9 @@ pub async fn list_for_season(
 ) -> Result<Vec<EpisodeRow>, DbError> {
     let sql = format!("{SELECT} WHERE show_id = ? AND season_number = ? ORDER BY episode_number");
 
-    Ok(sqlx::query_as::<_, EpisodeRow>(&sql)
+    // Safe: fixed literal fragment; `show_id`/`season_number` are bound, not
+    // interpolated.
+    Ok(sqlx::query_as::<_, EpisodeRow>(sqlx::AssertSqlSafe(sql))
         .bind(show_id)
         .bind(season_number)
         .fetch_all(db.pool())
