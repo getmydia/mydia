@@ -63,6 +63,18 @@ ffmpeg -y -f lavfi -i testsrc2=duration=5:size=1280x720:rate=24 \
        "$VIDEO_PATH"
 chown mydia:mydia "$VIDEO_PATH"
 
+# The file is pinned as an operator decision (`extra_source: :operator` below).
+# The clip is 5 seconds and the seeded movie carries no published runtime, so
+# `ExtraClassifier` reaches its absolute floor for a movie, 600 seconds, and
+# correctly calls the file a sample. It then demotes it to an extra, which
+# removes it from `MediaFile.versions/0` and empties `movie.files`, and every
+# streaming test fails on a null file id. The rescue that normally keeps one
+# version does not fire, by design: a folder holding only a short clip must
+# still report the movie as not owned.
+#
+# An operator decision is the honest fixture here, since the seed is asserting
+# this file IS the feature. The alternative, a clip longer than the 600 second
+# floor, would put a ten minute video in every E2E run.
 echo "E2E: seeding library entries"
 su-exec mydia /app/bin/mydia rpc "
     alias Mydia.{Settings, Media, Library, Repo}
@@ -89,7 +101,8 @@ su-exec mydia /app/bin/mydia rpc "
            resolution: \"720p\",
            codec: \"h264\",
            audio_codec: \"aac\",
-           metadata: %{\"duration\" => 5.0}
+           metadata: %{\"duration\" => 5.0},
+           extra_source: :operator
          }) do
       IO.puts(\"Test media seeded: E2E Test Movie (#{file_size} bytes)\")
     else
