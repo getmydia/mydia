@@ -134,24 +134,38 @@ matches nothing and so satisfies the negation:
    dangerous one, since it fires on a PR that was green moments earlier, so an
    automated merge reads a stale green and lands a commit whose CI never ran.
 
-Require non-empty output, then re-list and confirm `headRefOid` matches the commit
-you pushed. Keep this in a script file, since the worktree guard rejects the loop
-as an inline Bash command:
+Waiting for "nothing pending" is not enough, for the reason two paragraphs up: the
+rollup can be complete-looking before the slower contexts register. Confirm
+`headRefOid` matches the commit you pushed, and require the six contexts by name.
+Keep this in a script file, since the worktree guard rejects the loop as an inline
+Bash command:
 
 ```bash
+required='["Test","Test / PostgreSQL","Test / E2E Browser","Site build","Load lanes (ios)","Load lanes (android)"]'
+
 while true; do
-  head=$(gh pr view "$pr" --repo "$repo" --json headRefOid --jq .headRefOid 2>/dev/null)
-  out=$(gh pr checks "$pr" --repo "$repo" 2>/dev/null)
-  if [ "$head" = "$pushed_sha" ] && [ -n "$out" ] &&
-     ! printf '%s' "$out" | grep -q pending; then
+  head=$(gh pr view "$pr" --repo "$repo" --json headRefOid --jq .headRefOid 2>/dev/null || true)
+  if [ "$head" != "$pushed_sha" ]; then sleep 60; continue; fi
+
+  json=$(gh pr checks "$pr" --repo "$repo" --json name,bucket 2>/dev/null || true)
+  if [ -z "$json" ]; then sleep 60; continue; fi
+
+  # every required context present AND passing, and nothing still pending
+  if printf '%s' "$json" | jq -e --argjson need "$required" '
+       ((map(select(.bucket == "pass") | .name)) as $ok
+        | ($need - $ok) | length == 0)
+       and (all(.bucket != "pending"))' >/dev/null; then
     break
   fi
   sleep 60
 done
 ```
 
-The `headRefOid` comparison is the part that matters: without it the loop can
-break on a complete-looking run that describes the previous commit.
+Three guards, each covering a different way the naive loop lies. The
+`headRefOid` comparison rejects a run describing the previous commit. The
+`$need - $ok` subtraction catches a required context that has not registered at
+all, which "nothing failed" cannot see. The empty-`json` check keeps a transient
+`gh` failure from reading as a finished run.
 
 ## Infrastructure and network failures
 

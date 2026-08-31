@@ -532,6 +532,23 @@ The 2000ms is a timeout, not a sleep. Unloaded, both files together run 21 tests
 in 0.4s. Under contention they blow the deadline and fail as `** (EXIT) time out`
 on `Task.await/2`, which reads like a serialization regression.
 
+**That is not the only signature.** The same test also fails as
+
+```text
+Assertion failed, no matching message after 1000ms
+code: assert_receive {:ownership_attempt, ^first_pid}
+mailbox:
+pattern: {:ownership_attempt, ^first_pid}
+value:   {:ownership_attempt, #PID<0.44749.0>}
+```
+
+where the mailbox shows the *other* process reached ownership first. The test
+pins `first_pid` and expects it to win, which is a scheduling assumption rather
+than something the locking guarantees. Match on the test name, not on the
+exception type: an `assert_receive` failure here is the same flake as the
+`Task.await` timeout, not a distinct defect. Observed on CI 2026-08-31, twice in
+a row on one commit, then green on the third re-run with no code change.
+
 Observed 2026-08-31: `./dev mix precommit` failed with exactly these two while
 the PostgreSQL devenv stack was still up and a PostgreSQL suite overlapped the
 run. Re-running both files on a quiet machine gave 21 tests / 0 failures, and a
