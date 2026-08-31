@@ -215,4 +215,97 @@ defmodule Mydia.Library.ReleaseParserTest do
       assert result.year == 2020
     end
   end
+
+  describe "parse/1 - indexer site-branding prefixes" do
+    test "strips a `www.<host> - ` prefix from a TV release" do
+      # Regression: a title of this exact shape was returned by a live search.
+      # The prefix was folded into the show title as "Www Sitename Org Example
+      # Show", whose Jaro distance to the expected title was 0.40, below
+      # ReleaseRanker's 0.7 threshold. Every 1080p and 2160p candidate was
+      # hard-rejected as a title mismatch and a 360p XviD was grabbed instead.
+      # Names are anonymised; the shape is what matters.
+      result =
+        ReleaseParser.parse(
+          "www.SiteName.org    -    Example Show 2024 S02E01 Episode Title 1080p ATVP WEB-DL DDP5 1 Atmos H 264-GRP"
+        )
+
+      assert result.type == :tv_show
+      assert result.title == "Example Show"
+      assert result.year == 2024
+      assert result.season == 2
+      assert result.episodes == [1]
+    end
+
+    test "strips the prefix from the 2160p variant of the same release" do
+      result =
+        ReleaseParser.parse(
+          "www.SiteName.org    -    Example Show 2024 S02E01 Episode Title 2160p ATVP WEB-DL DDP5 1 Atmos DV HDR10Plus H 265-GRP"
+        )
+
+      assert result.title == "Example Show"
+      assert result.season == 2
+      assert result.episodes == [1]
+    end
+
+    test "strips a bracketed site prefix" do
+      result = ReleaseParser.parse("[ www.Torrenting.org ] Movie.Name.2020.1080p.BluRay.x264-GRP")
+
+      assert result.type == :movie
+      assert result.title == "Movie Name"
+      assert result.year == 2020
+    end
+
+    test "strips a dotted site prefix with no separator" do
+      result = ReleaseParser.parse("www.1TamilMV.world - Movie.Name.2020.1080p.BluRay.x264")
+
+      assert result.title == "Movie Name"
+      assert result.year == 2020
+    end
+
+    test "leaves a title that merely contains www alone" do
+      # Only a leading site prefix is stripped. A title is never emptied.
+      result = ReleaseParser.parse("Movie.Name.2020.1080p.BluRay.x264-GRP")
+      assert result.title == "Movie Name"
+    end
+
+    test "does not empty the title when the name is nothing but a site tag" do
+      result = ReleaseParser.parse("www.UIndex.org")
+      refute result.title == ""
+    end
+
+    test "does not eat a title word that follows the host on a dot" do
+      # The domain-label run is greedy, so `.The` looked like another label and
+      # the space after it satisfied the boundary check, leaving "Matrix".
+      # Only an unambiguous boundary (a bracket, a separator glyph, or a bare
+      # www.domain.tld before whitespace) may be stripped.
+      for title <- [
+            "www.example.com.The Sample Film.1999.1080p",
+            "www.example.com.The Sample Film 1999 1080p BluRay x264"
+          ] do
+        result = ReleaseParser.parse(title)
+
+        assert result.title =~ "The Sample",
+               "leading article was eaten: #{inspect(result.title)}"
+
+        assert result.year == 1999
+      end
+    end
+
+    test "leaves a run-on dotted domain alone rather than eating the title" do
+      # No delimiter separates the domain from the release, so the labels are
+      # indistinguishable from title words. Declining to strip is the safe
+      # failure: the title survives intact, just uncleaned.
+      result = ReleaseParser.parse("www.Site.org.Movie.Name.2020.1080p.BluRay.x264")
+
+      assert result.title =~ "Movie Name"
+      assert result.year == 2020
+    end
+
+    test "strips a prefix separated only by whitespace" do
+      result = ReleaseParser.parse("www.Torrenting.org Movie.Name.2020.1080p.BluRay.x264")
+
+      assert result.title == "Movie Name"
+      assert result.year == 2020
+    end
+  end
 end

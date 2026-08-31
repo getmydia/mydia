@@ -177,6 +177,50 @@ defmodule Mydia.Indexers.QualityParser do
     end)
   end
 
+  # A release title with no resolution token is SD in practice: the tag is
+  # omitted precisely when there is nothing to boast about. `XviD-AFG` and
+  # friends are 360p rips.
+  @assumed_resolution "360p"
+
+  @doc """
+  The resolution to *judge* a release by, with an untagged one assumed to be
+  #{@assumed_resolution}.
+
+  `parse/1` and `extract_resolution/1` stay honest and return `nil` when the
+  title carries no resolution token, because that output also feeds file
+  renaming (`Mydia.Jobs.MediaImport.generate_filename/4` → `FileNamer`), where
+  an invented resolution would be written into the filename on disk.
+
+  This function is the search-side reading of the same `nil`. Scoring an
+  untagged release as "unknown" gave it a neutral 50 from
+  `QualityProfile.score_media_file/2` and no range violation at all, which put
+  it *above* an honestly-labelled out-of-range release scoring 25. A 360p XviD
+  beat a 720p x265 that way. Call this at the point a release is measured
+  against a profile; never when recording what a file actually is.
+
+  ## Examples
+
+      iex> QualityParser.effective_resolution(QualityParser.parse("Movie.1080p.BluRay"))
+      "1080p"
+
+      iex> QualityParser.effective_resolution(QualityParser.parse("Movie.XviD-AFG"))
+      "360p"
+
+      iex> QualityParser.effective_resolution(nil)
+      "360p"
+  """
+  @spec effective_resolution(Quality.t() | nil) :: String.t()
+  def effective_resolution(%Quality{resolution: resolution}) when is_binary(resolution),
+    do: resolution
+
+  def effective_resolution(_quality), do: @assumed_resolution
+
+  @doc """
+  The resolution assumed for a release title that carries no resolution token.
+  """
+  @spec assumed_resolution() :: String.t()
+  def assumed_resolution, do: @assumed_resolution
+
   @doc """
   Extracts the source from a release title.
 
