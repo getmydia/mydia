@@ -78,6 +78,13 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     end
   end
 
+  # The playlist_mode a Registry entry predating that key is assumed to have
+  # carried. This is the safe default: it is the compatibility path that can
+  # only serve the offset it started at, never a wildcard that matches every
+  # request. Shared between @session_discriminators and session_matches?/2
+  # below so the two cannot drift out of sync.
+  @default_playlist_mode :window
+
   # Every request option that shapes the transcode output, mapped to the value
   # a Registry entry predating that option is assumed to have carried. A
   # session is reusable only when all of them agree.
@@ -86,7 +93,7 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   # discriminates depends on the playlist mode, and that is decided in
   # session_matches?/2 below.
   @session_discriminators %{
-    playlist_mode: :window,
+    playlist_mode: @default_playlist_mode,
     max_bitrate: nil,
     max_height: nil,
     audio_language: nil,
@@ -107,7 +114,7 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     # its encoder to any segment, so an offset mismatch is not a mismatch at
     # all. A windowed one can only serve the range it started at, so it is.
     offset_matches =
-      Map.get(metadata, :playlist_mode, :window) == :full or
+      Map.get(metadata, :playlist_mode, @default_playlist_mode) == :full or
         Map.get(metadata, :start_position, 0) == Map.get(request, :start_position, 0)
 
     shape_matches and offset_matches

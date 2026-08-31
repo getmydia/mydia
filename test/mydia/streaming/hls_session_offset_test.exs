@@ -264,5 +264,34 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
 
       refute HlsSessionSupervisor.session_matches?(running, request)
     end
+
+    test "a windowed session never serves a full request" do
+      # The reverse of the direction above: a session that only ever wrote
+      # the window it started at cannot suddenly claim to cover the whole
+      # file just because the new request says :full.
+      running = %{playlist_mode: :window, start_position: 0, max_bitrate: nil, max_height: nil}
+      request = %{playlist_mode: :full, start_position: 0, max_bitrate: nil, max_height: nil}
+
+      refute HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "metadata missing playlist_mode is treated as :window, not a wildcard" do
+      # Registry metadata written before playlist_mode existed must read as
+      # the safe, compatibility-only default. It must still serve the
+      # :window request such a session was actually built for...
+      assert HlsSessionSupervisor.session_matches?(
+               %{start_position: 0},
+               HlsSessionSupervisor.session_request(playlist_mode: :window)
+             )
+
+      # ...but must not be mistaken for a :full session that can be moved to
+      # any offset. Treating an absent key as a wildcard here would silently
+      # corrupt playback position for the older client such metadata belongs
+      # to.
+      refute HlsSessionSupervisor.session_matches?(
+               %{start_position: 0},
+               HlsSessionSupervisor.session_request(playlist_mode: :full)
+             )
+    end
   end
 end
