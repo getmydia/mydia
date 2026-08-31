@@ -12,9 +12,19 @@ cd "$(dirname "$0")/.."
 # crate pins. A mismatch does not fail, it regenerates every binding at the
 # wrong version, so the check is up front and by absolute path: a stale copy in
 # ~/.cargo/bin wins on PATH inside the devenv shell.
+#
+# The version is read from the crate rather than restated here, matching
+# nix/devShells/flake-module.nix. A literal in this file goes stale the moment
+# the pin moves, and the failure it then permits is the one it exists to catch.
 FRB="${CARGO_INSTALL_ROOT:?run this inside the devenv shell}/bin/flutter_rust_bridge_codegen"
-"$FRB" --version | grep -qF 2.12.0 || {
-  echo "ERROR: flutter_rust_bridge_codegen must be 2.12.0, got $("$FRB" --version)" >&2
+FRB_VERSION="$(sed -n 's/^flutter_rust_bridge = "=\(.*\)"$/\1/p' \
+  rust/mydia_player_p2p/Cargo.toml)"
+if [ -z "$FRB_VERSION" ]; then
+  echo "ERROR: could not read the flutter_rust_bridge pin from player/rust/mydia_player_p2p/Cargo.toml" >&2
+  exit 1
+fi
+"$FRB" --version | grep -qF "$FRB_VERSION" || {
+  echo "ERROR: flutter_rust_bridge_codegen must be $FRB_VERSION, got $("$FRB" --version)" >&2
   exit 1
 }
 
