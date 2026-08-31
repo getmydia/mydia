@@ -671,6 +671,25 @@ defmodule MydiaWeb.DownloadsLive.Index do
     {:noreply, update(socket, :match_modal, &MatchDialog.show_episodes(&1, media_item_id))}
   end
 
+  def handle_event("match_modal_add_external", %{"provider_id" => provider_id}, socket) do
+    with :ok <- Authorization.authorize_create_media(socket) do
+      dialog = %{socket.assigns.match_modal | adding: to_string(provider_id), error: nil}
+
+      case MatchDialog.add_external(dialog, provider_id) do
+        {:added, item} ->
+          case MatchDialog.select(%{dialog | adding: nil}, item.id) do
+            {:submit, {item_id, episode_id}} -> submit_match(socket, item_id, episode_id)
+            {:episodes, updated} -> {:noreply, assign(socket, :match_modal, updated)}
+          end
+
+        {:error, updated} ->
+          {:noreply, assign(socket, :match_modal, updated)}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
   def handle_event("match_modal_pick_episode", %{"episode_id" => episode_id}, socket) do
     {:submit, {item_id, ep_id}} =
       MatchDialog.select_episode(socket.assigns.match_modal, episode_id)

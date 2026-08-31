@@ -761,6 +761,44 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       assert has_element?(view, "#match-modal")
       assert has_element?(view, "#match-dialog-type-movie")
+      # #match-dialog-type-movie renders unconditionally regardless of the
+      # actual dialog type, so it alone would pass even if the handler were a
+      # no-op. Pin the flip itself: the provider row list must have swapped
+      # from the series stub (TVDB 81189) to the movie stub (TMDB 550).
+      assert has_element?(view, "#match-dialog-add-550")
+      refute has_element?(view, "#match-dialog-add-81189")
+    end
+  end
+
+  describe "match dialog: adding a title from the provider" do
+    test "adds the show and matches the download to it", %{conn: conn} do
+      # download_fixture creates its own media item when none is given, so the
+      # row always starts matched to something. Assert the match CHANGED to the
+      # newly added show rather than that it started empty.
+      wrong = media_item_fixture(%{type: "tv_show", title: "Wrong Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: wrong.id,
+          imported_at: nil,
+          title: "Stub.Series.S01-S03.1080p.WEB-DL"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+      render_change(view, "match_modal_search", %{"q" => "Stub"})
+
+      assert has_element?(view, "#match-dialog-add-81189")
+
+      render_click(view, "match_modal_add_external", %{"provider_id" => "81189"})
+
+      updated = Downloads.get_download!(download.id)
+      refute updated.media_item_id == wrong.id
+      assert updated.episode_id == nil
+
+      added = Mydia.Media.get_media_item!(updated.media_item_id)
+      assert added.title == "Stub Series"
+      assert added.tvdb_id == 81_189
     end
   end
 end

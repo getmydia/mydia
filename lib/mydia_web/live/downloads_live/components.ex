@@ -147,9 +147,9 @@ defmodule MydiaWeb.DownloadsLive.Components do
   @doc """
   The match / re-match dialog.
 
-  One list holds library rows and, once Task 6 lands, provider rows. TV rows
-  behave differently per mode, which the dialog states in words rather than
-  leaving the operator to discover by clicking.
+  One panel holds library rows, then provider rows for titles not yet in the
+  library. TV rows behave differently per mode, which the dialog states in
+  words rather than leaving the operator to discover by clicking.
   """
   attr :dialog, :map, required: true
 
@@ -261,6 +261,30 @@ defmodule MydiaWeb.DownloadsLive.Components do
               Pick episode
             </button>
           </div>
+        </div>
+
+        <div :if={@dialog.external_results != []} class="divider text-xs my-1">
+          Not in your library
+        </div>
+
+        <div class="max-h-64 overflow-y-auto flex flex-col gap-1">
+          <button
+            :for={result <- @dialog.external_results}
+            id={"match-dialog-add-#{result.provider_id}"}
+            type="button"
+            class="btn btn-sm btn-ghost justify-start"
+            disabled={@dialog.adding == to_string(result.provider_id)}
+            phx-click="match_modal_add_external"
+            phx-value-provider_id={result.provider_id}
+          >
+            <span
+              :if={@dialog.adding == to_string(result.provider_id)}
+              class="loading loading-spinner loading-xs"
+            ></span>
+            <span class="font-medium">{result.title}</span>
+            <span :if={result.year} class="text-base-content/60">({result.year})</span>
+            <span class="badge badge-xs badge-outline">Add to library</span>
+          </button>
         </div>
       <% end %>
 
