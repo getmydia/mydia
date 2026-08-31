@@ -1,12 +1,12 @@
 //! Enums, the Node interface, pagination machinery, and the shared sort
 //! input.
 //!
-//! The 17 types owned by this module (keep in sync with
+//! The 18 types owned by this module (keep in sync with
 //! tests/types_common.rs): Node, NodeEdge, NodeConnection, PageInfo,
 //! SortInput, and the enums DeviceEventType, MediaType, SearchResultType,
 //! LibraryType, SortField, SortDirection, MediaCategory, SubtitleFormat,
 //! StreamingStrategy, StreamingCandidateStrategy, SegmentType,
-//! MediaStreamType.
+//! MediaStreamType, PlaylistMode.
 
 use async_graphql::{Enum, InputObject, Interface, Object, SimpleObject, ID};
 
@@ -168,6 +168,15 @@ pub enum MediaStreamType {
     Subtitle,
 }
 
+/// How much of the media a streaming session's playlist covers.
+///
+/// Mirrors `enum :playlist_mode` in `lib/mydia_web/schema/enum_types.ex`.
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum PlaylistMode {
+    Full,
+    Window,
+}
+
 /// Renders just this group's types as SDL, so the group can be compared
 /// against the contract before the whole schema exists.
 pub fn sdl_fragment() -> String {
@@ -228,6 +237,10 @@ pub fn sdl_fragment() -> String {
 
         async fn segment_type(&self) -> SegmentType {
             SegmentType::Intro
+        }
+
+        async fn playlist_mode(&self) -> PlaylistMode {
+            PlaylistMode::Full
         }
     }
 
