@@ -12,9 +12,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
   import Mydia.DownloadsFixtures
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
+  import Mydia.MetadataStub, only: [setup_metadata_stub: 1]
 
   alias Mydia.Downloads
   alias Mydia.Library
+
+  # The match dialog's search/2 reaches the metadata relay for provider
+  # results. Swapping in the stub provider (like MatchDialogTest itself does)
+  # keeps every test in this file off the network rather than warming a cache
+  # entry per randomly-generated download title.
+  setup :setup_metadata_stub
 
   setup %{conn: conn} do
     admin = admin_user_fixture()
@@ -687,6 +694,256 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       # The flash alone would pass even if the modal stayed open on a download
       # that no longer exists, leaving the operator submitting into nothing.
       refute has_element?(view, "#match-files-modal")
+    end
+  end
+
+  describe "match dialog: in-flight season pack" do
+    test "opens prefilled from the release name with results already listed", %{conn: conn} do
+      show = media_item_fixture(%{type: "tv_show", title: "Prefilled Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          imported_at: nil,
+          title: "Prefilled.Show.S01-S03.1080p.WEB-DL.x265"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      html = render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+
+      assert has_element?(view, "#match-modal")
+      assert html =~ "Prefilled Show"
+      assert has_element?(view, "#match-dialog-result-#{show.id}")
+    end
+
+    test "matching a TV show in flight submits with no episode", %{conn: conn} do
+      old_show = media_item_fixture(%{type: "tv_show", title: "Wrong Show"})
+      new_show = media_item_fixture(%{type: "tv_show", title: "Right Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: old_show.id,
+          imported_at: nil,
+          title: "Right.Show.S01-S03.1080p.WEB-DL.x265"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+      render_change(view, "match_modal_search", %{"q" => "Right Show"})
+      render_click(view, "match_modal_pick_item", %{"media_item_id" => new_show.id})
+
+      updated = Downloads.get_download!(download.id)
+      assert updated.media_item_id == new_show.id
+      assert updated.episode_id == nil
+      refute has_element?(view, "#match-modal")
+    end
+
+    test "the Pick episode escape opens the episode list without submitting", %{conn: conn} do
+      show = media_item_fixture(%{type: "tv_show", title: "Escape Show"})
+      download = download_fixture(%{media_item_id: show.id, imported_at: nil})
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+      render_change(view, "match_modal_search", %{"q" => "Escape"})
+      render_click(view, "match_modal_show_episodes", %{"media_item_id" => show.id})
+
+      assert has_element?(view, "#match-modal")
+      assert Downloads.get_download!(download.id).media_item_id == show.id
+    end
+
+    test "flipping the type chips keeps the dialog open", %{conn: conn} do
+      show = media_item_fixture(%{type: "tv_show", title: "Chip Show"})
+      download = download_fixture(%{media_item_id: show.id, imported_at: nil})
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+      render_click(view, "match_modal_set_type", %{"type" => "movie"})
+
+      assert has_element?(view, "#match-modal")
+      assert has_element?(view, "#match-dialog-type-movie")
+      # #match-dialog-type-movie renders unconditionally regardless of the
+      # actual dialog type, so it alone would pass even if the handler were a
+      # no-op. Pin the flip itself: the provider row list must have swapped
+      # from the series stub (TVDB 81189) to the movie stub (TMDB 550).
+      assert has_element?(view, "#match-dialog-add-550")
+      refute has_element?(view, "#match-dialog-add-81189")
+    end
+  end
+
+  describe "match dialog: adding a title from the provider" do
+    test "adds the show and matches the download to it", %{conn: conn} do
+      # download_fixture creates its own media item when none is given, so the
+      # row always starts matched to something. Assert the match CHANGED to the
+      # newly added show rather than that it started empty.
+      wrong = media_item_fixture(%{type: "tv_show", title: "Wrong Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: wrong.id,
+          imported_at: nil,
+          title: "Stub.Series.S01-S03.1080p.WEB-DL"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+      render_change(view, "match_modal_search", %{"q" => "Stub"})
+
+      assert has_element?(view, "#match-dialog-add-81189")
+
+      render_click(view, "match_modal_add_external", %{"provider_id" => "81189"})
+
+      updated = Downloads.get_download!(download.id)
+      refute updated.media_item_id == wrong.id
+      assert updated.episode_id == nil
+
+      added = Mydia.Media.get_media_item!(updated.media_item_id)
+      assert added.title == "Stub Series"
+      assert added.tvdb_id == 81_189
+    end
+  end
+
+  describe "match dialog: post-import still requires an episode for TV" do
+    test "picking a TV show after import opens the episode list instead of submitting",
+         %{conn: conn} do
+      library = library_path_fixture(%{type: "series", monitored: true})
+      old_show = media_item_fixture(%{type: "tv_show", title: "Old Show"})
+      new_show = media_item_fixture(%{type: "tv_show", title: "New Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: old_show.id,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "Old Show/Season 01/S01E01.mkv",
+          library_path_id: library.id,
+          media_item_id: old_show.id,
+          size: 100,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
+      render_change(view, "match_modal_search", %{"q" => "New Show"})
+      render_click(view, "match_modal_pick_item", %{"media_item_id" => new_show.id})
+
+      # The dialog stays open on the episode step and nothing was written.
+      assert has_element?(view, "#match-modal")
+      assert Downloads.get_download!(download.id).media_item_id == old_show.id
+      refute_enqueued(worker: Mydia.Jobs.MediaRematch)
+    end
+
+    test "no Pick episode escape is offered after import", %{conn: conn} do
+      library = library_path_fixture(%{type: "series", monitored: true})
+      show = media_item_fixture(%{type: "tv_show", title: "Imported Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "Imported Show/Season 01/S01E01.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          size: 100,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
+      render_change(view, "match_modal_search", %{"q" => "Imported"})
+
+      refute has_element?(view, "#match-dialog-pick-episode-#{show.id}")
+    end
+
+    test "adding a not-yet-in-library show after import opens the episode list instead of submitting",
+         %{conn: conn} do
+      library = library_path_fixture(%{type: "series", monitored: true})
+      old_show = media_item_fixture(%{type: "tv_show", title: "Old Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: old_show.id,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "Old Show/Season 01/S01E01.mkv",
+          library_path_id: library.id,
+          media_item_id: old_show.id,
+          size: 100,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
+      render_change(view, "match_modal_search", %{"q" => "Stub"})
+
+      assert has_element?(view, "#match-dialog-add-81189")
+
+      render_click(view, "match_modal_add_external", %{"provider_id" => "81189"})
+
+      # The show is legitimately created by this flow, but the download's match
+      # must not be written until an episode is chosen: a nil episode_id on a
+      # post-import download makes MediaRematch.apply_relink/5 drop the file in
+      # the show root with no episode association instead of Season 01/.
+      assert has_element?(view, "#match-modal")
+      assert Downloads.get_download!(download.id).media_item_id == old_show.id
+      refute_enqueued(worker: Mydia.Jobs.MediaRematch)
+
+      # The show itself IS legitimately created by this flow; only the
+      # download's match must stay unwritten.
+      [added] = Mydia.Media.list_media_items(search: "Stub Series")
+      assert added.tvdb_id == 81_189
+    end
+
+    test "a forged episode pick from another show is rejected, not written", %{conn: conn} do
+      library = library_path_fixture(%{type: "series", monitored: true})
+      old_show = media_item_fixture(%{type: "tv_show", title: "Old Show"})
+      new_show = media_item_fixture(%{type: "tv_show", title: "New Show"})
+
+      other_show = media_item_fixture(%{type: "tv_show", title: "Other Show"})
+      foreign_episode = episode_fixture(%{media_item_id: other_show.id})
+
+      download =
+        download_fixture(%{
+          media_item_id: old_show.id,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "Old Show/Season 01/S01E01.mkv",
+          library_path_id: library.id,
+          media_item_id: old_show.id,
+          size: 100,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
+      render_change(view, "match_modal_search", %{"q" => "New Show"})
+      render_click(view, "match_modal_pick_item", %{"media_item_id" => new_show.id})
+
+      # The dialog is now on the episode step for new_show. Forge a pick for an
+      # episode that belongs to a different show entirely.
+      html =
+        render_click(view, "match_modal_pick_episode", %{"episode_id" => foreign_episode.id})
+
+      assert html =~ "not part of the selected show"
+      assert has_element?(view, "#match-modal")
+      assert Downloads.get_download!(download.id).media_item_id == old_show.id
+      refute_enqueued(worker: Mydia.Jobs.MediaRematch)
     end
   end
 end

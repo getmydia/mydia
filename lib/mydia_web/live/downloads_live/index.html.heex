@@ -924,74 +924,7 @@
     </.modal>
 
     <%!-- Match / re-match modal (in-flight correction + post-import re-match) --%>
-    <.modal :if={@match_modal} id="match-modal" show={true} on_cancel="close_match_modal">
-      <:title>
-        {if @match_modal.mode == :inflight, do: "Change match", else: "Re-match download"}
-      </:title>
-
-      <%= if @match_modal.selected do %>
-        <p class="text-sm text-base-content/80">
-          Choose the episode for <span class="font-medium">{@match_modal.selected.title}</span>:
-        </p>
-        <div
-          :if={@match_modal.episodes == []}
-          class="text-sm text-base-content/50 mt-2"
-        >
-          No episodes found for this show.
-        </div>
-        <div class="mt-2 max-h-64 overflow-y-auto flex flex-col gap-1">
-          <button
-            :for={ep <- @match_modal.episodes}
-            type="button"
-            class="btn btn-sm btn-ghost justify-start"
-            phx-click="match_modal_pick_episode"
-            phx-value-episode_id={ep.id}
-          >
-            S{String.pad_leading("#{ep.season_number}", 2, "0")}E{String.pad_leading(
-              "#{ep.episode_number}",
-              2,
-              "0"
-            )}
-            <span :if={ep.title} class="text-base-content/60">- {ep.title}</span>
-          </button>
-        </div>
-      <% else %>
-        <form id="match-modal-search-form" phx-change="match_modal_search">
-          <input
-            type="text"
-            name="q"
-            value={@match_modal.query}
-            class="input input-bordered w-full"
-            phx-debounce="300"
-            autocomplete="off"
-            placeholder="Search your library by title..."
-          />
-        </form>
-        <div class="mt-2 max-h-64 overflow-y-auto flex flex-col gap-1">
-          <button
-            :for={item <- @match_modal.results}
-            type="button"
-            class="btn btn-sm btn-ghost justify-start"
-            phx-click="match_modal_pick_item"
-            phx-value-media_item_id={item.id}
-            phx-value-type={item.type}
-            phx-value-title={item.title}
-          >
-            <span class="font-medium">{item.title}</span>
-            <span :if={item.year} class="text-base-content/60">({item.year})</span>
-            <span class="badge badge-xs badge-outline">
-              {if item.type == "tv_show", do: "TV", else: "Movie"}
-            </span>
-          </button>
-        </div>
-      <% end %>
-
-      <:actions>
-        <button type="button" class="btn btn-ghost" phx-click="close_match_modal">
-          Cancel
-        </button>
-      </:actions>
-    </.modal>
+    <Components.match_modal :if={@match_modal} dialog={@match_modal} />
 
     <%!-- Match files modal (manual file matching on import failure) --%>
     <Components.match_files_modal

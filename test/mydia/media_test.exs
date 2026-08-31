@@ -3276,8 +3276,67 @@ defmodule Mydia.MediaTest do
           skip_episode_refresh: true
         )
 
+      # `timestamps(type: :utc_datetime)` is SECOND precision, so two rows
+      # created back to back share an `inserted_at` and this assertion would be
+      # a coin flip on PostgreSQL -- which is exactly why this test flaked for
+      # months. Backdate the older row so "earliest" is a real comparison
+      # rather than a tie that some unrelated tie-break happens to resolve.
+      # The tie itself is covered by the next test, deliberately separately.
+      {1, _} =
+        Repo.update_all(
+          from(m in Mydia.Media.MediaItem, where: m.id == ^older.id),
+          set: [
+            inserted_at:
+              DateTime.utc_now() |> DateTime.add(-60, :second) |> DateTime.truncate(:second)
+          ]
+        )
+
       assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-dup-order"})
       assert id == older.id
+    end
+
+    test "a duplicate match resolves an identical-timestamp tie the same way every call" do
+      # The tie production actually has to survive. `MediaItem` uses
+      # `timestamps(type: :utc_datetime)`, so a burst of inserts landing in one
+      # second is an exact tie on `inserted_at`, and PostgreSQL may break such a
+      # tie either way on successive queries. That flip is the whole reason
+      # find_by_external_ids/2 orders at all, and the crawl inserts in bursts,
+      # so it is reachable rather than theoretical.
+      for title <- ["Tie A", "Tie B", "Tie C"] do
+        {:ok, _} =
+          Media.create_media_item(
+            %{title: title, type: "tv_show", imdb_id: "tt-dup-tie"},
+            skip_episode_refresh: true
+          )
+      end
+
+      # Force the tie rather than hoping the three inserts land in one second.
+      shared = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      {3, _} =
+        Repo.update_all(
+          from(m in Mydia.Media.MediaItem, where: m.imdb_id == "tt-dup-tie"),
+          set: [inserted_at: shared]
+        )
+
+      # Assert the specific row the tie-break selects, not merely that repeated
+      # calls agree. Agreement alone can pass by luck on an unordered query
+      # within a single run; pinning it to the lowest id fails whenever the
+      # tie-break is absent. `id` is a random v4 UUID, so which row that is
+      # carries no meaning -- only that it is always the same one.
+      lowest_id =
+        Mydia.Media.MediaItem
+        |> where([m], m.imdb_id == "tt-dup-tie")
+        |> order_by([m], asc: m.id)
+        |> limit(1)
+        |> Repo.one()
+
+      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-dup-tie"})
+      assert id == lowest_id.id
+
+      for _ <- 1..5 do
+        assert Media.find_by_external_ids(%{imdb: "tt-dup-tie"}).id == id
+      end
     end
 
     test "a non-numeric tvdb id falls through to tmdb instead of raising" do

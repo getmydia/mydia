@@ -80,6 +80,7 @@ defmodule Mydia.Library.ReleaseParser do
 
     result =
       basename
+      |> strip_site_prefix()
       |> tokenize_classify_resolve(target)
       |> build_parsed_file_info(filename, opts)
       |> maybe_merge_folder_context(folder_context)
@@ -125,6 +126,51 @@ defmodule Mydia.Library.ReleaseParser do
   end
 
   # ---- Internals ----
+
+  # Leading indexer site-branding, e.g. `www.UIndex.org    -    `,
+  # `[ www.Torrenting.org ] `, `www.1TamilMV.world - `. Several trackers
+  # stamp their domain onto every title they publish. Left in place the
+  # tokenizer reads it as part of the show name ("Www Uindex Org Dark
+  # Matter"), which sinks the Jaro comparison in
+  # `ReleaseRanker.reject_title_mismatches/2` below its 0.7 threshold and
+  # hard-rejects an otherwise perfect release.
+  #
+  # Anchored to a literal `www.` so it cannot bite a real title: no show or
+  # film is named "www.something". Only the leading occurrence is removed;
+  # trailing site tags in brackets are already handled by @release_group_re.
+  #
+  # Only an *unambiguous* boundary is stripped, in three forms:
+  #
+  #   (a) bracketed          `[ www.Torrenting.org ] Movie...`
+  #   (b) separator glyph    `www.SiteName.org    -    Example Show...`
+  #   (c) bare `www.host.tld` then whitespace   `www.Torrenting.org Movie...`
+  #
+  # A greedy `(?:\.[\w-]+)*` label run with a mere "next char is a delimiter"
+  # check is NOT safe: in `www.example.com.The Matrix.1999`, `.The` matches as
+  # another label and the space after it satisfies the check, so the title
+  # parses as "Matrix". Hence (c) permits exactly one TLD label, and (a)/(b)
+  # require a bracket or separator that a title word would not be followed by.
+  # Anything else, such as a fully run-on `www.Site.org.Movie.Name.2020`, does
+  # not match and is left untouched. That is the safe failure: a title we
+  # decline to clean, never a title we destroy.
+  @site_prefix_re ~r/
+    ^\s*
+    (?:
+        [\[\(\{]\s*www\.[\w.-]+\s*[\]\)\}]\s*      # (a) bracketed host
+      |
+        www\.[\w-]+(?:\.[\w-]+)*\s*[-–—:|]+\s*     # (b) host then separator
+      |
+        www\.[\w-]+\.[a-z]{2,6}\s+                 # (c) host then whitespace
+    )
+  /ix
+
+  defp strip_site_prefix(filename) do
+    stripped = Regex.replace(@site_prefix_re, filename, "", global: false)
+
+    # A name that is *nothing but* a site tag has no release information to
+    # recover, so keep the original rather than handing the tokenizer "".
+    if String.trim(stripped) == "", do: filename, else: stripped
+  end
 
   defp tokenize_classify_resolve(filename, target) do
     # Pre-pass: detect a trailing release-group separator (`-GROUP`)

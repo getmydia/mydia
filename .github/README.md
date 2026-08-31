@@ -97,12 +97,99 @@ the last run that was not a startup_failure, then
 change. Reaching `queued` instead of dying within a second is the signal the graph
 validates.
 
+## Dependabot merges through a gate, not GitHub's auto-merge
+
+`dependabot-auto-merge.yml` no longer calls `gh pr merge --auto`. That waited on
+**required** checks only, with no flag to widen it, so PR #613 merged 2026-08-29
+with seven red advisory checks and broke the master Docker image. Supplementing it
+would not have helped either: `--auto` fires the moment the required checks go
+green and beats any custom gate.
+
+The workflow now runs `scripts/dependabot-gate.sh`, which reads a PR's whole
+`statusCheckRollup` and prints one line:
+
+- `MERGE` -- every context concluded `SUCCESS`, `SKIPPED` or `NEUTRAL`. Merges,
+  but only when `mergeStateStatus` is `CLEAN` or `HAS_HOOKS`. `UNSTABLE` means
+  "mergeable with non-required checks failing", which is literally the state #613
+  merged in, and never merges.
+- `WAIT` -- something is still running, or no checks are registered yet. No
+  action, no comment.
+- `BLOCKED` -- everything concluded and something failed. Upserts one comment
+  naming the blocking contexts, rewritten in place rather than appended.
+
+Three details the data forces, each with a test fixture in
+`scripts/tests/fixtures/`: a rollup mixes `CheckRun` entries (`name`/`status`/
+`conclusion`) with `StatusContext` entries (`context`/`state`, no `status` field
+at all -- CodeRabbit posts one of these, and reading only `.status` waits
+forever); `SKIPPED` and `NEUTRAL` are normal and must count as passing; and an
+empty or null rollup means `WAIT`, never `MERGE`.
+
+### It cannot merge PRs that touch `.github/workflows/`
+
+This is structural, not a bug. `GITHUB_TOKEN` is a GitHub App token, and GitHub
+refuses to let an App land workflow-file changes without `workflows` permission:
+
+```text
+GraphQL: refusing to allow a GitHub App to create or update workflow
+`.github/workflows/<file>.yml` without `workflows` permission (mergePullRequest)
+```
+
+In practice that is dependabot's **actions group**. Confirmed 2026-08-31 on #627:
+the gate logged `PR #627: MERGE`, the merge failed, and the run continued. Merge
+that class by hand.
+
+There is no workflow-level escape hatch: `workflows` is not a valid key in a
+`permissions:` block, so this cannot be fixed by widening the job's permissions.
+It would take a GitHub App installation token or PAT carrying the repository's
+Workflows permission, wired in as a secret in place of `GITHUB_TOKEN`.
+
+That is deliberately not done. It would hand an auto-merging bot a credential
+that can land changes to CI configuration itself, which is a materially larger
+privilege than merging dependency bumps, and it would sit in a workflow that
+merges without human review. Merging that class by hand is the cheaper trade.
+
+### The trigger, and why not `check_suite`
+
+`workflow_run` over the nine workflows that run on pull requests. `check_suite`
+was tried first and reverted. GitHub documents that it "does not trigger workflows
+if the check suite was created by GitHub Actions", which reads as though it never
+fires here -- but it does, for suites created by *other* apps. That is worse than
+not firing: those suites conclude on their own schedule, typically well before CI,
+so the gate would evaluate early, log `WAIT`, and never be woken when the last
+Actions workflow finished.
+
+Missing a workflow from the list cannot cause a wrong merge -- the gate re-reads
+the full rollup rather than trusting the event, so an unlisted workflow still
+counts toward the verdict. What it can cause is a stuck PR. If the omitted
+workflow is the last to finish, every listed one has already fired, the gate has
+already logged `WAIT`, and nothing wakes it again. The PR sits green and open
+until someone re-runs a listed workflow. Keep the list complete, and when a
+green dependabot PR is not merging, check whether a workflow it runs is absent
+from it.
+
+### It is edge-triggered, so a green backlog sits
+
+The gate only evaluates a PR when one of those workflows *completes*. A PR that
+was already green before the gate existed has no event to fire for it and stays
+open indefinitely. Re-running any one of its workflows is enough to trigger a
+verdict. New dependabot PRs are unaffected.
+
+### Every fallible call in the loop is guarded
+
+The gate script call, `gh pr merge`, and the comment API calls all use
+`cmd || status=$?`, log to stderr, and continue. Under `set -euo pipefail` an
+unguarded failure -- a 409 because someone merged by hand, or the workflow-file
+refusal above -- would abort the step and leave every later dependabot PR in that
+run unevaluated. Do not remove those guards.
+
 ## Dependabot: a stale base blocks a green PR forever
 
 The Master ruleset requires `Load lanes (ios)`, `Load lanes (android)`,
-`Site build`, `Test`, `Test / PostgreSQL` and `Test / E2E Browser`. Several of
-those workflows were originally `paths:`-filtered, and `20f0db5e2` (2026-08-26)
-removed the filters precisely so they report on every PR.
+`Site build`, `Test`, `Test / PostgreSQL`, `Test / E2E Browser`, and -- since
+2026-08-31 -- `Build / Web` and `Test / Player`. Several of those workflows were
+originally `paths:`-filtered, and `20f0db5e2` (2026-08-26) removed the filters
+precisely so they report on every PR. `ci-player.yml` got the same treatment
+differently: its filter moved into a `changes` job, so its jobs always report.
 
 A PR branched from a master older than that commit still carries the
 path-filtered workflow files, so those jobs never run and the required contexts
