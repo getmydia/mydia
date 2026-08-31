@@ -31,6 +31,23 @@
         sha256 = "5638eb4495488e885ebec167fa57973e5c35e1a50c344eb7666c90ec1c4e3b12";
       };
 
+      # Download crates from the CDN rather than the crates.io API host.
+      #
+      # crates.io enforces an identifying User-Agent on
+      # `crates.io/api/v1/crates/<name>/<version>/download` and 403s the ones it
+      # does not recognise. That is what broke `fetchCargoVendor` below, and it
+      # caught up with `importCargoLock`'s plain curl UA too: every `CI / Nix`
+      # run since 2026-08-27 died on `cannot download crate-<name>.tar.gz from
+      # any mirror`, on a different arbitrary crate each time.
+      #
+      # `static.crates.io` is the CDN behind the API and enforces no such
+      # policy. nixpkgs made this the default in c0a89c379 (2026-05-27), which
+      # is newer than the nixpkgs this flake pins, so the override is applied
+      # here. It can go away when that pin moves past that commit.
+      crateRegistries = {
+        "https://github.com/rust-lang/crates.io-index" = "https://static.crates.io/crates";
+      };
+
       # Pre-fetch Rust/Cargo dependencies for the p2p NIF (required for sandbox build).
       #
       # Uses importCargoLock rather than fetchCargoVendor: fetchCargoVendor's
@@ -41,12 +58,14 @@
       # to maintain. The lock is pure crates.io (no git deps), so no outputHashes needed.
       cargoDeps = pkgs.rustPlatform.importCargoLock {
         lockFile = ../../native/mydia_p2p/Cargo.lock;
+        extraRegistries = crateRegistries;
       };
 
       # Vendored crates for the bundled webhook_notifier plugin guest, built for
       # wasm32-wasip2 by the plugins Mix compiler during `mix compile`.
       webhookNotifierCargoDeps = pkgs.rustPlatform.importCargoLock {
         lockFile = ../../plugins/webhook_notifier/Cargo.lock;
+        extraRegistries = crateRegistries;
       };
 
       # Same for the bundled simkl_sync plugin guest. Each bundled guest is its
@@ -54,6 +73,7 @@
       # (and a `.cargo/config.toml` below) or the no-network sandbox build fails.
       simklSyncCargoDeps = pkgs.rustPlatform.importCargoLock {
         lockFile = ../../plugins/simkl_sync/Cargo.lock;
+        extraRegistries = crateRegistries;
       };
 
       # Vendored crates for the subtitle re-sync NIF. Like the p2p NIF above,
@@ -62,6 +82,7 @@
       # build fails without printing an error.
       subsyncCargoDeps = pkgs.rustPlatform.importCargoLock {
         lockFile = ../../native/mydia_subsync/Cargo.lock;
+        extraRegistries = crateRegistries;
       };
 
       # Precompiled wasmex NIF (rustler_precompiled downloads this at compile

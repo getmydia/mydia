@@ -365,6 +365,14 @@ defmodule Mydia.Library.CandidatePromotionTest do
     end
   end
 
+  # Same reasoning as the ownership race in file_ingest_test.exs: this escapes
+  # the sandbox and waits on real connections being scheduled, so its budgets
+  # measure runner load rather than anything it computes. It was caught twice
+  # in .github/ci-flakes.md at the old one and two second values, on both
+  # adapters, and runs in a fraction of a second locally.
+  @ownership_await 30_000
+  @ownership_receive 10_000
+
   test "separate database connections serialize competing promotions at ownership" do
     %{library_path: library_path, movie: movie, candidate: candidate} =
       Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
@@ -427,26 +435,26 @@ defmodule Mydia.Library.CandidatePromotionTest do
     first = Task.async(promote)
     second = Task.async(promote)
 
-    assert_receive {:connection_ready, first_pid}, 1_000
-    assert_receive {:connection_ready, second_pid}, 1_000
+    assert_receive {:connection_ready, first_pid}, @ownership_receive
+    assert_receive {:connection_ready, second_pid}, @ownership_receive
     refute first_pid == second_pid
 
     send(first.pid, {:start_promotion, ref})
-    assert_receive {:ownership_attempt, ^first_pid}, 1_000
-    assert_receive {:ownership_boundary, ^first_pid}, 1_000
+    assert_receive {:ownership_attempt, ^first_pid}, @ownership_receive
+    assert_receive {:ownership_boundary, ^first_pid}, @ownership_receive
 
     # The first task holds SQLite's write lock. The second has reached the
     # ownership boundary but cannot enter its write transaction yet.
     send(second.pid, {:start_promotion, ref})
-    assert_receive {:ownership_attempt, ^second_pid}, 1_000
+    assert_receive {:ownership_attempt, ^second_pid}, @ownership_receive
     assert Task.yield(second, 0) == nil
 
     send(first.pid, {:release_ownership, ref})
-    assert {:ok, [_]} = Task.await(first, 2_000)
+    assert {:ok, [_]} = Task.await(first, @ownership_await)
 
-    assert_receive {:ownership_boundary, ^second_pid}, 1_000
+    assert_receive {:ownership_boundary, ^second_pid}, @ownership_receive
     send(second.pid, {:release_ownership, ref})
-    assert {:error, {:candidate_missing, _}} = Task.await(second, 2_000)
+    assert {:error, {:candidate_missing, _}} = Task.await(second, @ownership_await)
 
     Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
       assert Repo.aggregate(
