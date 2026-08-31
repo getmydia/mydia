@@ -5,6 +5,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
   alias MydiaWeb.DownloadsLive.MatchDialog
 
+  import Mydia.MediaFixtures
+  import Mydia.MetadataStub, only: [setup_metadata_stub: 1]
+
+  defp dialog_for(type) do
+    %MatchDialog{download_id: "d1", mode: :inflight, query: "", type: type}
+  end
+
   describe "open/2" do
     test "seeds the query from the parsed release title" do
       download = %{id: "d1", title: "Show.Name.S01-S03.1080p.WEB-DL.x265", media_item: nil}
@@ -66,6 +73,90 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
       assert dialog.error == nil
       assert dialog.search_warning == nil
       assert dialog.adding == nil
+    end
+  end
+
+  describe "search/2" do
+    setup :setup_metadata_stub
+
+    test "returns nothing for a query under two characters" do
+      dialog = MatchDialog.search(dialog_for(:movie), "a")
+
+      assert dialog.library_results == []
+      assert dialog.external_results == []
+      assert dialog.search_warning == nil
+    end
+
+    test "finds a library item by title" do
+      item = media_item_fixture(%{type: "movie", title: "Searchable Movie"})
+
+      dialog = MatchDialog.search(dialog_for(:movie), "Searchable")
+
+      assert Enum.map(dialog.library_results, & &1.id) == [item.id]
+    end
+
+    test "includes provider results alongside library results" do
+      dialog = MatchDialog.search(dialog_for(:movie), "Stub")
+
+      assert Enum.any?(dialog.external_results, &(&1.title == "Stub Movie"))
+      assert dialog.search_warning == nil
+    end
+
+    test "drops a provider result whose id is already a library item" do
+      _existing =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Stub Series",
+          tvdb_id: 81_189
+        })
+
+      dialog = MatchDialog.search(dialog_for(:tv_show), "Stub")
+
+      refute Enum.any?(dialog.external_results, &(to_string(&1.provider_id) == "81189"))
+      assert Enum.any?(dialog.library_results, &(&1.title == "Stub Series"))
+    end
+
+    test "clears any prior selection and error" do
+      dialog =
+        %{dialog_for(:movie) | selected: %{id: "x", title: "t", type: "movie"}, error: "boom"}
+        |> MatchDialog.search("Stub")
+
+      assert dialog.selected == nil
+      assert dialog.episodes == []
+      assert dialog.error == nil
+    end
+  end
+
+  describe "search/2 when the relay is unreachable" do
+    setup :setup_metadata_stub
+
+    setup do
+      Mydia.MetadataStubProvider.fail_search()
+      on_exit(&Mydia.MetadataStubProvider.clear_search_failure/0)
+      :ok
+    end
+
+    test "still returns library results and warns instead of emptying the dialog" do
+      item = media_item_fixture(%{type: "movie", title: "Offline Movie"})
+
+      dialog = MatchDialog.search(dialog_for(:movie), "Offline")
+
+      assert Enum.map(dialog.library_results, & &1.id) == [item.id]
+      assert dialog.external_results == []
+      assert dialog.search_warning =~ "metadata service"
+    end
+  end
+
+  describe "set_type/2" do
+    setup :setup_metadata_stub
+
+    test "re-runs the search under the new type" do
+      dialog =
+        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :movie}
+        |> MatchDialog.set_type(:tv_show)
+
+      assert dialog.type == :tv_show
+      assert Enum.any?(dialog.external_results, &(&1.media_type == :tv_show))
     end
   end
 end

@@ -15,6 +15,11 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   """
 
   alias Mydia.Library.ReleaseParser
+  alias Mydia.Media
+  alias Mydia.Metadata
+
+  @result_limit 10
+  @relay_down "Couldn't reach the metadata service. Showing library results only."
 
   defstruct [
     :download_id,
@@ -64,6 +69,76 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
       type: seed_type(parsed, download)
     }
   end
+
+  @doc """
+  Runs the library and provider searches for `query`.
+
+  Queries under two characters clear the lists rather than returning the whole
+  library. Any prior selection is dropped, because the operator is looking for
+  something else now.
+  """
+  @spec search(t(), String.t()) :: t()
+  def search(%__MODULE__{} = dialog, query) do
+    dialog = %{dialog | query: query, selected: nil, episodes: [], error: nil}
+
+    if String.length(String.trim(query)) < 2 do
+      %{dialog | library_results: [], external_results: [], search_warning: nil}
+    else
+      library = Media.list_media_items(search: query, limit: @result_limit)
+      {external, warning} = provider_search(dialog.type, query, library)
+
+      %{dialog | library_results: library, external_results: external, search_warning: warning}
+    end
+  end
+
+  @doc """
+  Switches the provider search between movies and TV and re-runs it.
+
+  There is no TMDB multi-search endpoint, so the type is a real choice rather
+  than a filter over one result set.
+  """
+  @spec set_type(t(), media_type()) :: t()
+  def set_type(%__MODULE__{} = dialog, type) when type in [:movie, :tv_show] do
+    search(%{dialog | type: type}, dialog.query)
+  end
+
+  # A relay outage must not empty the dialog: the library half still works and
+  # is often all the operator needs.
+  defp provider_search(type, query, library) do
+    case Metadata.search_cached(Metadata.default_relay_config(), query, media_type: type) do
+      {:ok, results} ->
+        {results |> reject_known(library, type) |> Enum.take(@result_limit), nil}
+
+      {:error, _reason} ->
+        {[], @relay_down}
+    end
+  end
+
+  # Deduped against the library rows already fetched rather than with a second
+  # query. Best effort by design: a library item whose stored title differs
+  # from the provider's misses the title search and reappears here, and
+  # `Media.Add.from_attrs/3` catches that case with `:already_in_library`.
+  defp reject_known(results, library, type) do
+    taken =
+      library
+      |> Enum.filter(&(&1.type == type_string(type)))
+      |> Enum.map(&provider_key(&1, type))
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+
+    Enum.reject(results, fn result ->
+      case Integer.parse(to_string(result.provider_id)) do
+        {id, _rest} -> MapSet.member?(taken, id)
+        :error -> false
+      end
+    end)
+  end
+
+  defp provider_key(item, :tv_show), do: item.tvdb_id
+  defp provider_key(item, :movie), do: item.tmdb_id
+
+  defp type_string(:tv_show), do: "tv_show"
+  defp type_string(:movie), do: "movie"
 
   defp seed_query(%{title: parsed_title}, _title)
        when is_binary(parsed_title) and parsed_title != "",

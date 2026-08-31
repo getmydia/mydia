@@ -36,6 +36,7 @@ defmodule Mydia.MetadataStubProvider do
   @season_fetch_block_key {__MODULE__, :season_fetch_block}
   @fetch_by_id_counts_table :mydia_metadata_stub_fetch_by_id_counts
   @raise_on_fetch_by_id_key {__MODULE__, :raise_on_fetch_by_id}
+  @search_failure_key {__MODULE__, :search_failure}
 
   @doc "TMDB id of the catalog movie."
   def movie_tmdb_id, do: @movie_tmdb_id
@@ -65,6 +66,23 @@ defmodule Mydia.MetadataStubProvider do
       {_owner, ^ref} -> :persistent_term.erase(@season_fetch_block_key)
       _other -> :ok
     end
+  end
+
+  @doc """
+  Makes the next and all subsequent `search/3` calls fail until cleared.
+
+  Opt-in: `search/3` only consults this key, so tests that never call it are
+  unaffected.
+  """
+  def fail_search do
+    :persistent_term.put(@search_failure_key, true)
+    :ok
+  end
+
+  @doc "Clears a search failure installed by `fail_search/0`."
+  def clear_search_failure do
+    :persistent_term.erase(@search_failure_key)
+    :ok
   end
 
   @doc """
@@ -131,9 +149,13 @@ defmodule Mydia.MetadataStubProvider do
 
   @impl true
   def search(_config, _query, opts) do
-    case Keyword.get(opts, :media_type) do
-      :tv_show -> {:ok, [series_search_result()]}
-      _ -> {:ok, [movie_search_result()]}
+    if :persistent_term.get(@search_failure_key, false) do
+      {:error, Error.connection_failed("stubbed search failure")}
+    else
+      case Keyword.get(opts, :media_type) do
+        :tv_show -> {:ok, [series_search_result()]}
+        _ -> {:ok, [movie_search_result()]}
+      end
     end
   end
 
