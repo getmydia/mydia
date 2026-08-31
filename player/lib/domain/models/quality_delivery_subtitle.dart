@@ -1,6 +1,9 @@
 /// User-facing subtitles for how a quality rung will be delivered.
 ///
 /// See `docs/superpowers/specs/2026-08-09-player-quality-delivery-labels-design.md`.
+library;
+
+import '../../core/player/hls_strategy_selection.dart';
 
 const kOriginalDirectPlaySubtitle = 'Direct Play';
 const kOriginalLosslessSubtitle = 'Original · no re-encoding';
@@ -57,13 +60,25 @@ bool firstStrategyAllowsDirectPlay(Iterable<String> strategyValues) {
   return first == 'DIRECT_PLAY' || first == 'REMUX';
 }
 
-/// Whether any candidate is a no-re-encode delivery (HLS_COPY or REMUX).
+/// Whether the delivery this playback will actually use skips re-encoding.
 ///
-/// A bare DIRECT_PLAY without HLS_COPY/REMUX is intentionally false: on web
-/// that list still plays via TRANSCODE HLS today.
+/// Delegates to [pickHlsStrategy] rather than scanning for the presence of a
+/// lossless-sounding strategy, because presence is not the question. This
+/// reads the one list [pickHlsStrategy] reads and reports what it decided, so
+/// the label cannot claim a delivery the player did not request.
+///
+/// It used to answer "is any candidate HLS_COPY or REMUX", and that made it
+/// disagree with [pickHlsStrategy] on the shape it matters most for. A
+/// *leading* `HLS_COPY` is the server's `:needs_transcoding` verdict;
+/// [pickHlsStrategy] refuses it and requests `TRANSCODE`, while this returned
+/// true and labelled the resulting re-encode "Original · no re-encoding".
+/// An HEVC file in a browser hits that path every time — the browser is sent
+/// H.264, not HEVC, and the label credited it with a decode it never did.
+///
+/// A bare DIRECT_PLAY without a usable HLS_COPY stays false: on web that list
+/// still plays via TRANSCODE HLS today. A leading `REMUX` is likewise false
+/// here, and correctly so — native reports it through the `canDirectPlay` arm
+/// of [originalDeliverySubtitle], and web never requests REMUX at all.
 bool strategiesAllowLosslessDelivery(Iterable<String> strategyValues) {
-  for (final value in strategyValues) {
-    if (value == 'HLS_COPY' || value == 'REMUX') return true;
-  }
-  return false;
+  return pickHlsStrategy(strategyValues.toList()) == 'HLS_COPY';
 }
