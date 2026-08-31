@@ -215,4 +215,60 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
       assert MatchDialog.select_episode(dialog, "ep-1") == {:submit, {"show-1", "ep-1"}}
     end
   end
+
+  describe "add_external/2" do
+    setup :setup_metadata_stub
+
+    import Mydia.MediaFixtures
+
+    test "creates the media item for a provider result" do
+      dialog =
+        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :movie}
+        |> MatchDialog.search("Stub")
+
+      [result | _] = dialog.external_results
+
+      assert {:added, item} = MatchDialog.add_external(dialog, result.provider_id)
+      assert item.title == "Stub Movie"
+      assert item.type == "movie"
+      # No library_path_id is sent, so TargetResolver decides at import time.
+      assert item.library_path_id == nil
+    end
+
+    test "adds a TV result through TVDB rather than TMDB" do
+      dialog =
+        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :tv_show}
+        |> MatchDialog.search("Stub")
+
+      [result | _] = dialog.external_results
+      assert result.provider == :tvdb
+
+      assert {:added, item} = MatchDialog.add_external(dialog, result.provider_id)
+      assert item.type == "tv_show"
+      assert item.tvdb_id == 81_189
+    end
+
+    test "treats an item already in the library as a plain selection" do
+      _existing = media_item_fixture(%{type: "movie", title: "Unrelated", tmdb_id: 550})
+
+      dialog =
+        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :movie}
+        |> MatchDialog.search("Stub")
+
+      [result | _] = dialog.external_results
+
+      assert {:added, item} = MatchDialog.add_external(dialog, result.provider_id)
+      assert item.tmdb_id == 550
+    end
+
+    test "reports an unknown provider id as an inline error" do
+      dialog =
+        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :movie}
+        |> MatchDialog.search("Stub")
+
+      assert {:error, updated} = MatchDialog.add_external(dialog, "does-not-exist")
+      assert updated.error =~ "no longer available"
+      assert updated.adding == nil
+    end
+  end
 end

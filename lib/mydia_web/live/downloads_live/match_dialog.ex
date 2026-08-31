@@ -16,7 +16,9 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
 
   alias Mydia.Library.ReleaseParser
   alias Mydia.Media
+  alias Mydia.Media.Add
   alias Mydia.Metadata
+  alias Mydia.Settings
 
   @result_limit 10
   @relay_down "Couldn't reach the metadata service. Showing library results only."
@@ -200,4 +202,52 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   defp seed_type(_parsed, %{media_item: %{type: "tv_show"}}), do: :tv_show
   defp seed_type(_parsed, %{media_item: %{type: "movie"}}), do: :movie
   defp seed_type(_parsed, _download), do: :movie
+
+  @doc """
+  Adds a provider result to the library and hands back the new item.
+
+  `:library_path_id` is deliberately not sent, which is what removes the need
+  for a library picker here: `Mydia.Library.TargetResolver` resolves the
+  destination by `:type_default` and then `:first_compatible`.
+
+  `{:already_in_library, item}` is success, not failure. It means the dedupe in
+  `search/2` and the provider disagreed, and the item the operator wanted
+  already exists.
+  """
+  @spec add_external(t(), String.t()) :: {:added, Mydia.Media.MediaItem.t()} | {:error, t()}
+  def add_external(%__MODULE__{} = dialog, provider_id) do
+    case find_external(dialog, provider_id) do
+      nil ->
+        {:error,
+         %{dialog | adding: nil, error: "That result is no longer available. Search again."}}
+
+      result ->
+        case Add.from_provider(result.provider_id, dialog.type, nil, add_opts(result)) do
+          {:ok, item} -> {:added, item}
+          {:error, {:already_in_library, item}} -> {:added, item}
+          {:error, reason} -> {:error, %{dialog | adding: nil, error: add_error(reason)}}
+        end
+    end
+  end
+
+  defp find_external(dialog, provider_id) do
+    Enum.find(dialog.external_results, fn result ->
+      to_string(result.provider_id) == to_string(provider_id)
+    end)
+  end
+
+  # A TV search result carries a TVDB id, but Add defaults TV to TMDB. Without
+  # this the TVDB id is sent to TMDB and resolves to the wrong show or nothing.
+  defp add_opts(result) do
+    opts = [
+      monitored: true,
+      season_monitoring: "all",
+      quality_profile_id: Settings.get_default_quality_profile_id()
+    ]
+
+    if result.provider == :tvdb, do: Keyword.put(opts, :provider, :tvdb), else: opts
+  end
+
+  defp add_error({:metadata, _reason}), do: "Couldn't fetch metadata for that title."
+  defp add_error(_reason), do: "Couldn't add that title to your library."
 end
