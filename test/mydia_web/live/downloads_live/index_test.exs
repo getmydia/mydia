@@ -862,5 +862,48 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       refute has_element?(view, "#match-dialog-pick-episode-#{show.id}")
     end
+
+    test "adding a not-yet-in-library show after import opens the episode list instead of submitting",
+         %{conn: conn} do
+      library = library_path_fixture(%{type: "series", monitored: true})
+      old_show = media_item_fixture(%{type: "tv_show", title: "Old Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: old_show.id,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "Old Show/Season 01/S01E01.mkv",
+          library_path_id: library.id,
+          media_item_id: old_show.id,
+          size: 100,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
+      render_change(view, "match_modal_search", %{"q" => "Stub"})
+
+      assert has_element?(view, "#match-dialog-add-81189")
+
+      render_click(view, "match_modal_add_external", %{"provider_id" => "81189"})
+
+      # The show is legitimately created by this flow, but the download's match
+      # must not be written until an episode is chosen: a nil episode_id on a
+      # post-import download makes MediaRematch.apply_relink/5 drop the file in
+      # the show root with no episode association instead of Season 01/.
+      assert has_element?(view, "#match-modal")
+      assert Downloads.get_download!(download.id).media_item_id == old_show.id
+      refute_enqueued(worker: Mydia.Jobs.MediaRematch)
+
+      # The show itself IS legitimately created by this flow; only the
+      # download's match must stay unwritten.
+      [added] = Mydia.Media.list_media_items(search: "Stub Series")
+      assert added.tvdb_id == 81_189
+    end
   end
 end

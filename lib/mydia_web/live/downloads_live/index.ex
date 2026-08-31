@@ -673,11 +673,11 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
   def handle_event("match_modal_add_external", %{"provider_id" => provider_id}, socket) do
     with :ok <- Authorization.authorize_create_media(socket) do
-      dialog = %{socket.assigns.match_modal | adding: to_string(provider_id), error: nil}
+      dialog = %{socket.assigns.match_modal | error: nil}
 
       case MatchDialog.add_external(dialog, provider_id) do
         {:added, item} ->
-          case MatchDialog.select(%{dialog | adding: nil}, item.id) do
+          case MatchDialog.select(dialog, item.id) do
             {:submit, {item_id, episode_id}} -> submit_match(socket, item_id, episode_id)
             {:episodes, updated} -> {:noreply, assign(socket, :match_modal, updated)}
           end

@@ -72,7 +72,6 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
       assert dialog.selected == nil
       assert dialog.error == nil
       assert dialog.search_warning == nil
-      assert dialog.adding == nil
     end
   end
 
@@ -268,7 +267,6 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
       assert {:error, updated} = MatchDialog.add_external(dialog, "does-not-exist")
       assert updated.error =~ "no longer available"
-      assert updated.adding == nil
     end
   end
 end

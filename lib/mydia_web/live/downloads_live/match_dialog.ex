@@ -32,7 +32,6 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
     library_results: [],
     external_results: [],
     episodes: [],
-    adding: nil,
     error: nil,
     search_warning: nil
   ]
@@ -49,7 +48,6 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
           library_results: [Mydia.Media.MediaItem.t()],
           external_results: [Mydia.Metadata.Structs.SearchResult.t()],
           episodes: [Mydia.Media.Episode.t()],
-          adding: String.t() | nil,
           error: String.t() | nil,
           search_warning: String.t() | nil
         }
@@ -218,14 +216,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   def add_external(%__MODULE__{} = dialog, provider_id) do
     case find_external(dialog, provider_id) do
       nil ->
-        {:error,
-         %{dialog | adding: nil, error: "That result is no longer available. Search again."}}
+        {:error, %{dialog | error: "That result is no longer available. Search again."}}
 
       result ->
         case Add.from_provider(result.provider_id, dialog.type, nil, add_opts(result)) do
           {:ok, item} -> {:added, item}
           {:error, {:already_in_library, item}} -> {:added, item}
-          {:error, reason} -> {:error, %{dialog | adding: nil, error: add_error(reason)}}
+          {:error, reason} -> {:error, %{dialog | error: add_error(reason)}}
         end
     end
   end

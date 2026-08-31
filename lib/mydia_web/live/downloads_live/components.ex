@@ -273,14 +273,10 @@ defmodule MydiaWeb.DownloadsLive.Components do
             id={"match-dialog-add-#{result.provider_id}"}
             type="button"
             class="btn btn-sm btn-ghost justify-start"
-            disabled={@dialog.adding == to_string(result.provider_id)}
             phx-click="match_modal_add_external"
             phx-value-provider_id={result.provider_id}
+            phx-disable-with="Adding..."
           >
-            <span
-              :if={@dialog.adding == to_string(result.provider_id)}
-              class="loading loading-spinner loading-xs"
-            ></span>
             <span class="font-medium">{result.title}</span>
             <span :if={result.year} class="text-base-content/60">({result.year})</span>
             <span class="badge badge-xs badge-outline">Add to library</span>
