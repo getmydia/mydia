@@ -90,6 +90,14 @@ jobs:
           merge_state() {
             local pr="$1" state i
             for i in 1 2 3 4 5; do
+              # bash does not inherit errexit into a command-substitution
+              # subshell (that needs `shopt -s inherit_errexit`, unset here),
+              # so a failing `gh` call below does not abort or retry -- it
+              # just yields an empty string for $state. Empty is not
+              # "UNKNOWN", so the loop stops immediately and the empty value
+              # falls through to the caller's inner `*` branch, which does
+              # not merge. It fails safe, but it is not the retry the loop
+              # otherwise looks like it provides.
               state="$(gh pr view "$pr" --json mergeStateStatus --jq .mergeStateStatus)"
               if [ "$state" != "UNKNOWN" ]; then
                 echo "$state"
@@ -134,13 +142,18 @@ jobs:
                 ;;
               BLOCKED)
                 contexts="$(printf '%s' "$line" | cut -f2- | tr '\t' '\n' | sed 's/^/- `/; s/=/` — /')"
+                comment_status=0
                 upsert_comment "$pr" "$marker
           This pull request is not being merged automatically. Every check has finished and these did not pass:
 
           $contexts
 
-          Re-run them if you believe they are flaky, or fix the incompatibility. This comment is rewritten in place as the checks change."
-                echo "  Blocked. Comment updated."
+          Re-run them if you believe they are flaky, or fix the incompatibility. This comment is rewritten in place as the checks change." || comment_status=$?
+                if [ "$comment_status" -ne 0 ]; then
+                  echo "  PR #$pr is blocked, but the comment could not be posted (exit $comment_status)." >&2
+                else
+                  echo "  Blocked. Comment updated."
+                fi
                 ;;
               MERGE)
                 state="$(merge_state "$pr")"
@@ -149,8 +162,13 @@ jobs:
                     # --merge is the only strategy this repository allows: both
                     # allow_squash_merge and allow_rebase_merge are false, and
                     # the other forms fail outright.
-                    gh pr merge --merge "$pr"
-                    echo "  Merged."
+                    merge_status=0
+                    gh pr merge --merge "$pr" || merge_status=$?
+                    if [ "$merge_status" -ne 0 ]; then
+                      echo "  gh pr merge failed (exit $merge_status). Leaving PR #$pr open." >&2
+                    else
+                      echo "  Merged."
+                    fi
                     ;;
                   *)
                     echo "  All checks green but mergeStateStatus is $state. Not merging."
