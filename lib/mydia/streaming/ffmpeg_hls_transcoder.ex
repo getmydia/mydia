@@ -393,12 +393,12 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # segment indices that have shown up since the previous poll.
   defp handle_playlist(state, contents) do
     state =
-      if !state.ready_notified do
+      if state.ready_notified do
+        state
+      else
         Logger.debug("Playlist file detected: #{state.playlist_path}")
         if state.on_ready, do: state.on_ready.()
         %{state | ready_notified: true}
-      else
-        state
       end
 
     if state.on_segments do

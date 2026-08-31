@@ -186,6 +186,30 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
 
   defp fake_from, do: {self(), make_ref()}
 
+  # A Process.sleep here would be a race, not a synchronization: under load
+  # the spawned Task's request_segment/2 call may not have reached the
+  # harness's mailbox within an arbitrary fixed delay, and if a notification
+  # sent right after the sleep arrives before the waiter parks, it is
+  # dropped and nothing ever resolves the call. Polling :sys.get_state/1
+  # instead is deterministic: it is itself a synchronous call into the same
+  # GenServer, so it serialises behind whatever is already queued ahead of
+  # it, including a request_segment call already in flight.
+  defp await_waiter(pid, index, attempts \\ 200) do
+    %{segment_waiters: waiters} = :sys.get_state(pid)
+
+    cond do
+      Map.has_key?(waiters, index) ->
+        :ok
+
+      attempts == 0 ->
+        flunk("waiter for segment #{index} never parked")
+
+      true ->
+        Process.sleep(5)
+        await_waiter(pid, index, attempts - 1)
+    end
+  end
+
   describe "relocation, driven sequentially through handle_call/3" do
     # A GenServer's mailbox is strictly single-threaded: three concurrent
     # request_segment calls from three separate player requests can only ever
@@ -249,13 +273,11 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
       {:ok, pid} = Harness.start_link(state)
 
       task = Task.async(fn -> HlsSession.request_segment(pid, 100) end)
-      # Gives the harness time to process the call above (relocate + park)
-      # before the notification below arrives. Without this, the cast could
-      # land first and be dropped by the generation guard, since the window
-      # would not have relocated to generation 1 yet — the same convention
-      # hls_session_ready_test.exs uses in this directory for the same
-      # cross-process synchronization problem.
-      Process.sleep(50)
+      # Waits for the harness to actually process the call above (relocate +
+      # park) before the notification below arrives. Without this, the cast
+      # could land first and be dropped by the generation guard, since the
+      # window would not have relocated to generation 1 yet.
+      await_waiter(pid, 100)
 
       HlsSession.notify_segments(pid, 1, [100])
 
@@ -267,7 +289,7 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
       {:ok, pid} = Harness.start_link(base_state())
 
       task = Task.async(fn -> HlsSession.request_segment(pid, 100) end)
-      Process.sleep(50)
+      await_waiter(pid, 100)
 
       # Generation 0 belonged to the encoder relocate/2 just replaced. Its
       # indices must not resolve a waiter parked against generation 1.
@@ -282,7 +304,7 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
       {:ok, pid} = Harness.start_link(base_state())
 
       task = Task.async(fn -> HlsSession.request_segment(pid, 100) end)
-      Process.sleep(50)
+      await_waiter(pid, 100)
 
       # Fires the same handle_info clause the real Process.send_after timer
       # would, on the test's own schedule instead of waiting out the real
