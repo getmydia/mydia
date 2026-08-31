@@ -12,9 +12,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
   import Mydia.DownloadsFixtures
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
+  import Mydia.MetadataStub, only: [setup_metadata_stub: 1]
 
   alias Mydia.Downloads
   alias Mydia.Library
+
+  # The match dialog's search/2 reaches the metadata relay for provider
+  # results. Swapping in the stub provider (like MatchDialogTest itself does)
+  # keeps every test in this file off the network rather than warming a cache
+  # entry per randomly-generated download title.
+  setup :setup_metadata_stub
 
   setup %{conn: conn} do
     admin = admin_user_fixture()
@@ -687,6 +694,73 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       # The flash alone would pass even if the modal stayed open on a download
       # that no longer exists, leaving the operator submitting into nothing.
       refute has_element?(view, "#match-files-modal")
+    end
+  end
+
+  describe "match dialog: in-flight season pack" do
+    test "opens prefilled from the release name with results already listed", %{conn: conn} do
+      show = media_item_fixture(%{type: "tv_show", title: "Prefilled Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          imported_at: nil,
+          title: "Prefilled.Show.S01-S03.1080p.WEB-DL.x265"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      html = render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+
+      assert has_element?(view, "#match-modal")
+      assert html =~ "Prefilled Show"
+      assert has_element?(view, "#match-dialog-result-#{show.id}")
+    end
+
+    test "matching a TV show in flight submits with no episode", %{conn: conn} do
+      old_show = media_item_fixture(%{type: "tv_show", title: "Wrong Show"})
+      new_show = media_item_fixture(%{type: "tv_show", title: "Right Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: old_show.id,
+          imported_at: nil,
+          title: "Right.Show.S01-S03.1080p.WEB-DL.x265"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+      render_change(view, "match_modal_search", %{"q" => "Right Show"})
+      render_click(view, "match_modal_pick_item", %{"media_item_id" => new_show.id})
+
+      updated = Downloads.get_download!(download.id)
+      assert updated.media_item_id == new_show.id
+      assert updated.episode_id == nil
+      refute has_element?(view, "#match-modal")
+    end
+
+    test "the Pick episode escape opens the episode list without submitting", %{conn: conn} do
+      show = media_item_fixture(%{type: "tv_show", title: "Escape Show"})
+      download = download_fixture(%{media_item_id: show.id, imported_at: nil})
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+      render_change(view, "match_modal_search", %{"q" => "Escape"})
+      render_click(view, "match_modal_show_episodes", %{"media_item_id" => show.id})
+
+      assert has_element?(view, "#match-modal")
+      assert Downloads.get_download!(download.id).media_item_id == show.id
+    end
+
+    test "flipping the type chips keeps the dialog open", %{conn: conn} do
+      show = media_item_fixture(%{type: "tv_show", title: "Chip Show"})
+      download = download_fixture(%{media_item_id: show.id, imported_at: nil})
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "inflight"})
+      render_click(view, "match_modal_set_type", %{"type" => "movie"})
+
+      assert has_element?(view, "#match-modal")
+      assert has_element?(view, "#match-dialog-type-movie")
     end
   end
 end

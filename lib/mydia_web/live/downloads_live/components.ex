@@ -144,6 +144,135 @@ defmodule MydiaWeb.DownloadsLive.Components do
     """
   end
 
+  @doc """
+  The match / re-match dialog.
+
+  One list holds library rows and, once Task 6 lands, provider rows. TV rows
+  behave differently per mode, which the dialog states in words rather than
+  leaving the operator to discover by clicking.
+  """
+  attr :dialog, :map, required: true
+
+  def match_modal(assigns) do
+    ~H"""
+    <.modal id="match-modal" show={true} on_cancel="close_match_modal">
+      <:title>
+        {if @dialog.mode == :inflight, do: "Change match", else: "Re-match download"}
+      </:title>
+
+      <%= if @dialog.selected do %>
+        <p class="text-sm text-base-content/80">
+          Choose the episode for <span class="font-medium">{@dialog.selected.title}</span>:
+        </p>
+        <p :if={@dialog.mode == :postimport} class="text-xs text-base-content/50 mt-1">
+          This download imported one file, so it maps to a single episode.
+        </p>
+        <div :if={@dialog.episodes == []} class="text-sm text-base-content/50 mt-2">
+          No episodes found for this show.
+        </div>
+        <div class="mt-2 max-h-64 overflow-y-auto flex flex-col gap-1">
+          <button
+            :for={ep <- @dialog.episodes}
+            id={"match-dialog-episode-#{ep.id}"}
+            type="button"
+            class="btn btn-sm btn-ghost justify-start"
+            phx-click="match_modal_pick_episode"
+            phx-value-episode_id={ep.id}
+          >
+            S{String.pad_leading("#{ep.season_number}", 2, "0")}E{String.pad_leading(
+              "#{ep.episode_number}",
+              2,
+              "0"
+            )}
+            <span :if={ep.title} class="text-base-content/60">- {ep.title}</span>
+          </button>
+        </div>
+      <% else %>
+        <div class="filter mb-3">
+          <input
+            id="match-dialog-type-tv"
+            class="btn btn-sm"
+            type="checkbox"
+            name="match_type"
+            aria-label="TV"
+            checked={@dialog.type == :tv_show}
+            phx-click="match_modal_set_type"
+            phx-value-type="tv_show"
+          />
+          <input
+            id="match-dialog-type-movie"
+            class="btn btn-sm"
+            type="checkbox"
+            name="match_type"
+            aria-label="Movie"
+            checked={@dialog.type == :movie}
+            phx-click="match_modal_set_type"
+            phx-value-type="movie"
+          />
+        </div>
+
+        <form id="match-modal-search-form" phx-change="match_modal_search">
+          <input
+            type="text"
+            name="q"
+            value={@dialog.query}
+            class="input input-bordered w-full"
+            phx-debounce="300"
+            autocomplete="off"
+            placeholder="Search your library or add a new title..."
+          />
+        </form>
+
+        <p :if={@dialog.search_warning} id="match-dialog-warning" class="text-warning text-xs mt-2">
+          {@dialog.search_warning}
+        </p>
+
+        <p :if={@dialog.error} id="match-dialog-error" class="alert alert-error mt-3 text-sm">
+          {@dialog.error}
+        </p>
+
+        <div class="mt-2 max-h-64 overflow-y-auto flex flex-col gap-1">
+          <div
+            :for={item <- @dialog.library_results}
+            class="flex items-center gap-1"
+          >
+            <button
+              id={"match-dialog-result-#{item.id}"}
+              type="button"
+              class="btn btn-sm btn-ghost justify-start grow"
+              phx-click="match_modal_pick_item"
+              phx-value-media_item_id={item.id}
+            >
+              <span class="font-medium">{item.title}</span>
+              <span :if={item.year} class="text-base-content/60">({item.year})</span>
+              <span class="badge badge-xs badge-outline">
+                {if item.type == "tv_show", do: "TV", else: "Movie"}
+              </span>
+            </button>
+            <button
+              :if={item.type == "tv_show" and @dialog.mode == :inflight}
+              id={"match-dialog-pick-episode-#{item.id}"}
+              type="button"
+              class="btn btn-xs btn-ghost"
+              phx-click="match_modal_show_episodes"
+              phx-value-media_item_id={item.id}
+              title="Match a single episode instead of the whole show"
+            >
+              Pick episode
+            </button>
+          </div>
+        </div>
+      <% end %>
+
+      <:actions>
+        <button type="button" class="btn btn-ghost" phx-click="close_match_modal">
+          Cancel
+        </button>
+      </:actions>
+    </.modal>
+    """
+  end
+
   # Whether the modal's candidates can target a movie destination, an episode,
   # or neither. Deliberately keyed off `download.media_item.type` (authoritative)
   # rather than `episodes == []` — an ordinary TV show whose episodes haven't

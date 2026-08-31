@@ -14,6 +14,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.DownloadsLive.Components
+  alias MydiaWeb.DownloadsLive.MatchDialog
   import MydiaWeb.Formatters
 
   require Logger
@@ -633,15 +634,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("open_match_modal", %{"id" => id, "mode" => mode}, socket)
       when mode in ["inflight", "postimport"] do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
-      {:noreply,
-       assign(socket, :match_modal, %{
-         download_id: id,
-         mode: String.to_existing_atom(mode),
-         query: "",
-         results: [],
-         selected: nil,
-         episodes: []
-       })}
+      with_download(socket, id, [preload: [:media_item]], fn download ->
+        dialog =
+          download
+          |> MatchDialog.open(mode_atom(mode))
+          |> then(&MatchDialog.search(&1, &1.query))
+
+        {:noreply, assign(socket, :match_modal, dialog)}
+      end)
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -652,41 +652,30 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("match_modal_search", %{"q" => query}, socket) do
-    results =
-      if String.length(query) >= 2 do
-        Media.list_media_items(search: query) |> Enum.take(10)
-      else
-        []
-      end
-
-    {:noreply,
-     update(socket, :match_modal, fn modal ->
-       %{modal | query: query, results: results}
-     end)}
+    {:noreply, update(socket, :match_modal, &MatchDialog.search(&1, query))}
   end
 
-  def handle_event(
-        "match_modal_pick_item",
-        %{"media_item_id" => media_item_id, "type" => type, "title" => title},
-        socket
-      ) do
-    if type == "tv_show" do
-      # TV: choose the specific episode in a second step.
-      episodes = Media.list_episodes(media_item_id)
+  def handle_event("match_modal_set_type", %{"type" => type}, socket)
+      when type in ["movie", "tv_show"] do
+    {:noreply, update(socket, :match_modal, &MatchDialog.set_type(&1, media_type_atom(type)))}
+  end
 
-      {:noreply,
-       update(socket, :match_modal, fn modal ->
-         %{modal | selected: %{id: media_item_id, title: title}, episodes: episodes}
-       end)}
-    else
-      # Movie: submit immediately.
-      submit_match(socket, media_item_id, nil)
+  def handle_event("match_modal_pick_item", %{"media_item_id" => media_item_id}, socket) do
+    case MatchDialog.select(socket.assigns.match_modal, media_item_id) do
+      {:submit, {item_id, episode_id}} -> submit_match(socket, item_id, episode_id)
+      {:episodes, dialog} -> {:noreply, assign(socket, :match_modal, dialog)}
     end
   end
 
+  def handle_event("match_modal_show_episodes", %{"media_item_id" => media_item_id}, socket) do
+    {:noreply, update(socket, :match_modal, &MatchDialog.show_episodes(&1, media_item_id))}
+  end
+
   def handle_event("match_modal_pick_episode", %{"episode_id" => episode_id}, socket) do
-    %{selected: %{id: media_item_id}} = socket.assigns.match_modal
-    submit_match(socket, media_item_id, episode_id)
+    {:submit, {item_id, ep_id}} =
+      MatchDialog.select_episode(socket.assigns.match_modal, episode_id)
+
+    submit_match(socket, item_id, ep_id)
   end
 
   # --- Match files modal (manual file matching on import failure) ---
@@ -949,6 +938,14 @@ defmodule MydiaWeb.DownloadsLive.Index do
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
+
+  # Event params are strings from the browser. Matched explicitly rather than
+  # converted, so a forged value cannot reach String.to_atom/1.
+  defp mode_atom("inflight"), do: :inflight
+  defp mode_atom("postimport"), do: :postimport
+
+  defp media_type_atom("movie"), do: :movie
+  defp media_type_atom("tv_show"), do: :tv_show
 
   @impl true
   def handle_info({:download_updated, _download_id}, socket) do
