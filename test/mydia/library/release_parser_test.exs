@@ -273,6 +273,21 @@ defmodule Mydia.Library.ReleaseParserTest do
       refute result.title == ""
     end
 
+    test "does not eat a title word that follows the host on a dot" do
+      # The domain-label run is greedy, so `.The` looked like another label and
+      # the space after it satisfied the boundary check, leaving "Matrix".
+      # Only an unambiguous boundary (a bracket, a separator glyph, or a bare
+      # www.domain.tld before whitespace) may be stripped.
+      for title <- [
+            "www.example.com.The Matrix.1999.1080p",
+            "www.example.com.The Matrix 1999 1080p BluRay x264"
+          ] do
+        result = ReleaseParser.parse(title)
+        assert result.title =~ "The Matrix", "expected 'The Matrix' in #{inspect(result.title)}"
+        assert result.year == 1999
+      end
+    end
+
     test "leaves a run-on dotted domain alone rather than eating the title" do
       # No delimiter separates the domain from the release, so the labels are
       # indistinguishable from title words. Declining to strip is the safe

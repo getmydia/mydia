@@ -135,19 +135,34 @@ defmodule Mydia.Library.ReleaseParser do
   # `ReleaseRanker.reject_title_mismatches/2` below its 0.7 threshold and
   # hard-rejects an otherwise perfect release.
   #
-  # Anchored to a literal `www.` plus dot-separated labels, so it cannot bite
-  # a real title: no show or film is named "www.something". Only the leading
-  # occurrence is removed; trailing site tags in brackets are already handled
-  # by @release_group_re.
+  # Anchored to a literal `www.` so it cannot bite a real title: no show or
+  # film is named "www.something". Only the leading occurrence is removed;
+  # trailing site tags in brackets are already handled by @release_group_re.
   #
-  # The lookahead is what keeps this safe. The domain run is greedy, so
-  # without it a fully dot-separated name like
-  # `www.Site.org.Movie.Name.2020.1080p` would have its title eaten as extra
-  # domain labels. Requiring a delimiter (whitespace, closing bracket, or a
-  # separator glyph) immediately after the domain means such a run-on simply
-  # does not match and is left untouched, which is the safe failure: a title
-  # we decline to clean, never a title we destroy.
-  @site_prefix_re ~r/^\s*(?:[\[\(\{]\s*)?www\.[\w-]+(?:\.[\w-]+)*(?=[\s\]\)\}:|–—-])\s*(?:[\]\)\}]\s*)?(?:[-–—:|]+\s*)?/i
+  # Only an *unambiguous* boundary is stripped, in three forms:
+  #
+  #   (a) bracketed          `[ www.Torrenting.org ] Movie...`
+  #   (b) separator glyph    `www.UIndex.org    -    Dark Matter...`
+  #   (c) bare `www.host.tld` then whitespace   `www.Torrenting.org Movie...`
+  #
+  # A greedy `(?:\.[\w-]+)*` label run with a mere "next char is a delimiter"
+  # check is NOT safe: in `www.example.com.The Matrix.1999`, `.The` matches as
+  # another label and the space after it satisfies the check, so the title
+  # parses as "Matrix". Hence (c) permits exactly one TLD label, and (a)/(b)
+  # require a bracket or separator that a title word would not be followed by.
+  # Anything else, such as a fully run-on `www.Site.org.Movie.Name.2020`, does
+  # not match and is left untouched. That is the safe failure: a title we
+  # decline to clean, never a title we destroy.
+  @site_prefix_re ~r/
+    ^\s*
+    (?:
+        [\[\(\{]\s*www\.[\w.-]+\s*[\]\)\}]\s*      # (a) bracketed host
+      |
+        www\.[\w-]+(?:\.[\w-]+)*\s*[-–—:|]+\s*     # (b) host then separator
+      |
+        www\.[\w-]+\.[a-z]{2,6}\s+                 # (c) host then whitespace
+    )
+  /ix
 
   defp strip_site_prefix(filename) do
     stripped = Regex.replace(@site_prefix_re, filename, "", global: false)
