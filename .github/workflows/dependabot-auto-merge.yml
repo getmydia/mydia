@@ -88,17 +88,23 @@ jobs:
           # mergeStateStatus is computed lazily and returns UNKNOWN until GitHub
           # catches up. Poll rather than treating UNKNOWN as an answer either way.
           merge_state() {
-            local pr="$1" state i
+            local pr="$1" state i read_status
             for i in 1 2 3 4 5; do
               # bash does not inherit errexit into a command-substitution
               # subshell (that needs `shopt -s inherit_errexit`, unset here),
-              # so a failing `gh` call below does not abort or retry -- it
-              # just yields an empty string for $state. Empty is not
-              # "UNKNOWN", so the loop stops immediately and the empty value
-              # falls through to the caller's inner `*` branch, which does
-              # not merge. It fails safe, but it is not the retry the loop
-              # otherwise looks like it provides.
-              state="$(gh pr view "$pr" --json mergeStateStatus --jq .mergeStateStatus)"
+              # so a failing `gh` call below would not abort this function on
+              # its own -- its exit status has to be captured explicitly to
+              # tell a failed read apart from a successful one that
+              # legitimately returned UNKNOWN. A failed read is retried like
+              # any other UNKNOWN; only a successful non-UNKNOWN read returns
+              # early.
+              read_status=0
+              state="$(gh pr view "$pr" --json mergeStateStatus --jq .mergeStateStatus)" || read_status=$?
+              if [ "$read_status" -ne 0 ]; then
+                echo "  gh pr view failed while polling mergeStateStatus for PR #$pr (exit $read_status); retrying." >&2
+                sleep 5
+                continue
+              fi
               if [ "$state" != "UNKNOWN" ]; then
                 echo "$state"
                 return 0
@@ -111,9 +117,13 @@ jobs:
           # One comment per pull request, edited in place. Appending a new
           # comment on every completed check suite would bury the pull request.
           upsert_comment() {
-            local pr="$1" body="$2" id
+            local pr="$1" body="$2" id read_status=0
             id="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${pr}/comments" --paginate \
-                   --jq "[.[] | select(.body | startswith(\"$marker\"))] | last | .id // empty")"
+                   --jq "[.[] | select(.body | startswith(\"$marker\"))] | last | .id // empty")" || read_status=$?
+            if [ "$read_status" -ne 0 ]; then
+              echo "  Could not read existing comments on PR #$pr (exit $read_status); not posting to avoid a duplicate." >&2
+              return 1
+            fi
             if [ -n "$id" ]; then
               gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" \
                 -f body="$body" > /dev/null
