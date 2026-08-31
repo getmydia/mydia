@@ -26,7 +26,15 @@ defmodule Mydia.Streaming.HlsRelocationIntegrationTest do
 
   alias Mydia.Streaming.{FfmpegHlsTranscoder, SegmentPlan}
 
-  @segment_seconds 4
+  # The relocated segment must land on the media time the playlist promised.
+  # Measured residual with the correct flags is about 21ms, constant across
+  # offsets (the spike saw the same 21ms at t=400 that this test sees at
+  # t=100), because it is a fixed muxer artifact rather than drift that
+  # scales with position. Dropping `-muxdelay 0 -muxpreload 0` shifts it by
+  # about +1.38s. This tolerance sits deliberately between the two: wide
+  # enough for encoder jitter, tight enough that losing the muxer flags
+  # fails loudly.
+  @start_time_tolerance_seconds 0.25
 
   setup do
     tmp = Path.join(System.tmp_dir!(), "hls-relocation-#{System.unique_integer([:positive])}")
@@ -107,7 +115,7 @@ defmodule Mydia.Streaming.HlsRelocationIntegrationTest do
 
     # The segment must carry its real media time, not restart near zero.
     # Without -copyts this is where the design fails.
-    assert_in_delta actual, expected_start, @segment_seconds / 2
+    assert_in_delta actual, expected_start, @start_time_tolerance_seconds
   end
 
   test "the published playlist names every segment the encoder can produce" do
