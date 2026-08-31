@@ -457,6 +457,13 @@ defmodule MydiaWeb.Schema.CommonTypes do
         "Output height ceiling the server actually applied, which may be " <>
           "lower than requested on a relay connection. Null means the " <>
           "source resolution is preserved."
+
+    field :playlist_mode, non_null(:playlist_mode),
+      description:
+        "The playlist mode this session actually serves, which may be WINDOW " <>
+          "even when FULL was requested. In FULL the playlist covers the whole " <>
+          "file, positions are real media positions, and start_position is " <>
+          "always 0. In WINDOW, start_position is the offset the stream begins at."
   end
 
   @desc "A download quality option"

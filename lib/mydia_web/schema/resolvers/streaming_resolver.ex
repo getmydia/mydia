@@ -122,7 +122,8 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
           strategy,
           max_bitrate,
           max_height,
-          args[:start_position]
+          args[:start_position],
+          args[:playlist_mode] || :window
         )
     end
   end
@@ -273,7 +274,8 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
          strategy,
          max_bitrate,
          max_height,
-         requested_position
+         requested_position,
+         playlist_mode
        ) do
     mode = strategy_to_mode(strategy)
 
@@ -283,7 +285,13 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
          start_position <- clamp_start_position(requested_position, duration),
          show_audio_language <- AudioPreferences.for_media_file(user_id, media_file),
          session_opts <-
-           build_session_opts(max_bitrate, max_height, start_position, show_audio_language),
+           build_session_opts(
+             max_bitrate,
+             max_height,
+             start_position,
+             show_audio_language,
+             playlist_mode
+           ),
          {:ok, pid} <-
            HlsSessionSupervisor.start_session(media_file.id, user_id, mode, session_opts),
          {:ok, info} <- HlsSession.get_info(pid) do
@@ -292,6 +300,12 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       # session or adopted a concurrent winner, either of which can be running
       # from a different offset than this caller asked for.
       session_start_position = info.start_position
+
+      # A full playlist covers the file from zero, so there is no offset for the
+      # client to map by. Reporting the encoder's current window here would
+      # shift every position the client derives.
+      reported_start_position =
+        if info.playlist_mode == :full, do: 0, else: info.start_position
 
       Logger.info(
         "Started streaming session #{info.session_id} for file #{file_id}, user #{user_id}" <>
@@ -312,9 +326,10 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
        %{
          session_id: info.session_id,
          duration: duration,
-         start_position: session_start_position,
+         start_position: reported_start_position,
          max_bitrate: max_bitrate,
-         max_height: max_height
+         max_height: max_height,
+         playlist_mode: info.playlist_mode
        }}
     else
       {:error, reason} ->
@@ -323,7 +338,13 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
     end
   end
 
-  defp build_session_opts(max_bitrate, max_height, start_position, show_audio_language) do
+  defp build_session_opts(
+         max_bitrate,
+         max_height,
+         start_position,
+         show_audio_language,
+         playlist_mode
+       ) do
     opts = if max_bitrate, do: [max_bitrate: max_bitrate], else: []
     opts = if max_height, do: [{:max_height, max_height} | opts], else: opts
 
@@ -334,6 +355,10 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       if show_audio_language != [],
         do: [{:show_audio_language, show_audio_language} | opts],
         else: opts
+
+    # Always sent, unlike the options above: HlsSessionSupervisor.session_matches?/2
+    # keys on it, so a full and a windowed request must never share a session.
+    opts = [{:playlist_mode, playlist_mode} | opts]
 
     if start_position > 0, do: [{:start_position, start_position} | opts], else: opts
   end

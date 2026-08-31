@@ -94,4 +94,13 @@ defmodule MydiaWeb.Schema.EnumTypes do
     value(:episode, description: "A TV episode, dated by its air date")
     value(:movie, description: "A movie, dated by its release date")
   end
+
+  @desc "How much of the media a streaming session's playlist covers"
+  enum :playlist_mode do
+    @desc "The playlist covers the whole file and every segment is addressable immediately. Seeking is a plain seek."
+    value(:full, as: :full)
+
+    @desc "The playlist grows as FFmpeg transcodes and covers only what has been produced. Seeking outside it requires a new session."
+    value(:window, as: :window)
+  end
 end
