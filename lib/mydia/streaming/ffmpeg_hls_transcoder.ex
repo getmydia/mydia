@@ -692,28 +692,12 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     #
     # -start_number makes filenames absolute, so a window relocated to t=400s
     # writes segment_00100.ts, which is the name the published playlist already
-    # promised. -copyts keeps source timestamps, so that segment reports its
-    # real media time rather than restarting near zero.
-    #
-    # -muxdelay 0 -muxpreload 0 are not optional decoration. The TS muxer's
-    # defaults add a reproducible 1.4s to every window's timestamps, the
-    # un-relocated first one included, which would put every segment that far
-    # from the time the published playlist declares for it. Zeroing both brings
-    # the error down to about 20ms. Measured, not assumed: without them segment
-    # 100 lands at 401.378667s, with them at 399.978667s.
-    #
-    # -output_ts_offset is deliberately absent. On top of -copyts it would apply
-    # the seek offset a second time.
-    #
-    # -hls_flags temp_file makes FFmpeg write to a temporary name and rename on
-    # completion. Without it a half-written segment exists on disk and the
-    # session would hand the player a truncated file.
+    # promised. -hls_flags temp_file makes FFmpeg write to a temporary name and
+    # rename on completion. Without it a half-written segment exists on disk
+    # and the session would hand the player a truncated file. Both are
+    # harmless in either mode, so unlike the timestamp flags below they are
+    # never gated.
     hls_args = [
-      "-copyts",
-      "-muxdelay",
-      "0",
-      "-muxpreload",
-      "0",
       "-f",
       "hls",
       "-hls_time",
@@ -733,6 +717,34 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       playlist_path
     ]
 
+    # -copyts keeps source timestamps, so a relocated segment reports its real
+    # media time rather than restarting near zero.
+    #
+    # -muxdelay 0 -muxpreload 0 are not optional decoration. The TS muxer's
+    # defaults add a reproducible 1.4s to every window's timestamps, the
+    # un-relocated first one included, which would put every segment that far
+    # from the time the published playlist declares for it. Zeroing both brings
+    # the error down to about 20ms. Measured, not assumed: without them segment
+    # 100 lands at 401.378667s, with them at 399.978667s.
+    #
+    # -output_ts_offset is deliberately absent. On top of -copyts it would apply
+    # the seek offset a second time.
+    #
+    # Gated on absolute_timestamps (true only for a :full session, whose fixed
+    # segment grid needs a relocated encoder to report real media time). A
+    # :window session never relocates and must keep reporting near-zero
+    # timestamps after a resume seek: the player's StreamTimeline
+    # (player/lib/core/player/stream_timeline.dart) exists to map that
+    # near-zero playback position back onto the real one by adding its resume
+    # offset, and absolute timestamps here would make it double that offset.
+    # HlsSession passes absolute_timestamps: playlist_mode == :full.
+    timestamp_args =
+      if Keyword.get(opts, :absolute_timestamps, false) do
+        ["-copyts", "-muxdelay", "0", "-muxpreload", "0"]
+      else
+        []
+      end
+
     # Only meaningful when the video stream is re-encoded. On a copied stream
     # the keyframes are whatever the source has, and FFmpeg rejects the flag
     # outright. reencodes_video?/2 above is what decides whether grid_aligned
@@ -749,7 +761,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # codec flags, which is where ffmpeg expects output stream selection.
     base_args ++
       AudioTrackSelector.ffmpeg_map_args(selected_audio) ++
-      video_args ++ audio_args ++ keyframe_args ++ hls_args
+      video_args ++ audio_args ++ keyframe_args ++ timestamp_args ++ hls_args
   end
 
   # Start FFmpeg process using Port

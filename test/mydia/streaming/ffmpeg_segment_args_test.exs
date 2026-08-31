@@ -41,7 +41,7 @@ defmodule Mydia.Streaming.FfmpegSegmentArgsTest do
 
   describe "timestamps" do
     test "keeps source timestamps so a relocated segment carries its real media time" do
-      assert "-copyts" in args(start_number: 100)
+      assert "-copyts" in args(start_number: 100, absolute_timestamps: true)
     end
 
     test "zeroes the muxer delay, which -copyts alone does not correct for" do
@@ -49,7 +49,7 @@ defmodule Mydia.Streaming.FfmpegSegmentArgsTest do
       # including the first, 1.4s away from the time the published playlist
       # declares for it. -copyts does not touch this. Dropping either of these
       # two silently reintroduces that offset on every segment of every session.
-      result = args(start_number: 100)
+      result = args(start_number: 100, absolute_timestamps: true)
 
       assert value_after(result, "-muxdelay") == "0"
       assert value_after(result, "-muxpreload") == "0"
@@ -58,7 +58,22 @@ defmodule Mydia.Streaming.FfmpegSegmentArgsTest do
     test "never applies the seek offset twice" do
       # -output_ts_offset on top of -copyts double-applies it. Measured and
       # rejected in the spike.
-      refute "-output_ts_offset" in args(start_number: 100)
+      refute "-output_ts_offset" in args(start_number: 100, absolute_timestamps: true)
+    end
+
+    # HlsSession passes absolute_timestamps: playlist_mode == :full, so this
+    # opt is what actually separates the two modes' output (the three tests
+    # above cover the :full side, with absolute_timestamps: true). A :window
+    # session never relocates and must go on reporting near-zero timestamps
+    # after a resume seek (see player/lib/core/player/stream_timeline.dart);
+    # carrying real media time there would make the player double-apply its
+    # resume offset.
+    test "omits copyts, muxdelay and muxpreload for a :window session" do
+      result = args(start_number: 100)
+
+      refute "-copyts" in result
+      refute "-muxdelay" in result
+      refute "-muxpreload" in result
     end
   end
 

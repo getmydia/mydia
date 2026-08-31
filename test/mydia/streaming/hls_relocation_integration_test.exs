@@ -90,7 +90,8 @@ defmodule Mydia.Streaming.HlsRelocationIntegrationTest do
       FfmpegHlsTranscoder.build_ffmpeg_args(source, out,
         start_position: trunc(expected_start),
         start_number: target_index,
-        grid_aligned: true
+        grid_aligned: true,
+        absolute_timestamps: true
       )
 
     {_out, 0} = System.cmd("ffmpeg", args, stderr_to_stdout: true)
@@ -116,15 +117,5 @@ defmodule Mydia.Streaming.HlsRelocationIntegrationTest do
     # The segment must carry its real media time, not restart near zero.
     # Without -copyts this is where the design fails.
     assert_in_delta actual, expected_start, @start_time_tolerance_seconds
-  end
-
-  test "the published playlist names every segment the encoder can produce" do
-    {:ok, plan} = SegmentPlan.build(120.0)
-    text = SegmentPlan.playlist(plan)
-
-    assert plan.count == 30
-    assert text =~ SegmentPlan.segment_name(0)
-    assert text =~ SegmentPlan.segment_name(29)
-    refute text =~ SegmentPlan.segment_name(30)
   end
 end

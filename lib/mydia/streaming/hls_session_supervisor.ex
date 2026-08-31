@@ -59,9 +59,12 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
         if session_matches?(metadata, session_request(opts)) do
           {:ok, pid}
         else
-          # A session transcoding from a different offset cannot serve this
-          # request: its playlist simply does not contain the wanted range. A
-          # session running at a different quality cannot serve it either: its
+          # A :window session transcoding from a different offset cannot serve
+          # this request: its playlist simply does not contain the wanted
+          # range. A :full session has no such gap; session_matches?/2 below
+          # treats an offset mismatch as a match for it and lets the running
+          # session relocate its encoder instead of being torn down. A session
+          # running at a different quality cannot serve it either: its
           # segments are already encoded at the old rung. Nor can one running
           # a different audio language: the track it mapped is already baked
           # into those segments, so a viewer switching language needs a fresh
@@ -126,7 +129,7 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   # send the field at all, and a new one sending an empty list.
   def session_request(opts) do
     %{
-      playlist_mode: Keyword.get(opts, :playlist_mode, :window),
+      playlist_mode: Keyword.get(opts, :playlist_mode, @default_playlist_mode),
       start_position: Keyword.get(opts, :start_position, 0),
       max_bitrate: Keyword.get(opts, :max_bitrate),
       max_height: Keyword.get(opts, :max_height),

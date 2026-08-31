@@ -402,6 +402,7 @@ defmodule Mydia.Streaming.HlsSession do
           start_position: start_position,
           start_number: first_index,
           grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate),
+          absolute_timestamps: playlist_mode == :full,
           audio_language: playback.audio_language,
           show_audio_language: playback.show_audio_language
         ]
@@ -806,7 +807,8 @@ defmodule Mydia.Streaming.HlsSession do
         media_file: media_file,
         start_position: Keyword.get(opts, :start_position, 0),
         start_number: Keyword.get(opts, :start_number, 0),
-        grid_aligned: Keyword.get(opts, :grid_aligned, false)
+        grid_aligned: Keyword.get(opts, :grid_aligned, false),
+        absolute_timestamps: Keyword.get(opts, :absolute_timestamps, false)
       ] ++
         if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: []) ++
         if(opts[:max_height], do: [max_height: opts[:max_height]], else: []) ++
