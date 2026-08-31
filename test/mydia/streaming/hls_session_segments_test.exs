@@ -149,7 +149,14 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
 
     @impl true
     def terminate(_reason, _state) do
-      Process.sleep(100)
+      # 500ms, not the real backend's 100ms: what matters here is the ratio
+      # between this sleep and the assertion threshold below, not fidelity
+      # to FfmpegHlsTranscoder's actual timing. At a 2x margin (100ms sleep,
+      # 50_000us threshold) this test flaked under full-suite CPU load,
+      # observed at 55_043us. Widening the sleep instead of the threshold
+      # keeps a genuine regression (a synchronous stop) failing by 5x rather
+      # than shrinking the room between "passes" and "regression detected".
+      Process.sleep(500)
       :ok
     end
   end
@@ -254,7 +261,7 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
           backend_opts: [transcoder_module: FakeBackend]
         )
 
-      # SlowStopBackend's terminate/2 sleeps 100ms, standing in for
+      # SlowStopBackend's terminate/2 sleeps 500ms, standing in for
       # FfmpegHlsTranscoder.terminate/2's real sleep before its SIGKILL
       # escalation check. If relocate/2 called stop_backend/2 inline instead
       # of through Task.start/1, this handle_call would take at least that
@@ -263,7 +270,7 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
       {elapsed_us, {:noreply, _state}} =
         :timer.tc(fn -> HlsSession.handle_call({:request_segment, 100}, fake_from(), state) end)
 
-      assert elapsed_us < 50_000
+      assert elapsed_us < 100_000
     end
   end
 
