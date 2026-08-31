@@ -2747,6 +2747,86 @@ defmodule Mydia.MediaTest do
     end
   end
 
+  describe "deleting a tv show gates episode file demotion on delete_files" do
+    alias Mydia.Library.ImportCandidate
+    alias Mydia.Media.MediaItem
+    alias Mydia.Repo
+
+    import Mydia.MediaFixtures
+    import Mydia.SettingsFixtures
+
+    setup do
+      tmp =
+        Path.join(System.tmp_dir!(), "mydia_media_show_del_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf(tmp) end)
+      %{library_path: library_path_fixture(%{path: tmp, type: "series"})}
+    end
+
+    defp show_with_episode_file(lp, rel, contents) do
+      media_item = media_item_fixture(%{type: "tv_show", tvdb_id: 1234})
+      episode = episode_fixture(media_item_id: media_item.id, season_number: 1, episode_number: 1)
+      absolute_path = Path.join(lp.path, rel)
+      File.mkdir_p!(Path.dirname(absolute_path))
+      File.write!(absolute_path, contents)
+
+      file =
+        media_file_fixture(
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: rel
+        )
+
+      {media_item, file}
+    end
+
+    defp candidate_for(file) do
+      Repo.get_by(ImportCandidate,
+        library_path_id: file.library_path_id,
+        relative_path: file.relative_path
+      )
+    end
+
+    test "delete_media_item/2 with delete_files: true creates no import candidate for the episode file",
+         %{library_path: lp} do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E01.mkv", "data")
+      abs = Path.join(lp.path, "Show/S01E01.mkv")
+
+      assert {:ok, %MediaItem{}, 0} = Media.delete_media_item(media_item, delete_files: true)
+      refute File.exists?(abs)
+      refute candidate_for(file)
+    end
+
+    test "delete_media_item/2 with delete_files: false still demotes the episode file", %{
+      library_path: lp
+    } do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E02.mkv", "data")
+      abs = Path.join(lp.path, "Show/S01E02.mkv")
+
+      assert {:ok, %MediaItem{}, 0} = Media.delete_media_item(media_item)
+      assert File.exists?(abs)
+      assert candidate_for(file)
+    end
+
+    test "delete_media_items/2 with delete_files: true creates no import candidates for episode files",
+         %{library_path: lp} do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E03.mkv", "data")
+
+      assert {:ok, 1, 0} = Media.delete_media_items([media_item.id], delete_files: true)
+      refute candidate_for(file)
+    end
+
+    test "delete_media_items/2 with delete_files: false still demotes episode files", %{
+      library_path: lp
+    } do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E04.mkv", "data")
+
+      assert {:ok, 1, 0} = Media.delete_media_items([media_item.id])
+      assert candidate_for(file)
+    end
+  end
+
   describe "partition_for_auto_search/1 with movies" do
     test "returns a movie with no files and no downloads" do
       movie = insert(:media_item, type: "movie")

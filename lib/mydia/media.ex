@@ -511,6 +511,12 @@ defmodule Mydia.Media do
   When `:delete_files` is true, will delete all associated media files from disk
   before removing the database records. When false (default), only removes database
   records and preserves files on disk.
+
+  For a TV show, a `:delete_files` of false also demotes every episode's
+  files into `import_candidates` first, so they surface again as answerable
+  import work if the show is re-added. When `:delete_files` is true, no
+  candidates are created for them -- the files are about to be gone, so
+  there is nothing left to import.
   """
   @spec delete_media_item(MediaItem.t(), keyword()) ::
           {:ok, MediaItem.t(), non_neg_integer()} | {:error, Ecto.Changeset.t()}
@@ -549,7 +555,20 @@ defmodule Mydia.Media do
 
     result =
       Repo.transaction(fn ->
-        demote_media_item_episodes(media_item)
+        # Demoting into `import_candidates` exists so a file surviving on
+        # disk becomes answerable import work again -- exactly backwards
+        # when `delete_files: true` is about to remove that same file's
+        # bytes. Demoting it first would leave a phantom candidate pointing
+        # at a path that no longer exists. The episode media_file rows still
+        # have to go before `Repo.delete(media_item)` cascades to the
+        # episodes themselves, since `media_files.episode_id` is
+        # `ON DELETE NO ACTION` -- `delete_media_item_episode_files/1`
+        # removes them without the demotion side effect.
+        if delete_files do
+          delete_media_item_episode_files(media_item)
+        else
+          demote_media_item_episodes(media_item)
+        end
 
         case Repo.delete(media_item) do
           {:ok, deleted} -> deleted
@@ -746,10 +765,20 @@ defmodule Mydia.Media do
             []
           end
 
-        MediaItem
-        |> where([m], m.id in ^ids and m.type == "tv_show")
-        |> Repo.all()
-        |> Enum.each(&demote_media_item_episodes/1)
+        # See the comment in `delete_media_item/2`: demoting into
+        # `import_candidates` when the files are about to be deleted from
+        # disk anyway would leave phantom candidates pointing at paths that
+        # no longer exist.
+        tv_shows =
+          MediaItem
+          |> where([m], m.id in ^ids and m.type == "tv_show")
+          |> Repo.all()
+
+        if delete_files do
+          Enum.each(tv_shows, &delete_media_item_episode_files/1)
+        else
+          Enum.each(tv_shows, &demote_media_item_episodes/1)
+        end
 
         # Delete the media items (and cascade delete all related DB records).
         count =
@@ -1252,6 +1281,25 @@ defmodule Mydia.Media do
   end
 
   defp demote_media_item_episodes(%MediaItem{}), do: :ok
+
+  # The `delete_files: true` counterpart to `demote_media_item_episodes/1`:
+  # removes the media_file rows for every episode of this show, without
+  # creating an `import_candidates` row for any of them. Still has to run
+  # before `Repo.delete(media_item)` (or a bulk `Repo.delete_all/1` over
+  # `MediaItem`) cascades the delete down to the episodes themselves, since
+  # `media_files.episode_id` is `ON DELETE NO ACTION` -- an episode with a
+  # media_file still pointing at it cannot be deleted.
+  defp delete_media_item_episode_files(%MediaItem{type: "tv_show", id: media_item_id}) do
+    episode_ids = from(e in Episode, where: e.media_item_id == ^media_item_id, select: e.id)
+
+    Mydia.Library.MediaFile
+    |> where([mf], mf.episode_id in subquery(episode_ids))
+    |> Repo.delete_all()
+
+    :ok
+  end
+
+  defp delete_media_item_episode_files(%MediaItem{}), do: :ok
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking episode changes.

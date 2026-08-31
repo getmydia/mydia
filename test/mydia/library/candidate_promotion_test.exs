@@ -6,6 +6,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
   import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
+  alias Mydia.Events
   alias Mydia.Events.Event
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, MediaFile}
   alias Mydia.Media.{Episode, MediaItem}
@@ -176,6 +177,8 @@ defmodule Mydia.Library.CandidatePromotionTest do
       parsed_info: %{type: :tv_show, season: 1, episodes: [1]}
     }
 
+    Events.subscribe()
+
     assert {:error, {:incompatible_media_type, "movie", "tv_show"}} =
              CandidatePromotion.promote_group([first, second], match, config: stub_config())
 
@@ -185,6 +188,39 @@ defmodule Mydia.Library.CandidatePromotionTest do
     refute File.exists?(Path.join(tmp_dir, "Unknown Show/tvshow.nfo"))
     assert Repo.get(ImportCandidate, first.id)
     assert Repo.get(ImportCandidate, second.id)
+
+    # `MetadataEnricher.persist/1` (via `Media.create_media_item/2`) emits a
+    # `media_item.added` event before `insert_files/3` fails on the second
+    # candidate and rolls the whole transaction back. The row above is
+    # already proven gone; this proves the broadcast a live subscriber would
+    # have seen is gone too, not just delayed.
+    refute_receive {:event_created, _event}, 200
+  end
+
+  test "a successful promotion still broadcasts its event once committed" do
+    library_path = library_path_fixture(%{type: "series"})
+
+    candidate =
+      import_candidate_fixture(%{
+        library_path_id: library_path.id,
+        media_type: "tv_show",
+        parsed_info: %{"type" => "tv_show", "season" => 1, "episodes" => [1]}
+      })
+
+    match = %{
+      provider_id: Integer.to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+      provider_type: :tvdb,
+      title: Mydia.MetadataStubProvider.series_title(),
+      match_confidence: 1.0,
+      parsed_info: %{type: :tv_show, season: 1, episodes: [1]}
+    }
+
+    Events.subscribe()
+
+    assert {:ok, [%MediaFile{}]} =
+             CandidatePromotion.promote_group([candidate], match, config: stub_config())
+
+    assert_receive {:event_created, %Event{type: "media_item.added"}}, 500
   end
 
   test "rejects a candidate changed after its match was prepared" do

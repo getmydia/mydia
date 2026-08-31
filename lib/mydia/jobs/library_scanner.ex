@@ -397,7 +397,23 @@ defmodule Mydia.Jobs.LibraryScanner do
       partition_and_restore(changes.new_files, library_path, trashed_by_path)
 
     on_disk_paths = Enum.map(scan_result.files, &Path.relative_to(&1.path, library_path.path))
-    {reaped_candidates, _} = ImportCandidates.delete_missing(library_path.id, on_disk_paths)
+
+    # Belt-and-suspenders alongside `ImportCandidates.delete_missing/3`'s own
+    # empty-list guard: skip the call entirely rather than round-trip to the
+    # database only to have it refuse. `delete_missing/3` stays the
+    # authoritative guard (it also protects any other caller), this just
+    # avoids the wasted query on the hot path every scan takes.
+    {reaped_candidates, _} =
+      if on_disk_paths == [] do
+        Logger.warning(
+          "Skipping import candidate reap: scan found no files on disk",
+          library_path_id: library_path.id
+        )
+
+        {0, nil}
+      else
+        ImportCandidates.delete_missing(library_path.id, on_disk_paths)
+      end
 
     discovery =
       if library_path.auto_import do

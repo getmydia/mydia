@@ -97,4 +97,54 @@ defmodule Mydia.Library.ImportCandidateTest do
     assert Repo.get(ImportCandidate, kept.id)
     refute Repo.get(ImportCandidate, removed.id)
   end
+
+  test "delete_missing refuses to reap when the scan found zero files" do
+    library_path = library_path_fixture()
+
+    stale =
+      import_candidate_fixture(%{
+        library_path_id: library_path.id,
+        relative_path: "gone.mkv"
+      })
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {0, nil} = ImportCandidates.delete_missing(library_path.id, [])
+      end)
+
+    assert log =~ "Refusing to reap"
+    assert Repo.get(ImportCandidate, stale.id)
+  end
+
+  test "delete_missing walks candidates in bounded pages instead of binding every on-disk path" do
+    library_path = library_path_fixture()
+
+    kept =
+      for n <- 1..5 do
+        import_candidate_fixture(%{
+          library_path_id: library_path.id,
+          relative_path: "kept-#{n}.mkv"
+        })
+      end
+
+    removed =
+      for n <- 1..5 do
+        import_candidate_fixture(%{
+          library_path_id: library_path.id,
+          relative_path: "removed-#{n}.mkv"
+        })
+      end
+
+    on_disk = Enum.map(kept, & &1.relative_path)
+
+    # A page size of 2 against 10 total candidates forces the pagination loop
+    # to run multiple times, proving the multi-page path (not just the
+    # single-page happy case) deletes the right rows and none of the kept
+    # ones -- without needing tens of thousands of fixtures to exceed a bind
+    # parameter limit.
+    assert {5, nil} = ImportCandidates.delete_missing(library_path.id, on_disk, batch_size: 2)
+
+    assert Enum.all?(kept, &Repo.get(ImportCandidate, &1.id))
+    assert Enum.all?(removed, &(Repo.get(ImportCandidate, &1.id) == nil))
+  end
 end

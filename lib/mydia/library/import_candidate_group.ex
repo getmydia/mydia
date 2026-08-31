@@ -54,11 +54,17 @@ defmodule Mydia.Library.ImportCandidateGroup do
 
   `anchor_key` is a normalized folder name (lowercased, punctuation stripped)
   but can still contain spaces and non-ASCII letters, neither of which is
-  safe inside a bare CSS selector. URL-safe base64 (no padding) is stable,
-  collision-free, and never needs escaping.
+  safe inside a bare CSS selector. URL-safe base64 (no padding) is stable and
+  collision-free, but its first output character is not guaranteed to be a
+  letter: it is derived from the leading byte of `anchor_key`, and a
+  Unicode-leading anchor (a non-Latin show or folder name) can produce a
+  byte whose encoding starts with a digit. A digit-leading id is not a valid
+  CSS identifier and is not safe to use unescaped in a `#id` selector or a
+  `phx-update="stream"` DOM id. The `"g"` prefix guarantees a letter always
+  leads, so the result never needs escaping.
   """
   @spec dom_id(t()) :: String.t()
   def dom_id(%__MODULE__{anchor_key: key}) do
-    Base.url_encode64(key, padding: false)
+    "g" <> Base.url_encode64(key, padding: false)
   end
 end

@@ -46,6 +46,17 @@ defmodule Mydia.ImportCandidates do
   @auto_accept_threshold 0.85
   @default_page_size 50
 
+  # Page size `delete_missing/3` walks the library path's candidates in.
+  # `relative_path not in ^relative_paths` would put one bind parameter per
+  # on-disk path into a single query -- a library with tens of thousands of
+  # files would exceed SQLite's SQLITE_MAX_VARIABLE_NUMBER (32766 on current
+  # builds, 999 on older ones) and PostgreSQL's 65535 parameter ceiling.
+  # Instead, `relative_paths` is turned into an in-memory `MapSet` once and
+  # each page's candidates are matched against it in Elixir; only the
+  # resulting missing-id delete is a bind list, and it never exceeds this
+  # page size regardless of how large the library is.
+  @delete_missing_batch_size 500
+
   # Cap on how many `%ImportCandidate{}` rows `members/2` returns for display.
   # A group can hold tens of thousands of files and the review page must
   # never render them all.
@@ -80,12 +91,80 @@ defmodule Mydia.ImportCandidates do
     Repo.get_by(ImportCandidate, library_path_id: library_path_id, relative_path: relative_path)
   end
 
-  @spec delete_missing(binary(), [String.t()]) :: {non_neg_integer(), nil | [term()]}
-  def delete_missing(library_path_id, relative_paths) do
-    ImportCandidate
-    |> where([candidate], candidate.library_path_id == ^library_path_id)
-    |> where([candidate], candidate.relative_path not in ^relative_paths)
-    |> Repo.delete_all()
+  @doc """
+  Reaps candidates for `library_path_id` whose `relative_path` is absent from
+  `relative_paths` (the paths a scan just found on disk).
+
+  Refuses to run when `relative_paths` is empty: `not in ^[]` is true for
+  every row, so an empty list is indistinguishable in SQL from "everything is
+  gone". An empty scan result is far more often a scan that saw nothing (an
+  unmounted network share, a library type whose extension filter matched zero
+  files) than a library that has genuinely been emptied, and a stale
+  candidate left behind is recoverable while a deleted one is not -- so this
+  treats an empty scan as non-authoritative and does nothing, logging a
+  warning since a silently skipped reap is the kind of thing an operator
+  needs to see. This guard lives here, not only at the scanner call site, so
+  no future caller can bypass it by forgetting to check first.
+
+  Walks the library path's candidates in bounded pages (`:batch_size` option,
+  default `#{@delete_missing_batch_size}`) rather than sending
+  `relative_paths` to the database as bind parameters: see
+  `@delete_missing_batch_size` for why.
+  """
+  @spec delete_missing(binary(), [String.t()], keyword()) ::
+          {non_neg_integer(), nil | [term()]}
+  def delete_missing(library_path_id, relative_paths, opts \\ [])
+
+  def delete_missing(library_path_id, [], _opts) do
+    Logger.warning(
+      "Refusing to reap import candidates: scan reported zero on-disk files",
+      library_path_id: library_path_id
+    )
+
+    {0, nil}
+  end
+
+  def delete_missing(library_path_id, relative_paths, opts) do
+    batch_size = Keyword.get(opts, :batch_size, @delete_missing_batch_size)
+    on_disk = MapSet.new(relative_paths)
+
+    {delete_missing_pages(library_path_id, on_disk, batch_size, nil, 0), nil}
+  end
+
+  defp delete_missing_pages(library_path_id, on_disk, batch_size, after_id, deleted) do
+    page =
+      ImportCandidate
+      |> where([c], c.library_path_id == ^library_path_id)
+      |> maybe_after_id(after_id)
+      |> order_by([c], asc: c.id)
+      |> select([c], {c.id, c.relative_path})
+      |> limit(^batch_size)
+      |> Repo.all()
+
+    case page do
+      [] ->
+        deleted
+
+      page ->
+        missing_ids =
+          for {id, relative_path} <- page, not MapSet.member?(on_disk, relative_path), do: id
+
+        deleted = deleted + delete_batch(missing_ids)
+
+        if length(page) < batch_size do
+          deleted
+        else
+          {last_id, _relative_path} = List.last(page)
+          delete_missing_pages(library_path_id, on_disk, batch_size, last_id, deleted)
+        end
+    end
+  end
+
+  defp delete_batch([]), do: 0
+
+  defp delete_batch(ids) do
+    {count, _} = ImportCandidate |> where([c], c.id in ^ids) |> Repo.delete_all()
+    count
   end
 
   @spec demote_episode_files(Episode.t()) :: {:ok, :ok} | {:error, term()}

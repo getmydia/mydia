@@ -125,6 +125,42 @@ defmodule Mydia.Jobs.LibraryScannerDiscoveryTest do
     end
   end
 
+  describe "an empty scan result" do
+    for auto_import <- [false, true] do
+      test "does not reap existing candidates when the scan finds zero files (auto_import: #{auto_import})",
+           %{tmp_dir: tmp_dir} do
+        lp =
+          library_path_fixture(%{
+            path: tmp_dir,
+            type: "movies",
+            auto_import: unquote(auto_import)
+          })
+
+        # `tmp_dir` stays empty -- `Library.Scanner.scan/2` genuinely finds
+        # zero files, which is indistinguishable in SQL from "everything on
+        # disk vanished". `not in ^[]` renders as true for every row, so
+        # without a guard this reaps every candidate for the library path.
+        #
+        # `next_retry_at` in the future keeps this candidate out of
+        # `ImportCandidates.outstanding/3`: with `auto_import: true`,
+        # discovery matches every outstanding candidate for the library path
+        # on every scan (not just ones this scan found), and `RaisingMatcher`
+        # would otherwise fire for a file that was never on disk to begin
+        # with -- a real but unrelated behavior this test is not about.
+        stale =
+          import_candidate_fixture(
+            library_path_id: lp.id,
+            relative_path: "gone.mkv",
+            next_retry_at:
+              DateTime.utc_now() |> DateTime.add(3600, :second) |> DateTime.truncate(:second)
+          )
+
+        assert :ok = scan(lp, matcher: RaisingMatcher)
+        assert Repo.get(ImportCandidate, stale.id)
+      end
+    end
+  end
+
   describe "auto_import: true discovery" do
     test "one scheduled scan caps the outstanding-match backlog by page count", %{
       tmp_dir: tmp_dir
