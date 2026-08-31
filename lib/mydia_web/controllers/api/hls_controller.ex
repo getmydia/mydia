@@ -7,6 +7,7 @@ defmodule MydiaWeb.Api.HlsController do
     AudioPreferences,
     HlsSessionSupervisor,
     HlsSession,
+    SegmentPlan,
     SessionFiles,
     SessionSubtitles
   }
@@ -19,8 +20,41 @@ defmodule MydiaWeb.Api.HlsController do
   """
   def master_playlist(conn, %{"session_id" => session_id}) do
     with {:ok, user_id} <- get_user_id(conn),
-         {:ok, pid} <- find_session_by_id(session_id, user_id),
-         :ok <- HlsSession.await_ready(pid, 30_000) do
+         {:ok, pid} <- find_session_by_id(session_id, user_id) do
+      case HlsSession.playlist(pid) do
+        {:ok, playlist} ->
+          # A full session's playlist is computed from the media duration and is
+          # complete before FFmpeg produces anything, so there is nothing to
+          # await. This is why a full-mode load has no "starting stream" wait.
+          heartbeat_session(session_id, user_id)
+
+          conn
+          |> put_resp_content_type("application/vnd.apple.mpegurl")
+          |> put_resp_header("cache-control", "no-cache")
+          |> send_resp(200, playlist)
+
+        {:error, :window_mode} ->
+          serve_window_playlist(conn, session_id, user_id, pid)
+      end
+    else
+      {:error, :no_user} ->
+        conn
+        |> put_status(:unauthorized)
+        |> json(%{error: "Authentication required"})
+
+      {:error, :session_not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "HLS session not found"})
+    end
+  end
+
+  # The pre-full-playlist compatibility path: FFmpeg is still growing this
+  # session's playlist on disk, so the controller must wait for it to exist
+  # and then serve whatever it currently contains. Kept intact for sessions
+  # that have no `SegmentPlan` (e.g. an unprobeable duration).
+  defp serve_window_playlist(conn, session_id, user_id, pid) do
+    with :ok <- HlsSession.await_ready(pid, 30_000) do
       # Session is ready - get the playlist path
       file_path =
         case HlsSession.get_playlist_path(pid) do
@@ -100,16 +134,6 @@ defmodule MydiaWeb.Api.HlsController do
           end
       end
     else
-      {:error, :no_user} ->
-        conn
-        |> put_status(:unauthorized)
-        |> json(%{error: "Authentication required"})
-
-      {:error, :session_not_found} ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "HLS session not found"})
-
       {:error, :timeout} ->
         Logger.warning("Timeout waiting for HLS session #{session_id} to be ready")
 
@@ -237,8 +261,61 @@ defmodule MydiaWeb.Api.HlsController do
   This route handles FFmpeg's flat structure where segments are in the root directory.
   """
   def root_segment(conn, %{"session_id" => session_id, "segment" => segment}) do
-    with {:ok, user_id} <- get_user_id(conn),
-         {:ok, info} <- get_session_info_by_id(session_id, user_id),
+    # get_user_id/1 runs outside the `with` (rather than as its first clause)
+    # so `user_id` is in scope in the `else` block below: a `with`'s `else`
+    # only sees the value that failed to match, not variables bound by
+    # clauses that already succeeded.
+    case get_user_id(conn) do
+      {:ok, user_id} ->
+        with {:ok, pid} <- find_session_by_id(session_id, user_id),
+             {:ok, index} <- SegmentPlan.index_from_name(segment) do
+          case HlsSession.request_segment(pid, index) do
+            {:ok, path} ->
+              heartbeat_session(session_id, user_id)
+
+              conn
+              |> put_resp_content_type(SessionFiles.content_type(segment))
+              |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
+              |> send_file(200, path)
+
+            {:error, :timeout} ->
+              # The encoder has not reached this segment yet. Both hls.js and mpv
+              # retry a 503 with Retry-After rather than treating it as fatal, which
+              # is what keeps a seek onto a slow transcode buffering instead of
+              # failing.
+              conn
+              |> put_resp_header("retry-after", "1")
+              |> put_status(:service_unavailable)
+              |> json(%{error: "Segment not ready"})
+
+            {:error, :window_mode} ->
+              serve_window_segment(conn, session_id, user_id, segment)
+          end
+        else
+          :error ->
+            # Not a segment filename. Subtitles and anything else the session
+            # directory holds resolve by path as before.
+            serve_window_segment(conn, session_id, user_id, segment)
+
+          {:error, :session_not_found} ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{error: "HLS session not found"})
+        end
+
+      {:error, :no_user} ->
+        conn
+        |> put_status(:unauthorized)
+        |> json(%{error: "Authentication required"})
+    end
+  end
+
+  # The pre-full-playlist compatibility path: resolves a requested name
+  # against the session directory by path rather than by segment index.
+  # Reached for anything that is not a `segment_NNNNN.ts` name (subtitles,
+  # legacy segment names) and for sessions with no `SegmentPlan`.
+  defp serve_window_segment(conn, session_id, user_id, segment) do
+    with {:ok, info} <- get_session_info_by_id(session_id, user_id),
          {:ok, segment_path} <- resolve_session_file(info, segment),
          true <- File.exists?(segment_path) do
       heartbeat_session(session_id, user_id)
@@ -248,11 +325,6 @@ defmodule MydiaWeb.Api.HlsController do
       |> put_resp_header("cache-control", cache_control_for(segment))
       |> send_file(200, segment_path)
     else
-      {:error, :no_user} ->
-        conn
-        |> put_status(:unauthorized)
-        |> json(%{error: "Authentication required"})
-
       {:error, :session_not_found} ->
         conn
         |> put_status(:not_found)
