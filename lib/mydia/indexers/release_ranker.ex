@@ -47,12 +47,18 @@ defmodule Mydia.Indexers.ReleaseRanker do
     as a hard removal (default: `true`). The automatic search jobs leave this at the default.
     Manual search deliberately passes `false`: per spec R8, manual search and manual grab are the
     operator's explicit escape hatch and must not silently drop a release the profile excludes.
+  - `:apply_resolution_floor` - Whether `:quality_profile`'s `:min_resolution` is enforced as a
+    hard removal (default: `true`). A release below the floor is dropped rather than down-scored,
+    because there is no minimum-score threshold before grabbing, so the top of an all-below-floor
+    list is grabbed regardless. A release with no resolution token counts as
+    `QualityParser.assumed_resolution/0`. Manual search passes `false`, for the same R8 reason as
+    `:apply_source_exclusion`.
   """
 
   require Logger
 
   alias Mydia.Downloads.ReleaseValidator
-  alias Mydia.Indexers.{SearchResult, SearchScorer}
+  alias Mydia.Indexers.{QualityParser, SearchResult, SearchScorer}
   alias Mydia.Indexers.Structs.{RankedResult, ScoreBreakdown}
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.ParsedFileInfo
@@ -79,6 +85,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
           min_post_age_minutes: non_neg_integer() | nil,
           now: DateTime.t() | nil,
           apply_source_exclusion: boolean() | nil,
+          apply_resolution_floor: boolean() | nil,
           custom_formats: [map()]
         ]
 
@@ -150,6 +157,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       |> reject_invalid_releases()
       |> filter_acceptable(opts)
       |> reject_excluded_sources(opts)
+      |> reject_below_min_resolution(opts)
       |> reject_title_mismatches(expected_title)
       |> Enum.map(fn result ->
         breakdown = calculate_score_breakdown(result, opts)
@@ -287,6 +295,62 @@ defmodule Mydia.Indexers.ReleaseRanker do
   defp result_source(%SearchResult{quality: %{source: source}}) when is_binary(source), do: source
   defp result_source(%SearchResult{title: title}) when is_binary(title), do: Sources.detect(title)
   defp result_source(_), do: nil
+
+  # Drops releases below the profile's :min_resolution. A hard removal for the
+  # same reason excluded_sources is: there is no minimum-score threshold before
+  # grabbing, so the top of an all-bad list is grabbed regardless of how far it
+  # sits below the floor. A 1080p profile took a 360p XviD this way.
+  #
+  # A release with no resolution token counts as
+  # `QualityParser.assumed_resolution/0`, so an untagged SD rip cannot slip
+  # under the floor by being unreadable.
+  #
+  # An absent profile, an absent :min_resolution, or a resolution outside the
+  # canonical vocabulary all mean "no floor". Only :min_resolution gates;
+  # :max_resolution stays a scoring signal, since grabbing above the ceiling
+  # wastes disk but still yields a watchable file.
+  defp reject_below_min_resolution(results, opts) do
+    order = QualityProfile.valid_resolutions()
+
+    case min_resolution_floor(opts, order) do
+      nil ->
+        results
+
+      floor_index ->
+        Enum.filter(results, fn result ->
+          resolution = QualityParser.effective_resolution(result.quality)
+
+          case Enum.find_index(order, &(&1 == resolution)) do
+            index when is_integer(index) and index < floor_index ->
+              Logger.info(
+                "[ReleaseRanker] Filtered out (resolution #{resolution} below profile minimum " <>
+                  "#{Enum.at(order, floor_index)}): #{result.title}"
+              )
+
+              false
+
+            _ ->
+              true
+          end
+        end)
+    end
+  end
+
+  # Resolves the floor's index in the canonical ascending vocabulary, or nil
+  # for "no floor". Reads :apply_resolution_floor (default true) *before*
+  # looking at the profile, mirroring excluded_sources/1: the opt-out is a
+  # positive flag the caller sets. Manual search passes false so the operator
+  # keeps their deliberate escape hatch (R8).
+  defp min_resolution_floor(opts, order) do
+    with true <- Keyword.get(opts, :apply_resolution_floor, true),
+         %{quality_standards: standards} when is_map(standards) <-
+           Keyword.get(opts, :quality_profile),
+         min_resolution when is_binary(min_resolution) <- Map.get(standards, :min_resolution) do
+      Enum.find_index(order, &(&1 == min_resolution))
+    else
+      _ -> nil
+    end
+  end
 
   ## Private Functions - Filtering
 
@@ -612,10 +676,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
     end)
   end
 
-  defp quality_preference_index(%SearchResult{quality: nil}, _preferred_qualities) do
-    999
-  end
-
   defp quality_preference_index(_result, nil) do
     # No preferred qualities set, return 0 so all results sort by score only
     0
@@ -626,16 +686,16 @@ defmodule Mydia.Indexers.ReleaseRanker do
     0
   end
 
+  # An untagged release resolves to QualityParser.assumed_resolution/0 rather
+  # than sorting into the 999 bucket, so it takes its real place in the
+  # preference order instead of tying with every other unrecognized release
+  # and winning the tie-break on raw score.
   defp quality_preference_index(%SearchResult{quality: quality}, preferred_qualities) do
-    case quality.resolution do
-      nil ->
-        999
+    resolution = QualityParser.effective_resolution(quality)
 
-      resolution ->
-        case Enum.find_index(preferred_qualities, &(&1 == resolution)) do
-          nil -> 999
-          index -> index
-        end
+    case Enum.find_index(preferred_qualities, &(&1 == resolution)) do
+      nil -> 999
+      index -> index
     end
   end
 
@@ -670,6 +730,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
     blocked_tags = Keyword.get(opts, :blocked_tags, [])
     custom_formats = Keyword.get(opts, :custom_formats, [])
     expected_title = Keyword.get(opts, :expected_title)
+    floor_index = min_resolution_floor(opts, QualityProfile.valid_resolutions())
 
     results
     |> Enum.map(fn result ->
@@ -691,7 +752,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
              blocked_tags,
              expected_title,
              excluded_sources(opts),
-             custom_formats
+             custom_formats,
+             floor_index
            ) do
         nil ->
           # Accepted — record the full breakdown (including penalties) so the
@@ -805,11 +867,20 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   defp maybe_put_penalties(row, _), do: row
 
-  # Returns a rejection reason string or nil if acceptable. The only hard
-  # removals are invalid releases (validator), blocked tags, and wrong-show
-  # title mismatches. Size/seeders/ratio are no longer rejection reasons — they
-  # are soft penalties on accepted results.
-  defp get_rejection_reason(result, blocked_tags, expected_title, excluded, custom_formats) do
+  # Returns a rejection reason string or nil if acceptable. The hard removals
+  # are invalid releases (validator), blocked tags, excluded sources, rejecting
+  # custom formats, sub-floor resolutions, and wrong-show title mismatches.
+  # Size/seeders/ratio are no longer rejection reasons — they are soft
+  # penalties on accepted results. The clause order mirrors the rank_all/2
+  # pipeline so the Activity stats and the actual ranking agree.
+  defp get_rejection_reason(
+         result,
+         blocked_tags,
+         expected_title,
+         excluded,
+         custom_formats,
+         floor_index
+       ) do
     cond do
       invalid_reason = invalid_release_reason(result) ->
         "invalid: #{invalid_reason}"
@@ -823,10 +894,33 @@ defmodule Mydia.Indexers.ReleaseRanker do
       rejecting = rejecting_format(result, custom_formats) ->
         "custom_format: #{rejecting}"
 
+      below = below_min_resolution_reason(result, floor_index) ->
+        below
+
       expected_title_mismatch?(result, expected_title) ->
         "title_mismatch"
 
       true ->
+        nil
+    end
+  end
+
+  # Mirrors reject_below_min_resolution/2. Names the assumed resolution
+  # explicitly when the title carried no token, so an operator reading the
+  # Activity view is not left wondering why a `resolution: null` row was cut.
+  defp below_min_resolution_reason(_result, nil), do: nil
+
+  defp below_min_resolution_reason(%SearchResult{quality: quality}, floor_index) do
+    order = QualityProfile.valid_resolutions()
+    resolution = QualityParser.effective_resolution(quality)
+    assumed? = is_nil(quality) or is_nil(quality.resolution)
+
+    case Enum.find_index(order, &(&1 == resolution)) do
+      index when is_integer(index) and index < floor_index ->
+        assumed_note = if assumed?, do: " (assumed, no resolution in title)", else: ""
+        "resolution_below_minimum: #{resolution}#{assumed_note} < #{Enum.at(order, floor_index)}"
+
+      _ ->
         nil
     end
   end

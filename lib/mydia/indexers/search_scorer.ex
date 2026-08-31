@@ -24,6 +24,7 @@ defmodule Mydia.Indexers.SearchScorer do
       SearchScorer.score_result_with_breakdown(result, quality_profile: profile, media_type: :movie, search_query: "...")
   """
 
+  alias Mydia.Indexers.QualityParser
   alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
   alias Mydia.Settings.QualityProfile
@@ -304,12 +305,19 @@ defmodule Mydia.Indexers.SearchScorer do
   end
 
   # Convert SearchResult to the media_attrs format expected by QualityProfile.score_media_file/2
+  #
+  # `:resolution` goes through QualityParser.effective_resolution/1, so an
+  # untagged release is measured as 360p rather than as "unknown". A nil here
+  # scored a neutral 50 and produced no range violation, ranking it above an
+  # honestly-labelled out-of-range release at 25. The assumption belongs at
+  # this seam and not inside score_media_file/2, which Mydia.Upgrades.Comparator
+  # also calls for real files, where a nil resolution means "not analyzed yet".
   defp search_result_to_media_attrs(%SearchResult{quality: nil} = result, media_type) do
     # No quality info available
     file_size_mb = if result.size, do: result.size / (1024 * 1024), else: nil
 
     %{
-      resolution: nil,
+      resolution: QualityParser.effective_resolution(nil),
       source: nil,
       video_codec: nil,
       audio_codec: nil,
@@ -327,7 +335,7 @@ defmodule Mydia.Indexers.SearchScorer do
     file_size_mb = if result.size, do: result.size / (1024 * 1024), else: nil
 
     base_attrs = %{
-      resolution: quality.resolution,
+      resolution: QualityParser.effective_resolution(quality),
       source: quality.source,
       video_codec: video_codec,
       audio_codec: audio_codec,

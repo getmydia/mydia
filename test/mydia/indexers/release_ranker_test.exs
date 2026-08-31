@@ -656,7 +656,14 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       assert length(ranked) == 1
     end
 
-    test "a min/max resolution violation zeroes the quality component but does not hard-reject the release" do
+    test "a min_resolution violation zeroes the quality component AND hard-rejects the release" do
+      # This assertion was inverted deliberately. It used to assert that a
+      # sub-floor release was merely down-scored, on the reasoning that soft
+      # penalties let weak releases sink rather than vanish. In practice
+      # nothing sits below them: there is no minimum score to grab, so the top
+      # of an all-sub-floor list is still taken. That is how a 1080p-floor
+      # profile grabbed a 360p XviD of Dark Matter S02E01. :min_resolution is
+      # now a floor, matching :excluded_sources.
       profile =
         build_quality_profile(%{
           quality_standards: %{
@@ -674,13 +681,39 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
         })
 
       breakdown = ReleaseRanker.calculate_score_breakdown(result, quality_profile: profile)
-      # QualityProfile.score_media_file/2 still detects the violation and zeroes
-      # the quality sub-score; that's real. What it no longer does is prevent
-      # the release from being ranked and selected.
       assert breakdown.quality == 0.0
 
-      ranked = ReleaseRanker.rank_all([result], quality_profile: profile)
-      assert length(ranked) == 1
+      assert ReleaseRanker.rank_all([result], quality_profile: profile) == []
+
+      # The operator's manual escape hatch still surfaces it.
+      assert length(
+               ReleaseRanker.rank_all([result],
+                 quality_profile: profile,
+                 apply_resolution_floor: false
+               )
+             ) == 1
+    end
+
+    test "max_resolution stays a scoring signal and does not hard-reject" do
+      # Only the floor gates. Grabbing above the ceiling wastes disk but still
+      # yields a watchable file, so it remains a penalty.
+      profile =
+        build_quality_profile(%{
+          quality_standards: %{
+            preferred_resolutions: ["720p"],
+            min_resolution: "720p",
+            max_resolution: "1080p"
+          }
+        })
+
+      result =
+        build_result(%{
+          title: "Test.Movie.2024.2160p.BluRay.x265-GROUP",
+          seeders: 100,
+          quality: QualityParser.parse("Test.Movie.2024.2160p.BluRay.x265-GROUP")
+        })
+
+      assert length(ReleaseRanker.rank_all([result], quality_profile: profile)) == 1
     end
 
     test "a profile without quality_standards zeroes the quality component" do

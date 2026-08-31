@@ -215,4 +215,79 @@ defmodule Mydia.Library.ReleaseParserTest do
       assert result.year == 2020
     end
   end
+
+  describe "parse/1 - indexer site-branding prefixes" do
+    test "strips a `www.<host> - ` prefix from a TV release" do
+      # Regression: this exact title was returned by a live search for
+      # Dark Matter S02E01. The prefix was folded into the show title as
+      # "Www Uindex Org Dark Matter", whose Jaro distance to the expected
+      # "Dark Matter (2024)" was 0.40, below ReleaseRanker's 0.7 threshold.
+      # Every 1080p and 2160p candidate was hard-rejected as a title
+      # mismatch and a 360p XviD was grabbed instead.
+      result =
+        ReleaseParser.parse(
+          "www.UIndex.org    -    Dark Matter 2024 S02E01 A Quiet Life 1080p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune"
+        )
+
+      assert result.type == :tv_show
+      assert result.title == "Dark Matter"
+      assert result.year == 2024
+      assert result.season == 2
+      assert result.episodes == [1]
+    end
+
+    test "strips the prefix from the 2160p variant of the same release" do
+      result =
+        ReleaseParser.parse(
+          "www.UIndex.org    -    Dark Matter 2024 S02E01 A Quiet Life 2160p ATVP WEB-DL DDP5 1 Atmos DV HDR10Plus H 265-Kitsune"
+        )
+
+      assert result.title == "Dark Matter"
+      assert result.season == 2
+      assert result.episodes == [1]
+    end
+
+    test "strips a bracketed site prefix" do
+      result = ReleaseParser.parse("[ www.Torrenting.org ] Movie.Name.2020.1080p.BluRay.x264-GRP")
+
+      assert result.type == :movie
+      assert result.title == "Movie Name"
+      assert result.year == 2020
+    end
+
+    test "strips a dotted site prefix with no separator" do
+      result = ReleaseParser.parse("www.1TamilMV.world - Movie.Name.2020.1080p.BluRay.x264")
+
+      assert result.title == "Movie Name"
+      assert result.year == 2020
+    end
+
+    test "leaves a title that merely contains www alone" do
+      # Only a leading site prefix is stripped. A title is never emptied.
+      result = ReleaseParser.parse("Movie.Name.2020.1080p.BluRay.x264-GRP")
+      assert result.title == "Movie Name"
+    end
+
+    test "does not empty the title when the name is nothing but a site tag" do
+      result = ReleaseParser.parse("www.UIndex.org")
+      refute result.title == ""
+    end
+
+    test "leaves a run-on dotted domain alone rather than eating the title" do
+      # No delimiter separates the domain from the release, so the labels are
+      # indistinguishable from title words. Declining to strip is the safe
+      # failure: the title survives intact, just uncleaned.
+      result = ReleaseParser.parse("www.Site.org.Movie.Name.2020.1080p.BluRay.x264")
+
+      assert result.title =~ "Movie Name"
+      assert result.year == 2020
+    end
+
+    test "strips a prefix separated only by whitespace" do
+      result = ReleaseParser.parse("www.Torrenting.org Movie.Name.2020.1080p.BluRay.x264")
+
+      assert result.title == "Movie Name"
+      assert result.year == 2020
+    end
+  end
 end

@@ -88,6 +88,33 @@ defmodule Mydia.Indexers.QualityParserTest do
     end
   end
 
+  describe "effective_resolution/1" do
+    test "returns the detected resolution when the title carries one" do
+      assert QualityParser.effective_resolution(QualityParser.parse("Movie.1080p.BluRay")) ==
+               "1080p"
+    end
+
+    test "assumes 360p when the title carries no resolution token" do
+      # An untagged release is SD in practice. Scoring it as "unknown" made it
+      # rank above an honestly-labelled 720p, which is how a 360p XviD beat a
+      # 720p x265 for Dark Matter S02E01.
+      quality = QualityParser.parse("Dark.Matter.2024.S02E01.A.Quiet.Life.XviD-AFG[EZTVx.to].avi")
+
+      assert quality.resolution == nil, "parse/1 must stay honest about what it detected"
+      assert QualityParser.effective_resolution(quality) == "360p"
+    end
+
+    test "assumes 360p for a nil quality" do
+      assert QualityParser.effective_resolution(nil) == "360p"
+    end
+
+    test "parse/1 is left untouched so renamed files never get a false 360p tag" do
+      # media_import.ex feeds parse/1 into FileNamer. A resolution invented
+      # here would be written into the filename on disk.
+      assert QualityParser.parse("Movie.BluRay.x264").resolution == nil
+    end
+  end
+
   describe "extract_source/1" do
     test "extracts BluRay source" do
       assert QualityParser.extract_source("Movie.1080p.BluRay.x264") == "BluRay"

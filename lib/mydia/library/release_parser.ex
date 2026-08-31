@@ -80,6 +80,7 @@ defmodule Mydia.Library.ReleaseParser do
 
     result =
       basename
+      |> strip_site_prefix()
       |> tokenize_classify_resolve(target)
       |> build_parsed_file_info(filename, opts)
       |> maybe_merge_folder_context(folder_context)
@@ -125,6 +126,36 @@ defmodule Mydia.Library.ReleaseParser do
   end
 
   # ---- Internals ----
+
+  # Leading indexer site-branding, e.g. `www.UIndex.org    -    `,
+  # `[ www.Torrenting.org ] `, `www.1TamilMV.world - `. Several trackers
+  # stamp their domain onto every title they publish. Left in place the
+  # tokenizer reads it as part of the show name ("Www Uindex Org Dark
+  # Matter"), which sinks the Jaro comparison in
+  # `ReleaseRanker.reject_title_mismatches/2` below its 0.7 threshold and
+  # hard-rejects an otherwise perfect release.
+  #
+  # Anchored to a literal `www.` plus dot-separated labels, so it cannot bite
+  # a real title: no show or film is named "www.something". Only the leading
+  # occurrence is removed; trailing site tags in brackets are already handled
+  # by @release_group_re.
+  #
+  # The lookahead is what keeps this safe. The domain run is greedy, so
+  # without it a fully dot-separated name like
+  # `www.Site.org.Movie.Name.2020.1080p` would have its title eaten as extra
+  # domain labels. Requiring a delimiter (whitespace, closing bracket, or a
+  # separator glyph) immediately after the domain means such a run-on simply
+  # does not match and is left untouched, which is the safe failure: a title
+  # we decline to clean, never a title we destroy.
+  @site_prefix_re ~r/^\s*(?:[\[\(\{]\s*)?www\.[\w-]+(?:\.[\w-]+)*(?=[\s\]\)\}:|–—-])\s*(?:[\]\)\}]\s*)?(?:[-–—:|]+\s*)?/i
+
+  defp strip_site_prefix(filename) do
+    stripped = Regex.replace(@site_prefix_re, filename, "", global: false)
+
+    # A name that is *nothing but* a site tag has no release information to
+    # recover, so keep the original rather than handing the tokenizer "".
+    if String.trim(stripped) == "", do: filename, else: stripped
+  end
 
   defp tokenize_classify_resolve(filename, target) do
     # Pre-pass: detect a trailing release-group separator (`-GROUP`)
