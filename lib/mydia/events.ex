@@ -62,10 +62,11 @@ defmodule Mydia.Events do
       :ok
   """
   def create_event_async(attrs) do
-    if sandbox_pool?() do
+    if sandbox_pool?() or Repo.in_transaction?() do
       # Under the SQL sandbox the test process owns the connection. A cast to
       # the long-lived writer would insert on a connection the test cannot see
-      # or roll back, so stay synchronous here.
+      # or roll back. A caller-owned transaction has the same atomicity
+      # requirement, so stay synchronous there as well.
       case create_event(attrs) do
         {:ok, event} ->
           Logger.debug("Event created asynchronously: #{event.type}")

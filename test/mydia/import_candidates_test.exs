@@ -181,6 +181,33 @@ defmodule Mydia.ImportCandidatesTest do
     end
   end
 
+  describe "a matched group with NULL confidence stays visible in the SQL bands" do
+    test "band counts, paging, and a filter selection all classify it as needs_attention" do
+      lp = library_path_fixture(%{type: "series"})
+
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        anchor_key: "unknown-confidence",
+        provider_id: "1234",
+        provider_type: "tvdb",
+        confidence: nil
+      })
+
+      assert %{ready: 0, needs_attention: 1, no_match: 0, total: 1} =
+               ImportCandidates.band_counts(lp.id)
+
+      assert {[group], nil} = ImportCandidates.page(lp.id, band: :needs_attention)
+      assert group.anchor_key == "unknown-confidence"
+
+      scope =
+        lp.id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(%{band: :needs_attention})
+
+      assert SelectionScope.count(scope) == 1
+    end
+  end
+
   describe "band_counts/1, count_by_status/2, and count_pending/0" do
     test "band_counts/1 partitions pending groups by band" do
       lp = library_path_fixture(%{type: "series"})
@@ -248,7 +275,7 @@ defmodule Mydia.ImportCandidatesTest do
 
       scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["alpha"])
 
-      assert {:ok, 2} = ImportCandidates.dismiss(scope)
+      assert {:ok, 1} = ImportCandidates.dismiss(scope)
 
       assert {[bravo], nil} = ImportCandidates.page(lp.id)
       assert bravo.anchor_key == "bravo"
@@ -265,12 +292,12 @@ defmodule Mydia.ImportCandidatesTest do
       dismiss_scope =
         lp.id |> SelectionScope.new() |> SelectionScope.select_page(["alpha", "bravo"])
 
-      assert {:ok, 3} = ImportCandidates.dismiss(dismiss_scope)
+      assert {:ok, 2} = ImportCandidates.dismiss(dismiss_scope)
 
       restore_scope =
         lp.id |> SelectionScope.new("ignored") |> SelectionScope.select_page(["alpha"])
 
-      assert {:ok, 2} = ImportCandidates.restore(restore_scope)
+      assert {:ok, 1} = ImportCandidates.restore(restore_scope)
 
       assert {[group], nil} = ImportCandidates.page(lp.id)
       assert group.anchor_key == "alpha"
@@ -667,6 +694,80 @@ defmodule Mydia.ImportCandidatesTest do
 
       assert {[group], nil} = ImportCandidates.page(lp.id)
       assert group.anchor_key == "unmatched"
+    end
+
+    test "accept and import-all both reject a group with conflicting providers" do
+      lp = library_path_fixture(%{type: "movies"})
+      first_movie = media_item_fixture(%{type: "movie", tmdb_id: 61_001})
+      second_movie = media_item_fixture(%{type: "movie", tmdb_id: 61_002})
+
+      first =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "conflict",
+          relative_path: "Conflict/a.mkv",
+          media_type: "movie",
+          provider_type: "tmdb",
+          provider_id: to_string(first_movie.tmdb_id),
+          confidence: 1.0,
+          parsed_info: %{"type" => "movie"}
+        })
+
+      second =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "conflict",
+          relative_path: "Conflict/b.mkv",
+          media_type: "movie",
+          provider_type: "tmdb",
+          provider_id: to_string(second_movie.tmdb_id),
+          confidence: 1.0,
+          parsed_info: %{"type" => "movie"}
+        })
+
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["conflict"])
+
+      assert {:ok, %{accepted: 0, skipped: 1}} = ImportCandidates.accept(scope)
+      assert {:ok, %{accepted: 0, skipped: 1}} = ImportCandidates.accept_all_matched(lp.id)
+
+      assert Repo.get(ImportCandidate, first.id)
+      assert Repo.get(ImportCandidate, second.id)
+      refute Repo.exists?(MediaFile)
+    end
+
+    test "accept keyset-pages selected groups instead of materializing the full selection" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", tmdb_id: 61_003})
+
+      for n <- 1..5 do
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "movie-#{n}",
+          relative_path: "Movie #{n}/movie.mkv",
+          media_type: "movie",
+          provider_type: "tmdb",
+          provider_id: to_string(movie.tmdb_id),
+          title: movie.title,
+          year: movie.year,
+          confidence: 1.0,
+          parsed_info: %{"type" => "movie"}
+        })
+      end
+
+      parent = self()
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{})
+
+      assert {:ok, %{accepted: 5, skipped: 0}} =
+               ImportCandidates.accept(scope,
+                 group_page_size: 2,
+                 after_group_page: fn groups -> send(parent, {:group_page, length(groups)}) end
+               )
+
+      assert_receive {:group_page, 2}
+      assert_receive {:group_page, 2}
+      assert_receive {:group_page, 1}
+      refute_receive {:group_page, _}
+      assert Repo.aggregate(MediaFile, :count) == 5
     end
   end
 end

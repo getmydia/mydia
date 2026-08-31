@@ -60,6 +60,7 @@ defmodule Mydia.Jobs.ImportRun do
     FileIngest,
     ImportCandidate,
     ImportRun,
+    MediaFile,
     MetadataMatcher,
     PathAnchor,
     ReleaseParser,
@@ -314,21 +315,34 @@ defmodule Mydia.Jobs.ImportRun do
     if owned_path?(library_path.id, relative_path) do
       false
     else
-      existing = ImportCandidates.get_by_path(library_path.id, relative_path)
-      attrs = candidate_scan_attrs(file_info, library_path, relative_path, existing)
+      parsed = ReleaseParser.parse_with_path(file_info.path)
 
-      case ImportCandidates.upsert(attrs) do
-        {:ok, _candidate} ->
-          is_nil(existing)
+      if MediaFile.parsed_type_compatible?(library_path.type, parsed.type) do
+        existing = ImportCandidates.get_by_path(library_path.id, relative_path)
+        attrs = candidate_scan_attrs(file_info, library_path, relative_path, existing, parsed)
 
-        {:error, changeset} ->
-          Logger.warning("Could not upsert an import candidate during a scan",
-            library_path_id: library_path.id,
-            relative_path: relative_path,
-            errors: inspect(changeset.errors)
-          )
+        case ImportCandidates.upsert(attrs) do
+          {:ok, _candidate} ->
+            is_nil(existing)
 
-          false
+          {:error, changeset} ->
+            Logger.warning("Could not upsert an import candidate during a scan",
+              library_path_id: library_path.id,
+              relative_path: relative_path,
+              errors: inspect(changeset.errors)
+            )
+
+            false
+        end
+      else
+        Logger.debug("Skipping a library-type-incompatible file during import discovery",
+          library_path_id: library_path.id,
+          library_type: library_path.type,
+          parsed_type: parsed.type,
+          relative_path: relative_path
+        )
+
+        false
       end
     end
   end
@@ -362,9 +376,8 @@ defmodule Mydia.Jobs.ImportRun do
   # size or mtime actually changed on disk, in which case they are explicitly
   # cleared: a match cached against the old bytes is not trustworthy evidence
   # about the new ones, and phase 2 has to re-earn it.
-  defp candidate_scan_attrs(file_info, library_path, relative_path, existing) do
+  defp candidate_scan_attrs(file_info, library_path, relative_path, existing, parsed) do
     mtime = DateTime.truncate(file_info.modified_at, :second)
-    parsed = ReleaseParser.parse_with_path(file_info.path)
     anchor = PathAnchor.anchor_for(file_info.path, library_path.path)
 
     base = %{

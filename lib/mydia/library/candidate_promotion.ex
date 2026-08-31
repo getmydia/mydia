@@ -17,8 +17,10 @@ defmodule Mydia.Library.CandidatePromotion do
     snapshot = candidate_snapshot(candidates)
 
     with :ok <- one_group?(candidates),
-         {:ok, media_item} <- MetadataEnricher.enrich(match, config: config),
-         {:ok, media_files} <- commit_group(candidates, snapshot, media_item, opts) do
+         {:ok, preparation} <- MetadataEnricher.prepare(match, config: config),
+         {:ok, {media_files, media_item}} <-
+           commit_group(candidates, snapshot, preparation, opts) do
+      MetadataEnricher.finalize(media_item)
       Sidecars.reconcile_all(Repo.preload(media_files, :library_path))
       {:ok, media_files}
     end
@@ -26,7 +28,7 @@ defmodule Mydia.Library.CandidatePromotion do
 
   def promote_group([], _match, _opts), do: {:error, :empty_group}
 
-  defp commit_group(candidates, snapshot, media_item, opts) do
+  defp commit_group(candidates, snapshot, preparation, opts) do
     transaction_opts = if DB.sqlite?(), do: [mode: :immediate], else: []
 
     ownership_attempt(opts)
@@ -39,9 +41,10 @@ defmodule Mydia.Library.CandidatePromotion do
              {:ok, locked_candidates} <- reread_candidates(candidates),
              :ok <- snapshot_matches?(locked_candidates, snapshot),
              :ok <- one_group?(locked_candidates),
+             {:ok, media_item} <- MetadataEnricher.persist(preparation),
              {:ok, media_files} <- insert_files(locked_candidates, media_item, opts),
              :ok <- delete_candidates(locked_candidates) do
-          media_files
+          {media_files, media_item}
         else
           {:error, reason} -> Repo.rollback(reason)
         end
@@ -49,7 +52,7 @@ defmodule Mydia.Library.CandidatePromotion do
       transaction_opts
     )
     |> case do
-      {:ok, media_files} -> {:ok, media_files}
+      {:ok, result} -> {:ok, result}
       {:error, reason} -> {:error, reason}
     end
   end

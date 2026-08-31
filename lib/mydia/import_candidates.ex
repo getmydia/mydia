@@ -56,6 +56,7 @@ defmodule Mydia.ImportCandidates do
   # group the size of a whole season tree never becomes one unbounded
   # allocation, while still being processed as a single logical group.
   @member_page_size 500
+  @accept_group_page_size 50
 
   @type cursor :: {non_neg_integer(), String.t()}
 
@@ -255,7 +256,8 @@ defmodule Mydia.ImportCandidates do
 
     dynamic(
       [c],
-      count(c.provider_id, :distinct) == 1 and min(c.confidence) >= ^threshold and
+      count(c.provider_id, :distinct) == 1 and
+        fragment("COALESCE(?, 0.0)", min(c.confidence)) >= ^threshold and
         (is_nil(max(c.provider_type)) or max(c.provider_type) != "local")
     )
   end
@@ -553,12 +555,10 @@ defmodule Mydia.ImportCandidates do
       |> limit(^@member_page_size)
       |> Repo.all()
 
-    acc = acc ++ page
-
     if length(page) < @member_page_size do
-      acc
+      [page | acc] |> Enum.reverse() |> Enum.concat()
     else
-      load_all_members(library_path_id, anchor_key, List.last(page).relative_path, acc)
+      load_all_members(library_path_id, anchor_key, List.last(page).relative_path, [page | acc])
     end
   end
 
@@ -574,14 +574,15 @@ defmodule Mydia.ImportCandidates do
   @spec dismiss(SelectionScope.t()) :: {:ok, non_neg_integer()}
   def dismiss(%SelectionScope{} = scope) do
     now = now()
+    group_count = selected_group_count(scope)
 
-    {count, _} =
+    {row_count, _} =
       candidate_query(scope)
       |> where([c], is_nil(c.dismissed_at))
       |> Repo.update_all(set: [dismissed_at: now, updated_at: now])
 
-    if count > 0, do: broadcast(scope.library_path_id)
-    {:ok, count}
+    if row_count > 0, do: broadcast(scope.library_path_id)
+    {:ok, if(row_count > 0, do: group_count, else: 0)}
   end
 
   @doc """
@@ -591,14 +592,22 @@ defmodule Mydia.ImportCandidates do
   @spec restore(SelectionScope.t()) :: {:ok, non_neg_integer()}
   def restore(%SelectionScope{} = scope) do
     now = now()
+    group_count = selected_group_count(scope)
 
-    {count, _} =
+    {row_count, _} =
       candidate_query(scope)
       |> where([c], not is_nil(c.dismissed_at))
       |> Repo.update_all(set: [dismissed_at: nil, updated_at: now])
 
-    if count > 0, do: broadcast(scope.library_path_id)
-    {:ok, count}
+    if row_count > 0, do: broadcast(scope.library_path_id)
+    {:ok, if(row_count > 0, do: group_count, else: 0)}
+  end
+
+  defp selected_group_count(scope) do
+    scope
+    |> SelectionScope.to_query()
+    |> subquery()
+    |> Repo.aggregate(:count)
   end
 
   # The row-level (ungrouped) query for a scope's selected anchors, built by
@@ -749,25 +758,62 @@ defmodule Mydia.ImportCandidates do
   @spec accept(SelectionScope.t(), keyword()) ::
           {:ok, %{accepted: non_neg_integer(), skipped: non_neg_integer()}}
   def accept(%SelectionScope{} = scope, opts \\ []) do
-    groups =
-      scope
-      |> SelectionScope.to_query()
-      |> Repo.all()
-      |> Enum.map(&to_group(&1, scope.status))
+    page_size = Keyword.get(opts, :group_page_size, @accept_group_page_size)
 
-    result =
-      Enum.reduce(groups, %{accepted: 0, skipped: 0}, fn group, acc ->
-        case accept_group(group, opts) do
-          {:ok, _media_files} -> %{acc | accepted: acc.accepted + 1}
-          {:error, _reason} -> %{acc | skipped: acc.skipped + 1}
-        end
-      end)
+    result = accept_group_pages(scope, opts, page_size, nil, %{accepted: 0, skipped: 0})
 
     if result.accepted > 0, do: broadcast(scope.library_path_id)
     {:ok, result}
   end
 
+  defp accept_group_pages(scope, opts, page_size, after_anchor, result) do
+    groups =
+      scope
+      |> SelectionScope.to_query()
+      |> maybe_after_anchor(after_anchor)
+      |> order_by([c], asc: c.anchor_key)
+      |> limit(^page_size)
+      |> Repo.all()
+      |> Enum.map(&to_group(&1, scope.status))
+
+    case groups do
+      [] ->
+        result
+
+      groups ->
+        after_group_page(opts, groups)
+
+        result =
+          Enum.reduce(groups, result, fn group, acc ->
+            case accept_group(group, opts) do
+              {:ok, _media_files} -> %{acc | accepted: acc.accepted + 1}
+              {:error, _reason} -> %{acc | skipped: acc.skipped + 1}
+            end
+          end)
+
+        if length(groups) < page_size do
+          result
+        else
+          accept_group_pages(scope, opts, page_size, List.last(groups).anchor_key, result)
+        end
+    end
+  end
+
+  defp maybe_after_anchor(query, nil), do: query
+  defp maybe_after_anchor(query, anchor), do: where(query, [c], c.anchor_key > ^anchor)
+
+  defp after_group_page(opts, groups) do
+    case Keyword.get(opts, :after_group_page) do
+      callback when is_function(callback, 1) -> callback.(groups)
+      _ -> :ok
+    end
+  end
+
   defp accept_group(%ImportCandidateGroup{provider_id: nil}, _opts), do: {:error, :no_match}
+
+  defp accept_group(%ImportCandidateGroup{provider_count: provider_count}, _opts)
+       when provider_count != 1,
+       do: {:error, :conflicting_providers}
 
   defp accept_group(%ImportCandidateGroup{provider_type: "local"}, _opts),
     do: {:error, :local_show}

@@ -228,8 +228,8 @@ defmodule Mydia.Library do
   @doc """
   Updates a media file during library scanning.
 
-  Uses scan_changeset which allows orphaned files (files not yet matched to
-  a media_item or episode) to be updated without validation errors.
+  Uses the scan-specific changeset so filesystem-derived fields can be
+  refreshed without exposing ownership fields to the scanner.
   """
   @spec update_media_file_scan(MediaFile.t(), map()) ::
           {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()}

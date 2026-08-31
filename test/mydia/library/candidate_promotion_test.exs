@@ -8,6 +8,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
 
   alias Mydia.Events.Event
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, MediaFile}
+  alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
 
   setup :setup_metadata_stub
@@ -130,6 +131,60 @@ defmodule Mydia.Library.CandidatePromotionTest do
     assert Repo.get(ImportCandidate, first.id)
     assert Repo.get(ImportCandidate, second.id)
     refute Repo.exists?(from f in MediaFile, where: f.library_path_id == ^library_path.id)
+  end
+
+  @tag :tmp_dir
+  test "a failed promotion for a new provider leaves no metadata, event, or NFO", %{
+    tmp_dir: tmp_dir
+  } do
+    library_path =
+      library_path_fixture(%{type: "mixed", path: tmp_dir, write_nfo: true})
+
+    first_path = "Unknown Show/Season 01/Unknown.Show.S01E01.mkv"
+    second_path = "Unknown Show/Unknown.Show.Movie.mkv"
+    File.mkdir_p!(Path.dirname(Path.join(tmp_dir, first_path)))
+    File.write!(Path.join(tmp_dir, first_path), "episode")
+    File.write!(Path.join(tmp_dir, second_path), "movie")
+
+    first =
+      import_candidate_with_id!("00000000-0000-4000-8000-000000000011", %{
+        library_path_id: library_path.id,
+        relative_path: first_path,
+        anchor_key: "unknown show",
+        size: 7,
+        discovered_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        media_type: "tv_show",
+        parsed_info: %{"type" => "tv_show", "season" => 1, "episodes" => [1]}
+      })
+
+    second =
+      import_candidate_with_id!("00000000-0000-4000-8000-000000000012", %{
+        library_path_id: library_path.id,
+        relative_path: second_path,
+        anchor_key: first.anchor_key,
+        size: 5,
+        discovered_at: first.discovered_at,
+        media_type: "movie",
+        parsed_info: %{"type" => "movie"}
+      })
+
+    match = %{
+      provider_id: Integer.to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
+      provider_type: :tvdb,
+      title: Mydia.MetadataStubProvider.series_title(),
+      match_confidence: 1.0,
+      parsed_info: %{type: :tv_show, season: 1, episodes: [1]}
+    }
+
+    assert {:error, {:incompatible_media_type, "movie", "tv_show"}} =
+             CandidatePromotion.promote_group([first, second], match, config: stub_config())
+
+    assert Repo.aggregate(MediaItem, :count) == 0
+    assert Repo.aggregate(Episode, :count) == 0
+    assert Repo.aggregate(Event, :count) == 0
+    refute File.exists?(Path.join(tmp_dir, "Unknown Show/tvshow.nfo"))
+    assert Repo.get(ImportCandidate, first.id)
+    assert Repo.get(ImportCandidate, second.id)
   end
 
   test "rejects a candidate changed after its match was prepared" do

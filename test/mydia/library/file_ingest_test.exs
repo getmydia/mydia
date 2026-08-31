@@ -1,5 +1,5 @@
 defmodule Mydia.Library.FileIngestTest do
-  use Mydia.DataCase, async: true
+  use Mydia.DataCase, async: false
 
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
@@ -92,6 +92,65 @@ defmodule Mydia.Library.FileIngestTest do
     assert parsed_info["episodes"] == [5, 6]
   end
 
+  test "a delayed review verdict cannot recreate a candidate deleted after it was read" do
+    candidate = candidate()
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_305})
+
+    boundary = fn ->
+      Repo.delete_all(from stored in ImportCandidate, where: stored.id == ^candidate.id)
+    end
+
+    assert {:error, {:candidate_missing, candidate_id}} =
+             FileIngest.ingest(candidate, match(movie, 0.5),
+               policy: :review,
+               candidate_update_boundary: boundary
+             )
+
+    assert candidate_id == candidate.id
+    refute Repo.get(ImportCandidate, candidate.id)
+    refute Mydia.ImportCandidates.get_by_path(candidate.library_path_id, candidate.relative_path)
+  end
+
+  test "a delayed review verdict cannot overwrite candidate content changed after it was read" do
+    candidate = candidate()
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_306})
+
+    boundary = fn ->
+      Repo.update_all(
+        from(stored in ImportCandidate, where: stored.id == ^candidate.id),
+        set: [size: 9_999, provider_id: "newer-provider", title: "Newer verdict"]
+      )
+    end
+
+    assert {:error, {:stale_candidate, candidate_id}} =
+             FileIngest.ingest(candidate, match(movie, 0.5),
+               policy: :review,
+               candidate_update_boundary: boundary
+             )
+
+    assert candidate_id == candidate.id
+    reloaded = Repo.get!(ImportCandidate, candidate.id)
+    assert reloaded.size == 9_999
+    assert reloaded.provider_id == "newer-provider"
+    assert reloaded.title == "Newer verdict"
+  end
+
+  test "failure backoff uses the persisted post-increment attempt tier" do
+    stale = candidate()
+
+    Repo.update_all(
+      from(stored in ImportCandidate, where: stored.id == ^stale.id),
+      set: [attempts: 4]
+    )
+
+    before = DateTime.utc_now()
+    assert :no_match = FileIngest.ingest(stale, nil, policy: :unattended)
+
+    reloaded = Repo.get!(ImportCandidate, stale.id)
+    assert reloaded.attempts == 5
+    assert DateTime.diff(reloaded.next_retry_at, before, :second) >= 86_399
+  end
+
   test "a deleted candidate is not recreated when promotion loses the row" do
     candidate = candidate()
     movie = media_item_fixture(%{type: "movie", tmdb_id: 60_308})
@@ -167,9 +226,11 @@ defmodule Mydia.Library.FileIngestTest do
 
     winner = Task.async(ingest)
     loser = Task.async(ingest)
+    winner_pid = winner.pid
+    loser_pid = loser.pid
 
-    assert_receive {:ingest_connection_ready, winner_pid}, 1_000
-    assert_receive {:ingest_connection_ready, loser_pid}, 1_000
+    assert_receive {:ingest_connection_ready, ^winner_pid}, 1_000
+    assert_receive {:ingest_connection_ready, ^loser_pid}, 1_000
 
     send(winner.pid, {:start_ingest, ref})
     assert_receive {:ingest_ownership_boundary, ^winner_pid}, 1_000

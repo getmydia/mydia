@@ -43,11 +43,13 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   # Page size for draining ImportCandidates.outstanding/3 during discovery.
   @discovery_chunk_size 50
+  @max_discovery_match_pages 20
 
   alias Mydia.Library.{
     BatchMatcher,
     FileIngest,
     ImportCandidate,
+    MediaFile,
     MetadataMatcher,
     PathAnchor,
     ScanSummary
@@ -565,21 +567,26 @@ defmodule Mydia.Jobs.LibraryScanner do
   # Metadata.default_relay_config/0, FileParser, BatchMatcher, and
   # MetadataMatcher -- never runs for a library that has not opted in.
   defp discover_unknown_paths(library_path, unknown_file_infos, opts) do
-    Enum.each(unknown_file_infos, &upsert_discovered_candidate(&1, library_path))
+    candidate_writes =
+      Enum.count(unknown_file_infos, fn file_info ->
+        upsert_discovered_candidate(file_info, library_path) == :ok
+      end)
 
     matcher = Keyword.get(opts, :matcher, MetadataMatcher)
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    max_match_pages = Keyword.get(opts, :max_match_pages, @max_discovery_match_pages)
 
-    auto_promoted = match_outstanding_candidates(library_path, matcher, config)
+    auto_promoted =
+      match_outstanding_candidates(library_path, matcher, config, max_match_pages)
 
-    if unknown_file_infos != [] do
+    if candidate_writes > 0 do
       Logger.info("Discovered unrecognized paths during scan",
         library_path_id: library_path.id,
-        count: length(unknown_file_infos)
+        count: candidate_writes
       )
     end
 
-    %{candidates: length(unknown_file_infos), auto_promoted: auto_promoted}
+    %{candidates: candidate_writes, auto_promoted: auto_promoted}
   end
 
   # A file whose parsed type cannot belong to this library path is skipped
@@ -595,7 +602,7 @@ defmodule Mydia.Jobs.LibraryScanner do
   defp upsert_discovered_candidate(file_info, library_path) do
     parsed = FileParser.parse_with_path(file_info.path)
 
-    if type_compatible?(library_path.type, parsed.type) do
+    if MediaFile.parsed_type_compatible?(library_path.type, parsed.type) do
       relative_path = Path.relative_to(file_info.path, library_path.path)
       existing = ImportCandidates.get_by_path(library_path.id, relative_path)
       attrs = discovered_candidate_attrs(file_info, library_path, relative_path, parsed, existing)
@@ -624,19 +631,6 @@ defmodule Mydia.Jobs.LibraryScanner do
       :skipped
     end
   end
-
-  # Mirrors `MediaFile.library_type_compatible?/3`'s rules at the file level
-  # (that function checks a resolved media item's type; this checks a
-  # freshly-parsed file's type, before any candidate or match exists to
-  # resolve). `:mixed` always accepts either type. An `:unknown` parsed type
-  # is let through, same as the deleted `validate_file_type_for_library/3`
-  # did ("allowing a matching attempt" for a file the parser could not
-  # classify) -- rejecting it here instead would silently hide every
-  # unparseable file from discovery.
-  defp type_compatible?(:mixed, _parsed_type), do: true
-  defp type_compatible?(:series, :movie), do: false
-  defp type_compatible?(:movies, :tv_show), do: false
-  defp type_compatible?(_library_type, _parsed_type), do: true
 
   # `size`/`mtime`/`parsed_info`/`media_type` are refreshed on every scan --
   # they are derived from the file and the path alone, never from a match, so
@@ -710,7 +704,31 @@ defmodule Mydia.Jobs.LibraryScanner do
   # of @discovery_chunk_size, matching and ingesting each page before moving
   # to the next, so one scan settles as much of the backlog as it can rather
   # than leaving everything past the first page for the next scheduled run.
-  defp match_outstanding_candidates(library_path, matcher, config, after_id \\ nil, promoted \\ 0) do
+  defp match_outstanding_candidates(library_path, matcher, config, max_pages) do
+    match_outstanding_candidate_pages(library_path, matcher, config, max_pages, nil, 0, 0)
+  end
+
+  defp match_outstanding_candidate_pages(
+         _library_path,
+         _matcher,
+         _config,
+         max_pages,
+         _after_id,
+         promoted,
+         pages
+       )
+       when pages >= max_pages,
+       do: promoted
+
+  defp match_outstanding_candidate_pages(
+         library_path,
+         matcher,
+         config,
+         max_pages,
+         after_id,
+         promoted,
+         pages
+       ) do
     case ImportCandidates.outstanding(library_path.id, @discovery_chunk_size, after: after_id) do
       [] ->
         promoted
@@ -719,12 +737,14 @@ defmodule Mydia.Jobs.LibraryScanner do
         chunk_promoted = match_and_ingest_chunk(chunk, library_path, matcher, config)
         last_id = chunk |> List.last() |> Map.fetch!(:id)
 
-        match_outstanding_candidates(
+        match_outstanding_candidate_pages(
           library_path,
           matcher,
           config,
+          max_pages,
           last_id,
-          promoted + chunk_promoted
+          promoted + chunk_promoted,
+          pages + 1
         )
     end
   end

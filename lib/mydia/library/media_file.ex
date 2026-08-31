@@ -196,11 +196,9 @@ defmodule Mydia.Library.MediaFile do
   into a partial answer instead of nothing, and then to the legacy `path`
   column as a last resort.
 
-  That last fallback looks dead — every row on a current install carries
-  `path: nil` — but `populate_media_file_relative_paths` skips files sitting
-  outside every configured library path, leaving them with no relative_path and
-  no library_path_id. On an install that upgraded from a version which still
-  wrote `path`, that column is the only location such a row has left.
+  That last fallback is only for a legacy struct or pre-invariant row from an
+  interrupted upgrade. Current persisted rows always have a parent and are
+  addressed by library path plus relative path.
 
   ## Examples
 
@@ -246,6 +244,16 @@ defmodule Mydia.Library.MediaFile do
   def library_type_compatible?(:movies, _media_item_type, true), do: false
   def library_type_compatible?(:series, "movie", _has_episode?), do: false
   def library_type_compatible?(_library_type, _media_item_type, _has_episode?), do: true
+
+  @doc "Whether a locally parsed file type is eligible for a library path."
+  @spec parsed_type_compatible?(atom(), atom()) :: boolean()
+  def parsed_type_compatible?(library_type, :movie),
+    do: library_type_compatible?(library_type, "movie", false)
+
+  def parsed_type_compatible?(library_type, :tv_show),
+    do: library_type_compatible?(library_type, "tv_show", true)
+
+  def parsed_type_compatible?(_library_type, _unknown), do: true
 
   @doc """
   Changeset for creating or updating a media file.

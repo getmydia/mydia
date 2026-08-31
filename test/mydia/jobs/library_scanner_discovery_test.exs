@@ -16,6 +16,7 @@ defmodule Mydia.Jobs.LibraryScannerDiscoveryTest do
   """
   use Mydia.DataCase, async: false
 
+  import Ecto.Query
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
@@ -125,6 +126,32 @@ defmodule Mydia.Jobs.LibraryScannerDiscoveryTest do
   end
 
   describe "auto_import: true discovery" do
+    test "one scheduled scan caps the outstanding-match backlog by page count", %{
+      tmp_dir: tmp_dir
+    } do
+      lp = library_path_fixture(%{path: tmp_dir, type: "movies", auto_import: true})
+
+      for n <- 1..51 do
+        File.write!(Path.join(tmp_dir, "AMBIGUOUS.Movie.#{2000 + n}.1080p.mkv"), "video")
+      end
+
+      assert {:ok, summary} =
+               LibraryScanner.scan_library_path(lp,
+                 matcher: ScriptedMatcher,
+                 max_match_pages: 1
+               )
+
+      assert summary.details.discovery.candidates == 51
+      assert Repo.aggregate(ImportCandidate, :count) == 51
+
+      assert Repo.aggregate(
+               from(candidate in ImportCandidate, where: not is_nil(candidate.provider_id)),
+               :count
+             ) == 50
+
+      assert Mydia.ImportCandidates.count_outstanding(lp.id) == 1
+    end
+
     test "a confident match promotes into an owned media file", %{tmp_dir: tmp_dir} do
       movie =
         media_item_fixture(%{
@@ -287,10 +314,11 @@ defmodule Mydia.Jobs.LibraryScannerDiscoveryTest do
       File.mkdir_p!(dir)
       File.write!(Path.join(dir, "Confident.Movie.1999.1080p.mkv"), "video")
 
-      assert :ok = scan(lp, matcher: RaisingMatcher)
+      assert {:ok, summary} = LibraryScanner.scan_library_path(lp, matcher: RaisingMatcher)
 
       assert Repo.aggregate(MediaFile, :count) == 0
       assert Repo.aggregate(ImportCandidate, :count) == 0
+      assert summary.details.discovery.candidates == 0
     end
 
     test "a TV-shaped file in a movies-only library makes no matcher call and creates nothing",

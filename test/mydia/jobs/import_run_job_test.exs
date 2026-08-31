@@ -8,7 +8,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
   alias Mydia.ImportCandidates
   alias Mydia.Library
   alias Mydia.Library.ImportCandidate
-  alias Mydia.Library.MediaFile
+  alias Mydia.Library.{MediaFile, RaisingMatcher}
   alias Mydia.Library.SelectionScope
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
 
@@ -64,6 +64,54 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 
       assert Library.get_import_run(run.id).files_discovered == 3
+    end
+
+    test "a movie-shaped file in a series library never becomes a candidate or reaches matching",
+         %{run: run, dir: dir, library_path: lp} do
+      File.rm_rf!(Path.join(dir, "Season 01"))
+      File.write!(Path.join(dir, "Some.Movie.2020.1080p.mkv"), "x")
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
+      assert Repo.aggregate(ImportCandidate, :count) == 0
+      assert ImportCandidates.count_outstanding(lp.id) == 0
+
+      assert :ok =
+               ImportRunJob.run_match_phase(Library.get_import_run(run.id),
+                 matcher: RaisingMatcher
+               )
+
+      reloaded = Library.get_import_run(run.id)
+      assert reloaded.files_discovered == 0
+      assert reloaded.files_matched == 0
+    end
+
+    test "a TV-shaped file in a movies library never becomes a candidate or reaches matching",
+         %{dir: dir, user: user} do
+      movies_dir = Path.join(dir, "movies")
+      File.mkdir_p!(movies_dir)
+      File.write!(Path.join(movies_dir, "Some.Show.S01E01.1080p.mkv"), "x")
+
+      movies = library_path_fixture(%{path: movies_dir, type: "movies"})
+
+      {:ok, movies_run} =
+        Library.create_import_run(%{
+          library_path_id: movies.id,
+          user_id: user.id,
+          mode: :review
+        })
+
+      assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(movies_run.id))
+      assert Repo.aggregate(ImportCandidate, :count) == 0
+      assert ImportCandidates.count_outstanding(movies.id) == 0
+
+      assert :ok =
+               ImportRunJob.run_match_phase(Library.get_import_run(movies_run.id),
+                 matcher: RaisingMatcher
+               )
+
+      reloaded = Library.get_import_run(movies_run.id)
+      assert reloaded.files_discovered == 0
+      assert reloaded.files_matched == 0
     end
 
     test "is idempotent, so a resumed run creates no duplicates", %{run: run} do
@@ -269,7 +317,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       candidate = ImportCandidates.get_by_path(lp.id, "Season 01/Bluey.S01E01.mkv")
 
       scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page([candidate.anchor_key])
-      assert {:ok, 3} = ImportCandidates.dismiss(scope)
+      assert {:ok, 1} = ImportCandidates.dismiss(scope)
 
       # Rerunning phase 1 must not resurrect the dismissal, whether or not
       # anything else about the path changed.
@@ -392,7 +440,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
     } do
       candidate = ImportCandidates.get_by_path(lp.id, relative_path)
       scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page([candidate.anchor_key])
-      assert {:ok, 3} = ImportCandidates.dismiss(scope)
+      assert {:ok, 1} = ImportCandidates.dismiss(scope)
 
       File.write!(Path.join(dir, relative_path), "a file that is no longer one byte")
 

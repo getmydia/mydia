@@ -124,7 +124,7 @@ defmodule Mydia.Library.MediaFileTest do
       assert MediaFile.display_path(media_file) == "/media/movies/Movie.mkv"
     end
 
-    test "fall back to the legacy path column for an orphaned row" do
+    test "fall back to the legacy path column for a pre-invariant row" do
       # The relative_path backfill skips files outside every configured library
       # path, so on an upgraded install `path` can be all such a row has left.
       media_file = %MediaFile{

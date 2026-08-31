@@ -5,7 +5,38 @@ defmodule Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFilesTest do
     "priv/repo/migrations/20260830143721_split_import_candidates_from_media_files.exs"
   )
 
+  Code.require_file("priv/repo/migrations/20260817143638_backfill_import_groups.exs")
+
+  alias Mydia.Repo.Migrations.BackfillImportGroups
   alias Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFiles
+
+  @tag :tmp_dir
+  test "a populated install upgrades through the legacy group backfill and candidate split" do
+    build_pre_migration_schema()
+
+    run_migration!(BackfillImportGroups, 20_260_817_143_638)
+
+    assert %{rows: [[2]]} = sql!("SELECT count(*) FROM import_groups")
+
+    assert %{rows: [[first_group_id], [second_group_id]]} =
+             sql!("""
+             SELECT import_group_id
+             FROM media_files
+             WHERE id IN ('active-match', 'active-unmatched')
+             ORDER BY id
+             """)
+
+    assert first_group_id
+    assert second_group_id
+
+    run_migration!(SplitImportCandidatesFromMediaFiles, 20_260_830_143_721)
+
+    assert %{rows: [[2]]} = sql!("SELECT count(*) FROM import_candidates")
+    assert %{rows: [[2]]} = sql!("SELECT count(*) FROM media_files")
+
+    assert %{rows: [[0]]} =
+             sql!("SELECT count(*) FROM sqlite_master WHERE name = 'import_groups'")
+  end
 
   @tag :tmp_dir
   test "promotes active parentless files, removes stale rows, and preserves owned files" do
@@ -63,14 +94,49 @@ defmodule Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFilesTest do
              SELECT count(*) FROM sqlite_master
              WHERE type = 'table' AND name = 'media_file_match_candidates'
              """)
+
+    assert %{rows: [[0]]} =
+             sql!("""
+             SELECT count(*) FROM sqlite_master
+             WHERE type = 'index' AND name = 'media_files_unresolved_idx'
+             """)
   end
 
   defp build_pre_migration_schema do
-    sql!("CREATE TABLE library_paths (id TEXT PRIMARY KEY, path TEXT NOT NULL)")
+    sql!(
+      "CREATE TABLE library_paths (id TEXT PRIMARY KEY, path TEXT NOT NULL, type TEXT NOT NULL)"
+    )
+
     sql!("CREATE TABLE media_items (id TEXT PRIMARY KEY)")
     sql!("CREATE TABLE episodes (id TEXT PRIMARY KEY)")
     sql!("CREATE TABLE quality_profiles (id TEXT PRIMARY KEY)")
-    sql!("CREATE TABLE import_groups (id TEXT PRIMARY KEY)")
+
+    sql!("""
+    CREATE TABLE import_groups (
+      id TEXT PRIMARY KEY,
+      library_path_id TEXT NOT NULL REFERENCES library_paths(id) ON DELETE CASCADE,
+      import_run_id TEXT,
+      anchor_path TEXT NOT NULL,
+      cluster_key TEXT NOT NULL,
+      display_title TEXT,
+      file_count INTEGER NOT NULL DEFAULT 0,
+      unresolved_count INTEGER NOT NULL DEFAULT 0,
+      numbered_count INTEGER NOT NULL DEFAULT 0,
+      media_type TEXT,
+      provider_type TEXT,
+      provider_id TEXT,
+      suggested_title TEXT,
+      suggested_year INTEGER,
+      min_confidence REAL,
+      evidence TEXT,
+      season_span TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      decided_at TEXT,
+      inserted_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (library_path_id, cluster_key)
+    )
+    """)
 
     sql!("""
     CREATE TABLE media_files (
@@ -123,7 +189,7 @@ defmodule Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFilesTest do
     )
     """)
 
-    sql!("INSERT INTO library_paths (id, path) VALUES ('library', '/media')")
+    sql!("INSERT INTO library_paths (id, path, type) VALUES ('library', '/media', 'series')")
     sql!("INSERT INTO media_items (id) VALUES ('movie')")
     sql!("INSERT INTO episodes (id) VALUES ('episode')")
 

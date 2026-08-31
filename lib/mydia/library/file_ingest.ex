@@ -1,14 +1,36 @@
 defmodule Mydia.Library.FileIngest do
   @moduledoc "Decides whether a durable import candidate stays in review or is promoted."
 
-  import Ecto.Query, only: [where: 3]
+  import Ecto.Query, only: [lock: 2, where: 3]
 
-  alias Mydia.ImportCandidates
+  alias Mydia.DB
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, MediaFile}
   alias Mydia.Repo
 
   @default_threshold Mydia.ImportCandidates.auto_accept_threshold()
   @retry_backoff_seconds [300, 1_800, 7_200, 21_600, 86_400]
+  @snapshot_fields [
+    :library_path_id,
+    :relative_path,
+    :anchor_key,
+    :size,
+    :mtime,
+    :parsed_info,
+    :provider_type,
+    :provider_id,
+    :title,
+    :year,
+    :media_type,
+    :confidence,
+    :attempts,
+    :last_error,
+    :next_retry_at,
+    :dismissed_at,
+    :discovered_at,
+    :inserted_at,
+    :updated_at
+  ]
+  @candidate_update_fields @snapshot_fields -- [:inserted_at, :updated_at, :dismissed_at]
 
   @type policy :: :review | :unattended
   @type result ::
@@ -21,14 +43,13 @@ defmodule Mydia.Library.FileIngest do
   def default_threshold, do: @default_threshold
 
   @spec ingest(ImportCandidate.t(), map() | nil, keyword()) :: result()
-  @spec ingest(MediaFile.t(), map() | nil, keyword()) :: term()
   def ingest(%ImportCandidate{} = candidate, match, opts) do
     policy = Keyword.fetch!(opts, :policy)
     threshold = Keyword.get(opts, :threshold, @default_threshold)
 
     case decide(candidate, match, policy, threshold) do
       :candidate ->
-        update_candidate(candidate, match)
+        update_candidate(candidate, match, opts)
 
       :promote ->
         promotion_opts = Keyword.put(opts, :allow_episode_creation, true)
@@ -46,11 +67,6 @@ defmodule Mydia.Library.FileIngest do
         end
     end
   end
-
-  # Callers are migrated to durable candidates by the surrounding pipeline
-  # tasks. This compatibility clause deliberately cannot create a media file,
-  # preserving the no-parentless-file invariant while the call sites move.
-  def ingest(%MediaFile{}, _match, _opts), do: {:error, :candidate_required}
 
   defp decide(_candidate, nil, _policy, _threshold), do: :candidate
   defp decide(_candidate, _match, :review, _threshold), do: :candidate
@@ -86,7 +102,7 @@ defmodule Mydia.Library.FileIngest do
     end
   end
 
-  defp update_candidate(candidate, nil) do
+  defp update_candidate(candidate, nil, _opts) do
     case record_failure(candidate, "no_match") do
       {:ok, _candidate} -> :no_match
       {:error, :candidate_missing} -> :no_match
@@ -94,29 +110,83 @@ defmodule Mydia.Library.FileIngest do
     end
   end
 
-  defp update_candidate(candidate, match) do
-    case ImportCandidates.upsert(candidate_attrs(candidate, match)) do
-      {:ok, updated} -> {:candidate, updated}
-      {:error, changeset} -> {:error, {:candidate_write_failed, changeset}}
+  defp update_candidate(candidate, match, opts) do
+    changeset = ImportCandidate.changeset(candidate, candidate_attrs(candidate, match))
+
+    if changeset.valid? do
+      candidate_update_boundary(opts)
+
+      attrs =
+        changeset
+        |> Ecto.Changeset.apply_changes()
+        |> Map.take(@candidate_update_fields)
+        |> Map.put(:updated_at, now())
+
+      {updated, _} =
+        candidate
+        |> snapshot_query()
+        |> Repo.update_all(set: Map.to_list(attrs))
+
+      case {updated, Repo.get(ImportCandidate, candidate.id)} do
+        {1, %ImportCandidate{} = current} -> {:candidate, current}
+        {0, nil} -> {:error, {:candidate_missing, candidate.id}}
+        {0, %ImportCandidate{}} -> {:error, {:stale_candidate, candidate.id}}
+      end
+    else
+      {:error, {:candidate_write_failed, changeset}}
     end
   end
 
   defp record_failure(candidate, error) do
-    {updated, _} =
-      ImportCandidate
-      |> where([stored], stored.id == ^candidate.id)
-      |> Repo.update_all(
-        inc: [attempts: 1],
-        set: [
-          last_error: error,
-          next_retry_at: next_retry_at(candidate.attempts + 1)
-        ]
-      )
+    transaction_opts = if DB.sqlite?(), do: [mode: :immediate], else: []
 
-    if updated == 1 do
-      {:ok, :updated}
-    else
-      {:error, :candidate_missing}
+    Repo.transaction(
+      fn ->
+        query = where(ImportCandidate, [stored], stored.id == ^candidate.id)
+        query = if DB.postgres?(), do: lock(query, "FOR UPDATE"), else: query
+
+        case Repo.one(query) do
+          nil ->
+            Repo.rollback(:candidate_missing)
+
+          stored ->
+            attempts = stored.attempts + 1
+
+            case stored
+                 |> ImportCandidate.changeset(%{
+                   attempts: attempts,
+                   last_error: error,
+                   next_retry_at: next_retry_at(attempts)
+                 })
+                 |> Repo.update() do
+              {:ok, updated} -> updated
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
+        end
+      end,
+      transaction_opts
+    )
+    |> case do
+      {:ok, updated} -> {:ok, updated}
+      {:error, :candidate_missing} -> {:error, :candidate_missing}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp snapshot_query(candidate) do
+    Enum.reduce(@snapshot_fields, where(ImportCandidate, [stored], stored.id == ^candidate.id), fn
+      field_name, query ->
+        case Map.fetch!(candidate, field_name) do
+          nil -> where(query, [stored], is_nil(field(stored, ^field_name)))
+          value -> where(query, [stored], field(stored, ^field_name) == ^value)
+        end
+    end)
+  end
+
+  defp candidate_update_boundary(opts) do
+    case Keyword.get(opts, :candidate_update_boundary) do
+      callback when is_function(callback, 0) -> callback.()
+      _ -> :ok
     end
   end
 
@@ -167,6 +237,8 @@ defmodule Mydia.Library.FileIngest do
     seconds = Enum.at(@retry_backoff_seconds, attempts - 1, List.last(@retry_backoff_seconds))
     DateTime.utc_now() |> DateTime.add(seconds, :second) |> DateTime.truncate(:second)
   end
+
+  defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)

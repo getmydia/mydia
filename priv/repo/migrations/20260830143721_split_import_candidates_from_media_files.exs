@@ -240,12 +240,7 @@ defmodule Mydia.Repo.Migrations.SplitImportCandidatesFromMediaFiles do
        [where: "analyzed_at IS NULL", name: :media_files_unanalyzed_idx]},
       [:supersedes_media_file_id],
       [:segment_analysis_state],
-      [:library_path_id, :relative_path],
-      {[:library_path_id],
-       [
-         where: "media_item_id IS NULL AND episode_id IS NULL AND trashed_at IS NULL",
-         name: :media_files_unresolved_idx
-       ]}
+      [:library_path_id, :relative_path]
     ]
   end
 end
