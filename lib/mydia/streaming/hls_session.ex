@@ -306,6 +306,7 @@ defmodule Mydia.Streaming.HlsSession do
                audio_language: playback.audio_language,
                show_audio_language: playback.show_audio_language,
                playlist_mode: playlist_mode,
+               requested_playlist_mode: requested_mode,
                started_at: DateTime.utc_now()
              }
            ) do

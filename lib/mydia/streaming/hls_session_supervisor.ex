@@ -92,11 +92,19 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   # a Registry entry predating that option is assumed to have carried. A
   # session is reusable only when all of them agree.
   #
+  # Discriminates on requested_playlist_mode, not the effective playlist_mode
+  # a session ended up running with: a :full request that degraded to :window
+  # because the duration was unknown still asked for :full, and a repeat
+  # request asking for the same thing should reuse that session rather than
+  # replace it every time (it would degrade identically anyway). Whether a
+  # session can actually serve the request's offset is a different question,
+  # decided in session_matches?/2 below against the effective mode.
+  #
   # start_position is absent from this map deliberately: whether it
   # discriminates depends on the playlist mode, and that is decided in
   # session_matches?/2 below.
   @session_discriminators %{
-    playlist_mode: @default_playlist_mode,
+    requested_playlist_mode: @default_playlist_mode,
     max_bitrate: nil,
     max_height: nil,
     audio_language: nil,
@@ -116,6 +124,13 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     # A full session publishes a playlist covering the whole file and can move
     # its encoder to any segment, so an offset mismatch is not a mismatch at
     # all. A windowed one can only serve the range it started at, so it is.
+    #
+    # Deliberately the EFFECTIVE playlist_mode, not requested_playlist_mode
+    # above: a session that asked for :full but degraded to :window because
+    # the duration was unknown is really a windowed session and can only
+    # serve the offset it started at, same as one that was never anything but
+    # :window. Testing the requested mode here would let such a session
+    # answer a request at an offset its encoder can never reach.
     offset_matches =
       Map.get(metadata, :playlist_mode, @default_playlist_mode) == :full or
         Map.get(metadata, :start_position, 0) == Map.get(request, :start_position, 0)
@@ -129,7 +144,7 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   # send the field at all, and a new one sending an empty list.
   def session_request(opts) do
     %{
-      playlist_mode: Keyword.get(opts, :playlist_mode, @default_playlist_mode),
+      requested_playlist_mode: Keyword.get(opts, :playlist_mode, @default_playlist_mode),
       start_position: Keyword.get(opts, :start_position, 0),
       max_bitrate: Keyword.get(opts, :max_bitrate),
       max_height: Keyword.get(opts, :max_height),
