@@ -102,6 +102,44 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
     search(%{dialog | type: type}, dialog.query)
   end
 
+  @doc """
+  Chooses a library item.
+
+  Movies always submit. A TV show submits at show level in `:inflight`, where
+  the import job resolves each file's episode from its filename. In
+  `:postimport` the download is one file on disk, which is one episode, so the
+  episode list opens instead.
+  """
+  @spec select(t(), binary()) :: {:submit, {binary(), binary() | nil}} | {:episodes, t()}
+  def select(%__MODULE__{} = dialog, media_item_id) do
+    item = Media.get_media_item!(media_item_id)
+
+    if item.type == "tv_show" and dialog.mode == :postimport do
+      {:episodes, put_selected(dialog, item)}
+    else
+      {:submit, {item.id, nil}}
+    end
+  end
+
+  @doc """
+  Opens the episode list for a show without submitting.
+
+  This is the "Pick episode" escape on an in-flight TV row, for the download
+  that really is one mis-named episode.
+  """
+  @spec show_episodes(t(), binary()) :: t()
+  def show_episodes(%__MODULE__{} = dialog, media_item_id) do
+    put_selected(dialog, Media.get_media_item!(media_item_id))
+  end
+
+  @doc """
+  Submits the chosen show together with the chosen episode.
+  """
+  @spec select_episode(t(), binary()) :: {:submit, {binary(), binary()}}
+  def select_episode(%__MODULE__{selected: %{id: media_item_id}}, episode_id) do
+    {:submit, {media_item_id, episode_id}}
+  end
+
   # A relay outage must not empty the dialog: the library half still works and
   # is often all the operator needs.
   defp provider_search(type, query, library) do
@@ -136,6 +174,15 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
 
   defp provider_key(item, :tv_show), do: item.tvdb_id
   defp provider_key(item, :movie), do: item.tmdb_id
+
+  defp put_selected(dialog, item) do
+    %{
+      dialog
+      | selected: %{id: item.id, title: item.title, type: item.type},
+        episodes: Media.list_episodes(item.id),
+        error: nil
+    }
+  end
 
   defp type_string(:tv_show), do: "tv_show"
   defp type_string(:movie), do: "movie"

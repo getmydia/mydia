@@ -159,4 +159,60 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
       assert Enum.any?(dialog.external_results, &(&1.media_type == :tv_show))
     end
   end
+
+  describe "select/2" do
+    import Mydia.MediaFixtures
+
+    test "a movie submits immediately in either mode" do
+      movie = media_item_fixture(%{type: "movie", title: "A Movie"})
+
+      for mode <- [:inflight, :postimport] do
+        dialog = %MatchDialog{download_id: "d1", mode: mode, type: :movie}
+
+        assert {:submit, {id, nil}} = MatchDialog.select(dialog, movie.id)
+        assert id == movie.id
+      end
+    end
+
+    test "a TV show submits show-level in flight" do
+      show = media_item_fixture(%{type: "tv_show", title: "A Show"})
+      dialog = %MatchDialog{download_id: "d1", mode: :inflight, type: :tv_show}
+
+      assert {:submit, {id, nil}} = MatchDialog.select(dialog, show.id)
+      assert id == show.id
+    end
+
+    test "a TV show opens the episode list after import" do
+      show = media_item_fixture(%{type: "tv_show", title: "A Show"})
+      dialog = %MatchDialog{download_id: "d1", mode: :postimport, type: :tv_show}
+
+      assert {:episodes, updated} = MatchDialog.select(dialog, show.id)
+      assert updated.selected.id == show.id
+      assert updated.selected.title == "A Show"
+    end
+  end
+
+  describe "show_episodes/2 and select_episode/2" do
+    import Mydia.MediaFixtures
+
+    test "show_episodes loads the show's episodes in flight" do
+      show = media_item_fixture(%{type: "tv_show", title: "A Show"})
+      dialog = %MatchDialog{download_id: "d1", mode: :inflight, type: :tv_show}
+
+      updated = MatchDialog.show_episodes(dialog, show.id)
+
+      assert updated.selected.id == show.id
+      assert is_list(updated.episodes)
+    end
+
+    test "select_episode submits the selected show and episode" do
+      dialog = %MatchDialog{
+        download_id: "d1",
+        mode: :postimport,
+        selected: %{id: "show-1", title: "A Show", type: "tv_show"}
+      }
+
+      assert MatchDialog.select_episode(dialog, "ep-1") == {:submit, {"show-1", "ep-1"}}
+    end
+  end
 end
