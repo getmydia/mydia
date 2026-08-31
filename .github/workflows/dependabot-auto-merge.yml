@@ -8,16 +8,26 @@ name: Dependabot auto-merge
 # PR #613 auto-merged with seven red checks and broke the master Docker image.
 # This workflow waits on the whole rollup instead.
 #
-# check_suite would have been the natural event and was tried first. It cannot
-# work here: "this event does not trigger workflows if the check suite was
-# created by GitHub Actions or if the check suite's head SHA is associated with
-# GitHub Actions." Every check suite on a pull request here is Actions-created,
-# so the trigger never fired at all.
+# check_suite was the natural event and was tried first, in the revision this
+# one replaces. It fires here, but not usefully, and the distinction is worth
+# recording because the docs invite the wrong conclusion in both directions.
 #
-# workflow_run has no such restriction. It is listed against every workflow that
-# runs on pull requests, so the gate re-evaluates as each one finishes and the
-# last to complete sees a terminal rollup. Missing one from this list only costs
-# a re-evaluation point, not correctness, because the gate always re-reads the
+# GitHub says the event "does not trigger workflows if the check suite was
+# created by GitHub Actions or if the check suite's head SHA is associated with
+# GitHub Actions." Read literally that suggests it never fires on this
+# repository. It does: runs on this workflow with event `check_suite` are in the
+# history for 2026-08-30, and they executed the gate correctly. The restriction
+# evidently applies per check suite, so suites from other apps still trigger it.
+#
+# That is precisely the problem. The suites that DO fire are the ones Actions did
+# not create, and they finish on their own schedule -- CodeRabbit typically well
+# before CI does. The gate would evaluate early, log WAIT, and never be woken
+# again when the last Actions workflow finally completed. Firing at the wrong
+# moment is worse than not firing, because it looks like it is working.
+#
+# workflow_run fires exactly when a listed workflow completes, so the last one
+# to finish sees a terminal rollup. Missing an entry from the list below costs a
+# re-evaluation point, not correctness, because the gate always re-reads the
 # full rollup rather than trusting the triggering event.
 #
 # A workflow_run workflow runs in default-branch context, so it does not carry
