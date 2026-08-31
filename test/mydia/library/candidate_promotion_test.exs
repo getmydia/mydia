@@ -283,6 +283,52 @@ defmodule Mydia.Library.CandidatePromotionTest do
     assert episode_id
   end
 
+  test "promotes a multi-file group when relative_path order disagrees with id order" do
+    library_path = library_path_fixture(%{type: "movies"})
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_313})
+
+    anchor_key = "reverse-order-group"
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    build = fn id, path ->
+      import_candidate_with_id!(id, %{
+        library_path_id: library_path.id,
+        relative_path: path,
+        anchor_key: anchor_key,
+        size: 1_000_000_000,
+        discovered_at: now,
+        media_type: "movie",
+        parsed_info: %{"type" => "movie"}
+      })
+    end
+
+    # IDs ascend a < b < c < d, but each is paired with a relative_path so
+    # that relative_path order is the exact reverse of id order -- the order
+    # `ImportCandidates.load_all_members/2` (via `accept_group/2`) actually
+    # hands to `promote_group/3` in production, since candidates there are
+    # loaded `order_by: asc: relative_path`, not by id.
+    a = build.("00000000-0000-4000-8000-000000000031", "part-4.mkv")
+    b = build.("00000000-0000-4000-8000-000000000032", "part-3.mkv")
+    c = build.("00000000-0000-4000-8000-000000000033", "part-2.mkv")
+    d = build.("00000000-0000-4000-8000-000000000034", "part-1.mkv")
+
+    # Sanity check: the two orderings really do disagree completely.
+    assert Enum.sort_by([a, b, c, d], & &1.id) == [a, b, c, d]
+    assert Enum.sort_by([a, b, c, d], & &1.relative_path) == [d, c, b, a]
+
+    assert {:ok, media_files} =
+             CandidatePromotion.promote_group([d, c, b, a], movie_match(movie),
+               config: stub_config()
+             )
+
+    assert length(media_files) == 4
+    assert Enum.all?(media_files, &(&1.media_item_id == movie.id))
+
+    for candidate <- [a, b, c, d] do
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+  end
+
   test "separate database connections serialize competing promotions at ownership" do
     %{library_path: library_path, movie: movie, candidate: candidate} =
       Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->

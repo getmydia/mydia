@@ -99,7 +99,13 @@ defmodule Mydia.Library.CandidatePromotion do
       |> select([candidate], candidate.id)
       |> Repo.all()
 
-    if locked_ids == ids, do: :ok, else: {:error, :candidate_missing}
+    missing = ids -- locked_ids
+
+    cond do
+      missing != [] -> {:error, {:candidate_missing, hd(missing)}}
+      length(locked_ids) == length(ids) -> :ok
+      true -> {:error, {:candidate_missing, hd(ids)}}
+    end
   end
 
   defp reread_candidates(candidates) do
