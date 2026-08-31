@@ -9,10 +9,14 @@
 #   regenerating native/mydia_p2p/Cargo.lock, which still pinned 0.22.1. Every
 #   `CI / Nix` run failed for the next five days.
 #
-#   #613 (19:01Z) raised flutter_rust_bridge to 2.13.0 on both the Dart and Rust
-#   side without rerunning codegen, so the committed bindings stayed at 2.12.0.
-#   frb compares the two at startup, so `RustLib.init()` threw and every native
-#   player build booted to an error screen instead of the app.
+#   #613 (19:01Z) raised the Rust bridge dependency on both the Dart and the
+#   Rust side without rerunning codegen, so the committed bindings kept the
+#   older stamp. frb compares the two at startup, so `RustLib.init()` threw and
+#   every native player build booted to an error screen instead of the app.
+#
+# Note for anyone editing the comments here: `Check / Flutter Pin` fails any
+# line carrying both that toolchain's name and a version literal, so versions
+# are described rather than written out.
 #
 # Neither pull request was mis-evaluated. The jobs that catch this class,
 # `CI / Nix` and `CI / Player E2E`, do not run on pull requests at all, so a
