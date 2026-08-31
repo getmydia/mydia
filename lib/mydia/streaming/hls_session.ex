@@ -401,7 +401,7 @@ defmodule Mydia.Streaming.HlsSession do
           max_height: max_height,
           start_position: start_position,
           start_number: first_index,
-          grid_aligned: FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate),
+          grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate),
           audio_language: playback.audio_language,
           show_audio_language: playback.show_audio_language
         ]
@@ -464,6 +464,28 @@ defmodule Mydia.Streaming.HlsSession do
   end
 
   defp plan_from_media_file(_media_file), do: nil
+
+  # Whether the initial backend start for this session should force
+  # keyframes onto the segment grid.
+  #
+  # Gated on playlist_mode == :full: grid alignment exists only to keep the
+  # pre-computed :full playlist's uniform declared segment durations
+  # accurate. A :window session has no such playlist, so forcing keyframes
+  # there would change keyframe placement and segment cutting on the
+  # compatibility path (the only mode wired into production today) for no
+  # benefit; :window must stay exactly what it was before this feature
+  # existed.
+  #
+  # Public only so this decision can be asserted directly; reaching it
+  # through start_registered_session/7 needs a full init/1 (Registry, a DB
+  # job row, a real media file), which is unrelated to whether the decision
+  # itself is right. Nothing outside this module should call it.
+  @doc false
+  @spec grid_aligned?(:full | :window, Mydia.Library.MediaFile.t() | nil, integer() | nil) ::
+          boolean()
+  def grid_aligned?(playlist_mode, media_file, max_bitrate) do
+    playlist_mode == :full and FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate)
+  end
 
   @impl true
   def handle_call(:get_info, _from, state) do
@@ -708,7 +730,28 @@ defmodule Mydia.Streaming.HlsSession do
 
     if is_pid(state.backend_pid) and Process.alive?(state.backend_pid) do
       Process.unlink(state.backend_pid)
-      stop_backend(state.backend, state.backend_pid)
+
+      # stop_backend/2 reaches FfmpegHlsTranscoder.stop_transcoding/1, which is
+      # GenServer.stop/2 and blocks until terminate/2 finishes, and
+      # terminate/2 has an unconditional 100ms sleep before its SIGKILL
+      # escalation check. Called inline, that freezes this session's entire
+      # mailbox (every other segment request, get_info, heartbeat) for at
+      # least 100ms on every relocation, in the exact path this feature
+      # exists to make smooth. Task.start/1 moves the wait off this process
+      # without linking or monitoring it back in, so the old encoder's exit
+      # can no longer affect this session (which is the whole point of the
+      # unlink above). Deliberately not Task.async/1 or
+      # Task.Supervisor.async/2: both link the task to this process, which
+      # reintroduces the coupling the unlink just removed.
+      #
+      # This does mean the old and new encoders overlap for roughly 100ms.
+      # That is safe: the old backend is already unlinked and about to stop
+      # producing segments, and any {:segments_ready, ...} it still manages
+      # to send in that window carries the old generation, which the guard
+      # clause on that handle_cast discards.
+      backend_pid = state.backend_pid
+      backend = state.backend
+      Task.start(fn -> stop_backend(backend, backend_pid) end)
     end
 
     opts =

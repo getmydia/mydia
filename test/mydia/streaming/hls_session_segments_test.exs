@@ -52,6 +52,32 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
     end
   end
 
+  describe "grid_aligned?/3" do
+    # Nothing previously asserted what HlsSession actually passes for
+    # FFmpeg's grid_aligned opt. Covering it directly here, rather than only
+    # through hand-built %HlsSession.State{} fixtures elsewhere in this file
+    # that could quietly encode the same mistake this guards against.
+    test "is false for a :window session even when the video would be re-encoded" do
+      media_file = %MediaFile{codec: "hevc"}
+      refute HlsSession.grid_aligned?(:window, media_file, nil)
+    end
+
+    test "is true for a :full session whose video is re-encoded" do
+      media_file = %MediaFile{codec: "hevc"}
+      assert HlsSession.grid_aligned?(:full, media_file, nil)
+    end
+
+    test "is false for a :full session whose video is copied" do
+      media_file = %MediaFile{codec: "h264"}
+      refute HlsSession.grid_aligned?(:full, media_file, nil)
+    end
+
+    test "is true for a :full session forced to transcode by a bitrate cap" do
+      media_file = %MediaFile{codec: "h264"}
+      assert HlsSession.grid_aligned?(:full, media_file, 4000)
+    end
+  end
+
   # ---------------------------------------------------------------------
   # Everything below drives the real GenServer. The two describe blocks
   # above pin how SegmentPlan and TranscodeWindow compose, which is
@@ -105,6 +131,27 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
 
     @impl true
     def init(opts), do: {:ok, opts}
+  end
+
+  defmodule SlowStopBackend do
+    @moduledoc """
+    Same as FakeBackend, but its terminate/2 sleeps before returning,
+    standing in for FfmpegHlsTranscoder.terminate/2's real, unconditional
+    100ms sleep before its SIGKILL escalation check. Used to prove
+    relocate/2 does not wait on that sleep inline.
+    """
+    use GenServer
+
+    def start_transcoding(opts), do: GenServer.start_link(__MODULE__, opts)
+
+    @impl true
+    def init(opts), do: {:ok, opts}
+
+    @impl true
+    def terminate(_reason, _state) do
+      Process.sleep(100)
+      :ok
+    end
   end
 
   defp base_state(overrides \\ []) do
@@ -172,6 +219,27 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
                HlsSession.handle_call({:request_segment, 1}, fake_from(), state)
 
       assert path == Path.join(state.temp_dir, "segment_00001.ts")
+    end
+
+    test "does not block on the outgoing backend's stop" do
+      {:ok, outgoing_pid} = SlowStopBackend.start_transcoding([])
+
+      state =
+        base_state(
+          backend_pid: outgoing_pid,
+          backend_opts: [transcoder_module: FakeBackend]
+        )
+
+      # SlowStopBackend's terminate/2 sleeps 100ms, standing in for
+      # FfmpegHlsTranscoder.terminate/2's real sleep before its SIGKILL
+      # escalation check. If relocate/2 called stop_backend/2 inline instead
+      # of through Task.start/1, this handle_call would take at least that
+      # long to return, freezing the session's whole mailbox (every other
+      # segment request, get_info, heartbeat) for the duration.
+      {elapsed_us, {:noreply, _state}} =
+        :timer.tc(fn -> HlsSession.handle_call({:request_segment, 100}, fake_from(), state) end)
+
+      assert elapsed_us < 50_000
     end
   end
 
