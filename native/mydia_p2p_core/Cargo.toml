@@ -41,7 +41,7 @@ serde_json = "1.0"
 # Pairing seal. These are protocol crates rather than convenience ones: the
 # Elixir server and the Dart player both reach this module through their
 # bindings, so a parameter that differs between them breaks pairing outright.
-argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
 chacha20poly1305 = { version = "0.11", default-features = false, features = ["alloc", "getrandom"] }
 hkdf = "0.13"
 sha2 = { version = "0.11", default-features = false }
