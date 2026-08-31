@@ -112,6 +112,29 @@ jobs:
       - name: Assert the store release notes hold their contract
         run: ./scripts/check-testflight-notes.sh
 
+  generated-freshness:
+    name: Check / Generated Freshness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # rustup reads rust-toolchain.toml, so `cargo metadata --locked` below
+      # resolves with the same toolchain the Nix build uses rather than
+      # whatever the runner image ships.
+      - name: Install the pinned Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      # Guards the two ways a dependency bump ships a broken tree while every
+      # check stays green: generated frb bindings left behind by a version pin
+      # that moved, and a Cargo.lock left behind by a manifest that moved. Both
+      # happened on 2026-08-29, three minutes apart, and neither was catchable
+      # on a pull request, because the jobs that would have caught them
+      # (`CI / Nix`, `CI / Player E2E`) do not run on one. This does.
+      - name: Assert generated artifacts match their manifests
+        run: ./scripts/check-generated-freshness.sh
+
   # Both NixOS VM tests run on push only. They are the slowest and least
   # reliable jobs in CI, combining a QEMU boot with a full Nix build on top of
   # the FlakeHub cache 503s that can hit any Nix job, and breaking the NixOS

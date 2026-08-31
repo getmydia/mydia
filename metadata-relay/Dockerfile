@@ -72,7 +72,19 @@ RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
     mix release
 
 # Start a new stage for the final image
-FROM alpine:3.24.1
+# Alpine 3.23, not 3.24, on purpose. musl 1.2.6 (Alpine 3.24) tightened
+# `sigaltstack()` to reject any size below `sysconf(_SC_MINSIGSTKSZ)`, which on
+# a CPU with a large XSAVE area (AVX-512, AMX) exceeds the fixed 8 KB that
+# OTP 28's ERTS asks for, so the VM aborts at startup with
+# "sys_sigaltstack(): Failed to set alternate signal stack". musl 1.2.5 checks
+# against a static MINSIGSTKSZ instead and is unaffected.
+#
+# It is a musl 1.2.6 regression rather than an Alpine one, and OTP fixed its
+# side in erlang/otp#11376 (merged to maint 2026-08-10), but that is not in any
+# released tag yet: 28.0 through 28.5.0.5 and 29.0 through 29.0.5 all still
+# hardcode SIGSTKSZ. Move this back to a current Alpine once a patch release
+# carries that commit. Alpine 3.23 is supported until 2027-11-01.
+FROM alpine:3.23.5
 
 # Install runtime dependencies
 RUN apk add --no-cache libstdc++ openssl ncurses-libs curl
