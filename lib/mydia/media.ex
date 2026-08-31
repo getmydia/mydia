@@ -259,20 +259,36 @@ defmodule Mydia.Media do
 
   defp parse_external_id(_id), do: nil
 
-  # `limit(1)` rather than a bare `Repo.one/1`: imdb_id carries no unique index,
-  # so a duplicate would raise Ecto.MultipleResultsError partway through a crawl
-  # and abort every remaining item. `order_by` makes the pick among duplicates
-  # deterministic (oldest first) rather than left to whatever order the
-  # database happens to return, which on PostgreSQL is not guaranteed to be
-  # insertion order -- and the crawl now repeats daily, so a nondeterministic
-  # pick could flip the stored mapping between runs.
-  defp external_id_match(query, nil),
-    do: query |> order_by([m], asc: m.inserted_at) |> limit(1) |> Repo.one()
+  defp external_id_match(query, nil), do: oldest_match(query)
 
   defp external_id_match(query, type) do
     query
     |> where([m], m.type == ^type)
-    |> order_by([m], asc: m.inserted_at)
+    |> oldest_match()
+  end
+
+  # `limit(1)` rather than a bare `Repo.one/1`: imdb_id carries no unique index,
+  # so a duplicate would raise Ecto.MultipleResultsError partway through a crawl
+  # and abort every remaining item. The ordering makes the pick among duplicates
+  # deterministic rather than left to whatever order the database happens to
+  # return, which on PostgreSQL is not guaranteed to be insertion order -- and
+  # the crawl repeats daily, so a nondeterministic pick could flip the stored
+  # mapping between runs.
+  #
+  # The `id` tie-break is load-bearing, not decoration. `MediaItem` declares
+  # `timestamps(type: :utc_datetime)`, which is SECOND precision, so two rows
+  # written in the same second carry identical `inserted_at` and ordering by it
+  # alone leaves them an exact tie -- which PostgreSQL may break either way on
+  # successive queries. That is the flip this function exists to prevent, and it
+  # is reachable in production: the crawl inserts in bursts.
+  #
+  # Note what the tie-break does and does not buy. `id` is a random v4 UUID
+  # (`@primary_key {:id, :binary_id, autogenerate: true}`), not a sequence, so
+  # among rows sharing a second the winner is arbitrary -- but STABLE, which is
+  # the property that matters. "Oldest wins" holds only at second granularity.
+  defp oldest_match(query) do
+    query
+    |> order_by([m], asc: m.inserted_at, asc: m.id)
     |> limit(1)
     |> Repo.one()
   end
