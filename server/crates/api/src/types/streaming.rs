@@ -7,7 +7,7 @@
 
 use async_graphql::{SimpleObject, ID};
 
-use crate::types::common::StreamingCandidateStrategy;
+use crate::types::common::{PlaylistMode, StreamingCandidateStrategy};
 
 #[derive(SimpleObject)]
 pub struct StreamingCandidatesResult {
@@ -71,6 +71,10 @@ pub struct StreamingSessionResult {
     pub start_position: Option<i32>,
     pub max_bitrate: Option<i32>,
     pub max_height: Option<i32>,
+    /// The playlist mode this session actually serves, which may be WINDOW
+    /// even when FULL was requested. Mirrors `playlistMode` on
+    /// `:streaming_session_result` in `lib/mydia_web/schema/common_types.ex`.
+    pub playlist_mode: PlaylistMode,
 }
 
 #[derive(SimpleObject)]

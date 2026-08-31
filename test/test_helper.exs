@@ -4,6 +4,7 @@
 # Exclude external integration tests by default (require external services)
 # Exclude feature tests by default (require chromedriver)
 # Exclude relay tests by default (require connected relay service)
+# Exclude ffmpeg integration tests by default (run real ffmpeg, seconds not ms)
 # Run specific tests explicitly with: mix test --include <tag>
 max_cases =
   if System.get_env("DATABASE_TYPE") == "postgres" do
@@ -12,7 +13,7 @@ max_cases =
     1
   end
 
-ExUnit.start(max_cases: max_cases, exclude: [:external, :feature, :requires_relay])
+ExUnit.start(max_cases: max_cases, exclude: [:external, :feature, :requires_relay, :ffmpeg])
 Ecto.Adapters.SQL.Sandbox.mode(Mydia.Repo, :manual)
 
 # Refuse outbound HTTP. Nothing else stops a test reaching the production

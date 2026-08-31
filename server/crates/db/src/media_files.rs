@@ -130,17 +130,20 @@ pub async fn upsert(db: &Db, new: NewMediaFile) -> Result<MediaFileRow, DbError>
 pub async fn find_by_path(db: &Db, path: &str) -> Result<Option<MediaFileRow>, DbError> {
     let sql = format!("{SELECT} WHERE path = ?");
 
-    Ok(sqlx::query_as::<_, MediaFileRow>(&sql)
+    // Safe: fixed literal fragment; `path` is bound, not interpolated.
+    Ok(sqlx::query_as::<_, MediaFileRow>(sqlx::AssertSqlSafe(sql))
         .bind(path)
         .fetch_optional(db.pool())
         .await?)
 }
 
 pub async fn find(db: &Db, id: &str) -> Result<Option<MediaFileRow>, DbError> {
-    let row = sqlx::query_as::<_, MediaFileRow>(&format!("{SELECT} WHERE id = ?1"))
-        .bind(id)
-        .fetch_optional(db.pool())
-        .await?;
+    // Safe: fixed literal fragment; `id` is bound, not interpolated.
+    let row =
+        sqlx::query_as::<_, MediaFileRow>(sqlx::AssertSqlSafe(format!("{SELECT} WHERE id = ?1")))
+            .bind(id)
+            .fetch_optional(db.pool())
+            .await?;
 
     Ok(row)
 }
@@ -148,7 +151,8 @@ pub async fn find(db: &Db, id: &str) -> Result<Option<MediaFileRow>, DbError> {
 pub async fn list_for_item(db: &Db, media_item_id: &str) -> Result<Vec<MediaFileRow>, DbError> {
     let sql = format!("{SELECT} WHERE media_item_id = ? ORDER BY path");
 
-    Ok(sqlx::query_as::<_, MediaFileRow>(&sql)
+    // Safe: fixed literal fragment; `media_item_id` is bound, not interpolated.
+    Ok(sqlx::query_as::<_, MediaFileRow>(sqlx::AssertSqlSafe(sql))
         .bind(media_item_id)
         .fetch_all(db.pool())
         .await?)
@@ -157,7 +161,8 @@ pub async fn list_for_item(db: &Db, media_item_id: &str) -> Result<Vec<MediaFile
 pub async fn list_for_episode(db: &Db, episode_id: &str) -> Result<Vec<MediaFileRow>, DbError> {
     let sql = format!("{SELECT} WHERE episode_id = ? ORDER BY path");
 
-    Ok(sqlx::query_as::<_, MediaFileRow>(&sql)
+    // Safe: fixed literal fragment; `episode_id` is bound, not interpolated.
+    Ok(sqlx::query_as::<_, MediaFileRow>(sqlx::AssertSqlSafe(sql))
         .bind(episode_id)
         .fetch_all(db.pool())
         .await?)
@@ -181,12 +186,16 @@ pub async fn prune_outside(
                                     WHERE i.library_path_id = ?))";
 
     if keep.is_empty() {
-        let removed = sqlx::query(&format!("DELETE FROM media_files WHERE {scope}"))
-            .bind(library_path_id)
-            .bind(library_path_id)
-            .execute(db.pool())
-            .await?
-            .rows_affected();
+        // Safe: `scope` is the fixed literal fragment above; no input is
+        // interpolated at all.
+        let removed = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "DELETE FROM media_files WHERE {scope}"
+        )))
+        .bind(library_path_id)
+        .bind(library_path_id)
+        .execute(db.pool())
+        .await?
+        .rows_affected();
         return Ok(removed);
     }
 
@@ -212,18 +221,23 @@ pub async fn prune_outside(
         let placeholders = vec!["(?)"; chunk.len()].join(", ");
         let sql =
             format!("INSERT OR IGNORE INTO media_files_prune_keep (path) VALUES {placeholders}");
-        let mut query = sqlx::query(&sql);
+        // Safe: `placeholders` is a run of `(?)` markers, one per entry in
+        // `chunk`; its length varies with the input slice but its content is
+        // fixed text, never path data (those are bound below, per entry).
+        let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
         for path in chunk {
             query = query.bind(path);
         }
         query.execute(&mut *tx).await?;
     }
 
-    let removed = sqlx::query(&format!(
+    // Safe: `scope` is the fixed literal fragment defined above; the rest of
+    // the string is a fixed literal too. No input is interpolated.
+    let removed = sqlx::query(sqlx::AssertSqlSafe(format!(
         "DELETE FROM media_files
          WHERE {scope}
            AND path NOT IN (SELECT path FROM media_files_prune_keep)"
-    ))
+    )))
     .bind(library_path_id)
     .bind(library_path_id)
     .execute(&mut *tx)

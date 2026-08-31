@@ -13,7 +13,7 @@ use crate::types::auth::{
     remote_device_from, AccessToken, ApiKey, ClaimCode, CreateApiKeyResult, LoginInput,
     LoginResult, MediaToken, RemoteDevice, RevokeDeviceResult, ToggleFavoriteResult, User,
 };
-use crate::types::common::StreamingStrategy;
+use crate::types::common::{PlaylistMode, StreamingStrategy};
 use crate::types::discovery::RemoveFromContinueWatchingResult;
 use crate::types::media::{Episode, Movie, Progress, SubtitleTrack, SubtitleTrackSetting, TvShow};
 use crate::types::streaming::{
@@ -345,6 +345,12 @@ impl RootMutationType {
     }
 
     /// Start an HLS streaming session for a media file
+    // The arity is the GraphQL contract's, not a design choice: every
+    // parameter is an argument the Elixir schema declares, and this signature
+    // has to mirror it exactly or `sdl_parity` fails. Splitting it into a
+    // struct would change the emitted SDL, which is the one thing that must
+    // not happen here.
+    #[allow(clippy::too_many_arguments)]
     async fn start_streaming_session(
         &self,
         _ctx: &Context<'_>,
@@ -357,6 +363,10 @@ impl RootMutationType {
         // Real media position, in seconds, at which to begin transcoding.
         // Optional; omitted or 0 starts at the beginning.
         _start_position: Option<i32>,
+        // Ask for a full-length playlist covering the whole file. Omitted
+        // means WINDOW, the growing playlist older clients expect. Mirrors
+        // `playlistMode` in lib/mydia_web/schema/mutation_types.ex.
+        _playlist_mode: Option<PlaylistMode>,
     ) -> Result<Option<StreamingSessionResult>> {
         Err(not_implemented("startStreamingSession"))
     }

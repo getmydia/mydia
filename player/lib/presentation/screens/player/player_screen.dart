@@ -65,6 +65,7 @@ import '../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/start_streaming_session.graphql.dart';
+import '../../../graphql/mutations/start_streaming_session_compat.dart';
 import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
@@ -562,6 +563,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // Whether current playback is direct play (vs HLS)
   bool _isDirectPlay = false;
+
+  /// Whether the server is serving a playlist covering the whole file.
+  ///
+  /// False against a server too old to know about `playlistMode`, which is the
+  /// only reason the restart path below still exists. Delete that path, and
+  /// this field, once the compatibility window closes.
+  bool _fullPlaylist = false;
 
   /// The rung in effect, or null before anything has settled one for this
   /// playback.
@@ -1383,8 +1391,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               'Failed to start streaming session: ${result.exception}');
         }
 
-        final sessionData =
-            Mutation$StartStreamingSession.fromJson(result.data!);
+        final sessionData = Mutation$StartStreamingSession.fromJson(
+          withPlaylistModeDefault(result.data!),
+        );
         final sessionResult = sessionData.startStreamingSession;
         if (sessionResult == null) {
           throw Exception('No session data returned from server');
@@ -1416,16 +1425,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // field entirely, which correctly yields offset zero.
         final serverOffset = sessionResult.startPosition ?? 0;
 
+        // What the server actually served, not what was asked for: a server
+        // that cannot determine the media duration answers WINDOW even when
+        // FULL was requested, and a server too old to know `playlistMode` at
+        // all is normalized to WINDOW by `withPlaylistModeDefault` above.
+        _fullPlaylist = sessionResult.playlistMode == Enum$PlaylistMode.FULL;
+
         if (_totalDuration == null && sessionResult.duration != null) {
           _totalDuration = Duration(
             milliseconds: (sessionResult.duration! * 1000).round(),
           );
         }
 
-        _timeline = StreamTimeline(
-          startOffset: Duration(seconds: serverOffset),
-          totalDuration: _totalDuration,
-        );
+        // A full playlist starts at zero and carries the real runtime in its
+        // EXT-X-ENDLIST, so player coordinates are already real coordinates and
+        // the timeline has nothing to correct. The offset form is kept only for
+        // a windowed session, where FFmpeg's -ss shifted the timestamps.
+        _timeline = _fullPlaylist
+            ? StreamTimeline(totalDuration: _totalDuration)
+            : StreamTimeline(
+                startOffset: Duration(seconds: serverOffset),
+                totalDuration: _totalDuration,
+              );
         debugPrint('[PlayerScreen] Stream timeline: $_timeline');
 
         // Build HLS URL based on mode
@@ -1445,16 +1466,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         );
       }
 
-      // `canDirect` is exactly the HLS/non-HLS split of this method: the HLS
-      // branch above has already baked the resume decision into the
-      // session's start offset, so acting on `plan` again here would
-      // double-apply it via a seek on top of that offset. The direct-play
-      // branch has no server-side offset to bake it into and must resume
-      // with a plain seek, which is what passing `plan` through does.
+      // `canDirect` is exactly the HLS/non-HLS split of this method for a
+      // windowed session: the HLS branch above has already baked the resume
+      // decision into the session's start offset, so acting on `plan` again
+      // here would double-apply it via a seek on top of that offset. The
+      // direct-play branch has no server-side offset to bake it into and
+      // must resume with a plain seek, which is what passing `plan` through
+      // does. A full-playlist HLS session joins the direct-play side of this
+      // split: its playlist starts at zero regardless of where FFmpeg's
+      // window began, so it needs the same client-side seek. Passing the
+      // real `plan` through here is the *only* thing that makes that seek
+      // happen -- `_openPlayerAndStart`'s own `if (plan.resumes)` block
+      // already does it, unmodified, once it receives a nonzero position, so
+      // there is no separate `_fullPlaylist` branch to look for there.
       await _openPlayerAndStart(
         mediaSource,
         httpHeaders,
-        plan: canDirect ? plan : ResumePlan.fromStart,
+        plan: canDirect || _fullPlaylist ? plan : ResumePlan.fromStart,
       );
     } catch (e) {
       debugPrint('Error initializing player: $e');
@@ -1609,6 +1637,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           maxBitrate: maxBitrate,
           maxHeight: maxHeight,
           startPosition: startPosition,
+          playlistMode: Enum$PlaylistMode.FULL,
         ).toJson(),
       ),
     );
@@ -1626,13 +1655,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   /// True when the failure is this server's schema not knowing about
-  /// `maxHeight`, rather than a transport, authorization, or resolver
-  /// problem. Only the former is worth retrying through the legacy document.
+  /// `maxHeight` or `playlistMode`, rather than a transport, authorization,
+  /// or resolver problem. Only these are worth retrying through the legacy
+  /// document.
   ///
-  /// Both messages are Absinthe's verbatim validation text — see
+  /// All four messages are Absinthe's verbatim validation text — see
   /// `Absinthe.Phase.Document.Validation.KnownArgumentNames` and
-  /// `.FieldsOnCorrectType`. An old server emits both at once (the argument
-  /// and the echoed fields arrived in the same change), so either is enough.
+  /// `.FieldsOnCorrectType`. An old server emits both of a pair at once (the
+  /// argument and the echoed field arrived in the same change), so any one
+  /// is enough. `playlistMode` shipped in a later change than `maxHeight`,
+  /// so a server updated only as far as height caps reaches this same
+  /// fallback — exactly the compatibility window this feature is built for.
   /// Matching the exact phrasing rather than loose keywords keeps a genuine
   /// failure from being mistaken for version skew and silently retried.
   bool _looksLikeMissingHeightSupport(QueryResult<Object?> result) {
@@ -1640,7 +1673,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return graphqlErrors.any((error) {
       final message = error.message;
       return message.contains('Unknown argument "maxHeight"') ||
-          message.contains('Cannot query field "maxHeight"');
+          message.contains('Cannot query field "maxHeight"') ||
+          message.contains('Unknown argument "playlistMode"') ||
+          message.contains('Cannot query field "playlistMode"');
     });
   }
 
@@ -1650,11 +1685,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Reached by three paths, not just the HLS one: the HLS branch, the
   /// direct-play branch, and the "already downloaded, still online" branch.
   /// It no longer prompts — the resume decision is made once, upstream of
-  /// every fork, by [resolveResumePlan] — it only executes [plan]. The HLS
-  /// branch bakes that same decision into the session's FFmpeg start offset,
-  /// the only way to resume a live-style playlist; the other two hold the
-  /// entire file locally, have no server-side session to give an offset to,
-  /// and seek correctly, so for them resuming is a plain [Player.seek] after
+  /// every fork, by [resolveResumePlan] — it only executes [plan]. A windowed
+  /// HLS session bakes that same decision into FFmpeg's start offset instead,
+  /// the only way to resume a live-style playlist, so [plan] arrives here
+  /// already neutralized to [ResumePlan.fromStart] for it. The other three —
+  /// direct play, "already downloaded", and a full-playlist HLS session —
+  /// hold or expose the whole file at real coordinates and have nothing to
+  /// bake an offset into, so for them resuming is a plain [Player.seek] after
   /// the media opens.
   Future<void> _openPlayerAndStart(
     String mediaSource,
@@ -1738,15 +1775,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // A plain seek, not a `seekToReal`: these paths hold the whole file, so
     // the player's own coordinates already are the real ones and there is no
-    // session that could need restarting.
+    // session that could need restarting. A full-playlist HLS session reaches
+    // this too: the call site passes the real `plan` (not
+    // `ResumePlan.fromStart`) exactly when `canDirect || _fullPlaylist`, so
+    // this is already the full-playlist resume seek -- do not add a second,
+    // `_fullPlaylist`-gated block here, it would just re-seek to the same
+    // position every time this one already fires.
     if (plan.resumes) {
       await player.seek(plan.position);
     }
 
-    // The bar a position has to clear to count as playback. Zero on the HLS
-    // branch, which always arrives here with `ResumePlan.fromStart` because
-    // its offset went into FFmpeg's `-ss` instead, so its player-local
-    // coordinates genuinely do start at zero.
+    // The bar a position has to clear to count as playback. Zero on a
+    // windowed HLS session, which always arrives here with
+    // `ResumePlan.fromStart` because its offset went into FFmpeg's `-ss`
+    // instead, so its player-local coordinates genuinely do start at zero.
+    // Direct play and full-playlist HLS both carry the real resume position
+    // through instead, matching the seek above.
     _furthestPosition = plan.position;
 
     // Start playback, unless a remote `LoadContent` asked to load without
@@ -3209,6 +3253,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (shouldRestartForSeek(
       isDirectPlay: _isDirectPlay,
+      fullPlaylist: _fullPlaylist,
       realTarget: clamped,
       localTarget: local,
       seekableEnd: seekableEnd,
@@ -5171,9 +5216,17 @@ KeyEventResult handleEpisodeNavKey(
 /// Overshooting [seekableEnd] by up to [kSeekRestartTolerance] does not
 /// restart: `seekToReal` clamps those to the seekable end instead. See that
 /// constant for why a small skip on a cold stream must not cost a restart.
+///
+/// [fullPlaylist] short-circuits everything below it: once the server has
+/// published a playlist covering the whole file, it relocates its own
+/// encoder on demand, so every position is already addressable and no seek
+/// ever needs a restart. The boundary math below only still exists for a
+/// server too old to serve a full playlist, which is the sole remaining
+/// reason a far seek must restart the session.
 @visibleForTesting
 bool shouldRestartForSeek({
   required bool isDirectPlay,
+  required bool fullPlaylist,
   required Duration realTarget,
   required Duration localTarget,
   required Duration seekableEnd,
@@ -5183,6 +5236,11 @@ bool shouldRestartForSeek({
   // no HLS session to restart, and the player's own duration is already the
   // true one, so seeking is always local for them.
   if (isDirectPlay) return false;
+
+  // A full-length playlist covers the whole file and the server relocates its
+  // encoder on demand, so every position is already addressable. This is the
+  // path that makes a far scrub buffer rather than reload.
+  if (fullPlaylist) return false;
 
   return localTarget > seekableEnd + kSeekRestartTolerance ||
       realTarget < startOffset;

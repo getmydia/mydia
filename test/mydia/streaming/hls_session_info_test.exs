@@ -21,7 +21,7 @@ defmodule Mydia.Streaming.HlsSessionInfoTest do
 
   alias Mydia.Streaming.HlsSession
 
-  defp state(start_position) do
+  defp state(start_position, playlist_mode) do
     %HlsSession.State{
       session_id: "sess-#{start_position}",
       media_file_id: 1,
@@ -31,13 +31,18 @@ defmodule Mydia.Streaming.HlsSessionInfoTest do
       backend: :ffmpeg,
       backend_pid: nil,
       temp_dir: "/tmp/mydia-hls/sess-#{start_position}",
-      last_activity: DateTime.utc_now()
+      last_activity: DateTime.utc_now(),
+      playlist_mode: playlist_mode
     }
   end
 
-  defp get_info(start_position) do
+  defp get_info(start_position, playlist_mode \\ :window) do
     {:reply, {:ok, info}, _new_state} =
-      HlsSession.handle_call(:get_info, {self(), make_ref()}, state(start_position))
+      HlsSession.handle_call(
+        :get_info,
+        {self(), make_ref()},
+        state(start_position, playlist_mode)
+      )
 
     info
   end
@@ -53,6 +58,15 @@ defmodule Mydia.Streaming.HlsSessionInfoTest do
       # assume offset zero" — which is right for an old server but would mask
       # a real bug here.
       assert get_info(0).start_position == 0
+    end
+
+    test "reports the session's playlist mode" do
+      # StreamingResolver reads this back rather than assuming the request was
+      # honoured: a server that cannot determine the media duration degrades a
+      # `:full` request to `:window`, and the resolver needs to tell the
+      # difference to report the mode (and start_position) honestly.
+      assert get_info(0, :window).playlist_mode == :window
+      assert get_info(0, :full).playlist_mode == :full
     end
   end
 end

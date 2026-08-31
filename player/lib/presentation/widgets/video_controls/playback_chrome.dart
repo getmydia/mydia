@@ -9,6 +9,7 @@ import '../../../core/player/stream_timeline.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/window_buttons_bridge.dart';
 import '../../../core/theme/depth_tokens.dart';
+import 'buffering_indicator.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
@@ -570,134 +571,160 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       stream: widget.player.stream.playing,
       initialData: widget.player.state.playing,
       builder: (context, snapshot) {
-        return ChromeVisibility(
-          controller: widget.chromeVisibility,
-          isPlaying: snapshot.data ?? false,
-          isSeeking: _seeking,
-          // Both gates live here, not inside ChromeVisibility, so widget
-          // tests can construct that class with plain callbacks and get
-          // deterministic behaviour regardless of the host platform.
-          //
-          // Double-click stays available in fullscreen, since that is how
-          // you get back out. The window drag does not: there is no window
-          // to move.
-          onDoubleTap:
-              PlatformFeatures.isDesktop ? widget.onFullscreenTap : null,
-          onWindowDrag: PlatformFeatures.isDesktop && !widget.isFullscreen
-              ? startWindowDrag
-              : null,
-          onActivity: widget.onActivity,
-          child: SafeArea(
-            child: Stack(
-              children: [
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: ChromeSlide(
-                    hiddenOffsetY: -6,
-                    child: ChromeTopBar(
-                      title: widget.title,
-                      onBack: widget.onBack,
-                      castAction: widget.castAction,
-                      onCastTap: widget.onCastTap,
-                    ),
-                  ),
-                ),
-                // Mobile only: a large centre play/pause. Desktop/web use the
-                // panel's own transport; on touch a one-handed thumb reach to
-                // a 48px in-bar button is worse than a centre target. No skip
-                // buttons here — `gesture_controls.dart` already does
-                // double-tap-left/right for ±10s.
-                if (InputCapabilities.touchPrimary)
-                  Center(
-                    child: CenterPlayButton(player: widget.player),
-                  ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: metrics.bottomOffset,
-                  child: ChromeSlide(
-                    hiddenOffsetY: 8,
-                    child: Center(
-                      child: ChromePanel(
-                        metrics: metrics,
-                        transport: TransportCluster(
-                          player: widget.player,
-                          onBack10: () => _seekBy(const Duration(seconds: -10)),
-                          onForward10: () =>
-                              _seekBy(const Duration(seconds: 10)),
-                          onPreviousEpisode: widget.onPreviousEpisode,
-                          onNextEpisode: widget.onNextEpisode,
-                          // Below the mobile breakpoint the in-bar transport
-                          // is play/pause only (see
-                          // `TransportSurface.compact`'s dartdoc for the full
-                          // layout reasoning). `onPreviousEpisode`/
-                          // `onNextEpisode` above are still passed through
-                          // unconditionally — `compact` ignores them
-                          // regardless — rather than gated to null here, so
-                          // they reappear the moment the breakpoint is
-                          // crossed without this widget needing to know why.
-                          //
-                          // NOTE, this is a real, currently-unresolved gap:
-                          // unlike ±10s seek (which has an explicit gesture
-                          // replacement, double-tap in
-                          // `gesture_controls.dart`), episode nav has no
-                          // touch-reachable equivalent once it's dropped
-                          // from the bar. `UpNextOverlay` only offers *next*,
-                          // and only near an episode's end; there is no
-                          // touch path to the *previous* episode at all
-                          // below this breakpoint. See this task's report for
-                          // the open follow-up; do not read this comment as
-                          // "handled".
-                          compact: metrics.compactTransport,
-                        ),
-                        // Unconditional per ChromePanel's `volume` dartdoc:
-                        // it already gates visibility internally via
-                        // Visibility(maintainState: true), so
-                        // VolumeCluster's `_lastVolume` survives a
-                        // breakpoint crossing only if it isn't also rebuilt
-                        // from scratch here.
-                        volume: VolumeCluster(player: widget.player),
-                        secondary: SecondaryCluster(
-                          onSubtitleTap: widget.onSubtitleTap,
-                          onAudioTap: widget.onAudioTap,
-                          // Passed through `metrics.showQuality` rather than
-                          // bare, even though every tier shows it today: see
-                          // that field's dartdoc — it stays a real per-tier
-                          // lever for the tier that can't absorb a future
-                          // 5th control.
-                          onQualityTap:
-                              metrics.showQuality ? widget.onQualityTap : null,
-                          onFullscreenTap: widget.onFullscreenTap,
-                          onAlwaysOnTopTap: PlatformFeatures.isDesktop &&
-                                  metrics.showAlwaysOnTop
-                              ? widget.onAlwaysOnTopTap
-                              : null,
-                          audioTrackCount: widget.audioTrackCount,
-                          subtitleTrackCount: widget.subtitleTrackCount,
-                          selectedAudioLabel: widget.selectedAudioLabel,
-                          selectedSubtitleLabel: widget.selectedSubtitleLabel,
-                          selectedQualityLabel: widget.selectedQualityLabel,
-                          isFullscreen: widget.isFullscreen,
-                          isAlwaysOnTop: widget.isAlwaysOnTop,
-                          gap: metrics.secondaryGap,
-                        ),
-                        scrubber: _ScrubberRow(
-                          player: widget.player,
-                          timeline: widget.timeline,
-                          onSeekToReal: widget.onSeekToReal,
-                          touchTargets: metrics.touchTargets,
-                          onSeekStart: () => setState(() => _seeking = true),
-                          onSeekEnd: () => setState(() => _seeking = false),
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ChromeVisibility(
+              controller: widget.chromeVisibility,
+              isPlaying: snapshot.data ?? false,
+              isSeeking: _seeking,
+              // Both gates live here, not inside ChromeVisibility, so widget
+              // tests can construct that class with plain callbacks and get
+              // deterministic behaviour regardless of the host platform.
+              //
+              // Double-click stays available in fullscreen, since that is how
+              // you get back out. The window drag does not: there is no
+              // window to move.
+              onDoubleTap:
+                  PlatformFeatures.isDesktop ? widget.onFullscreenTap : null,
+              onWindowDrag: PlatformFeatures.isDesktop && !widget.isFullscreen
+                  ? startWindowDrag
+                  : null,
+              onActivity: widget.onActivity,
+              child: SafeArea(
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      right: 16,
+                      child: ChromeSlide(
+                        hiddenOffsetY: -6,
+                        child: ChromeTopBar(
+                          title: widget.title,
+                          onBack: widget.onBack,
+                          castAction: widget.castAction,
+                          onCastTap: widget.onCastTap,
                         ),
                       ),
                     ),
-                  ),
+                    // Mobile only: a large centre play/pause. Desktop/web use
+                    // the panel's own transport; on touch a one-handed thumb
+                    // reach to a 48px in-bar button is worse than a centre
+                    // target. No skip buttons here — `gesture_controls.dart`
+                    // already does double-tap-left/right for ±10s.
+                    if (InputCapabilities.touchPrimary)
+                      Center(
+                        child: CenterPlayButton(player: widget.player),
+                      ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: metrics.bottomOffset,
+                      child: ChromeSlide(
+                        hiddenOffsetY: 8,
+                        child: Center(
+                          child: ChromePanel(
+                            metrics: metrics,
+                            transport: TransportCluster(
+                              player: widget.player,
+                              onBack10: () =>
+                                  _seekBy(const Duration(seconds: -10)),
+                              onForward10: () =>
+                                  _seekBy(const Duration(seconds: 10)),
+                              onPreviousEpisode: widget.onPreviousEpisode,
+                              onNextEpisode: widget.onNextEpisode,
+                              // Below the mobile breakpoint the in-bar
+                              // transport is play/pause only (see
+                              // `TransportSurface.compact`'s dartdoc for the
+                              // full layout reasoning). `onPreviousEpisode`/
+                              // `onNextEpisode` above are still passed
+                              // through unconditionally — `compact` ignores
+                              // them regardless — rather than gated to null
+                              // here, so they reappear the moment the
+                              // breakpoint is crossed without this widget
+                              // needing to know why.
+                              //
+                              // NOTE, this is a real, currently-unresolved
+                              // gap: unlike ±10s seek (which has an explicit
+                              // gesture replacement, double-tap in
+                              // `gesture_controls.dart`), episode nav has no
+                              // touch-reachable equivalent once it's dropped
+                              // from the bar. `UpNextOverlay` only offers
+                              // *next*, and only near an episode's end; there
+                              // is no touch path to the *previous* episode at
+                              // all below this breakpoint. See this task's
+                              // report for the open follow-up; do not read
+                              // this comment as "handled".
+                              compact: metrics.compactTransport,
+                            ),
+                            // Unconditional per ChromePanel's `volume`
+                            // dartdoc: it already gates visibility internally
+                            // via Visibility(maintainState: true), so
+                            // VolumeCluster's `_lastVolume` survives a
+                            // breakpoint crossing only if it isn't also
+                            // rebuilt from scratch here.
+                            volume: VolumeCluster(player: widget.player),
+                            secondary: SecondaryCluster(
+                              onSubtitleTap: widget.onSubtitleTap,
+                              onAudioTap: widget.onAudioTap,
+                              // Passed through `metrics.showQuality` rather
+                              // than bare, even though every tier shows it
+                              // today: see that field's dartdoc — it stays a
+                              // real per-tier lever for the tier that can't
+                              // absorb a future 5th control.
+                              onQualityTap: metrics.showQuality
+                                  ? widget.onQualityTap
+                                  : null,
+                              onFullscreenTap: widget.onFullscreenTap,
+                              onAlwaysOnTopTap: PlatformFeatures.isDesktop &&
+                                      metrics.showAlwaysOnTop
+                                  ? widget.onAlwaysOnTopTap
+                                  : null,
+                              audioTrackCount: widget.audioTrackCount,
+                              subtitleTrackCount: widget.subtitleTrackCount,
+                              selectedAudioLabel: widget.selectedAudioLabel,
+                              selectedSubtitleLabel:
+                                  widget.selectedSubtitleLabel,
+                              selectedQualityLabel: widget.selectedQualityLabel,
+                              isFullscreen: widget.isFullscreen,
+                              isAlwaysOnTop: widget.isAlwaysOnTop,
+                              gap: metrics.secondaryGap,
+                            ),
+                            scrubber: _ScrubberRow(
+                              player: widget.player,
+                              timeline: widget.timeline,
+                              onSeekToReal: widget.onSeekToReal,
+                              touchTargets: metrics.touchTargets,
+                              onSeekStart: () =>
+                                  setState(() => _seeking = true),
+                              onSeekEnd: () => setState(() => _seeking = false),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+            // Outside ChromeVisibility on purpose: that widget fades its
+            // whole child subtree on the auto-hide timer, and a slow seek is
+            // precisely when the chrome has already hidden. Buffering
+            // feedback has to outlive the controls or it is absent exactly
+            // when it is needed.
+            //
+            // IgnorePointer is not optional: `PlaybackSurface` inside
+            // `ChromeVisibility` handles tap-to-toggle-chrome and
+            // double-tap-to-fullscreen. A bare sibling laid over it would
+            // swallow taps in the centre of the screen while buffering,
+            // which is exactly where people tap. `BufferingIndicator`
+            // already centres itself and collapses to `SizedBox.shrink()`
+            // when not buffering, so no extra `Center` is needed here.
+            IgnorePointer(
+              child: BufferingIndicator(player: widget.player),
+            ),
+          ],
         );
       },
     );

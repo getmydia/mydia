@@ -172,6 +172,9 @@ type RootMutationType {
 
     "Real media position, in seconds, at which to begin transcoding. Optional; omitted or 0 starts at the beginning."
     startPosition: Int
+
+    "Ask for a full-length playlist covering the whole file, which makes seeking a plain seek. Omitted means WINDOW, the growing playlist older clients expect. A server that cannot determine the media duration answers WINDOW even when FULL was requested; read the mode back from the result rather than assuming."
+    playlistMode: PlaylistMode
   ): StreamingSessionResult
 
   "Remember which audio language this viewer wants for a show or film"
@@ -1174,6 +1177,9 @@ type StreamingSessionResult {
 
   "Output height ceiling the server actually applied, which may be lower than requested on a relay connection. Null means the source resolution is preserved."
   maxHeight: Int
+
+  "The playlist mode this session actually serves, which may be WINDOW even when FULL was requested. In FULL the playlist covers the whole file, positions are real media positions, and start_position is always 0. In WINDOW, start_position is the offset the stream begins at."
+  playlistMode: PlaylistMode!
 }
 
 "A download quality option"
@@ -1627,6 +1633,15 @@ enum CalendarEntryKind {
 
   "A movie, dated by its release date"
   MOVIE
+}
+
+"How much of the media a streaming session's playlist covers"
+enum PlaylistMode {
+  "The playlist covers the whole file and every segment is addressable immediately. Seeking is a plain seek."
+  FULL
+
+  "The playlist grows as FFmpeg transcodes and covers only what has been produced. Seeking outside it requires a new session."
+  WINDOW
 }
 
 """

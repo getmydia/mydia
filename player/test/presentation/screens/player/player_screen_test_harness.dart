@@ -523,12 +523,20 @@ Map<String, dynamic> streamingCandidatesResponse({
 /// have applied — deliberately separate parameters from whatever the client
 /// requested, so tests can make them differ on purpose (a relay clamps both
 /// caps below the request).
+///
+/// [playlistMode] defaults to `WINDOW`, not `FULL`: every test written
+/// before full-playlist support existed encodes windowed-mode assumptions
+/// (an echoed offset that matters, a timeline built from it, a session that
+/// restarts on a far seek), and defaulting to `FULL` here would silently
+/// flip all of them onto the identity timeline instead. Tests exercising the
+/// full-playlist path pass `playlistMode: 'FULL'` explicitly.
 Map<String, dynamic> startStreamingSessionResponse({
   String sessionId = 'sess-1',
   double? duration,
   int? startPosition,
   int? maxBitrate,
   int? maxHeight,
+  String playlistMode = 'WINDOW',
 }) {
   return {
     '__typename': 'RootMutationType',
@@ -539,6 +547,7 @@ Map<String, dynamic> startStreamingSessionResponse({
       'startPosition': startPosition,
       'maxBitrate': maxBitrate,
       'maxHeight': maxHeight,
+      'playlistMode': playlistMode,
     },
   };
 }

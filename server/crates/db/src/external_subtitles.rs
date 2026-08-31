@@ -55,9 +55,10 @@ pub async fn list_for_file(
     db: &Db,
     media_file_id: &str,
 ) -> Result<Vec<ExternalSubtitleRow>, DbError> {
-    let rows = sqlx::query_as::<_, ExternalSubtitleRow>(&format!(
+    // Safe: fixed literal fragment; `media_file_id` is bound, not interpolated.
+    let rows = sqlx::query_as::<_, ExternalSubtitleRow>(sqlx::AssertSqlSafe(format!(
         "{SELECT} WHERE media_file_id = ?1 ORDER BY language, path"
-    ))
+    )))
     .bind(media_file_id)
     .fetch_all(db.pool())
     .await?;
@@ -90,7 +91,11 @@ pub async fn list_for_files(
              ORDER BY media_file_id, language, path"
         );
 
-        let mut query = sqlx::query_as::<_, ExternalSubtitleRow>(&sql);
+        // Safe: `placeholders` is a run of `?1, ?2, ...` positional markers,
+        // one per entry in `chunk`; its length varies with the input slice
+        // but its content is only digits and `?`, never file-id text (those
+        // are bound below, per entry).
+        let mut query = sqlx::query_as::<_, ExternalSubtitleRow>(sqlx::AssertSqlSafe(sql));
         for id in chunk {
             query = query.bind(id);
         }
@@ -102,10 +107,13 @@ pub async fn list_for_files(
 }
 
 pub async fn find(db: &Db, id: &str) -> Result<Option<ExternalSubtitleRow>, DbError> {
-    let row = sqlx::query_as::<_, ExternalSubtitleRow>(&format!("{SELECT} WHERE id = ?1"))
-        .bind(id)
-        .fetch_optional(db.pool())
-        .await?;
+    // Safe: fixed literal fragment; `id` is bound, not interpolated.
+    let row = sqlx::query_as::<_, ExternalSubtitleRow>(sqlx::AssertSqlSafe(format!(
+        "{SELECT} WHERE id = ?1"
+    )))
+    .bind(id)
+    .fetch_optional(db.pool())
+    .await?;
 
     Ok(row)
 }
@@ -123,7 +131,10 @@ pub async fn prune_for_file(db: &Db, media_file_id: &str, keep: &[String]) -> Re
         query.push_str(&format!(" AND path <> ?{}", index + 2));
     }
 
-    let mut statement = sqlx::query(&query).bind(media_file_id);
+    // Safe: the appended fragments are `AND path <> ?N` markers, one per
+    // entry in `keep`; the only thing that varies is the count and the
+    // positional index, never path text (those are bound below, per entry).
+    let mut statement = sqlx::query(sqlx::AssertSqlSafe(query)).bind(media_file_id);
     for path in keep {
         statement = statement.bind(path);
     }

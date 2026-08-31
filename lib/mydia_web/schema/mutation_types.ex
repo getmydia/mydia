@@ -167,6 +167,15 @@ defmodule MydiaWeb.Schema.MutationTypes do
             "Optional; omitted or 0 starts at the beginning."
       )
 
+      arg(:playlist_mode, :playlist_mode,
+        description:
+          "Ask for a full-length playlist covering the whole file, which makes " <>
+            "seeking a plain seek. Omitted means WINDOW, the growing playlist " <>
+            "older clients expect. A server that cannot determine the media " <>
+            "duration answers WINDOW even when FULL was requested; read the " <>
+            "mode back from the result rather than assuming."
+      )
+
       resolve(&StreamingResolver.start_streaming_session/3)
     end
 

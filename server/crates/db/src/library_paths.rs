@@ -71,7 +71,11 @@ pub async fn sync_from_config(
         format!("DELETE FROM library_paths WHERE path NOT IN ({placeholders})")
     };
 
-    let mut delete = sqlx::query(&sql);
+    // Safe: `sql` is either the fixed literal `DELETE FROM library_paths` or
+    // that plus a run of `?` markers (one per entry in `keep`); the count
+    // varies with the input slice, but the content is only `?` and `, `,
+    // never path text (those are bound below, per entry).
+    let mut delete = sqlx::query(sqlx::AssertSqlSafe(sql));
     for path in &keep {
         delete = delete.bind(*path);
     }
@@ -83,18 +87,25 @@ pub async fn sync_from_config(
 pub async fn list(db: &Db) -> Result<Vec<LibraryPathRow>, DbError> {
     let sql = format!("{SELECT} ORDER BY path");
 
-    Ok(sqlx::query_as::<_, LibraryPathRow>(&sql)
-        .fetch_all(db.pool())
-        .await?)
+    // Safe: `sql` is `SELECT` (a fixed const) plus a fixed literal suffix; no
+    // input is interpolated at all.
+    Ok(
+        sqlx::query_as::<_, LibraryPathRow>(sqlx::AssertSqlSafe(sql))
+            .fetch_all(db.pool())
+            .await?,
+    )
 }
 
 pub async fn find(db: &Db, id: &str) -> Result<Option<LibraryPathRow>, DbError> {
     let sql = format!("{SELECT} WHERE id = ?");
 
-    Ok(sqlx::query_as::<_, LibraryPathRow>(&sql)
-        .bind(id)
-        .fetch_optional(db.pool())
-        .await?)
+    // Safe: fixed literal fragment; `id` is bound, not interpolated.
+    Ok(
+        sqlx::query_as::<_, LibraryPathRow>(sqlx::AssertSqlSafe(sql))
+            .bind(id)
+            .fetch_optional(db.pool())
+            .await?,
+    )
 }
 
 pub async fn touch_scanned(db: &Db, id: &str) -> Result<(), DbError> {

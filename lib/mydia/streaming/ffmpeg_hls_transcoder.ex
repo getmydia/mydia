@@ -63,11 +63,13 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       :on_complete,
       :on_error,
       :on_ready,
+      :on_segments,
       :playlist_path,
       :buffer,
       :duration,
       :started_at,
-      ready_notified: false
+      ready_notified: false,
+      seen_segments: MapSet.new()
     ]
 
     @type t :: %__MODULE__{
@@ -79,6 +81,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             on_complete: (-> any()) | nil,
             on_error: (String.t() -> any()) | nil,
             on_ready: (-> any()) | nil,
+            on_segments: ([non_neg_integer()] -> any()) | nil,
+            seen_segments: MapSet.t(non_neg_integer()),
             playlist_path: String.t() | nil,
             buffer: String.t(),
             duration: float() | nil,
@@ -155,6 +159,29 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     GenServer.call(pid, :get_status)
   end
 
+  @doc """
+  The segment indices FFmpeg's own playlist lists as finished.
+
+  The playlist is the authoritative completion signal: FFmpeg appends an entry
+  only once a segment is closed. Reading the directory instead would race with
+  a segment still being written.
+
+  Public so the parsing can be unit-tested without running FFmpeg.
+  """
+  @spec finished_indices(String.t()) :: [non_neg_integer()]
+  def finished_indices(playlist_text) do
+    playlist_text
+    |> String.split("\n", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.flat_map(fn line ->
+      case Mydia.Streaming.SegmentPlan.index_from_name(line) do
+        {:ok, index} -> [index]
+        :error -> []
+      end
+    end)
+    |> Enum.sort()
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -170,6 +197,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     on_complete = Keyword.get(opts, :on_complete)
     on_error = Keyword.get(opts, :on_error)
     on_ready = Keyword.get(opts, :on_ready)
+    on_segments = Keyword.get(opts, :on_segments)
 
     # Build FFmpeg command
     args = build_ffmpeg_args(input_path, output_dir, opts)
@@ -192,14 +220,16 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           on_complete: on_complete,
           on_error: on_error,
           on_ready: on_ready,
+          on_segments: on_segments,
           playlist_path: playlist_path,
           buffer: "",
           duration: nil,
           started_at: DateTime.utc_now()
         }
 
-        # Schedule first playlist check if we have an on_ready callback
-        if on_ready do
+        # One timer drives both signals. Readiness is just "the playlist
+        # exists"; the segment poll is "which entries has it grown".
+        if on_ready || on_segments do
           Process.send_after(self(), :check_playlist_ready, 100)
         end
 
@@ -273,6 +303,13 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   def handle_info({port, {:exit_status, 0}}, %{ffmpeg_port: port} = state) do
     Logger.info("FFmpeg transcoding completed successfully")
 
+    # The poll loop runs on a fixed cadence that has nothing to do with when
+    # FFmpeg actually writes its last segment and exits, so a tail segment
+    # finished in the gap since the last poll would otherwise never be
+    # reported. One last read before the process (and this GenServer) is
+    # gone.
+    state = final_segment_catchup(state)
+
     # Notify readiness if not already done — when FFmpeg completes very quickly
     # (e.g., stream copy), the scheduled :check_playlist_ready may not have fired yet.
     if !state.ready_notified && state.on_ready && File.exists?(state.playlist_path) do
@@ -288,6 +325,11 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   end
 
   def handle_info({port, {:exit_status, status}}, %{ffmpeg_port: port} = state) do
+    # Same tail-segment gap as the zero-exit clause above: an encoder that
+    # dies mid-window can still have finished segments sitting in the
+    # playlist that no poll ever reported.
+    state = final_segment_catchup(state)
+
     # Include any buffered output in the error message
     error_details =
       if state.buffer != "" do
@@ -311,31 +353,69 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     {:stop, {:ffmpeg_terminated, reason}, state}
   end
 
-  def handle_info(:check_playlist_ready, %{ready_notified: true} = state) do
-    # Already notified, stop checking
-    {:noreply, state}
-  end
-
   def handle_info(:check_playlist_ready, state) do
-    if File.exists?(state.playlist_path) do
-      Logger.debug("Playlist file detected: #{state.playlist_path}")
+    state = final_segment_catchup(state)
 
-      # Call the on_ready callback
-      if state.on_ready do
-        state.on_ready.()
-      end
-
-      {:noreply, %{state | ready_notified: true}}
-    else
-      # Not ready yet, check again in 100ms
-      Process.send_after(self(), :check_playlist_ready, 100)
-      {:noreply, state}
+    # Readiness fires once; segment discovery runs for the life of the encoder.
+    if state.on_segments || !state.ready_notified do
+      Process.send_after(self(), :check_playlist_ready, 250)
     end
+
+    {:noreply, state}
   end
 
   def handle_info(msg, state) do
     Logger.debug("Unhandled message in FfmpegHlsTranscoder: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  # One last playlist read before the GenServer stops. The regular poll
+  # loop runs on a fixed timer that has no relationship to when FFmpeg
+  # actually finishes its last segment and exits, so without this call a
+  # tail segment finished in the gap between the last poll and process exit
+  # is never reported through on_segments. A caller downstream
+  # (TranscodeWindow.decide/2) then waits on a segment nothing will ever
+  # produce.
+  #
+  # Public only so the catch-up read can be exercised directly in tests
+  # without needing a real FFmpeg process to exit at a controlled moment;
+  # nothing outside this module should call it.
+  @doc false
+  @spec final_segment_catchup(State.t()) :: State.t()
+  def final_segment_catchup(state) do
+    case File.read(state.playlist_path) do
+      {:ok, contents} -> handle_playlist(state, contents)
+      {:error, _reason} -> state
+    end
+  end
+
+  # Notifies readiness the first time the playlist appears, and reports any
+  # segment indices that have shown up since the previous poll.
+  defp handle_playlist(state, contents) do
+    state =
+      if state.ready_notified do
+        state
+      else
+        Logger.debug("Playlist file detected: #{state.playlist_path}")
+        if state.on_ready, do: state.on_ready.()
+        %{state | ready_notified: true}
+      end
+
+    if state.on_segments do
+      fresh =
+        contents
+        |> finished_indices()
+        |> Enum.reject(&MapSet.member?(state.seen_segments, &1))
+
+      if fresh == [] do
+        state
+      else
+        state.on_segments.(fresh)
+        %{state | seen_segments: Enum.into(fresh, state.seen_segments)}
+      end
+    else
+      state
+    end
   end
 
   @impl true
@@ -400,6 +480,29 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # Audio bitrate budget (kbps) subtracted from total when calculating video bitrate
   @audio_bitrate_kbps 128
 
+  @doc """
+  Whether the video stream will be re-encoded rather than copied.
+
+  This is the single place that decision gets made; `build_ffmpeg_args/3`
+  calls it too, so the two can never disagree. Only a re-encode can have its
+  keyframes forced onto the segment grid, so this is also what decides
+  whether `grid_aligned` may be set: `HlsSession` calls it before starting or
+  relocating the encoder, to decide what to pass as `grid_aligned`.
+  """
+  @spec reencodes_video?(Mydia.Library.MediaFile.t() | nil, integer() | nil) :: boolean()
+  def reencodes_video?(media_file, max_bitrate) do
+    transcode_policy =
+      Application.get_env(:mydia, :streaming, [])
+      |> Keyword.get(:transcode_policy, :copy_when_compatible)
+
+    cond do
+      not is_nil(max_bitrate) -> true
+      transcode_policy != :copy_when_compatible -> true
+      is_nil(media_file) -> true
+      true -> not should_copy_video?(media_file.codec)
+    end
+  end
+
   # Build FFmpeg command arguments for HLS transcoding
   @doc false
   # Public only so the argument construction can be unit-tested directly;
@@ -418,34 +521,33 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # since we need to control the output bitrate
     force_transcode = not is_nil(max_bitrate)
 
-    # Determine video codec - use copy if compatible and policy allows, otherwise transcode
+    # Determine video codec - use copy if compatible and policy allows, otherwise
+    # transcode. An explicit opt always wins; short of that, reencodes_video?/2
+    # is the single decider, so this can never disagree with what HlsSession
+    # used to decide `grid_aligned`.
     video_codec =
-      cond do
-        Keyword.get(opts, :video_codec) ->
-          Keyword.get(opts, :video_codec)
-
-        force_transcode ->
+      case Keyword.get(opts, :video_codec) do
+        nil when force_transcode ->
           Logger.info("Bitrate cap set (#{max_bitrate}kbps), forcing video transcode to H.264")
           "libx264"
 
-        not is_nil(media_file) and transcode_policy == :copy_when_compatible ->
-          if should_copy_video?(media_file.codec) do
+        nil ->
+          if reencodes_video?(media_file, max_bitrate) do
+            Logger.info(
+              "Video codec #{(media_file && media_file.codec) || "unknown"} needs transcoding to H.264"
+            )
+
+            "libx264"
+          else
             Logger.info(
               "Video codec #{media_file.codec} is compatible, using stream copy (fast, no quality loss)"
             )
 
             "copy"
-          else
-            Logger.info("Video codec #{media_file.codec || "unknown"} needs transcoding to H.264")
-            "libx264"
           end
 
-        true ->
-          if transcode_policy == :always do
-            Logger.debug("Transcode policy is :always, transcoding video to H.264")
-          end
-
-          "libx264"
+        explicit ->
+          explicit
       end
 
     # Which audio stream this playback carries, resolved before the codec
@@ -495,7 +597,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
     # Use index.m3u8 to match HLS controller expectations
     playlist_path = Path.join(output_dir, "index.m3u8")
-    segment_pattern = Path.join(output_dir, "segment_%03d.ts")
+    segment_pattern = Path.join(output_dir, "segment_%05d.ts")
+    start_number = Keyword.get(opts, :start_number, 0)
+    segment_seconds = Mydia.Streaming.SegmentPlan.default_segment_seconds()
 
     # `-ss` before `-i` is input seeking: FFmpeg jumps to the nearest keyframe
     # without decoding everything before it. Placed after `-i` it would decode
@@ -580,21 +684,32 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
         ]
       end
 
-    # HLS output parameters
-    # Use live-style playlist (no -hls_playlist_type) so playlist updates incrementally
-    # as segments are written. This allows playback to start quickly without waiting
-    # for the entire file to be processed.
-    # -hls_list_size 0 keeps all segments in playlist for full seeking capability
+    # The playlist FFmpeg writes here is internal bookkeeping only: it is how
+    # HlsSession learns which segments are finished. What the player receives is
+    # SegmentPlan.playlist/1, computed from the media duration before FFmpeg
+    # starts. -hls_list_size 0 keeps every entry so the session can read the
+    # whole set on each poll.
+    #
+    # -start_number makes filenames absolute, so a window relocated to t=400s
+    # writes segment_00100.ts, which is the name the published playlist already
+    # promised. -hls_flags temp_file makes FFmpeg write to a temporary name and
+    # rename on completion. Without it a half-written segment exists on disk
+    # and the session would hand the player a truncated file. Both are
+    # harmless in either mode, so unlike the timestamp flags below they are
+    # never gated.
     hls_args = [
       "-f",
       "hls",
       "-hls_time",
-      "4",
+      to_string(segment_seconds),
       "-hls_list_size",
       "0",
+      "-start_number",
+      to_string(start_number),
+      "-hls_flags",
+      "temp_file",
       "-hls_segment_filename",
       segment_pattern,
-      # Progress reporting
       "-progress",
       "pipe:1",
       "-loglevel",
@@ -602,11 +717,51 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       playlist_path
     ]
 
+    # -copyts keeps source timestamps, so a relocated segment reports its real
+    # media time rather than restarting near zero.
+    #
+    # -muxdelay 0 -muxpreload 0 are not optional decoration. The TS muxer's
+    # defaults add a reproducible 1.4s to every window's timestamps, the
+    # un-relocated first one included, which would put every segment that far
+    # from the time the published playlist declares for it. Zeroing both brings
+    # the error down to about 20ms. Measured, not assumed: without them segment
+    # 100 lands at 401.378667s, with them at 399.978667s.
+    #
+    # -output_ts_offset is deliberately absent. On top of -copyts it would apply
+    # the seek offset a second time.
+    #
+    # Gated on absolute_timestamps (true only for a :full session, whose fixed
+    # segment grid needs a relocated encoder to report real media time). A
+    # :window session never relocates and must keep reporting near-zero
+    # timestamps after a resume seek: the player's StreamTimeline
+    # (player/lib/core/player/stream_timeline.dart) exists to map that
+    # near-zero playback position back onto the real one by adding its resume
+    # offset, and absolute timestamps here would make it double that offset.
+    # HlsSession passes absolute_timestamps: playlist_mode == :full.
+    timestamp_args =
+      if Keyword.get(opts, :absolute_timestamps, false) do
+        ["-copyts", "-muxdelay", "0", "-muxpreload", "0"]
+      else
+        []
+      end
+
+    # Only meaningful when the video stream is re-encoded. On a copied stream
+    # the keyframes are whatever the source has, and FFmpeg rejects the flag
+    # outright. reencodes_video?/2 above is what decides whether grid_aligned
+    # may be true; HlsSession calls it before starting or relocating the
+    # encoder and passes the answer straight through as this opt.
+    keyframe_args =
+      if Keyword.get(opts, :grid_aligned, false) do
+        ["-force_key_frames", "expr:gte(t,n_forced*#{segment_seconds})"]
+      else
+        []
+      end
+
     # Combine all args. The maps sit directly after the input and before the
     # codec flags, which is where ffmpeg expects output stream selection.
     base_args ++
       AudioTrackSelector.ffmpeg_map_args(selected_audio) ++
-      video_args ++ audio_args ++ hls_args
+      video_args ++ audio_args ++ keyframe_args ++ timestamp_args ++ hls_args
   end
 
   # Start FFmpeg process using Port

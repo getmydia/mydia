@@ -3,6 +3,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session.graphql.dart';
+import '../../graphql/mutations/start_streaming_session_compat.dart';
 import '../../graphql/schema.graphql.dart';
 import 'cast_backend.dart';
 
@@ -74,7 +75,8 @@ class GraphqlCastStreamingSessionService
     final data = result.data;
     final session = data == null
         ? null
-        : Mutation$StartStreamingSession.fromJson(data).startStreamingSession;
+        : Mutation$StartStreamingSession.fromJson(withPlaylistModeDefault(data))
+            .startStreamingSession;
 
     if (session == null) {
       throw const CastBackendException(

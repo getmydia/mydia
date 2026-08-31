@@ -227,4 +227,176 @@ defmodule Mydia.Streaming.HlsSessionOffsetTest do
       DynamicSupervisor.stop(sup)
     end
   end
+
+  describe "session_matches?/2 with a full playlist" do
+    alias Mydia.Streaming.HlsSessionSupervisor
+
+    # A "genuinely" full or windowed session below is one whose effective
+    # playlist_mode matches what it was requested_playlist_mode as, i.e. it
+    # never degraded. The degraded case (requested :full, effective :window)
+    # gets its own describe block further down.
+
+    test "a full session serves a request at a different offset" do
+      # The whole point of the full playlist: the running encoder can be moved
+      # to any segment, so a seek must not replace the session.
+      running = %{
+        requested_playlist_mode: :full,
+        playlist_mode: :full,
+        start_position: 0,
+        max_bitrate: nil,
+        max_height: nil
+      }
+
+      request = HlsSessionSupervisor.session_request(playlist_mode: :full, start_position: 4200)
+
+      assert HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "a windowed session is still replaced on an offset mismatch" do
+      running = %{
+        requested_playlist_mode: :window,
+        playlist_mode: :window,
+        start_position: 0,
+        max_bitrate: nil,
+        max_height: nil
+      }
+
+      request =
+        HlsSessionSupervisor.session_request(playlist_mode: :window, start_position: 4200)
+
+      refute HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "a full session never serves a windowed request" do
+      # An old client expects FFmpeg to have started at its offset and reads
+      # positions relative to that. A full session's playlist would shift every
+      # position it derives.
+      running = %{
+        requested_playlist_mode: :full,
+        playlist_mode: :full,
+        start_position: 0,
+        max_bitrate: nil,
+        max_height: nil
+      }
+
+      request = HlsSessionSupervisor.session_request(playlist_mode: :window)
+
+      refute HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "a full session is still replaced when the quality rung changes" do
+      # Segments already on disk were encoded at the old rung.
+      running = %{
+        requested_playlist_mode: :full,
+        playlist_mode: :full,
+        start_position: 0,
+        max_bitrate: nil,
+        max_height: nil
+      }
+
+      request = HlsSessionSupervisor.session_request(playlist_mode: :full, max_height: 720)
+
+      refute HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "a windowed session never serves a full request" do
+      # The reverse of the direction above: a session that only ever wrote
+      # the window it started at cannot suddenly claim to cover the whole
+      # file just because the new request says :full. This is the "genuinely
+      # windowed" case: it was requested as :window and ran as :window.
+      running = %{
+        requested_playlist_mode: :window,
+        playlist_mode: :window,
+        start_position: 0,
+        max_bitrate: nil,
+        max_height: nil
+      }
+
+      request = HlsSessionSupervisor.session_request(playlist_mode: :full)
+
+      refute HlsSessionSupervisor.session_matches?(running, request)
+    end
+
+    test "metadata missing playlist_mode is treated as :window, not a wildcard" do
+      # Registry metadata written before playlist_mode/requested_playlist_mode
+      # existed must read as the safe, compatibility-only default. It must
+      # still serve the :window request such a session was actually built
+      # for...
+      assert HlsSessionSupervisor.session_matches?(
+               %{start_position: 0},
+               HlsSessionSupervisor.session_request(playlist_mode: :window)
+             )
+
+      # ...but must not be mistaken for a :full session that can be moved to
+      # any offset. Treating an absent key as a wildcard here would silently
+      # corrupt playback position for the older client such metadata belongs
+      # to.
+      refute HlsSessionSupervisor.session_matches?(
+               %{start_position: 0},
+               HlsSessionSupervisor.session_request(playlist_mode: :full)
+             )
+    end
+  end
+
+  describe "session_matches?/2 for a session that degraded from :full to :window" do
+    alias Mydia.Streaming.HlsSessionSupervisor
+
+    # The bug this discriminator split fixes: HlsSession.init/1 registers the
+    # EFFECTIVE mode under :playlist_mode, so a :full request that degraded
+    # (unknown duration) is recorded as :window. Before requested_playlist_mode
+    # existed, @session_discriminators keyed on that same effective field, so
+    # a repeat :full request for the identical file never matched its own
+    # session -- session_matches?/2 said no, start_session/4 tore the running
+    # session down and started an identical replacement, which degraded
+    # identically. Every repeat request churned the session.
+    test "still matches a repeat :full request at the same offset" do
+      degraded = %{
+        requested_playlist_mode: :full,
+        playlist_mode: :window,
+        start_position: 0,
+        max_bitrate: nil,
+        max_height: nil
+      }
+
+      request = HlsSessionSupervisor.session_request(playlist_mode: :full)
+
+      assert HlsSessionSupervisor.session_matches?(degraded, request)
+    end
+
+    test "is still replaced when the repeat request's offset differs" do
+      # offset_matches must keep testing the EFFECTIVE playlist_mode. A
+      # degraded session is really a windowed one underneath and can only
+      # serve the exact offset it started at, same as a session that was
+      # never anything but :window -- getting this backwards would let it
+      # answer a request at an offset its encoder can never reach.
+      degraded = %{
+        requested_playlist_mode: :full,
+        playlist_mode: :window,
+        start_position: 0,
+        max_bitrate: nil,
+        max_height: nil
+      }
+
+      request = HlsSessionSupervisor.session_request(playlist_mode: :full, start_position: 4200)
+
+      refute HlsSessionSupervisor.session_matches?(degraded, request)
+    end
+
+    test "a genuinely windowed session (never requested :full) still does not match a :full request" do
+      # Distinguishes "this session degraded from :full" from "this session
+      # was always :window": both have an effective playlist_mode of
+      # :window, but only the former asked for :full in the first place.
+      genuinely_windowed = %{
+        requested_playlist_mode: :window,
+        playlist_mode: :window,
+        start_position: 0,
+        max_bitrate: nil,
+        max_height: nil
+      }
+
+      request = HlsSessionSupervisor.session_request(playlist_mode: :full)
+
+      refute HlsSessionSupervisor.session_matches?(genuinely_windowed, request)
+    end
+  end
 end

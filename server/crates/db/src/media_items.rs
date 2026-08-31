@@ -78,7 +78,8 @@ pub async fn upsert(db: &Db, new: NewMediaItem) -> Result<MediaItemRow, DbError>
                     AND identity_key = ? AND COALESCE(year, -1) = COALESCE(?, -1)"
     );
 
-    Ok(sqlx::query_as::<_, MediaItemRow>(&sql)
+    // Safe: fixed literal fragment; every value is bound, not interpolated.
+    Ok(sqlx::query_as::<_, MediaItemRow>(sqlx::AssertSqlSafe(sql))
         .bind(&new.library_path_id)
         .bind(&new.media_type)
         .bind(&new.identity_key)
@@ -90,7 +91,8 @@ pub async fn upsert(db: &Db, new: NewMediaItem) -> Result<MediaItemRow, DbError>
 pub async fn find(db: &Db, id: &str) -> Result<Option<MediaItemRow>, DbError> {
     let sql = format!("{SELECT} WHERE id = ?");
 
-    Ok(sqlx::query_as::<_, MediaItemRow>(&sql)
+    // Safe: fixed literal fragment; `id` is bound, not interpolated.
+    Ok(sqlx::query_as::<_, MediaItemRow>(sqlx::AssertSqlSafe(sql))
         .bind(id)
         .fetch_optional(db.pool())
         .await?)
@@ -159,7 +161,14 @@ pub async fn browse(
         order_by(sort)
     );
 
-    Ok(sqlx::query_as::<_, MediaItemRow>(&sql)
+    // Safe: `HAS_FILES` is a fixed literal fragment, and `order_by(sort)`
+    // returns one of a fixed set of `&'static str` literals chosen by an
+    // exhaustive match over the `BrowseField`/`descending` enum and bool
+    // (see `order_by` above) — the caller (crates/api/src/query.rs) builds
+    // `BrowseSort` only from a parsed GraphQL `SortField` enum, never from a
+    // raw string, so arbitrary text can never reach this format string.
+    // `media_type`, `limit`, and `offset` are all bound, not interpolated.
+    Ok(sqlx::query_as::<_, MediaItemRow>(sqlx::AssertSqlSafe(sql))
         .bind(media_type)
         .bind(limit.max(0))
         .bind(offset.max(0))
@@ -172,7 +181,9 @@ pub async fn browse(
 pub async fn count(db: &Db, media_type: &str) -> Result<i64, DbError> {
     let sql = format!("SELECT count(*) FROM media_items WHERE media_type = ? AND {HAS_FILES}");
 
-    Ok(sqlx::query_scalar::<_, i64>(&sql)
+    // Safe: `HAS_FILES` is a fixed literal fragment; `media_type` is bound,
+    // not interpolated.
+    Ok(sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
         .bind(media_type)
         .fetch_one(db.pool())
         .await?)
