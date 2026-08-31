@@ -1474,8 +1474,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // must resume with a plain seek, which is what passing `plan` through
       // does. A full-playlist HLS session joins the direct-play side of this
       // split: its playlist starts at zero regardless of where FFmpeg's
-      // window began, so it needs the same client-side seek -- see the
-      // `_fullPlaylist` branch in `_openPlayerAndStart`.
+      // window began, so it needs the same client-side seek. Passing the
+      // real `plan` through here is the *only* thing that makes that seek
+      // happen -- `_openPlayerAndStart`'s own `if (plan.resumes)` block
+      // already does it, unmodified, once it receives a nonzero position, so
+      // there is no separate `_fullPlaylist` branch to look for there.
       await _openPlayerAndStart(
         mediaSource,
         httpHeaders,
@@ -1772,16 +1775,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // A plain seek, not a `seekToReal`: these paths hold the whole file, so
     // the player's own coordinates already are the real ones and there is no
-    // session that could need restarting.
+    // session that could need restarting. A full-playlist HLS session reaches
+    // this too: the call site passes the real `plan` (not
+    // `ResumePlan.fromStart`) exactly when `canDirect || _fullPlaylist`, so
+    // this is already the full-playlist resume seek -- do not add a second,
+    // `_fullPlaylist`-gated block here, it would just re-seek to the same
+    // position every time this one already fires.
     if (plan.resumes) {
-      await player.seek(plan.position);
-    }
-
-    // In full mode the playlist covers the file from zero, so resuming is a
-    // plain seek, exactly as the direct-play path already does. In windowed
-    // mode FFmpeg already started at the offset and seeking again would
-    // double-apply it.
-    if (_fullPlaylist && plan.position > Duration.zero) {
       await player.seek(plan.position);
     }
 
@@ -1790,7 +1790,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // `ResumePlan.fromStart` because its offset went into FFmpeg's `-ss`
     // instead, so its player-local coordinates genuinely do start at zero.
     // Direct play and full-playlist HLS both carry the real resume position
-    // through instead, matching the seeks above.
+    // through instead, matching the seek above.
     _furthestPosition = plan.position;
 
     // Start playback, unless a remote `LoadContent` asked to load without
