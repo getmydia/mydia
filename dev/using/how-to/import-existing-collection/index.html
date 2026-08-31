@@ -1001,13 +1001,41 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#import-wizard" class="md-nav__link">
+  <a href="#the-import-page" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Import Wizard
+        The Import Page
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="The Import Page">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automatic-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reviewing-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reviewing Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2915,13 +2943,41 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#import-wizard" class="md-nav__link">
+  <a href="#the-import-page" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Import Wizard
+        The Import Page
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="The Import Page">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automatic-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reviewing-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reviewing Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2973,20 +3029,43 @@
 <p><strong>TV Shows:</strong>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Show Title (Year)/Season 01/Show Title - S01E01 - Episode Title.mkv
 </code></pre></div></p>
-<h2 id="import-wizard">Import Wizard</h2>
-<p>For bulk imports, use the Import Wizard. It scans a library you have already
-configured; you do not browse to a folder from inside it.</p>
+<h2 id="the-import-page">The Import Page</h2>
+<p>For bulk imports, use <strong>Import</strong> in the sidebar. It scans a library you have
+already configured; you do not browse to a folder from inside it.</p>
 <ol>
 <li>Click <strong>Import Files</strong> on the dashboard, or go to <strong>Import</strong> in the sidebar</li>
-<li>On <strong>Select a Library to Scan</strong>, click the library you want to bring in</li>
-<li>Review the matches on <strong>Review Matches</strong>, correcting any Mydia got wrong</li>
-<li>Click <strong>Import</strong> to confirm</li>
+<li>Pick the library you want to bring in from the tabs at the top</li>
+<li>Click <strong>Start scan</strong></li>
+<li>Once the scan finishes, review the matches below it, correcting any Mydia
+   got wrong, then accept them</li>
 </ol>
 <p>If the library you want is not on the list, add it first. See
 <a href="../manage-libraries/">Managing Libraries</a>.</p>
 <p>The <a href="../../tutorials/first-library-import/">Import Your First Movie</a> tutorial walks
-the same screens with a single file, if you would rather see it once before running
-it against a whole collection.</p>
+through the same page with a single file, if you would rather see it once before
+running it against a whole collection.</p>
+<h3 id="automatic-import">Automatic Import</h3>
+<p>The <strong>Automatically import confident matches in this run</strong> checkbox on the scan
+form controls what a scan does with a high-confidence match:</p>
+<ul>
+<li><strong>Checked</strong> (the default): the scan matches and imports confident results on
+  its own, leaving only uncertain or unmatched files for you to review.</li>
+<li><strong>Unchecked</strong>: the scan discovers and matches files but leaves every result,
+  confident or not, for you to review and accept by hand.</li>
+</ul>
+<p>A library's <strong>Automatic scanning</strong> schedule (see
+<a href="../manage-libraries/">Managing Libraries</a>) uses the same distinction for its
+own unattended runs: off, a scheduled scan only maintains files Mydia already
+knows about; on, it also discovers new files and imports confident matches
+without a manual scan.</p>
+<h3 id="reviewing-results">Reviewing Results</h3>
+<p>Below the scan controls, results are grouped by folder and filtered into
+<strong>Ready</strong>, <strong>Needs attention</strong>, and <strong>No match</strong> chips, plus an <strong>Ignored</strong>
+chip for anything you have dismissed. Dismissing a result is durable: it
+survives later scans of the same library, and survives <strong>Clear</strong> too.</p>
+<p><strong>Clear</strong> removes unresolved scan results and finished scan history for the
+selected library so the next scan starts fresh, but it never removes a result
+you have already dismissed -- that decision stays exactly as you left it.</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><a href="../manage-libraries/">Managing Libraries</a> - Configure automatic and manual scanning</li>
