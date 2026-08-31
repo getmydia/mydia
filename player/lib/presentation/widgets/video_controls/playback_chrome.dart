@@ -9,6 +9,7 @@ import '../../../core/player/stream_timeline.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/window_buttons_bridge.dart';
 import '../../../core/theme/depth_tokens.dart';
+import 'buffering_indicator.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
@@ -603,6 +604,16 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                       onCastTap: widget.onCastTap,
                     ),
                   ),
+                ),
+                // Every platform: a small spinner over the retained frame
+                // while the player buffers. Directly above `CenterPlayButton`
+                // in this `Stack` so it occupies the same centred spot -- the
+                // two are mutually exclusive in practice, since media_kit
+                // does not report `playing` and `buffering` in a way that
+                // shows both, and `CenterPlayButton` already hides itself
+                // while playback is active.
+                Center(
+                  child: BufferingIndicator(player: widget.player),
                 ),
                 // Mobile only: a large centre play/pause. Desktop/web use the
                 // panel's own transport; on touch a one-handed thumb reach to

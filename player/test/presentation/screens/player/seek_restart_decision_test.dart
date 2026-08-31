@@ -29,6 +29,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 620),
           localTarget: const Duration(seconds: 20),
           seekableEnd: const Duration(seconds: 300),
@@ -45,6 +46,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 1000),
           localTarget: const Duration(seconds: 400),
           seekableEnd: const Duration(seconds: 300),
@@ -63,6 +65,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 500),
           localTarget: Duration.zero,
           seekableEnd: const Duration(seconds: 300),
@@ -80,6 +83,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: true,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 9999),
           localTarget: const Duration(seconds: 9999),
           seekableEnd: const Duration(seconds: 10),
@@ -93,6 +97,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 900),
           localTarget: const Duration(seconds: 300),
           seekableEnd: const Duration(seconds: 300),
@@ -106,6 +111,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 600),
           localTarget: Duration.zero,
           seekableEnd: const Duration(seconds: 300),
@@ -121,6 +127,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 400),
           localTarget: const Duration(seconds: 400),
           seekableEnd: const Duration(seconds: 300),
@@ -134,6 +141,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 200),
           localTarget: const Duration(seconds: 200),
           seekableEnd: const Duration(seconds: 300),
@@ -153,6 +161,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 10),
           localTarget: const Duration(seconds: 10),
           seekableEnd: const Duration(seconds: 8),
@@ -166,6 +175,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 38),
           localTarget: const Duration(seconds: 38),
           seekableEnd: const Duration(seconds: 8),
@@ -180,6 +190,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 39),
           localTarget: const Duration(seconds: 39),
           seekableEnd: const Duration(seconds: 8),
@@ -197,6 +208,7 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: const Duration(seconds: 630),
           localTarget: const Duration(seconds: 30),
           seekableEnd: const Duration(seconds: 20),
@@ -218,10 +230,58 @@ void main() {
       expect(
         shouldRestartForSeek(
           isDirectPlay: false,
+          fullPlaylist: false,
           realTarget: Duration.zero,
           localTarget: Duration.zero,
           seekableEnd: const Duration(seconds: 300),
           startOffset: const Duration(seconds: 600),
+        ),
+        isTrue,
+      );
+    });
+  });
+
+  group('shouldRestartForSeek with a full playlist', () {
+    test('never restarts for a forward seek past the encoder', () {
+      // The server relocates FFmpeg on demand. A seek is a seek.
+      expect(
+        shouldRestartForSeek(
+          isDirectPlay: false,
+          fullPlaylist: true,
+          realTarget: const Duration(hours: 1),
+          localTarget: const Duration(hours: 1),
+          seekableEnd: const Duration(seconds: 30),
+          startOffset: Duration.zero,
+        ),
+        isFalse,
+      );
+    });
+
+    test('never restarts for a backward seek before where playback began', () {
+      // The resume-then-scrub-back case, which used to restart every time.
+      expect(
+        shouldRestartForSeek(
+          isDirectPlay: false,
+          fullPlaylist: true,
+          realTarget: const Duration(minutes: 5),
+          localTarget: const Duration(minutes: 5),
+          seekableEnd: const Duration(hours: 1),
+          startOffset: const Duration(minutes: 45),
+        ),
+        isFalse,
+      );
+    });
+
+    test('still restarts a windowed session in the same situation', () {
+      // The compatibility path against an older server has not changed.
+      expect(
+        shouldRestartForSeek(
+          isDirectPlay: false,
+          fullPlaylist: false,
+          realTarget: const Duration(minutes: 5),
+          localTarget: const Duration(minutes: 5),
+          seekableEnd: const Duration(hours: 1),
+          startOffset: const Duration(minutes: 45),
         ),
         isTrue,
       );

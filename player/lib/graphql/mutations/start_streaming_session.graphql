@@ -1,9 +1,10 @@
-mutation StartStreamingSession($fileId: ID!, $strategy: StreamingStrategy!, $maxBitrate: Int, $maxHeight: Int, $startPosition: Int) {
-  startStreamingSession(fileId: $fileId, strategy: $strategy, maxBitrate: $maxBitrate, maxHeight: $maxHeight, startPosition: $startPosition) {
+mutation StartStreamingSession($fileId: ID!, $strategy: StreamingStrategy!, $maxBitrate: Int, $maxHeight: Int, $startPosition: Int, $playlistMode: PlaylistMode) {
+  startStreamingSession(fileId: $fileId, strategy: $strategy, maxBitrate: $maxBitrate, maxHeight: $maxHeight, startPosition: $startPosition, playlistMode: $playlistMode) {
     sessionId
     duration
     startPosition
     maxBitrate
     maxHeight
+    playlistMode
   }
 }
