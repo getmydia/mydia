@@ -28,7 +28,7 @@ defmodule Mydia.Streaming.SegmentPlan do
 
   @default_segment_seconds 4
 
-  @segment_name_pattern ~r/^segment_(\d{5})\.ts$/
+  @segment_name_pattern ~r/^segment_(\d{5})\.ts\z/
 
   @doc """
   The segment length every session uses, in seconds.

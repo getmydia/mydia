@@ -103,6 +103,20 @@ defmodule Mydia.Streaming.SegmentPlanTest do
       assert SegmentPlan.index_from_name("segment_.ts") == :error
       assert SegmentPlan.index_from_name("../../etc/passwd") == :error
     end
+
+    test "rejects a segment name with a trailing newline" do
+      # Erlang's re treats an unanchored `$` as end-of-string OR just before one
+      # trailing newline, so `$` here would accept this. The controller feeds this
+      # function untrusted request paths, and its contract is that anything which
+      # is not a segment filename returns :error.
+      assert SegmentPlan.index_from_name("segment_00000.ts\n") == :error
+    end
+
+    test "rejects other trailing whitespace and control characters" do
+      assert SegmentPlan.index_from_name("segment_00000.ts\r") == :error
+      assert SegmentPlan.index_from_name("segment_00000.ts\r\n") == :error
+      assert SegmentPlan.index_from_name("segment_00000.ts ") == :error
+    end
   end
 
   describe "playlist/1" do
