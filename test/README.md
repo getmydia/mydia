@@ -103,7 +103,7 @@ are present, so `./dev feature-test <path>` runs with `:feature` still excluded:
 0 tests, exit 0, printed as `All tests have been excluded.` Pass the tag
 yourself:
 
-```
+```bash
 ./dev feature-test test/mydia_web/features/foo_test.exs --only feature
 ```
 
@@ -122,8 +122,12 @@ after changing any class string, since Tailwind only emits classes it finds in
 source.
 
 Before trusting any feature-test result in a new worktree, run
-`test/mydia_web/features/smoke_test.exs --only feature` and confirm 1 test, 0
-failures. That single run proves the tag filter, chromedriver and the asset build
+
+```bash
+./dev feature-test test/mydia_web/features/smoke_test.exs --only feature
+```
+
+and confirm 1 test, 0 failures. That single run proves the tag filter, chromedriver and the asset build
 at once.
 
 ### After a rebase, a clean compile proves nothing
@@ -146,7 +150,8 @@ fix the callers, never the signature: adding a lower-arity compatibility clause
 turns CI green while undoing the refactor's whole point, and for a required-scope
 argument it reinstates the authorization hole the branch existed to close. Then
 run the full suite again, since the files CI names may not be the whole set. On
-#565 a fifth file, `media_request_backfill_test.exs`, had the same stale call in a
+PR #565 a fifth file, `media_request_backfill_test.exs`, had the same stale call
+in a
 shared fixture with six more tests behind it. Grepping the tree for every call
 site of the changed functions is the cheap version of this check.
 
@@ -198,7 +203,7 @@ globally from `test/test_helper.exs` with
 `Req.default_options(adapter: Mydia.RelayGuard)`. It reaches every `Req.new/1`
 call site with no `lib/` changes, because `Req.new/2` merges `default_options()`
 before splitting `:adapter` into the request struct. Shipped in PR #611, closing
-#530.
+issue #530.
 
 What gets through: loopback (`localhost`, `127.0.0.1`, `::1`), RFC 2606 reserved
 TLDs (`.invalid`, `.test`, `.example`), and RFC 5737 documentation ranges

@@ -4,7 +4,7 @@ The rule for any red check: read the actual failing job and test name before
 assuming your diff broke something, then check whether master is red on the same
 job.
 
-```
+```bash
 gh run list --repo getmydia/mydia --branch master --workflow "<workflow>" --limit 5
 ```
 
@@ -43,9 +43,10 @@ there. Two pushes looked like a slow queue for about 40 minutes.
 Never conclude green from "nothing failed". Assert the named jobs are present and
 passing:
 
-```
+```bash
 gh pr checks <n> --repo getmydia/mydia --json name,bucket --jq '
-  ["Test", "Test / PostgreSQL", "Rust", "Test / E2E Browser"] as $need
+  ["Test", "Test / PostgreSQL", "Test / E2E Browser", "Site build",
+   "Load lanes (ios)", "Load lanes (android)"] as $need
   | (map(select(.bucket=="pass") | .name)) as $passing
   | ($need - $passing)'
 ```
@@ -68,7 +69,7 @@ old head exits with a truncated view. Re-watch after each push.
 The Master ruleset (`gh api repos/getmydia/mydia/rulesets/9740184`) requires
 exactly six status checks:
 
-```
+```text
 Test, Test / PostgreSQL, Test / E2E Browser, Site build,
 Load lanes (ios), Load lanes (android)
 ```
@@ -109,7 +110,7 @@ survive was #611's, which inherited a break introduced by #613.
 Before bisecting a Docker failure, list the runs and note which SHAs have no
 completed run at all:
 
-```
+```bash
 gh run list --workflow=ci-docker.yml --branch=master --json headSha,conclusion,createdAt
 ```
 
@@ -139,11 +140,18 @@ as an inline Bash command:
 
 ```bash
 while true; do
+  head=$(gh pr view "$pr" --repo "$repo" --json headRefOid --jq .headRefOid 2>/dev/null)
   out=$(gh pr checks "$pr" --repo "$repo" 2>/dev/null)
-  if [ -n "$out" ] && ! printf '%s' "$out" | grep -q pending; then break; fi
+  if [ "$head" = "$pushed_sha" ] && [ -n "$out" ] &&
+     ! printf '%s' "$out" | grep -q pending; then
+    break
+  fi
   sleep 60
 done
 ```
+
+The `headRefOid` comparison is the part that matters: without it the loop can
+break on a complete-looking run that describes the previous commit.
 
 ## Infrastructure and network failures
 
@@ -213,7 +221,7 @@ until the 6-hour job timeout. Recovery is `gh run cancel <id>`, poll until
 `status=completed`, then `gh run rerun <id> --failed`; the rerun passed in 9m4s.
 Check the in-progress step name before assuming a long job is doing work:
 
-```
+```bash
 gh api repos/getmydia/mydia/actions/jobs/<job-id> --jq '.steps[] | select(.status=="in_progress") | .name'
 ```
 
@@ -226,7 +234,7 @@ any "Install <deps>" step as the suspect when a job outlives its siblings.
 **Test dies building a wasm plugin, with no error text at all.** Seen 2026-08-28
 on PR #593, where the `Test (SQLite) under devenv` step printed
 
-```
+```text
 [plugins] compiling simkl_sync -> priv/plugins/simkl_sync.wasm
 [plugins] compiling webhook_notifier -> priv/plugins/webhook_notifier.wasm
 ##[error]Process completed with exit code 1.
@@ -251,7 +259,7 @@ failed". The tell is the runtime, since a real `Build / Web` takes 2 to 4 minute
 Get the per-step breakdown before reading logs, which works while the run is still
 going:
 
-```
+```bash
 gh api repos/getmydia/mydia/actions/jobs/<job-id> --jq '.steps[] | "\(.conclusion // .status)\t\(.name)"'
 ```
 
@@ -455,7 +463,8 @@ one convergence fix (`606737722` added it, `4a653b488` patched it), so treat
 selector-not-found failures in it as suspect before blaming a diff.
 
 Confirmed on PR #555 (2026-08-25), again on PR #600 (2026-08-29), and again on PR
-#615. The #600 run is the useful one, because the diff did touch `run_control.ex`,
+PR #615. The #600 run is the useful one, because the diff did touch
+`run_control.ex`,
 which is exactly when the flake looks causal. Two checks separated it from the
 diff: the change to that file was label text only, with the `#auto-import-toggle`
 input itself untouched, and the test keys on the CSS id rather than the label. What
@@ -488,7 +497,7 @@ api` alone explains itself, on stderr: `the response contains terminal escape
 sequences, pass --allow-escape-sequences to output it anyway`. The two
 `gh run view` forms print nothing at all. What works:
 
-```
+```bash
 gh api repos/getmydia/mydia/actions/jobs/<job-id>/logs --allow-escape-sequences > /tmp/job.log
 grep -aE "^\s+[0-9]+\) test|[0-9]+ tests, [0-9]+ failure" /tmp/job.log
 ```
@@ -497,7 +506,7 @@ Use `grep -a`, since the file is then full of control bytes and grep otherwise
 treats it as binary and prints only "Binary file matches". Getting the per-error
 breakdown out of a multi-failure run is worth one extra pass:
 
-```
+```bash
 grep -aoE "\*\* \([A-Za-z.]+Error\)[^\"]{0,80}" /tmp/job.log | sed 's/^[0-9T:.-]*Z *//' | sort | uniq -c | sort -rn
 ```
 

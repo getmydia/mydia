@@ -15,9 +15,13 @@ warns that the artifact is stale.
 To produce a component artifact for tests, build via nix and let the placed
 `priv/plugins/<name>.wasm` persist, since Docker skips and keeps it:
 
-```
-cd <crate> && nix develop /home/arosenfeld/Code/mydia#default -c cargo build --release --target wasm32-wasip2
-cp target/wasm32-wasip2/release/<name>.wasm priv/plugins/<name>.wasm   # gitignored; CI rebuilds it
+Run this from the repository root:
+
+```bash
+nix develop .#default -c cargo build --release --target wasm32-wasip2 \
+  --manifest-path plugins/<name>/Cargo.toml
+cp plugins/<name>/target/wasm32-wasip2/release/<name>.wasm \
+  priv/plugins/<name>.wasm   # gitignored; CI rebuilds it
 ```
 
 Both `nix develop .#default` and `.#rust` have `wasm32-wasip2` and `wasm-tools`.
@@ -57,7 +61,7 @@ Bump them together when nix moves.
 
 To diagnose, this shows the emitted WASI version:
 
-```
+```bash
 nix develop .#rust -c bash -c 'cd plugins/<g> && cargo build --release --target wasm32-wasip2 && wasm-tools component wit target/wasm32-wasip2/release/<g>.wasm | grep wasi'
 ```
 

@@ -44,7 +44,7 @@ that is attacker-triggerable rather than accidental.
 When attaching credentials as a raw header, either set `redirect: false` and
 handle hops yourself with a per-hop origin check, or accept that the credential
 goes wherever the response points. The Cardigann search engine takes the first
-option: `attach_cookies/3` in `lib/mydia/indexers/cardigann_search_engine.ex`
+option: `attach_cookies/4` in `lib/mydia/indexers/cardigann_search_engine.ex`
 sets `redirect: false` whenever it attaches a `Cookie`, and an unfollowed 3xx
 falls through to the existing failover. Trusted-origin scoping for absolute paths
 and mirror failover is tracked in issue #602.

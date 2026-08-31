@@ -52,9 +52,9 @@ can tolerate nil, but preload `:library_path` first or it warns and returns nil.
 
 Two things to watch. In `import_media_live`, `file.path` is a scanner struct with
 a genuine path, not a `%MediaFile{}`. And `lib/mydia/library/file_renamer.ex:247`
-still feeds `absolute_path/1` into `Path.basename/1` unguarded, left out of PR
-#467 on purpose; it is a background rename, where erroring is probably better
-than displaying a placeholder.
+still feeds `absolute_path/1` into `Path.basename/1` unguarded, left out of
+PR #467 on purpose; it is a background rename, where erroring is probably
+better than displaying a placeholder.
 
 Component test fixtures that pass plain maps with invented fields hide this whole
 class of bug. The modal test asserted against a map with a populated `path:` that

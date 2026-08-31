@@ -34,11 +34,17 @@ between.
 and predates all of this, so it is the idiom to copy.
 
 Any `ConsumerState` mutating a provider outside a normal callback needs eager
-notifier capture, a deferred write, and an identity check on retraction. The guard
-on the deferred state re-check is not unit-testable, because post-frame callbacks
-fire synchronously inside a single `pump` and there is no window to interleave.
-Document it rather than writing a test that passes either way. See
+notifier capture, a deferred write, and an identity check on retraction. See
 `player/lib/presentation/widgets/poster_frame.dart`.
+
+The identity check is testable and is tested: the scroll-recycling regression in
+`player/test/presentation/widgets/poster_frame_test.dart` publishes a second
+poster's override between the update and the pump that flushes the deferred
+clear, and asserts the fresher override survives. A write does not have to land
+in the same frame as the pump; it only has to be the active override when the
+callback fires. What resists a test is narrower: the `!mounted || !_isHovered`
+re-check, since there is no seam to move the pointer out between scheduling and
+flushing. Document that one rather than writing a test that passes either way.
 
 ## The analyzer does not catch post-await ref use
 

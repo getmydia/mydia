@@ -4,14 +4,15 @@ This is the Flutter web client for Mydia, built for streaming media playback.
 
 Deeper reference lives alongside this file in `player/docs/`:
 
-- `workflow.md` - codegen, running the suite, analyze, and the format hook that
-  drops your file out of its own commit. **Run `./dev player setup` first in any
-  new worktree.**
-- `testing.md` - the three ways a `StubLink` stub silently mis-scripts a screen
-  test, and why inline Dart GraphQL strings skip schema validation.
-- `riverpod.md` - writes from `dispose`, post-await `ref`, and testing a throwing
-  notifier.
-- `packaging.md` - Windows, iOS and fastlane.
+- [workflow.md](docs/workflow.md) - codegen, running the suite, analyze, and the
+  format hook that drops your file out of its own commit. **Run
+  `./dev player setup` first in any new worktree.**
+- [testing.md](docs/testing.md) - the three ways a `StubLink` stub silently
+  mis-scripts a screen test, and why inline Dart GraphQL strings skip schema
+  validation.
+- [riverpod.md](docs/riverpod.md) - writes from `dispose`, post-await `ref`, and
+  testing a throwing notifier.
+- [packaging.md](docs/packaging.md) - Windows, iOS and fastlane.
 
 ## Project Overview
 

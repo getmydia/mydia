@@ -17,13 +17,14 @@ describes the failure. A NIF is a cdylib the BEAM dlopens, and on musl the defau
 `crt-static` feature forbids producing a cdylib at all, so `mix compile` dies
 with:
 
-```
+```text
 error: cannot produce cdylib for `<crate> v0.1.0` as the target
 x86_64-unknown-linux-musl does not support these crate types
 ```
 
 Hit on 2026-08-27. `native/mydia_subsync`, the subtitle re-sync NIF, shipped in
-#588 without this file and broke `CI / Docker` and `CI / Player E2E` on master.
+PR #588 without this file and broke `CI / Docker` and `CI / Player E2E` on
+master.
 Fixed in #589 by copying the p2p crate's config verbatim.
 
 The trap is that no pre-merge gate is musl. All of these passed on the broken

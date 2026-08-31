@@ -330,6 +330,7 @@ once both branches merge, so neither PR's CI catches it. Prefer a real timestamp
 and check every remote branch before finalising a filename:
 
 ```bash
+git fetch --all --prune   # git branch -r reads local tracking refs only
 for b in $(git branch -r --format='%(refname:short)' | grep -v HEAD); do
   git ls-tree -r --name-only "$b" -- priv/repo/migrations 2>/dev/null | xargs -r -n1 basename
 done | cut -d_ -f1 | sort | uniq -d

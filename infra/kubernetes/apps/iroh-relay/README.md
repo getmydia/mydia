@@ -18,7 +18,7 @@ dies. It takes about 10 seconds.
 Rolled out 2026-08-19, went straight into CrashLoopBackOff, rolled back within
 about 2 minutes:
 
-```
+```text
 thread 'tokio-rt-worker' panicked at noq-udp-1.1.0/src/cmsg/mod.rs:81:5:
 assertion failed: align_of::<T>() <= align_of::<C>()
 ```
@@ -77,10 +77,10 @@ expected rather than traffic loss. Success is `accepts_total` growing and
 `accepts_total - disconnects_total` climbing back to its pre-rollout value, which
 was 4 nodes on 2026-08-19.
 
-The public HTTPS path returns 404, and that is not a fault: the Service is
-ClusterIP with no Ingress in the namespace, so 80 and 443 are not exposed through
-k8s at all. Only UDP 7842 (QUIC) and 3478 (STUN) have `hostPort`. Check
-`/generate_204` against the pod IP from the node instead.
+There is no public HTTPS path to test. The Service is ClusterIP with no Ingress
+in the namespace, so 80 and 443 are not exposed through k8s at all, and only UDP
+7842 (QUIC) and 3478 (STUN) have `hostPort`. Probe `/generate_204` against the
+**pod IP from the node**; a 404 there is the relay answering, not a fault.
 
 `relayserver_unique_client_keys_total` is useless and still broken in 1.0.3, where
 `ClientCounter::default()` is built per connection actor rather than shared.
