@@ -63,11 +63,13 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       :on_complete,
       :on_error,
       :on_ready,
+      :on_segments,
       :playlist_path,
       :buffer,
       :duration,
       :started_at,
-      ready_notified: false
+      ready_notified: false,
+      seen_segments: MapSet.new()
     ]
 
     @type t :: %__MODULE__{
@@ -79,6 +81,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             on_complete: (-> any()) | nil,
             on_error: (String.t() -> any()) | nil,
             on_ready: (-> any()) | nil,
+            on_segments: ([non_neg_integer()] -> any()) | nil,
+            seen_segments: MapSet.t(non_neg_integer()),
             playlist_path: String.t() | nil,
             buffer: String.t(),
             duration: float() | nil,
@@ -155,6 +159,29 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     GenServer.call(pid, :get_status)
   end
 
+  @doc """
+  The segment indices FFmpeg's own playlist lists as finished.
+
+  The playlist is the authoritative completion signal: FFmpeg appends an entry
+  only once a segment is closed. Reading the directory instead would race with
+  a segment still being written.
+
+  Public so the parsing can be unit-tested without running FFmpeg.
+  """
+  @spec finished_indices(String.t()) :: [non_neg_integer()]
+  def finished_indices(playlist_text) do
+    playlist_text
+    |> String.split("\n", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.flat_map(fn line ->
+      case Mydia.Streaming.SegmentPlan.index_from_name(line) do
+        {:ok, index} -> [index]
+        :error -> []
+      end
+    end)
+    |> Enum.sort()
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -170,6 +197,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     on_complete = Keyword.get(opts, :on_complete)
     on_error = Keyword.get(opts, :on_error)
     on_ready = Keyword.get(opts, :on_ready)
+    on_segments = Keyword.get(opts, :on_segments)
 
     # Build FFmpeg command
     args = build_ffmpeg_args(input_path, output_dir, opts)
@@ -192,14 +220,16 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           on_complete: on_complete,
           on_error: on_error,
           on_ready: on_ready,
+          on_segments: on_segments,
           playlist_path: playlist_path,
           buffer: "",
           duration: nil,
           started_at: DateTime.utc_now()
         }
 
-        # Schedule first playlist check if we have an on_ready callback
-        if on_ready do
+        # One timer drives both signals. Readiness is just "the playlist
+        # exists"; the segment poll is "which entries has it grown".
+        if on_ready || on_segments do
           Process.send_after(self(), :check_playlist_ready, 100)
         end
 
@@ -311,31 +341,53 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     {:stop, {:ffmpeg_terminated, reason}, state}
   end
 
-  def handle_info(:check_playlist_ready, %{ready_notified: true} = state) do
-    # Already notified, stop checking
-    {:noreply, state}
-  end
-
   def handle_info(:check_playlist_ready, state) do
-    if File.exists?(state.playlist_path) do
-      Logger.debug("Playlist file detected: #{state.playlist_path}")
-
-      # Call the on_ready callback
-      if state.on_ready do
-        state.on_ready.()
+    state =
+      case File.read(state.playlist_path) do
+        {:ok, contents} -> handle_playlist(state, contents)
+        {:error, _reason} -> state
       end
 
-      {:noreply, %{state | ready_notified: true}}
-    else
-      # Not ready yet, check again in 100ms
-      Process.send_after(self(), :check_playlist_ready, 100)
-      {:noreply, state}
+    # Readiness fires once; segment discovery runs for the life of the encoder.
+    if state.on_segments || !state.ready_notified do
+      Process.send_after(self(), :check_playlist_ready, 250)
     end
+
+    {:noreply, state}
   end
 
   def handle_info(msg, state) do
     Logger.debug("Unhandled message in FfmpegHlsTranscoder: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  # Notifies readiness the first time the playlist appears, and reports any
+  # segment indices that have shown up since the previous poll.
+  defp handle_playlist(state, contents) do
+    state =
+      if !state.ready_notified do
+        Logger.debug("Playlist file detected: #{state.playlist_path}")
+        if state.on_ready, do: state.on_ready.()
+        %{state | ready_notified: true}
+      else
+        state
+      end
+
+    if state.on_segments do
+      fresh =
+        contents
+        |> finished_indices()
+        |> Enum.reject(&MapSet.member?(state.seen_segments, &1))
+
+      if fresh == [] do
+        state
+      else
+        state.on_segments.(fresh)
+        %{state | seen_segments: Enum.into(fresh, state.seen_segments)}
+      end
+    else
+      state
+    end
   end
 
   @impl true
