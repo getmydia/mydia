@@ -452,6 +452,29 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # Audio bitrate budget (kbps) subtracted from total when calculating video bitrate
   @audio_bitrate_kbps 128
 
+  @doc """
+  Whether the video stream will be re-encoded rather than copied.
+
+  This is the single place that decision gets made; `build_ffmpeg_args/3`
+  calls it too, so the two can never disagree. Only a re-encode can have its
+  keyframes forced onto the segment grid, so this is also what decides
+  whether `grid_aligned` may be set: `HlsSession` calls it before starting or
+  relocating the encoder, to decide what to pass as `grid_aligned`.
+  """
+  @spec reencodes_video?(Mydia.Library.MediaFile.t() | nil, integer() | nil) :: boolean()
+  def reencodes_video?(media_file, max_bitrate) do
+    transcode_policy =
+      Application.get_env(:mydia, :streaming, [])
+      |> Keyword.get(:transcode_policy, :copy_when_compatible)
+
+    cond do
+      not is_nil(max_bitrate) -> true
+      transcode_policy != :copy_when_compatible -> true
+      is_nil(media_file) -> true
+      true -> not should_copy_video?(media_file.codec)
+    end
+  end
+
   # Build FFmpeg command arguments for HLS transcoding
   @doc false
   # Public only so the argument construction can be unit-tested directly;
@@ -470,34 +493,33 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # since we need to control the output bitrate
     force_transcode = not is_nil(max_bitrate)
 
-    # Determine video codec - use copy if compatible and policy allows, otherwise transcode
+    # Determine video codec - use copy if compatible and policy allows, otherwise
+    # transcode. An explicit opt always wins; short of that, reencodes_video?/2
+    # is the single decider, so this can never disagree with what HlsSession
+    # used to decide `grid_aligned`.
     video_codec =
-      cond do
-        Keyword.get(opts, :video_codec) ->
-          Keyword.get(opts, :video_codec)
-
-        force_transcode ->
+      case Keyword.get(opts, :video_codec) do
+        nil when force_transcode ->
           Logger.info("Bitrate cap set (#{max_bitrate}kbps), forcing video transcode to H.264")
           "libx264"
 
-        not is_nil(media_file) and transcode_policy == :copy_when_compatible ->
-          if should_copy_video?(media_file.codec) do
+        nil ->
+          if reencodes_video?(media_file, max_bitrate) do
+            Logger.info(
+              "Video codec #{(media_file && media_file.codec) || "unknown"} needs transcoding to H.264"
+            )
+
+            "libx264"
+          else
             Logger.info(
               "Video codec #{media_file.codec} is compatible, using stream copy (fast, no quality loss)"
             )
 
             "copy"
-          else
-            Logger.info("Video codec #{media_file.codec || "unknown"} needs transcoding to H.264")
-            "libx264"
           end
 
-        true ->
-          if transcode_policy == :always do
-            Logger.debug("Transcode policy is :always, transcoding video to H.264")
-          end
-
-          "libx264"
+        explicit ->
+          explicit
       end
 
     # Which audio stream this playback carries, resolved before the codec
@@ -684,9 +706,10 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     ]
 
     # Only meaningful when the video stream is re-encoded. On a copied stream
-    # the keyframes are whatever the source has, and FFmpeg rejects the flag.
-    # The caller decides, because it is the caller that knows whether the copy
-    # decision above landed on "copy".
+    # the keyframes are whatever the source has, and FFmpeg rejects the flag
+    # outright. reencodes_video?/2 above is what decides whether grid_aligned
+    # may be true; HlsSession calls it before starting or relocating the
+    # encoder and passes the answer straight through as this opt.
     keyframe_args =
       if Keyword.get(opts, :grid_aligned, false) do
         ["-force_key_frames", "expr:gte(t,n_forced*#{segment_seconds})"]

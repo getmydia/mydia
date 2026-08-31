@@ -33,6 +33,8 @@ defmodule Mydia.Streaming.HlsSession do
 
   alias Mydia.Library
   alias Mydia.Streaming.FfmpegHlsTranscoder
+  alias Mydia.Streaming.SegmentPlan
+  alias Mydia.Streaming.TranscodeWindow
   alias Mydia.Repo
   alias Mydia.Downloads.TranscodeJob
 
@@ -63,6 +65,12 @@ defmodule Mydia.Streaming.HlsSession do
       :timeout_ref,
       :playlist_path,
       :db_job_id,
+      :segment_plan,
+      :backend_opts,
+      playlist_mode: :window,
+      window: nil,
+      segment_waiters: %{},
+      window_generation: 0,
       ready: false,
       ready_waiters: []
     ]
@@ -81,6 +89,12 @@ defmodule Mydia.Streaming.HlsSession do
             timeout_ref: reference() | nil,
             playlist_path: String.t() | nil,
             db_job_id: binary() | nil,
+            segment_plan: Mydia.Streaming.SegmentPlan.t() | nil,
+            backend_opts: keyword(),
+            playlist_mode: :full | :window,
+            window: Mydia.Streaming.TranscodeWindow.t() | nil,
+            segment_waiters: %{non_neg_integer() => [GenServer.from()]},
+            window_generation: non_neg_integer(),
             ready: boolean(),
             ready_waiters: list()
           }
@@ -97,6 +111,12 @@ defmodule Mydia.Streaming.HlsSession do
     * `:user_id` - (required) ID of the user requesting the stream
     * `:registry_key` - (required) Registry key for session registration
     * `:name` - (optional) GenServer name for registration
+    * `:playlist_mode` - (optional) `:full` publishes the complete VOD
+      playlist up front and serves segments on demand via
+      `request_segment/2`; `:window` is the existing behaviour, where the
+      client resolves segment files directly. Default `:window`. A `:full`
+      request degrades to `:window` when the media file's duration is
+      unknown (see `plan_from_media_file/1`).
 
   ## Examples
 
@@ -173,6 +193,40 @@ defmodule Mydia.Streaming.HlsSession do
     GenServer.cast(pid, :notify_ready)
   end
 
+  @segment_wait_timeout 10_000
+
+  @doc """
+  Resolves a segment to an on-disk path, waiting or relocating the encoder as
+  needed.
+
+  Returns `{:error, :window_mode}` for a session that has no plan, whose
+  segments the caller must resolve by filename as before.
+  """
+  @spec request_segment(pid(), non_neg_integer()) ::
+          {:ok, String.t()} | {:error, :timeout} | {:error, :window_mode}
+  def request_segment(pid, index) do
+    GenServer.call(pid, {:request_segment, index}, @segment_wait_timeout + 2_000)
+  catch
+    :exit, {:timeout, _} -> {:error, :timeout}
+  end
+
+  @doc "The published playlist, or `{:error, :window_mode}` if this session has none."
+  @spec playlist(pid()) :: {:ok, String.t()} | {:error, :window_mode}
+  def playlist(pid), do: GenServer.call(pid, :playlist)
+
+  @doc """
+  Records segments the backend has finished writing.
+
+  `generation` guards against a stopped backend's last poll arriving after a
+  relocation has already started a new one: its indices belong to a window that
+  no longer exists, and folding them in would make the session believe the new
+  encoder is further along than it is.
+  """
+  @spec notify_segments(pid(), non_neg_integer(), [non_neg_integer()]) :: :ok
+  def notify_segments(pid, generation, indices) do
+    GenServer.cast(pid, {:segments_ready, generation, indices})
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -209,6 +263,21 @@ defmodule Mydia.Streaming.HlsSession do
           preload: [:media_item, :library_path, episode: :media_item]
         )
 
+      # A session is only :full when the caller asked for it AND the duration is
+      # actually known. ensure_duration_known/2 can come back empty when the
+      # inline probe budget is exceeded, and there is no plan to publish without
+      # a duration, so that session degrades to :window regardless of what the
+      # client requested.
+      requested_mode = Keyword.get(opts, :playlist_mode, :window)
+
+      segment_plan =
+        case requested_mode do
+          :full -> plan_from_media_file(media_file)
+          :window -> nil
+        end
+
+      playlist_mode = if segment_plan, do: :full, else: :window
+
       # Register this session in the Registry. This is a `:unique` key, so two
       # concurrent callers can race here (e.g. HlsSessionSupervisor replacing a
       # session on an offset mismatch from two overlapping requests for the
@@ -217,7 +286,7 @@ defmodule Mydia.Streaming.HlsSession do
       # that get_session/2 could never find. See
       # HlsSessionSupervisor.start_new_session/5, which adopts the winner's
       # pid instead of treating this as a failure. Registration happens
-      # before the temp directory is created and before start_backend/5
+      # before the temp directory is created and before start_backend/6
       # spawns FFmpeg, so the losing branch below spawns no process and
       # leaks nothing.
       case Registry.register(
@@ -232,11 +301,20 @@ defmodule Mydia.Streaming.HlsSession do
                max_height: max_height,
                audio_language: playback.audio_language,
                show_audio_language: playback.show_audio_language,
+               playlist_mode: playlist_mode,
                started_at: DateTime.utc_now()
              }
            ) do
         {:ok, _owner} ->
-          start_registered_session(media_file_id, user_id, mode, media_file, playback)
+          start_registered_session(
+            media_file_id,
+            user_id,
+            mode,
+            media_file,
+            playback,
+            segment_plan,
+            playlist_mode
+          )
 
         {:error, {:already_registered, pid}} ->
           {:stop, {:already_registered, pid}}
@@ -251,8 +329,22 @@ defmodule Mydia.Streaming.HlsSession do
   # Continues session setup once this process has won the registration race
   # for its (media_file_id, user_id) key. Creates the temp dir, the DB job
   # record, and starts the FFmpeg backend.
-  defp start_registered_session(media_file_id, user_id, mode, media_file, playback) do
+  defp start_registered_session(
+         media_file_id,
+         user_id,
+         mode,
+         media_file,
+         playback,
+         segment_plan,
+         playlist_mode
+       ) do
     %{max_bitrate: max_bitrate, max_height: max_height, start_position: start_position} = playback
+
+    # The segment the running encoder has to start from. Only meaningful for a
+    # :full session: a :window session has no plan to index into, and its
+    # first_index is never consulted (there is no window to seed).
+    first_index =
+      if segment_plan, do: SegmentPlan.index_for_time(segment_plan, start_position), else: 0
 
     # Generate session ID and create temp directory
     session_id = generate_session_id()
@@ -301,14 +393,21 @@ defmodule Mydia.Streaming.HlsSession do
         Logger.info("Temp directory: #{temp_dir}")
         Logger.info("Starting HLS transcoding with FFmpeg backend")
 
+        # The keyword list a relocation reuses verbatim (see relocate/2), so it
+        # has to carry everything start_backend/6 needs beyond the offset and
+        # start number, which relocate overwrites per-call.
+        backend_opts = [
+          max_bitrate: max_bitrate,
+          max_height: max_height,
+          start_position: start_position,
+          start_number: first_index,
+          grid_aligned: FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate),
+          audio_language: playback.audio_language,
+          show_audio_language: playback.show_audio_language
+        ]
+
         # Start FFmpeg backend
-        case start_backend(:ffmpeg, media_file, temp_dir, job.id,
-               max_bitrate: max_bitrate,
-               max_height: max_height,
-               start_position: start_position,
-               audio_language: playback.audio_language,
-               show_audio_language: playback.show_audio_language
-             ) do
+        case start_backend(:ffmpeg, media_file, temp_dir, job.id, backend_opts, 0) do
           {:ok, backend_pid} ->
             # Link to backend process so we terminate if it crashes
             Process.link(backend_pid)
@@ -326,7 +425,11 @@ defmodule Mydia.Streaming.HlsSession do
               backend_pid: backend_pid,
               temp_dir: temp_dir,
               last_activity: DateTime.utc_now(),
-              db_job_id: job.id
+              db_job_id: job.id,
+              segment_plan: segment_plan,
+              playlist_mode: playlist_mode,
+              window: if(playlist_mode == :full, do: TranscodeWindow.new(first_index), else: nil),
+              backend_opts: backend_opts
             }
 
             # Schedule initial timeout check
@@ -351,6 +454,17 @@ defmodule Mydia.Streaming.HlsSession do
     end
   end
 
+  # The duration ffprobe recorded at analyze time, or whatever the resolver's
+  # inline probe managed to fill in. nil means no plan and no full playlist.
+  defp plan_from_media_file(%{metadata: %{duration: duration}}) when is_number(duration) do
+    case SegmentPlan.build(duration) do
+      {:ok, plan} -> plan
+      :error -> nil
+    end
+  end
+
+  defp plan_from_media_file(_media_file), do: nil
+
   @impl true
   def handle_call(:get_info, _from, state) do
     # Getting info counts as activity
@@ -371,7 +485,9 @@ defmodule Mydia.Streaming.HlsSession do
       backend: state.backend,
       temp_dir: state.temp_dir,
       last_activity: state.last_activity,
-      backend_alive?: is_pid(state.backend_pid) and Process.alive?(state.backend_pid)
+      backend_alive?: is_pid(state.backend_pid) and Process.alive?(state.backend_pid),
+      playlist_mode: state.playlist_mode,
+      duration: state.segment_plan && state.segment_plan.duration
     }
 
     {:reply, {:ok, info}, state}
@@ -379,6 +495,34 @@ defmodule Mydia.Streaming.HlsSession do
 
   def handle_call(:get_playlist_path, _from, state) do
     {:reply, {:ok, state.playlist_path}, state}
+  end
+
+  def handle_call(:playlist, _from, %{segment_plan: nil} = state) do
+    {:reply, {:error, :window_mode}, state}
+  end
+
+  def handle_call(:playlist, _from, state) do
+    state = update_activity(state)
+    {:reply, {:ok, SegmentPlan.playlist(state.segment_plan)}, state}
+  end
+
+  def handle_call({:request_segment, _index}, _from, %{segment_plan: nil} = state) do
+    {:reply, {:error, :window_mode}, state}
+  end
+
+  def handle_call({:request_segment, index}, from, state) do
+    state = update_activity(state)
+
+    case TranscodeWindow.decide(state.window, index) do
+      :serve ->
+        {:reply, {:ok, segment_path(state, index)}, state}
+
+      :wait ->
+        {:noreply, park_waiter(state, index, from)}
+
+      {:relocate, target} ->
+        {:noreply, state |> relocate(target) |> park_waiter(index, from)}
+    end
   end
 
   def handle_call(:await_ready, _from, %{ready: true} = state) do
@@ -423,6 +567,26 @@ defmodule Mydia.Streaming.HlsSession do
     {:noreply, %{state | ready: true, ready_waiters: []}}
   end
 
+  def handle_cast({:segments_ready, generation, _indices}, %{window_generation: current} = state)
+      when generation != current do
+    # A dead backend's final poll. Its indices belong to a window that has
+    # already been replaced.
+    {:noreply, state}
+  end
+
+  def handle_cast({:segments_ready, _generation, indices}, state) do
+    window = TranscodeWindow.mark_ready(state.window, indices)
+
+    {waiters, remaining} = Map.split(state.segment_waiters, indices)
+
+    Enum.each(waiters, fn {index, froms} ->
+      path = segment_path(state, index)
+      Enum.each(froms, &safe_reply(&1, {:ok, path}))
+    end)
+
+    {:noreply, %{state | window: window, segment_waiters: remaining}}
+  end
+
   @impl true
   def handle_info(:check_timeout, state) do
     now = DateTime.utc_now()
@@ -443,6 +607,31 @@ defmodule Mydia.Streaming.HlsSession do
     Logger.warning("Backend #{state.backend} (#{inspect(pid)}) terminated: #{inspect(reason)}")
     # Backend died, we should terminate too
     {:stop, {:backend_terminated, reason}, state}
+  end
+
+  def handle_info({:waiter_timeout, index, from}, state) do
+    # Answered already, or still parked. Only the still-parked case needs a
+    # reply, and it must be removed so a later segment arrival does not reply
+    # to the same caller twice.
+    case Map.get(state.segment_waiters, index) do
+      nil ->
+        {:noreply, state}
+
+      froms ->
+        if from in froms do
+          safe_reply(from, {:error, :timeout})
+          remaining = List.delete(froms, from)
+
+          waiters =
+            if remaining == [],
+              do: Map.delete(state.segment_waiters, index),
+              else: Map.put(state.segment_waiters, index, remaining)
+
+          {:noreply, %{state | segment_waiters: waiters}}
+        else
+          {:noreply, state}
+        end
+    end
   end
 
   def handle_info(msg, state) do
@@ -487,8 +676,78 @@ defmodule Mydia.Streaming.HlsSession do
 
   ## Private Functions
 
+  defp segment_path(state, index) do
+    Path.join(state.temp_dir, SegmentPlan.segment_name(index))
+  end
+
+  defp park_waiter(state, index, from) do
+    Process.send_after(self(), {:waiter_timeout, index, from}, @segment_wait_timeout)
+
+    %{
+      state
+      | segment_waiters: Map.update(state.segment_waiters, index, [from], &[from | &1])
+    }
+  end
+
+  # A waiter's caller can die between parking and the reply. GenServer.reply/2
+  # to a dead caller exits, which would take the whole session down with it.
+  defp safe_reply(from, message) do
+    GenServer.reply(from, message)
+  catch
+    :exit, _reason -> :ok
+  end
+
+  # Moves the encoder to `target`, keeping every segment already on disk.
+  #
+  # The backend is unlinked before it is stopped. HlsSession links to its
+  # backend so a crashed encoder takes the session down; without the unlink, a
+  # deliberate stop would do the same thing and every seek would kill the
+  # session.
+  defp relocate(state, target) do
+    generation = state.window_generation + 1
+
+    if is_pid(state.backend_pid) and Process.alive?(state.backend_pid) do
+      Process.unlink(state.backend_pid)
+      stop_backend(state.backend, state.backend_pid)
+    end
+
+    opts =
+      state.backend_opts
+      |> Keyword.put(:start_position, trunc(SegmentPlan.start_time(state.segment_plan, target)))
+      |> Keyword.put(:start_number, target)
+
+    case start_backend(
+           :ffmpeg,
+           state.media_file,
+           state.temp_dir,
+           state.db_job_id,
+           opts,
+           generation
+         ) do
+      {:ok, backend_pid} ->
+        Process.link(backend_pid)
+
+        %{
+          state
+          | backend_pid: backend_pid,
+            window: TranscodeWindow.relocate(state.window, target),
+            window_generation: generation
+        }
+
+      {:error, reason} ->
+        Logger.error("Failed to relocate FFmpeg to segment #{target}: #{inspect(reason)}")
+
+        %{
+          state
+          | backend_pid: nil,
+            window: TranscodeWindow.stopped(state.window),
+            window_generation: generation
+        }
+    end
+  end
+
   # Start FFmpeg backend
-  defp start_backend(:ffmpeg, media_file, temp_dir, job_id, opts) do
+  defp start_backend(:ffmpeg, media_file, temp_dir, job_id, opts, generation) do
     # Resolve absolute path for FFmpeg input
     absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
     Logger.info("Starting FFmpeg backend for #{absolute_path}")
@@ -502,7 +761,9 @@ defmodule Mydia.Streaming.HlsSession do
         input_path: absolute_path,
         output_dir: temp_dir,
         media_file: media_file,
-        start_position: Keyword.get(opts, :start_position, 0)
+        start_position: Keyword.get(opts, :start_position, 0),
+        start_number: Keyword.get(opts, :start_number, 0),
+        grid_aligned: Keyword.get(opts, :grid_aligned, false)
       ] ++
         if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: []) ++
         if(opts[:max_height], do: [max_height: opts[:max_height]], else: []) ++
@@ -544,10 +805,22 @@ defmodule Mydia.Streaming.HlsSession do
           end,
           on_error: fn error ->
             Logger.error("FFmpeg transcoding error for #{absolute_path}: #{error}")
+          end,
+          on_segments: fn indices ->
+            __MODULE__.notify_segments(session_pid, generation, indices)
           end
         ]
 
-    case FfmpegHlsTranscoder.start_transcoding(transcoder_opts) do
+    # Overridable per-session so a test can drive relocation without spawning
+    # real FFmpeg (see test/mydia/streaming/hls_session_segments_test.exs).
+    # Threaded through opts rather than global Application config: relocate/2
+    # reuses state.backend_opts verbatim on every call, so a value set once at
+    # session construction survives every relocation with no global state and
+    # no async: false, unlike Application.get_env(:mydia, :transcoder_module)
+    # (see Mydia.Downloads.JobManager for that pattern).
+    transcoder = Keyword.get(opts, :transcoder_module, FfmpegHlsTranscoder)
+
+    case transcoder.start_transcoding(transcoder_opts) do
       {:ok, pid} ->
         {:ok, pid}
 
@@ -556,7 +829,7 @@ defmodule Mydia.Streaming.HlsSession do
     end
   end
 
-  defp start_backend(backend, _media_file, _temp_dir, _job_id, _opts) do
+  defp start_backend(backend, _media_file, _temp_dir, _job_id, _opts, _generation) do
     Logger.error("Unknown backend: #{backend}")
     {:error, :unknown_backend}
   end
