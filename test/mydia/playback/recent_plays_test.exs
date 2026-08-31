@@ -130,7 +130,11 @@ defmodule Mydia.Playback.RecentPlaysTest do
       user = AccountsFixtures.user_fixture()
 
       :ok = Streaming.emit_playback_started(media_file.id, user.id)
-      Repo.delete!(episode)
+      # A raw `Repo.delete!(episode)` now violates the media_files_has_parent
+      # FK (episode_id is ON DELETE NO ACTION so the CHECK can never be
+      # widowed): the domain-correct deletion path demotes the file back to
+      # an import candidate first, same as any other episode deletion.
+      {:ok, _deleted} = Mydia.Media.delete_episode(episode)
 
       assert Stats.recent_plays(10) == []
     end

@@ -62,9 +62,11 @@ defmodule Mydia.Library.PathAnchor do
   @doc """
   Normalizes a folder name into a stable cluster key.
 
-  Two folders naming the same show must produce the same key, because the key
-  is the unique index on `import_groups` and therefore what makes a rescan
-  reuse an earlier decision.
+  Two folders naming the same show must produce the same key: every
+  `import_candidates` row discovered under that folder stores it as
+  `anchor_key`, which is what `Mydia.ImportCandidates.group_query/2`
+  aggregates rows by, and therefore what makes a rescan reuse an earlier
+  decision rather than starting a fresh group.
   """
   @spec normalize(String.t()) :: String.t()
   def normalize(name) when is_binary(name) do

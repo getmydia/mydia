@@ -84,6 +84,7 @@ defmodule Mydia.Repo.Migrations.MarkExistingTrashedFilesAsMissingTest do
         Library.create_scanned_media_file(%{
           relative_path: "active.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 11,
           metadata: %FileMetadata{container: "mkv"}
         })
@@ -109,6 +110,7 @@ defmodule Mydia.Repo.Migrations.MarkExistingTrashedFilesAsMissingTest do
         Library.create_scanned_media_file(%{
           relative_path: "null_meta.mkv",
           library_path_id: library_path.id,
+          media_item_id: insert(:media_item, type: "movie").id,
           size: 11
         })
 
@@ -174,6 +176,7 @@ defmodule Mydia.Repo.Migrations.MarkExistingTrashedFilesAsMissingTest do
       Library.create_scanned_media_file(%{
         relative_path: name,
         library_path_id: library_path.id,
+        media_item_id: insert(:media_item, type: "movie").id,
         size: byte_size("video bytes")
       })
 

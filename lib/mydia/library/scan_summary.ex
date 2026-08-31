@@ -7,13 +7,15 @@ defmodule Mydia.Library.ScanSummary do
   This struct is the contract it hands back instead, so a caller that only wants
   counts cannot grow a dependency on the processor's internal shape.
 
-  `details` carries the processor's own return value unchanged, so data such as
-  `new_media_files` stays reachable by the code that already relies on it.
+  `details` carries the processor's own return value unchanged (`:changes`,
+  `:discovery`, `:restored`, `:reaped_candidates`), so data beyond the four
+  counts below stays reachable by code that already relies on it.
 
-  `auto_linked` counts files this scan linked only because the library has
-  `auto_import` enabled, across both the new-file stream and the orphan
-  re-enrichment branch. It is a subset of the files the scan touched, not a
-  separate kind of change.
+  `auto_linked` counts import candidates this scan promoted into owned media
+  files because the library has `auto_import` enabled -- see
+  `Mydia.Jobs.LibraryScanner.discover_unknown_paths/3`. It is always zero
+  when `auto_import` is false: discovery never runs, so nothing to promote
+  is ever attempted.
   """
 
   @type t :: %__MODULE__{

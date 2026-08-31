@@ -287,11 +287,13 @@ defmodule Mydia.Jobs.FileAnalysisTest do
         relative = "file_#{i}.mkv"
         absolute = Path.join(dir, relative)
         File.write!(absolute, "fake video bytes for #{i}")
+        movie = media_item_fixture(%{type: "movie"})
 
         {:ok, mf} =
           Library.create_scanned_media_file(%{
             relative_path: relative,
             library_path_id: library_path.id,
+            media_item_id: movie.id,
             size: File.stat!(absolute).size
           })
 

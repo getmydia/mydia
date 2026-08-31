@@ -7,6 +7,7 @@ defmodule Mydia.Library.TrashStoreTest do
   """
   use Mydia.DataCase, async: false
 
+  import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
   alias Mydia.Library
@@ -31,6 +32,7 @@ defmodule Mydia.Library.TrashStoreTest do
       Library.create_scanned_media_file(%{
         relative_path: name,
         library_path_id: library_path.id,
+        media_item_id: media_item_fixture(%{type: "movie"}).id,
         size: byte_size("video bytes")
       })
 
@@ -141,6 +143,7 @@ defmodule Mydia.Library.TrashStoreTest do
         Library.create_scanned_media_file(%{
           relative_path: "movie.mkv",
           library_path_id: library_path.id,
+          media_item_id: media_item_fixture(%{type: "movie"}).id,
           size: 1
         })
 

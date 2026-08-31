@@ -7,9 +7,9 @@ defmodule Mydia.Library.EpisodeMinter do
   TVDB 447978 sat five weeks behind its own broadcaster and stranded sixteen
   files exactly that way.
 
-  Whether minting is allowed at all is not decided here. `FileIngest` owns that
-  through its policy: an accepted import run is `:create_items` and may mint, a
-  scheduled scan is `:local_only` and never does. This module decides only
+  Whether minting is allowed at all is not decided here. Candidate promotion
+  owns that through its policy: an accepted unattended import may mint, while
+  review mode leaves the candidate for an operator. This module decides only
   whether a coordinate is *plausible* for this show.
 
   ## The anchor
@@ -32,9 +32,11 @@ defmodule Mydia.Library.EpisodeMinter do
 
   The season ceiling is read fresh on every call, so importing seasons 4 and 5
   together cascades: the season 4 rows land first and raise the ceiling for
-  season 5. Out of order, the season 5 files stay outstanding and the next pass
-  takes them, because `Jobs.ApplyImportGroups.drain/3` retries while it makes
-  progress.
+  season 5. Out of order, the season 5 anchor's candidates stay matched but
+  unpromoted -- `Mydia.Library.CandidatePromotion.promote_group/3` commits one
+  anchor as a single transaction, so a season 5 group that fails to mint rolls
+  back whole and is simply eligible for another Accept once season 4 has
+  raised the ceiling.
 
   ## Why the row is untagged
 

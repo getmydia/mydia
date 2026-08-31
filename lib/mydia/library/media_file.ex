@@ -44,7 +44,6 @@ defmodule Mydia.Library.MediaFile do
           extra_checked_at: DateTime.t() | nil,
           relative_path: String.t() | nil,
           supersedes_media_file_id: binary() | nil,
-          import_group_id: binary() | nil,
           library_path: Mydia.Settings.LibraryPath.t() | Ecto.Association.NotLoaded.t(),
           media_item: Mydia.Media.MediaItem.t() | Ecto.Association.NotLoaded.t(),
           episode: Mydia.Media.Episode.t() | nil | Ecto.Association.NotLoaded.t(),
@@ -127,7 +126,6 @@ defmodule Mydia.Library.MediaFile do
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
     has_many :segments, Mydia.Library.MediaSegment
     belongs_to :supersedes_media_file, __MODULE__, foreign_key: :supersedes_media_file_id
-    belongs_to :import_group, Mydia.Library.ImportGroup, type: :binary_id
 
     timestamps(type: :utc_datetime)
   end
@@ -198,11 +196,9 @@ defmodule Mydia.Library.MediaFile do
   into a partial answer instead of nothing, and then to the legacy `path`
   column as a last resort.
 
-  That last fallback looks dead — every row on a current install carries
-  `path: nil` — but `populate_media_file_relative_paths` skips files sitting
-  outside every configured library path, leaving them with no relative_path and
-  no library_path_id. On an install that upgraded from a version which still
-  wrote `path`, that column is the only location such a row has left.
+  That last fallback is only for a legacy struct or pre-invariant row from an
+  interrupted upgrade. Current persisted rows always have a parent and are
+  addressed by library path plus relative path.
 
   ## Examples
 
@@ -249,6 +245,16 @@ defmodule Mydia.Library.MediaFile do
   def library_type_compatible?(:series, "movie", _has_episode?), do: false
   def library_type_compatible?(_library_type, _media_item_type, _has_episode?), do: true
 
+  @doc "Whether a locally parsed file type is eligible for a library path."
+  @spec parsed_type_compatible?(atom(), atom()) :: boolean()
+  def parsed_type_compatible?(library_type, :movie),
+    do: library_type_compatible?(library_type, "movie", false)
+
+  def parsed_type_compatible?(library_type, :tv_show),
+    do: library_type_compatible?(library_type, "tv_show", true)
+
+  def parsed_type_compatible?(_library_type, _unknown), do: true
+
   @doc """
   Changeset for creating or updating a media file.
   """
@@ -289,8 +295,7 @@ defmodule Mydia.Library.MediaFile do
       :extra_kind,
       :extra_source,
       :extra_checked_at,
-      :supersedes_media_file_id,
-      :import_group_id
+      :supersedes_media_file_id
     ])
     |> validate_required([:relative_path, :library_path_id])
     |> validate_one_parent()
@@ -298,21 +303,19 @@ defmodule Mydia.Library.MediaFile do
     |> validate_number(:size, greater_than: 0)
     |> validate_number(:bitrate, greater_than: 0)
     |> check_constraint(:media_item_id,
-      name: :media_files_parent_check,
-      message: "cannot set both media_item_id and episode_id"
+      name: :media_files_has_parent,
+      message: "must belong to a media item or episode"
     )
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
     |> foreign_key_constraint(:supersedes_media_file_id)
-    |> foreign_key_constraint(:import_group_id)
   end
 
   @doc """
   Changeset for creating a media file during library scanning.
-  Parent association (media_item_id or episode_id) is optional during initial creation
-  and will be set later during metadata enrichment.
+  Scanner-created media files must already have a media-item or episode parent.
   """
   def scan_changeset(media_file, attrs) do
     media_file
@@ -352,13 +355,13 @@ defmodule Mydia.Library.MediaFile do
       :extra_checked_at
     ])
     |> validate_required([:relative_path, :library_path_id])
-    |> validate_parent_exclusivity()
+    |> validate_one_parent()
     |> validate_library_type_compatibility()
     |> validate_number(:size, greater_than: 0)
     |> validate_number(:bitrate, greater_than: 0)
     |> check_constraint(:media_item_id,
-      name: :media_files_parent_check,
-      message: "cannot set both media_item_id and episode_id"
+      name: :media_files_has_parent,
+      message: "must belong to a media item or episode"
     )
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
@@ -383,19 +386,6 @@ defmodule Mydia.Library.MediaFile do
     end
   end
 
-  # Ensure both media_item_id and episode_id are not set at the same time
-  # (allows both to be nil for orphaned files during scanning)
-  defp validate_parent_exclusivity(changeset) do
-    media_item_id = get_field(changeset, :media_item_id)
-    episode_id = get_field(changeset, :episode_id)
-
-    if not is_nil(media_item_id) and not is_nil(episode_id) do
-      add_error(changeset, :media_item_id, "cannot set both media_item_id and episode_id")
-    else
-      changeset
-    end
-  end
-
   # Validates that the media type is compatible with the library path type
   defp validate_library_type_compatibility(changeset) do
     media_item_id = get_field(changeset, :media_item_id)
@@ -406,8 +396,7 @@ defmodule Mydia.Library.MediaFile do
     if is_nil(library_path_id) do
       changeset
     else
-      # Validate media type compatibility. Only validate if a parent association
-      # is set (orphaned files are allowed).
+      # Validation of a parent is handled separately by validate_one_parent/1.
       if is_nil(media_item_id) and is_nil(episode_id) do
         changeset
       else

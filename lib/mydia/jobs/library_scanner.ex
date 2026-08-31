@@ -8,6 +8,16 @@ defmodule Mydia.Jobs.LibraryScanner do
   - Updates the database with file information
   - Tracks scan status and errors
 
+  Known-file maintenance -- detecting modified/deleted owned files, restoring
+  a file that reappears at a previously-trashed path, adopting/reaping
+  sidecar subtitles, and reaping `ImportCandidate` rows whose paths
+  disappeared -- always runs, regardless of a library path's `auto_import`
+  setting. Discovery of paths this library does not yet own only runs when
+  `auto_import` is true: see `scan_library_path/2` and
+  `discover_unknown_paths/3`. With `auto_import: false`, an unrecognized
+  path is left alone entirely -- no candidate, no parse, no relay call --
+  for a human to pick up through the import inbox.
+
   Scans enqueued automatically (the interval scheduler and the boot-time health
   check) carry a random `schedule_in` delay of up to 30 minutes, which spreads
   load across self-hosted instances hitting the metadata relay. See
@@ -25,20 +35,26 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   require Logger
   alias Mydia.{Library, Settings, Repo, Metadata}
+  alias Mydia.ImportCandidates
   alias Mydia.Subtitles.Sidecars
 
   # Upper bound of the insert-time jitter applied to automatic scans.
   @max_startup_delay_ms 30 * 60 * 1000
 
+  # Page size for draining ImportCandidates.outstanding/3 during discovery.
+  @discovery_chunk_size 50
+  @max_discovery_match_pages 20
+
   alias Mydia.Library.{
+    BatchMatcher,
     FileIngest,
+    ImportCandidate,
+    MediaFile,
     MetadataMatcher,
-    OrphanReenricher,
-    SampleDetector,
+    PathAnchor,
     ScanSummary
   }
 
-  alias Mydia.ImportGroups
   alias Mydia.Settings.LibraryPath
 
   alias Mydia.Library.ReleaseParser, as: FileParser
@@ -198,7 +214,13 @@ defmodule Mydia.Jobs.LibraryScanner do
     end
   end
 
-  defp scan_library_path(library_path) do
+  @doc false
+  # Public so a test can inject a deterministic `:matcher` (and other
+  # discovery options) into a real scan without going through Oban's
+  # `perform/1` args map, which has no room for one. Real scans never pass
+  # opts; `opts` flows unchanged into `discover_unknown_paths/3`.
+  @spec scan_library_path(LibraryPath.t(), keyword()) :: {:ok, ScanSummary.t()} | {:error, term()}
+  def scan_library_path(library_path, opts \\ []) do
     Logger.debug("Scanning library path",
       id: library_path.id,
       path: library_path.path,
@@ -221,7 +243,6 @@ defmodule Mydia.Jobs.LibraryScanner do
         })
     end
 
-    # Perform the file system scan with appropriate extensions for library type
     progress_callback = fn count ->
       Logger.debug("Scan progress", library_path_id: library_path.id, files_scanned: count)
     end
@@ -234,11 +255,10 @@ defmodule Mydia.Jobs.LibraryScanner do
              progress_callback: progress_callback,
              video_extensions: extensions
            ) do
-      summary = summarize(process_scan_result(library_path, scan_result))
+      summary = summarize(process_scan_result(library_path, scan_result, opts))
 
       if reconcile_sidecars?(summary) do
         reconcile_sidecars(library_path)
-        rebuild_import_groups(library_path)
       end
 
       summary
@@ -287,16 +307,16 @@ defmodule Mydia.Jobs.LibraryScanner do
     {:error, error_message}
   end
 
-  # process_scan_result/2 returns its counts as lists under :changes. Convert
-  # them to a ScanSummary so callers read one shape and cannot reach into the
-  # processor's own return value by accident.
+  # process_scan_result/3 returns its counts under a :changes key alongside
+  # discovery bookkeeping. Convert them to a ScanSummary so callers read one
+  # shape and cannot reach into the processor's internal shape by accident.
   defp summarize({:ok, %{changes: changes} = details}) do
     {:ok,
      %ScanSummary{
        new_files: length(changes.new_files),
        modified_files: length(changes.modified_files),
        deleted_files: length(changes.deleted_files),
-       auto_linked: details |> Map.get(:cleanup_stats, %{}) |> Map.get(:auto_linked, 0),
+       auto_linked: Map.get(details, :auto_promoted, 0),
        details: details
      }}
   end
@@ -306,20 +326,14 @@ defmodule Mydia.Jobs.LibraryScanner do
 
   @doc false
   # Public only so this guard can be unit-tested directly. `summary` reads
-  # `{:ok, _}` when Library.Scanner.scan/2 succeeded and process_scan_result/2
-  # ran to completion, and `{:error, _}` both when the filesystem scan
-  # failed (the with block's else clauses handle that and never reach the
-  # call site this guards) and when process_scan_result/2 raised internally,
-  # since its own pre-existing rescue converts that into
-  # handle_scan_error/2's error tuple rather than letting the exception
-  # escape. That second case is what this guard exists for: without it,
-  # reconciliation would run against a scan the job reports as failed.
-  # Forcing that path end-to-end would mean reaching a raise that survives
-  # every self-rescuing helper process_scan_result/2 calls
-  # (fix_orphaned_tv_file/2, revalidate_tv_file_association/1,
-  # associate_file_with_episode/2, and match_file_to_existing_items/4 all
-  # already catch their own exceptions), so the guard is pinned directly
-  # here instead of via a contrived scan_library_path/1 integration test.
+  # `{:ok, _}` when Library.Scanner.scan/2 succeeded and process_scan_result/3
+  # ran to completion, and `{:error, _}` both when the filesystem scan itself
+  # failed (the `with` block's `else` clauses handle that and never reach the
+  # call site this guards) and when process_scan_result/3 raised internally
+  # and its own rescue converted that into handle_scan_error/2's error tuple
+  # rather than letting the exception escape. That second case is what this
+  # guard exists for: without it, reconciliation would run against a scan the
+  # job reports as failed.
   @spec reconcile_sidecars?({:ok, ScanSummary.t()} | {:error, term()}) :: boolean()
   def reconcile_sidecars?(summary), do: match?({:ok, _}, summary)
 
@@ -356,493 +370,57 @@ defmodule Mydia.Jobs.LibraryScanner do
       :ok
   end
 
-  defp process_scan_result(library_path, scan_result) do
-    # Get existing files from database - only files within this library path
-    # This prevents deleting files from other library paths during scan
-    existing_files = Library.list_media_files(library_path_id: library_path.id)
+  # The auto-import boundary. Known-file maintenance (modification,
+  # deletion/trashing, trashed-path restoration) and candidate reaping run
+  # unconditionally, in both modes, before anything below ever looks at
+  # `library_path.auto_import`. Only discovery of paths this library does
+  # not yet own is gated: with auto_import false, `unknown` is computed and
+  # then simply never handed to discover_unknown_paths/3, so no candidate is
+  # written and no parser, matcher, or relay call ever runs for it.
+  defp process_scan_result(library_path, scan_result, opts) do
+    # One bulk query builds both path-index maps known-file maintenance
+    # needs below, instead of a query per changed file: `active_by_path`
+    # (used by `detect_changes/3` and by `process_modified_files/3`) and
+    # `trashed_by_path` (used by `partition_and_restore/3` to recognize a
+    # path that reappeared where a trashed file used to be).
+    all_files = Library.list_media_files(library_path_id: library_path.id, include_trashed: true)
+    {trashed_files, active_files} = Enum.split_with(all_files, & &1.trashed_at)
+    active_by_path = Map.new(active_files, &{&1.relative_path, &1})
+    trashed_by_path = Map.new(trashed_files, &{&1.relative_path, &1})
 
-    # Detect changes
-    changes = Library.Scanner.detect_changes(scan_result, existing_files, library_path)
+    changes = Library.Scanner.detect_changes(scan_result, active_files, library_path)
 
-    # Extras are persisted with a classification rather than dropped. Dropping
-    # them meant a file Mydia decided to ignore left no trace anywhere, and the
-    # same files were re-detected and re-dropped on every subsequent scan.
-    regular_new_files = changes.new_files
+    process_modified_files(changes.modified_files, library_path, active_by_path)
+    process_deleted_files(changes.deleted_files)
 
-    extras_count =
-      Enum.count(changes.new_files, fn file_info ->
-        not is_nil(extra_classification(file_info.path))
-      end)
+    {restored_count, unknown} =
+      partition_and_restore(changes.new_files, library_path, trashed_by_path)
 
-    if extras_count > 0 do
-      Logger.info("Flagged #{extras_count} sample/trailer/extra files during scan",
-        library_path_id: library_path.id
-      )
-    end
+    on_disk_paths = Enum.map(scan_result.files, &Path.relative_to(&1.path, library_path.path))
 
-    # Process files in batches to avoid long-running transactions
-    batch_size = 100
-    total_new_files = length(regular_new_files)
-    total_modified = length(changes.modified_files)
-    total_deleted = length(changes.deleted_files)
-
-    Logger.info("Processing library changes in batches",
-      new_files: total_new_files,
-      modified_files: total_modified,
-      deleted_files: total_deleted,
-      batch_size: batch_size
-    )
-
-    # Process new files in batches
-    new_media_files =
-      regular_new_files
-      |> Enum.chunk_every(batch_size)
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {batch, batch_index} ->
-        batch_num = batch_index + 1
-        total_batches = ceil(total_new_files / batch_size)
-
-        Logger.debug("Processing new files batch #{batch_num}/#{total_batches}",
-          batch_size: length(batch)
+    # Belt-and-suspenders alongside `ImportCandidates.delete_missing/3`'s own
+    # empty-list guard: skip the call entirely rather than round-trip to the
+    # database only to have it refuse. `delete_missing/3` stays the
+    # authoritative guard (it also protects any other caller), this just
+    # avoids the wasted query on the hot path every scan takes.
+    {reaped_candidates, _} =
+      if on_disk_paths == [] do
+        Logger.warning(
+          "Skipping import candidate reap: scan found no files on disk",
+          library_path_id: library_path.id
         )
 
-        # Broadcast progress
-        Phoenix.PubSub.broadcast(
-          Mydia.PubSub,
-          "library_scanner",
-          {:library_scan_progress,
-           %{
-             library_path_id: library_path.id,
-             stage: :creating_files,
-             current: batch_index * batch_size + length(batch),
-             total: total_new_files
-           }}
-        )
-
-        # Process batch in a transaction
-        {:ok, batch_results} =
-          Repo.transaction(fn ->
-            Enum.map(batch, fn file_info ->
-              # Calculate relative path from library root
-              relative_path = Path.relative_to(file_info.path, library_path.path)
-
-              # Check if a trashed file with the same path exists — restore it instead of creating a duplicate
-              case Library.get_media_file_by_relative_path(
-                     library_path.id,
-                     relative_path,
-                     include_trashed: true
-                   ) do
-                %{trashed_at: trashed_at} = trashed_file when not is_nil(trashed_at) ->
-                  case Library.restore_media_file(trashed_file) do
-                    {:ok, restored_file} ->
-                      Logger.info("Restored trashed media file",
-                        path: file_info.path,
-                        relative_path: relative_path
-                      )
-
-                      {:ok, restored_file, file_info}
-
-                    {:error, _reason} ->
-                      Logger.error("Failed to restore trashed media file",
-                        path: file_info.path,
-                        relative_path: relative_path
-                      )
-
-                      {:error, file_info}
-                  end
-
-                _ ->
-                  extra_attrs =
-                    case extra_classification(file_info.path) do
-                      nil ->
-                        %{}
-
-                      {kind, source} ->
-                        %{
-                          extra_kind: kind,
-                          extra_source: source,
-                          extra_checked_at: DateTime.utc_now() |> DateTime.truncate(:second)
-                        }
-                    end
-
-                  attrs =
-                    Map.merge(
-                      %{
-                        library_path_id: library_path.id,
-                        relative_path: relative_path,
-                        size: file_info.size,
-                        verified_at: DateTime.utc_now()
-                      },
-                      extra_attrs
-                    )
-
-                  case Library.create_scanned_media_file(attrs) do
-                    {:ok, media_file} ->
-                      Logger.debug("Added new media file",
-                        path: file_info.path,
-                        relative_path: relative_path
-                      )
-
-                      {:ok, media_file, file_info}
-
-                    {:error, changeset} ->
-                      Logger.error("Failed to create media file",
-                        path: file_info.path,
-                        errors: inspect(changeset.errors)
-                      )
-
-                      {:error, file_info}
-                  end
-              end
-            end)
-          end)
-
-        batch_results
-      end)
-
-    # Process modified files in batches
-    changes.modified_files
-    |> Enum.chunk_every(batch_size)
-    |> Enum.with_index()
-    |> Enum.each(fn {batch, batch_index} ->
-      batch_num = batch_index + 1
-      total_batches = ceil(total_modified / batch_size)
-
-      Logger.debug("Processing modified files batch #{batch_num}/#{total_batches}",
-        batch_size: length(batch)
-      )
-
-      # Broadcast progress
-      Phoenix.PubSub.broadcast(
-        Mydia.PubSub,
-        "library_scanner",
-        {:library_scan_progress,
-         %{
-           library_path_id: library_path.id,
-           stage: :updating_files,
-           current: batch_index * batch_size + length(batch),
-           total: total_modified
-         }}
-      )
-
-      # Process batch in a transaction
-      Repo.transaction(fn ->
-        Enum.each(batch, fn file_info ->
-          # Calculate relative path to find the file in database
-          relative_path = Path.relative_to(file_info.path, library_path.path)
-
-          case Library.get_media_file_by_relative_path(
-                 library_path.id,
-                 relative_path
-               ) do
-            nil ->
-              Logger.warning("Modified file not found in database",
-                path: file_info.path,
-                relative_path: relative_path
-              )
-
-            media_file ->
-              {:ok, _} =
-                Library.update_media_file_scan(media_file, %{
-                  size: file_info.size,
-                  verified_at: DateTime.utc_now()
-                })
-
-              Logger.debug("Updated media file", path: file_info.path)
-          end
-        end)
-      end)
-    end)
-
-    # Process deleted files in batches
-    changes.deleted_files
-    |> Enum.chunk_every(batch_size)
-    |> Enum.with_index()
-    |> Enum.each(fn {batch, batch_index} ->
-      batch_num = batch_index + 1
-      total_batches = ceil(total_deleted / batch_size)
-
-      Logger.debug("Processing deleted files batch #{batch_num}/#{total_batches}",
-        batch_size: length(batch)
-      )
-
-      # Broadcast progress
-      Phoenix.PubSub.broadcast(
-        Mydia.PubSub,
-        "library_scanner",
-        {:library_scan_progress,
-         %{
-           library_path_id: library_path.id,
-           stage: :deleting_files,
-           current: batch_index * batch_size + length(batch),
-           total: total_deleted
-         }}
-      )
-
-      # Process batch in a transaction — trash instead of hard-delete
-      Repo.transaction(fn ->
-        Enum.each(batch, fn media_file ->
-          # Preload library_path association for path resolution
-          media_file = Mydia.Repo.preload(media_file, :library_path)
-          absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-          # These files are missing from disk, which is the one case
-          # Library.trash_media_file/1 has nothing to move, so a failure here
-          # is a database problem. Log it and keep going rather than raising a
-          # MatchError that aborts the whole batch transaction and rolls back
-          # every other file in it.
-          case Library.trash_media_file(media_file) do
-            {:ok, _} ->
-              Logger.debug("Trashed media file record", path: absolute_path)
-
-            {:error, reason} ->
-              Logger.error("Failed to trash a media file missing from disk",
-                path: absolute_path,
-                media_file_id: media_file.id,
-                reason: inspect(reason)
-              )
-          end
-        end)
-      end)
-    end)
-
-    # Prepare result for metadata enrichment
-    result = %{changes: changes, scan_result: scan_result, new_media_files: new_media_files}
-
-    # Get metadata provider config
-    metadata_config = Metadata.default_relay_config()
-
-    # Process metadata enrichment for new files in parallel (outside transaction)
-    # Use Task.async_stream for concurrency with back-pressure
-    total_to_enrich = Enum.count(result.new_media_files, &match?({:ok, _, _}, &1))
-
-    Logger.info("Starting metadata enrichment",
-      total_files: total_to_enrich,
-      max_concurrency: 10
-    )
-
-    enrichment_results =
-      result.new_media_files
-      |> Enum.filter(&match?({:ok, _, _}, &1))
-      |> Stream.with_index()
-      |> Task.async_stream(
-        fn {{:ok, media_file, file_info}, index} ->
-          # Broadcast progress every 10 files
-          if rem(index, 10) == 0 do
-            Phoenix.PubSub.broadcast(
-              Mydia.PubSub,
-              "library_scanner",
-              {:library_scan_progress,
-               %{
-                 library_path_id: library_path.id,
-                 stage: :enriching_metadata,
-                 current: index,
-                 total: total_to_enrich
-               }}
-            )
-          end
-
-          # Try to parse, match, and enrich the file
-          process_result = process_media_file(media_file, file_info, metadata_config)
-          {media_file, process_result}
-        end,
-        max_concurrency: 10,
-        timeout: :infinity,
-        on_timeout: :kill_task
-      )
-      |> Enum.map(fn
-        {:ok, result} ->
-          result
-
-        {:exit, reason} ->
-          Logger.warning("Metadata enrichment task crashed", reason: inspect(reason))
-          nil
-      end)
-      |> Enum.reject(&is_nil/1)
-
-    # Count type mismatches in new files
-    type_mismatch_count =
-      Enum.count(enrichment_results, fn {_file, result} ->
-        result == {:error, :library_type_mismatch}
-      end)
-
-    # Both populations, deliberately. The new-file stream alone would report
-    # zero on a library whose backlog is all existing orphans, which is the
-    # shape this change exists to fix.
-    new_file_auto_linked =
-      Enum.count(enrichment_results, fn {_file, result} ->
-        result == {:ok, :auto_linked}
-      end)
-
-    # Initialize tracking for robust cleanup operations
-    cleanup_stats = %{
-      orphaned_files_fixed: 0,
-      tv_orphans_fixed: 0,
-      associations_updated: 0,
-      invalid_paths_removed: 0,
-      type_mismatches_detected: type_mismatch_count,
-      movies_in_series_libs: 0,
-      tv_in_movies_libs: 0,
-      auto_linked: 0
-    }
-
-    # 1. Re-enrich completely orphaned files (no media_item_id and no episode_id)
-    # Skip extras/samples/trailers, they should remain orphaned.
-    completely_orphaned =
-      existing_files
-      |> Enum.filter(fn file ->
-        is_nil(file.media_item_id) and is_nil(file.episode_id)
-      end)
-      |> Enum.reject(fn file ->
-        file = Mydia.Repo.preload(file, :library_path)
-        abs_path = Mydia.Library.MediaFile.absolute_path(file)
-
-        not SampleDetector.skip_detection?(abs_path) and
-          SampleDetector.excluded?(SampleDetector.detect(abs_path))
-      end)
-
-    file_info_by_path =
-      Map.new(result.scan_result.files, fn file_info -> {file_info.path, file_info} end)
-
-    orphan_stats =
-      OrphanReenricher.run(library_path, completely_orphaned, file_info_by_path,
-        reenrich: &process_media_file/3,
-        config: metadata_config
-      )
-
-    cleanup_stats = Map.put(cleanup_stats, :orphaned_files_fixed, orphan_stats.fixed)
-
-    # Kept separate from cleanup_stats so Task 5's auto_linked total can add
-    # the new-file stream's count to this one. Galactica's orphans are all
-    # existing files, so a total taken from the new-file stream alone would
-    # report zero while items were being created.
-    orphan_auto_linked = orphan_stats.auto_linked
-
-    # Both populations, summed only now that both are computed:
-    # new_file_auto_linked comes from the new-file stream above, and
-    # orphan_auto_linked from the orphan branch that just ran.
-    auto_linked_count = new_file_auto_linked + orphan_auto_linked
-    cleanup_stats = Map.put(cleanup_stats, :auto_linked, auto_linked_count)
-
-    # 2. Fix orphaned TV show files (have media_item_id for TV show but no episode_id)
-    # Preload media_item to check type
-    tv_orphaned_files =
-      existing_files
-      |> Repo.preload(:media_item)
-      |> Enum.filter(fn file ->
-        not is_nil(file.media_item_id) and
-          is_nil(file.episode_id) and
-          file.media_item != nil and
-          file.media_item.type == "tv_show"
-      end)
-
-    cleanup_stats =
-      if tv_orphaned_files != [] do
-        Logger.info("Fixing orphaned TV show files", count: length(tv_orphaned_files))
-
-        fixed_count =
-          Enum.count(tv_orphaned_files, fn media_file ->
-            fix_orphaned_tv_file(media_file, metadata_config)
-          end)
-
-        Map.put(cleanup_stats, :tv_orphans_fixed, fixed_count)
+        {0, nil}
       else
-        cleanup_stats
+        ImportCandidates.delete_missing(library_path.id, on_disk_paths)
       end
 
-    # 3. Re-validate file associations for TV shows
-    # Check if season/episode info changed by re-parsing filenames
-    tv_files_with_episodes =
-      existing_files
-      |> Repo.preload([:media_item, :episode])
-      |> Enum.filter(fn file ->
-        not is_nil(file.episode_id) and file.episode != nil
-      end)
-
-    cleanup_stats =
-      if tv_files_with_episodes != [] do
-        Logger.debug("Re-validating TV file associations",
-          count: length(tv_files_with_episodes)
-        )
-
-        updated_count =
-          Enum.count(tv_files_with_episodes, fn media_file ->
-            revalidate_tv_file_association(media_file)
-          end)
-
-        Map.put(cleanup_stats, :associations_updated, updated_count)
+    discovery =
+      if library_path.auto_import do
+        discover_unknown_paths(library_path, unknown, opts)
       else
-        cleanup_stats
+        %{candidates: 0, auto_promoted: 0}
       end
-
-    # 4. Detect existing type mismatches in library
-    # Find movies in series-only libraries
-    movies_in_series_libs =
-      detect_type_mismatches(existing_files, library_path, :movies_in_series)
-
-    # Find TV shows in movies-only libraries
-    tv_in_movies_libs =
-      detect_type_mismatches(existing_files, library_path, :tv_in_movies)
-
-    cleanup_stats =
-      cleanup_stats
-      |> Map.put(:movies_in_series_libs, length(movies_in_series_libs))
-      |> Map.put(:tv_in_movies_libs, length(tv_in_movies_libs))
-
-    # Log detected mismatches
-    if movies_in_series_libs != [] do
-      sample_paths =
-        Enum.take(movies_in_series_libs, 3)
-        |> Enum.map(fn file ->
-          # Preload library_path association for path resolution
-          file = Mydia.Repo.preload(file, :library_path)
-          Mydia.Library.MediaFile.absolute_path(file)
-        end)
-
-      Logger.warning("Detected movies in series-only library",
-        count: length(movies_in_series_libs),
-        library_path: library_path.path,
-        sample_paths: sample_paths
-      )
-    end
-
-    if tv_in_movies_libs != [] do
-      sample_paths =
-        Enum.take(tv_in_movies_libs, 3)
-        |> Enum.map(fn file ->
-          # Preload library_path association for path resolution
-          file = Mydia.Repo.preload(file, :library_path)
-          Mydia.Library.MediaFile.absolute_path(file)
-        end)
-
-      Logger.warning("Detected TV shows in movies-only library",
-        count: length(tv_in_movies_libs),
-        library_path: library_path.path,
-        sample_paths: sample_paths
-      )
-    end
-
-    # 5. Track removed files with invalid paths
-    cleanup_stats =
-      Map.put(cleanup_stats, :invalid_paths_removed, length(result.changes.deleted_files))
-
-    # Log cleanup summary
-    if cleanup_stats.orphaned_files_fixed > 0 or cleanup_stats.tv_orphans_fixed > 0 or
-         cleanup_stats.associations_updated > 0 or cleanup_stats.invalid_paths_removed > 0 or
-         cleanup_stats.type_mismatches_detected > 0 or cleanup_stats.movies_in_series_libs > 0 or
-         cleanup_stats.tv_in_movies_libs > 0 do
-      Logger.info("Cleanup summary",
-        orphaned_files_fixed: cleanup_stats.orphaned_files_fixed,
-        tv_orphans_fixed: cleanup_stats.tv_orphans_fixed,
-        associations_updated: cleanup_stats.associations_updated,
-        invalid_paths_removed: cleanup_stats.invalid_paths_removed,
-        type_mismatches_detected: cleanup_stats.type_mismatches_detected,
-        movies_in_series_libs: cleanup_stats.movies_in_series_libs,
-        tv_in_movies_libs: cleanup_stats.tv_in_movies_libs
-      )
-    end
-
-    result = Map.put(result, :cleanup_stats, cleanup_stats)
 
     # Update library path with success status (skip for runtime paths)
     if updatable_library_path?(library_path) do
@@ -854,9 +432,6 @@ defmodule Mydia.Jobs.LibraryScanner do
         })
     end
 
-    # Broadcast scan completed with cleanup stats
-    cleanup_stats = Map.get(result, :cleanup_stats, %{})
-
     Phoenix.PubSub.broadcast(
       Mydia.PubSub,
       "library_scanner",
@@ -864,26 +439,357 @@ defmodule Mydia.Jobs.LibraryScanner do
        %{
          library_path_id: library_path.id,
          type: library_path.type,
-         new_files: length(result.changes.new_files),
-         modified_files: length(result.changes.modified_files),
-         deleted_files: length(result.changes.deleted_files),
-         orphaned_files_fixed: Map.get(cleanup_stats, :orphaned_files_fixed, 0),
-         tv_orphans_fixed: Map.get(cleanup_stats, :tv_orphans_fixed, 0),
-         associations_updated: Map.get(cleanup_stats, :associations_updated, 0),
-         invalid_paths_removed: Map.get(cleanup_stats, :invalid_paths_removed, 0),
-         type_mismatches_detected: Map.get(cleanup_stats, :type_mismatches_detected, 0),
-         auto_linked: Map.get(cleanup_stats, :auto_linked, 0),
-         movies_in_series_libs: Map.get(cleanup_stats, :movies_in_series_libs, 0),
-         tv_in_movies_libs: Map.get(cleanup_stats, :tv_in_movies_libs, 0)
+         new_files: length(changes.new_files),
+         modified_files: length(changes.modified_files),
+         deleted_files: length(changes.deleted_files),
+         auto_linked: discovery.auto_promoted
        }}
     )
 
-    {:ok, result}
+    {:ok,
+     %{
+       changes: changes,
+       discovery: discovery,
+       auto_promoted: discovery.auto_promoted,
+       restored: restored_count,
+       reaped_candidates: reaped_candidates
+     }}
   rescue
     error ->
       error_message = Exception.format(:error, error, __STACKTRACE__)
       Logger.error("Library scan raised exception", error: error_message)
       handle_scan_error(library_path, error_message)
+  end
+
+  # Known-file maintenance: a file whose size or effective mtime changed
+  # since it was last verified gets its stats refreshed. Runs unconditionally,
+  # in both auto_import modes. `active_by_path` is the caller's already-fetched
+  # path index (see process_scan_result/3), so this issues zero queries of
+  # its own regardless of how many files changed.
+  defp process_modified_files(modified_file_infos, library_path, active_by_path) do
+    Enum.each(modified_file_infos, fn file_info ->
+      relative_path = Path.relative_to(file_info.path, library_path.path)
+
+      case Map.get(active_by_path, relative_path) do
+        nil ->
+          Logger.warning("Modified file not found in database",
+            path: file_info.path,
+            relative_path: relative_path
+          )
+
+        media_file ->
+          {:ok, _} =
+            Library.update_media_file_scan(media_file, %{
+              size: file_info.size,
+              verified_at: DateTime.utc_now()
+            })
+
+          Logger.debug("Updated media file", path: file_info.path)
+      end
+    end)
+
+    :ok
+  end
+
+  # Known-file maintenance: an owned file no longer found on disk is trashed,
+  # not deleted -- `Library.trash_media_file/1` moves the record into the
+  # trashed state so it can be restored if the file reappears (see
+  # partition_and_restore/3). Runs unconditionally, in both auto_import modes.
+  defp process_deleted_files(deleted_media_files) do
+    Enum.each(deleted_media_files, fn media_file ->
+      media_file = Repo.preload(media_file, :library_path)
+      absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
+
+      # These files are missing from disk, which is the one case
+      # Library.trash_media_file/1 has nothing to move, so a failure here is
+      # a database problem. Log it and keep going rather than crashing the
+      # whole scan over one row.
+      case Library.trash_media_file(media_file) do
+        {:ok, _} ->
+          Logger.debug("Trashed media file record", path: absolute_path)
+
+        {:error, reason} ->
+          Logger.error("Failed to trash a media file missing from disk",
+            path: absolute_path,
+            media_file_id: media_file.id,
+            reason: inspect(reason)
+          )
+      end
+    end)
+
+    :ok
+  end
+
+  # `changes.new_files` (from Library.Scanner.detect_changes/3) is every path
+  # with no *active* owned media file. Some of those paths match a
+  # previously-trashed media file at the exact same relative path instead --
+  # that path was never unknown to this library, so restoring it is
+  # known-file maintenance, not discovery, and runs the same in both
+  # auto_import modes. What is left after peeling those off is genuinely
+  # unknown, and is the only thing the auto_import gate in
+  # process_scan_result/3 ever gets to see. `trashed_by_path` is the
+  # caller's already-fetched path index (see process_scan_result/3), so this
+  # issues zero lookup queries of its own regardless of how many new paths
+  # there are -- only `Library.restore_media_file/1` writes, one per actual
+  # restoration.
+  defp partition_and_restore(new_file_infos, library_path, trashed_by_path) do
+    {restored_count, unknown_acc} =
+      Enum.reduce(new_file_infos, {0, []}, fn file_info, {restored_count, unknown_acc} ->
+        relative_path = Path.relative_to(file_info.path, library_path.path)
+
+        case Map.get(trashed_by_path, relative_path) do
+          %{trashed_at: %DateTime{}} = trashed_file ->
+            case Library.restore_media_file(trashed_file) do
+              {:ok, _restored} ->
+                Logger.info("Restored trashed media file",
+                  path: file_info.path,
+                  relative_path: relative_path
+                )
+
+                {restored_count + 1, unknown_acc}
+
+              {:error, reason} ->
+                Logger.error("Failed to restore trashed media file",
+                  path: file_info.path,
+                  relative_path: relative_path,
+                  reason: inspect(reason)
+                )
+
+                {restored_count, unknown_acc}
+            end
+
+          nil ->
+            {restored_count, [file_info | unknown_acc]}
+        end
+      end)
+
+    {restored_count, Enum.reverse(unknown_acc)}
+  end
+
+  # Plex-mode discovery. Every unrecognized path becomes (or refreshes) a
+  # durable ImportCandidate first -- local parsing only, no relay call, and
+  # an existing candidate's dismissal is preserved by ImportCandidates.upsert/1
+  # never touching :dismissed_at. Only then is every currently-outstanding
+  # candidate for this library path -- this scan's new arrivals plus any
+  # earlier candidate whose retry backoff has since elapsed -- batch-matched
+  # and hand to FileIngest.ingest/3 under the :unattended policy. A confident
+  # match promotes into an owned media file; anything else (low confidence,
+  # no match, or a parsed extra/sample/trailer, which FileIngest always keeps
+  # in review) stays a candidate.
+  #
+  # Never called when library_path.auto_import is false: the caller
+  # (process_scan_result/3) substitutes a static %{candidates: 0,
+  # auto_promoted: 0} instead, so this function -- and therefore
+  # Metadata.default_relay_config/0, FileParser, BatchMatcher, and
+  # MetadataMatcher -- never runs for a library that has not opted in.
+  defp discover_unknown_paths(library_path, unknown_file_infos, opts) do
+    candidate_writes =
+      Enum.count(unknown_file_infos, fn file_info ->
+        upsert_discovered_candidate(file_info, library_path) == :ok
+      end)
+
+    matcher = Keyword.get(opts, :matcher, MetadataMatcher)
+    config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    max_match_pages = Keyword.get(opts, :max_match_pages, @max_discovery_match_pages)
+
+    auto_promoted =
+      match_outstanding_candidates(library_path, matcher, config, max_match_pages)
+
+    if candidate_writes > 0 do
+      Logger.info("Discovered unrecognized paths during scan",
+        library_path_id: library_path.id,
+        count: candidate_writes
+      )
+    end
+
+    %{candidates: candidate_writes, auto_promoted: auto_promoted}
+  end
+
+  # A file whose parsed type cannot belong to this library path is skipped
+  # entirely: no candidate is written for it at all, mirroring what
+  # `auto_import: false` already does for every unknown path. This is
+  # deliberately a hard skip rather than a candidate that stays permanently
+  # unmatched -- skipping means there is never a row to leave outstanding
+  # forever, and it reproduces master's actual guarantee (no parse-driven
+  # matcher/relay call for a type-incompatible file), which
+  # `validate_file_type_for_library/3` used to provide before this file's
+  # discovery rewrite deleted it along with the rest of the old per-file
+  # enrichment branch. See `type_compatible?/2`.
+  defp upsert_discovered_candidate(file_info, library_path) do
+    parsed = FileParser.parse_with_path(file_info.path)
+
+    if MediaFile.parsed_type_compatible?(library_path.type, parsed.type) do
+      relative_path = Path.relative_to(file_info.path, library_path.path)
+      existing = ImportCandidates.get_by_path(library_path.id, relative_path)
+      attrs = discovered_candidate_attrs(file_info, library_path, relative_path, parsed, existing)
+
+      case ImportCandidates.upsert(attrs) do
+        {:ok, _candidate} ->
+          :ok
+
+        {:error, changeset} ->
+          Logger.warning("Could not upsert an import candidate during a scan",
+            library_path_id: library_path.id,
+            relative_path: relative_path,
+            errors: inspect(changeset.errors)
+          )
+
+          :error
+      end
+    else
+      Logger.debug("Skipping a library-type-incompatible file during discovery",
+        library_path_id: library_path.id,
+        library_type: library_path.type,
+        parsed_type: parsed.type,
+        path: file_info.path
+      )
+
+      :skipped
+    end
+  end
+
+  # `size`/`mtime`/`parsed_info`/`media_type` are refreshed on every scan --
+  # they are derived from the file and the path alone, never from a match, so
+  # overwriting them is always safe and keeps them current if the file on disk
+  # changed. `discovered_at` is the one exception that is NOT refreshed: it is
+  # first-seen time, so an existing candidate's is carried forward.
+  #
+  # `dismissed_at` never appears in these attrs: leaving it out of the params
+  # `ImportCandidate.changeset/2` casts is what preserves a human's dismissal
+  # across a rescan (`ImportCandidates.upsert/1`'s own contract). The
+  # match/retry fields are preserved the same way -- left out of the attrs --
+  # unless the file's size or mtime actually changed on disk, in which case
+  # they are explicitly cleared: a match cached against the old bytes is not
+  # trustworthy evidence about the new ones.
+  defp discovered_candidate_attrs(file_info, library_path, relative_path, parsed, existing) do
+    mtime = DateTime.truncate(file_info.modified_at, :second)
+    anchor = PathAnchor.anchor_for(file_info.path, library_path.path)
+
+    base = %{
+      library_path_id: library_path.id,
+      relative_path: relative_path,
+      anchor_key: anchor.cluster_key,
+      size: file_info.size,
+      mtime: mtime,
+      media_type: to_string(parsed.type),
+      parsed_info: discovered_candidate_parsed_info(parsed),
+      discovered_at: existing_discovered_at(existing)
+    }
+
+    if existing && candidate_content_changed?(existing, file_info.size, mtime) do
+      Map.merge(base, %{
+        provider_type: nil,
+        provider_id: nil,
+        title: nil,
+        year: nil,
+        confidence: nil,
+        attempts: 0,
+        last_error: nil,
+        next_retry_at: nil
+      })
+    else
+      base
+    end
+  end
+
+  defp existing_discovered_at(nil), do: DateTime.utc_now() |> DateTime.truncate(:second)
+  defp existing_discovered_at(existing), do: existing.discovered_at
+
+  defp candidate_content_changed?(existing, size, mtime) do
+    existing.size != size or candidate_mtime_differs?(existing.mtime, mtime)
+  end
+
+  # A missing mtime on either side means there is nothing to compare against,
+  # not proof that the file changed.
+  defp candidate_mtime_differs?(nil, _mtime), do: false
+  defp candidate_mtime_differs?(_mtime, nil), do: false
+  defp candidate_mtime_differs?(a, b), do: DateTime.compare(a, b) != :eq
+
+  defp discovered_candidate_parsed_info(parsed) do
+    %{
+      "type" => to_string(parsed.type),
+      "season" => parsed.season,
+      "episodes" => parsed.episodes || [],
+      "is_sample" => parsed.is_sample || false,
+      "is_trailer" => parsed.is_trailer || false,
+      "is_extra" => parsed.is_extra || false
+    }
+  end
+
+  # Keyset-drains every outstanding candidate for the library path in pages
+  # of @discovery_chunk_size, matching and ingesting each page before moving
+  # to the next, so one scan settles as much of the backlog as it can rather
+  # than leaving everything past the first page for the next scheduled run.
+  defp match_outstanding_candidates(library_path, matcher, config, max_pages) do
+    match_outstanding_candidate_pages(library_path, matcher, config, max_pages, nil, 0, 0)
+  end
+
+  defp match_outstanding_candidate_pages(
+         _library_path,
+         _matcher,
+         _config,
+         max_pages,
+         _after_id,
+         promoted,
+         pages
+       )
+       when pages >= max_pages,
+       do: promoted
+
+  defp match_outstanding_candidate_pages(
+         library_path,
+         matcher,
+         config,
+         max_pages,
+         after_id,
+         promoted,
+         pages
+       ) do
+    case ImportCandidates.outstanding(library_path.id, @discovery_chunk_size, after: after_id) do
+      [] ->
+        promoted
+
+      chunk ->
+        chunk_promoted = match_and_ingest_chunk(chunk, library_path, matcher, config)
+        last_id = chunk |> List.last() |> Map.fetch!(:id)
+
+        match_outstanding_candidate_pages(
+          library_path,
+          matcher,
+          config,
+          max_pages,
+          last_id,
+          promoted + chunk_promoted,
+          pages + 1
+        )
+    end
+  end
+
+  defp match_and_ingest_chunk(chunk, library_path, matcher, config) do
+    by_path = Map.new(chunk, &{ImportCandidate.absolute_path(&1), &1})
+
+    by_path
+    |> Map.keys()
+    |> BatchMatcher.match_paths(
+      library_root: library_path.path,
+      matcher: matcher,
+      config: config,
+      provider: library_path.tv_metadata_source
+    )
+    |> Enum.map(fn {path, result} -> ingest_discovered_match(by_path, path, result, config) end)
+    |> Enum.count(&match?({:promoted, _}, &1))
+  end
+
+  defp ingest_discovered_match(by_path, path, result, config) do
+    candidate = Map.fetch!(by_path, path)
+
+    match =
+      case result do
+        {:ok, match} -> match
+        {:error, _reason} -> nil
+      end
+
+    FileIngest.ingest(candidate, match, policy: :unattended, config: config)
   end
 
   # Checks if a library path can be updated in the database.
@@ -893,565 +799,4 @@ defmodule Mydia.Jobs.LibraryScanner do
   end
 
   defp updatable_library_path?(_), do: true
-
-  @doc false
-  # Public so the rebuild can be tested directly. Its caller `scan_library_path/1`
-  # is private and the entry point `perform_job/1` is tagged `:external` and
-  # excluded from the default suite.
-  #
-  # The scan caches matches as `MatchCandidate` rows, but `/import` renders
-  # `ImportGroup` rows, and nothing built the second from the first unless a
-  # human started an import run. That is why a library could hold hundreds of
-  # matched orphans while the inbox said there was nothing to review.
-  #
-  # Skipped while a run is active. `ImportGroups.write_group/4` strips
-  # `:status` from an existing row but not `:import_run_id`, so rebuilding with
-  # no run id would detach the running import's own groups from it. The run
-  # rebuilds them itself when it finishes, so yielding costs nothing.
-  #
-  # A failure here must not fail the scan either: by the time this runs,
-  # process_scan_result/2 has already committed every file change and the
-  # caller already reports the scan a success, so letting an exception here
-  # crash the whole Oban job would report a false failure over work that
-  # already landed. upsert_for_library/2 is idempotent, so the next scan (or
-  # the import run this raced against, once it finishes) redoes any group
-  # this attempt missed, for free. Concretely, `write_group/4` hard-matches
-  # `{:ok, group} = Repo.insert_or_update()`, and the active-run check above
-  # is check-then-act with a real window: if this rebuild races a freshly
-  # started import run's own upsert on the same new cluster_key, the loser
-  # hits a genuine unique-constraint collision and that match raises.
-  @spec rebuild_import_groups(LibraryPath.t()) ::
-          {:ok, %{groups: non_neg_integer(), files: non_neg_integer()}} | :skipped | :error
-  def rebuild_import_groups(library_path) do
-    case Library.active_import_run(library_path.id) do
-      nil ->
-        ImportGroups.upsert_for_library(library_path)
-
-      _run ->
-        Logger.debug("Skipping import group rebuild, a run is active",
-          library_path_id: library_path.id
-        )
-
-        :skipped
-    end
-  rescue
-    error ->
-      Logger.warning("Import group rebuild failed",
-        library_path_id: library_path.id,
-        error: Exception.format(:error, error, __STACKTRACE__)
-      )
-
-      :error
-  end
-
-  defp process_media_file(media_file, file_info, metadata_config) do
-    Logger.debug("Processing media file for metadata", path: file_info.path)
-
-    # Load library_path to check type restrictions
-    media_file = Repo.preload(media_file, :library_path)
-    library_path = media_file.library_path
-
-    # Early validation: check if file type is compatible with library type
-    # Parse the file using full path to leverage folder structure for TV shows
-    # This ensures files in "/media/tv/Show Name/Season XX/" are correctly identified
-    parsed = FileParser.parse_with_path(file_info.path)
-
-    case validate_file_type_for_library(parsed.type, library_path, file_info.path) do
-      :ok ->
-        # Type is compatible, proceed with matching
-        match_file_to_existing_items(media_file, file_info, metadata_config, library_path)
-
-      {:error, _reason} = error ->
-        # Type mismatch, skip processing
-        error
-    end
-  end
-
-  defp validate_file_type_for_library(file_type, library_path, file_path) do
-    cond do
-      # Mixed libraries allow both types
-      library_path.type == :mixed ->
-        :ok
-
-      # Series-only library: only allow TV shows
-      library_path.type == :series and file_type == :tv_show ->
-        :ok
-
-      library_path.type == :series and file_type == :movie ->
-        Logger.info("Skipping movie file in series-only library",
-          path: file_path,
-          library_path: library_path.path,
-          library_type: library_path.type
-        )
-
-        {:error, :library_type_mismatch}
-
-      # Movies-only library: only allow movies
-      library_path.type == :movies and file_type == :movie ->
-        :ok
-
-      library_path.type == :movies and file_type == :tv_show ->
-        Logger.info("Skipping TV show file in movies-only library",
-          path: file_path,
-          library_path: library_path.path,
-          library_type: library_path.type
-        )
-
-        {:error, :library_type_mismatch}
-
-      # Unknown file type - let it through for now
-      file_type == :unknown ->
-        Logger.debug("Unknown file type, allowing matching attempt",
-          path: file_path
-        )
-
-        :ok
-
-      # Any other case
-      true ->
-        :ok
-    end
-  end
-
-  defp match_file_to_existing_items(media_file, file_info, metadata_config, library_path) do
-    # Use the library's configured TV metadata source for new matches.
-    provider = library_path && library_path.tv_metadata_source
-
-    # Try to match the file to metadata
-    case MetadataMatcher.match_file(file_info.path,
-           config: metadata_config,
-           provider: provider
-         ) do
-      {:ok, match_result} ->
-        Logger.info("Matched media file",
-          path: file_info.path,
-          title: match_result.title,
-          provider_id: match_result.provider_id,
-          confidence: match_result.match_confidence,
-          from_local_db: Map.get(match_result, :from_local_db, false)
-        )
-
-        # The policy is the auto-import gate. It stays `:local_only` for every
-        # library that has not opted in, which is what keeps a scheduled scan
-        # from inventing items behind the user: an external match is cached as
-        # a candidate and the file stays orphaned for the inbox to offer.
-        policy = FileIngest.policy_for(library_path, media_file)
-
-        ingest_result =
-          FileIngest.ingest(media_file, match_result,
-            policy: policy,
-            config: metadata_config
-          )
-
-        log_ingest_result(ingest_result, match_result, file_info)
-        scan_result_from_ingest(ingest_result, auto_linked?(policy, match_result))
-
-      {:error, :unknown_media_type} ->
-        Logger.debug("Could not determine media type",
-          path: file_info.path
-        )
-
-        {:error, :unknown_media_type}
-
-      {:error, :no_matches_found} ->
-        Logger.info("No metadata matches found - file will remain orphaned",
-          path: file_info.path
-        )
-
-        {:error, :no_matches_found}
-
-      {:error, :low_confidence_match} ->
-        Logger.info("Only low confidence matches found - file will remain orphaned",
-          path: file_info.path
-        )
-
-        {:error, :low_confidence_match}
-
-      {:error, reason} ->
-        Logger.warning("Failed to match media file",
-          path: file_info.path,
-          reason: reason
-        )
-
-        {:error, reason}
-    end
-  rescue
-    error ->
-      Logger.error("Exception while processing media file",
-        path: file_info.path,
-        error: Exception.message(error)
-      )
-
-      {:error, :exception}
-  end
-
-  defp log_ingest_result({:linked, media_item}, _match_result, file_info) do
-    Logger.info("Associated file with existing media item",
-      media_item_id: media_item.id,
-      title: media_item.title,
-      path: file_info.path
-    )
-  end
-
-  defp log_ingest_result({:candidate, _candidate}, match_result, file_info) do
-    Logger.info("Skipping external match - file will remain orphaned for manual import",
-      path: file_info.path,
-      title: match_result.title,
-      provider_id: match_result.provider_id
-    )
-  end
-
-  defp log_ingest_result({:error, {:library_type_mismatch, message}}, _match_result, file_info) do
-    Logger.warning("Library type mismatch detected",
-      path: file_info.path,
-      error: message
-    )
-  end
-
-  defp log_ingest_result(_ingest_result, _match_result, _file_info), do: :ok
-
-  @doc false
-  # True only for a link that `:local_only` would not have made: the library
-  # opted into auto-import and the match came from an external provider. A
-  # local-database link would have happened on any scan, so counting it would
-  # overstate what auto-import actually did.
-  @spec auto_linked?(FileIngest.policy(), map()) :: boolean()
-  def auto_linked?(:create_items, match_result),
-    do: not Map.get(match_result, :from_local_db, false)
-
-  def auto_linked?(:local_only, _match_result), do: false
-
-  @doc false
-  # Public only so the mapping from a `FileIngest.ingest/3` result plus its
-  # auto-import classification to the scanner's legacy return contract can be
-  # tested directly. The caller, `match_file_to_existing_items/4`, is private
-  # and its only entry point (`perform_job/1`) is tagged `:external` and
-  # excluded from the default test suite, so without this seam the
-  # translation, including the ordering that makes `{:library_type_mismatch,
-  # _}` take priority over the generic `{:error, _}` catch-all, would have
-  # zero coverage.
-  @spec scan_result_from_ingest(FileIngest.result(), boolean()) ::
-          {:ok, :enriched | :auto_linked} | {:error, atom()}
-  def scan_result_from_ingest({:linked, _media_item}, true), do: {:ok, :auto_linked}
-  def scan_result_from_ingest({:linked, _media_item}, false), do: {:ok, :enriched}
-
-  def scan_result_from_ingest({:candidate, _candidate}, _auto_linked?),
-    do: {:error, :no_local_match}
-
-  def scan_result_from_ingest({:error, {:library_type_mismatch, _message}}, _auto_linked?),
-    do: {:error, :library_type_mismatch}
-
-  def scan_result_from_ingest({:error, _reason}, _auto_linked?), do: {:error, :enrichment_failed}
-  def scan_result_from_ingest(:no_match, _auto_linked?), do: {:error, :no_matches_found}
-
-  # Detects type mismatches in existing files based on library path type
-  defp detect_type_mismatches(existing_files, library_path, mismatch_type) do
-    # Skip detection for :mixed libraries (they allow both types)
-    if library_path.type == :mixed do
-      []
-    else
-      existing_files
-      |> Repo.preload([:media_item, :episode])
-      |> Enum.filter(fn file ->
-        case mismatch_type do
-          :movies_in_series ->
-            # Movies in a series-only library
-            library_path.type == :series and
-              not is_nil(file.media_item_id) and
-              file.media_item != nil and
-              file.media_item.type == "movie"
-
-          :tv_in_movies ->
-            # TV shows in a movies-only library
-            library_path.type == :movies and
-              not is_nil(file.episode_id) and
-              file.episode != nil
-        end
-      end)
-    end
-  end
-
-  # Attempts to fix an orphaned TV show file by matching it to an episode
-  defp fix_orphaned_tv_file(media_file, metadata_config) do
-    try do
-      # Preload library_path association for path resolution
-      media_file = Mydia.Repo.preload(media_file, :library_path)
-      path_for_log = Mydia.Library.MediaFile.absolute_path(media_file)
-
-      Logger.debug("Attempting to fix orphaned TV file",
-        path: path_for_log,
-        media_item_id: media_file.media_item_id
-      )
-
-      # Parse using full path to extract season from folder structure if available
-      # This handles files where filename doesn't contain season info but folder does
-      parsed = FileParser.parse_with_path(path_for_log)
-
-      case parsed do
-        %{type: :tv_show, season: season, episodes: episodes}
-        when not is_nil(season) and not is_nil(episodes) ->
-          # Try to find the episode in the database
-          # For multi-episode files, use the first episode
-          episode_number = List.first(episodes)
-
-          case Mydia.Media.get_episode_by_number(media_file.media_item_id, season, episode_number) do
-            nil ->
-              # Episode doesn't exist yet, try to fetch it from TMDB
-              Logger.info("Episode not found, attempting to fetch from provider",
-                media_item_id: media_file.media_item_id,
-                season: season,
-                episode: episode_number
-              )
-
-              # Fetch the media item to get provider ID
-              media_item = Mydia.Media.get_media_item!(media_file.media_item_id)
-
-              # Prefer tvdb_id for TV shows, fall back to tmdb_id
-              {provider_id, has_tvdb} =
-                cond do
-                  media_item.tvdb_id -> {media_item.tvdb_id, true}
-                  media_item.tmdb_id -> {media_item.tmdb_id, false}
-                  true -> {nil, false}
-                end
-
-              if provider_id do
-                # Pass tvdb_season_id when using TVDB so the relay routes correctly
-                fetch_opts =
-                  if has_tvdb do
-                    # For TVDB we need the season's TVDB ID for proper routing
-                    # We don't have it here, so pass empty opts (relay will use series ID + season number)
-                    []
-                  else
-                    []
-                  end
-
-                # Fetch season data from the appropriate provider
-                case Metadata.fetch_season(
-                       metadata_config,
-                       to_string(provider_id),
-                       season,
-                       fetch_opts
-                     ) do
-                  {:ok, season_data} ->
-                    # Create episodes for this season
-                    create_episodes_from_season(media_item, season_data)
-
-                    # Try to find the episode again
-                    case Mydia.Media.get_episode_by_number(
-                           media_file.media_item_id,
-                           season,
-                           episode_number
-                         ) do
-                      nil ->
-                        Logger.warning("Episode still not found after provider fetch",
-                          media_item_id: media_file.media_item_id,
-                          season: season,
-                          episode: episode_number
-                        )
-
-                        false
-
-                      episode ->
-                        associate_file_with_episode(media_file, episode)
-                    end
-
-                  {:error, reason} ->
-                    Logger.warning("Failed to fetch season from provider",
-                      media_item_id: media_file.media_item_id,
-                      season: season,
-                      reason: reason
-                    )
-
-                    false
-                end
-              else
-                Logger.warning("Media item has no provider ID, cannot fetch episodes",
-                  media_item_id: media_file.media_item_id
-                )
-
-                false
-              end
-
-            episode ->
-              # Episode exists, associate the file with it
-              associate_file_with_episode(media_file, episode)
-          end
-
-        _ ->
-          Logger.debug("Could not parse season/episode info from filename",
-            path: path_for_log
-          )
-
-          false
-      end
-    rescue
-      error ->
-        # Recalculate path for error logging if media_file hasn't been preloaded yet
-        media_file = Mydia.Repo.preload(media_file, :library_path, force: true)
-        error_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-        Logger.error("Exception while fixing orphaned TV file",
-          path: error_path,
-          error: Exception.message(error)
-        )
-
-        false
-    end
-  end
-
-  # Re-validates a TV file's episode association by re-parsing the filename
-  defp revalidate_tv_file_association(media_file) do
-    # Preload library_path for path resolution
-    media_file = Mydia.Repo.preload(media_file, :library_path)
-    full_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-    # Parse using full path to extract season from folder structure if available
-    parsed = FileParser.parse_with_path(full_path)
-
-    case parsed do
-      %{type: :tv_show, season: season, episodes: episodes}
-      when not is_nil(season) and not is_nil(episodes) ->
-        # Get the first episode number (for multi-episode files)
-        episode_number = List.first(episodes)
-
-        # Check if this matches the current association
-        if media_file.episode.season_number != season or
-             media_file.episode.episode_number != episode_number do
-          Logger.info("File association mismatch detected",
-            path: full_path,
-            current_season: media_file.episode.season_number,
-            current_episode: media_file.episode.episode_number,
-            parsed_season: season,
-            parsed_episode: episode_number
-          )
-
-          # Try to find the correct episode
-          case Mydia.Media.get_episode_by_number(
-                 media_file.episode.media_item_id,
-                 season,
-                 episode_number
-               ) do
-            nil ->
-              Logger.warning("Correct episode not found, keeping current association",
-                media_item_id: media_file.episode.media_item_id,
-                season: season,
-                episode: episode_number
-              )
-
-              false
-
-            new_episode ->
-              # Update the association
-              case Library.update_media_file(media_file, %{episode_id: new_episode.id}) do
-                {:ok, _updated_file} ->
-                  Logger.info("Updated file association",
-                    path: full_path,
-                    old_episode:
-                      "S#{media_file.episode.season_number}E#{media_file.episode.episode_number}",
-                    new_episode: "S#{new_episode.season_number}E#{new_episode.episode_number}"
-                  )
-
-                  true
-
-                {:error, reason} ->
-                  Logger.error("Failed to update file association",
-                    path: full_path,
-                    reason: reason
-                  )
-
-                  false
-              end
-          end
-        else
-          # Association is correct
-          false
-        end
-
-      _ ->
-        # Could not parse or not a TV show file
-        false
-    end
-  rescue
-    error ->
-      # Preload library_path association for path resolution in rescue
-      media_file = Mydia.Repo.preload(media_file, :library_path)
-      path_for_log = Mydia.Library.MediaFile.absolute_path(media_file)
-
-      Logger.error("Exception while revalidating file association",
-        path: path_for_log,
-        error: Exception.message(error)
-      )
-
-      false
-  end
-
-  # Associates a media file with an episode
-  # For TV shows, files should have episode_id set, not media_item_id
-  # So we need to clear media_item_id when setting episode_id
-  defp associate_file_with_episode(media_file, episode) do
-    try do
-      # Preload library_path association for path resolution
-      media_file = Mydia.Repo.preload(media_file, :library_path)
-      path_for_log = Mydia.Library.MediaFile.absolute_path(media_file)
-
-      case Library.update_media_file(media_file, %{episode_id: episode.id, media_item_id: nil}) do
-        {:ok, _updated_file} ->
-          Logger.info("Associated file with episode",
-            path: path_for_log,
-            episode: "S#{episode.season_number}E#{episode.episode_number}"
-          )
-
-          true
-
-        {:error, reason} ->
-          Logger.error("Failed to associate file with episode",
-            path: path_for_log,
-            reason: inspect(reason)
-          )
-
-          false
-      end
-    rescue
-      error ->
-        # Recalculate path for error logging
-        media_file = Mydia.Repo.preload(media_file, :library_path, force: true)
-        error_path = Mydia.Library.MediaFile.absolute_path(media_file)
-
-        Logger.error("Exception while associating file with episode",
-          path: error_path,
-          error: Exception.message(error)
-        )
-
-        false
-    end
-  end
-
-  # Creates/updates episodes from season data using the consolidated function
-  defp create_episodes_from_season(media_item, season_data) do
-    {:ok, count} =
-      Mydia.Media.upsert_episodes_from_season(media_item, season_data,
-        monitor_new?:
-          Mydia.Media.should_monitor_new_episode?(media_item, season_data.season_number)
-      )
-
-    Logger.debug("Upserted #{count} episodes from season data",
-      media_item_id: media_item.id,
-      season: season_data.season_number
-    )
-  rescue
-    error ->
-      Logger.error("Exception while creating episodes from season data",
-        media_item_id: media_item.id,
-        error: Exception.message(error)
-      )
-  end
-
-  # nil when the file is a version, {kind, source} when it is an extra.
-  defp extra_classification(path) do
-    if SampleDetector.skip_detection?(path) do
-      nil
-    else
-      SampleDetector.extra_kind(SampleDetector.detect(path))
-    end
-  end
 end

@@ -21,7 +21,7 @@ defmodule Mydia.Library.MetadataMatcher do
   @type match_result :: MatchResult.t()
 
   # Cost of a known-wrong year on an otherwise plausible title. Sized against
-  # `Mydia.ImportGroups`' 0.85 auto-accept threshold: an exact title match
+  # `Mydia.ImportCandidates`' 0.85 auto-accept threshold: an exact title match
   # cannot score below 0.9, so anything at or under 0.10 leaves a contradicted
   # year auto-accepting silently. Sized from above too -- `select_best_tv_match/2`
   # discards anything under 0.5, and a suggestion a reviewer can see and correct

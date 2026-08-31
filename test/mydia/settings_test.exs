@@ -599,11 +599,14 @@ defmodule Mydia.SettingsTest do
 
       # Create media file records with relative paths
       for file <- test_files do
+        movie = insert(:media_item, type: "movie")
+
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
           |> Mydia.Library.MediaFile.scan_changeset(%{
             library_path_id: library_path.id,
             relative_path: file,
+            media_item_id: movie.id,
             size: 1000
           })
           |> Ecto.Changeset.put_change(:path, Path.join(old_path, file))
@@ -642,11 +645,14 @@ defmodule Mydia.SettingsTest do
 
       # Create media file records with relative paths
       for file <- test_files do
+        movie = insert(:media_item, type: "movie")
+
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
           |> Mydia.Library.MediaFile.scan_changeset(%{
             library_path_id: library_path.id,
             relative_path: file,
+            media_item_id: movie.id,
             size: 1000
           })
           |> Ecto.Changeset.put_change(:path, Path.join(old_path, file))
@@ -696,11 +702,14 @@ defmodule Mydia.SettingsTest do
 
       # Create media file records with relative paths
       for file <- test_files do
+        movie = insert(:media_item, type: "movie")
+
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
           |> Mydia.Library.MediaFile.scan_changeset(%{
             library_path_id: library_path.id,
             relative_path: file,
+            media_item_id: movie.id,
             size: 1000
           })
           |> Ecto.Changeset.put_change(:path, Path.join(old_path, file))
@@ -754,11 +763,14 @@ defmodule Mydia.SettingsTest do
 
       # Create media file records for all 15 files
       for file <- test_files do
+        movie = insert(:media_item, type: "movie")
+
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
           |> Mydia.Library.MediaFile.scan_changeset(%{
             library_path_id: library_path.id,
             relative_path: file,
+            media_item_id: movie.id,
             size: 1000
           })
           |> Ecto.Changeset.put_change(:path, Path.join(old_path, file))
@@ -818,11 +830,14 @@ defmodule Mydia.SettingsTest do
 
       # Create media file records
       for file <- test_files do
+        movie = insert(:media_item, type: "movie")
+
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
           |> Mydia.Library.MediaFile.scan_changeset(%{
             library_path_id: library_path.id,
             relative_path: file,
+            media_item_id: movie.id,
             size: 1000
           })
           |> Ecto.Changeset.put_change(:path, Path.join(old_path, file))
@@ -857,11 +872,14 @@ defmodule Mydia.SettingsTest do
 
       # Create media file records
       for file <- test_files do
+        movie = insert(:media_item, type: "movie")
+
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
           |> Mydia.Library.MediaFile.scan_changeset(%{
             library_path_id: library_path.id,
             relative_path: file,
+            media_item_id: movie.id,
             size: 1000
           })
           |> Ecto.Changeset.put_change(:path, Path.join(old_path, file))
@@ -903,11 +921,14 @@ defmodule Mydia.SettingsTest do
 
       # Create media file records
       for file <- test_files do
+        movie = insert(:media_item, type: "movie")
+
         {:ok, _media_file} =
           %Mydia.Library.MediaFile{}
           |> Mydia.Library.MediaFile.scan_changeset(%{
             library_path_id: library_path.id,
             relative_path: file,
+            media_item_id: movie.id,
             size: 1000
           })
           |> Ecto.Changeset.put_change(:path, Path.join(old_path, file))

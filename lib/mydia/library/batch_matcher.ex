@@ -25,8 +25,11 @@ defmodule Mydia.Library.BatchMatcher do
 
   `match_paths/2` returns exactly one result per input path, no matter what
   happens inside a worker. `Jobs.ImportRun`'s match loop depends on that: a
-  path with no result gets no `MatchCandidate`, stays in the outstanding set,
-  and is reselected by every later chunk forever.
+  path with no result gets no `ImportCandidate` update, stays in the
+  outstanding set (`Mydia.ImportCandidates.outstanding/3`), and is reselected
+  by every later chunk forever. `Mydia.ImportCandidates`'s rematch path
+  (`ImportCandidates.rematch/2`) depends on the same guarantee for its own
+  `ImportCandidate` rows.
 
   Two layers keep that true. `MetadataMatcher.match_file/2` is HTTP plus
   parsing of payloads this code does not control, so a raise there is

@@ -114,7 +114,7 @@ defmodule MydiaWeb.Live.UserAuth do
       |> assign(:movie_count, Mydia.Media.count_movies())
       |> assign(:tv_show_count, Mydia.Media.count_tv_shows())
       |> assign(:downloads_count, Mydia.Downloads.count_active_downloads())
-      |> assign(:import_group_count, Mydia.ImportGroups.count_pending())
+      |> assign(:import_candidate_group_count, Mydia.ImportCandidates.count_pending())
       |> assign(:pending_requests_count, pending_requests_count)
       |> assign(:configured_library_types, configured_library_types)
       |> assign(:executing_jobs, executing_jobs)

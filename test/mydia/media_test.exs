@@ -660,6 +660,8 @@ defmodule Mydia.MediaTest do
 
   describe "episodes" do
     alias Mydia.Media.Episode
+    alias Mydia.Library.{ImportCandidate, MediaFile}
+    alias Mydia.Repo
 
     import Mydia.MediaFixtures
 
@@ -711,6 +713,62 @@ defmodule Mydia.MediaTest do
       episode = episode_fixture(media_item_id: media_item.id)
       assert {:ok, %Episode{}} = Media.delete_episode(episode)
       assert_raise Ecto.NoResultsError, fn -> Media.get_episode!(episode.id) end
+    end
+
+    test "deleting an episode demotes its file without leaving an orphan" do
+      show = media_item_fixture(%{type: "tv_show", tvdb_id: 1234})
+      episode = episode_fixture(media_item_id: show.id, season_number: 2, episode_number: 3)
+
+      file =
+        media_file_fixture(
+          episode_id: episode.id,
+          relative_path: "Show/Season 02/S02E03.mkv"
+        )
+
+      assert {:ok, _episode} = Media.delete_episode(episode)
+      refute Repo.get(MediaFile, file.id)
+
+      assert %ImportCandidate{
+               relative_path: "Show/Season 02/S02E03.mkv",
+               provider_type: "tvdb",
+               provider_id: "1234",
+               parsed_info: %{"season" => 2, "episodes" => [3]}
+             } = Repo.get_by!(ImportCandidate, library_path_id: file.library_path_id)
+    end
+
+    test "episode demotion uses the media item's authoritative provider" do
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          tvdb_id: 1234,
+          tmdb_id: 5678,
+          metadata_source: :tmdb
+        })
+
+      episode = episode_fixture(media_item_id: show.id, season_number: 2, episode_number: 3)
+      file = media_file_fixture(episode_id: episode.id, relative_path: "Show/S02E03.mkv")
+
+      assert {:ok, _episode} = Media.delete_episode(episode)
+
+      assert %ImportCandidate{provider_type: "tmdb", provider_id: "5678"} =
+               Repo.get_by!(ImportCandidate, library_path_id: file.library_path_id)
+    end
+
+    test "episode demotion preserves a known provider when its id is unavailable" do
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          tvdb_id: 1234,
+          metadata_source: :tmdb
+        })
+
+      episode = episode_fixture(media_item_id: show.id, season_number: 2, episode_number: 3)
+      file = media_file_fixture(episode_id: episode.id, relative_path: "Show/S02E03.mkv")
+
+      assert {:ok, _episode} = Media.delete_episode(episode)
+
+      assert %ImportCandidate{provider_type: "tmdb", provider_id: nil} =
+               Repo.get_by!(ImportCandidate, library_path_id: file.library_path_id)
     end
 
     test "create_episode/1 casts and persists absolute_number and provider_episode_id" do
@@ -1973,7 +2031,7 @@ defmodule Mydia.MediaTest do
       assert is_nil(Mydia.Repo.get!(MediaItem, reconciled.id).season_order)
     end
 
-    test "swaps provider ids, recreates episodes, and re-links files", ctx do
+    test "swaps provider ids, recreates episodes, and demotes episode files", ctx do
       stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
       stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1, 2])
 
@@ -1998,16 +2056,14 @@ defmodule Mydia.MediaTest do
       # The old episode row is gone (wiped, not left parallel).
       assert is_nil(Mydia.Repo.get(Mydia.Media.Episode, ctx.old_episode.id))
 
-      # The previously episode-linked file is still attached to the show
-      # (re-linked by filename), not orphaned with both ids null.
       media_file = Mydia.Repo.get(Mydia.Library.MediaFile, ctx.media_file.id)
-      refute is_nil(media_file)
-      # Re-linked by filename to a recreated episode (not left orphaned).
-      assert not is_nil(media_file.episode_id)
+      assert is_nil(media_file)
 
-      relinked = Mydia.Repo.get(Mydia.Media.Episode, media_file.episode_id)
-      assert relinked.season_number == 1
-      assert relinked.episode_number == 1
+      assert %Mydia.Library.ImportCandidate{} =
+               Mydia.Repo.get_by(Mydia.Library.ImportCandidate,
+                 library_path_id: ctx.media_file.library_path_id,
+                 relative_path: ctx.media_file.relative_path
+               )
     end
 
     test "a failed new-provider fetch leaves existing episodes intact", ctx do
@@ -2162,7 +2218,7 @@ defmodule Mydia.MediaTest do
       }
     end
 
-    test "swaps to tvdb ids, recreates episodes, and re-links files", ctx do
+    test "swaps to tvdb ids, recreates episodes, and demotes episode files", ctx do
       tvdb_season_id = System.unique_integer([:positive])
       stub_tvdb_show(ctx.bypass, ctx.new_id, "TVDB Show", 2010, [{1, tvdb_season_id}])
       stub_tvdb_season(ctx.bypass, tvdb_season_id, 1, [1, 2])
@@ -2188,10 +2244,14 @@ defmodule Mydia.MediaTest do
       # The old episode row is gone (wiped, not left parallel).
       assert is_nil(Mydia.Repo.get(Mydia.Media.Episode, ctx.old_episode.id))
 
-      # The previously episode-linked file is re-linked by filename.
       media_file = Mydia.Repo.get(Mydia.Library.MediaFile, ctx.media_file.id)
-      refute is_nil(media_file)
-      assert not is_nil(media_file.episode_id)
+      assert is_nil(media_file)
+
+      assert %Mydia.Library.ImportCandidate{} =
+               Mydia.Repo.get_by(Mydia.Library.ImportCandidate,
+                 library_path_id: ctx.media_file.library_path_id,
+                 relative_path: ctx.media_file.relative_path
+               )
     end
 
     test "clears a stale season_order picked under the old provider", ctx do
@@ -2684,6 +2744,86 @@ defmodule Mydia.MediaTest do
 
       assert {:ok, 1, 0} = Media.delete_media_items([item.id])
       assert File.exists?(abs)
+    end
+  end
+
+  describe "deleting a tv show gates episode file demotion on delete_files" do
+    alias Mydia.Library.ImportCandidate
+    alias Mydia.Media.MediaItem
+    alias Mydia.Repo
+
+    import Mydia.MediaFixtures
+    import Mydia.SettingsFixtures
+
+    setup do
+      tmp =
+        Path.join(System.tmp_dir!(), "mydia_media_show_del_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf(tmp) end)
+      %{library_path: library_path_fixture(%{path: tmp, type: "series"})}
+    end
+
+    defp show_with_episode_file(lp, rel, contents) do
+      media_item = media_item_fixture(%{type: "tv_show", tvdb_id: 1234})
+      episode = episode_fixture(media_item_id: media_item.id, season_number: 1, episode_number: 1)
+      absolute_path = Path.join(lp.path, rel)
+      File.mkdir_p!(Path.dirname(absolute_path))
+      File.write!(absolute_path, contents)
+
+      file =
+        media_file_fixture(
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: rel
+        )
+
+      {media_item, file}
+    end
+
+    defp candidate_for(file) do
+      Repo.get_by(ImportCandidate,
+        library_path_id: file.library_path_id,
+        relative_path: file.relative_path
+      )
+    end
+
+    test "delete_media_item/2 with delete_files: true creates no import candidate for the episode file",
+         %{library_path: lp} do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E01.mkv", "data")
+      abs = Path.join(lp.path, "Show/S01E01.mkv")
+
+      assert {:ok, %MediaItem{}, 0} = Media.delete_media_item(media_item, delete_files: true)
+      refute File.exists?(abs)
+      refute candidate_for(file)
+    end
+
+    test "delete_media_item/2 with delete_files: false still demotes the episode file", %{
+      library_path: lp
+    } do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E02.mkv", "data")
+      abs = Path.join(lp.path, "Show/S01E02.mkv")
+
+      assert {:ok, %MediaItem{}, 0} = Media.delete_media_item(media_item)
+      assert File.exists?(abs)
+      assert candidate_for(file)
+    end
+
+    test "delete_media_items/2 with delete_files: true creates no import candidates for episode files",
+         %{library_path: lp} do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E03.mkv", "data")
+
+      assert {:ok, 1, 0} = Media.delete_media_items([media_item.id], delete_files: true)
+      refute candidate_for(file)
+    end
+
+    test "delete_media_items/2 with delete_files: false still demotes episode files", %{
+      library_path: lp
+    } do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E04.mkv", "data")
+
+      assert {:ok, 1, 0} = Media.delete_media_items([media_item.id])
+      assert candidate_for(file)
     end
   end
 

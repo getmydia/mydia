@@ -16,6 +16,7 @@ defmodule Mydia.Events do
 
   @pubsub_name Mydia.PubSub
   @events_topic "events:all"
+  @pending_broadcasts_key :mydia_events_pending_broadcasts
 
   ## Event Creation
 
@@ -23,6 +24,17 @@ defmodule Mydia.Events do
   Creates an event and broadcasts it to subscribers.
 
   This is a synchronous operation that waits for database insert and PubSub broadcast.
+
+  Outside an ambient `Repo.transaction/2` the broadcast happens immediately,
+  exactly as always. Inside one, the insert still runs on the caller's
+  connection (so the event row rolls back with everything else -- see
+  `create_event_async/1`'s `Repo.in_transaction?()` branch), but the
+  broadcast is queued instead of firing right away: broadcasting eagerly
+  would let a subscriber see `{:event_created, event}` for a row the
+  surrounding transaction might still abort. `Mydia.Repo.transaction/2`
+  flushes the queue once its outermost call actually commits, and discards it
+  if that call rolls back. See `flush_pending_broadcasts/0` and
+  `discard_pending_broadcasts/0`, which only `Mydia.Repo` should call.
 
   ## Examples
 
@@ -38,12 +50,58 @@ defmodule Mydia.Events do
     |> Repo.insert()
     |> case do
       {:ok, event} = result ->
-        broadcast_event(event)
+        queue_or_broadcast(event)
         result
 
       error ->
         error
     end
+  end
+
+  defp queue_or_broadcast(event) do
+    if Repo.in_transaction?() do
+      enqueue_pending_broadcast(event)
+    else
+      broadcast_event(event)
+    end
+  end
+
+  defp enqueue_pending_broadcast(event) do
+    Process.put(@pending_broadcasts_key, [event | Process.get(@pending_broadcasts_key, [])])
+    :ok
+  end
+
+  @doc """
+  Broadcasts every event `create_event/1` queued while an ambient transaction
+  was open, then clears the queue.
+
+  Called by `Mydia.Repo.transaction/2` after its outermost call commits.
+  Never call this directly from application code.
+  """
+  @spec flush_pending_broadcasts() :: :ok
+  def flush_pending_broadcasts do
+    @pending_broadcasts_key
+    |> Process.delete()
+    |> case do
+      nil -> :ok
+      events -> events |> Enum.reverse() |> Enum.each(&broadcast_event/1)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Discards any events queued by `create_event/1` without broadcasting them.
+
+  Called by `Mydia.Repo.transaction/2` when its outermost call rolls back,
+  and before starting a fresh top-level transaction (to clear anything a
+  prior exception left behind). Never call this directly from application
+  code.
+  """
+  @spec discard_pending_broadcasts() :: :ok
+  def discard_pending_broadcasts do
+    Process.delete(@pending_broadcasts_key)
+    :ok
   end
 
   @doc """
@@ -62,10 +120,11 @@ defmodule Mydia.Events do
       :ok
   """
   def create_event_async(attrs) do
-    if sandbox_pool?() do
+    if sandbox_pool?() or Repo.in_transaction?() do
       # Under the SQL sandbox the test process owns the connection. A cast to
       # the long-lived writer would insert on a connection the test cannot see
-      # or roll back, so stay synchronous here.
+      # or roll back. A caller-owned transaction has the same atomicity
+      # requirement, so stay synchronous there as well.
       case create_event(attrs) do
         {:ok, event} ->
           Logger.debug("Event created asynchronously: #{event.type}")

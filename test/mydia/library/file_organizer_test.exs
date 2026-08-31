@@ -331,30 +331,6 @@ defmodule Mydia.Library.FileOrganizerTest do
     end
   end
 
-  describe "organize_file/2 error handling" do
-    test "returns error when media_item not found" do
-      base_path = unique_path("/media/movies")
-
-      {:ok, library_path} =
-        %LibraryPath{}
-        |> LibraryPath.changeset(%{
-          path: base_path,
-          type: :movies
-        })
-        |> Repo.insert()
-
-      {:ok, media_file} =
-        %MediaFile{}
-        |> MediaFile.scan_changeset(%{
-          relative_path: "orphan.mkv",
-          library_path_id: library_path.id
-        })
-        |> Repo.insert()
-
-      assert {:error, :no_media_item} = FileOrganizer.organize_file(media_file, dry_run: true)
-    end
-  end
-
   describe "place_file/3" do
     @describetag :tmp_dir
 

@@ -4,15 +4,24 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
   # jobs are inserted but never executed by the test run.
   use Oban.Testing, repo: Mydia.Repo
 
+  import Ecto.Query
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
+  import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
-  alias Mydia.ImportGroups
+  alias Mydia.ImportCandidates
   alias Mydia.Library
-  alias Mydia.Library.ImportGroup
+  alias Mydia.Library.{ImportCandidate, ImportCandidateGroup, MediaFile}
   alias Mydia.Repo
+
+  # "import all accepts every provider-matched result..." promotes a
+  # candidate with no locally pre-existing media item (the "uncertain" case),
+  # which makes CandidatePromotion enrich through a live provider fetch. The
+  # stub keeps that fetch on loopback instead of the real relay -- the test
+  # sandbox refuses real outbound HTTP outright.
+  setup :setup_metadata_stub
 
   setup %{conn: conn} do
     # The app skips Oban entirely in test env (see Mydia.Application), so
@@ -27,22 +36,6 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     library_path = library_path_fixture()
 
     {:ok, conn: log_in_user(conn, user), user: user, library_path: library_path}
-  end
-
-  defp import_group(library_path, attrs) do
-    defaults = %{
-      library_path_id: library_path.id,
-      anchor_path: "Show",
-      cluster_key: Ecto.UUID.generate(),
-      display_title: "Show",
-      file_count: 1,
-      unresolved_count: 1,
-      status: "pending"
-    }
-
-    %ImportGroup{}
-    |> ImportGroup.changeset(Map.merge(defaults, Map.new(attrs)))
-    |> Repo.insert!()
   end
 
   test "renders the run control", %{conn: conn} do
@@ -230,29 +223,31 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import")
 
-    media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
-
-    {:ok, _} =
-      Library.upsert_match_candidate(%{
-        media_file_id: media_file.id,
-        rank: 0,
+    candidate =
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
         provider_type: "tmdb",
         provider_id: "603",
         title: "The Matrix",
         confidence: 0.95
       })
 
-    {:ok, _} = ImportGroups.upsert_for_library(lp, import_run_id: run.id)
-    {[group], nil} = ImportGroups.page(lp.id)
+    dom_id =
+      ImportCandidateGroup.dom_id(%ImportCandidateGroup{
+        id: candidate.anchor_key,
+        anchor_key: candidate.anchor_key,
+        library_path_id: lp.id,
+        file_count: 1
+      })
 
-    refute has_element?(view, "#group-#{group.id}")
+    refute has_element?(view, "#group-#{dom_id}")
 
     {:ok, finished} =
       Library.update_import_run(run, %{status: :done, phase: :finished, files_matched: 1})
 
     send(view.pid, {:import_run_progress, finished})
 
-    assert has_element?(view, "#group-#{group.id}")
+    assert has_element?(view, "#group-#{dom_id}")
     assert has_element?(view, "#band-all .badge", "1")
     assert has_element?(view, "#review-section")
     assert has_element?(view, "#review-heading #scan-complete-status", "Scan complete")
@@ -393,21 +388,13 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
          library_path: lp,
          user: user
        } do
-    media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
-
-    {:ok, _} =
-      Library.upsert_match_candidate(%{
-        media_file_id: media_file.id,
-        rank: 0,
-        provider_type: "tmdb",
-        provider_id: "603",
-        title: "The Matrix",
-        confidence: 0.95
-      })
-
-    # The summary reads `import_groups`, same as the review section beneath it,
-    # so a bare MatchCandidate is not enough to produce a review count.
-    {:ok, _} = ImportGroups.upsert_for_library(lp)
+    import_candidate_fixture(%{
+      library_path_id: lp.id,
+      provider_type: "tmdb",
+      provider_id: "603",
+      title: "The Matrix",
+      confidence: 0.95
+    })
 
     {:ok, run} =
       Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
@@ -458,20 +445,16 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     library_path: lp,
     user: user
   } do
-    media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
-
-    {:ok, _} =
-      Library.upsert_match_candidate(%{
-        media_file_id: media_file.id,
-        rank: 0,
+    candidate =
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
         provider_type: "tmdb",
         provider_id: "603",
         title: "The Matrix",
         confidence: 0.95
       })
 
-    {:ok, _} = ImportGroups.upsert_for_library(lp)
-    {[group], nil} = ImportGroups.page(lp.id)
+    group = ImportCandidates.get_group(lp.id, candidate.anchor_key)
 
     {:ok, run} =
       Library.create_import_run(%{library_path_id: lp.id, user_id: user.id, mode: :review})
@@ -480,11 +463,9 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
 
     {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{lp.id}")
 
-    assert has_element?(view, "#group-#{group.id}")
+    assert has_element?(view, "#group-#{ImportCandidateGroup.dom_id(group)}")
     assert has_element?(view, "#review-section #clear-scan-results")
     refute has_element?(view, "#start-run-form #clear-scan-results")
-
-    assert Library.list_unmatched_media_file_paths(lp.id, 10) == []
 
     html =
       view
@@ -492,57 +473,75 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
       |> render_click()
 
     refute has_element?(view, "#run-outcome")
-    refute has_element?(view, "#group-#{group.id}")
+    refute has_element?(view, "#group-#{ImportCandidateGroup.dom_id(group)}")
     assert has_element?(view, "#no-groups", "Nothing to review")
     refute Library.last_import_run(lp.id)
 
     # The point of clearing: the cached verdict goes too, so the next scan
     # re-matches this file instead of rebuilding the same group from it.
-    assert Library.list_match_candidates(media_file.id) == []
-    file_id = media_file.id
-    assert [{^file_id, _path}] = Library.list_unmatched_media_file_paths(lp.id, 10)
-
-    assert html =~ "cached match(es)"
+    refute Repo.get(ImportCandidate, candidate.id)
+    assert html =~ "Dismissed decisions are preserved"
   end
 
   test "import all accepts every provider-matched result only for the selected library", %{
     conn: conn,
     library_path: selected
   } do
+    confident_movie = media_item_fixture(%{type: "movie", tmdb_id: 9001})
+
     confident =
-      import_group(selected,
-        display_title: "Confident",
+      import_candidate_fixture(%{
+        library_path_id: selected.id,
+        anchor_key: "confident",
+        media_type: "movie",
         provider_type: "tmdb",
-        provider_id: "1",
-        min_confidence: 0.99
-      )
+        provider_id: to_string(confident_movie.tmdb_id),
+        title: confident_movie.title,
+        year: confident_movie.year,
+        confidence: 0.99,
+        parsed_info: %{"type" => "movie"}
+      })
 
     uncertain =
-      import_group(selected,
-        display_title: "Uncertain",
+      import_candidate_fixture(%{
+        library_path_id: selected.id,
+        anchor_key: "uncertain",
+        media_type: "movie",
         provider_type: "tmdb",
-        provider_id: "2",
-        min_confidence: 0.55
-      )
+        provider_id: "9002",
+        confidence: 0.55,
+        parsed_info: %{"type" => "movie"}
+      })
 
-    unmatched = import_group(selected, display_title: "Unmatched")
+    unmatched =
+      import_candidate_fixture(%{
+        library_path_id: selected.id,
+        anchor_key: "unmatched",
+        media_type: "movie",
+        parsed_info: %{"type" => "movie"}
+      })
 
     local =
-      import_group(selected,
-        display_title: "Local",
+      import_candidate_fixture(%{
+        library_path_id: selected.id,
+        anchor_key: "local",
         provider_type: "local",
         provider_id: "local-item"
-      )
+      })
 
     other_library = library_path_fixture(%{type: "movies"})
+    other_movie = media_item_fixture(%{type: "movie", tmdb_id: 9003})
 
     other =
-      import_group(other_library,
-        display_title: "Other library",
+      import_candidate_fixture(%{
+        library_path_id: other_library.id,
+        anchor_key: "other library",
+        media_type: "movie",
         provider_type: "tmdb",
-        provider_id: "3",
-        min_confidence: 0.99
-      )
+        provider_id: to_string(other_movie.tmdb_id),
+        confidence: 0.99,
+        parsed_info: %{"type" => "movie"}
+      })
 
     {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{selected.id}")
 
@@ -553,16 +552,13 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     |> element("#import-all-results")
     |> render_click()
 
-    assert Repo.reload!(confident).status == "accepted"
-    assert Repo.reload!(uncertain).status == "accepted"
-    assert Repo.reload!(unmatched).status == "pending"
-    assert Repo.reload!(local).status == "pending"
-    assert Repo.reload!(other).status == "pending"
+    refute Repo.get(ImportCandidate, confident.id)
+    refute Repo.get(ImportCandidate, uncertain.id)
+    assert Repo.get(ImportCandidate, unmatched.id)
+    assert Repo.get(ImportCandidate, local.id)
+    assert Repo.get(ImportCandidate, other.id)
 
-    assert_enqueued(
-      worker: Mydia.Jobs.ApplyImportGroups,
-      args: %{"library_path_id" => selected.id}
-    )
+    assert Repo.exists?(from(f in MediaFile, where: f.media_item_id == ^confident_movie.id))
   end
 
   test "scan controls and review are both visible while idle", %{conn: conn} do
@@ -576,19 +572,13 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     conn: conn,
     library_path: lp
   } do
-    media_file = orphaned_media_file_fixture(%{library_path_id: lp.id})
-
-    {:ok, _} =
-      Library.upsert_match_candidate(%{
-        media_file_id: media_file.id,
-        rank: 0,
-        provider_type: "tmdb",
-        provider_id: "603",
-        title: "The Matrix",
-        confidence: 0.95
-      })
-
-    {:ok, _} = ImportGroups.upsert_for_library(lp)
+    import_candidate_fixture(%{
+      library_path_id: lp.id,
+      provider_type: "tmdb",
+      provider_id: "603",
+      title: "The Matrix",
+      confidence: 0.95
+    })
 
     {:ok, view, _html} = live(conn, ~p"/import")
 

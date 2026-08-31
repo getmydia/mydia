@@ -10,9 +10,10 @@ defmodule Mydia.Library.MetadataEnricher do
   """
 
   require Logger
-  alias Mydia.{Media, Metadata, Repo, Settings}
-  alias Mydia.Library.EpisodeMinter
+  alias Mydia.{Media, Metadata, Repo}
+  alias Mydia.Library.MetadataPreparation
   alias Mydia.Media.ExternalIds
+  alias Mydia.Media.MediaItem
   alias Mydia.Metadata.LanguageCode
   alias Mydia.Metadata.NfoWriter
 
@@ -26,7 +27,7 @@ defmodule Mydia.Library.MetadataEnricher do
     - `opts` - Options
       - `:config` - Provider configuration (default: Metadata.default_relay_config())
       - `:fetch_episodes` - For TV shows, whether to fetch episode data (default: true)
-      - `:media_file_id` - Optional media file ID to associate
+      - `:media_file_id` - Accepted for compatibility but never associated here
 
   ## Examples
 
@@ -36,12 +37,21 @@ defmodule Mydia.Library.MetadataEnricher do
   """
   def enrich(match_result, opts \\ [])
 
-  def enrich(%{provider_id: provider_id, provider_type: provider_type} = match_result, opts)
-      when not is_nil(provider_id) and not is_nil(provider_type) do
-    config = Keyword.get(opts, :config, Metadata.default_relay_config())
-    media_file_id = Keyword.get(opts, :media_file_id)
-    allow_episode_creation = Keyword.get(opts, :allow_episode_creation, false)
+  def enrich(match_result, opts) do
+    with {:ok, preparation} <- prepare(match_result, opts),
+         {:ok, media_item} <- persist_in_transaction(preparation) do
+      finalize(media_item)
+      {:ok, media_item}
+    end
+  end
 
+  @doc "Fetches all remote provider data without persisting metadata rows."
+  @spec prepare(map(), keyword()) :: {:ok, MetadataPreparation.t()} | {:error, term()}
+  def prepare(match_result, opts \\ [])
+
+  def prepare(%{provider_id: provider_id, provider_type: provider_type} = match_result, opts)
+      when is_binary(provider_id) and provider_type in [:tmdb, :tvdb] do
+    config = Keyword.get(opts, :config, Metadata.default_relay_config())
     media_type = determine_media_type(match_result)
 
     Logger.info("Enriching media with full metadata",
@@ -49,82 +59,20 @@ defmodule Mydia.Library.MetadataEnricher do
       provider_type: provider_type,
       media_type: media_type,
       title: match_result.title,
-      media_file_id: media_file_id,
       has_parsed_info: Map.has_key?(match_result, :parsed_info),
       parsed_info: Map.get(match_result, :parsed_info)
     )
 
-    # Validate library type compatibility if we have a media file
-    with :ok <- validate_library_type_compatibility(media_type, media_file_id) do
-      # Check if media item already exists
-      case get_or_create_media_item(provider_id, media_type, match_result, config) do
-        {:ok, media_item} ->
-          # Associate media file with media_item for movies only
-          # For TV shows, files are associated with episodes instead
-          if media_file_id && media_type == :movie do
-            associate_media_file(media_item, media_file_id)
-          end
-
-          # For TV shows, fetch and create episodes
-          if media_type == :tv_show and Keyword.get(opts, :fetch_episodes, true) do
-            # Add media_file_id to match_result so it can be used for episode file association
-            match_result_with_file_id =
-              if media_file_id do
-                Logger.debug(
-                  "Adding media_file_id to match_result for episode association: " <>
-                    "media_file_id=#{inspect(media_file_id)}, " <>
-                    "season=#{inspect(match_result.parsed_info.season)}, " <>
-                    "episodes=#{inspect(match_result.parsed_info.episodes)}"
-                )
-
-                Map.put(match_result, :media_file_id, media_file_id)
-              else
-                Logger.warning("No media_file_id provided for TV show import")
-                match_result
-              end
-
-            # Fast path: if episodes already exist, skip full enrichment and
-            # just associate the file with its target episode via DB lookup
-            if episodes_exist_for_show?(media_item) do
-              Logger.debug("Fast path: episodes exist, skipping enrichment",
-                media_item_id: media_item.id,
-                title: media_item.title
-              )
-
-              associate_file_with_target_episodes(
-                media_item,
-                match_result_with_file_id,
-                allow_episode_creation
-              )
-            else
-              enrich_episodes(
-                media_item,
-                provider_id,
-                config,
-                match_result_with_file_id,
-                allow_episode_creation
-              )
-            end
-          end
-
-          NfoWriter.maybe_write_nfos(media_item)
-
-          {:ok, media_item}
-
-        {:error, reason} = error ->
-          Logger.error("Failed to enrich media",
-            provider_id: provider_id,
-            reason: reason
-          )
-
-          error
-      end
+    with {:ok, id} <- provider_id(provider_id),
+         {:ok, preparation, metadata} <-
+           prepare_media_item(id, provider_id, provider_type, media_type, match_result, config),
+         {:ok, episode_seasons} <-
+           prepare_episode_seasons(preparation, metadata, config, opts) do
+      {:ok, %{preparation | episode_seasons: episode_seasons}}
     else
       {:error, reason} = error ->
-        Logger.error("Library type validation failed",
+        Logger.error("Failed to prepare media enrichment",
           provider_id: provider_id,
-          media_type: media_type,
-          media_file_id: media_file_id,
           reason: reason
         )
 
@@ -132,8 +80,7 @@ defmodule Mydia.Library.MetadataEnricher do
     end
   end
 
-  # Fallback clause for invalid match results (missing provider_id or provider_type)
-  def enrich(match_result, _opts) do
+  def prepare(match_result, _opts) do
     Logger.error("Invalid match result - missing provider_id or provider_type",
       has_provider_id: is_map(match_result) and Map.has_key?(match_result, :provider_id),
       has_provider_type: is_map(match_result) and Map.has_key?(match_result, :provider_type),
@@ -144,6 +91,19 @@ defmodule Mydia.Library.MetadataEnricher do
     {:error,
      {:invalid_match_result, "Match result missing required fields: provider_id or provider_type"}}
   end
+
+  @doc "Persists prepared metadata. The caller must own the surrounding transaction."
+  @spec persist(MetadataPreparation.t()) :: {:ok, MediaItem.t()} | {:error, term()}
+  def persist(%MetadataPreparation{} = preparation) do
+    with {:ok, media_item} <- persist_media_item(preparation),
+         :ok <- persist_episode_seasons(media_item, preparation.episode_seasons) do
+      {:ok, media_item}
+    end
+  end
+
+  @doc "Runs filesystem metadata export after the database transaction commits."
+  @spec finalize(MediaItem.t()) :: :ok
+  def finalize(media_item), do: NfoWriter.maybe_write_nfos(media_item)
 
   ## Private Functions
 
@@ -156,133 +116,133 @@ defmodule Mydia.Library.MetadataEnricher do
 
   defp determine_media_type(_), do: :movie
 
-  defp get_or_create_media_item(provider_id, media_type, match_result, config) do
-    provider_type = Map.get(match_result, :provider_type, :tmdb)
-    id = String.to_integer(provider_id)
+  defp provider_id(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {id, ""} when id > 0 -> {:ok, id}
+      _ -> {:error, {:invalid_provider_id, value}}
+    end
+  end
 
-    # Look up existing item by the appropriate provider ID
+  defp prepare_media_item(
+         id,
+         provider_id,
+         provider_type,
+         media_type,
+         match_result,
+         config
+       ) do
     existing_item =
-      if provider_type == :tvdb do
-        Media.get_media_item_by_tvdb(id)
-      else
-        Media.get_media_item_by_tmdb(id)
-      end
+      if provider_type == :tvdb,
+        do: Media.get_media_item_by_tvdb(id),
+        else: Media.get_media_item_by_tmdb(id)
 
     case existing_item do
       nil ->
-        # Fetch full metadata and create new item
-        create_new_media_item(provider_id, media_type, match_result, config)
+        Logger.debug("Preparing new media item", provider_id: provider_id, type: media_type)
 
-      item ->
-        # Update existing item with latest metadata. Pass the match's resolved
-        # provider so a nil-source item can adopt it (see provenance handling
-        # in update_existing_media_item/5).
-        update_existing_media_item(item, provider_id, media_type, config, provider_type)
-    end
-  end
+        with {:ok, metadata} <-
+               fetch_full_metadata(provider_id, media_type, config, provider_type, nil) do
+          attrs = build_media_item_attrs(metadata, media_type, match_result)
 
-  defp create_new_media_item(provider_id, media_type, match_result, config) do
-    Logger.debug("Creating new media item", provider_id: provider_id, type: media_type)
-
-    provider_type = Map.get(match_result, :provider_type, :tmdb)
-
-    # No row exists yet, so there is no recorded ordering: the item is created
-    # with season_order nil, which is the official ordering.
-    case fetch_full_metadata(provider_id, media_type, config, provider_type, nil) do
-      {:ok, full_metadata} ->
-        attrs = build_media_item_attrs(full_metadata, media_type, match_result)
-
-        case Media.create_media_item(attrs, skip_episode_refresh: true) do
-          {:ok, media_item} ->
-            # Episodes will be fetched by enrich_episodes if needed
-            {:ok, media_item}
-
-          error ->
-            error
+          {:ok,
+           %MetadataPreparation{
+             provider_id: provider_id,
+             provider_type: provider_type,
+             media_type: media_type,
+             operation: :create,
+             media_item_attrs: attrs,
+             episode_seasons: []
+           }, metadata}
+        else
+          {:error, reason} -> {:error, {:metadata_fetch_failed, reason}}
         end
 
-      {:error, reason} ->
-        {:error, {:metadata_fetch_failed, reason}}
+      existing_item ->
+        prepare_existing_media_item(
+          existing_item,
+          provider_id,
+          provider_type,
+          media_type,
+          config
+        )
     end
   end
 
-  defp update_existing_media_item(
+  defp prepare_existing_media_item(
          existing_item,
          provider_id,
+         match_provider_type,
          media_type,
-         config,
-         match_provider_type
+         config
        ) do
-    # Skip re-fetching metadata if the item was recently updated (within the last hour)
-    # This avoids redundant HTTP calls when importing multiple files for the same show
-    if recently_enriched?(existing_item) do
-      maybe_stamp_recently_enriched(existing_item, media_type, match_provider_type)
-    else
-      Logger.debug("Updating existing media item",
-        id: existing_item.id,
-        provider_id: provider_id
-      )
+    cond do
+      recently_enriched?(existing_item) and
+        media_type == :tv_show and is_nil(existing_item.metadata_source) ->
+        {:ok,
+         preparation(
+           existing_item,
+           provider_id,
+           match_provider_type,
+           media_type,
+           :stamp_source,
+           %{
+             metadata_source: match_provider_type
+           }
+         ), existing_item.metadata}
 
-      # An explicit `metadata_source` is authoritative provenance and wins
-      # (preserve behavior from f1e4840f). Otherwise a nil-source item adopts
-      # the match's resolved provider. We never infer from id presence:
-      # maybe_discover_tvdb_id back-fills tvdb_id onto TMDB-matched shows, so
-      # id-inference would mis-stamp dual-id rows.
-      provider_type = existing_item.metadata_source || match_provider_type
+      recently_enriched?(existing_item) ->
+        Logger.debug("Skipping metadata re-fetch for recently enriched item",
+          id: existing_item.id,
+          title: existing_item.title
+        )
 
-      case fetch_full_metadata(
-             provider_id,
-             media_type,
-             config,
-             provider_type,
-             existing_item.season_order
-           ) do
-        {:ok, full_metadata} ->
-          # `exclude_id` matters only here: the row already exists and usually
-          # already owns the cross-referenced id, so without it the item is
-          # found as the owner of its own id, the id is dropped and the
-          # operator gets a spurious duplicate warning out of an ordinary scan.
-          attrs =
-            build_media_item_attrs(full_metadata, media_type, %{
-              provider_type: provider_type,
-              exclude_id: existing_item.id
-            })
+        {:ok,
+         preparation(existing_item, provider_id, match_provider_type, media_type, :reuse, nil),
+         existing_item.metadata}
 
-          Media.update_media_item(existing_item, attrs, reason: "Metadata enriched")
+      true ->
+        provider_type = existing_item.metadata_source || match_provider_type
 
-        {:error, reason} ->
-          Logger.warning("Failed to fetch updated metadata, returning existing item",
-            id: existing_item.id,
-            reason: reason
-          )
+        case fetch_full_metadata(
+               provider_id,
+               media_type,
+               config,
+               provider_type,
+               existing_item.season_order
+             ) do
+          {:ok, metadata} ->
+            attrs =
+              build_media_item_attrs(metadata, media_type, %{
+                provider_type: provider_type,
+                exclude_id: existing_item.id
+              })
 
-          {:ok, existing_item}
-      end
+            {:ok,
+             preparation(existing_item, provider_id, provider_type, media_type, :update, attrs),
+             metadata}
+
+          {:error, reason} ->
+            Logger.warning("Failed to fetch updated metadata, returning existing item",
+              id: existing_item.id,
+              reason: reason
+            )
+
+            {:ok, preparation(existing_item, provider_id, provider_type, media_type, :reuse, nil),
+             existing_item.metadata}
+        end
     end
   end
 
-  # Within the freshness window we skip the relay re-fetch, but a nil-source TV
-  # item must still record provenance — otherwise self-heal would silently
-  # no-op for items rescanned within the hour. Stamp only (no relay call);
-  # items that already carry a source are left untouched.
-  defp maybe_stamp_recently_enriched(
-         %{metadata_source: nil} = existing_item,
-         :tv_show,
-         provider_type
-       )
-       when not is_nil(provider_type) do
-    Media.update_media_item(existing_item, %{metadata_source: provider_type},
-      reason: "Provenance recorded"
-    )
-  end
-
-  defp maybe_stamp_recently_enriched(existing_item, _media_type, _provider_type) do
-    Logger.debug("Skipping metadata re-fetch for recently enriched item",
-      id: existing_item.id,
-      title: existing_item.title
-    )
-
-    {:ok, existing_item}
+  defp preparation(existing_item, provider_id, provider_type, media_type, operation, attrs) do
+    %MetadataPreparation{
+      provider_id: provider_id,
+      provider_type: provider_type,
+      media_type: media_type,
+      operation: operation,
+      media_item_id: existing_item.id,
+      media_item_attrs: attrs,
+      episode_seasons: []
+    }
   end
 
   defp fetch_full_metadata(provider_id, media_type, config, provider_type, season_order) do
@@ -400,90 +360,102 @@ defmodule Mydia.Library.MetadataEnricher do
 
   defp extract_year_from_date(_), do: nil
 
-  defp associate_media_file(media_item, media_file_id) do
-    # Update the media file to associate it with this media item
-    media_file = Mydia.Library.get_media_file!(media_file_id)
-
-    case Mydia.Library.update_media_file(media_file, %{media_item_id: media_item.id}) do
-      {:ok, _updated_file} ->
-        Logger.debug("Associated media file with media item",
-          media_file_id: media_file_id,
-          media_item_id: media_item.id
-        )
-
-        :ok
-
-      {:error, changeset} ->
-        Logger.error("Failed to associate media file with media item",
-          media_file_id: media_file_id,
-          media_item_id: media_item.id,
-          errors: inspect(changeset.errors)
-        )
-
-        {:error, changeset}
-    end
-  rescue
-    error ->
-      Logger.error("Exception while associating media file with media item",
-        media_file_id: media_file_id,
-        media_item_id: media_item.id,
-        error: Exception.message(error)
-      )
-
-      {:error, error}
+  defp persist_in_transaction(preparation) do
+    Repo.transaction(fn ->
+      case persist(preparation) do
+        {:ok, media_item} -> media_item
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
-  defp enrich_episodes(
-         media_item,
-         provider_id,
-         config,
-         match_result,
-         allow_episode_creation
-       ) do
+  defp prepare_episode_seasons(preparation, metadata, config, opts) do
+    should_fetch? =
+      preparation.media_type == :tv_show and
+        Keyword.get(opts, :fetch_episodes, true) and
+        not episodes_exist_for_show?(preparation.media_item_id)
+
+    if should_fetch? do
+      fetch_episode_seasons(metadata, preparation.provider_id, config)
+    else
+      {:ok, []}
+    end
+  end
+
+  defp persist_media_item(%MetadataPreparation{operation: :create, media_item_attrs: attrs}) do
+    Media.create_media_item(attrs, skip_episode_refresh: true)
+  end
+
+  defp persist_media_item(%MetadataPreparation{
+         operation: operation,
+         media_item_id: media_item_id,
+         media_item_attrs: attrs
+       })
+       when operation in [:update, :stamp_source] do
+    case Repo.get(MediaItem, media_item_id) do
+      nil -> {:error, {:media_item_missing, media_item_id}}
+      media_item -> Media.update_media_item(media_item, attrs, reason: "Metadata enriched")
+    end
+  end
+
+  defp persist_media_item(%MetadataPreparation{operation: :reuse, media_item_id: media_item_id}) do
+    case Repo.get(MediaItem, media_item_id) do
+      nil -> {:error, {:media_item_missing, media_item_id}}
+      media_item -> {:ok, media_item}
+    end
+  end
+
+  defp persist_episode_seasons(media_item, episode_seasons) do
+    Enum.each(episode_seasons, &create_episodes_for_season(media_item, &1))
+    :ok
+  end
+
+  defp fetch_episode_seasons(metadata, provider_id, config) do
     Logger.debug("Fetching episodes for TV show",
-      media_item_id: media_item.id,
-      title: media_item.title
+      provider_id: provider_id,
+      title: if(is_map(metadata), do: Map.get(metadata, :title), else: nil)
     )
 
     # Get seasons list from metadata (includes tvdb_season_id if from TVDB)
-    seasons = get_seasons_list(media_item.metadata)
+    seasons = get_seasons_list(metadata)
 
     # The show's original language lets the TVDB season/episode fetch prefer the
     # original-language translation before falling back to English.
-    original_language = LanguageCode.original_language_from(media_item.metadata)
+    original_language = LanguageCode.original_language_from(metadata)
 
     if seasons != [] do
-      # Fetch and create/update all episodes
-      Enum.each(seasons, fn season ->
-        season_num = Map.get(season, :season_number, 0)
-        tvdb_season_id = Map.get(season, :tvdb_season_id)
+      season_data =
+        Enum.reduce(seasons, [], fn season, acc ->
+          season_num = Map.get(season, :season_number, 0)
+          tvdb_season_id = Map.get(season, :tvdb_season_id)
 
-        fetch_opts =
-          [tvdb_season_id: tvdb_season_id, original_language: original_language]
-          |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+          fetch_opts =
+            [tvdb_season_id: tvdb_season_id, original_language: original_language]
+            |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
-        case Metadata.fetch_season_cached(config, provider_id, season_num, fetch_opts) do
-          {:ok, season_data} ->
-            create_episodes_for_season(media_item, season_data)
+          case Metadata.fetch_season_cached(config, provider_id, season_num, fetch_opts) do
+            {:ok, fetched_season} ->
+              [fetched_season | acc]
 
-          {:error, reason} ->
-            Logger.warning("Failed to fetch season data",
-              media_item_id: media_item.id,
-              season: season_num,
-              reason: reason
-            )
-        end
-      end)
+            {:error, reason} ->
+              Logger.warning("Failed to fetch season data",
+                provider_id: provider_id,
+                season: season_num,
+                reason: reason
+              )
 
-      # After all episodes are created, directly associate the file with the target episode(s)
-      associate_file_with_target_episodes(media_item, match_result, allow_episode_creation)
+              acc
+          end
+        end)
+
+      {:ok, Enum.reverse(season_data)}
     else
       Logger.warning("No season information available",
-        media_item_id: media_item.id
+        provider_id: provider_id
       )
-    end
 
-    :ok
+      {:ok, []}
+    end
   end
 
   defp get_seasons_list(%{seasons: seasons}) when is_list(seasons) do
@@ -510,136 +482,15 @@ defmodule Mydia.Library.MetadataEnricher do
     )
   end
 
-  # Directly associates the media file with target episodes using O(1) lookups
-  # instead of iterating through all episodes
-  defp associate_file_with_target_episodes(
-         media_item,
-         %{
-           parsed_info: %{season: season, episodes: episode_numbers} = parsed,
-           media_file_id: media_file_id
-         },
-         allow_episode_creation
-       )
-       when is_binary(media_file_id) and is_list(episode_numbers) do
-    Logger.debug("Associating file with target episodes via direct lookup",
-      media_item_id: media_item.id,
-      season: season,
-      episode_numbers: episode_numbers,
-      media_file_id: media_file_id
-    )
-
-    # Direct lookup for each target episode - O(k) where k is the number of episodes in the file
-    # Typically k=1, sometimes k=2 for double episodes
-    Enum.each(episode_numbers, fn episode_number ->
-      case Media.get_episode_by_number(media_item.id, season, episode_number) do
-        nil ->
-          maybe_mint_and_associate(
-            media_item,
-            season,
-            episode_number,
-            media_file_id,
-            Map.get(parsed, :original_filename),
-            allow_episode_creation
-          )
-
-        episode ->
-          associate_media_file_with_episode(episode, media_file_id)
-      end
-    end)
-  end
-
-  defp associate_file_with_target_episodes(_media_item, match_result, _allow) do
-    # No media_file_id or parsed_info - nothing to associate
-    Logger.debug("Skipping file association - no media_file_id or parsed episode info",
-      has_media_file_id: Map.has_key?(match_result, :media_file_id),
-      has_parsed_info: Map.has_key?(match_result, :parsed_info)
-    )
-
-    :ok
-  end
-
-  # The provider does not have this episode. Creating it is allowed only on a
-  # user-accepted import (`FileIngest`'s `:create_items` policy), and only for a
-  # coordinate `EpisodeMinter` considers plausible for this show. Anything else
-  # keeps the old behaviour exactly: warn, leave the file orphaned, and let
-  # `FileIngest.confirm_association/3` write the reason onto the rank-0
-  # candidate so the inbox can show it.
-  defp maybe_mint_and_associate(
-         media_item,
-         season,
-         episode_number,
-         media_file_id,
-         filename,
-         true
-       ) do
-    case EpisodeMinter.mint(media_item, season, episode_number, filename) do
-      {:ok, episode} ->
-        associate_media_file_with_episode(episode, media_file_id)
-
-      {:error, reason} ->
-        Logger.warning("Could not create the missing episode for file association",
-          media_item_id: media_item.id,
-          season: season,
-          episode: episode_number,
-          reason: inspect(reason)
-        )
-    end
-  end
-
-  defp maybe_mint_and_associate(
-         media_item,
-         season,
-         episode_number,
-         _media_file_id,
-         _filename,
-         false
-       ) do
-    Logger.warning("Target episode not found for file association",
-      media_item_id: media_item.id,
-      season: season,
-      episode: episode_number
-    )
-  end
-
-  defp associate_media_file_with_episode(episode, media_file_id) do
-    media_file =
-      Mydia.Library.get_media_file!(media_file_id)
-      |> Mydia.Repo.preload(:library_path)
-
-    case Mydia.Library.update_media_file(media_file, %{episode_id: episode.id}) do
-      {:ok, _updated_file} ->
-        Logger.debug("Associated file with episode",
-          episode_id: episode.id,
-          season: episode.season_number,
-          episode: episode.episode_number,
-          media_file_id: media_file_id
-        )
-
-      {:error, changeset} ->
-        Logger.error("Failed to associate file with episode",
-          episode_id: episode.id,
-          media_file_id: media_file_id,
-          errors: inspect(changeset.errors)
-        )
-    end
-  rescue
-    error ->
-      Logger.error("Exception associating file with episode",
-        episode_id: episode.id,
-        media_file_id: media_file_id,
-        error: inspect(error)
-      )
-
-      :ok
-  end
-
   # Checks if episodes already exist in the database for a given TV show.
   # Used to determine if we can skip the full episode enrichment HTTP calls.
-  defp episodes_exist_for_show?(media_item) do
+  defp episodes_exist_for_show?(nil), do: false
+
+  defp episodes_exist_for_show?(media_item_id) do
     import Ecto.Query, only: [from: 2]
 
     Repo.exists?(
-      from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id, limit: 1)
+      from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item_id, limit: 1)
     )
   end
 
@@ -648,112 +499,5 @@ defmodule Mydia.Library.MetadataEnricher do
   defp recently_enriched?(media_item) do
     one_hour_ago = DateTime.add(DateTime.utc_now(), -3600, :second)
     DateTime.compare(media_item.updated_at, one_hour_ago) == :gt
-  end
-
-  # Validates that the media type is compatible with the library path type
-  defp validate_library_type_compatibility(_media_type, nil) do
-    # No media file, skip validation
-    :ok
-  end
-
-  defp validate_library_type_compatibility(media_type, media_file_id)
-       when is_binary(media_file_id) do
-    case Mydia.Repo.get(Mydia.Library.MediaFile, media_file_id)
-         |> Mydia.Repo.preload(:library_path) do
-      nil ->
-        # Media file not found, let it proceed (will fail later with better error)
-        :ok
-
-      media_file ->
-        validate_media_type_against_library_path(media_type, media_file)
-    end
-  rescue
-    error ->
-      Logger.error("Exception during library type validation",
-        media_type: media_type,
-        media_file_id: media_file_id,
-        error: inspect(error)
-      )
-
-      # Allow to proceed if validation itself fails
-      :ok
-  end
-
-  defp validate_media_type_against_library_path(media_type, media_file) do
-    absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
-    library_path = find_library_path_for_file(absolute_path)
-    media_type_string = media_type_to_string(media_type)
-
-    cond do
-      # No library path found, allow the operation
-      is_nil(library_path) ->
-        :ok
-
-      # Library is :mixed, allow both types
-      library_path.type == :mixed ->
-        :ok
-
-      # Movie in :series library
-      media_type_string == "movie" and library_path.type == :series ->
-        emit_type_mismatch_telemetry(media_type_string, library_path)
-
-        Logger.warning("Type mismatch: Cannot add movies to series-only library",
-          media_type: media_type_string,
-          library_path: library_path.path,
-          library_type: library_path.type,
-          file_path: absolute_path
-        )
-
-        {:error,
-         {:library_type_mismatch,
-          "Cannot add movies to a library path configured for TV series only (path: #{library_path.path})"}}
-
-      # TV show in :movies library
-      media_type_string == "tv_show" and library_path.type == :movies ->
-        emit_type_mismatch_telemetry(media_type_string, library_path)
-
-        Logger.warning("Type mismatch: Cannot add TV shows to movies-only library",
-          media_type: media_type_string,
-          library_path: library_path.path,
-          library_type: library_path.type,
-          file_path: absolute_path
-        )
-
-        {:error,
-         {:library_type_mismatch,
-          "Cannot add TV shows to a library path configured for movies only (path: #{library_path.path})"}}
-
-      # All other cases are valid
-      true ->
-        :ok
-    end
-  end
-
-  # Finds the library path that contains the given file path
-  # Prefers the longest matching prefix (most specific path)
-  defp find_library_path_for_file(file_path) do
-    library_paths = Settings.list_library_paths()
-
-    library_paths
-    |> Enum.filter(fn library_path ->
-      String.starts_with?(file_path, library_path.path)
-    end)
-    |> Enum.max_by(
-      fn library_path -> String.length(library_path.path) end,
-      fn -> nil end
-    )
-  end
-
-  # Emits telemetry event for type mismatch tracking
-  defp emit_type_mismatch_telemetry(media_type, library_path) do
-    :telemetry.execute(
-      [:mydia, :library, :type_mismatch],
-      %{count: 1},
-      %{
-        media_type: media_type,
-        library_type: library_path.type,
-        library_path: library_path.path
-      }
-    )
   end
 end

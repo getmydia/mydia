@@ -241,8 +241,6 @@ defmodule Mydia.Media.ProviderSwitch do
       # Step 3 (transactional, no network): wipe + swap + recreate + re-link.
       result =
         Repo.transaction(fn ->
-          file_ids = linked_media_file_ids(item)
-
           # Season monitoring lives in the episode rows, so the wipe below
           # erases it. Capture the per-season verdict first and replay it, or
           # every season the user deliberately unmonitored comes back monitored
@@ -259,6 +257,16 @@ defmodule Mydia.Media.ProviderSwitch do
             |> Repo.all()
             |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
             |> Map.new(fn {season_number, flags} -> {season_number, Enum.any?(flags)} end)
+
+          Episode
+          |> where([episode], episode.media_item_id == ^item.id)
+          |> Repo.all()
+          |> Enum.each(fn episode ->
+            case Mydia.ImportCandidates.demote_episode_files(episode) do
+              {:ok, :ok} -> :ok
+              {:error, reason} -> Repo.rollback(reason)
+            end
+          end)
 
           Repo.delete_all(from(e in Episode, where: e.media_item_id == ^item.id))
 
@@ -306,15 +314,6 @@ defmodule Mydia.Media.ProviderSwitch do
           # Only now are the seasons genuinely refreshed from the new provider.
           # Inside the transaction, so a later rollback takes the stamp with it.
           Media.stamp_seasons_refreshed(updated)
-
-          # Re-attach captured files to the show so re-linking can find them,
-          # then re-link by filename. Files that don't parse stay on the show.
-          Repo.update_all(
-            from(mf in MediaFile, where: mf.id in ^file_ids),
-            set: [media_item_id: updated.id, episode_id: nil]
-          )
-
-          Mydia.Library.match_files_to_episodes(updated.id)
 
           Media.get_media_item!(updated.id)
         end)
@@ -388,22 +387,6 @@ defmodule Mydia.Media.ProviderSwitch do
         do: {:ok, season_datas, total_episodes},
         else: {:error, :no_episodes}
     end
-  end
-
-  defp linked_media_file_ids(%MediaItem{id: id}) do
-    episode_linked =
-      from mf in MediaFile,
-        join: e in Episode,
-        on: mf.episode_id == e.id,
-        where: e.media_item_id == ^id,
-        select: mf.id
-
-    direct =
-      from mf in MediaFile,
-        where: mf.media_item_id == ^id,
-        select: mf.id
-
-    (Repo.all(episode_linked) ++ Repo.all(direct)) |> Enum.uniq()
   end
 
   # seasons_refreshed_at is deliberately absent: it is not castable, so passing
