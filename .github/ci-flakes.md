@@ -64,51 +64,79 @@ Also note `cancel-in-progress: true` in that workflow's concurrency group: pushi
 a new commit cancels the in-flight run, so a `gh pr checks --watch` started on the
 old head exits with a truncated view. Re-watch after each push.
 
-## Only six checks are required
+## Eight checks are required, and most are still advisory
 
 The Master ruleset (`gh api repos/getmydia/mydia/rulesets/9740184`) requires
-exactly six status checks:
+eight status checks:
 
 ```text
 Test, Test / PostgreSQL, Test / E2E Browser, Site build,
-Load lanes (ios), Load lanes (android)
+Load lanes (ios), Load lanes (android), Build / Web, Test / Player
 ```
 
-Everything else is advisory, including `Test / Player`, `Build / Web`,
-`Build / Android`, `Build / Linux`, `Build / macOS`, `Build / Windows`,
-`Flatpak / Build`, `Rust`, every `Check / *`, and the lockfile scanners.
+Everything else is still advisory, including `Build / Android`, `Build / Linux`,
+`Build / macOS`, `Build / Windows`, `Flatpak / Build`, `Rust`, every `Check / *`,
+and the lockfile scanners. A break visible only to those still merges.
 
-GitHub required-status-checks block forever on a context that never reports, and
-those workflows are path-filtered at the workflow level (`ci-player.yml`'s
-`on.pull_request.paths`), so a PR touching no `player/**` file would hang on an
-Expected check. The short list is the workaround, and `dependabot-auto-merge.yml`'s
-own comment says so.
+`Build / Web` and `Test / Player` were promoted 2026-08-31, and the two jobs with
+catalogued hang and network-block modes -- `Build / Linux` and `Flatpak / Build`
+-- were deliberately left out. Requiring either would trade a merge hole for a
+merge deadlock.
+
+### Why the list was short, and what changed
+
+GitHub required-status-checks block forever on a context that never reports.
+`ci-player.yml` used to filter on paths at the *workflow* level, so on a PR
+touching no `player/**` file the workflow never started and `Build / Web` never
+registered. The short required list was the workaround.
+
+The filter now lives in a `changes` job inside the workflow, so every job always
+reports -- concluding in a few seconds with its steps skipped when nothing
+relevant changed. That is what made the two contexts requirable. The gating
+conditions are **step-level, never job-level**: a job-level `if:` concludes the
+job `skipped`, and whether a ruleset counts a skipped required check as satisfied
+is configuration-dependent. `grep -n "^    if:" .github/workflows/ci-player.yml`
+must return nothing; that is the whole safety net.
+
+Measured behaviour on real PRs: on one touching `native/`, `Build / Web` ran
+4m17s and `Test / Player` 12m57s. On one touching only `site/`, they reported
+`pass` in 2s and 4s.
+
+### The failure that prompted all of this
 
 `gh pr merge --auto` waits on required checks only, with no flag to consider
-advisory ones, so a dependabot PR can merge with a wall of red. PR #613
-(`flutter_secure_storage` 10.3.1 to 11.0.0) merged 2026-08-29 with seven red checks
-(Build/Web, Test/Player, Build/Android, Build/Linux, Build/Windows, Build/macOS,
-Flatpak/Build) and broke the master Docker image, because v11 removed
-`AndroidOptions.encryptedSharedPreferences`.
+advisory ones. PR #613 (`flutter_secure_storage` 10.3.1 to 11.0.0) merged
+2026-08-29 with seven red checks (Build/Web, Test/Player, Build/Android,
+Build/Linux, Build/Windows, Build/macOS, Flatpak/Build) and broke the master
+Docker image, because v11 removed `AndroidOptions.encryptedSharedPreferences`.
 
 Do not describe a break like that as "the PR gate missed it". The gate fired
 loudly and nothing was listening. When triaging a merged-but-broken commit, check
 the PR's full check list rather than whether it merged green.
 
-Making a path-filtered job requirable needs a shim: move the path filter into a
-`changes` job and gate downstream work with a step-level `if:`, never job-level. A
-job-level `if:` concludes `skipped`, and a skipped required check is ambiguous to
-rulesets.
+`--auto` is no longer used for dependabot. See the merge gate in
+`.github/README.md`.
 
-## CI / Docker cancels its own master runs
+## CI / Docker used to cancel its own master runs
 
-`ci-docker.yml` sets `cancel-in-progress: true` on a ref-keyed group and is
-push-only on master, so consecutive merges cancel each other's image builds. On
-2026-08-29 the runs for #577, #612 and #613 were all cancelled, and the first to
-survive was #611's, which inherited a break introduced by #613.
+**Fixed 2026-08-31.** `ci-docker.yml` now keys its concurrency group to
+`github.sha`, so every master commit gets its own run and nothing supersedes
+anything. Re-runs of the same SHA still dedupe. The cost is that a burst of
+merges runs concurrent image builds instead of serialising them, which is the
+point.
 
-Before bisecting a Docker failure, list the runs and note which SHAs have no
-completed run at all:
+The history matters for reading anything older than that, and the mechanism is
+worth knowing because it is easy to misdiagnose. The group was keyed to the ref,
+and `cancel-in-progress` read `${{ github.event_name == 'pull_request' }}` --
+always `false` here, since the workflow is push-only. Setting it to a literal
+`false` would have changed nothing; that was never the bug. A concurrency group
+holds at most **one pending run** and cancels the previously pending one when a
+new run enters, so a burst of merges discarded its own queue. On 2026-08-29 the
+runs for #577, #612 and #613 never executed at all, and the first to survive was
+#611's, which inherited a break introduced by #613.
+
+Before bisecting a Docker failure on older history, list the runs and note which
+SHAs have no completed run at all:
 
 ```bash
 gh run list --workflow=ci-docker.yml --branch=master --json headSha,conclusion,createdAt
@@ -284,6 +312,31 @@ Postgres, so the Postgres job runs modules concurrently and is where order- and
 config-leak-sensitive tests surface. Any change that shifts suite timing, even one
 extra query per LiveView mount, can expose a latent one without being its cause.
 
+### Both adapters at once
+
+The green-SQLite / red-Postgres split is the usual shape, so a test failing on
+**both** jobs in the same run reads as a real regression. One known case is not.
+
+**`Mydia.Library.CandidatePromotionTest`, "separate database connections
+serialize competing promotions at ownership"**
+(`test/mydia/library/candidate_promotion_test.exs`). Seen 2026-08-31 on PR #631,
+1 failure of 9773 on `Test` and 1 of 9774 on `Test / PostgreSQL` simultaneously.
+
+It is not adapter-related because the test deliberately escapes the sandbox: it
+wraps setup in `Ecto.Adapters.SQL.Sandbox.unboxed_run/2` and races real
+connections to prove promotion serialises at the ownership boundary. Real
+connections on a loaded runner are timing-sensitive by construction, and the
+SQLite log carries `(Exqlite.Error) database is locked` and
+`DBConnection.OwnershipError: cannot find ownership process` alongside it.
+
+Triage as usual: #631's diff was a single workflow YAML file, which cannot reach
+Elixir code, and master's `ci.yml` was green on the three preceding commits. The
+test is young, added with the import-pipeline work, so treat timing-shaped
+failures in that file as flake-first once master is confirmed green.
+
+Note its `on_exit` deletes rows through another `unboxed_run`, so a failed run
+can leave real rows behind in the shared SQLite test database.
+
 ### Postgres job
 
 **`CrashReporter.TowerReporterTest`**, high rate, roughly 3 in 5 runs. Fails
@@ -345,17 +398,29 @@ files, all under `player/`, zero Elixir, and the same job had passed on the
 immediately preceding commit with an identical Elixir tree.
 
 **`Media.MediaTest`**, "a duplicate match deterministically picks the earliest
-inserted row". Fails `assert id == older.id` with two different UUIDs. This one has
-a real root cause: `external_id_match/2` (`lib/mydia/media.ex`) does
+inserted row". **FIXED 2026-08-31 in #632.** Kept here because it was the
+highest-frequency flake in this file for months and old runs still show it.
+
+`external_id_match/2` (`lib/mydia/media.ex`) ordered only by
 `order_by([m], asc: m.inserted_at) |> limit(1)`, while `MediaItem` declares
 `timestamps(type: :utc_datetime)`, second precision. Two rows inserted in the same
-second are an exact tie, so PostgreSQL may return either while SQLite happens to be
-stable. The test asserts a determinism the query does not provide, and the real fix
-is a tie-break: `order_by([m], asc: m.inserted_at, asc: m.id)`. Until then it is a
-coin flip on a fast runner, and the production risk the test was written to catch,
-the daily crawl flipping a stored mapping between runs, is still live. Reconfirmed
-2026-08-29 on PR #615 (`f44cc0b0a`), a single failure in 9797, on a
+second were an exact tie, so PostgreSQL could return either while SQLite happened
+to be stable. The test created its two rows back to back -- which share a second
+-- so it was asserting a determinism the query did not provide, and was itself a
+coin flip. Reconfirmed 2026-08-29 on PR #615, a single failure in 9797, on a
 collections-only diff.
+
+The fix adds `asc: m.id` as a secondary sort. Note what that buys, because the
+obvious reading is wrong: `id` is a random v4 UUID
+(`@primary_key {:id, :binary_id, autogenerate: true}`), not a sequence, so among
+rows sharing a second the winner is arbitrary but **stable**. Stability is the
+property that prevents the production risk -- the daily crawl flipping a stored
+mapping between runs. "Oldest wins" holds only at second granularity.
+
+The test was split in two: one backdates the older row so "earliest" is a real
+comparison, and one forces three rows onto a single timestamp and asserts the
+lowest id wins. The second fails whenever the tie-break is absent; asserting only
+that repeated calls agree would pass by luck on an unordered query.
 
 That same test has a second, unrelated mode: a 60s `ExUnit.TimeoutError` whose
 stack ends in `Mint.Core.Transport.SSL.recv/3` via Finch, a real outbound HTTPS
