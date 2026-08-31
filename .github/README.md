@@ -138,10 +138,15 @@ In practice that is dependabot's **actions group**. Confirmed 2026-08-31 on #627
 the gate logged `PR #627: MERGE`, the merge failed, and the run continued. Merge
 that class by hand.
 
-Granting `permissions: workflows: write` would fix it and was deliberately not
-done -- it would let an auto-merging bot land changes to CI configuration itself,
-which is a materially larger privilege than merging dependency bumps. Treat it as
-a maintainer decision, not a papercut.
+There is no workflow-level escape hatch: `workflows` is not a valid key in a
+`permissions:` block, so this cannot be fixed by widening the job's permissions.
+It would take a GitHub App installation token or PAT carrying the repository's
+Workflows permission, wired in as a secret in place of `GITHUB_TOKEN`.
+
+That is deliberately not done. It would hand an auto-merging bot a credential
+that can land changes to CI configuration itself, which is a materially larger
+privilege than merging dependency bumps, and it would sit in a workflow that
+merges without human review. Merging that class by hand is the cheaper trade.
 
 ### The trigger, and why not `check_suite`
 
@@ -153,8 +158,14 @@ not firing: those suites conclude on their own schedule, typically well before C
 so the gate would evaluate early, log `WAIT`, and never be woken when the last
 Actions workflow finished.
 
-Missing a workflow from the list costs a re-evaluation point, not correctness,
-because the gate always re-reads the full rollup rather than trusting the event.
+Missing a workflow from the list cannot cause a wrong merge -- the gate re-reads
+the full rollup rather than trusting the event, so an unlisted workflow still
+counts toward the verdict. What it can cause is a stuck PR. If the omitted
+workflow is the last to finish, every listed one has already fired, the gate has
+already logged `WAIT`, and nothing wakes it again. The PR sits green and open
+until someone re-runs a listed workflow. Keep the list complete, and when a
+green dependabot PR is not merging, check whether a workflow it runs is absent
+from it.
 
 ### It is edge-triggered, so a green backlog sits
 
