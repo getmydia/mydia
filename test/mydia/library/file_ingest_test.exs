@@ -165,6 +165,16 @@ defmodule Mydia.Library.FileIngestTest do
     refute Mydia.ImportCandidates.get_by_path(candidate.library_path_id, candidate.relative_path)
   end
 
+  # Timeouts here are generous on purpose. This test escapes the sandbox and
+  # races two real connections through the SQLite write lock, so every wait is
+  # for another OS process to be scheduled rather than for anything this test
+  # computes. It runs in well under a second locally and still timed out on
+  # two of three CI runs at the two second budget it used to carry, which is a
+  # loaded runner, not a regression. The numbers below are large enough that
+  # only a genuine hang reaches them; a real failure still fails, just later.
+  @ownership_await 30_000
+  @ownership_receive 10_000
+
   test "a losing promotion failure cannot resurrect the winner's deleted candidate" do
     %{library_path: library_path, movie: movie, candidate: candidate} =
       Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
@@ -229,24 +239,24 @@ defmodule Mydia.Library.FileIngestTest do
     winner_pid = winner.pid
     loser_pid = loser.pid
 
-    assert_receive {:ingest_connection_ready, ^winner_pid}, 1_000
-    assert_receive {:ingest_connection_ready, ^loser_pid}, 1_000
+    assert_receive {:ingest_connection_ready, ^winner_pid}, @ownership_receive
+    assert_receive {:ingest_connection_ready, ^loser_pid}, @ownership_receive
 
     send(winner.pid, {:start_ingest, ref})
-    assert_receive {:ingest_ownership_boundary, ^winner_pid}, 1_000
+    assert_receive {:ingest_ownership_boundary, ^winner_pid}, @ownership_receive
 
     # The losing FileIngest reaches promotion while the winner owns the SQLite
     # write lock, so it records its failure only after the winner deletes.
     send(loser.pid, {:start_ingest, ref})
-    assert_receive {:ingest_ownership_attempt, ^loser_pid}, 1_000
+    assert_receive {:ingest_ownership_attempt, ^loser_pid}, @ownership_receive
     assert Task.yield(loser, 0) == nil
 
     send(winner.pid, {:release_ingest_ownership, ref})
-    assert {:promoted, [_]} = Task.await(winner, 2_000)
+    assert {:promoted, [_]} = Task.await(winner, @ownership_await)
 
-    assert_receive {:ingest_ownership_boundary, ^loser_pid}, 1_000
+    assert_receive {:ingest_ownership_boundary, ^loser_pid}, @ownership_receive
     send(loser.pid, {:release_ingest_ownership, ref})
-    assert {:error, {:candidate_missing, candidate_id}} = Task.await(loser, 2_000)
+    assert {:error, {:candidate_missing, candidate_id}} = Task.await(loser, @ownership_await)
     assert candidate_id == candidate.id
 
     Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
