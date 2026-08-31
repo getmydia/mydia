@@ -205,13 +205,42 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
     end
 
     test "select_episode submits the selected show and episode" do
+      show = media_item_fixture(%{type: "tv_show", title: "A Show"})
+      episode = episode_fixture(%{media_item_id: show.id})
+
       dialog = %MatchDialog{
         download_id: "d1",
         mode: :postimport,
-        selected: %{id: "show-1", title: "A Show", type: "tv_show"}
+        selected: %{id: show.id, title: "A Show", type: "tv_show"},
+        episodes: [episode]
       }
 
-      assert MatchDialog.select_episode(dialog, "ep-1") == {:submit, {"show-1", "ep-1"}}
+      assert MatchDialog.select_episode(dialog, episode.id) == {:submit, {show.id, episode.id}}
+    end
+
+    test "select_episode rejects an episode that belongs to a different show" do
+      show = media_item_fixture(%{type: "tv_show", title: "A Show"})
+      episode = episode_fixture(%{media_item_id: show.id})
+
+      other_show = media_item_fixture(%{type: "tv_show", title: "Another Show"})
+      other_episode = episode_fixture(%{media_item_id: other_show.id})
+
+      dialog = %MatchDialog{
+        download_id: "d1",
+        mode: :postimport,
+        selected: %{id: show.id, title: "A Show", type: "tv_show"},
+        episodes: [episode]
+      }
+
+      assert {:error, updated} = MatchDialog.select_episode(dialog, other_episode.id)
+      assert updated.error =~ "not part of the selected show"
+    end
+
+    test "select_episode returns an error rather than raising when nothing is selected" do
+      dialog = %MatchDialog{download_id: "d1", mode: :postimport, selected: nil}
+
+      assert {:error, updated} = MatchDialog.select_episode(dialog, "ep-1")
+      assert updated.error =~ "not part of the selected show"
     end
   end
 

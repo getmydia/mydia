@@ -691,10 +691,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("match_modal_pick_episode", %{"episode_id" => episode_id}, socket) do
-    {:submit, {item_id, ep_id}} =
-      MatchDialog.select_episode(socket.assigns.match_modal, episode_id)
-
-    submit_match(socket, item_id, ep_id)
+    case MatchDialog.select_episode(socket.assigns.match_modal, episode_id) do
+      {:submit, {item_id, ep_id}} -> submit_match(socket, item_id, ep_id)
+      {:error, dialog} -> {:noreply, assign(socket, :match_modal, dialog)}
+    end
   end
 
   # --- Match files modal (manual file matching on import failure) ---

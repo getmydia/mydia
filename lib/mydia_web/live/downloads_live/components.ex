@@ -170,6 +170,9 @@ defmodule MydiaWeb.DownloadsLive.Components do
         <div :if={@dialog.episodes == []} class="text-sm text-base-content/50 mt-2">
           No episodes found for this show.
         </div>
+        <p :if={@dialog.error} id="match-dialog-error" class="alert alert-error mt-3 text-sm">
+          {@dialog.error}
+        </p>
         <div class="mt-2 max-h-64 overflow-y-auto flex flex-col gap-1">
           <button
             :for={ep <- @dialog.episodes}

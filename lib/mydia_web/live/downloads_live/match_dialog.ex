@@ -134,10 +134,28 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
 
   @doc """
   Submits the chosen show together with the chosen episode.
+
+  The episode id comes from a browser event, so it is checked against
+  `dialog.episodes`, the authoritative list `put_selected/2` loaded for the
+  selected show. The foreign key alone only proves the episode exists, not
+  that it belongs to this show, and a forged `episode_id` paired with an
+  unrelated show would file the import under a nonsense path.
   """
-  @spec select_episode(t(), binary()) :: {:submit, {binary(), binary()}}
-  def select_episode(%__MODULE__{selected: %{id: media_item_id}}, episode_id) do
-    {:submit, {media_item_id, episode_id}}
+  @spec select_episode(t(), binary()) :: {:submit, {binary(), binary()}} | {:error, t()}
+  def select_episode(%__MODULE__{selected: %{id: media_item_id}} = dialog, episode_id) do
+    if Enum.any?(dialog.episodes, &(&1.id == episode_id)) do
+      {:submit, {media_item_id, episode_id}}
+    else
+      {:error, episode_mismatch(dialog)}
+    end
+  end
+
+  def select_episode(%__MODULE__{selected: nil} = dialog, _episode_id) do
+    {:error, episode_mismatch(dialog)}
+  end
+
+  defp episode_mismatch(dialog) do
+    %{dialog | error: "That episode is not part of the selected show. Search again."}
   end
 
   # A relay outage must not empty the dialog: the library half still works and
