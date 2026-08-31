@@ -801,4 +801,66 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       assert added.tvdb_id == 81_189
     end
   end
+
+  describe "match dialog: post-import still requires an episode for TV" do
+    test "picking a TV show after import opens the episode list instead of submitting",
+         %{conn: conn} do
+      library = library_path_fixture(%{type: "series", monitored: true})
+      old_show = media_item_fixture(%{type: "tv_show", title: "Old Show"})
+      new_show = media_item_fixture(%{type: "tv_show", title: "New Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: old_show.id,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "Old Show/Season 01/S01E01.mkv",
+          library_path_id: library.id,
+          media_item_id: old_show.id,
+          size: 100,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
+      render_change(view, "match_modal_search", %{"q" => "New Show"})
+      render_click(view, "match_modal_pick_item", %{"media_item_id" => new_show.id})
+
+      # The dialog stays open on the episode step and nothing was written.
+      assert has_element?(view, "#match-modal")
+      assert Downloads.get_download!(download.id).media_item_id == old_show.id
+      refute_enqueued(worker: Mydia.Jobs.MediaRematch)
+    end
+
+    test "no Pick episode escape is offered after import", %{conn: conn} do
+      library = library_path_fixture(%{type: "series", monitored: true})
+      show = media_item_fixture(%{type: "tv_show", title: "Imported Show"})
+
+      download =
+        download_fixture(%{
+          media_item_id: show.id,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {:ok, _file} =
+        Library.create_media_file(%{
+          relative_path: "Imported Show/Season 01/S01E01.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          size: 100,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
+      render_click(view, "open_match_modal", %{"id" => download.id, "mode" => "postimport"})
+      render_change(view, "match_modal_search", %{"q" => "Imported"})
+
+      refute has_element?(view, "#match-dialog-pick-episode-#{show.id}")
+    end
+  end
 end
