@@ -303,6 +303,13 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   def handle_info({port, {:exit_status, 0}}, %{ffmpeg_port: port} = state) do
     Logger.info("FFmpeg transcoding completed successfully")
 
+    # The poll loop runs on a fixed cadence that has nothing to do with when
+    # FFmpeg actually writes its last segment and exits, so a tail segment
+    # finished in the gap since the last poll would otherwise never be
+    # reported. One last read before the process (and this GenServer) is
+    # gone.
+    state = final_segment_catchup(state)
+
     # Notify readiness if not already done — when FFmpeg completes very quickly
     # (e.g., stream copy), the scheduled :check_playlist_ready may not have fired yet.
     if !state.ready_notified && state.on_ready && File.exists?(state.playlist_path) do
@@ -318,6 +325,11 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   end
 
   def handle_info({port, {:exit_status, status}}, %{ffmpeg_port: port} = state) do
+    # Same tail-segment gap as the zero-exit clause above: an encoder that
+    # dies mid-window can still have finished segments sitting in the
+    # playlist that no poll ever reported.
+    state = final_segment_catchup(state)
+
     # Include any buffered output in the error message
     error_details =
       if state.buffer != "" do
@@ -342,11 +354,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   end
 
   def handle_info(:check_playlist_ready, state) do
-    state =
-      case File.read(state.playlist_path) do
-        {:ok, contents} -> handle_playlist(state, contents)
-        {:error, _reason} -> state
-      end
+    state = final_segment_catchup(state)
 
     # Readiness fires once; segment discovery runs for the life of the encoder.
     if state.on_segments || !state.ready_notified do
@@ -359,6 +367,26 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   def handle_info(msg, state) do
     Logger.debug("Unhandled message in FfmpegHlsTranscoder: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  # One last playlist read before the GenServer stops. The regular poll
+  # loop runs on a fixed timer that has no relationship to when FFmpeg
+  # actually finishes its last segment and exits, so without this call a
+  # tail segment finished in the gap between the last poll and process exit
+  # is never reported through on_segments. A caller downstream
+  # (TranscodeWindow.decide/2) then waits on a segment nothing will ever
+  # produce.
+  #
+  # Public only so the catch-up read can be exercised directly in tests
+  # without needing a real FFmpeg process to exit at a controlled moment;
+  # nothing outside this module should call it.
+  @doc false
+  @spec final_segment_catchup(State.t()) :: State.t()
+  def final_segment_catchup(state) do
+    case File.read(state.playlist_path) do
+      {:ok, contents} -> handle_playlist(state, contents)
+      {:error, _reason} -> state
+    end
   end
 
   # Notifies readiness the first time the playlist appears, and reports any
