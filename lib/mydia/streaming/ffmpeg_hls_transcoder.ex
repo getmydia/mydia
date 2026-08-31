@@ -495,7 +495,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
     # Use index.m3u8 to match HLS controller expectations
     playlist_path = Path.join(output_dir, "index.m3u8")
-    segment_pattern = Path.join(output_dir, "segment_%03d.ts")
+    segment_pattern = Path.join(output_dir, "segment_%05d.ts")
+    start_number = Keyword.get(opts, :start_number, 0)
+    segment_seconds = Mydia.Streaming.SegmentPlan.default_segment_seconds()
 
     # `-ss` before `-i` is input seeking: FFmpeg jumps to the nearest keyframe
     # without decoding everything before it. Placed after `-i` it would decode
@@ -580,21 +582,48 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
         ]
       end
 
-    # HLS output parameters
-    # Use live-style playlist (no -hls_playlist_type) so playlist updates incrementally
-    # as segments are written. This allows playback to start quickly without waiting
-    # for the entire file to be processed.
-    # -hls_list_size 0 keeps all segments in playlist for full seeking capability
+    # The playlist FFmpeg writes here is internal bookkeeping only: it is how
+    # HlsSession learns which segments are finished. What the player receives is
+    # SegmentPlan.playlist/1, computed from the media duration before FFmpeg
+    # starts. -hls_list_size 0 keeps every entry so the session can read the
+    # whole set on each poll.
+    #
+    # -start_number makes filenames absolute, so a window relocated to t=400s
+    # writes segment_00100.ts, which is the name the published playlist already
+    # promised. -copyts keeps source timestamps, so that segment reports its
+    # real media time rather than restarting near zero.
+    #
+    # -muxdelay 0 -muxpreload 0 are not optional decoration. The TS muxer's
+    # defaults add a reproducible 1.4s to every window's timestamps, the
+    # un-relocated first one included, which would put every segment that far
+    # from the time the published playlist declares for it. Zeroing both brings
+    # the error down to about 20ms. Measured, not assumed: without them segment
+    # 100 lands at 401.378667s, with them at 399.978667s.
+    #
+    # -output_ts_offset is deliberately absent. On top of -copyts it would apply
+    # the seek offset a second time.
+    #
+    # -hls_flags temp_file makes FFmpeg write to a temporary name and rename on
+    # completion. Without it a half-written segment exists on disk and the
+    # session would hand the player a truncated file.
     hls_args = [
+      "-copyts",
+      "-muxdelay",
+      "0",
+      "-muxpreload",
+      "0",
       "-f",
       "hls",
       "-hls_time",
-      "4",
+      to_string(segment_seconds),
       "-hls_list_size",
       "0",
+      "-start_number",
+      to_string(start_number),
+      "-hls_flags",
+      "temp_file",
       "-hls_segment_filename",
       segment_pattern,
-      # Progress reporting
       "-progress",
       "pipe:1",
       "-loglevel",
@@ -602,11 +631,22 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       playlist_path
     ]
 
+    # Only meaningful when the video stream is re-encoded. On a copied stream
+    # the keyframes are whatever the source has, and FFmpeg rejects the flag.
+    # The caller decides, because it is the caller that knows whether the copy
+    # decision above landed on "copy".
+    keyframe_args =
+      if Keyword.get(opts, :grid_aligned, false) do
+        ["-force_key_frames", "expr:gte(t,n_forced*#{segment_seconds})"]
+      else
+        []
+      end
+
     # Combine all args. The maps sit directly after the input and before the
     # codec flags, which is where ffmpeg expects output stream selection.
     base_args ++
       AudioTrackSelector.ffmpeg_map_args(selected_audio) ++
-      video_args ++ audio_args ++ hls_args
+      video_args ++ audio_args ++ keyframe_args ++ hls_args
   end
 
   # Start FFmpeg process using Port
