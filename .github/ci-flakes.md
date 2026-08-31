@@ -320,7 +320,10 @@ The green-SQLite / red-Postgres split is the usual shape, so a test failing on
 **`Mydia.Library.CandidatePromotionTest`, "separate database connections
 serialize competing promotions at ownership"**
 (`test/mydia/library/candidate_promotion_test.exs`). Seen 2026-08-31 on PR #631,
-1 failure of 9773 on `Test` and 1 of 9774 on `Test / PostgreSQL` simultaneously.
+1 failure of 9773 on `Test` and 1 of 9774 on `Test / PostgreSQL` simultaneously,
+and again hours later on #634 (1 of 9774 on `Test`) whose diff was **this file
+and `.github/README.md` only**. Two sightings the same day on diffs that cannot
+reach Elixir code, so budget a re-run for it rather than investigating.
 
 It is not adapter-related because the test deliberately escapes the sandbox: it
 wraps setup in `Ecto.Adapters.SQL.Sandbox.unboxed_run/2` and races real
