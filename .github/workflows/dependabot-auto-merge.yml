@@ -47,8 +47,9 @@ on:
     types: [completed]
 
 permissions:
-  contents: read
-  pull-requests: read
+  contents: write
+  pull-requests: write
+  checks: read
 
 jobs:
   gate:
@@ -82,7 +83,83 @@ jobs:
             exit 0
           fi
 
+          marker='<!-- dependabot-gate -->'
+
+          # mergeStateStatus is computed lazily and returns UNKNOWN until GitHub
+          # catches up. Poll rather than treating UNKNOWN as an answer either way.
+          merge_state() {
+            local pr="$1" state i
+            for i in 1 2 3 4 5; do
+              state="$(gh pr view "$pr" --json mergeStateStatus --jq .mergeStateStatus)"
+              if [ "$state" != "UNKNOWN" ]; then
+                echo "$state"
+                return 0
+              fi
+              sleep 5
+            done
+            echo UNKNOWN
+          }
+
+          # One comment per pull request, edited in place. Appending a new
+          # comment on every completed check suite would bury the pull request.
+          upsert_comment() {
+            local pr="$1" body="$2" id
+            id="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${pr}/comments" --paginate \
+                   --jq "[.[] | select(.body | startswith(\"$marker\"))] | last | .id // empty")"
+            if [ -n "$id" ]; then
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" \
+                -f body="$body" > /dev/null
+            else
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${pr}/comments" \
+                -f body="$body" > /dev/null
+            fi
+          }
+
           for pr in $prs; do
-            verdict="$(./scripts/dependabot-gate.sh verdict --pr "$pr")"
+            # A failure evaluating one pull request must not abort the whole
+            # step and leave every later pull request in this run unevaluated.
+            gate_status=0
+            line="$(./scripts/dependabot-gate.sh verdict --pr "$pr")" || gate_status=$?
+            if [ "$gate_status" -ne 0 ]; then
+              echo "PR #$pr: dependabot-gate.sh failed (exit $gate_status). Skipping this pull request." >&2
+              continue
+            fi
+
+            verdict="$(printf '%s' "$line" | cut -f1)"
             echo "PR #$pr: $verdict"
+
+            case "$verdict" in
+              WAIT)
+                echo "  Checks still running. Nothing to do."
+                ;;
+              BLOCKED)
+                contexts="$(printf '%s' "$line" | cut -f2- | tr '\t' '\n' | sed 's/^/- `/; s/=/` — /')"
+                upsert_comment "$pr" "$marker
+          This pull request is not being merged automatically. Every check has finished and these did not pass:
+
+          $contexts
+
+          Re-run them if you believe they are flaky, or fix the incompatibility. This comment is rewritten in place as the checks change."
+                echo "  Blocked. Comment updated."
+                ;;
+              MERGE)
+                state="$(merge_state "$pr")"
+                case "$state" in
+                  CLEAN|HAS_HOOKS)
+                    # --merge is the only strategy this repository allows: both
+                    # allow_squash_merge and allow_rebase_merge are false, and
+                    # the other forms fail outright.
+                    gh pr merge --merge "$pr"
+                    echo "  Merged."
+                    ;;
+                  *)
+                    echo "  All checks green but mergeStateStatus is $state. Not merging."
+                    ;;
+                esac
+                ;;
+              *)
+                echo "  Unrecognised verdict '$verdict'. Not merging." >&2
+                exit 1
+                ;;
+            esac
           done
