@@ -22,6 +22,8 @@ defmodule Mydia.Media do
     - `:ids` - Filter to a specific list of media item ids
     - `:monitored` - Filter by monitored status (true/false)
     - `:category` - Filter by category (atom or string, e.g., :anime_movie or "anime_movie")
+    - `:exclude_categories` - Drop these categories from the result (list of atoms or strings)
+    - `:base_query` - Ecto query to start from instead of the full MediaItem table
     - `:library_path_type` - Filter by library path type (:movies, :series, etc.)
     - `:search` - Search by title (case-insensitive substring match)
     - `:added_since` - Filter to items inserted after this DateTime
@@ -31,7 +33,7 @@ defmodule Mydia.Media do
   """
   @spec list_media_items(keyword()) :: [MediaItem.t()]
   def list_media_items(opts \\ []) do
-    MediaItem
+    (opts[:base_query] || MediaItem)
     |> apply_media_item_filters(opts)
     |> maybe_preload(opts[:preload])
     |> Repo.all()
@@ -831,21 +833,29 @@ defmodule Mydia.Media do
 
   @doc """
   Returns the count of movies in the library.
+
+  ## Options
+    - `:exclude_categories` - Drop these categories from the count
   """
-  @spec count_movies() :: non_neg_integer()
-  def count_movies do
+  @spec count_movies(keyword()) :: non_neg_integer()
+  def count_movies(opts \\ []) do
     MediaItem
     |> where([m], m.type == "movie")
+    |> apply_media_item_filters(Keyword.take(opts, [:exclude_categories]))
     |> Repo.aggregate(:count)
   end
 
   @doc """
   Returns the count of TV shows in the library.
+
+  ## Options
+    - `:exclude_categories` - Drop these categories from the count
   """
-  @spec count_tv_shows() :: non_neg_integer()
-  def count_tv_shows do
+  @spec count_tv_shows(keyword()) :: non_neg_integer()
+  def count_tv_shows(opts \\ []) do
     MediaItem
     |> where([m], m.type == "tv_show")
+    |> apply_media_item_filters(Keyword.take(opts, [:exclude_categories]))
     |> Repo.aggregate(:count)
   end
 
@@ -2147,6 +2157,16 @@ defmodule Mydia.Media do
 
       {:category, category}, query when is_binary(category) ->
         where(query, [m], m.category == ^category)
+
+      {:exclude_categories, []}, query ->
+        query
+
+      {:exclude_categories, categories}, query when is_list(categories) ->
+        names = Enum.map(categories, &to_string/1)
+        # `category` is nullable and SQL evaluates NULL NOT IN (...) to NULL,
+        # which drops the row. An item that has not been classified yet must
+        # stay on the page it is already on, so keep NULLs explicitly.
+        where(query, [m], is_nil(m.category) or m.category not in ^names)
 
       {:library_path_type, library_type}, query ->
         filter_by_library_path_type(query, library_type)
