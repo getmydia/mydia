@@ -557,7 +557,11 @@ defmodule MydiaWeb.LibraryComponents do
   The caret half of the "Add to Library" split button.
 
   Renders nothing when there are fewer than two candidates, so a
-  single-library install sees the plain add button exactly as before.
+  single-library install sees the plain add button exactly as before. Set
+  `always_show` to keep the caret reachable regardless of candidate count: on
+  Discover the caret also opens the Configure entry inside
+  `library_picker_dialog/1`, which must stay reachable even with zero or one
+  library.
 
   This is a real `<button>` rather than a `div[role="button"]` because it no
   longer drives a CSS `:focus` dropdown. It pushes an event and the host opens
@@ -567,11 +571,12 @@ defmodule MydiaWeb.LibraryComponents do
   attr :tmdb_id, :any, default: nil
   attr :media_type, :any, default: nil
   attr :title, :string, default: ""
+  attr :always_show, :boolean, default: false
 
   def library_picker_button(assigns) do
     ~H"""
     <button
-      :if={length(@libraries) > 1}
+      :if={length(@libraries) > 1 or @always_show}
       type="button"
       data-test="library-picker-caret"
       class="btn btn-primary btn-sm join-item px-2"
@@ -602,6 +607,12 @@ defmodule MydiaWeb.LibraryComponents do
 
   Libraries have no `name` column, only `path`, so each entry shows the
   basename with the full path as secondary text.
+
+  `configure_event` is nil by default, which renders no Configure entry at
+  all: Dashboard and the media detail page's rail host this same dialog but
+  have no `open_add_config` handler, and a stray click there would crash the
+  LiveView with no matching `handle_event` clause. Discover is the only host
+  that passes it.
   """
   attr :picker, :map,
     default: nil,
@@ -609,6 +620,7 @@ defmodule MydiaWeb.LibraryComponents do
 
   attr :event, :string, default: "add_to_library"
   attr :on_cancel, :string, default: "close_library_picker"
+  attr :configure_event, :string, default: nil
 
   def library_picker_dialog(assigns) do
     ~H"""
@@ -636,6 +648,17 @@ defmodule MydiaWeb.LibraryComponents do
             >
               <span class="font-medium">{Path.basename(library.path)}</span>
               <span class="text-xs text-base-content/50 truncate w-full">{library.path}</span>
+            </button>
+          </li>
+          <li :if={@configure_event}>
+            <button
+              id="discover-configure-add"
+              type="button"
+              phx-click={@configure_event}
+              phx-value-tmdb_id={@picker.tmdb_id}
+              phx-value-media_type={@picker.media_type}
+            >
+              <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Configure...
             </button>
           </li>
         </ul>
