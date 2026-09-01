@@ -164,5 +164,41 @@ void main() {
 
       expect(await service.statuses.first, isA<RegistrationSucceeded>());
     });
+
+    test('stops calling register after dispose', () async {
+      var calls = 0;
+      // Built directly rather than through serviceWith/FakeDelay: this
+      // register never succeeds, so without the dispose fix the retry loop
+      // runs forever. FakeDelay resolves through microtasks only, with no
+      // real Timer, so an unbounded chain of those would starve the event
+      // loop and pumpEventQueue (itself Timer-based) would never return,
+      // hanging the test before dispose() is even reached. A real
+      // zero-duration delay still yields to the event loop each iteration,
+      // so the loop can be observed and then actually stopped.
+      final service = NodeRegistrationService(
+        register: (_) async {
+          calls += 1;
+          return false;
+        },
+        now: () => clock,
+        delay: (_) => Future<void>.delayed(Duration.zero),
+      );
+
+      service.update(controllable: true, nodeId: 'abc', clientReady: true);
+      await pumpEventQueue();
+
+      final callsAtDispose = calls;
+      expect(callsAtDispose, greaterThan(0));
+
+      service.dispose();
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(calls, callsAtDispose,
+          reason: 'a disposed service must not keep calling register');
+
+      // Disposing twice must be harmless.
+      service.dispose();
+    });
   });
 }

@@ -64,6 +64,13 @@ class NodeRegistrationService {
 
   bool _running = false;
 
+  /// Closing [_controller] only silences [_emit]'s output; it does not stop
+  /// the reconcile loop itself. Without this flag, a disposed service whose
+  /// loop is between attempts would re-read its still-unchanged inputs, see
+  /// them unsatisfied, and start a fresh attempt that keeps calling
+  /// [_register] and [_delay] for real, forever.
+  bool _disposed = false;
+
   RegistrationStatus get status => _status;
 
   /// The current status, replayed to each new listener before any later
@@ -81,6 +88,7 @@ class NodeRegistrationService {
     required String? nodeId,
     required bool clientReady,
   }) {
+    if (_disposed) return;
     _controllable = controllable;
     _desiredNodeId = nodeId;
     _clientReady = clientReady;
@@ -91,6 +99,7 @@ class NodeRegistrationService {
   /// Abandons any pending backoff and reconciles immediately. Wired to the
   /// retry action in settings.
   void retryNow() {
+    if (_disposed) return;
     _generation += 1;
     unawaited(_reconcile());
   }
@@ -100,6 +109,8 @@ class NodeRegistrationService {
     _running = true;
     try {
       while (true) {
+        if (_disposed) return;
+
         final generation = _generation;
 
         if (!_controllable) {
@@ -169,6 +180,7 @@ class NodeRegistrationService {
   }
 
   void dispose() {
+    _disposed = true;
     // Bumped so an attempt still in flight abandons itself instead of emitting
     // into a closed controller.
     _generation += 1;
