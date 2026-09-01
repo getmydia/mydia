@@ -19,7 +19,9 @@ defmodule Mydia.Accounts.UserPreference do
     "theme" => "system",
     "close_manual_search_after_grab" => false,
     "grid_density" => "comfortable",
-    "recommendations_expanded" => false
+    "recommendations_expanded" => false,
+    "hide_player" => false,
+    "player_banner_dismissed" => false
   }
 
   # Valid values for each preference
@@ -95,6 +97,34 @@ defmodule Mydia.Accounts.UserPreference do
   end
 
   @doc """
+  Whether the player's navigation entry points should be hidden.
+
+  Covers the sidebar pill, the mobile dock tab, the dashboard banner and the
+  Devices "Web" tile. Play buttons on individual movies and episodes are not
+  affected, and `/player` stays reachable: this is a preference, not access
+  control.
+
+  The `== true` comparison is deliberate. `preferences` is a free-form map and
+  `validate_preferences/1` only runs on writes, so a hand-edited row could hold
+  the string "true". Returning that string would reach `not @hide_player` in a
+  template, where `not "true"` raises ArgumentError and breaks every render.
+  """
+  def hide_player?(%__MODULE__{preferences: prefs}) do
+    Map.get(prefs, "hide_player", @defaults["hide_player"]) == true
+  end
+
+  @doc """
+  Whether the user closed the dashboard player banner.
+
+  Independent of `hide_player?/1`: closing the banner never touches the
+  navigation, and turning the hide setting off never brings a dismissed banner
+  back.
+  """
+  def player_banner_dismissed?(%__MODULE__{preferences: prefs}) do
+    Map.get(prefs, "player_banner_dismissed", @defaults["player_banner_dismissed"]) == true
+  end
+
+  @doc """
   Changeset for creating or updating user preferences.
 
   The `preferences` param should be a map with string keys, e.g.:
@@ -131,6 +161,8 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
     |> validate_preference_value("grid_density", @valid_densities)
     |> validate_preference_value("recommendations_expanded", [true, false])
+    |> validate_preference_value("hide_player", [true, false])
+    |> validate_preference_value("player_banner_dismissed", [true, false])
   end
 
   defp validate_preference_value(changeset, key, valid_values) do
