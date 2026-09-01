@@ -251,5 +251,46 @@ defmodule MydiaWeb.CollectionLive.SmartRulesDialogTest do
       assert Collections.get_collection(user, collection.id).name == "Renamed"
       assert saved_conditions(user, collection) == [condition]
     end
+
+    test "a list left over from an operator that just turned scalar", %{conn: conn, user: user} do
+      collection =
+        smart_collection!(user, "Anime", %{
+          "field" => "category",
+          "operator" => "in",
+          "value" => ["anime_movie", "anime_series"]
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/collections/#{collection.id}?edit=true")
+
+      # Saving before the change event swaps the multi-select out posts a scalar
+      # operator alongside the list the old input still held. The editor shows the
+      # first value as selected, so that is the one the save has to keep.
+      view
+      |> element("#edit-collection-form")
+      |> render_submit(%{
+        "collection" => %{
+          "name" => "Renamed",
+          "description" => "",
+          "visibility" => "private"
+        },
+        "match_type" => "all",
+        "conditions" => %{
+          "0" => %{
+            "field" => "category",
+            "operator" => "eq",
+            "value" => ["anime_movie", "anime_series"]
+          }
+        },
+        "sort_field" => "",
+        "sort_direction" => "desc",
+        "limit" => ""
+      })
+
+      assert Collections.get_collection(user, collection.id).name == "Renamed"
+
+      assert saved_conditions(user, collection) == [
+               %{"field" => "category", "operator" => "eq", "value" => "anime_movie"}
+             ]
+    end
   end
 end

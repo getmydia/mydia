@@ -1048,9 +1048,10 @@ defmodule MydiaWeb.CollectionLive.Show do
   end
 
   # A multi-select's list can outlive a switch to a scalar operator by one change
-  # event, so collapse it before the scalar clauses below try to parse it.
+  # event. The editor narrows that list to its first entry, so parse the same one
+  # rather than a joined string, which would match nothing.
   defp parse_condition_value(field, value, operator) when is_list(value) do
-    parse_condition_value(field, value_string(value), operator)
+    parse_condition_value(field, value |> value_list() |> List.first(""), operator)
   end
 
   defp parse_condition_value(_field, value, "between") do
