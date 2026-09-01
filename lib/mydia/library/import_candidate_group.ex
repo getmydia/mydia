@@ -14,6 +14,11 @@ defmodule Mydia.Library.ImportCandidateGroup do
   contain spaces, Unicode, or other characters that are not valid in a CSS/DOM
   id, so templates must render `dom_id/1` for the HTML `id` attribute rather
   than the raw `anchor_key` or `id` field.
+
+  `queued?` and `queue_error` reflect the group's `queued_op` state: `queued?`
+  is true when the group was read at `status: "queued"`, and `queue_error`
+  carries the message a terminal refusal left behind when a queued accept or
+  re-match was cleared without promoting -- see `Mydia.ImportCandidates.drain_accepted/2`.
   """
 
   @enforce_keys [:id, :anchor_key, :library_path_id, :file_count]

@@ -12,9 +12,13 @@ defmodule Mydia.Repo.Migrations.AddQueueMarkersToImportCandidates do
       add :queue_error, :text
     end
 
-    # Partial: the overwhelming majority of rows carry no marker, and every
-    # reader of this column filters on `queued_op IS NOT NULL`. Supported on
-    # both SQLite and PostgreSQL.
+    # Partial: the overwhelming majority of rows carry no marker, and readers
+    # of this column filter on it in both directions -- `is_nil(queued_op)`
+    # for the pending view (`filter_status/2`, `count_pending/0`, and both
+    # queue functions' UPDATE guards) and `not is_nil(queued_op)` for the
+    # queued one -- so this partial index still covers the selective,
+    # minority-row side of that split. Supported on both SQLite and
+    # PostgreSQL.
     create index(:import_candidates, [:library_path_id, :queued_op],
              where: "queued_op IS NOT NULL",
              name: :import_candidates_queued_op_index
