@@ -7,6 +7,8 @@ import '../../../core/connection/connection_summary.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/platform_features.dart';
+import '../../../core/remote/node_registration_providers.dart';
+import '../../../core/remote/registration_status.dart';
 import '../../../core/remote/remote_control_settings.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/update/platform_updater.dart';
@@ -224,6 +226,7 @@ class _ManageSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final updateState = ref.watch(updateProvider);
     final controllableEnabled = ref.watch(remoteControlEnabledProvider).value;
+    final registration = ref.watch(nodeRegistrationProvider);
 
     return SettingsSection(
       label: 'Manage',
@@ -245,12 +248,20 @@ class _ManageSection extends ConsumerWidget {
           key: const Key('remote-control-enabled-switch'),
           icon: Icons.settings_remote,
           title: 'Allow this device to be controlled',
-          subtitle: 'Lets another paired device see and drive playback here',
+          subtitle: registration.describe(),
           value: controllableEnabled ?? true,
           onChanged: controllableEnabled == null
               ? null
               : (value) => _setControllable(ref, value),
         ),
+        if (registration is RegistrationFailed)
+          SettingsRow.action(
+            key: const Key('remote-control-retry-row'),
+            icon: Icons.refresh,
+            title: 'Retry registration',
+            subtitle: 'Try to make this device discoverable again',
+            onTap: () => ref.read(nodeRegistrationProvider.notifier).retry(),
+          ),
         if (PlatformUpdater.supportedOnCurrentPlatform)
           SettingsRow.action(
             key: const Key('check-for-updates-row'),
