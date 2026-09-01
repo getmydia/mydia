@@ -457,16 +457,26 @@ defmodule Mydia.Accounts do
   # not even editing.
   defp validate_add_references(changeset, delta) do
     changeset
-    |> validate_reference(delta, "add_quality_profile_id", &quality_profile_exists?/1)
+    |> validate_reference(
+      delta,
+      "add_quality_profile_id",
+      &Mydia.Settings.quality_profile_exists?/1
+    )
     |> validate_reference(
       delta,
       "add_movie_library_path_id",
-      &library_path_exists_as_type?(&1, Mydia.Settings.LibraryPath.movie_library_types())
+      &Mydia.Settings.library_path_exists_as_type?(
+        &1,
+        Mydia.Settings.LibraryPath.movie_library_types()
+      )
     )
     |> validate_reference(
       delta,
       "add_series_library_path_id",
-      &library_path_exists_as_type?(&1, Mydia.Settings.LibraryPath.series_library_types())
+      &Mydia.Settings.library_path_exists_as_type?(
+        &1,
+        Mydia.Settings.LibraryPath.series_library_types()
+      )
     )
   end
 
@@ -494,32 +504,6 @@ defmodule Mydia.Accounts do
   end
 
   defp delta_fetch(_delta, _key), do: nil
-
-  # A malformed id cannot be cast to the `:binary_id` column on PostgreSQL,
-  # which raises `Ecto.Query.CastError` inside `Repo.exists?` instead of
-  # returning false. SQLite stores `binary_id` as unconstrained TEXT, so no
-  # cast error fires there; a malformed id there simply matches no row. This
-  # mirrors the adapter split documented in `Mydia.Repo.ForeignKeyGuard`
-  # (lib/mydia/repo/foreign_key_guard.ex) for the identical pattern: a value
-  # the adapter cannot even cast certainly does not exist.
-  defp quality_profile_exists?(id) do
-    Repo.exists?(from p in Mydia.Settings.QualityProfile, where: p.id == ^id)
-  rescue
-    Ecto.Query.CastError -> false
-  end
-
-  # `allowed_types` comes from `Mydia.Settings.LibraryPath.movie_library_types/0`
-  # or `series_library_types/0`, the same lists `validate_flag_for_type/4`
-  # uses to gate `default_for_movies`/`default_for_series` there: a `:movies`
-  # library cannot back the series add-option, a `:series` library cannot
-  # back the movie one, and a `:mixed` library backs either.
-  defp library_path_exists_as_type?(id, allowed_types) do
-    Repo.exists?(
-      from l in Mydia.Settings.LibraryPath, where: l.id == ^id and l.type in ^allowed_types
-    )
-  rescue
-    Ecto.Query.CastError -> false
-  end
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking preference changes.

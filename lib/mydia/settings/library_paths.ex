@@ -75,6 +75,26 @@ defmodule Mydia.Settings.LibraryPaths do
     |> Repo.one()
   end
 
+  @doc """
+  Whether a library path with `id` exists and has one of `allowed_types`.
+
+  `allowed_types` is typically `LibraryPath.movie_library_types/0` or
+  `series_library_types/0`, the same lists `LibraryPath`'s own changeset uses
+  to gate `default_for_movies`/`default_for_series`: a `:movies` library
+  cannot back the series add-option, a `:series` library cannot back the
+  movie one, and a `:mixed` library backs either.
+  """
+  @spec library_path_exists_as_type?(term(), [atom()]) :: boolean()
+  def library_path_exists_as_type?(id, allowed_types) do
+    Repo.exists?(from l in LibraryPath, where: l.id == ^id and l.type in ^allowed_types)
+  rescue
+    # A malformed id cannot be cast to the `:binary_id` column on PostgreSQL,
+    # which raises `Ecto.Query.CastError` here instead of returning false.
+    # SQLite stores `binary_id` as unconstrained TEXT, so no cast error fires
+    # there; a malformed id there simply matches no row.
+    Ecto.Query.CastError -> false
+  end
+
   @tv_library_types [:series, :mixed]
 
   @doc """
