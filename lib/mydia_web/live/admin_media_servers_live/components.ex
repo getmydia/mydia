@@ -983,7 +983,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp media_server_type_bg_class(_), do: "bg-base-300"
 
   defp media_server_type_icon_class(:plex), do: "text-warning"
-  defp media_server_type_icon_class(:jellyfin), do: "text-info"
+  defp media_server_type_icon_class(:jellyfin), do: "text-primary"
   defp media_server_type_icon_class(_), do: "text-base-content/60"
 
   defp media_server_type_label(:plex), do: "Plex"

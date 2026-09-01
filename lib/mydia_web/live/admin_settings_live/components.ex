@@ -116,11 +116,11 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
         id="tracked-errors-link"
         class="stat hover:bg-base-300 transition-colors cursor-pointer"
       >
-        <div class="stat-figure text-info">
+        <div class="stat-figure text-primary">
           <.icon name="hero-magnifying-glass" class="w-8 h-8" />
         </div>
         <div class="stat-title">Tracked</div>
-        <div class="stat-value text-info">
+        <div class="stat-value text-primary">
           {@stats.tracked_errors}
           <span class="text-base font-normal">
             {if @stats.tracked_errors == 1, do: "error", else: "errors"}
