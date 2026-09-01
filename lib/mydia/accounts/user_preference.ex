@@ -95,6 +95,36 @@ defmodule Mydia.Accounts.UserPreference do
   end
 
   @doc """
+  Per-user override for the target library on add, or nil to inherit the
+  instance default.
+
+  These add-option getters return nil rather than a concrete default on
+  purpose: nil is the signal `Mydia.Media.AddDefaults` uses to fall through to
+  the instance setting. Do not add them to `@defaults`.
+  """
+  def add_library_path_id(%__MODULE__{preferences: prefs}, :movie),
+    do: Map.get(prefs, "add_movie_library_path_id")
+
+  def add_library_path_id(%__MODULE__{preferences: prefs}, :tv_show),
+    do: Map.get(prefs, "add_series_library_path_id")
+
+  @doc "Per-user quality profile override on add, or nil to inherit."
+  def add_quality_profile_id(%__MODULE__{preferences: prefs}),
+    do: Map.get(prefs, "add_quality_profile_id")
+
+  @doc "Per-user monitored override on add, or nil to inherit."
+  def add_monitored(%__MODULE__{preferences: prefs}),
+    do: Map.get(prefs, "add_monitored")
+
+  @doc "Per-user season monitoring override on add, or nil to inherit."
+  def add_season_monitoring(%__MODULE__{preferences: prefs}),
+    do: Map.get(prefs, "add_season_monitoring")
+
+  @doc "Per-user search-on-add override, or nil to inherit."
+  def add_search_on_add(%__MODULE__{preferences: prefs}),
+    do: Map.get(prefs, "add_search_on_add")
+
+  @doc """
   Changeset for creating or updating user preferences.
 
   The `preferences` param should be a map with string keys, e.g.:
@@ -131,6 +161,12 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
     |> validate_preference_value("grid_density", @valid_densities)
     |> validate_preference_value("recommendations_expanded", [true, false])
+    |> validate_preference_value("add_monitored", [true, false])
+    |> validate_preference_value("add_search_on_add", [true, false])
+    |> validate_preference_value(
+      "add_season_monitoring",
+      Mydia.Config.Schema.season_monitoring_values()
+    )
   end
 
   defp validate_preference_value(changeset, key, valid_values) do

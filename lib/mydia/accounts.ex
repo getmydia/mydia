@@ -427,12 +427,60 @@ defmodule Mydia.Accounts do
   @doc """
   Updates a user's preferences.
 
-  The attrs should be a map with string keys matching preference names.
+  `attrs` is either a flat map of preference keys to merge into what is
+  already stored, e.g. `%{"theme" => "dark"}` (the existing convention used
+  throughout the app), or that same delta nested under a `"preferences"` key,
+  e.g. `%{"preferences" => %{"theme" => "dark"}}` (the shape a changeset-driven
+  form naturally submits). Either way the delta is merged with the existing
+  preferences rather than replacing them.
   """
   def update_preference(%UserPreference{} = preference, attrs) do
+    delta = Map.get(attrs, "preferences", attrs)
+
     preference
-    |> UserPreference.update_preferences_changeset(attrs)
+    |> UserPreference.update_preferences_changeset(delta)
+    |> validate_add_references()
     |> Repo.update()
+  end
+
+  # The two ID-valued add preferences point at rows, which the schema module
+  # cannot check without pulling Repo into it. A stale value is still tolerated
+  # at read time by `Mydia.Media.AddDefaults`; this only stops a user storing an
+  # ID that was already wrong when they saved it.
+  defp validate_add_references(changeset) do
+    changeset
+    |> validate_reference("add_quality_profile_id", &quality_profile_exists?/1)
+    |> validate_reference("add_movie_library_path_id", &library_path_exists?/1)
+    |> validate_reference("add_series_library_path_id", &library_path_exists?/1)
+  end
+
+  defp validate_reference(changeset, key, exists?) do
+    case Ecto.Changeset.get_change(changeset, :preferences) do
+      prefs when is_map(prefs) ->
+        case Map.get(prefs, key) do
+          nil ->
+            changeset
+
+          "" ->
+            changeset
+
+          id ->
+            if exists?.(id),
+              do: changeset,
+              else: Ecto.Changeset.add_error(changeset, :preferences, "unknown #{key}: #{id}")
+        end
+
+      _ ->
+        changeset
+    end
+  end
+
+  defp quality_profile_exists?(id) do
+    Repo.exists?(from p in Mydia.Settings.QualityProfile, where: p.id == ^id)
+  end
+
+  defp library_path_exists?(id) do
+    Repo.exists?(from l in Mydia.Settings.LibraryPath, where: l.id == ^id)
   end
 
   @doc """
