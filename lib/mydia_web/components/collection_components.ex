@@ -8,6 +8,7 @@ defmodule MydiaWeb.CollectionComponents do
   use Phoenix.Component
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
+  import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1]
 
   use Phoenix.VerifiedRoutes,
     endpoint: MydiaWeb.Endpoint,
@@ -45,7 +46,7 @@ defmodule MydiaWeb.CollectionComponents do
         @class
       ]}
     >
-      <div :for={{id, collection} <- @collections} id={id}>
+      <div :for={{id, collection} <- @collections} id={id} class="h-full">
         {render_slot(@collection, collection)}
       </div>
     </div>
@@ -113,8 +114,8 @@ defmodule MydiaWeb.CollectionComponents do
 
   def collection_card(assigns) do
     ~H"""
-    <div class="relative group">
-      <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
+    <div class="relative group h-full">
+      <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
         <.link navigate={@href}>
           <figure class="relative aspect-[2/3] overflow-hidden bg-base-300">
             <.poster_collage poster_paths={@poster_paths} collection_type={@collection.type} />
@@ -159,21 +160,20 @@ defmodule MydiaWeb.CollectionComponents do
             </.link>
           <% end %>
         </div>
-        <div class="card-body p-3">
-          <h3 class="card-title text-sm line-clamp-2" title={@collection.name}>
-            {@collection.name}
-          </h3>
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-xs text-base-content/70">
-              {@item_count} {if @item_count == 1, do: "item", else: "items"}
-            </span>
-            <%= if @collection.visibility == "shared" do %>
-              <span class="badge badge-xs badge-outline gap-1">
-                <.icon name="hero-globe-alt" class="w-3 h-3" /> Shared
+        <.poster_card_body title={@collection.name}>
+          <:meta>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs text-base-content/70">
+                {@item_count} {if @item_count == 1, do: "item", else: "items"}
               </span>
-            <% end %>
-          </div>
-        </div>
+              <%= if @collection.visibility == "shared" do %>
+                <span class="badge badge-xs badge-outline gap-1">
+                  <.icon name="hero-globe-alt" class="w-3 h-3" /> Shared
+                </span>
+              <% end %>
+            </div>
+          </:meta>
+        </.poster_card_body>
       </div>
     </div>
     """
