@@ -410,7 +410,12 @@ defmodule Mydia.Media do
 
     simple_changes =
       changes
-      |> Map.take([:title, :original_title, :year])
+      # :monitored and :monitor_new_seasons are operator settings, not metadata.
+      # They are here so that a write of either lands in the item's history with
+      # its old and new value, whichever caller made it. Without that, the
+      # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
+      # from an ordinary "Metadata enriched" update for three weeks.
+      |> Map.take([:title, :original_title, :year, :monitored, :monitor_new_seasons])
       |> Enum.map(fn {field, new_value} ->
         old_value = Map.get(original, field)
         {field, %{old: old_value, new: new_value}}

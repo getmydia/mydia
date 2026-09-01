@@ -1,6 +1,7 @@
 defmodule Mydia.MediaTest do
   use Mydia.DataCase
 
+  alias Mydia.Events
   alias Mydia.Media
 
   describe "media_items" do
@@ -3431,6 +3432,54 @@ defmodule Mydia.MediaTest do
         })
 
       assert Mydia.Media.episode_bounds(show.id) == {2, 10}
+    end
+  end
+
+  describe "update_media_item/3 change tracking" do
+    import Mydia.MediaFixtures
+
+    test "records a monitored change in the event" do
+      item = media_item_fixture(%{monitored: true})
+
+      assert {:ok, _updated} =
+               Media.update_media_item(item, %{monitored: false}, reason: "Monitoring disabled")
+
+      event =
+        Events.list_events(
+          type: "media_item.updated",
+          resource_type: "media_item",
+          resource_id: item.id
+        )
+        |> List.first()
+
+      assert event
+      assert event.metadata["reason"] == "Monitoring disabled"
+      assert event.metadata["changes"]["monitored"] == %{"old" => true, "new" => false}
+    end
+
+    # monitor_new_seasons is an Ecto.Enum over [:all, :none], not a boolean.
+    # Atom values pass through serialize_change_value/1 unchanged and Jason
+    # encodes them as strings, so they read back as "all" and "none".
+    test "records a monitor_new_seasons change in the event" do
+      item = media_item_fixture(%{type: "tv_show", monitor_new_seasons: :all})
+
+      assert {:ok, _updated} =
+               Media.update_media_item(item, %{monitor_new_seasons: :none})
+
+      event =
+        Events.list_events(
+          type: "media_item.updated",
+          resource_type: "media_item",
+          resource_id: item.id
+        )
+        |> List.first()
+
+      assert event
+
+      assert event.metadata["changes"]["monitor_new_seasons"] == %{
+               "old" => "all",
+               "new" => "none"
+             }
     end
   end
 end
