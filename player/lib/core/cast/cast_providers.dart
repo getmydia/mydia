@@ -48,8 +48,8 @@ final castBackendProvider = Provider<CastBackend>((ref) {
 ///
 /// That is not the only way this goes stale, though, and the other way used
 /// to be steady-state. `p2pServiceProvider` is a plain, permanent
-/// `Provider` — it is never invalidated, so `ref.watch` here never triggers
-/// a rebuild on its own — and the same `P2pService` instance's `host` can be
+/// `Provider`: it is never invalidated, so `ref.watch` here never triggers
+/// a rebuild on its own. The same `P2pService` instance's `host` can still be
 /// swapped out from under it: `P2pStatusNotifier.reinitializeWithRelayUrl`
 /// (wired to the relay-URL field on `login_screen.dart`, reachable again any
 /// time auth is lost and the app falls back to that screen while a
@@ -66,8 +66,8 @@ final castBackendProvider = Provider<CastBackend>((ref) {
 /// lifetime. A rebuild here after the manager already exists does not
 /// reach it. The old host is never explicitly torn down either (the Rust
 /// side only drops it on GC). A real fix needs `CastSessionManager` to
-/// re-resolve its Mydia backend live instead of capturing it once — which
-/// means changing what `CastBackendRegistry` holds — or, short of that,
+/// re-resolve its Mydia backend live instead of capturing it once, which
+/// means changing what `CastBackendRegistry` holds, or, short of that,
 /// invalidating `castSessionManagerProvider` itself on every relay change,
 /// which would tear down *any* live cast session (Chromecast/DLNA included,
 /// not just Mydia) as a side effect of an unrelated P2P setting change. Both
