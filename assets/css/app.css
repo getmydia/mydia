@@ -11,6 +11,13 @@
    scanner can see. Safelist them so they're always built. */
 @source inline("status-{success,error,warning,info,neutral}");
 
+/* Sidebar section icons are chosen at runtime from collections.sidebar_icon,
+   and the allowlist that defines them lives in lib/mydia/collections/, which is
+   outside the @source globs above. Without this, an icon that happens not to be
+   used anywhere in lib/mydia_web gets no CSS at all and renders as a blank box.
+   test/mydia/collections/sidebar_icon_safelist_test.exs keeps the two in sync. */
+@source inline("hero-{sparkles,film,tv,star,bolt,fire,globe-alt,face-smile,rocket-launch,squares-2x2,book-open,beaker}");
+
 /* A Tailwind plugin that makes "hero-#{ICON}" classes available.
    The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";
