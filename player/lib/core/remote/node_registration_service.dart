@@ -74,11 +74,31 @@ class NodeRegistrationService {
   RegistrationStatus get status => _status;
 
   /// The current status, replayed to each new listener before any later
-  /// update. Without the replay, a listener attached after the terminal
-  /// transition would wait forever for an event that already happened.
-  Stream<RegistrationStatus> get statuses async* {
-    yield _status;
-    yield* _controller.stream;
+  /// update.
+  ///
+  /// Deliberately not `async*`. A generator body does not start until the
+  /// consumer listens and then advances over several microtasks, so a
+  /// caller that listens and then synchronously calls [update] loses every
+  /// event emitted before `yield*` managed to attach. `onListen` fires
+  /// synchronously from `listen()`, so the upstream subscription is in
+  /// place before any caller can emit.
+  Stream<RegistrationStatus> get statuses {
+    late final StreamController<RegistrationStatus> out;
+    StreamSubscription<RegistrationStatus>? subscription;
+
+    out = StreamController<RegistrationStatus>(
+      onListen: () {
+        subscription = _controller.stream.listen(
+          out.add,
+          onError: out.addError,
+          onDone: out.close,
+        );
+        out.add(_status);
+      },
+      onCancel: () => subscription?.cancel(),
+    );
+
+    return out.stream;
   }
 
   /// Feeds the loop the latest view of its three inputs. Safe to call on every

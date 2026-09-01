@@ -200,5 +200,20 @@ void main() {
       // Disposing twice must be harmless.
       service.dispose();
     });
+
+    test('delivers later statuses to a continuous listener', () async {
+      final service = serviceWith((_) async => true);
+      addTearDown(service.dispose);
+
+      final seen = <RegistrationStatus>[];
+      final subscription = service.statuses.listen(seen.add);
+      addTearDown(subscription.cancel);
+
+      service.update(controllable: true, nodeId: 'abc', clientReady: true);
+      await pumpEventQueue();
+
+      expect(seen.last, isA<RegistrationSucceeded>(),
+          reason: 'a listener attached before update must see the outcome');
+    });
   });
 }
