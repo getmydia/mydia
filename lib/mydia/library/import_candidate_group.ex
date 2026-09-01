@@ -30,7 +30,9 @@ defmodule Mydia.Library.ImportCandidateGroup do
     :media_type,
     :min_confidence,
     :provider_count,
-    :dismissed?
+    :dismissed?,
+    :queued?,
+    :queue_error
   ]
 
   @type t :: %__MODULE__{
@@ -46,7 +48,9 @@ defmodule Mydia.Library.ImportCandidateGroup do
           media_type: String.t() | nil,
           min_confidence: float() | nil,
           provider_count: non_neg_integer() | nil,
-          dismissed?: boolean() | nil
+          dismissed?: boolean() | nil,
+          queued?: boolean() | nil,
+          queue_error: String.t() | nil
         }
 
   @doc """

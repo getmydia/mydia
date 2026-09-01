@@ -801,4 +801,106 @@ defmodule Mydia.ImportCandidatesTest do
       assert is_nil(candidate.queue_error)
     end
   end
+
+  describe "queued status" do
+    setup do
+      lp = library_path_fixture()
+
+      pending =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: "9001",
+          title: "Wandering Aurora",
+          media_type: "tv_show",
+          confidence: 0.95
+        })
+
+      queued =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Glass Harbour/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: "9002",
+          title: "Glass Harbour",
+          media_type: "tv_show",
+          confidence: 0.95,
+          queued_op: "accept",
+          queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      %{lp: lp, pending: pending, queued: queued}
+    end
+
+    test "pending excludes queued groups", %{lp: lp, pending: pending} do
+      {groups, _cursor} = ImportCandidates.page(lp.id, status: "pending")
+
+      assert Enum.map(groups, & &1.anchor_key) == [pending.anchor_key]
+    end
+
+    test "queued returns only queued groups", %{lp: lp, queued: queued} do
+      {groups, _cursor} = ImportCandidates.page(lp.id, status: "queued")
+
+      assert [group] = groups
+      assert group.anchor_key == queued.anchor_key
+      assert group.queued? == true
+      assert group.dismissed? == false
+    end
+
+    test "count_by_status/2 counts queued groups", %{lp: lp} do
+      assert ImportCandidates.count_by_status(lp.id, "queued") == 1
+      assert ImportCandidates.count_by_status(lp.id, "pending") == 1
+    end
+
+    test "count_pending/0 excludes queued groups", %{lp: _lp} do
+      assert ImportCandidates.count_pending() == 1
+    end
+
+    test "a queued group carries its queue_error", %{lp: lp} do
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Paper Lantern/s01e01.mkv",
+        queued_op: "accept",
+        queue_error: "Files in this folder match different titles."
+      })
+
+      {groups, _cursor} = ImportCandidates.page(lp.id, status: "queued")
+
+      assert Enum.any?(
+               groups,
+               &(&1.queue_error == "Files in this folder match different titles.")
+             )
+    end
+
+    test "dismiss/1 leaves a queued row alone when its anchor is also pending", %{
+      lp: lp,
+      queued: queued
+    } do
+      # The guard only matters for a mixed anchor, and a mixed anchor is a real
+      # state: a scan that discovers a new file inside a folder whose import is
+      # already queued inserts a pending row beside the queued ones.
+      # `SelectionScope.to_query/1` groups by anchor_key, so the pending row
+      # pulls the whole anchor into a "pending" selection, and
+      # `candidate_query/1` then matches every row under that key, queued rows
+      # included. Without the guard, dismiss/1 would stamp them.
+      newcomer =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: Path.join(Path.dirname(queued.relative_path), "s01e02.mkv")
+        })
+
+      assert newcomer.anchor_key == queued.anchor_key
+
+      scope =
+        lp.id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(%{})
+
+      {:ok, _count} = ImportCandidates.dismiss(scope)
+
+      assert is_nil(Mydia.Repo.get!(Mydia.Library.ImportCandidate, queued.id).dismissed_at)
+      refute is_nil(Mydia.Repo.get!(Mydia.Library.ImportCandidate, newcomer.id).dismissed_at)
+    end
+  end
 end

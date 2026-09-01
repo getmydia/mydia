@@ -255,9 +255,8 @@ defmodule Mydia.ImportCandidates do
   straight off it, e.g. as a subquery of matching anchor keys (see
   `Mydia.Library.SelectionScope.to_query/1`, which delegates here).
 
-  `:status` (default `"pending"`) selects undismissed candidates; anything
-  else selects dismissed ones. `:band` and `:q` apply the same predicates
-  `page/2` exposes.
+  `:status` (default `"pending"`) is `"pending"`, `"queued"`, or anything else
+  for dismissed. `:band` and `:q` apply the same predicates `page/2` exposes.
   """
   @spec group_query(binary(), keyword()) :: Ecto.Query.t()
   def group_query(library_path_id, opts \\ []) do
@@ -265,7 +264,7 @@ defmodule Mydia.ImportCandidates do
 
     ImportCandidate
     |> where([c], c.library_path_id == ^library_path_id)
-    |> filter_dismissed(status)
+    |> filter_status(status)
     # `library_path_id` is constant across every row here (the WHERE clause
     # above already pins it), but PostgreSQL still requires a plain
     # (non-aggregate) selected column to appear in GROUP BY -- SQLite is
@@ -282,14 +281,25 @@ defmodule Mydia.ImportCandidates do
       provider_type: max(c.provider_type),
       suggested_title: max(c.title),
       suggested_year: max(c.year),
-      media_type: max(c.media_type)
+      media_type: max(c.media_type),
+      queued_op: max(c.queued_op),
+      queue_error: max(c.queue_error)
     })
     |> apply_band(Keyword.get(opts, :band))
     |> apply_search(Keyword.get(opts, :q))
   end
 
-  defp filter_dismissed(query, "pending"), do: where(query, [c], is_nil(c.dismissed_at))
-  defp filter_dismissed(query, _status), do: where(query, [c], not is_nil(c.dismissed_at))
+  # Three mutually exclusive states over two nullable columns. A queued row is
+  # never dismissed (queue_accept/1 and queue_rematch/1 only mark undismissed
+  # rows) and a dismissed row is never queued (dismiss/1 skips queued rows), so
+  # "pending" has to exclude both while the other two each name one.
+  defp filter_status(query, "pending"),
+    do: where(query, [c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
+
+  defp filter_status(query, "queued"),
+    do: where(query, [c], is_nil(c.dismissed_at) and not is_nil(c.queued_op))
+
+  defp filter_status(query, _status), do: where(query, [c], not is_nil(c.dismissed_at))
 
   defp apply_band(query, nil), do: query
   defp apply_band(query, :all), do: query
@@ -455,7 +465,9 @@ defmodule Mydia.ImportCandidates do
       media_type: row.media_type,
       min_confidence: min_confidence,
       provider_count: row.provider_count,
-      dismissed?: status != "pending"
+      dismissed?: status == "ignored",
+      queued?: status == "queued",
+      queue_error: row.queue_error
     }
   end
 
@@ -500,7 +512,7 @@ defmodule Mydia.ImportCandidates do
   @spec count_pending() :: non_neg_integer()
   def count_pending do
     ImportCandidate
-    |> where([c], is_nil(c.dismissed_at))
+    |> where([c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
     |> join(:inner, [c], lp in LibraryPath, on: lp.id == c.library_path_id)
     |> where([c, lp], lp.type in ^ImportRun.importable_types())
     |> group_by([c], [c.library_path_id, c.anchor_key])
@@ -657,7 +669,7 @@ defmodule Mydia.ImportCandidates do
 
     {row_count, _} =
       candidate_query(scope)
-      |> where([c], is_nil(c.dismissed_at))
+      |> where([c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
       |> Repo.update_all(set: [dismissed_at: now, updated_at: now])
 
     if row_count > 0, do: broadcast(scope.library_path_id)
