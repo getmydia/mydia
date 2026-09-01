@@ -340,7 +340,7 @@ other task, and the next `assert_receive` timed out with a mailbox full of
 correctly-delivered messages from the pid it was not looking for. That mailbox
 dump is the tell, and it is what distinguishes this from a genuine timeout:
 
-```
+```text
 code: assert_receive {:ownership_attempt, ^first_pid}
 mailbox:
   value: {:ownership_attempt, #PID<0.40175.0>}
