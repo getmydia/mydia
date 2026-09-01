@@ -92,10 +92,13 @@ defmodule Mydia.Collections do
   with certainty, including malformed JSON, because the caller is the sidebar
   and the library pages: failing open is the only safe direction.
   """
-  @spec claimed_categories(User.t()) :: [binary()]
+  @spec claimed_categories(User.t() | [Collection.t()]) :: [binary()]
   def claimed_categories(%User{} = user) do
-    user
-    |> list_pinned_sections()
+    user |> list_pinned_sections() |> claimed_categories()
+  end
+
+  def claimed_categories(sections) when is_list(sections) do
+    sections
     |> Enum.filter(& &1.exclusive)
     |> Enum.flat_map(&section_categories/1)
     |> Enum.uniq()

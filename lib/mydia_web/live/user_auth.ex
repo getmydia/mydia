@@ -109,17 +109,13 @@ defmodule MydiaWeb.Live.UserAuth do
     # Get executing jobs for sidebar status indicator
     executing_jobs = Mydia.Jobs.list_executing_jobs()
 
-    excluded_categories =
-      case Map.fetch(socket.assigns, :current_user) do
-        {:ok, %{} = user} -> Mydia.Collections.claimed_categories(user)
-        _ -> []
-      end
-
     sections =
       case Map.fetch(socket.assigns, :current_user) do
         {:ok, %{} = user} -> Mydia.Collections.list_pinned_sections(user)
         _ -> []
       end
+
+    excluded_categories = Mydia.Collections.claimed_categories(sections)
 
     socket =
       socket

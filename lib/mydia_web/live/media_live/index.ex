@@ -126,7 +126,7 @@ defmodule MydiaWeb.MediaLive.Index do
         0
 
       categories ->
-        length(Media.list_media_items(type: type, category_in: categories))
+        Media.count_media_items(type: type, category_in: categories)
     end
   end
 

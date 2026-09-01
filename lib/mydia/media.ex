@@ -832,6 +832,19 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  Returns the count of media items matching the given filter options.
+
+  Accepts the same options as `list_media_items/1`, but aggregates in the
+  database instead of loading rows.
+  """
+  @spec count_media_items(keyword()) :: non_neg_integer()
+  def count_media_items(opts \\ []) do
+    (opts[:base_query] || MediaItem)
+    |> apply_media_item_filters(opts)
+    |> Repo.aggregate(:count)
+  end
+
+  @doc """
   Returns the count of movies in the library.
 
   ## Options
@@ -839,10 +852,7 @@ defmodule Mydia.Media do
   """
   @spec count_movies(keyword()) :: non_neg_integer()
   def count_movies(opts \\ []) do
-    MediaItem
-    |> where([m], m.type == "movie")
-    |> apply_media_item_filters(Keyword.take(opts, [:exclude_categories]))
-    |> Repo.aggregate(:count)
+    count_media_items(Keyword.merge(Keyword.take(opts, [:exclude_categories]), type: "movie"))
   end
 
   @doc """
@@ -853,10 +863,7 @@ defmodule Mydia.Media do
   """
   @spec count_tv_shows(keyword()) :: non_neg_integer()
   def count_tv_shows(opts \\ []) do
-    MediaItem
-    |> where([m], m.type == "tv_show")
-    |> apply_media_item_filters(Keyword.take(opts, [:exclude_categories]))
-    |> Repo.aggregate(:count)
+    count_media_items(Keyword.merge(Keyword.take(opts, [:exclude_categories]), type: "tv_show"))
   end
 
   @doc """
