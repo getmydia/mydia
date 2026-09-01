@@ -143,6 +143,67 @@
           </div>
         </div>
 
+        <!-- Add Defaults Card -->
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title text-lg mb-4">
+              <.icon name="hero-plus-circle" class="w-5 h-5" /> Add Defaults
+            </h2>
+            <p class="text-sm text-base-content/60 mb-3">
+              Override what happens when you add a movie or TV show. Leave a field on
+              "Use server default" to follow the instance-wide setting.
+            </p>
+
+            <form
+              id="profile-add-defaults-form"
+              phx-change="update_add_defaults"
+              class="space-y-3"
+            >
+              <.inherit_select
+                name="add_movie_library_path_id"
+                label="Movie library"
+                value={@add_prefs["add_movie_library_path_id"]}
+                options={@movie_library_options}
+              />
+              <.inherit_select
+                name="add_series_library_path_id"
+                label="TV library"
+                value={@add_prefs["add_series_library_path_id"]}
+                options={@series_library_options}
+              />
+              <.inherit_select
+                name="add_quality_profile_id"
+                label="Quality profile"
+                value={@add_prefs["add_quality_profile_id"]}
+                options={@quality_profile_options}
+              />
+              <.inherit_select
+                name="add_season_monitoring"
+                label="Season monitoring"
+                value={@add_prefs["add_season_monitoring"]}
+                options={[
+                  {"all", "All seasons"},
+                  {"first", "First season"},
+                  {"future", "Future only"},
+                  {"none", "None"}
+                ]}
+              />
+              <.inherit_select
+                name="add_monitored"
+                label="Monitored on add"
+                value={@add_prefs["add_monitored"]}
+                options={[{true, "Yes"}, {false, "No"}]}
+              />
+              <.inherit_select
+                name="add_search_on_add"
+                label="Search for a release on add"
+                value={@add_prefs["add_search_on_add"]}
+                options={[{true, "Yes"}, {false, "No"}]}
+              />
+            </form>
+          </div>
+        </div>
+
         <!-- Security Card -->
         <div class="card bg-base-100 shadow-sm">
           <div class="card-body">
