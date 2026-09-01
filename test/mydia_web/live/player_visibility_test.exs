@@ -8,6 +8,7 @@ defmodule MydiaWeb.PlayerVisibilityTest do
   import Mydia.SettingsFixtures
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.UserPreference
 
   setup %{conn: conn} do
     # DashboardLive.Index loads both trending rails on connected mount.
@@ -54,5 +55,44 @@ defmodule MydiaWeb.PlayerVisibilityTest do
     {:ok, view, _html} = live(conn, ~p"/movies/#{item.id}")
 
     assert has_element?(view, ~s{a[href^="/player/#/player/movie/"]})
+  end
+
+  test "the banner renders by default", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#player-cta-banner")
+  end
+
+  test "dismissing removes the banner and persists", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+    assert has_element?(view, "#player-cta-banner")
+
+    view |> element("#dismiss-player-banner") |> render_click()
+
+    refute has_element?(view, "#player-cta-banner")
+
+    {:ok, remounted, _html} = live(conn, ~p"/")
+    refute has_element?(remounted, "#player-cta-banner")
+  end
+
+  test "dismissing leaves the sidebar pill and dock tab in place", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    view |> element("#dismiss-player-banner") |> render_click()
+
+    assert has_element?(view, "#sidebar-player-link")
+    assert has_element?(view, "#dock-player-link")
+  end
+
+  test "hide_player removes the banner even when it was never dismissed", %{
+    conn: conn,
+    user: user
+  } do
+    :ok = hide_player(user)
+    refute UserPreference.player_banner_dismissed?(Accounts.get_user_preference!(user))
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    refute has_element?(view, "#player-cta-banner")
   end
 end
