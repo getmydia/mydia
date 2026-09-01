@@ -58,6 +58,19 @@
             </div>
 
             <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
+
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                id="discover-hide-owned"
+                type="checkbox"
+                phx-click="toggle_hide_owned"
+                checked={@hide_owned}
+                class="toggle toggle-sm toggle-primary"
+              />
+              <span class={["text-sm", !@hide_owned && "text-base-content/50"]}>
+                Hide in library
+              </span>
+            </label>
           </div>
 
           <%= if @search_mode do %>
@@ -189,7 +202,7 @@
             </p>
           </div>
         </div>
-      <% @items == [] -> %>
+      <% @visible_items == [] -> %>
         <div class="flex flex-col items-center justify-center py-16 gap-4">
           <div class="bg-base-200 rounded-full p-6">
             <.icon name="hero-magnifying-glass" class="w-10 h-10 text-base-content/40" />
@@ -199,6 +212,9 @@
             <p class="text-sm text-base-content/50 mt-1">
               Try adjusting your filters or search terms
             </p>
+            <p :if={@hide_owned} class="text-sm text-base-content/50 mt-1">
+              Titles already in your library are hidden.
+            </p>
           </div>
         </div>
       <% true -> %>
@@ -206,7 +222,7 @@
           id="discover-grid"
           class={["grid gap-4 md:gap-5", grid_columns_class(@grid_density)]}
         >
-          <%= for {item, index} <- Enum.with_index(@items) do %>
+          <%= for {item, index} <- Enum.with_index(@visible_items) do %>
             <.trending_card
               item={item}
               media_type={item.media_type || @media_type}

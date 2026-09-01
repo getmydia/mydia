@@ -19,7 +19,8 @@ defmodule Mydia.Accounts.UserPreference do
     "theme" => "system",
     "close_manual_search_after_grab" => false,
     "grid_density" => "comfortable",
-    "recommendations_expanded" => false
+    "recommendations_expanded" => false,
+    "discover_hide_owned" => false
   }
 
   # Valid values for each preference
@@ -95,6 +96,17 @@ defmodule Mydia.Accounts.UserPreference do
   end
 
   @doc """
+  Whether the Discover grid hides titles already in the library.
+
+  Defaults to false. Hiding by default would make a search for an owned title
+  render an empty result, which reads as "not available" rather than "you
+  already have this".
+  """
+  def discover_hide_owned(%__MODULE__{preferences: prefs}) do
+    Map.get(prefs, "discover_hide_owned", @defaults["discover_hide_owned"])
+  end
+
+  @doc """
   Per-user override for the target library on add, or nil to inherit the
   instance default.
 
@@ -161,6 +173,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
     |> validate_preference_value("grid_density", @valid_densities)
     |> validate_preference_value("recommendations_expanded", [true, false])
+    |> validate_preference_value("discover_hide_owned", [true, false])
     |> validate_preference_value("add_monitored", [true, false])
     |> validate_preference_value("add_search_on_add", [true, false])
     |> validate_preference_value(

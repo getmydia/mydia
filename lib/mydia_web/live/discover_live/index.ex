@@ -5,6 +5,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   require Logger
 
+  alias Mydia.Accounts
+  alias Mydia.Accounts.UserPreference
   alias Mydia.Media
   alias Mydia.Media.AddDefaults
   alias Mydia.Media.Recommendations
@@ -39,6 +41,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   @unsupported_media_type "That media type is not supported."
 
+  # The provider returns fixed-size pages. Removing owned titles from one can
+  # empty it entirely, which would look like the end of the results. Fetch the
+  # next page when that happens, bounded so a fully-owned category cannot spin.
+  @max_auto_advance 3
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -47,6 +54,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:languages, MydiaWeb.Languages.all())
       |> assign(:sort_options, @sort_options)
       |> assign(:items, [])
+      |> assign(:visible_items, [])
       |> assign(:loading, true)
       |> assign(:loading_more, false)
       |> assign(:page, 1)
@@ -65,6 +73,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:libraries, [])
       |> assign(:library_picker, nil)
       |> GridDensity.assign_current()
+      |> assign_hide_owned()
 
     {:ok, socket}
   end
@@ -110,6 +119,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:sort_by, sort_by)
         |> assign(:page, page)
         |> assign(:items, [])
+        |> assign_visible_items()
         |> assign(:loading, true)
         |> assign(:load_error, nil)
         |> assign(:has_more, false)
@@ -206,7 +216,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_event("load_more", _, socket) do
     if socket.assigns.has_more and not socket.assigns.loading_more do
       next_page = socket.assigns.page + 1
-      send(self(), {:load_page, next_page})
+      send(self(), {:load_page, next_page, 0})
       {:noreply, assign(socket, :loading_more, true)}
     else
       {:noreply, socket}
@@ -307,6 +317,18 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, GridDensity.put(socket, density)}
   end
 
+  def handle_event("toggle_hide_owned", _params, socket) do
+    value = not socket.assigns.hide_owned
+
+    if user = socket.assigns[:current_user] do
+      preference = Accounts.get_user_preference!(user)
+
+      Accounts.update_preference(preference, %{"preferences" => %{"discover_hide_owned" => value}})
+    end
+
+    {:noreply, socket |> assign(:hide_owned, value) |> assign_visible_items()}
+  end
+
   # Info handlers
 
   @impl true
@@ -344,11 +366,15 @@ defmodule MydiaWeb.DiscoverLive.Index do
           Metadata.fetch_curated_list(category, media_type: media_type, page: page)
       end
 
-    socket = handle_load_result(socket, result, :replace)
+    socket =
+      socket
+      |> handle_load_result(result, :replace)
+      |> maybe_auto_advance(0)
+
     {:noreply, socket}
   end
 
-  def handle_info({:load_page, page}, socket) do
+  def handle_info({:load_page, page, advances}, socket) do
     %{
       media_type: media_type,
       search_mode: search_mode,
@@ -370,8 +396,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
           Metadata.fetch_curated_list(category, media_type: media_type, page: page)
       end
 
-    socket = handle_load_result(socket, result, :append)
-    {:noreply, assign(socket, :loading_more, false)}
+    socket =
+      socket
+      |> handle_load_result(result, :append)
+      |> assign(:loading_more, false)
+      |> maybe_auto_advance(advances)
+
+    {:noreply, socket}
   end
 
   def handle_info({:fetch_detail_metadata, tmdb_id, media_type}, socket) do
@@ -465,6 +496,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
+         |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
@@ -479,6 +511,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
+         |> assign_visible_items()
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
       {:error, {:changeset, changeset}} ->
@@ -520,6 +553,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:requesting_item_id, nil)
         |> assign(:request_status_map, request_status_map)
         |> assign(:items, items)
+        |> assign_visible_items()
         |> assign(:selected_recommendations, recommendations)
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
@@ -584,6 +618,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   # Private helpers
 
+  defp assign_hide_owned(socket) do
+    value =
+      case socket.assigns[:current_user] do
+        nil -> false
+        user -> user |> Accounts.get_user_preference!() |> UserPreference.discover_hide_owned()
+      end
+
+    assign(socket, :hide_owned, value)
+  end
+
   defp handle_load_result(socket, result, mode) do
     case result do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
@@ -601,6 +645,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         socket
         |> assign(:items, items)
+        |> assign_visible_items()
         |> assign(:page, page)
         |> assign(:total_pages, total_pages)
         |> assign(:has_more, page < total_pages)
@@ -623,6 +668,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         socket
         |> assign(:items, items)
+        |> assign_visible_items()
         |> assign(:has_more, false)
         |> assign(:load_error, nil)
         |> assign(:loading, false)
@@ -632,8 +678,42 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         socket
         |> assign(:items, if(mode == :append, do: socket.assigns.items, else: []))
+        |> assign_visible_items()
         |> assign(:load_error, reason)
         |> assign(:loading, false)
+    end
+  end
+
+  # Derives :visible_items from :items and :hide_owned. Call this everywhere
+  # either of those is assigned, so the template never filters.
+  defp assign_visible_items(socket) do
+    visible =
+      if socket.assigns.hide_owned do
+        Enum.reject(socket.assigns.items, & &1.in_library)
+      else
+        socket.assigns.items
+      end
+
+    assign(socket, :visible_items, visible)
+  end
+
+  defp maybe_auto_advance(socket, advances) do
+    cond do
+      not socket.assigns.hide_owned ->
+        socket
+
+      advances >= @max_auto_advance ->
+        socket
+
+      socket.assigns.visible_items != [] ->
+        socket
+
+      not socket.assigns.has_more ->
+        socket
+
+      true ->
+        send(self(), {:load_page, socket.assigns.page + 1, advances + 1})
+        assign(socket, :loading_more, true)
     end
   end
 
