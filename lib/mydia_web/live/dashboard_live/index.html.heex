@@ -7,25 +7,40 @@
   </div>
 
   <!-- Player CTA Banner -->
-  <a
-    href="/player"
-    class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow mb-6 md:mb-8"
+  <div
+    :if={!@hide_player and !@player_banner_dismissed}
+    id="player-cta-banner"
+    class="card bg-base-100 shadow-sm mb-6 md:mb-8"
   >
     <div class="card-body flex-col sm:flex-row sm:items-center gap-4">
-      <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-        <.icon name="hero-play-circle-solid" class="w-6 h-6 text-primary" />
-      </div>
-      <div class="flex-1 min-w-0">
-        <h3 class="font-semibold">Open the Mydia Player</h3>
-        <p class="text-sm text-base-content/60">
-          Watch your library right here — no separate app needed.
-        </p>
-      </div>
-      <span class="btn btn-primary btn-sm self-start sm:self-center shrink-0">
-        Launch Player <.icon name="hero-arrow-right" class="w-4 h-4" />
-      </span>
+      <a
+        href="/player"
+        class="flex-1 flex flex-col sm:flex-row sm:items-center gap-4 min-w-0 group"
+      >
+        <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          <.icon name="hero-play-circle-solid" class="w-6 h-6 text-primary" />
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-semibold">Open the Mydia Player</h3>
+          <p class="text-sm text-base-content/60">
+            Watch your library right here, no separate app needed.
+          </p>
+        </div>
+        <span class="btn btn-primary btn-sm self-start sm:self-center shrink-0 group-hover:shadow-md transition-shadow">
+          Launch Player <.icon name="hero-arrow-right" class="w-4 h-4" />
+        </span>
+      </a>
+      <button
+        id="dismiss-player-banner"
+        type="button"
+        phx-click="dismiss_player_banner"
+        class="btn btn-sm btn-ghost btn-square self-start sm:self-center shrink-0"
+        aria-label="Dismiss"
+      >
+        <.icon name="hero-x-mark" class="w-4 h-4" />
+      </button>
     </div>
-  </a>
+  </div>
 
   <!-- Stats Cards -->
   <% admin? = @current_user && @current_user.role == "admin" %>

@@ -5,6 +5,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   require Logger
 
+  alias Mydia.Accounts
   alias Mydia.Media
   alias Mydia.Media.RecentlyAdded
   alias Mydia.Library
@@ -137,6 +138,16 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   @impl true
+  def handle_event("dismiss_player_banner", _params, socket) do
+    case Accounts.dismiss_player_banner(socket.assigns.current_user) do
+      {:ok, _preference} ->
+        {:noreply, assign(socket, :player_banner_dismissed, true)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not dismiss that. Please try again.")}
+    end
+  end
+
   def handle_event("open_library_picker", params, socket) do
     {:noreply, MediaAddHelpers.put_library_picker(socket, params)}
   end

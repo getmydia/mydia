@@ -57,6 +57,10 @@ defmodule MydiaWeb.Layouts do
     default: nil,
     doc: "unread release notes, as %{version: String.t(), older_count: non_neg_integer()}"
 
+  attr :hide_player, :boolean,
+    default: false,
+    doc: "when true, suppress the player entry points in the sidebar and mobile dock"
+
   attr :current_path, :string,
     default: nil,
     doc: "the current request path for active nav highlighting"
@@ -120,7 +124,11 @@ defmodule MydiaWeb.Layouts do
           </div>
           {render_slot(@inner_block)}
         </main>
-        <.mobile_dock current_user={@current_user} current_path={@current_path} />
+        <.mobile_dock
+          current_user={@current_user}
+          current_path={@current_path}
+          hide_player={@hide_player}
+        />
       </div>
 
       <!-- Sidebar -->
@@ -136,6 +144,8 @@ defmodule MydiaWeb.Layouts do
                 <h1 class="text-2xl font-bold">Mydia</h1>
               </div>
               <a
+                :if={!@hide_player}
+                id="sidebar-player-link"
                 href="/player"
                 class="btn btn-primary btn-sm gap-1.5 rounded-full shadow-sm hover:shadow-md transition-shadow"
                 title="Open Player"
@@ -571,6 +581,10 @@ defmodule MydiaWeb.Layouts do
   attr :current_user, :map, default: nil, doc: "the currently authenticated user"
   attr :current_path, :string, default: nil, doc: "the current request path"
 
+  attr :hide_player, :boolean,
+    default: false,
+    doc: "when true, omit the Player tab from the dock"
+
   def mobile_dock(assigns) do
     ~H"""
     <nav
@@ -629,6 +643,8 @@ defmodule MydiaWeb.Layouts do
           label="Downloads"
         />
         <a
+          :if={!@hide_player}
+          id="dock-player-link"
           href="/player"
           data-dock-link
           class="flex flex-col items-center justify-center min-w-[52px] py-1.5 rounded-xl text-primary hover:bg-primary/10 transition-[color,opacity] duration-300 ease-in-out relative z-10"

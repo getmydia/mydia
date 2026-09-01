@@ -444,6 +444,21 @@ defmodule Mydia.Accounts do
   end
 
   @doc """
+  Records that the user closed the dashboard player banner.
+
+  Idempotent: a second call rewrites the same value. Separate from the
+  `hide_player` preference, so dismissing the banner never touches the
+  navigation and turning that setting off never brings a dismissed banner back.
+  """
+  @spec dismiss_player_banner(User.t()) ::
+          {:ok, UserPreference.t()} | {:error, Ecto.Changeset.t()}
+  def dismiss_player_banner(%User{} = user) do
+    user
+    |> get_user_preference!()
+    |> update_preference(%{"player_banner_dismissed" => true})
+  end
+
+  @doc """
   The newest changelog version this user has seen, or `nil`.
 
   `nil` means the user has never been shown the changelog, which includes every
