@@ -13,6 +13,7 @@ defmodule MydiaWeb.DashboardLive.Components do
   use MydiaWeb, :verified_routes
 
   import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
+  import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1]
 
   alias MydiaWeb.Live.Helpers.MediaImages
 
@@ -39,7 +40,7 @@ defmodule MydiaWeb.DashboardLive.Components do
           id={"#{@id}-item-#{entry.media_item.id}"}
           class="snap-start flex-shrink-0 w-36"
         >
-          <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden group">
+          <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden group">
             <.link navigate={~p"/media/#{entry.media_item.id}"}>
               <.poster_figure
                 src={MediaImages.poster_url(entry.media_item, "w342")}
@@ -56,11 +57,7 @@ defmodule MydiaWeb.DashboardLive.Components do
                 </:overlay>
               </.poster_figure>
             </.link>
-            <div class="card-body p-3">
-              <h3 class="card-title text-sm line-clamp-2" title={entry.media_item.title}>
-                {entry.media_item.title}
-              </h3>
-            </div>
+            <.poster_card_body title={entry.media_item.title} />
           </div>
         </div>
       </div>
