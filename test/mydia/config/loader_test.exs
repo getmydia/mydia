@@ -1139,4 +1139,15 @@ defmodule Mydia.Config.LoaderTest do
       assert Application.get_env(:mydia, :runtime_config) == good
     end
   end
+
+  describe "media default_season_monitoring (DEFAULT_SEASON_MONITORING)" do
+    test "loads default_season_monitoring from DEFAULT_SEASON_MONITORING" do
+      System.put_env("DEFAULT_SEASON_MONITORING", "first")
+      on_exit(fn -> System.delete_env("DEFAULT_SEASON_MONITORING") end)
+
+      {:ok, config} = Mydia.Config.Loader.load(sources: [:env])
+
+      assert config.media.default_season_monitoring == "first"
+    end
+  end
 end
