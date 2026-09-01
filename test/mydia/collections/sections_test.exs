@@ -211,4 +211,44 @@ defmodule Mydia.Collections.SectionsTest do
 
     Collections.create_collection(user, attrs)
   end
+
+  describe "SectionPresets" do
+    alias Mydia.Collections.SectionPresets
+
+    test "every preset produces a collection that validates" do
+      user = user_fixture()
+
+      for preset <- SectionPresets.all() do
+        assert {:ok, collection} =
+                 Collections.create_collection(user, %{
+                   name: preset.name,
+                   type: "smart",
+                   visibility: "private",
+                   smart_rules: Jason.encode!(preset.rules),
+                   sidebar_icon: preset.icon
+                 }),
+               "preset #{preset.key} did not create"
+
+        assert {:ok, _} = Collections.validate_smart_rules(collection.smart_rules)
+      end
+    end
+
+    test "every preset icon is on the allowlist" do
+      for preset <- SectionPresets.all() do
+        assert preset.icon in Collection.valid_sidebar_icons()
+      end
+    end
+
+    test "the anime preset claims both anime categories and is exclusive" do
+      preset = SectionPresets.get("anime")
+
+      assert preset.exclusive
+      assert %{"conditions" => [%{"field" => "category", "value" => values}]} = preset.rules
+      assert Enum.sort(values) == ["anime_movie", "anime_series"]
+    end
+
+    test "get/1 returns nil for an unknown key" do
+      assert is_nil(SectionPresets.get("nope"))
+    end
+  end
 end
