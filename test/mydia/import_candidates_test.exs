@@ -770,4 +770,35 @@ defmodule Mydia.ImportCandidatesTest do
       assert Repo.aggregate(MediaFile, :count) == 5
     end
   end
+
+  describe "queue marker fields" do
+    test "a candidate round-trips its queue markers" do
+      lp = library_path_fixture()
+      at = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          queued_op: "accept",
+          queued_at: at,
+          queue_error: "No provider match to import from."
+        })
+
+      reloaded = Mydia.Repo.get!(Mydia.Library.ImportCandidate, candidate.id)
+
+      assert reloaded.queued_op == "accept"
+      assert reloaded.queued_at == at
+      assert reloaded.queue_error == "No provider match to import from."
+    end
+
+    test "queue markers default to nil" do
+      lp = library_path_fixture()
+      candidate = import_candidate_fixture(%{library_path_id: lp.id})
+
+      assert is_nil(candidate.queued_op)
+      assert is_nil(candidate.queued_at)
+      assert is_nil(candidate.queue_error)
+    end
+  end
 end
