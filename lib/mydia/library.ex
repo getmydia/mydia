@@ -681,6 +681,42 @@ defmodule Mydia.Library do
     end
   end
 
+  # The directory diff in the three re-scan paths proposes files as missing by
+  # comparing path strings against a scan of one inferred directory. This is
+  # the only thing allowed to confirm it.
+  #
+  # A row the diff called missing whose file is nevertheless sitting on disk is
+  # not missing: it is a row whose stored path did not match the scan for some
+  # other reason. A second row for the same file, a path that normalises
+  # differently, a scan that could not read the directory, a file whose
+  # extension is outside Scanner's list. Trashing it moves bytes out of the
+  # library, which is how #653 emptied people's libraries.
+  #
+  # A row with no resolvable path is kept in the list. There is nothing to
+  # check, and TrashStore.store/1 has nothing to move for it either.
+  @spec reject_files_still_on_disk([MediaFile.t()]) :: [MediaFile.t()]
+  defp reject_files_still_on_disk(candidates) do
+    Enum.reject(candidates, fn media_file ->
+      case MediaFile.absolute_path(media_file) do
+        nil ->
+          false
+
+        path ->
+          present? = File.exists?(path)
+
+          if present? do
+            Logger.warning(
+              "Re-scan called a file missing that is still on disk; refusing to trash it",
+              media_file_id: media_file.id,
+              path: path
+            )
+          end
+
+          present?
+      end
+    end)
+  end
+
   @doc """
   Restores a trashed media file: the file moves back to its library path and
   `trashed_at` is cleared.
@@ -1210,9 +1246,9 @@ defmodule Mydia.Library do
                 end)
 
               trashed_count =
-                Enum.count(missing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
+                missing_files
+                |> reject_files_still_on_disk()
+                |> Enum.count(fn file -> match?({:ok, _}, trash_media_file(file)) end)
 
               Logger.info("Found new files during re-scan",
                 new_file_count: length(new_files),
@@ -1395,9 +1431,9 @@ defmodule Mydia.Library do
                 end)
 
               trashed_count =
-                Enum.count(missing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
+                missing_files
+                |> reject_files_still_on_disk()
+                |> Enum.count(fn file -> match?({:ok, _}, trash_media_file(file)) end)
 
               Logger.info("Found new files for season during re-scan",
                 season: season_number,
@@ -1581,9 +1617,9 @@ defmodule Mydia.Library do
                 end)
 
               trashed_count =
-                Enum.count(missing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
+                missing_files
+                |> reject_files_still_on_disk()
+                |> Enum.count(fn file -> match?({:ok, _}, trash_media_file(file)) end)
 
               Logger.info("Found new files during movie re-scan",
                 new_file_count: length(new_files),
