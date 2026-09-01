@@ -375,4 +375,52 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
       refute Map.has_key?(:sys.get_state(pid).segment_waiters, 100)
     end
   end
+
+  describe "a :window session's segments_ready notification" do
+    # Regression test for a crash that reached master: FfmpegHlsTranscoder's
+    # on_segments callback used to be wired unconditionally in start_backend/6,
+    # for both :full and :window sessions. A :window session has no
+    # TranscodeWindow (its `window` field is nil -- see start_registered_session/7,
+    # called from init/1), but
+    # TranscodeWindow.mark_ready/2 pattern-matches %TranscodeWindow{} in its
+    # head, so the first {:segments_ready, ...} cast a real encoder sent for a
+    # windowed session raised FunctionClauseError and took the whole session
+    # GenServer down roughly 60ms after start. Every later playlist request
+    # then 404'd because the session no longer existed (CI / Player E2E on
+    # master, run 33452019208; player/integration_test/p2p_streaming_test.dart
+    # failing on "HLS playlist should be ready with segments").
+    #
+    # The fix has two halves: start_backend/6 no longer wires on_segments at
+    # all for a :window session (nothing to notify), and handle_cast/2 gained
+    # a `%{window: nil}` clause as defence in depth so this cast is inert even
+    # if some future caller re-introduces it. This test exercises the
+    # handle_cast/2 guard directly, which is what actually protects the
+    # session if that ever happens.
+    test "does not crash the session" do
+      state =
+        base_state(
+          playlist_mode: :window,
+          segment_plan: nil,
+          window: nil
+        )
+
+      # Trapping exits keeps a crash from taking the test process down with the
+      # link, so the failure surfaces as :sys.get_state/1 exiting with :noproc
+      # rather than as an unrelated-looking test process death.
+      Process.flag(:trap_exit, true)
+      {:ok, pid} = Harness.start_link(state)
+
+      # window_generation defaults to 0 in base_state/1; matching it here
+      # means this notification is not discarded by the stale-generation
+      # guard clause and actually reaches the window: nil clause under test.
+      HlsSession.notify_segments(pid, 0, [0])
+
+      # :sys.get_state/1 is a synchronous system message. Sent from the same
+      # process right after the cast, it is guaranteed to be handled after it,
+      # so this synchronises on the cast actually being processed instead of
+      # sleeping and hoping. If the cast crashed the session, the call exits
+      # with :noproc and the test fails.
+      assert %{window: nil} = :sys.get_state(pid)
+    end
+  end
 end
