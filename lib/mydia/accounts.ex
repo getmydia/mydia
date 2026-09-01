@@ -16,6 +16,7 @@ defmodule Mydia.Accounts do
   alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter}
 
   @changelog_key "last_seen_changelog_version"
+  @anime_nudge_key "anime_nudge_dismissed"
 
   ## Users
 
@@ -499,6 +500,26 @@ defmodule Mydia.Accounts do
           _ -> true
         end
     end
+  end
+
+  @doc """
+  Returns true when the user has dismissed the offer to create an Anime section.
+  """
+  @spec anime_nudge_dismissed?(User.t()) :: boolean()
+  def anime_nudge_dismissed?(%User{} = user) do
+    pref = get_user_preference!(user)
+    Map.get(pref.preferences || %{}, @anime_nudge_key, false) == true
+  end
+
+  @doc """
+  Records that the user dismissed the Anime section offer. Permanent.
+  """
+  @spec dismiss_anime_nudge(User.t()) ::
+          {:ok, UserPreference.t()} | {:error, Ecto.Changeset.t()}
+  def dismiss_anime_nudge(%User{} = user) do
+    user
+    |> get_user_preference!()
+    |> update_preference(%{@anime_nudge_key => true})
   end
 
   ## API Keys

@@ -437,3 +437,23 @@ multi-member promotion success unpinned until `32820f75c` added a regression.
 When touching promotion locking, ownership transactions, or anything under
 `DB.postgres?()` / `DB.sqlite?()`, run the PostgreSQL suite before claiming done.
 A local PostgreSQL is available via devenv.
+
+## :exclude_categories keeps NULL rows on purpose
+
+`Media.list_media_items/1` and `Media.count_media_items/1` accept
+`:exclude_categories`, used by the Movies and TV pages to hide categories that
+an exclusive sidebar section has claimed for itself. The clause in
+`apply_media_item_filters/2` is `is_nil(m.category) or m.category not in
+^names`, which keeps rows whose `category` is NULL. That is deliberate: SQL
+evaluates `NULL NOT IN ('anime_series')` to NULL, and a NULL `WHERE` condition
+drops the row, which would silently remove every item that has not been
+classified yet from the page it already belongs on.
+
+`count_media_items/1` is a database aggregate (`Repo.aggregate(:count)`), and
+`count_movies/1` and `count_tv_shows/1` both delegate to it, forwarding only
+`:exclude_categories` alongside their own fixed `:type`. The sidebar's movie
+and TV badge counts are computed the same way, once per LiveView mount, by the
+`:load_navigation_data` hook in `lib/mydia_web/live/user_auth.ex`, from the
+same `Collections.claimed_categories/1` result the Movies and TV pages use.
+The badge and the page it links to therefore share one exclusion set and
+cannot disagree.

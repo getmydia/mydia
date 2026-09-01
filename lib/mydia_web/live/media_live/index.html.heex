@@ -3,19 +3,47 @@
     <%!-- Header with title and view controls --%>
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-6">
       <div>
-        <h1 class="text-3xl font-bold">{@page_title}</h1>
+        <div class="flex items-center gap-3">
+          <.icon
+            :if={@section && @section.sidebar_icon}
+            name={@section.sidebar_icon}
+            class="w-7 h-7 text-primary"
+          />
+          <h1 id="section-heading" class="text-3xl font-bold">{@page_title}</h1>
+        </div>
         <p class="text-base-content/70 mt-1">
           Browse and manage your media library
         </p>
+
+        <div :if={@section_error} id="section-rules-error" class="alert alert-warning mt-3">
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          <span>
+            This section's rules can't be read, so it has nothing to show. Edit the collection to fix them.
+          </span>
+          <.link navigate={~p"/collections/#{@section.id}"} class="btn btn-sm">Edit rules</.link>
+        </div>
       </div>
 
       <%!-- Actions and view controls --%>
       <div class="flex flex-wrap items-center gap-2">
         <%!-- Selection controls --%>
         <.selection_controls
+          id="toggle-selection-mode"
           selection_mode={@selection_mode}
           selected_count={MapSet.size(@selected_ids)}
         />
+
+        <%!-- Section settings (shown on section pages the current user owns) --%>
+        <button
+          :if={@section && @section_owned?}
+          id="open-section-settings"
+          type="button"
+          phx-click="open_section_settings"
+          class="btn btn-ghost btn-sm btn-circle"
+          aria-label="Section settings"
+        >
+          <.icon name="hero-cog-6-tooth" class="w-5 h-5" />
+        </button>
 
         <%!-- Re-scan button (shown on Movies and TV Shows pages) --%>
         <%= if @filter_type in ["movie", "tv_show"] do %>
@@ -92,6 +120,14 @@
         />
       </div>
     </div>
+
+    <.section_settings_modal
+      :if={@section && @section_form}
+      section={@section}
+      form={@section_form}
+      exclusive_eligible={@section_exclusive_eligible}
+      open={@show_section_settings}
+    />
 
     <%!-- Hidden debug info for tests --%>
     <div
@@ -199,6 +235,47 @@
           <% end %>
         </select>
       </.form>
+    </div>
+
+    <div :if={@show_anime_nudge} id="anime-nudge" class="alert alert-info mb-4">
+      <.icon name="hero-sparkles" class="w-5 h-5" />
+      <span>
+        You have a fair bit of anime mixed in here. Want it in its own sidebar section?
+      </span>
+      <div class="flex gap-2">
+        <button
+          id="accept-anime-nudge"
+          phx-click="accept_anime_nudge"
+          class="btn btn-sm btn-primary"
+        >
+          Create Anime section
+        </button>
+        <button
+          id="dismiss-anime-nudge"
+          phx-click="dismiss_anime_nudge"
+          class="btn btn-sm btn-ghost"
+        >
+          No thanks
+        </button>
+      </div>
+    </div>
+
+    <div
+      :if={@excluded_count > 0 and is_nil(@section)}
+      id="excluded-notice"
+      class="alert alert-info mb-4"
+    >
+      <.icon name="hero-information-circle" class="w-5 h-5" />
+      <span>
+        <%= case @claiming_sections do %>
+          <% [section] -> %>
+            {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your
+            <.link navigate={~p"/sections/#{section.id}"} class="link link-primary font-semibold">{section.name}</.link>
+            section.
+          <% _ -> %>
+            {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your pinned sections.
+        <% end %>
+      </span>
     </div>
 
     <%!-- Empty state (shown when no items) --%>
@@ -555,6 +632,7 @@
               title={if all_selected, do: "Deselect all", else: "Select all"}
             >
               <input
+                id="select-all"
                 type="checkbox"
                 class="checkbox checkbox-sm checkbox-primary"
                 checked={all_selected}
@@ -589,6 +667,7 @@
 
               <div class="tooltip tooltip-top" data-tip="Monitor">
                 <button
+                  id="batch-monitor"
                   type="button"
                   class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
                   phx-click="batch_monitor"
@@ -600,6 +679,7 @@
 
               <div class="tooltip tooltip-top" data-tip="Unmonitor">
                 <button
+                  id="batch-unmonitor"
                   type="button"
                   class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
                   phx-click="batch_unmonitor"

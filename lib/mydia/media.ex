@@ -22,6 +22,9 @@ defmodule Mydia.Media do
     - `:ids` - Filter to a specific list of media item ids
     - `:monitored` - Filter by monitored status (true/false)
     - `:category` - Filter by category (atom or string, e.g., :anime_movie or "anime_movie")
+    - `:exclude_categories` - Drop these categories from the result (list of atoms or strings)
+    - `:category_in` - Keep only these categories in the result (list of atoms or strings)
+    - `:base_query` - Ecto query to start from instead of the full MediaItem table
     - `:library_path_type` - Filter by library path type (:movies, :series, etc.)
     - `:search` - Search by title (case-insensitive substring match)
     - `:added_since` - Filter to items inserted after this DateTime
@@ -31,7 +34,7 @@ defmodule Mydia.Media do
   """
   @spec list_media_items(keyword()) :: [MediaItem.t()]
   def list_media_items(opts \\ []) do
-    MediaItem
+    (opts[:base_query] || MediaItem)
     |> apply_media_item_filters(opts)
     |> maybe_preload(opts[:preload])
     |> Repo.all()
@@ -830,23 +833,38 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Returns the count of movies in the library.
+  Returns the count of media items matching the given filter options.
+
+  Accepts the same options as `list_media_items/1`, but aggregates in the
+  database instead of loading rows.
   """
-  @spec count_movies() :: non_neg_integer()
-  def count_movies do
-    MediaItem
-    |> where([m], m.type == "movie")
+  @spec count_media_items(keyword()) :: non_neg_integer()
+  def count_media_items(opts \\ []) do
+    (opts[:base_query] || MediaItem)
+    |> apply_media_item_filters(opts)
     |> Repo.aggregate(:count)
   end
 
   @doc """
-  Returns the count of TV shows in the library.
+  Returns the count of movies in the library.
+
+  ## Options
+    - `:exclude_categories` - Drop these categories from the count
   """
-  @spec count_tv_shows() :: non_neg_integer()
-  def count_tv_shows do
-    MediaItem
-    |> where([m], m.type == "tv_show")
-    |> Repo.aggregate(:count)
+  @spec count_movies(keyword()) :: non_neg_integer()
+  def count_movies(opts \\ []) do
+    count_media_items(Keyword.merge(Keyword.take(opts, [:exclude_categories]), type: "movie"))
+  end
+
+  @doc """
+  Returns the count of TV shows in the library.
+
+  ## Options
+    - `:exclude_categories` - Drop these categories from the count
+  """
+  @spec count_tv_shows(keyword()) :: non_neg_integer()
+  def count_tv_shows(opts \\ []) do
+    count_media_items(Keyword.merge(Keyword.take(opts, [:exclude_categories]), type: "tv_show"))
   end
 
   @doc """
@@ -2148,6 +2166,16 @@ defmodule Mydia.Media do
       {:category, category}, query when is_binary(category) ->
         where(query, [m], m.category == ^category)
 
+      {:exclude_categories, []}, query ->
+        query
+
+      {:exclude_categories, categories}, query when is_list(categories) ->
+        names = Enum.map(categories, &to_string/1)
+        # `category` is nullable and SQL evaluates NULL NOT IN (...) to NULL,
+        # which drops the row. An item that has not been classified yet must
+        # stay on the page it is already on, so keep NULLs explicitly.
+        where(query, [m], is_nil(m.category) or m.category not in ^names)
+
       {:library_path_type, library_type}, query ->
         filter_by_library_path_type(query, library_type)
 
@@ -2166,6 +2194,13 @@ defmodule Mydia.Media do
 
       {:has_files, true}, query ->
         filter_by_has_files(query)
+
+      {:category_in, []}, query ->
+        query
+
+      {:category_in, categories}, query when is_list(categories) ->
+        names = Enum.map(categories, &to_string/1)
+        where(query, [m], m.category in ^names)
 
       _other, query ->
         query

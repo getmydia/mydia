@@ -40,6 +40,7 @@ defmodule MydiaWeb.Layouts do
   attr :current_user, :map, default: nil, doc: "the currently authenticated user"
   attr :movie_count, :integer, default: 0, doc: "number of movies in library"
   attr :tv_show_count, :integer, default: 0, doc: "number of TV shows in library"
+  attr :sections, :list, default: [], doc: "collections the user pinned to the sidebar"
   attr :downloads_count, :integer, default: 0, doc: "number of active downloads"
   attr :pending_requests_count, :integer, default: 0, doc: "number of pending requests"
 
@@ -167,13 +168,32 @@ defmodule MydiaWeb.Layouts do
                   class={nav_active?(@current_path, "/movies", false) && "active"}
                 >
                   <.icon name="hero-film" class="w-5 h-5" /> Movies
-                  <span class="badge badge-sm">{@movie_count}</span>
+                  <span id="nav-movie-count" class="badge badge-sm">{@movie_count}</span>
                 </.link>
               </li>
               <li>
                 <.link navigate="/tv" class={nav_active?(@current_path, "/tv", false) && "active"}>
                   <.icon name="hero-tv" class="w-5 h-5" /> TV Shows
-                  <span class="badge badge-sm">{@tv_show_count}</span>
+                  <span id="nav-tv-count" class="badge badge-sm">{@tv_show_count}</span>
+                </.link>
+              </li>
+              <li :for={section <- @sections}>
+                <.link
+                  id={"nav-section-#{section.id}"}
+                  navigate={~p"/sections/#{section.id}"}
+                  class={nav_active?(@current_path, "/sections/#{section.id}", false) && "active"}
+                >
+                  <.icon name={section.sidebar_icon || "hero-squares-2x2"} class="w-5 h-5" />
+                  {section.name}
+                </.link>
+              </li>
+              <li>
+                <.link
+                  id="nav-add-section"
+                  navigate={~p"/sections/new"}
+                  class="text-base-content/60 hover:text-base-content"
+                >
+                  <.icon name="hero-plus" class="w-5 h-5" /> Add section
                 </.link>
               </li>
               <li class="menu-title mt-4">

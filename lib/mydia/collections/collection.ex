@@ -25,6 +25,16 @@ defmodule Mydia.Collections.Collection do
   @visibility_values ~w(private shared)
   @sort_order_values ~w(position title year added_date rating)
 
+  # Hero icons offered for sidebar sections. Every name is verified to exist in
+  # deps/heroicons/optimized/24/outline. Validating against an allowlist keeps a
+  # bad value from rendering a broken icon on every page in the app, since the
+  # sidebar is in the layout.
+  @sidebar_icons ~w(
+    hero-sparkles hero-film hero-tv hero-star hero-bolt hero-fire
+    hero-globe-alt hero-face-smile hero-rocket-launch hero-squares-2x2
+    hero-book-open hero-beaker
+  )
+
   @type t :: %__MODULE__{
           id: binary(),
           name: String.t() | nil,
@@ -36,6 +46,9 @@ defmodule Mydia.Collections.Collection do
           visibility: String.t(),
           is_system: boolean(),
           position: integer(),
+          pinned_position: integer() | nil,
+          sidebar_icon: String.t() | nil,
+          exclusive: boolean(),
           user: Mydia.Accounts.User.t() | Ecto.Association.NotLoaded.t(),
           collection_items:
             [Mydia.Collections.CollectionItem.t()] | Ecto.Association.NotLoaded.t(),
@@ -53,6 +66,9 @@ defmodule Mydia.Collections.Collection do
     field :visibility, :string, default: "private"
     field :is_system, :boolean, default: false
     field :position, :integer, default: 0
+    field :pinned_position, :integer
+    field :sidebar_icon, :string
+    field :exclusive, :boolean, default: false
 
     belongs_to :user, Mydia.Accounts.User
     has_many :collection_items, Mydia.Collections.CollectionItem
@@ -73,13 +89,18 @@ defmodule Mydia.Collections.Collection do
       :sort_order,
       :smart_rules,
       :visibility,
-      :position
+      :position,
+      :pinned_position,
+      :sidebar_icon,
+      :exclusive
     ])
     |> validate_required([:name, :type, :visibility])
     |> validate_inclusion(:type, @type_values)
     |> validate_inclusion(:visibility, @visibility_values)
     |> validate_inclusion(:sort_order, @sort_order_values)
+    |> validate_inclusion(:sidebar_icon, @sidebar_icons, message: "is not a supported icon")
     |> validate_smart_rules()
+    |> validate_pinned_section_type()
     |> foreign_key_constraint(:user_id)
   end
 
@@ -111,6 +132,11 @@ defmodule Mydia.Collections.Collection do
   """
   def valid_sort_orders, do: @sort_order_values
 
+  @doc """
+  Returns the hero icon names offered for sidebar sections.
+  """
+  def valid_sidebar_icons, do: @sidebar_icons
+
   # Validates that smart_rules is valid JSON with at least one condition when type is "smart"
   defp validate_smart_rules(changeset) do
     type = get_field(changeset, :type)
@@ -140,6 +166,20 @@ defmodule Mydia.Collections.Collection do
 
       true ->
         changeset
+    end
+  end
+
+  # Only smart collections may be pinned as sidebar sections: pin_section/3
+  # and the :section LiveView route both already guard against a manual
+  # collection reaching /sections/:id, since smart_rules: nil would build an
+  # unfiltered query. This is the third layer, closing off the changeset
+  # itself as a way to bypass those guards.
+  defp validate_pinned_section_type(changeset) do
+    if get_field(changeset, :type) == "manual" and
+         not is_nil(get_field(changeset, :pinned_position)) do
+      add_error(changeset, :pinned_position, "only smart collections can be pinned")
+    else
+      changeset
     end
   end
 
