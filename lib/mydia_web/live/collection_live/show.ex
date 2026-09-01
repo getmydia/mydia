@@ -15,7 +15,8 @@ defmodule MydiaWeb.CollectionLive.Show do
   alias Mydia.Collections.Collection
   alias Mydia.Media
 
-  import MydiaWeb.CollectionLive.Components, only: [smart_rules_editor: 1, load_value_options: 1]
+  import MydiaWeb.CollectionLive.Components,
+    only: [smart_rules_editor: 1, load_value_options: 1, value_list: 1, value_string: 1]
 
   @items_per_page 50
   @default_condition %{"field" => "", "operator" => "eq", "value" => ""}
@@ -95,12 +96,9 @@ defmodule MydiaWeb.CollectionLive.Show do
     %{
       "field" => Map.get(cond, "field", ""),
       "operator" => Map.get(cond, "operator", "eq"),
-      "value" => format_condition_value(Map.get(cond, "value", ""))
+      "value" => value_string(Map.get(cond, "value", ""))
     }
   end
-
-  defp format_condition_value(value) when is_list(value), do: Enum.join(value, ", ")
-  defp format_condition_value(value), do: to_string(value)
 
   @impl true
   def handle_params(params, _url, socket) do
@@ -945,7 +943,7 @@ defmodule MydiaWeb.CollectionLive.Show do
               %{
                 "field" => new_field,
                 "operator" => cond["operator"] || old_cond["operator"] || "eq",
-                "value" => cond["value"] || ""
+                "value" => value_string(cond["value"])
               }
             end
           end)
@@ -1046,11 +1044,13 @@ defmodule MydiaWeb.CollectionLive.Show do
 
   defp parse_condition_value(_field, value, operator)
        when operator in ["in", "not_in", "contains_any"] do
-    # Split comma-separated values into a list
-    value
-    |> String.split(",")
-    |> Enum.map(&String.trim/1)
-    |> Enum.filter(&(&1 != ""))
+    value_list(value)
+  end
+
+  # A multi-select's list can outlive a switch to a scalar operator by one change
+  # event, so collapse it before the scalar clauses below try to parse it.
+  defp parse_condition_value(field, value, operator) when is_list(value) do
+    parse_condition_value(field, value_string(value), operator)
   end
 
   defp parse_condition_value(_field, value, "between") do
