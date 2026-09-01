@@ -6,6 +6,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   require Logger
 
   alias Mydia.Media
+  alias Mydia.Media.AddDefaults
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
   alias MydiaWeb.Live.Authorization
@@ -399,16 +400,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
-    case MediaAddHelpers.library_path_opts(library_path_id, media_type) do
-      {:error, :unknown_library} ->
-        {:noreply,
-         socket
-         |> clear_adding(provider_id)
-         |> put_flash(:error, "That library is no longer available. Nothing was added.")}
+    defaults =
+      AddDefaults.resolve(socket.assigns.current_user, media_type,
+        library_path_id: presence(library_path_id)
+      )
 
-      {:ok, opts} ->
-        add_with_opts(provider_id, media_type, opts, socket)
-    end
+    opts =
+      defaults
+      |> AddDefaults.to_add_opts()
+      |> Keyword.put(:search_on_add, defaults.search_on_add)
+
+    add_with_opts(provider_id, media_type, opts, socket)
   end
 
   def handle_info({:request_media, provider_id, media_type}, socket) do
@@ -427,6 +429,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
         {:noreply, submit_request(socket, item, media_type)}
     end
   end
+
+  # The picker's blank placeholder ("") and an ordinary card click's nil both
+  # mean "no explicit choice"; anything else is a client-supplied library id
+  # override for the resolver.
+  defp presence(nil), do: nil
+  defp presence(""), do: nil
+  defp presence(value), do: value
 
   defp add_with_opts(provider_id, media_type, opts, socket) do
     case MediaAddHelpers.handle_add_media_to_library(

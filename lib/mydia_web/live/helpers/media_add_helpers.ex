@@ -7,6 +7,8 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   request approval shares.
   """
 
+  require Logger
+
   alias Mydia.Media.Add
   alias Mydia.Metadata
   alias Mydia.Settings
@@ -155,10 +157,16 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   An optional `config` (relay config map) can be injected for testing; it
   defaults to `Metadata.default_relay_config()`.
 
-  `opts` are forwarded to `Mydia.Media.Add`; `:monitored`,
+  `opts` are forwarded to `Mydia.Media.Add`, except `:search_on_add`, which is
+  popped off first: `Add` does not accept it. `:monitored`,
   `:quality_profile_id` and `:library_path_id` let a caller inherit settings
   from an item the user is already looking at, or pin an explicit target
   library. TV shows ignore monitored and quality profile today.
+
+  On a successful add, queues an automatic indexer search when
+  `:search_on_add` is true. A queue failure is logged and does not fail the
+  add: adding the title is what the user asked for, the search is a
+  convenience on top of it.
   """
   def handle_add_media_to_library(
         provider_id,
@@ -167,10 +175,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
         config \\ nil,
         opts \\ []
       ) do
+    {search_on_add, add_opts} = Keyword.pop(opts, :search_on_add, false)
     provider_id_int = Add.parse_provider_id(provider_id)
 
-    case Add.from_provider(provider_id, media_type, config, opts) do
+    case Add.from_provider(provider_id, media_type, config, add_opts) do
       {:ok, media_item} ->
+        maybe_queue_search(media_item, search_on_add)
+
         {:ok, media_item,
          update_library_status_map(library_status_map, media_item, provider_id_int)}
 
@@ -182,6 +193,29 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
       {:error, _} = error ->
         error
+    end
+  end
+
+  # Moved here from the deleted AddMediaLive. Uses the shared auto-search path
+  # rather than enqueuing directly: it is already Oban-dedupe-safe (singular
+  # insert/1, not insert_all/1) and is what the media detail page uses.
+  #
+  # A failure leaves the item added. Adding the title is what the user asked
+  # for; the search is a convenience.
+  defp maybe_queue_search(_media_item, false), do: :ok
+
+  defp maybe_queue_search(media_item, true) do
+    case Mydia.Search.queue_auto_searches([media_item]) do
+      {:ok, _count} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to queue search on add",
+          media_item_id: media_item.id,
+          reason: inspect(reason)
+        )
+
+        :ok
     end
   end
 
