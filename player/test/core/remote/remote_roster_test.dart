@@ -11,12 +11,19 @@ Map<String, dynamic> devicesResponse(List<Map<String, dynamic>> devices) => {
       'devices': devices,
     };
 
-Map<String, dynamic> device(String id, String name, String? nodeId) => {
+Map<String, dynamic> device(
+  String id,
+  String name,
+  String? nodeId, {
+  bool isRevoked = false,
+}) =>
+    {
       '__typename': 'RemoteDevice',
       'id': id,
       'deviceName': name,
       'platform': 'linux',
       'nodeId': nodeId,
+      'isRevoked': isRevoked,
     };
 
 RemoteRoster rosterWith(StubLink link, DateTime Function() now) => RemoteRoster(
@@ -105,6 +112,32 @@ void main() {
       // strangers buy at most the initial fetch plus one refetch.
       // StubLink.responses repeats its last entry, so a short script is fine.
       expect(link.requests.length, lessThanOrEqualTo(2));
+    });
+
+    test('omits revoked devices from the picker list', () async {
+      final link = StubLink.responses([
+        devicesResponse([
+          device('d1', 'Kitchen', 'a' * 64),
+          device('d2', 'Old Tablet', 'b' * 64, isRevoked: true),
+        ]),
+      ]);
+
+      final roster = rosterWith(link, () => fixedClock);
+      final entries = await roster.entries();
+
+      expect(entries.map((e) => e.id), ['d1']);
+    });
+
+    test('refuses a revoked device that tries to drive this one', () async {
+      final link = StubLink.responses([
+        devicesResponse([
+          device('d2', 'Old Tablet', 'b' * 64, isRevoked: true),
+        ]),
+      ]);
+
+      final roster = rosterWith(link, () => fixedClock);
+
+      expect(await roster.allows('b' * 64), isFalse);
     });
   });
 }
