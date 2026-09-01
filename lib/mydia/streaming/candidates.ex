@@ -118,8 +118,22 @@ defmodule Mydia.Streaming.Candidates do
       :direct_play ->
         container = Compatibility.get_container_format(media_file)
 
+        # HLS_COPY sits between the two for the benefit of clients that cannot
+        # take DIRECT_PLAY even when they qualify for it. The web player is the
+        # whole of that set today: it always plays through an HLS session
+        # (`PlayerScreen` gates direct play on `!kIsWeb`), so a two-rung list
+        # left it choosing TRANSCODE — re-encoding a file the client had just
+        # said, in its device profile, that it could decode untouched.
+        #
+        # Native is unaffected: DIRECT_PLAY still leads, which is what both
+        # `firstStrategyAllowsDirectPlay` and `pickHlsStrategy` read. And the
+        # rung is safe to offer precisely because this branch is the one where
+        # the client's own allowlist and conditions already approved every
+        # stream — unlike `:needs_transcoding` below, where a leading HLS_COPY
+        # means the opposite and the player has to refuse it.
         [
           build_candidate("DIRECT_PLAY", container, video_codec_str, audio_codec_str),
+          build_candidate("HLS_COPY", "ts", video_codec_str, audio_codec_str),
           build_candidate("TRANSCODE", "ts", "avc1.640028", "mp4a.40.2")
         ]
 

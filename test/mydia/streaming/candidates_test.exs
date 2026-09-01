@@ -391,6 +391,40 @@ defmodule Mydia.Streaming.CandidatesTest do
       assert first == "DIRECT_PLAY"
     end
 
+    test "offers HLS_COPY behind DIRECT_PLAY, for clients that cannot direct play" do
+      # The web player always plays through an HLS session, so a two-rung
+      # [DIRECT_PLAY, TRANSCODE] list left it re-encoding a file its own
+      # device profile had just approved untouched.
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      assert strategies(Candidates.build_streaming_candidates(mkv_hevc(), profile)) ==
+               ["DIRECT_PLAY", "HLS_COPY", "TRANSCODE"]
+    end
+
+    test "the direct-play HLS_COPY carries the original codecs, not the transcode ones" do
+      # It is a stream copy: repackaging only. A rung claiming avc1/mp4a here
+      # would describe bytes ffmpeg is not producing.
+      profile = %DeviceProfile{
+        containers: ["mkv"],
+        video_codecs: ["hevc"],
+        audio_codecs: ["ac3"],
+        hdr_formats: []
+      }
+
+      candidates = Candidates.build_streaming_candidates(mkv_hevc(), profile)
+      hls_copy = Enum.find(candidates, &(&1.strategy == "HLS_COPY"))
+      direct = Enum.find(candidates, &(&1.strategy == "DIRECT_PLAY"))
+
+      assert hls_copy.video_codec == direct.video_codec
+      assert hls_copy.audio_codec == direct.audio_codec
+      assert hls_copy.container == "ts"
+    end
+
     test "leads with HLS_COPY or TRANSCODE under the browser default" do
       candidates =
         Candidates.build_streaming_candidates(mkv_hevc(), DeviceProfile.browser_default())
