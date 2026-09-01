@@ -1024,14 +1024,32 @@ defmodule Mydia.ImportCandidates do
     |> Enum.filter(&(&1.queued_op == op))
   end
 
+  # The pending (queued_op IS NULL) subset of one anchor's membership -- the
+  # counterpart to `load_queued_members/3` for callers that act on whatever
+  # has not already been claimed by a queued op. `create_local_show/2` uses
+  # this rather than `load_all_members/2`: a scan can insert a pending row
+  # under an anchor whose import is already queued (see the moduledoc on that
+  # theme), and a queued row's provider identity and eventual promotion must
+  # not be disturbed by an unrelated "create local show from folder" call
+  # against the same anchor.
+  defp load_pending_members(library_path_id, anchor_key) do
+    library_path_id
+    |> load_all_members(anchor_key)
+    |> Enum.filter(&is_nil(&1.queued_op))
+  end
+
   @doc """
   Promotes every group queued for accept on one library path.
 
   Discovers its own work from `queued_op`, so a restarted job resumes where it
   stopped and a second accept queued while this runs is picked up by the same
-  loop. Groups are drained one anchor page at a time; the whole membership of
-  one group still goes to `CandidatePromotion.promote_group/3` in a single call,
-  which is the only transaction boundary here.
+  loop. Groups are drained in anchor pages, but every currently-queued anchor
+  is swept once (in keyset-paged pages of `:anchor_page_size`) before this
+  decides whether the pass made progress -- an early anchor that fails
+  without clearing its marker cannot strand anchors ordered after it, only
+  slow down how many full sweeps a stuck queue costs. The whole membership of
+  one group still goes to `CandidatePromotion.promote_group/3` in a single
+  call, which is the only transaction boundary here.
 
   A terminal refusal (no provider match, files matching different titles, a
   synthetic local show, a group whose rows vanished) clears the marker and
@@ -1360,6 +1378,15 @@ defmodule Mydia.ImportCandidates do
   `band/1` and `group_query/2` already give a provider-matched local group),
   but this function's own precondition -- every remaining candidate already
   local-marked -- is what a second click actually hits.
+
+  Scoped to the anchor's *pending* subset (`queued_op IS NULL`) via
+  `load_pending_members/2`, not its full membership: a scan can insert a
+  pending row under an anchor whose import is already queued for accept, and
+  that queued row carries a real provider match this function must not
+  overwrite with a generic local identity, nor delete out from under the
+  drain that is about to promote it. The queued row is left untouched --
+  `queued_op`, its provider fields, and its existence all survive -- and
+  continues to be promoted normally.
   """
   @spec create_local_show(binary(), String.t()) :: {:ok, Media.MediaItem.t()} | {:error, term()}
   def create_local_show(library_path_id, anchor_key) do
@@ -1371,7 +1398,7 @@ defmodule Mydia.ImportCandidates do
   end
 
   defp create_local_show_transaction(library_path_id, anchor_key) do
-    case load_all_members(library_path_id, anchor_key) do
+    case load_pending_members(library_path_id, anchor_key) do
       [] ->
         {:error, :not_found}
 
@@ -1403,16 +1430,23 @@ defmodule Mydia.ImportCandidates do
   end
 
   # Every candidate `link_local_candidate/2` successfully linked is already
-  # deleted by the time this runs; what remains is exactly the unnumbered
-  # leftovers `create_local_show/2`'s doc promises to leave visible. Stamping
-  # them here (not before creating `item`, since `provider_id` needs its id)
-  # is what makes a second call against the same anchor see an
-  # all-local-marked group and refuse rather than minting a second show.
+  # deleted by the time this runs; what remains among the *pending* subset is
+  # exactly the unnumbered leftovers `create_local_show/2`'s doc promises to
+  # leave visible. Stamping them here (not before creating `item`, since
+  # `provider_id` needs its id) is what makes a second call against the same
+  # anchor see an all-local-marked pending group and refuse rather than
+  # minting a second show.
+  #
+  # Scoped to `is_nil(queued_op)`, matching `load_pending_members/2` above:
+  # `for_anchor/3` alone would also overwrite any row already queued for
+  # accept/rematch under this anchor, discarding its real provider identity
+  # in favour of this synthetic local one.
   defp mark_leftover_candidates_local(library_path_id, anchor_key, item) do
     now = now()
 
     ImportCandidate
     |> for_anchor(library_path_id, anchor_key)
+    |> where([c], is_nil(c.queued_op))
     |> Repo.update_all(set: [provider_type: "local", provider_id: item.id, updated_at: now])
   end
 

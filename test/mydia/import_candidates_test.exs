@@ -515,6 +515,58 @@ defmodule Mydia.ImportCandidatesTest do
       assert {:error, :not_found} = ImportCandidates.create_local_show(lp.id, "missing")
     end
 
+    test "leaves an accept-queued sibling row untouched instead of linking or overwriting it" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      # The pending subset of this anchor has no provider match -- what makes
+      # it show up as :no_match and offer "Create show from folder" in the
+      # first place.
+      pending =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "split anchor",
+          relative_path: "Split Anchor/Season 01/ep1.mkv",
+          media_type: "tv_show",
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+
+      # A second file under the same folder that a scan discovered after this
+      # anchor was already queued for accept -- it carries a real provider
+      # match and is eligible for CandidatePromotion.promote_group/3 once the
+      # drain reaches it.
+      queued =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "split anchor",
+          relative_path: "Split Anchor/Season 01/ep2.mkv",
+          media_type: "tv_show",
+          provider_type: "tvdb",
+          provider_id: "9001",
+          title: "Split Anchor",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [2]},
+          queued_op: "accept",
+          queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      assert {:ok, item} = ImportCandidates.create_local_show(lp.id, "split anchor")
+
+      # Only the pending row was linked into the new local show.
+      refute Repo.get(ImportCandidate, pending.id)
+
+      episodes = Repo.all(from(e in Mydia.Media.Episode, where: e.media_item_id == ^item.id))
+      assert length(episodes) == 1
+      assert hd(episodes).episode_number == 1
+
+      # The queued row survived: not linked, not deleted, not overwritten
+      # with the synthetic local provider identity, and still carrying its
+      # own queued_op for the drain to promote normally.
+      reloaded = Repo.get!(ImportCandidate, queued.id)
+      assert reloaded.queued_op == "accept"
+      assert reloaded.provider_type == "tvdb"
+      assert reloaded.provider_id == "9001"
+    end
+
     test "a repeat call against the same anchor is refused instead of creating a second show" do
       lp = library_path_fixture(%{type: "series", path: "/media/Series"})
 
