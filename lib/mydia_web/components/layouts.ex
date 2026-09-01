@@ -167,13 +167,13 @@ defmodule MydiaWeb.Layouts do
                   class={nav_active?(@current_path, "/movies", false) && "active"}
                 >
                   <.icon name="hero-film" class="w-5 h-5" /> Movies
-                  <span class="badge badge-sm">{@movie_count}</span>
+                  <span id="nav-movie-count" class="badge badge-sm">{@movie_count}</span>
                 </.link>
               </li>
               <li>
                 <.link navigate="/tv" class={nav_active?(@current_path, "/tv", false) && "active"}>
                   <.icon name="hero-tv" class="w-5 h-5" /> TV Shows
-                  <span class="badge badge-sm">{@tv_show_count}</span>
+                  <span id="nav-tv-count" class="badge badge-sm">{@tv_show_count}</span>
                 </.link>
               </li>
               <li class="menu-title mt-4">

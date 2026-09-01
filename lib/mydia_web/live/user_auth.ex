@@ -109,10 +109,27 @@ defmodule MydiaWeb.Live.UserAuth do
     # Get executing jobs for sidebar status indicator
     executing_jobs = Mydia.Jobs.list_executing_jobs()
 
+    excluded_categories =
+      case Map.fetch(socket.assigns, :current_user) do
+        {:ok, %{} = user} -> Mydia.Collections.claimed_categories(user)
+        _ -> []
+      end
+
+    sections =
+      case Map.fetch(socket.assigns, :current_user) do
+        {:ok, %{} = user} -> Mydia.Collections.list_pinned_sections(user)
+        _ -> []
+      end
+
     socket =
       socket
-      |> assign(:movie_count, Mydia.Media.count_movies())
-      |> assign(:tv_show_count, Mydia.Media.count_tv_shows())
+      |> assign(:movie_count, Mydia.Media.count_movies(exclude_categories: excluded_categories))
+      |> assign(
+        :tv_show_count,
+        Mydia.Media.count_tv_shows(exclude_categories: excluded_categories)
+      )
+      |> assign(:excluded_categories, excluded_categories)
+      |> assign(:sections, sections)
       |> assign(:downloads_count, Mydia.Downloads.count_active_downloads())
       |> assign(:import_candidate_group_count, Mydia.ImportCandidates.count_pending())
       |> assign(:pending_requests_count, pending_requests_count)

@@ -52,6 +52,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:section, nil)
      |> assign(:section_query, nil)
      |> assign(:section_error, false)
+     |> assign(:excluded_count, 0)
      |> assign(:show_add_to_collection_modal, false)
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
@@ -67,6 +68,7 @@ defmodule MydiaWeb.MediaLive.Index do
     socket
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
+    |> assign(:excluded_count, excluded_count(socket, "movie"))
     |> load_media_items(reset: true)
   end
 
@@ -74,6 +76,7 @@ defmodule MydiaWeb.MediaLive.Index do
     socket
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
+    |> assign(:excluded_count, excluded_count(socket, "tv_show"))
     |> load_media_items(reset: true)
   end
 
@@ -114,6 +117,16 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:all_visible_ids, MapSet.new())
         |> assign(:has_more, false)
         |> stream(:media_items, [], reset: true)
+    end
+  end
+
+  defp excluded_count(socket, type) do
+    case socket.assigns[:excluded_categories] || [] do
+      [] ->
+        0
+
+      categories ->
+        length(Media.list_media_items(type: type, category_in: categories))
     end
   end
 
@@ -778,6 +791,14 @@ defmodule MydiaWeb.MediaLive.Index do
 
     []
     |> maybe_add_filter(:base_query, assigns[:section_query])
+    # A section's own base_query already selects its claimed categories, so
+    # excluding those same categories here would contradict it and empty the
+    # section out. The exclusion only makes sense off of section pages, where
+    # it is what removes claimed items from the built-in Movies/TV listings.
+    |> maybe_add_filter(
+      :exclude_categories,
+      if(is_nil(assigns[:section]), do: assigns[:excluded_categories], else: [])
+    )
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
     |> Keyword.put(:preload, [

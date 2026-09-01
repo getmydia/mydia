@@ -124,4 +124,42 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert render(view) =~ "Anime"
     end
   end
+
+  describe "exclusive sections and the built-in pages" do
+    test "the TV page hides the claimed categories", %{
+      conn: conn,
+      anime: anime,
+      live: live
+    } do
+      {:ok, _view, html} = live(conn, ~p"/tv")
+
+      assert html =~ live.title
+      refute html =~ anime.title
+    end
+
+    test "the TV page keeps everything when the section is not exclusive", %{
+      conn: conn,
+      user: user,
+      section: section,
+      anime: anime
+    } do
+      {:ok, _} = Collections.update_collection(user, section, %{exclusive: false})
+
+      {:ok, _view, html} = live(conn, ~p"/tv")
+
+      assert html =~ anime.title
+    end
+
+    test "the sidebar count agrees with the page", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert has_element?(view, "#nav-tv-count", "1")
+    end
+
+    test "the page explains where the hidden items went", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert has_element?(view, "#excluded-notice")
+    end
+  end
 end

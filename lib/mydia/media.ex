@@ -2187,6 +2187,13 @@ defmodule Mydia.Media do
       {:has_files, true}, query ->
         filter_by_has_files(query)
 
+      {:category_in, []}, query ->
+        query
+
+      {:category_in, categories}, query when is_list(categories) ->
+        names = Enum.map(categories, &to_string/1)
+        where(query, [m], m.category in ^names)
+
       _other, query ->
         query
     end)
