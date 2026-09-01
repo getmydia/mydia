@@ -155,7 +155,13 @@ defmodule MydiaWeb.Features.MediaBackdropTest do
     assert left == 0,
            "backdrop left is #{left}, expected 0 because the drawer is closed below lg"
 
-    assert eval_js(session, @sidebar_probe) == []
+    # @sidebar_probe is deliberately not used here. Below lg the drawer is not
+    # `drawer-open`, and daisyUI renders a closed `.drawer-side` as a hidden
+    # `position: fixed` box spanning the whole viewport, so elementFromPoint can
+    # never return one of its descendants and the probe cannot mean anything.
+    # Assert the layer is genuinely fixed instead, which is what matters at this
+    # width and what the wide test would otherwise be the only one covering.
+    assert eval_js(session, @backdrop_position) == "fixed"
   end
 
   defp scroll_to_bottom(session) do
