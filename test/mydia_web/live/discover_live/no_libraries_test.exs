@@ -1,5 +1,5 @@
 defmodule MydiaWeb.DiscoverLive.NoLibrariesTest do
-  # async: false — connected LiveView tests cannot use the Postgres
+  # async: false: connected LiveView tests cannot use the Postgres
   # non-shared sandbox, which hides test rows from the mount process.
   use MydiaWeb.ConnCase, async: false
 

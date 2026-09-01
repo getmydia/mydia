@@ -21,9 +21,23 @@ defmodule MydiaWeb.AddMediaComponents do
   attr :quality_profiles, :list, default: []
   attr :defaults, AddDefaults, default: nil
 
+  # z-[1000] mirrors LibraryComponents.library_picker_dialog/1: the
+  # Configure entry it hosts is also reachable from the recommendations rail
+  # inside the trending-detail modal (itself a `.modal`), so this must not
+  # depend on rendering after that modal in the template to paint on top.
+  #
+  # phx-window-keydown/phx-key mirror the same sibling for the same reason: a
+  # <dialog open={...}> toggled via the `open` attribute, unlike one opened
+  # with showModal(), gets no native Escape handling on its own.
   def add_config_modal(assigns) do
     ~H"""
-    <dialog id="add-config-modal" class="modal" open={@open and @item != nil}>
+    <dialog
+      id="add-config-modal"
+      class="modal z-[1000]"
+      open={@open and @item != nil}
+      phx-window-keydown={(@open and @item != nil) && "close_add_config"}
+      phx-key="Escape"
+    >
       <div :if={@item} class="modal-box max-w-2xl">
         <h3 class="font-bold text-lg mb-4">Configure Before Adding</h3>
         <%!-- Media Preview --%>
