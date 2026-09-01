@@ -434,10 +434,18 @@ defmodule Mydia.Library.CandidatePromotionTest do
 
     first = Task.async(promote)
     second = Task.async(promote)
+    first_pid = first.pid
+    second_pid = second.pid
 
-    assert_receive {:connection_ready, first_pid}, @ownership_receive
-    assert_receive {:connection_ready, second_pid}, @ownership_receive
-    refute first_pid == second_pid
+    # Take the pids from the Task structs, never from the order the
+    # :connection_ready messages arrive in. Which task checks out its real
+    # connection first is a coin flip, and binding them from the mailbox
+    # swapped the two roles whenever the second one won: the test then drove
+    # first.pid while waiting on messages from the other task, and every
+    # later assert_receive timed out. Pinning here is order-independent
+    # because assert_receive scans the whole mailbox for a match.
+    assert_receive {:connection_ready, ^first_pid}, @ownership_receive
+    assert_receive {:connection_ready, ^second_pid}, @ownership_receive
 
     send(first.pid, {:start_promotion, ref})
     assert_receive {:ownership_attempt, ^first_pid}, @ownership_receive

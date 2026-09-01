@@ -315,28 +315,56 @@ extra query per LiveView mount, can expose a latent one without being its cause.
 ### Both adapters at once
 
 The green-SQLite / red-Postgres split is the usual shape, so a test failing on
-**both** jobs in the same run reads as a real regression. One known case is not.
+**both** jobs in the same run reads as a real regression. Trust that reading: the
+one entry filed here as an exception turned out to be a genuine test bug, and
+carrying it as a flake for a day bought nothing but re-runs.
 
 **`Mydia.Library.CandidatePromotionTest`, "separate database connections
 serialize competing promotions at ownership"**
-(`test/mydia/library/candidate_promotion_test.exs`). Seen 2026-08-31 on PR #631,
-failing on `Test` (1 failure out of 9773) and `Test / PostgreSQL` (1 out of 9774)
-in the same run, and again hours later on #634 (1 out of 9774 on `Test`) whose
-diff was **this file and `.github/README.md` only**. Two sightings the same day
-on diffs that cannot reach Elixir code, so budget a re-run rather than
-investigating.
+(`test/mydia/library/candidate_promotion_test.exs`). **Fixed 2026-09-01. It was
+never a flake; it was a bug in the test.** Kept here because it was catalogued
+as timing noise for a day and cost re-runs, and because the shape recurs.
 
-It is not adapter-related because the test deliberately escapes the sandbox: it
-wraps setup in `Ecto.Adapters.SQL.Sandbox.unboxed_run/2` and races real
-connections to prove promotion serialises at the ownership boundary. Real
-connections on a loaded runner are timing-sensitive by construction, and the
-SQLite log carries `(Exqlite.Error) database is locked` and
-`DBConnection.OwnershipError: cannot find ownership process` alongside it.
+The test starts two tasks that each check out a real connection and report it,
+then bound the two roles out of the mailbox:
 
-Triage as usual: #631's diff was a single workflow YAML file, which cannot reach
-Elixir code, and master's `ci.yml` was green on the three preceding commits. The
-test is young, added with the import-pipeline work, so treat timing-shaped
-failures in that file as flake-first once master is confirmed green.
+```elixir
+assert_receive {:connection_ready, first_pid}
+assert_receive {:connection_ready, second_pid}
+```
+
+but drove the tasks through the `Task` structs (`send(first.pid, ...)`). Which
+task wins the checkout is a coin flip, so roughly half the time `first_pid` was
+`second.pid`: the test then started `first.pid` and waited on messages from the
+other task, and the next `assert_receive` timed out with a mailbox full of
+correctly-delivered messages from the pid it was not looking for. That mailbox
+dump is the tell, and it is what distinguishes this from a genuine timeout:
+
+```
+code: assert_receive {:ownership_attempt, ^first_pid}
+mailbox:
+  value: {:ownership_attempt, #PID<0.40175.0>}
+  value: {:ownership_boundary, #PID<0.40175.0>}
+```
+
+with `first_pid` bound to a *different* pid than every message in the mailbox.
+The fix is to bind the pids from the `Task` structs and pin them in every
+`assert_receive`, which is order-independent because `assert_receive` scans the
+whole mailbox for a match. The sibling ownership race in `file_ingest_test.exs`
+already did this (`winner_pid = winner.pid`); this test did not.
+
+Seen on PR #631 (`Test` 1/9773 and `Test / PostgreSQL` 1/9774 in the same run),
+on #634, and on master at `731282dc` on 2026-09-01. Failing on **both** adapters
+was read as evidence it could not be a code defect, since the test escapes the
+sandbox via `Ecto.Adapters.SQL.Sandbox.unboxed_run/2` and races real
+connections. It is the opposite: a coin flip in the test body is exactly what
+fails on both adapters at once. Runner load only changes how often the coin
+lands the wrong way.
+
+**Generalise from this.** Whenever concurrent processes report themselves to the
+test, bind their identities from what spawned them, never from arrival order.
+An `assert_receive` timeout whose mailbox dump shows the awaited message present
+under a different pid is this bug, not load.
 
 Note its `on_exit` deletes rows through another `unboxed_run`, so a failed run
 can leave real rows behind in the shared SQLite test database.
