@@ -245,7 +245,7 @@ defmodule MydiaWeb.CollectionLive.Show do
           phx-viewport-bottom={@has_more && "load_more"}
           class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4"
         >
-          <div :for={{id, item} <- @streams.items} id={id} class="relative group">
+          <div :for={{id, item} <- @streams.items} id={id} class="relative group h-full">
             <%!-- Remove button for manual collections --%>
             <%= if @collection.type == "manual" and can_edit?(@collection, @current_user) do %>
               <button
@@ -259,13 +259,14 @@ defmodule MydiaWeb.CollectionLive.Show do
               </button>
             <% end %>
 
-            <.link navigate={item_href(item)} class="block">
-              <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
+            <.link navigate={item_href(item)} class="block h-full">
+              <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
                 <.poster_figure src={item.poster_url} alt={item.title} />
-                <div class="card-body p-3">
-                  <h3 class="card-title text-sm line-clamp-2">{item.title}</h3>
-                  <span class="text-xs text-base-content/70">{item.year}</span>
-                </div>
+                <.poster_card_body title={item.title}>
+                  <:meta>
+                    <span class="text-xs text-base-content/70">{item.year}</span>
+                  </:meta>
+                </.poster_card_body>
               </div>
             </.link>
           </div>
