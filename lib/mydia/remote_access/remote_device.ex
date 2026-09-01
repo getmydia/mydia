@@ -12,6 +12,7 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
   @type t :: %__MODULE__{
           id: binary(),
           device_name: String.t() | nil,
+          client_device_id: String.t() | nil,
           platform: String.t() | nil,
           token_hash: String.t() | nil,
           token: String.t() | nil,
@@ -26,6 +27,7 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
 
   schema "remote_devices" do
     field :device_name, :string
+    field :client_device_id, :string
     field :platform, :string
     field :token_hash, :string
     field :token, :string, virtual: true
@@ -60,6 +62,23 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
     |> hash_token()
     |> foreign_key_constraint(:user_id)
     |> unique_constraint(:token_hash)
+  end
+
+  @doc """
+  Changeset for a device created by a password login rather than by pairing.
+
+  Distinct from `changeset/2` because that one requires `:token`: pairing
+  always mints a device token, while a password login authenticates the user
+  directly and has no device token to hash.
+  """
+  def login_changeset(device, attrs) do
+    device
+    |> cast(attrs, [:client_device_id, :device_name, :platform, :user_id])
+    |> validate_required([:client_device_id, :device_name, :platform, :user_id])
+    |> validate_length(:client_device_id, min: 1, max: 255)
+    |> validate_length(:device_name, min: 1, max: 100)
+    |> validate_length(:platform, min: 1, max: 50)
+    |> unique_constraint([:user_id, :client_device_id])
   end
 
   @doc """
