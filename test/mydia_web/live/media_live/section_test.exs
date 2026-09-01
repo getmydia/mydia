@@ -184,29 +184,19 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert has_element?(view, "#nav-tv-count", "1")
     end
 
-    test "the page explains where the hidden items went", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/tv")
+    test "the claimed items are absent and no banner explains them", %{
+      conn: conn,
+      anime: anime,
+      live: live
+    } do
+      {:ok, view, html} = live(conn, ~p"/tv")
 
-      assert has_element?(view, "#excluded-notice")
+      assert html =~ live.title
+      refute html =~ anime.title
+      refute has_element?(view, "#excluded-notice")
     end
 
-    test "the notice names the single claiming section and links to it", %{
-      conn: conn,
-      section: section
-    } do
-      {:ok, view, _html} = live(conn, ~p"/tv")
-
-      assert has_element?(
-               view,
-               ~s(#excluded-notice a[href="/sections/#{section.id}"]),
-               "Anime"
-             )
-    end
-
-    test "the notice falls back to aggregate wording when more than one section claims", %{
-      conn: conn,
-      user: user
-    } do
+    test "a second claiming section still shows no banner", %{conn: conn, user: user} do
       {:ok, _other} =
         Collections.create_collection(user, %{
           name: "Retro",
@@ -224,8 +214,7 @@ defmodule MydiaWeb.MediaLive.SectionTest do
 
       {:ok, view, _html} = live(conn, ~p"/tv")
 
-      assert has_element?(view, "#excluded-notice", "in your pinned sections")
-      refute has_element?(view, "#excluded-notice a")
+      refute has_element?(view, "#excluded-notice")
     end
 
     test "the sidebar shows the pinned section", %{conn: conn, section: section} do

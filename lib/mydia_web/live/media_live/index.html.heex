@@ -260,24 +260,6 @@
       </div>
     </div>
 
-    <div
-      :if={@excluded_count > 0 and is_nil(@section)}
-      id="excluded-notice"
-      class="alert alert-info mb-4"
-    >
-      <.icon name="hero-information-circle" class="w-5 h-5" />
-      <span>
-        <%= case @claiming_sections do %>
-          <% [section] -> %>
-            {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your
-            <.link navigate={~p"/sections/#{section.id}"} class="link link-primary font-semibold">{section.name}</.link>
-            section.
-          <% _ -> %>
-            {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your pinned sections.
-        <% end %>
-      </span>
-    </div>
-
     <%!-- Empty state (shown when no items) --%>
     <%= if @media_items_empty? do %>
       <div class="flex flex-col items-center justify-center py-16">

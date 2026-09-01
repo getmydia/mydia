@@ -60,8 +60,6 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:section_owned?, false)
      |> assign(:section_query, nil)
      |> assign(:section_error, false)
-     |> assign(:excluded_count, 0)
-     |> assign(:claiming_sections, [])
      |> assign(:show_section_settings, false)
      |> assign(:section_form, nil)
      |> assign(:section_exclusive_eligible, false)
@@ -81,8 +79,6 @@ defmodule MydiaWeb.MediaLive.Index do
     socket
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
-    |> assign(:excluded_count, excluded_count(socket, "movie"))
-    |> assign(:claiming_sections, claiming_sections(socket))
     |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> load_media_items(reset: true)
   end
@@ -91,8 +87,6 @@ defmodule MydiaWeb.MediaLive.Index do
     socket
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
-    |> assign(:excluded_count, excluded_count(socket, "tv_show"))
-    |> assign(:claiming_sections, claiming_sections(socket))
     |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> load_media_items(reset: true)
   end
@@ -147,24 +141,6 @@ defmodule MydiaWeb.MediaLive.Index do
       Accounts.anime_nudge_dismissed?(user) -> false
       true -> Media.count_media_items(category_in: anime) >= @anime_nudge_threshold
     end
-  end
-
-  defp excluded_count(socket, type) do
-    case socket.assigns[:excluded_categories] || [] do
-      [] ->
-        0
-
-      categories ->
-        Media.count_media_items(type: type, category_in: categories)
-    end
-  end
-
-  # The sections claiming categories away from this page, so the excluded
-  # items notice can name the one responsible instead of staying anonymous.
-  # `@sections` is already the current user's own pinned sections (the nav
-  # hook scopes it that way), so filtering it is enough without another query.
-  defp claiming_sections(socket) do
-    Enum.filter(socket.assigns[:sections] || [], & &1.exclusive)
   end
 
   @impl true
