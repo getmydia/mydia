@@ -573,7 +573,7 @@ defmodule Mydia.ImportCandidatesTest do
     end
   end
 
-  describe "rematch/2" do
+  describe "queue_rematch/1 and drain_rematch/2" do
     test "matches selected candidates and writes results back onto them" do
       lp = library_path_fixture(%{type: "series", path: "/media/Series"})
 
@@ -586,9 +586,10 @@ defmodule Mydia.ImportCandidatesTest do
         })
 
       scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["doctor who"])
+      {:ok, _} = ImportCandidates.queue_rematch(scope)
 
       assert {:ok, %{files: 1, failures: 0}} =
-               ImportCandidates.rematch(scope, matcher: Mydia.Library.ParsedInfoMatcher)
+               ImportCandidates.drain_rematch(lp.id, matcher: Mydia.Library.ParsedInfoMatcher)
 
       reloaded = Repo.reload!(candidate)
       assert reloaded.provider_id == "stub"
@@ -605,12 +606,13 @@ defmodule Mydia.ImportCandidatesTest do
         relative_path: "Doctor Who (2005)/Season 01/Doctor Who - S01E01.mkv"
       })
 
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["doctor who"])
+      {:ok, _} = ImportCandidates.queue_rematch(scope)
+
       Phoenix.PubSub.subscribe(Mydia.PubSub, "import_candidates:#{lp.id}")
 
-      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["doctor who"])
-
       assert {:ok, %{files: 0, failures: 1}} =
-               ImportCandidates.rematch(scope, matcher: Mydia.Library.CrashingMatcher)
+               ImportCandidates.drain_rematch(lp.id, matcher: Mydia.Library.CrashingMatcher)
 
       assert_receive {:import_candidates_changed, lp_id}
       assert lp_id == lp.id

@@ -437,15 +437,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("rematch_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      selection = socket.assigns.selection
-      count = SelectionScope.count(selection)
+      {:ok, %{queued: queued}} = ImportCandidates.queue_rematch(socket.assigns.selection)
 
       {:noreply,
        socket
-       |> put_flash(:info, "Re-matching #{count} group(s)…")
+       |> put_flash(:info, "Queued #{queued} group(s) for re-matching.")
        |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
        |> load_groups()
-       |> start_async(:rematch_candidates, fn -> ImportCandidates.rematch(selection) end)}
+       |> refresh_counts()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -697,22 +696,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       end
 
     {:noreply, socket}
-  end
-
-  def handle_async(:rematch_candidates, {:ok, {:ok, stats}}, socket) do
-    message =
-      if stats.failures > 0 do
-        "Re-matched #{stats.files} file(s), #{stats.failures} failed."
-      else
-        "Re-matched #{stats.files} file(s)."
-      end
-
-    {:noreply, socket |> put_flash(:info, message) |> load_groups() |> refresh_counts()}
-  end
-
-  def handle_async(:rematch_candidates, {:exit, reason}, socket) do
-    Logger.warning("Batch re-match crashed", reason: inspect(reason))
-    {:noreply, put_flash(socket, :error, "Re-match failed. Try again.")}
   end
 
   @impl true

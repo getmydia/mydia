@@ -1276,7 +1276,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
              )
     end
 
-    test "batch rematch re-runs matcher on selected groups", %{conn: conn} do
+    test "batch rematch queues selected groups for re-matching", %{conn: conn} do
       lp = library_path_fixture(%{type: "series", path: "/media/Series"})
 
       candidate =
@@ -1292,13 +1292,10 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       render_click(view, "toggle_group", %{"id" => "stub series"})
       assert has_element?(view, "#rematch-selected")
 
-      render_click(view, "rematch_selected", %{})
-      render_async(view)
+      html = view |> element("#rematch-selected") |> render_click()
 
-      assert render(view) =~ "Re-matched 1 file(s)."
-
-      reloaded = Repo.reload!(candidate)
-      assert reloaded.provider_id == to_string(MetadataStubProvider.series_tvdb_id())
+      assert html =~ "Queued 1 group(s) for re-matching."
+      assert Repo.reload!(candidate).queued_op == "rematch"
     end
   end
 end

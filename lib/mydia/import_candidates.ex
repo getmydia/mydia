@@ -676,6 +676,9 @@ defmodule Mydia.ImportCandidates do
     |> where([c], is_nil(c.next_retry_at) or c.next_retry_at <= ^now)
   end
 
+  defp maybe_after_id(query, nil), do: query
+  defp maybe_after_id(query, id), do: where(query, [c], c.id > ^id)
+
   # Walks a whole group's undismissed candidates in keyset pages of
   # #{@member_page_size}, so a group the size of a full season tree is never
   # one unbounded allocation, while still handing callers (`accept/2`,
@@ -1148,65 +1151,93 @@ defmodule Mydia.ImportCandidates do
   defp queue_error_message(:local_show), do: "Local shows are created directly, not imported."
   defp queue_error_message(:empty_group), do: "No files left to import."
 
+  @rematch_page_size 250
+
   @doc """
-  Re-runs metadata matching for the candidates in a selection.
+  Queues a selection for re-matching.
 
-  Matches through `Mydia.Library.BatchMatcher` in bounded pages, writes each
-  result back onto its candidate via `Mydia.Library.FileIngest.ingest/3` under
-  the `:review` policy (write the verdict, never auto-promote), and broadcasts
-  one change event after the whole pass -- not once per page or per file.
+  Same shape as `queue_accept/1` with no eligibility filter, since any candidate
+  can be re-matched.
   """
-  @spec rematch(SelectionScope.t(), keyword()) ::
-          {:ok, %{files: non_neg_integer(), failures: non_neg_integer()}}
-  def rematch(%SelectionScope{} = scope, opts \\ []) do
-    library_path = Settings.get_library_path!(scope.library_path_id)
-    matcher = Keyword.get(opts, :matcher, Mydia.Library.MetadataMatcher)
-    config = Keyword.get(opts, :config) || Metadata.default_relay_config()
-    page_size = Keyword.get(opts, :page_size, 250)
+  @spec queue_rematch(SelectionScope.t()) :: {:ok, %{queued: non_neg_integer()}}
+  def queue_rematch(%SelectionScope{} = scope) do
+    now = now()
+    group_count = selected_group_count(scope)
 
-    base_query = candidate_query(scope) |> where([c], is_nil(c.dismissed_at))
+    {row_count, _} =
+      scope
+      |> candidate_query()
+      |> where([c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
+      |> Repo.update_all(
+        set: [queued_op: "rematch", queued_at: now, queue_error: nil, updated_at: now]
+      )
 
-    stats =
-      rematch_pages(base_query, library_path, matcher, config, page_size, nil, %{
-        files: 0,
-        failures: 0
-      })
+    if row_count > 0 do
+      enqueue(Mydia.Jobs.RematchImportCandidates, scope.library_path_id)
+      broadcast(scope.library_path_id)
+    end
 
-    broadcast(scope.library_path_id)
-
-    {:ok, stats}
+    {:ok, %{queued: if(row_count > 0, do: group_count, else: 0)}}
   end
 
-  defp rematch_pages(base_query, library_path, matcher, config, page_size, after_id, stats) do
+  @doc """
+  Re-runs metadata matching for every candidate queued for re-match on one
+  library path.
+
+  Matches through `Mydia.Library.BatchMatcher` in bounded pages and writes each
+  result back with `Mydia.Library.FileIngest.ingest/3` under the `:review`
+  policy, which records the verdict and never auto-promotes. Every row in a page
+  has its marker cleared once the page is ingested, whether it matched or not, so
+  the loop always makes progress and a re-match is never retried forever over a
+  file no provider recognises.
+  """
+  @spec drain_rematch(binary(), keyword()) ::
+          {:ok,
+           %{files: non_neg_integer(), failures: non_neg_integer(), remaining: non_neg_integer()}}
+  def drain_rematch(library_path_id, opts \\ []) do
+    library_path = Settings.get_library_path!(library_path_id)
+    matcher = Keyword.get(opts, :matcher, Mydia.Library.MetadataMatcher)
+    config = Keyword.get(opts, :config) || Metadata.default_relay_config()
+    page_size = Keyword.get(opts, :page_size, @rematch_page_size)
+
+    result =
+      drain_rematch_pages(library_path, matcher, config, page_size, %{files: 0, failures: 0})
+
+    broadcast(library_path_id)
+    result
+  end
+
+  defp drain_rematch_pages(library_path, matcher, config, page_size, acc) do
     rows =
-      base_query
-      |> maybe_after_id(after_id)
+      library_path.id
+      |> queued_query("rematch")
       |> order_by([c], asc: c.id)
       |> limit(^page_size)
       |> Repo.all()
 
-    case rows do
-      [] ->
-        stats
+    if rows == [] do
+      {:ok, Map.put(acc, :remaining, 0)}
+    else
+      page_stats = rematch_rows(rows, library_path, matcher, config)
+      clear_rematch_markers(Enum.map(rows, & &1.id))
 
-      rows ->
-        page_stats = rematch_rows(rows, library_path, matcher, config)
-        stats = Map.merge(stats, page_stats, fn _key, left, right -> left + right end)
+      # One broadcast per page so the Queued chip drains visibly.
+      broadcast(library_path.id)
 
-        rematch_pages(
-          base_query,
-          library_path,
-          matcher,
-          config,
-          page_size,
-          List.last(rows).id,
-          stats
-        )
+      acc = Map.merge(acc, page_stats, fn _key, left, right -> left + right end)
+      drain_rematch_pages(library_path, matcher, config, page_size, acc)
     end
   end
 
-  defp maybe_after_id(query, nil), do: query
-  defp maybe_after_id(query, id), do: where(query, [c], c.id > ^id)
+  # Conditional on the op, so a row the user has since queued for accept keeps
+  # its new marker instead of being cleared by an in-flight re-match.
+  defp clear_rematch_markers(ids) do
+    now = now()
+
+    ImportCandidate
+    |> where([c], c.id in ^ids and c.queued_op == "rematch")
+    |> Repo.update_all(set: [queued_op: nil, queued_at: nil, updated_at: now])
+  end
 
   defp rematch_rows(rows, library_path, matcher, config) do
     rows_by_path = Map.new(rows, &{Path.join(library_path.path, &1.relative_path), &1})
