@@ -80,13 +80,6 @@
                   Requested by {request.requester.email} on {format_date(request.inserted_at)}
                 </span>
               </div>
-              <div
-                :if={request.requester_notes}
-                class="flex items-start gap-2 text-base-content/70"
-              >
-                <.icon name="hero-chat-bubble-left-right" class="w-4 h-4 mt-0.5" />
-                <span>{request.requester_notes}</span>
-              </div>
               <div :if={request.status == "approved"} class="flex items-start gap-2 text-success">
                 <.icon name="hero-check-circle" class="w-4 h-4 mt-0.5" />
                 <div>

@@ -6,6 +6,8 @@ defmodule MydiaWeb.ProfileLive.Index do
   alias Mydia.Accounts
   alias Mydia.Accounts.UserPreference
   alias Mydia.Settings
+  alias Mydia.Settings.LibraryPath
+  alias MydiaWeb.Formatters
 
   @themes [
     {"System", "system"},
@@ -41,8 +43,14 @@ defmodule MydiaWeb.ProfileLive.Index do
       |> assign(:themes, @themes)
       |> assign(:theme, UserPreference.theme(preference))
       # Add defaults
-      |> assign(:movie_library_options, library_options(libraries, [:movies, :mixed]))
-      |> assign(:series_library_options, library_options(libraries, [:series, :mixed]))
+      |> assign(
+        :movie_library_options,
+        library_options(libraries, LibraryPath.movie_library_types())
+      )
+      |> assign(
+        :series_library_options,
+        library_options(libraries, LibraryPath.series_library_types())
+      )
       |> assign(
         :quality_profile_options,
         Enum.map(Settings.list_quality_profiles(), &{&1.id, &1.name})
@@ -168,7 +176,7 @@ defmodule MydiaWeb.ProfileLive.Index do
          |> assign(:add_prefs, preference.preferences)}
 
       {:error, changeset} ->
-        {:noreply, put_flash(socket, :error, error_message(changeset))}
+        {:noreply, put_flash(socket, :error, Formatters.format_changeset_errors(changeset))}
     end
   end
 
@@ -185,17 +193,6 @@ defmodule MydiaWeb.ProfileLive.Index do
   defp normalize_add_pref(key, "true") when key in ~w(add_monitored add_search_on_add), do: true
   defp normalize_add_pref(key, "false") when key in ~w(add_monitored add_search_on_add), do: false
   defp normalize_add_pref(_key, value), do: value
-
-  defp error_message(%Ecto.Changeset{} = changeset) do
-    changeset
-    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
-    |> Enum.flat_map(fn {_field, msgs} -> msgs end)
-    |> Enum.join(", ")
-    |> case do
-      "" -> "Failed to update preferences"
-      message -> message
-    end
-  end
 
   defp password_changeset(params \\ %{}) do
     types = %{

@@ -83,7 +83,9 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       assert request.tvdb_id == tvdb_id
       assert is_nil(request.tmdb_id)
       assert MediaRequest.external_ref(request) == {:tvdb, tvdb_id}
-      assert map[tvdb_id] == "pending"
+      # Tagged, not bare: a bare key would collide with a TMDB movie or show
+      # that happens to share this same numeric id.
+      assert map[{:tvdb, tvdb_id}] == "pending"
     end
 
     test "still stores a movie under tmdb_id even when the card is tagged provider: :tvdb" do
@@ -132,7 +134,9 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
           requester_id: guest_user.id
         })
 
-      assert MediaRequestHelpers.request_status_map()[tvdb_id] == "pending"
+      # Tagged, not bare: a bare key would collide with a TMDB movie or show
+      # that happens to share this same numeric id.
+      assert MediaRequestHelpers.request_status_map()[{:tvdb, tvdb_id}] == "pending"
     end
   end
 
@@ -150,6 +154,50 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
 
       assert a.request_status == "pending"
       assert b.request_status == nil
+    end
+
+    test "does not let a TVDB show read as requested off a same-numbered TMDB movie's entry" do
+      shared_id = System.unique_integer([:positive])
+
+      movie =
+        item(shared_id, "Shared Id Movie")
+        |> Map.put(:media_type, :movie)
+
+      series =
+        tvdb_item(shared_id, "Shared Id Series")
+        |> Map.put(:media_type, :tv_show)
+
+      # Only the TMDB movie has an outstanding request, keyed bare as
+      # request_status_map/0 would store it.
+      map = %{shared_id => "pending"}
+
+      [enriched_movie, enriched_series] =
+        MediaRequestHelpers.enrich_with_request_status([movie, series], map)
+
+      assert enriched_movie.request_status == "pending"
+      assert is_nil(enriched_series.request_status)
+    end
+
+    test "reads a TVDB show's own request off its tagged key, unaffected by a same-numbered TMDB entry" do
+      shared_id = System.unique_integer([:positive])
+
+      movie =
+        item(shared_id, "Other Shared Id Movie")
+        |> Map.put(:media_type, :movie)
+
+      series =
+        tvdb_item(shared_id, "Other Shared Id Series")
+        |> Map.put(:media_type, :tv_show)
+
+      # No TMDB movie request exists; only the TVDB show does, keyed tagged
+      # as request_status_map/0 would store it.
+      map = %{{:tvdb, shared_id} => "pending"}
+
+      [enriched_movie, enriched_series] =
+        MediaRequestHelpers.enrich_with_request_status([movie, series], map)
+
+      assert is_nil(enriched_movie.request_status)
+      assert enriched_series.request_status == "pending"
     end
   end
 end
