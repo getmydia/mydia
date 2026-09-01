@@ -1,16 +1,23 @@
 // The shell pins CastOverlayButton into its own Stack so casting is reachable
-// even on desktop screens that suppress their app bar entirely (Home). But some
-// in-shell screens (Library, Downloads, Settings, Search, Unwatched,
-// ContinueWatching, Favorites, RecentlyAdded, Collections) keep a real,
-// always-visible app bar with their own action buttons in the same top-right
-// band the overlay paints into — those screens carry their own CastButton
-// instead, and the shell must not also paint the overlay there, or the overlay
-// sits on top of and intercepts taps for the screen's own actions.
+// on a screen that suppresses its app bar on desktop and therefore has no
+// top-right band of its own. Home is the last such destination. Every other
+// in-shell screen keeps a real, always-visible app bar with its own action
+// buttons in exactly the band the overlay paints into, and carries its own
+// CastButton there, so the shell must not also paint the overlay: doing so
+// stacks two cast buttons in the same corner (which reads as a doubled
+// header) and intercepts taps meant for the screen's own actions.
 //
-// `AppShell.hasOwnCastButton` is the single routing decision that keeps these
-// two mutually exclusive. It's asserted directly here (rather than by
-// mounting the full `AppShell`, which needs a GoRouter ancestor plus the auth/
-// connection/download provider graph — no existing shell test does that; see
+// `AppShell.needsCastOverlay` is the single routing decision that keeps these
+// two mutually exclusive. It was once the opposite question, an allowlist of
+// routes that carried their own button, and that list silently fell behind
+// twice: `/calendar` and `/filter/:id` both grew a real bar with a CastButton
+// and neither was added, so both showed the doubled button. The cases below
+// pin the inverted form, where a route is only in the overlay's path if it is
+// named here.
+//
+// The predicate is asserted directly (rather than by mounting the full
+// `AppShell`, which needs a GoRouter ancestor plus the auth/connection/
+// download provider graph, and no existing shell test does that; see
 // app_shell_backdrop_test.dart and app_shell_search_nav_test.dart, which both
 // use lightweight stand-ins instead) and then exercised against a Stack that
 // reproduces the shell's exact `if (showCastOverlay) CastOverlayButton(...)`
@@ -25,51 +32,49 @@ import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/cast_actions.dart';
 
 void main() {
-  group('AppShell.hasOwnCastButton', () {
-    // Library, Downloads, Settings and Search all keep a real app bar on
-    // every platform (no desktop suppression) and were each given their own
-    // CastButton in this fix — see the corresponding screen files.
+  group('AppShell.needsCastOverlay', () {
+    // Every in-shell destination other than Home. Library, Downloads,
+    // Settings and Search keep a real app bar on every platform and were each
+    // given their own CastButton; the rest gained an always-visible glass bar
+    // with a trailing CastButton when they moved onto `BrowseScaffold`.
     for (final location in [
       '/movies',
       '/shows',
       '/downloads',
       '/settings',
       '/search',
-      // Gained an always-visible glass bar with its own CastButton when they
-      // moved onto `BrowseScaffold`. Before that they suppressed their bar
-      // entirely on desktop and the overlay was their only affordance.
       '/unwatched',
       '/continue-watching',
       '/favorites',
       '/recently-added',
       '/collections',
-      // Sub-paths under a route with its own button must also be excluded
-      // from the overlay, matching how `_isHomeSection`/`_isLibrarySection`
-      // already treat these as prefixes, not exact matches.
+      // The two the old allowlist missed. `/calendar` renders through
+      // `BrowseScaffold`; `/filter/:id` builds its own bar with a CastButton
+      // after the view-toggle and overflow menu. Both showed two cast buttons
+      // stacked in the top-right corner until this predicate was inverted.
+      '/calendar',
+      '/filter/1',
+      // Sub-paths and query strings resolve the same way as their parents.
       '/search?q=foo&type=movie',
       '/settings/devices',
     ]) {
-      test('is true for $location (screen carries its own CastButton)', () {
-        expect(AppShell.hasOwnCastButton(location), isTrue);
+      test('is false for $location (screen carries its own CastButton)', () {
+        expect(AppShell.needsCastOverlay(location), isFalse);
       });
     }
 
     // Home is the last in-shell destination that still suppresses its app bar
     // on desktop, so the overlay remains its only cast affordance.
-    for (final location in [
-      '/',
-    ]) {
-      test('is false for $location (overlay is the only affordance)', () {
-        expect(AppShell.hasOwnCastButton(location), isFalse);
-      });
-    }
+    test('is true for / (overlay is the only affordance)', () {
+      expect(AppShell.needsCastOverlay('/'), isTrue);
+    });
   });
 
-  group('the shell Stack, gated by hasOwnCastButton', () {
+  group('the shell Stack, gated by needsCastOverlay', () {
     /// Reproduces the exact conditional the shell's own Stack children use:
-    /// `if (!AppShell.hasOwnCastButton(location)) CastOverlayButton(...)`.
+    /// `if (AppShell.needsCastOverlay(location)) CastOverlayButton(...)`.
     Widget stackFor(String location) {
-      final showCastOverlay = !AppShell.hasOwnCastButton(location);
+      final showCastOverlay = AppShell.needsCastOverlay(location);
 
       return ProviderScope(
         overrides: [
@@ -93,6 +98,14 @@ void main() {
     testWidgets('renders no cast button on a route with its own (e.g. /movies)',
         (tester) async {
       await tester.pumpWidget(stackFor('/movies'));
+      await tester.pump();
+
+      expect(find.byKey(const Key('cast-button')), findsNothing);
+    });
+
+    testWidgets('renders no cast button on /calendar, which has its own',
+        (tester) async {
+      await tester.pumpWidget(stackFor('/calendar'));
       await tester.pump();
 
       expect(find.byKey(const Key('cast-button')), findsNothing);

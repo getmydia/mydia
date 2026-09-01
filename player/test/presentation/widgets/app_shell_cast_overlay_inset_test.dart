@@ -9,7 +9,7 @@
 // overlay from (see app_shell.dart) — rather than mounting the full
 // `AppShell`, which needs a Riverpod graph, router location and GraphQL
 // client (see app_shell_cast_overlay_test.dart for the sibling test covering
-// the routing predicate, `hasOwnCastButton`, the same way). Because the test
+// the routing predicate, `needsCastOverlay`, the same way). Because the test
 // calls the real seam instead of re-declaring its `topInset` arithmetic, a
 // regression at either call site is caught here without any mirror to keep
 // in sync by hand.
