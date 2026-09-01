@@ -136,6 +136,17 @@ defmodule Mydia.Collections.SmartRulesFields do
     end
   end
 
+  @multi_value_operators ~w(in not_in contains_any)
+
+  @doc """
+  Whether an operator takes a list of values rather than a single one.
+
+  Rules store a list for these operators and a scalar for the rest, so the
+  editor has to render a multi-select for them - a single select can never
+  hold, or give back, more than one of the stored values.
+  """
+  def multi_value_operator?(operator), do: to_string(operator) in @multi_value_operators
+
   @doc """
   Returns operator labels for display.
   """

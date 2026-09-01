@@ -13,7 +13,8 @@ defmodule MydiaWeb.CollectionLive.Index do
   alias Mydia.Collections
   alias Mydia.Collections.Collection
 
-  import MydiaWeb.CollectionLive.Components, only: [smart_rules_editor: 1, load_value_options: 1]
+  import MydiaWeb.CollectionLive.Components,
+    only: [smart_rules_editor: 1, load_value_options: 1, value_list: 1, value_string: 1]
 
   @default_condition %{"field" => "", "operator" => "eq", "value" => ""}
 
@@ -407,7 +408,7 @@ defmodule MydiaWeb.CollectionLive.Index do
             %{
               "field" => cond["field"] || "",
               "operator" => cond["operator"] || "eq",
-              "value" => cond["value"] || ""
+              "value" => value_string(cond["value"])
             }
           end)
       end
@@ -492,11 +493,14 @@ defmodule MydiaWeb.CollectionLive.Index do
   end
 
   defp parse_condition_value(value, operator) when operator in ["in", "not_in", "contains_any"] do
-    # Split comma-separated values into a list
-    value
-    |> String.split(",")
-    |> Enum.map(&String.trim/1)
-    |> Enum.filter(&(&1 != ""))
+    value_list(value)
+  end
+
+  # A multi-select's list can outlive a switch to a scalar operator by one change
+  # event. The editor narrows that list to its first entry, so parse the same one
+  # rather than a joined string, which would match nothing.
+  defp parse_condition_value(value, operator) when is_list(value) do
+    value |> value_list() |> List.first("") |> parse_condition_value(operator)
   end
 
   defp parse_condition_value(value, "between") do
