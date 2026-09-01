@@ -97,7 +97,8 @@ defmodule MydiaWeb.SectionLive.New do
                 <div>
                   <div class="font-semibold">Custom</div>
                   <div class="text-sm text-base-content/70">
-                    Build a smart collection with your own rules, then pin it.
+                    Build a smart collection with your own rules, then use
+                    "Pin to sidebar" on it to add it here.
                   </div>
                 </div>
               </div>

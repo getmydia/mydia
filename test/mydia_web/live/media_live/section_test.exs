@@ -100,6 +100,28 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, ~p"/sections/#{theirs.id}")
     end
 
+    test "redirects rather than rendering the whole library for a manual collection", %{
+      conn: conn,
+      user: user
+    } do
+      # A manual collection has no smart_rules, so a section page for one
+      # (pinned before the type: "smart" guard existed) would otherwise fall
+      # back to an unfiltered query. Bypass pin_section/3 with an update, the
+      # same way a pre-guard row would have gotten here.
+      {:ok, manual} =
+        Collections.create_collection(user, %{
+          name: "Watchlist",
+          type: "manual",
+          visibility: "private"
+        })
+
+      manual
+      |> Ecto.Changeset.change(%{pinned_position: 0})
+      |> Mydia.Repo.update!()
+
+      assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, ~p"/sections/#{manual.id}")
+    end
+
     test "renders an error state rather than an empty library for broken rules", %{
       conn: conn,
       section: section

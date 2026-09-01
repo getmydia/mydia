@@ -119,13 +119,26 @@ defmodule Mydia.Collections do
   @doc """
   Pins a collection to the user's sidebar, appending it after existing sections.
 
+  Only a smart collection can be pinned. A manual collection has no
+  `smart_rules`, and `MediaLive.Index`'s section page falls back to `"{}"` for
+  a nil rule set, which is an unfiltered query, so pinning one would put the
+  entire library behind a section link. Refuses with `{:error, :not_smart}`
+  instead.
+
   ## Options
     - `:sidebar_icon` - hero icon name from `Collection.valid_sidebar_icons/0`
     - `:exclusive` - claim the section's categories away from Movies and TV
   """
   @spec pin_section(User.t(), Collection.t(), keyword()) ::
-          {:ok, Collection.t()} | {:error, Ecto.Changeset.t()}
-  def pin_section(%User{} = user, %Collection{} = collection, opts \\ []) do
+          {:ok, Collection.t()}
+          | {:error, Ecto.Changeset.t() | :unauthorized | :system_collection | :not_smart}
+  def pin_section(user, collection, opts \\ [])
+
+  def pin_section(%User{} = _user, %Collection{type: "manual"} = _collection, _opts) do
+    {:error, :not_smart}
+  end
+
+  def pin_section(%User{} = user, %Collection{type: "smart"} = collection, opts) do
     next_position =
       user
       |> list_pinned_sections()

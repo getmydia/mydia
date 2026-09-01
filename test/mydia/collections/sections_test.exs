@@ -164,6 +164,14 @@ defmodule Mydia.Collections.SectionsTest do
       assert unpinned.exclusive == false
       assert Collections.claimed_categories(user) == []
     end
+
+    test "pinning a manual collection is refused" do
+      user = user_fixture()
+      {:ok, collection} = Collections.create_collection(user, plain_attrs("Watchlist"))
+
+      assert Collections.pin_section(user, collection) == {:error, :not_smart}
+      assert Collections.list_pinned_sections(user) == []
+    end
   end
 
   describe "exclusive_eligible?/1" do

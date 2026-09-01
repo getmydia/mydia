@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Settings
   alias Mydia.Collections
+  alias Mydia.Collections.Collection
   alias Mydia.Collections.SmartRules
   alias Mydia.Downloads.DownloadService
   alias Mydia.Search
@@ -98,12 +99,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp apply_action(socket, :section, %{"id" => id}) do
     case Collections.get_collection(socket.assigns.current_user, id) do
-      nil ->
-        socket
-        |> put_flash(:error, "That section is no longer available.")
-        |> push_navigate(to: ~p"/")
-
-      collection ->
+      %Collection{type: "smart"} = collection ->
         socket
         |> assign(:page_title, collection.name)
         # mount/3 does not assign :filter_type; only :movies and :tv_shows do.
@@ -113,6 +109,11 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:section, collection)
         |> assign(:section_owned?, collection.user_id == socket.assigns.current_user.id)
         |> load_section(collection)
+
+      _not_found_or_not_smart ->
+        socket
+        |> put_flash(:error, "That section is no longer available.")
+        |> push_navigate(to: ~p"/")
     end
   end
 
