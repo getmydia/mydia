@@ -328,7 +328,7 @@ defmodule MydiaWeb.SearchLive.Index do
            {:ok, metadata} ->
              # Create media item without parsed data (since parsing failed)
              # Episodes are automatically fetched for TV shows via create_media_item
-             attrs = build_media_item_attrs_from_metadata_only(metadata, media_type_atom)
+             attrs = Mydia.Media.AttrsFromMetadata.from_metadata(metadata, media_type_atom)
              Media.create_media_item(attrs)
 
            error ->
@@ -1369,7 +1369,7 @@ defmodule MydiaWeb.SearchLive.Index do
     case existing do
       nil ->
         # Create new media item
-        attrs = build_media_item_attrs(parsed, metadata)
+        attrs = Mydia.Media.AttrsFromMetadata.from_parsed(parsed, metadata)
 
         # Episodes are automatically fetched for TV shows via create_media_item
         case Media.create_media_item(attrs) do
@@ -1387,56 +1387,6 @@ defmodule MydiaWeb.SearchLive.Index do
     end
   end
 
-  defp build_media_item_attrs(parsed, metadata) do
-    type =
-      case parsed.type do
-        :movie -> "movie"
-        :tv_show -> "tv_show"
-        _ -> "movie"
-      end
-
-    # Get monitor_by_default setting from config
-    config = Mydia.Config.get()
-    monitor_by_default = config.media.monitor_by_default
-
-    base = %{
-      type: type,
-      title: metadata.title || parsed.title,
-      original_title: metadata.original_title,
-      year:
-        metadata.year ||
-          (metadata.release_date && extract_year_from_date(metadata.release_date)) ||
-          (metadata.first_air_date && extract_year_from_date(metadata.first_air_date)) ||
-          parsed.year,
-      metadata: metadata,
-      monitored: monitor_by_default
-    }
-
-    # For TV shows from TVDB, store tvdb_id; otherwise store tmdb_id
-    if parsed.type == :tv_show and Map.get(metadata, :provider) == :tvdb do
-      Map.put(base, :tvdb_id, metadata.provider_id)
-    else
-      Map.put(base, :tmdb_id, metadata.provider_id)
-    end
-  end
-
-  defp extract_year_from_date(%Date{} = date), do: date.year
-
-  defp extract_year_from_date(date_string) when is_binary(date_string) do
-    case String.split(date_string, "-") do
-      [year_str | _] ->
-        case Integer.parse(year_str) do
-          {year, _} -> year
-          :error -> nil
-        end
-
-      _ ->
-        nil
-    end
-  end
-
-  defp extract_year_from_date(_), do: nil
-
   defp extract_search_hint(release_title) do
     # Try to extract a reasonable search query from the release title
     # Remove common release tags and patterns
@@ -1450,38 +1400,6 @@ defmodule MydiaWeb.SearchLive.Index do
     |> String.replace(~r/[\.\-_]+/, " ")
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
-  end
-
-  defp build_media_item_attrs_from_metadata_only(metadata, media_type) do
-    type =
-      case media_type do
-        :movie -> "movie"
-        :tv_show -> "tv_show"
-        _ -> "movie"
-      end
-
-    # Get monitor_by_default setting from config
-    config = Mydia.Config.get()
-    monitor_by_default = config.media.monitor_by_default
-
-    base = %{
-      type: type,
-      title: metadata.title,
-      original_title: metadata.original_title,
-      year:
-        metadata.year ||
-          (metadata.release_date && extract_year_from_date(metadata.release_date)) ||
-          (metadata.first_air_date && extract_year_from_date(metadata.first_air_date)),
-      metadata: metadata,
-      monitored: monitor_by_default
-    }
-
-    # For TV shows from TVDB, store tvdb_id; otherwise store tmdb_id
-    if media_type == :tv_show and Map.get(metadata, :provider) == :tvdb do
-      Map.put(base, :tvdb_id, metadata.provider_id)
-    else
-      Map.put(base, :tmdb_id, metadata.provider_id)
-    end
   end
 
   defp format_client_error(error) when is_binary(error), do: error
