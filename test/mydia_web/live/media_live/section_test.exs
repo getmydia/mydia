@@ -161,5 +161,27 @@ defmodule MydiaWeb.MediaLive.SectionTest do
 
       assert has_element?(view, "#excluded-notice")
     end
+
+    test "the sidebar shows the pinned section", %{conn: conn, section: section} do
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert has_element?(view, "#nav-section-#{section.id}", "Anime")
+    end
+
+    test "the sidebar offers an add-section entry", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert has_element?(view, "#nav-add-section")
+    end
+
+    test "another user's sidebar has no sections", %{conn: _conn} do
+      other = user_fixture(%{role: "admin"})
+      conn = log_in_user(Phoenix.ConnTest.build_conn(), other)
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view, "[id^='nav-section-']")
+      assert Mydia.Collections.list_pinned_sections(other) == []
+    end
   end
 end
