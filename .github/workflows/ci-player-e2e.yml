@@ -214,7 +214,7 @@ jobs:
       # environment of later `run:` steps.
       - name: Expose GitHub Actions runtime for BuildKit
         if: steps.should.outputs.run == 'true'
-        uses: crazy-max/ghaction-github-runtime@v3
+        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
 
       # The resolve steps below replace the former `docker compose build`.
       # They pull by default and build only what a PR actually changed, which
@@ -403,6 +403,10 @@ jobs:
               if compose up -d --wait relay mydia; then
                 echo "::endgroup::"
                 echo "::notice::Dependencies healthy on attempt ${attempt}/3."
+                if [ "$attempt" -gt 1 ]; then
+                  echo "::warning::Dependencies needed ${attempt} attempts to start. This run is FLAKY, not clean. See e2e-deps-attempt-*-logs.txt in the artifacts."
+                  echo "E2E_RETRIED=true" >> "$GITHUB_ENV"
+                fi
                 return 0
               fi
               echo "::endgroup::"
@@ -427,6 +431,7 @@ jobs:
             if [ "$status" -eq 0 ]; then
               if [ "$cycle" -gt 1 ]; then
                 echo "::warning::Player E2E passed only on cycle ${cycle}. This run is FLAKY, not clean. See e2e-cycle-1-logs.txt in the artifacts."
+                echo "E2E_RETRIED=true" >> "$GITHUB_ENV"
               fi
               exit 0
             fi
@@ -448,8 +453,14 @@ jobs:
           docker compose -f compose.player-e2e.yml logs relay > relay-logs.txt 2>&1 || true
           docker compose -f compose.player-e2e.yml logs test > test-logs.txt 2>&1 || true
 
-      - name: Upload logs on failure
-        if: failure() && steps.should.outputs.run == 'true'
+      - name: Upload logs on failure or retry
+        # Not purely failure()-gated: a retried success (E2E_RETRIED=true,
+        # set by the "Run player E2E tests" step above) is flaky, not clean,
+        # and its warning points here for e2e-cycle-1-logs.txt or
+        # e2e-deps-attempt-*-logs.txt. If this stayed failure()-only, that
+        # pointer would name a file nobody could ever retrieve. Do not
+        # simplify this back to failure() alone.
+        if: (failure() || env.E2E_RETRIED == 'true') && steps.should.outputs.run == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: player-e2e-logs
