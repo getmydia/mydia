@@ -164,6 +164,28 @@ jobs:
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v4
 
+      # Exposes ACTIONS_RUNTIME_TOKEN and ACTIONS_CACHE_URL/ACTIONS_RESULTS_URL
+      # to the job environment. GitHub injects those into actions only, never
+      # into `run:` steps, and both resolve steps below call `docker buildx
+      # build` from a `run:` step. Without this, every `--cache-from` and
+      # `--cache-to type=gha` in this job is a SILENT no-op: BuildKit skips the
+      # cache backend and the build succeeds anyway, so nothing points at the
+      # problem.
+      #
+      # Measured on run 33444861643, a green master push, before this step
+      # existed: the only build that logged `importing cache manifest` was the
+      # `Publish / Toolbox` job, which uses `docker/build-push-action`. The
+      # server build imported no manifest and produced zero CACHED layers
+      # across a 12m30s run. The `player-toolbox` cache scope had exactly one
+      # entry ever, written by that same action-based job.
+      #
+      # Do NOT delete this as redundant with setup-buildx-action. That action
+      # creates the builder; it does not put the runtime token in the
+      # environment of later `run:` steps.
+      - name: Expose GitHub Actions runtime for BuildKit
+        if: steps.should.outputs.run == 'true'
+        uses: crazy-max/ghaction-github-runtime@v3
+
       # The resolve steps below replace the former `docker compose build`.
       # They pull by default and build only what a PR actually changed, which
       # removes the cold-build cost from the common path rather than trying to
@@ -180,9 +202,14 @@ jobs:
       #
       # That revert also noted layer caching could not bootstrap, because a
       # cold build that cannot finish inside the job budget never exports a
-      # cache. That is addressed here from both ends: pulls mean most runs
-      # never build at all, and the non-PR builds below export cache so a cold
-      # run still leaves something warm behind.
+      # cache. That is addressed from both ends: pulls mean most runs never
+      # build at all, and the non-PR builds below export cache so a cold run
+      # still leaves something warm behind.
+      #
+      # Both halves of that only became true on 2026-09-01, when the runtime
+      # step above was added. Every cache flag in this job was inert before
+      # then, so any build timing recorded in these comments and dated earlier
+      # describes a fully cold build with no cache reads or writes.
       - name: Log in to registry
         if: steps.should.outputs.run == 'true'
         uses: docker/login-action@v4
