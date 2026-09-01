@@ -438,15 +438,18 @@ defmodule MydiaWeb.LibraryComponents do
 
   ## Attributes
 
+    * `:id` - Optional DOM id for the toggle button.
     * `:selection_mode` - Whether selection mode is active.
     * `:selected_count` - Number of selected items.
   """
+  attr :id, :string, default: nil
   attr :selection_mode, :boolean, required: true
   attr :selected_count, :integer, required: true
 
   def selection_controls(assigns) do
     ~H"""
     <button
+      id={@id}
       type="button"
       class={["btn btn-sm gap-1", @selection_mode && "btn-active"]}
       phx-click="toggle_selection_mode"

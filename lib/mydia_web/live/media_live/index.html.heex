@@ -27,18 +27,11 @@
       <%!-- Actions and view controls --%>
       <div class="flex flex-wrap items-center gap-2">
         <%!-- Selection controls --%>
-        <button
+        <.selection_controls
           id="toggle-selection-mode"
-          type="button"
-          class={["btn btn-sm gap-1", @selection_mode && "btn-active"]}
-          phx-click="toggle_selection_mode"
-          title={if @selection_mode, do: "Exit selection mode", else: "Enter selection mode"}
-        >
-          <.icon name="hero-check-circle" class="w-4 h-4" />
-          <span class="hidden sm:inline">
-            {if @selection_mode, do: "Selecting", else: "Select"}
-          </span>
-        </button>
+          selection_mode={@selection_mode}
+          selected_count={MapSet.size(@selected_ids)}
+        />
 
         <%!-- Re-scan button (shown on Movies and TV Shows pages) --%>
         <%= if @filter_type in ["movie", "tv_show"] do %>
