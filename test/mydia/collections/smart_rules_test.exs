@@ -416,4 +416,35 @@ defmodule Mydia.Collections.SmartRulesTest do
       assert "contains" in operators
     end
   end
+
+  describe "query/1" do
+    test "returns a composable query for valid rules" do
+      rules =
+        ~s({"conditions":[{"field":"category","operator":"in","value":["anime_series"]}]})
+
+      assert {:ok, %Ecto.Query{} = query} = SmartRules.query(rules)
+      assert is_list(Mydia.Repo.all(query))
+    end
+
+    test "returns an error for invalid JSON" do
+      assert {:error, "Invalid JSON"} = SmartRules.query("{not json")
+    end
+
+    test "returns an error for an unknown field" do
+      rules = ~s({"conditions":[{"field":"nope","operator":"eq","value":"x"}]})
+
+      assert {:error, message} = SmartRules.query(rules)
+      assert message =~ "Invalid rules"
+    end
+
+    test "accepts a decoded map as well as a JSON string" do
+      rules = %{
+        "conditions" => [
+          %{"field" => "category", "operator" => "in", "value" => ["anime_movie"]}
+        ]
+      }
+
+      assert {:ok, %Ecto.Query{}} = SmartRules.query(rules)
+    end
+  end
 end

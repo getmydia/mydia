@@ -257,6 +257,30 @@ defmodule Mydia.Collections.SmartRules do
   """
   def valid_operators, do: @valid_operators
 
+  @doc """
+  Returns the validated Ecto query for a rule set without executing it.
+
+  Callers that need to compose further filters onto a smart collection (the
+  sidebar section view) use this instead of `execute_query/2`, which runs the
+  query and returns rows. Errors are returned rather than swallowed, so a
+  section with broken rules can render an editable error state instead of
+  looking like an empty library.
+  """
+  @spec query(binary() | map()) :: {:ok, Ecto.Query.t()} | {:error, binary()}
+  def query(rules) when is_binary(rules) do
+    case Jason.decode(rules) do
+      {:ok, decoded} -> query(decoded)
+      {:error, _} -> {:error, "Invalid JSON"}
+    end
+  end
+
+  def query(rules) when is_map(rules) do
+    case validate(rules) do
+      {:ok, _} -> {:ok, build_query(rules)}
+      {:error, errors} -> {:error, "Invalid rules: #{Enum.join(errors, ", ")}"}
+    end
+  end
+
   ## Private Functions
 
   defp validate_condition(condition, idx) when is_map(condition) do
