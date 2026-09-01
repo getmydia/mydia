@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/remote/node_registration_service.dart';
 import 'package:player/core/remote/registration_status.dart';
@@ -9,6 +11,18 @@ class FakeDelay {
 
   Future<void> call(Duration duration) async {
     waits.add(duration);
+  }
+}
+
+/// A delay that never resolves on its own, so a test can hold the service in
+/// a backoff wait indefinitely and observe whether something else -- namely
+/// [NodeRegistrationService.retryNow] -- is what actually moves it along.
+class ControllableDelay {
+  final List<Duration> waits = [];
+
+  Future<void> call(Duration duration) {
+    waits.add(duration);
+    return Completer<void>().future;
   }
 }
 
@@ -104,6 +118,39 @@ void main() {
       expect(service.status, isA<RegistrationSucceeded>());
     });
 
+    test('retryNow interrupts a pending backoff wait instead of waiting it out',
+        () async {
+      var calls = 0;
+      final delay = ControllableDelay();
+      final service = NodeRegistrationService(
+        register: (_) async {
+          calls += 1;
+          // Fails once, then succeeds on the retry retryNow() triggers.
+          return calls >= 2;
+        },
+        now: () => clock,
+        delay: delay.call,
+      );
+      addTearDown(service.dispose);
+
+      service.update(controllable: true, nodeId: 'abc', clientReady: true);
+      await pumpEventQueue();
+
+      // The first attempt failed and is now asleep in a backoff wait that
+      // this test's ControllableDelay never resolves on its own.
+      expect(calls, 1);
+      expect(service.status, isA<RegistrationFailed>());
+      expect(delay.waits, [const Duration(seconds: 2)]);
+
+      service.retryNow();
+      await pumpEventQueue();
+
+      expect(calls, 2,
+          reason: 'retryNow must interrupt the backoff wait promptly, not '
+              'leave the retry pending until the full delay elapses');
+      expect(service.status, isA<RegistrationSucceeded>());
+    });
+
     test('treats a throwing register as a retryable failure', () async {
       var calls = 0;
       final service = serviceWith((_) async {
@@ -118,6 +165,39 @@ void main() {
 
       expect(calls, 2);
       expect(service.status, isA<RegistrationSucceeded>());
+    });
+
+    test('re-registers the same node id when the client scope changes',
+        () async {
+      final sent = <String>[];
+      final service = serviceWith((nodeId) async {
+        sent.add(nodeId);
+        return true;
+      });
+      addTearDown(service.dispose);
+
+      final clientA = Object();
+      final clientB = Object();
+
+      service.update(
+        controllable: true,
+        nodeId: 'abc',
+        clientReady: true,
+        clientScope: clientA,
+      );
+      await pumpEventQueue();
+      service.update(
+        controllable: true,
+        nodeId: 'abc',
+        clientReady: true,
+        clientScope: clientB,
+      );
+      await pumpEventQueue();
+
+      expect(sent, ['abc', 'abc'],
+          reason: 'a different client scope must re-register the same node '
+              'id, because a cached confirmation only speaks for the '
+              'client that produced it');
     });
 
     test('re-registers when the node id changes', () async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
@@ -57,6 +59,60 @@ void main() {
           reason: 'the late node id must drive a registration, not be missed');
       expect(container.read(nodeRegistrationProvider),
           isA<RegistrationSucceeded>());
+    });
+
+    test(
+        'a stored false resolving after a loading period does not '
+        'register', () async {
+      final sent = <String>[];
+      final statusNotifier = _FakeP2pStatus();
+      final controllableCompleter = Completer<bool>();
+
+      final container = ProviderContainer(overrides: [
+        nodeRegistrationServiceProvider.overrideWith((ref) {
+          final service = NodeRegistrationService(
+            register: (nodeId) async {
+              sent.add(nodeId);
+              return true;
+            },
+            delay: (_) async {},
+          );
+          ref.onDispose(service.dispose);
+          return service;
+        }),
+        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+        // Never resolves until the test says so, standing in for Hive still
+        // opening its box.
+        remoteControlEnabledProvider
+            .overrideWith((ref) => controllableCompleter.future),
+        graphqlClientProvider.overrideWith(
+          (ref) => stubClient(StubLink.responses([
+            <String, dynamic>{'__typename': 'Mutation'},
+          ])),
+        ),
+      ]);
+      addTearDown(container.dispose);
+
+      // Keep the driver alive for the whole test.
+      container.listen(nodeRegistrationProvider, (_, __) {});
+      // The node id and the client are both ready; only the setting is
+      // still loading, so it alone must be what gates registration.
+      statusNotifier.publish('a' * 64);
+      await pumpEventQueue();
+
+      expect(sent, isEmpty,
+          reason: 'the setting has not resolved yet, so nothing may '
+              'register even though every other input is ready');
+      expect(
+          container.read(nodeRegistrationProvider), isA<RegistrationWaiting>());
+
+      controllableCompleter.complete(false);
+      await pumpEventQueue();
+
+      expect(sent, isEmpty,
+          reason: 'a stored false resolving after loading must not have '
+              'been treated as enabled during the loading window');
+      expect(container.read(nodeRegistrationProvider), isA<RegistrationIdle>());
     });
   });
 }

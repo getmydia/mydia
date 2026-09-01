@@ -239,17 +239,45 @@ defmodule Mydia.RemoteAccess do
   its row instead of adding one on every launch. The token is only generated
   on the insert branch: a returning client keeps its original row and hash
   untouched.
+
+  Two concurrent first-time logins for the same `client_device_id` can both
+  pass the lookup above before either insert lands. The loser hits the
+  `unique_constraint([:user_id, :client_device_id])` on `login_changeset/2`;
+  rather than surface that as a failed login, re-read the row the winner just
+  created and return it, so both callers end up with the same device instead
+  of one of them erroring out.
   """
   def find_or_create_login_device(%{user_id: user_id, client_device_id: client_device_id} = attrs) do
     case Repo.get_by(RemoteDevice, user_id: user_id, client_device_id: client_device_id) do
-      nil ->
-        %RemoteDevice{}
-        |> RemoteDevice.login_changeset(Map.put(attrs, :token, generate_login_device_token()))
-        |> Repo.insert()
-
-      device ->
-        {:ok, device}
+      nil -> insert_login_device(attrs, user_id, client_device_id)
+      device -> {:ok, device}
     end
+  end
+
+  defp insert_login_device(attrs, user_id, client_device_id) do
+    %RemoteDevice{}
+    |> RemoteDevice.login_changeset(Map.put(attrs, :token, generate_login_device_token()))
+    |> Repo.insert()
+    |> case do
+      {:ok, device} ->
+        {:ok, device}
+
+      {:error, changeset} = error ->
+        if unique_constraint_error?(changeset) do
+          case Repo.get_by(RemoteDevice, user_id: user_id, client_device_id: client_device_id) do
+            nil -> error
+            device -> {:ok, device}
+          end
+        else
+          error
+        end
+    end
+  end
+
+  defp unique_constraint_error?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn {_field, {_message, opts}} ->
+      Keyword.get(opts, :constraint) == :unique
+    end)
   end
 
   # Unused, unretrievable token for a password-login device. Hashed into

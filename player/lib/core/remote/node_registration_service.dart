@@ -57,12 +57,31 @@ class NodeRegistrationService {
   /// against [_desiredNodeId], which is what makes a node ID change re-register.
   String? _registeredNodeId;
 
+  /// The identity [update] most recently attached to [_registeredNodeId].
+  ///
+  /// The driver watches `graphqlClientProvider` and calls [update] with the
+  /// current client on every rebuild, so a plain client change already flows
+  /// through as ordinary input. But a client change caused by signing out
+  /// into a *different* account or server, on the same device with the same
+  /// iroh node ID, would otherwise leave `_registeredNodeId == nodeId` still
+  /// true and skip registration entirely -- the cached value is only true of
+  /// the client that produced it. Opaque on purpose: this never inspects the
+  /// scope, only compares its identity to the previous one.
+  Object? _clientScope;
+
   /// Bumped by every [update] and [retryNow]. The loop compares it against the
   /// value it started with, so inputs changing mid-attempt abandon that attempt
   /// instead of letting a stale result overwrite fresher state.
   int _generation = 0;
 
   bool _running = false;
+
+  /// Completed by [retryNow] and [dispose] to interrupt whichever backoff
+  /// wait is currently in [_attemptUntilSuccess], one fresh instance per
+  /// wait. `null` whenever no wait is in progress. A `Completer` can only be
+  /// completed once, so every completion site checks [Completer.isCompleted]
+  /// first.
+  Completer<void>? _wakeUp;
 
   /// Closing [_controller] only silences [_emit]'s output; it does not stop
   /// the reconcile loop itself. Without this flag, a disposed service whose
@@ -101,14 +120,26 @@ class NodeRegistrationService {
     return out.stream;
   }
 
-  /// Feeds the loop the latest view of its three inputs. Safe to call on every
+  /// Feeds the loop the latest view of its inputs. Safe to call on every
   /// rebuild: identical inputs that are already satisfied do no work.
+  ///
+  /// [clientScope] identifies which client [nodeId] would be registered
+  /// with, typically the `GraphQLClient` instance itself. Omitted (`null`)
+  /// by callers that never change scope, such as the existing tests below.
+  /// A scope change clears [_registeredNodeId] so a node ID that was already
+  /// confirmed against the previous scope is re-registered against the new
+  /// one instead of being treated as already done.
   void update({
     required bool controllable,
     required String? nodeId,
     required bool clientReady,
+    Object? clientScope,
   }) {
     if (_disposed) return;
+    if (!identical(clientScope, _clientScope)) {
+      _clientScope = clientScope;
+      _registeredNodeId = null;
+    }
     _controllable = controllable;
     _desiredNodeId = nodeId;
     _clientReady = clientReady;
@@ -118,10 +149,23 @@ class NodeRegistrationService {
 
   /// Abandons any pending backoff and reconciles immediately. Wired to the
   /// retry action in settings.
+  ///
+  /// Bumping [_generation] alone is not enough: the loop only checks it
+  /// between attempts, and a loop sleeping through [_delay] in
+  /// [_attemptUntilSuccess] does not reach that check until the delay
+  /// elapses, up to a minute later. Completing [_wakeUp] (when a wait is
+  /// actually in progress) races that delay via `Future.any` and lets the
+  /// retry happen immediately instead.
   void retryNow() {
     if (_disposed) return;
     _generation += 1;
+    _wakeCurrentWait();
     unawaited(_reconcile());
+  }
+
+  void _wakeCurrentWait() {
+    final wakeUp = _wakeUp;
+    if (wakeUp != null && !wakeUp.isCompleted) wakeUp.complete();
   }
 
   Future<void> _reconcile() async {
@@ -190,7 +234,17 @@ class NodeRegistrationService {
 
       final wait = _backoff[min(attempt - 1, _backoff.length - 1)];
       _emit(RegistrationFailed(reason, attempt, _now().add(wait)));
-      await _delay(wait);
+
+      // Fresh Completer per wait: one already completed by a previous
+      // retryNow() cannot be reused, and `_wakeCurrentWait` only ever
+      // touches whichever instance is currently assigned to `_wakeUp`.
+      final wakeUp = Completer<void>();
+      _wakeUp = wakeUp;
+      try {
+        await Future.any([_delay(wait), wakeUp.future]);
+      } finally {
+        if (identical(_wakeUp, wakeUp)) _wakeUp = null;
+      }
     }
   }
 
@@ -204,6 +258,11 @@ class NodeRegistrationService {
     // Bumped so an attempt still in flight abandons itself instead of emitting
     // into a closed controller.
     _generation += 1;
+    // Same reasoning as retryNow(): without this, a service disposed while
+    // sleeping through a backoff wait keeps that wait alive (harmlessly, since
+    // `_disposed` is checked once it wakes) for up to a minute instead of
+    // unwinding immediately.
+    _wakeCurrentWait();
     unawaited(_controller.close());
   }
 }
