@@ -458,8 +458,16 @@ defmodule Mydia.Accounts do
   defp validate_add_references(changeset, delta) do
     changeset
     |> validate_reference(delta, "add_quality_profile_id", &quality_profile_exists?/1)
-    |> validate_reference(delta, "add_movie_library_path_id", &library_path_exists?/1)
-    |> validate_reference(delta, "add_series_library_path_id", &library_path_exists?/1)
+    |> validate_reference(
+      delta,
+      "add_movie_library_path_id",
+      &library_path_exists_as_type?(&1, Mydia.Settings.LibraryPath.movie_library_types())
+    )
+    |> validate_reference(
+      delta,
+      "add_series_library_path_id",
+      &library_path_exists_as_type?(&1, Mydia.Settings.LibraryPath.series_library_types())
+    )
   end
 
   defp validate_reference(changeset, delta, key, exists?) do
@@ -500,8 +508,15 @@ defmodule Mydia.Accounts do
     Ecto.Query.CastError -> false
   end
 
-  defp library_path_exists?(id) do
-    Repo.exists?(from l in Mydia.Settings.LibraryPath, where: l.id == ^id)
+  # `allowed_types` comes from `Mydia.Settings.LibraryPath.movie_library_types/0`
+  # or `series_library_types/0`, the same lists `validate_flag_for_type/4`
+  # uses to gate `default_for_movies`/`default_for_series` there: a `:movies`
+  # library cannot back the series add-option, a `:series` library cannot
+  # back the movie one, and a `:mixed` library backs either.
+  defp library_path_exists_as_type?(id, allowed_types) do
+    Repo.exists?(
+      from l in Mydia.Settings.LibraryPath, where: l.id == ^id and l.type in ^allowed_types
+    )
   rescue
     Ecto.Query.CastError -> false
   end

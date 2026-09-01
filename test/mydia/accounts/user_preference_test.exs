@@ -119,5 +119,38 @@ defmodule Mydia.Accounts.UserPreferenceTest do
 
       refute changeset.valid?
     end
+
+    test "rejects a series-only library path stored as the movie override" do
+      user = user_fixture()
+      series_library = library_path_fixture(%{type: "series"})
+      pref = Accounts.get_user_preference!(user)
+
+      assert {:error, changeset} =
+               Accounts.update_preference(pref, %{
+                 "preferences" => %{"add_movie_library_path_id" => series_library.id}
+               })
+
+      refute changeset.valid?
+    end
+
+    test "accepts a mixed-type library path under either add-option key" do
+      user = user_fixture()
+      mixed_library = library_path_fixture(%{type: "mixed"})
+      pref = Accounts.get_user_preference!(user)
+
+      assert {:ok, pref} =
+               Accounts.update_preference(pref, %{
+                 "preferences" => %{"add_movie_library_path_id" => mixed_library.id}
+               })
+
+      assert UserPreference.add_library_path_id(pref, :movie) == mixed_library.id
+
+      assert {:ok, pref} =
+               Accounts.update_preference(pref, %{
+                 "preferences" => %{"add_series_library_path_id" => mixed_library.id}
+               })
+
+      assert UserPreference.add_library_path_id(pref, :tv_show) == mixed_library.id
+    end
   end
 end
