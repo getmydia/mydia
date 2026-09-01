@@ -22,7 +22,20 @@ jobs:
     name: Publish / Toolbox
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    needs: test-player-e2e
+    # Deliberately NOT `needs: test-player-e2e`, and do not add it back.
+    #
+    # This job builds a toolchain image (Flutter, GTK, mpv). The E2E tests do
+    # not validate it. The test container bind-mounts the repo at /workspace
+    # and runs `flutter pub get`, `build_runner` and `flutter test -d linux`
+    # at runtime, so the tests exercise the commit's player source against
+    # this toolchain, never the toolchain itself. A green test run is not
+    # evidence the image is good, and a red one is not evidence it is bad.
+    #
+    # Gating on the test job also created a deadlock that does not
+    # self-recover: a failing or timed-out test run blocked both the registry
+    # tag AND the player-toolbox cache scope from ever refreshing, so the next
+    # push started from the same cold state that caused the failure. See the
+    # timeout-minutes comment on test-player-e2e.
     permissions:
       contents: read
       packages: write
