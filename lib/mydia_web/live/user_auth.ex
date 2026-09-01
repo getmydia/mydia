@@ -136,6 +136,7 @@ defmodule MydiaWeb.Live.UserAuth do
       |> assign(:show_feedback_modal, false)
       |> assign(:feedback_form, build_feedback_form(%{}))
       |> assign_changelog_notice()
+      |> assign_player_ui()
       |> attach_hook(:changelog_hook, :handle_event, &handle_changelog_event/3)
       |> attach_hook(:jobs_status_hook, :handle_info, &handle_jobs_status/2)
       |> attach_hook(:feedback_hook, :handle_event, &handle_feedback_event/3)
@@ -243,6 +244,30 @@ defmodule MydiaWeb.Live.UserAuth do
 
       _ ->
         assign(socket, :changelog_notice, nil)
+    end
+  end
+
+  # Player entry-point visibility, read once per mount.
+  #
+  # No connected?/1 gate: unlike assign_changelog_notice/1 this only reads, so
+  # there is no write to defer to the connected render. This on_mount covers the
+  # whole of live_session :authenticated, so every role gets the assigns.
+  defp assign_player_ui(socket) do
+    case socket.assigns do
+      %{current_user: %Mydia.Accounts.User{} = user} ->
+        pref = Mydia.Accounts.get_user_preference!(user)
+
+        socket
+        |> assign(:hide_player, Mydia.Accounts.UserPreference.hide_player?(pref))
+        |> assign(
+          :player_banner_dismissed,
+          Mydia.Accounts.UserPreference.player_banner_dismissed?(pref)
+        )
+
+      _ ->
+        socket
+        |> assign(:hide_player, false)
+        |> assign(:player_banner_dismissed, false)
     end
   end
 
