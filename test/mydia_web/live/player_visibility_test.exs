@@ -95,4 +95,22 @@ defmodule MydiaWeb.PlayerVisibilityTest do
 
     refute has_element?(view, "#player-cta-banner")
   end
+
+  test "the Devices web tile renders by default", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/devices")
+
+    assert has_element?(view, "#download-web")
+  end
+
+  test "hide_player removes the Devices web tile but keeps the native downloads", %{
+    conn: conn,
+    user: user
+  } do
+    :ok = hide_player(user)
+
+    {:ok, view, _html} = live(conn, ~p"/devices")
+
+    refute has_element?(view, "#download-web")
+    assert has_element?(view, "#download-card")
+  end
 end
