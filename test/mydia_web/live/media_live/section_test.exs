@@ -184,29 +184,19 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert has_element?(view, "#nav-tv-count", "1")
     end
 
-    test "the page explains where the hidden items went", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/tv")
+    test "the claimed items are absent and no banner explains them", %{
+      conn: conn,
+      anime: anime,
+      live: live
+    } do
+      {:ok, view, html} = live(conn, ~p"/tv")
 
-      assert has_element?(view, "#excluded-notice")
+      assert html =~ live.title
+      refute html =~ anime.title
+      refute has_element?(view, "#excluded-notice")
     end
 
-    test "the notice names the single claiming section and links to it", %{
-      conn: conn,
-      section: section
-    } do
-      {:ok, view, _html} = live(conn, ~p"/tv")
-
-      assert has_element?(
-               view,
-               ~s(#excluded-notice a[href="/sections/#{section.id}"]),
-               "Anime"
-             )
-    end
-
-    test "the notice falls back to aggregate wording when more than one section claims", %{
-      conn: conn,
-      user: user
-    } do
+    test "a second claiming section still shows no banner", %{conn: conn, user: user} do
       {:ok, _other} =
         Collections.create_collection(user, %{
           name: "Retro",
@@ -224,8 +214,7 @@ defmodule MydiaWeb.MediaLive.SectionTest do
 
       {:ok, view, _html} = live(conn, ~p"/tv")
 
-      assert has_element?(view, "#excluded-notice", "in your pinned sections")
-      refute has_element?(view, "#excluded-notice a")
+      refute has_element?(view, "#excluded-notice")
     end
 
     test "the sidebar shows the pinned section", %{conn: conn, section: section} do
@@ -463,6 +452,49 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert [created] = Collections.list_pinned_sections(user)
       assert created.name == "Anime"
       assert path == "/sections/#{created.id}"
+    end
+
+    test "accepting silences the nudge even after the section is removed", %{
+      conn: conn,
+      user: user
+    } do
+      for n <- 1..10 do
+        categorized_media_item_fixture(
+          %{title: "Signal Garden #{n}", type: "tv_show"},
+          :anime_series
+        )
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      {:error, {:live_redirect, %{to: _path}}} =
+        view |> element("#accept-anime-nudge") |> render_click()
+
+      [created] = Collections.list_pinned_sections(user)
+      {:ok, _unpinned} = Collections.unpin_section(user, created)
+
+      {:ok, view2, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view2, "#anime-nudge")
+    end
+
+    test "a non-exclusive anime section silences the nudge", %{
+      conn: conn,
+      user: user,
+      section: section
+    } do
+      for n <- 1..10 do
+        categorized_media_item_fixture(
+          %{title: "Signal Garden #{n}", type: "tv_show"},
+          :anime_series
+        )
+      end
+
+      {:ok, _} = Collections.pin_section(user, section, exclusive: false)
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view, "#anime-nudge")
     end
   end
 end

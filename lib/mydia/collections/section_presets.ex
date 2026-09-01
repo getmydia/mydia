@@ -22,7 +22,7 @@ defmodule Mydia.Collections.SectionPresets do
     %{
       key: "anime",
       name: "Anime",
-      icon: "hero-sparkles",
+      icon: "hero-bolt",
       description: "Japanese animation, movies and series, out of Movies and TV.",
       rules: %{
         "conditions" => [

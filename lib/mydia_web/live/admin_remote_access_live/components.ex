@@ -258,7 +258,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
             <div class="divider my-1"></div>
 
             <div class="alert bg-info/10 border-info/20 py-2.5">
-              <.icon name="hero-light-bulb" class="w-5 h-5 text-info" />
+              <.icon name="hero-light-bulb" class="w-5 h-5 text-primary" />
               <div class="text-xs">
                 <span class="font-semibold">Tip:</span>
                 Use
@@ -271,7 +271,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
                   Tailscale
                 </a>
                 for secure access anywhere. Add your Tailscale address, e.g.
-                <code class="bg-info/20 px-1.5 py-0.5 rounded font-mono text-info">
+                <code class="bg-info/20 px-1.5 py-0.5 rounded font-mono text-primary">
                   http://mydia.tail1234.ts.net:4000
                 </code>
               </div>
@@ -391,6 +391,6 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
 
   defp connection_type_class("direct"), do: "text-success font-medium"
   defp connection_type_class("relay"), do: "text-warning font-medium"
-  defp connection_type_class("mixed"), do: "text-info font-medium"
+  defp connection_type_class("mixed"), do: "text-primary font-medium"
   defp connection_type_class(_), do: ""
 end

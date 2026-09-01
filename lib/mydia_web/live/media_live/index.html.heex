@@ -238,7 +238,7 @@
     </div>
 
     <div :if={@show_anime_nudge} id="anime-nudge" class="alert alert-info mb-4">
-      <.icon name="hero-sparkles" class="w-5 h-5" />
+      <.icon name="hero-bolt" class="w-5 h-5" />
       <span>
         You have a fair bit of anime mixed in here. Want it in its own sidebar section?
       </span>
@@ -246,7 +246,7 @@
         <button
           id="accept-anime-nudge"
           phx-click="accept_anime_nudge"
-          class="btn btn-sm btn-primary"
+          class="btn btn-sm btn-neutral"
         >
           Create Anime section
         </button>
@@ -258,24 +258,6 @@
           No thanks
         </button>
       </div>
-    </div>
-
-    <div
-      :if={@excluded_count > 0 and is_nil(@section)}
-      id="excluded-notice"
-      class="alert alert-info mb-4"
-    >
-      <.icon name="hero-information-circle" class="w-5 h-5" />
-      <span>
-        <%= case @claiming_sections do %>
-          <% [section] -> %>
-            {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your
-            <.link navigate={~p"/sections/#{section.id}"} class="link link-primary font-semibold">{section.name}</.link>
-            section.
-          <% _ -> %>
-            {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your pinned sections.
-        <% end %>
-      </span>
     </div>
 
     <%!-- Empty state (shown when no items) --%>

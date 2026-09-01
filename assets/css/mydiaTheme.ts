@@ -64,7 +64,7 @@ export default plugin(
         "--color-neutral": "oklch(29.72% 0.013 257.29)", // #1f2937 (Gray-800)
         "--color-neutral-content": "oklch(98.04% 0.003 247.86)", // #f9fafb (Gray-50)
 
-        "--color-info": "oklch(62.8% 0.2515 258.34)", // #3b82f6 (Blue-500)
+        "--color-info": "oklch(50% 0.119 242.8)", // #0369a1 (Sky-700)
         "--color-info-content": "oklch(100% 0 0)", // #ffffff
 
         "--color-success": "oklch(68.3% 0.1686 163.14)", // #10b981 (Emerald-500)
@@ -161,7 +161,7 @@ export default plugin(
         "--color-neutral": "oklch(95.76% 0.006 252.37)", // #f1f5f9 (Slate-100)
         "--color-neutral-content": "oklch(25.33% 0.016 252.42)", // #0f172a (Slate-900)
 
-        "--color-info": "oklch(62.8% 0.2515 258.34)", // #3b82f6 (Blue-500)
+        "--color-info": "oklch(50% 0.119 242.8)", // #0369a1 (Sky-700)
         "--color-info-content": "oklch(100% 0 0)", // #ffffff
 
         "--color-success": "oklch(68.3% 0.1686 163.14)", // #10b981 (Emerald-500)

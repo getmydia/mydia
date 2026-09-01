@@ -219,7 +219,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           <% @band == :ignored -> %>
             <button
               id="restore-selected"
-              class="btn btn-sm btn-primary"
+              class="btn btn-sm btn-neutral"
               disabled={@count == 0}
               phx-click="restore_selected"
             >
@@ -240,7 +240,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           <% true -> %>
             <button
               id="accept-selected"
-              class="btn btn-sm btn-primary"
+              class="btn btn-sm btn-neutral"
               disabled={@count == 0}
               phx-click="accept_selected"
             >

@@ -337,4 +337,63 @@ defmodule Mydia.Collections.SectionsTest do
       assert is_nil(SectionPresets.get("nope"))
     end
   end
+
+  describe "pinned_categories/1" do
+    test "returns categories from every pinned section, exclusive or not" do
+      user = user_fixture()
+
+      {:ok, _exclusive} =
+        Collections.create_collection(user, %{
+          name: "Anime",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{"field" => "category", "operator" => "in", "value" => ["anime_series"]}
+              ]
+            }),
+          pinned_position: 0,
+          exclusive: true
+        })
+
+      {:ok, _plain} =
+        Collections.create_collection(user, %{
+          name: "Toons",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{"field" => "category", "operator" => "in", "value" => ["cartoon_series"]}
+              ]
+            }),
+          pinned_position: 1,
+          exclusive: false
+        })
+
+      sections = Collections.list_pinned_sections(user)
+
+      assert Enum.sort(Collections.pinned_categories(sections)) ==
+               ["anime_series", "cartoon_series"]
+
+      assert Collections.claimed_categories(sections) == ["anime_series"]
+    end
+  end
+
+  describe "section presets" do
+    test "the anime preset uses an icon with no AI connotation" do
+      preset = Mydia.Collections.SectionPresets.get("anime")
+
+      assert preset.icon == "hero-bolt"
+      assert preset.icon in Collection.valid_sidebar_icons()
+    end
+
+    test "every preset icon is allowlisted" do
+      for preset <- Mydia.Collections.SectionPresets.all() do
+        assert preset.icon in Collection.valid_sidebar_icons(),
+               "#{preset.key} uses #{preset.icon}, which is not allowlisted"
+      end
+    end
+  end
 end
