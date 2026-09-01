@@ -6,17 +6,19 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
   alias Mydia.Accounts
   alias Mydia.Auth.Guardian
   alias Mydia.Config
+  alias Mydia.RemoteAccess
 
   @doc """
   Login with username/password and device information.
 
   This resolver:
   1. Validates credentials
-  2. Creates a JWT token
+  2. Finds or creates the caller's `RemoteDevice` row and mints a device-scoped token
   3. Returns user info and token
 
-  Note: This does NOT create a device record - that's handled by the remote access flow.
-  For direct mode login, we just authenticate and return a token.
+  The device row is what `registerDeviceNode` keys on, so a password login has
+  to produce one just like pairing does, or the device that logged in this way
+  can never publish its iroh node id.
   """
   def login(_parent, %{input: input}, %{context: context}) do
     # Check if local auth is enabled
@@ -57,26 +59,38 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
           # Update last login timestamp
           Accounts.update_last_login(user)
 
-          # Create JWT token
-          case Guardian.create_token(user) do
-            {:ok, token, claims} ->
-              # Get token expiration (default is 30 days for Guardian)
-              expires_in = Map.get(claims, "exp", 0) - Map.get(claims, "iat", 0)
-
-              {:ok,
-               %{
-                 token: token,
-                 user: user,
-                 expires_in: expires_in
-               }}
-
-            {:error, reason} ->
-              {:error, "Failed to create authentication token: #{inspect(reason)}"}
-          end
+          issue_login_token(user, input)
         else
           Accounts.record_login_failure(ip_address, input.username)
           {:error, "Invalid username or password"}
         end
+    end
+  end
+
+  # A password login must end with a device row and a `device_id` claim, the
+  # same shape pairing produces. Without them `registerDeviceNode` rejects the
+  # caller, the device never publishes its iroh node id, and it stays invisible
+  # to every other device on the account. The `login_input` fields this needs
+  # have been required by the schema all along and were previously discarded.
+  defp issue_login_token(user, input) do
+    with {:ok, device} <-
+           RemoteAccess.find_or_create_login_device(%{
+             user_id: user.id,
+             client_device_id: input.device_id,
+             device_name: input.device_name,
+             platform: input.platform
+           }),
+         {:ok, token, claims} <-
+           Guardian.encode_and_sign(user, %{"device_id" => device.id, "typ" => "access"}) do
+      expires_in = Map.get(claims, "exp", 0) - Map.get(claims, "iat", 0)
+
+      {:ok, %{token: token, user: user, expires_in: expires_in}}
+    else
+      {:error, %Ecto.Changeset{}} ->
+        {:error, "Failed to register this device"}
+
+      {:error, reason} ->
+        {:error, "Failed to create authentication token: #{inspect(reason)}"}
     end
   end
 end

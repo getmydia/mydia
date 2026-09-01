@@ -11,6 +11,8 @@ import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/remote/node_registration_providers.dart';
+import 'package:player/core/remote/registration_status.dart';
 import 'package:player/core/remote/remote_control_settings.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
@@ -115,6 +117,20 @@ const _status = P2pStatus(
   connectedPeersCount: 0,
 );
 
+/// Publishes a fixed registration status so a widget test can drive the row
+/// without a p2p host or a server.
+class _StubRegistration extends NodeRegistrationDriver {
+  _StubRegistration(this._status);
+
+  final RegistrationStatus _status;
+
+  @override
+  RegistrationStatus build() => _status;
+
+  @override
+  void retry() {}
+}
+
 /// Resolves and reads normally, but fails the write itself — for proving
 /// `_setControllable` catches a failure from `setControllable` specifically,
 /// not just from `remoteControlSettingsProvider` failing to resolve at all
@@ -136,6 +152,7 @@ Future<void> _pump(
   bool failRemoteControlWrite = false,
   String version = '',
   Size size = const Size(1000, 1400),
+  RegistrationStatus registration = const RegistrationIdle(),
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -162,6 +179,9 @@ Future<void> _pump(
           (ref) async => failRemoteControlWrite
               ? _ThrowingRemoteControlSettings(box: _remoteControlBox)
               : RemoteControlSettings(box: _remoteControlBox),
+        ),
+        nodeRegistrationProvider.overrideWith(
+          () => _StubRegistration(registration),
         ),
       ],
       child: MaterialApp.router(
@@ -497,6 +517,32 @@ void main() {
         updateCheckSubtitle(isMacOS: false, availableVersion: null),
         "You're up to date",
       );
+    });
+  });
+
+  group('remote control registration status', () {
+    testWidgets('shows the retry row only when registration has failed',
+        (tester) async {
+      await _pump(
+        tester,
+        registration:
+            const RegistrationFailed('could not reach the server', 3, null),
+      );
+
+      expect(find.byKey(const Key('remote-control-retry-row')), findsOneWidget);
+      expect(find.text('Not discoverable: could not reach the server'),
+          findsOneWidget);
+    });
+
+    testWidgets('hides the retry row once registration succeeds',
+        (tester) async {
+      await _pump(
+        tester,
+        registration: RegistrationSucceeded('abc', DateTime(2026, 9, 1)),
+      );
+
+      expect(find.byKey(const Key('remote-control-retry-row')), findsNothing);
+      expect(find.text('Discoverable by your other devices'), findsOneWidget);
     });
   });
 }

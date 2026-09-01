@@ -19,7 +19,8 @@ import 'core/downloads/download_service.dart';
 import 'core/auth/device_info_service.dart';
 import 'core/remote/ambient_lifecycle.dart';
 import 'core/remote/load_content_navigation.dart';
-import 'core/remote/node_registration.dart';
+import 'core/remote/node_registration_providers.dart';
+import 'core/remote/registration_status.dart';
 import 'core/remote/remote_control_intent.dart';
 import 'core/remote/remote_control_receiver.dart';
 import 'core/remote/remote_control_settings.dart';
@@ -223,6 +224,20 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       },
     );
 
+    // The receiver still needs a GraphQL client and a live host, and the first
+    // attempt above can run before either exists. Registration succeeding is
+    // proof that both are now present, so it is the right moment to try again.
+    // `_initRemoteControlIfEnabled` no-ops once a receiver is wired, so this
+    // costs nothing in the common case where the first attempt worked.
+    ref.listenManual<RegistrationStatus>(
+      nodeRegistrationProvider,
+      (previous, next) {
+        if (next is! RegistrationSucceeded) return;
+        unawaited(_initRemoteControlIfEnabled());
+      },
+      fireImmediately: true,
+    );
+
     // Fire and forget: the source starts on its fallback layout, so the
     // chrome renders correctly before this completes and simply re-renders
     // if the real layout differs.
@@ -285,19 +300,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final p2pService = ref.read(p2pServiceProvider);
       await p2pService.initialize();
 
-      final nodeId = p2pService.nodeId;
-      if (nodeId == null) {
-        debugPrint(
-            '[MyApp] Remote control: no node ID after initialize, skipping');
-        return;
-      }
-
+      // Registration deliberately does not happen here any more. It is an
+      // invariant maintained by `nodeRegistrationProvider`, not a startup
+      // step: doing it inline meant a node id or GraphQL client that had not
+      // arrived yet left this device unregistered, and therefore invisible to
+      // every other device, for the rest of the session.
       final client = await ref.read(asyncGraphqlClientProvider.future);
-      final registered = await NodeRegistration(
-        client: client,
-        nodeId: () async => p2pService.nodeId,
-      ).register();
-      debugPrint('[MyApp] Remote control node registration: $registered');
 
       final targetController = ref.read(remoteTargetControllerProvider);
       final receiver = RemoteControlReceiver(

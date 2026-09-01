@@ -101,6 +101,14 @@ class P2pStatus {
   final bool isRelayConnected;
   final int connectedPeersCount;
   final String? nodeAddr;
+
+  /// This node's iroh node ID, or null until [P2pService.initialize] has
+  /// completed. Published here rather than read from `P2pService.nodeId`
+  /// because `p2pServiceProvider` is a plain `Provider` that is never
+  /// invalidated: watching it cannot observe `initialize()` or `reset()`
+  /// swapping the host underneath. This record is broadcast, so a consumer
+  /// that watches it rebuilds when the identity actually changes.
+  final String? nodeId;
   final String? relayUrl;
   final P2pConnectionType peerConnectionType;
 
@@ -109,6 +117,7 @@ class P2pStatus {
     required this.isRelayConnected,
     required this.connectedPeersCount,
     this.nodeAddr,
+    this.nodeId,
     this.relayUrl,
     this.peerConnectionType = P2pConnectionType.none,
   });
@@ -118,6 +127,7 @@ class P2pStatus {
         isRelayConnected = false,
         connectedPeersCount = 0,
         nodeAddr = null,
+        nodeId = null,
         relayUrl = null,
         peerConnectionType = P2pConnectionType.none;
 
@@ -126,6 +136,7 @@ class P2pStatus {
     bool? isRelayConnected,
     int? connectedPeersCount,
     String? nodeAddr,
+    String? nodeId,
     String? relayUrl,
     P2pConnectionType? peerConnectionType,
   }) {
@@ -134,6 +145,7 @@ class P2pStatus {
       isRelayConnected: isRelayConnected ?? this.isRelayConnected,
       connectedPeersCount: connectedPeersCount ?? this.connectedPeersCount,
       nodeAddr: nodeAddr ?? this.nodeAddr,
+      nodeId: nodeId ?? this.nodeId,
       relayUrl: relayUrl ?? this.relayUrl,
       peerConnectionType: peerConnectionType ?? this.peerConnectionType,
     );
@@ -270,6 +282,7 @@ class P2pService {
       isRelayConnected: _isRelayConnected,
       connectedPeersCount: _connectedPeers.length,
       nodeAddr: _nodeAddr,
+      nodeId: _nodeId,
       relayUrl: relayUrl,
       peerConnectionType: peerConnectionType,
     );

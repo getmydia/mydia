@@ -12,6 +12,7 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
   @type t :: %__MODULE__{
           id: binary(),
           device_name: String.t() | nil,
+          client_device_id: String.t() | nil,
           platform: String.t() | nil,
           token_hash: String.t() | nil,
           token: String.t() | nil,
@@ -26,6 +27,7 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
 
   schema "remote_devices" do
     field :device_name, :string
+    field :client_device_id, :string
     field :platform, :string
     field :token_hash, :string
     field :token, :string, virtual: true
@@ -59,6 +61,31 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
     |> validate_length(:platform, min: 1, max: 50)
     |> hash_token()
     |> foreign_key_constraint(:user_id)
+    |> unique_constraint(:token_hash)
+  end
+
+  @doc """
+  Changeset for a device created by a password login rather than by pairing.
+
+  Distinct from `changeset/2` in that it also handles `:client_device_id` and
+  carries `unique_constraint([:user_id, :client_device_id])`. It still
+  requires and hashes `:token` exactly like `changeset/2` does, but the
+  caller generates that token itself and discards the plaintext immediately
+  after this changeset is applied. Nobody ever holds the preimage, so the
+  resulting `token_hash` is a unique value that can never authenticate
+  anything, on purpose: a password-login device re-authenticates with the
+  user's own credentials, never with a device token. This keeps `token_hash`
+  satisfying its `NOT NULL` and `UNIQUE` constraints without weakening them.
+  """
+  def login_changeset(device, attrs) do
+    device
+    |> cast(attrs, [:client_device_id, :device_name, :platform, :token, :user_id])
+    |> validate_required([:client_device_id, :device_name, :platform, :token, :user_id])
+    |> validate_length(:client_device_id, min: 1, max: 255)
+    |> validate_length(:device_name, min: 1, max: 100)
+    |> validate_length(:platform, min: 1, max: 50)
+    |> hash_token()
+    |> unique_constraint([:user_id, :client_device_id])
     |> unique_constraint(:token_hash)
   end
 

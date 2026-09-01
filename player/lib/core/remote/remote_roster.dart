@@ -52,13 +52,15 @@ class RemoteRoster {
         deviceName
         platform
         nodeId
+        isRevoked
       }
     }
   ''';
 
   /// Devices that can actually be dialed. A device with no node ID has never
   /// reported one, so it is omitted rather than listed as permanently
-  /// offline.
+  /// offline, and a revoked device is omitted because revoking is documented
+  /// as preventing future access.
   Future<List<RemoteDeviceEntry>> entries() async {
     await _ensureFresh();
     return _entries;
@@ -128,6 +130,10 @@ class RemoteRoster {
       _entries = devices
           .cast<Map<String, dynamic>>()
           .where((d) => (d['nodeId'] as String?)?.isNotEmpty ?? false)
+          // Revoking is documented as preventing future access, and this list
+          // is the access control list as well as the picker list, so a
+          // revoked device must not be dialable or permitted to dial.
+          .where((d) => d['isRevoked'] != true)
           .map((d) => RemoteDeviceEntry(
                 id: d['id'] as String,
                 deviceName: d['deviceName'] as String,

@@ -173,5 +173,23 @@ void main() {
         expect(defaultRelayUrl, equals('https://cae1-1.relay.mydia.dev'));
       });
     });
+
+    group('nodeId', () {
+      test('is null before the host is initialized', () {
+        expect(const P2pStatus.initial().nodeId, isNull);
+      });
+
+      test('is carried through copyWith', () {
+        final status = P2pStatus(
+          isInitialized: true,
+          isRelayConnected: true,
+          connectedPeersCount: 0,
+          nodeId: 'a' * 64,
+        );
+
+        expect(status.copyWith().nodeId, 'a' * 64);
+        expect(status.copyWith(nodeId: 'b' * 64).nodeId, 'b' * 64);
+      });
+    });
   });
 }
