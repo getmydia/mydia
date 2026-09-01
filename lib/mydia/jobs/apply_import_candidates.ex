@@ -16,7 +16,12 @@ defmodule Mydia.Jobs.ApplyImportCandidates do
   already running must enqueue a fresh job rather than be swallowed by the
   uniqueness guard, otherwise rows marked during the final page are stranded
   with nothing left to pick them up. `Jobs.MediaImport` documents the same
-  tradeoff.
+  tradeoff. The narrowed `states:` list lives on `ImportCandidates.enqueue/2`,
+  the single call site both this worker and `Jobs.RematchImportCandidates`
+  share, rather than here: declaring it statically on `use Oban.Worker` trips
+  Oban's compile-time `--warnings-as-errors` check for a missing incomplete
+  state, the same reason `Jobs.MediaImport.schedule_snooze_retry/2` overrides
+  it at its own call site instead of in its module attributes.
 
   A library with candidates still queued at the end is reported to Oban as a
   failure so `max_attempts` retries it. Terminal refusals do not reach that
@@ -26,7 +31,7 @@ defmodule Mydia.Jobs.ApplyImportCandidates do
   use Oban.Worker,
     queue: :default,
     max_attempts: 3,
-    unique: [period: 300, keys: [:library_path_id], states: [:available, :scheduled, :retryable]]
+    unique: [period: 300, keys: [:library_path_id]]
 
   alias Mydia.ImportCandidates
 

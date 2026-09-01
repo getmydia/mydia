@@ -8,15 +8,16 @@ defmodule Mydia.Jobs.RematchImportCandidates do
   re-derived from band and search predicates that may match different groups by
   the time the job runs.
 
-  Shares `Jobs.ApplyImportCandidates`'s queue and uniqueness reasoning. The two
-  workers never contend for a row, because a candidate carries at most one
+  Shares `Jobs.ApplyImportCandidates`'s queue and uniqueness reasoning
+  (including where the narrowed `unique` `states:` list actually lives). The
+  two workers never contend for a row, because a candidate carries at most one
   `queued_op` and each worker filters on its own value.
   """
 
   use Oban.Worker,
     queue: :default,
     max_attempts: 3,
-    unique: [period: 300, keys: [:library_path_id], states: [:available, :scheduled, :retryable]]
+    unique: [period: 300, keys: [:library_path_id]]
 
   require Logger
 

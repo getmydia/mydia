@@ -966,9 +966,19 @@ defmodule Mydia.ImportCandidates do
   # Oban's engine is disabled in test (config/test.exs sets `engine: false`), so
   # Oban.insert/1 raises there. See test/README.md and
   # Mydia.Downloads.Queue.insert_job/1, which uses the same fallback.
+  #
+  # `states:` is overridden here rather than declared on `use Oban.Worker` in
+  # the worker modules themselves, so it deliberately excludes `:executing`: a
+  # click landing while a drain is already running must enqueue a fresh job
+  # rather than be swallowed by the uniqueness guard (see both workers'
+  # moduledocs). Declaring that narrowed list statically trips Oban's own
+  # `--warnings-as-errors` compile check (it warns whenever `:states` omits
+  # any incomplete state); overriding it only here, at the single call site
+  # both workers share, avoids the warning the same way
+  # `Jobs.MediaImport.schedule_snooze_retry/2` does for its own narrowed case.
   defp enqueue(worker, library_path_id) do
     %{"library_path_id" => library_path_id}
-    |> worker.new()
+    |> worker.new(unique: [states: [:available, :scheduled, :retryable]])
     |> insert_job()
   end
 
