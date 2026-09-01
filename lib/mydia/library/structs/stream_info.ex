@@ -19,6 +19,10 @@ defmodule Mydia.Library.Structs.StreamInfo do
   names reach the Flutter player verbatim through GraphQL codegen.
   """
 
+  # The file details modal renders this as JSON. Without an encoder,
+  # Jason.encode!/2 raises Protocol.UndefinedError and takes the modal with it.
+  @derive Jason.Encoder
+
   defstruct [
     # common
     :index,

@@ -23,6 +23,10 @@ defmodule Mydia.Library.Structs.FileMetadata do
 
   alias Mydia.Library.Structs.StreamInfo
 
+  # See StreamInfo: the file details modal encodes this struct directly.
+  # `streams` holds StreamInfo structs, which derive the protocol too.
+  @derive Jason.Encoder
+
   defstruct [
     # Core technical
     :duration,
