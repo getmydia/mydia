@@ -80,7 +80,17 @@ RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
 # ============================================
 # Elixir Build Stage
 # ============================================
-FROM elixir:1.19-alpine AS builder
+# Digest-pinned, not tag-pinned, because the official elixir images publish no
+# Alpine-qualified tag: the variants are <version>[-otp-NN]-alpine and nothing
+# more, so a tag cannot express which Alpine a builder runs on. This digest
+# carries Alpine 3.23.5. It matters because this stage runs the BEAM to
+# compile, and musl 1.2.6 (Alpine 3.24) aborts the VM at startup on a CPU with
+# a large XSAVE area. See metadata-relay/Dockerfile for the full explanation.
+#
+# Nothing bumps this automatically: .github/dependabot.yml has no docker
+# ecosystem. It is pinned for correctness, not currency. Move it once a
+# released OTP tag carries erlang/otp#11376.
+FROM elixir:1.19-alpine@sha256:c504b910bbc1d5dccefb2d81e6a49a7747b931ab737c1e774a46fdf85906ef11 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -202,7 +212,19 @@ RUN mix release
 # ============================================
 # Runtime Stage
 # ============================================
-FROM erlang:28-alpine
+# Alpine 3.23, and not an erlang image. metadata-relay/Dockerfile carries the
+# full explanation: musl 1.2.6, which Alpine 3.24 ships, tightened
+# sigaltstack() to reject any size below sysconf(_SC_MINSIGSTKSZ), which on a
+# CPU with a large XSAVE area exceeds the fixed 8 KB OTP 28 asks for, so the VM
+# aborts at startup. erlang:28-alpine happens to be built on 3.23.5 with musl
+# 1.2.5 today, but no tag of that image pins an Alpine version, so an upstream
+# rebuild would break every user with such a CPU and no commit here.
+#
+# No erlang base is needed. mix.exs declares no `releases`, so include_erts
+# defaults to true and the release carries the ERTS the builder produced. This
+# image's own OTP was never executed, only its shared libraries were, and those
+# are installed explicitly below.
+FROM alpine:3.23
 
 # Database type: sqlite (default) or postgres
 # This argument is only used for image labels - the actual adapter is already compiled
@@ -222,6 +244,8 @@ LABEL org.opencontainers.image.title="Mydia" \
 # libpq is needed for PostgreSQL connections at runtime
 # sqlite provides the sqlite3 CLI for database inspection
 # openssl is needed for self-signed certificate generation
+# libstdc++ and ncurses-libs came from the erlang base this image used to use;
+# the bundled ERTS and the Rust NIFs link against them
 RUN apk add --no-cache \
     sqlite \
     libpq \
@@ -233,7 +257,9 @@ RUN apk add --no-cache \
     su-exec \
     tzdata \
     shadow \
-    openssl
+    openssl \
+    libstdc++ \
+    ncurses-libs
 
 # Create app user with default UID/GID (will be updated by entrypoint if needed)
 RUN addgroup -g 1000 mydia && \

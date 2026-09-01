@@ -458,8 +458,13 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
             class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center mb-4"
             phx-drop-target={@uploads.subtitle.ref}
           >
+            <%!-- accept is set here rather than through allow_upload, which
+                  would need the four subtitle types registered on the mime
+                  dependency at compile time. live_file_input declares accept
+                  as an explicit override for exactly this. --%>
             <.live_file_input
               upload={@uploads.subtitle}
+              accept=".srt,.ass,.ssa,.vtt"
               class="file-input file-input-bordered w-full"
             />
             <p class="text-xs opacity-60 mt-2">SRT, ASS, SSA or VTT, up to 2 MB</p>

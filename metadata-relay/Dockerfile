@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1.4
-FROM elixir:1.20.1-alpine AS builder
+# Digest-pinned rather than tag-pinned: the official elixir images publish no
+# Alpine-qualified tag, and this stage runs the BEAM to compile, so it is
+# exposed to the same musl 1.2.6 abort as the runtime stage below. This digest
+# carries Alpine 3.23.5.
+FROM elixir:1.20.1-alpine@sha256:f50894ff69b0d07b310fe9c97b48b3475568ecccb7f0ccd7c350a789feb395a3 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache build-base git openssl-dev nodejs npm
@@ -84,7 +88,10 @@ RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
 # released tag yet: 28.0 through 28.5.0.5 and 29.0 through 29.0.5 all still
 # hardcode SIGSTKSZ. Move this back to a current Alpine once a patch release
 # carries that commit. Alpine 3.23 is supported until 2027-11-01.
-FROM alpine:3.23.5
+#
+# The tag floats within 3.23 so security patches still arrive; only the minor
+# is held, and 3.23 can never carry musl 1.2.6.
+FROM alpine:3.23
 
 # Install runtime dependencies
 RUN apk add --no-cache libstdc++ openssl ncurses-libs curl

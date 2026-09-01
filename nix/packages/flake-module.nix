@@ -463,6 +463,37 @@
                 [ pkgs.ffmpeg_6-headless pkgs.sqlite pkgs.openssl ] ++ extraRuntimeDeps
               )}
           '';
+
+          # Boot the release once. `bin/mydia eval` runs the config providers
+          # and Config.Provider.boot/2's compile_env validation, which is
+          # exactly what aborted the v0.14.0-beta.4 NixOS module, without
+          # starting an application, opening a database, or touching the
+          # network. Without this the same failure only appears in the
+          # push-only VM test, as a 900 second timeout on wait_for_unit with
+          # the real error buried in the guest's journal.
+          #
+          # config/runtime.exs requires these three under SQLite.
+          # Mydia.Release.Env.fetch_secret!/2 enforces a 32 character floor, so
+          # these are long enough to pass and are obvious throwaways; they
+          # never leave the sandbox and never reach the output. RELEASE_TMP has
+          # to be redirected because it defaults to a directory inside the
+          # release root, which is the read-only store path.
+          doInstallCheck = true;
+          installCheckPhase = ''
+            runHook preInstallCheck
+
+            export RELEASE_TMP=$(mktemp -d)
+            export RELEASE_DISTRIBUTION=none
+            export SECRET_KEY_BASE=nix-install-check-not-a-real-secret-key-base-value
+            export GUARDIAN_SECRET_KEY=nix-install-check-not-a-real-guardian-secret-key
+            export DATABASE_PATH=$RELEASE_TMP/install-check.db
+            export MYDIA_DATA_DIR=$RELEASE_TMP
+
+            echo "install check: booting the release to validate its configuration"
+            $out/bin/mydia eval ':ok'
+
+            runHook postInstallCheck
+          '';
         } // pkgs.lib.optionalAttrs (databaseType != null) {
           DATABASE_TYPE = databaseType;
         });
