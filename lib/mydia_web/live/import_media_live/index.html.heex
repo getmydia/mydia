@@ -50,11 +50,15 @@
             id="import-all-results"
             type="button"
             class="btn btn-primary btn-sm"
+            disabled={@importing?}
             phx-click="import_all_results"
-            phx-disable-with="Importing…"
             data-confirm="Import every matched result for this library? This includes lower-confidence matches."
           >
-            <.icon name="hero-check-circle" class="w-4 h-4" /> Import All
+            <%= if @importing? do %>
+              <span class="loading loading-spinner loading-xs" /> Importing…
+            <% else %>
+              <.icon name="hero-check-circle" class="w-4 h-4" /> Import All
+            <% end %>
           </button>
 
           <button

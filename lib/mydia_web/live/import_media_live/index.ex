@@ -123,6 +123,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       # schedules exactly one Process.send_after/3 rather than one per
       # message.
       |> assign(:refresh_scheduled?, false)
+      # True while an accept is promoting in the background. Only "Import all"
+      # reads it: accepting a selection clears that selection, which disables
+      # the Accept button on its own, but "Import all" takes no selection and
+      # would otherwise re-enable the moment start_accept/3 returns and invite
+      # a second concurrent pass over the same groups.
+      |> assign(:importing?, false)
       # The "Change match" / "Identify" search modal's state, nil when
       # closed. `match_search_token` is a monotonic counter (mirrors
       # SearchLive's own `search_id`) captured by each `start_async` search
@@ -242,10 +248,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
          library_path_id when is_binary(library_path_id) <-
            socket.assigns.selected_library_path_id do
       {:noreply,
-       socket
-       |> accept_result(
+       start_accept(socket, socket.assigns.band_counts.total, fn ->
          ImportCandidates.accept_all_matched(library_path_id, allow_episode_creation: true)
-       )}
+       end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
       nil -> {:noreply, put_flash(socket, :error, "Select a library before importing results.")}
@@ -401,11 +406,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("accept_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
+      selection = socket.assigns.selection
+
       {:noreply,
-       socket
-       |> accept_result(
-         ImportCandidates.accept(socket.assigns.selection, allow_episode_creation: true)
-       )}
+       start_accept(socket, SelectionScope.count(selection), fn ->
+         ImportCandidates.accept(selection, allow_episode_creation: true)
+       end)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -721,6 +727,25 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     {:noreply, put_flash(socket, :error, "Re-match failed. Try again.")}
   end
 
+  def handle_async(:accept_candidates, {:ok, {:ok, result}}, socket) do
+    {:noreply, accept_result(socket, {:ok, result})}
+  end
+
+  # Each group commits in its own transaction, so a crash part-way through
+  # leaves the groups it already promoted imported and the rest still pending.
+  # Reloading rather than just flashing is what makes that visible: the page
+  # then shows exactly what is left to retry.
+  def handle_async(:accept_candidates, {:exit, reason}, socket) do
+    Logger.warning("Import accept crashed", reason: inspect(reason))
+
+    {:noreply,
+     socket
+     |> put_flash(:error, "Import failed. Any groups already imported are done; retry the rest.")
+     |> assign(:importing?, false)
+     |> load_groups()
+     |> refresh_counts()}
+  end
+
   @impl true
   def handle_info({:import_run_progress, run}, socket) do
     socket =
@@ -814,10 +839,37 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     "Cleared #{candidates} scan result(s). Dismissed decisions are preserved."
   end
 
+  # Promoting a group is slow and mostly not database work: a relay fetch per
+  # season, an NFO write, and a sidecar reconcile, repeated for every group in
+  # the selection. Called straight from `handle_event/3` that ran inside the
+  # LiveView -- one process, one message at a time -- so the socket could not
+  # render anything until the last group landed. A three-series accept on a
+  # real instance took about eight seconds per series and left the page sitting
+  # on its pre-click state for the best part of a minute, with no flash and
+  # nothing to show the click had registered.
+  #
+  # `start_async/3` moves the promotion to a task so this callback returns at
+  # once: the "Importing…" flash paints immediately, the page stays
+  # interactive, and `handle_async(:accept_candidates, ...)` does the reload
+  # when the work finishes. This is the shape `rematch_selected` already uses,
+  # for the same reason.
+  #
+  # The selection is captured by the caller's closure and cleared here, so the
+  # Accept button disables itself for the duration and cannot start a second
+  # pass over groups the first one is still promoting.
+  defp start_accept(socket, count, work) do
+    socket
+    |> put_flash(:info, "Importing #{count} group(s)…")
+    |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+    |> assign(:importing?, true)
+    |> start_async(:accept_candidates, work)
+  end
+
   defp accept_result(socket, {:ok, %{accepted: accepted}}) do
     socket
     |> put_flash(:info, "Accepted #{accepted} group(s).")
     |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+    |> assign(:importing?, false)
     |> load_groups()
     |> refresh_counts()
   end

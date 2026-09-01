@@ -337,8 +337,69 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     view |> element("#select-all-matching") |> render_click()
     view |> element("#accept-selected") |> render_click()
 
+    render_async(view)
+
     assert Repo.aggregate(from(f in Mydia.Library.MediaFile), :count) == 3
     assert ImportCandidates.count_pending() == 1
+  end
+
+  # Accept used to call `ImportCandidates.accept/2` straight from
+  # `handle_event/3`. A LiveView is one process handling one message at a time,
+  # so the entire promotion -- a relay fetch per season, an NFO write and a
+  # sidecar reconcile per group -- ran inside the event, and nothing could
+  # render until the last group landed. On the production instance three series
+  # took about eight seconds each and the review page sat on its pre-click state
+  # for the best part of a minute with no flash, no spinner and no sign the
+  # click had registered.
+  #
+  # Racing a second event against the first would assert that indirectly. The
+  # provider block gives a sharper signal for free: it reports the pid doing the
+  # enrichment, and that pid being the LiveView's own *is* the bug.
+  test "accepting a selection enriches off the LiveView process", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+
+    seed_group(lp, "blocking-series", %{
+      media_type: "tv_show",
+      provider_type: "tvdb",
+      provider_id: to_string(MetadataStubProvider.series_tvdb_id()),
+      title: MetadataStubProvider.series_title(),
+      confidence: 1.0,
+      parsed_info: %{"type" => "tv_show", "season" => 1, "episodes" => [1]}
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    # Released from a helper rather than from the test process on purpose:
+    # under the old synchronous code the enrichment blocks inside the LiveView,
+    # so a release written after `render_click/3` would never be reached and the
+    # test would fail on a five second stub timeout instead of on its own
+    # assertion.
+    test_pid = self()
+
+    releaser =
+      spawn_link(fn ->
+        receive do
+          {:metadata_season_fetch_started, ref, worker} ->
+            send(test_pid, {:enriched_in, worker})
+            send(worker, {:release_metadata_season_fetch, ref})
+        end
+      end)
+
+    MetadataStubProvider.block_next_season_fetch(releaser)
+
+    render_click(view, "toggle_group", %{"id" => "blocking-series"})
+    render_click(view, "accept_selected", %{})
+
+    assert_receive {:enriched_in, worker}, 5_000
+
+    refute worker == view.pid,
+           "metadata enrichment ran inside the LiveView process, which freezes " <>
+             "the page until the whole selection has finished importing"
+
+    render_async(view)
+
+    assert has_element?(view, "#flash-info", "Accepted 1 group(s).")
+    assert ImportCandidates.count_pending() == 0
   end
 
   test "select all matching and clear both redraw every checkbox on screen", %{conn: conn} do
@@ -411,6 +472,7 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert has_element?(view, "#bulk-bar", "55 group(s) selected")
 
     view |> element("#accept-selected") |> render_click()
+    render_async(view)
 
     assert Repo.aggregate(
              from(f in Mydia.Library.MediaFile, where: f.library_path_id == ^lp.id),

@@ -552,6 +552,10 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     |> element("#import-all-results")
     |> render_click()
 
+    # Import All promotes off the LiveView process so the page stays
+    # responsive while it runs; await the task before asserting on its writes.
+    render_async(view)
+
     refute Repo.get(ImportCandidate, confident.id)
     refute Repo.get(ImportCandidate, uncertain.id)
     assert Repo.get(ImportCandidate, unmatched.id)
