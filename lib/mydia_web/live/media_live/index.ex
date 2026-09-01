@@ -56,9 +56,11 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:scan_result, nil)
      |> assign(:scan_progress, nil)
      |> assign(:section, nil)
+     |> assign(:section_owned?, false)
      |> assign(:section_query, nil)
      |> assign(:section_error, false)
      |> assign(:excluded_count, 0)
+     |> assign(:claiming_sections, [])
      |> assign(:show_section_settings, false)
      |> assign(:section_form, nil)
      |> assign(:section_exclusive_eligible, false)
@@ -79,6 +81,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
     |> assign(:excluded_count, excluded_count(socket, "movie"))
+    |> assign(:claiming_sections, claiming_sections(socket))
     |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> load_media_items(reset: true)
   end
@@ -88,6 +91,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
     |> assign(:excluded_count, excluded_count(socket, "tv_show"))
+    |> assign(:claiming_sections, claiming_sections(socket))
     |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> load_media_items(reset: true)
   end
@@ -107,6 +111,7 @@ defmodule MydiaWeb.MediaLive.Index do
         # {nil, _} clause is the right behaviour for a section.
         |> assign(:filter_type, nil)
         |> assign(:section, collection)
+        |> assign(:section_owned?, collection.user_id == socket.assigns.current_user.id)
         |> load_section(collection)
     end
   end
@@ -151,6 +156,14 @@ defmodule MydiaWeb.MediaLive.Index do
       categories ->
         Media.count_media_items(type: type, category_in: categories)
     end
+  end
+
+  # The sections claiming categories away from this page, so the excluded
+  # items notice can name the one responsible instead of staying anonymous.
+  # `@sections` is already the current user's own pinned sections (the nav
+  # hook scopes it that way), so filtering it is enough without another query.
+  defp claiming_sections(socket) do
+    Enum.filter(socket.assigns[:sections] || [], & &1.exclusive)
   end
 
   @impl true
@@ -630,23 +643,23 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("open_section_settings", _params, socket) do
-    section = socket.assigns.section
-
-    {:noreply,
-     socket
-     |> assign(:show_section_settings, true)
-     |> assign(:section_exclusive_eligible, Collections.exclusive_eligible?(section))
-     |> assign(
-       :section_form,
-       to_form(
-         %{
-           "name" => section.name,
-           "sidebar_icon" => section.sidebar_icon,
-           "exclusive" => section.exclusive
-         },
-         as: :section
-       )
-     )}
+    with_section(socket, fn section ->
+      {:noreply,
+       socket
+       |> assign(:show_section_settings, true)
+       |> assign(:section_exclusive_eligible, Collections.exclusive_eligible?(section))
+       |> assign(
+         :section_form,
+         to_form(
+           %{
+             "name" => section.name,
+             "sidebar_icon" => section.sidebar_icon,
+             "exclusive" => section.exclusive
+           },
+           as: :section
+         )
+       )}
+    end)
   end
 
   def handle_event("close_section_settings", _params, socket) do
@@ -654,43 +667,46 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("save_section", %{"section" => params}, socket) do
-    user = socket.assigns.current_user
-    section = socket.assigns.section
+    with_section(socket, fn section ->
+      user = socket.assigns.current_user
 
-    attrs = %{
-      name: params["name"],
-      sidebar_icon: params["sidebar_icon"],
-      exclusive: params["exclusive"] == "true" and Collections.exclusive_eligible?(section)
-    }
+      attrs = %{
+        name: params["name"],
+        sidebar_icon: params["sidebar_icon"],
+        exclusive: params["exclusive"] == "true" and Collections.exclusive_eligible?(section)
+      }
 
-    case Collections.update_collection(user, section, attrs) do
-      {:ok, updated} ->
-        {:noreply,
-         socket
-         |> assign(:section, updated)
-         |> assign(:page_title, updated.name)
-         |> assign(:show_section_settings, false)
-         |> assign(:excluded_categories, Collections.claimed_categories(user))
-         |> put_flash(:info, "Section updated")}
+      case Collections.update_collection(user, section, attrs) do
+        {:ok, updated} ->
+          {:noreply,
+           socket
+           |> assign(:section, updated)
+           |> assign(:page_title, updated.name)
+           |> assign(:show_section_settings, false)
+           |> assign(:excluded_categories, Collections.claimed_categories(user))
+           |> put_flash(:info, "Section updated")}
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not update the section")}
-    end
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not update the section")}
+      end
+    end)
   end
 
   def handle_event("unpin_section", _params, socket) do
-    user = socket.assigns.current_user
+    with_section(socket, fn section ->
+      user = socket.assigns.current_user
 
-    case Collections.unpin_section(user, socket.assigns.section) do
-      {:ok, _collection} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Section removed from the sidebar")
-         |> push_navigate(to: ~p"/tv")}
+      case Collections.unpin_section(user, section) do
+        {:ok, _collection} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Section removed from the sidebar")
+           |> push_navigate(to: ~p"/tv")}
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not remove the section")}
-    end
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not remove the section")}
+      end
+    end)
   end
 
   def handle_event("dismiss_anime_nudge", _params, socket) do
@@ -814,6 +830,16 @@ defmodule MydiaWeb.MediaLive.Index do
 
     Logger.warning("Unhandled message in MediaLive.Index: #{inspect(msg)}")
     {:noreply, socket}
+  end
+
+  # Guards event handlers that only make sense on a section page. A
+  # hand-crafted client event fired from /movies or /tv, where @section is
+  # nil, would otherwise crash the socket instead of being a no-op.
+  defp with_section(socket, fun) do
+    case socket.assigns.section do
+      nil -> {:noreply, socket}
+      section -> fun.(section)
+    end
   end
 
   defp run_batch_auto_search(socket) do

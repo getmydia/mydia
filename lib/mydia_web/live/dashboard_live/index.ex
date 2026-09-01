@@ -78,9 +78,14 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   defp load_dashboard_data(socket) do
-    # Load basic stats
-    movie_count = Media.count_movies()
-    tv_show_count = Media.count_tv_shows()
+    # Load basic stats. The nav hook (MydiaWeb.Live.UserAuth.on_mount
+    # :load_navigation_data) runs before mount/3 and already assigns
+    # :excluded_categories, so reuse it here rather than recomputing it. This
+    # keeps the dashboard's :movie_count / :tv_show_count assigns in sync with
+    # the sidebar badges, which the same assign keys drive in Layouts.app.
+    excluded_categories = socket.assigns[:excluded_categories] || []
+    movie_count = Media.count_movies(exclude_categories: excluded_categories)
+    tv_show_count = Media.count_tv_shows(exclude_categories: excluded_categories)
     active_downloads_count = Downloads.count_active_downloads()
     total_storage = Library.total_storage_bytes() |> format_bytes()
 

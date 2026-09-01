@@ -33,9 +33,9 @@
           selected_count={MapSet.size(@selected_ids)}
         />
 
-        <%!-- Section settings (shown on section pages only) --%>
+        <%!-- Section settings (shown on section pages the current user owns) --%>
         <button
-          :if={@section}
+          :if={@section && @section_owned?}
           id="open-section-settings"
           type="button"
           phx-click="open_section_settings"
@@ -267,7 +267,14 @@
     >
       <.icon name="hero-information-circle" class="w-5 h-5" />
       <span>
-        {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your pinned sections.
+        <%= case @claiming_sections do %>
+          <% [section] -> %>
+            {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your
+            <.link navigate={~p"/sections/#{section.id}"} class="link link-primary font-semibold">{section.name}</.link>
+            section.
+          <% _ -> %>
+            {@excluded_count} {if(@excluded_count == 1, do: "item is", else: "items are")} in your pinned sections.
+        <% end %>
       </span>
     </div>
 

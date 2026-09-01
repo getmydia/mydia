@@ -162,6 +162,44 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert has_element?(view, "#excluded-notice")
     end
 
+    test "the notice names the single claiming section and links to it", %{
+      conn: conn,
+      section: section
+    } do
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert has_element?(
+               view,
+               ~s(#excluded-notice a[href="/sections/#{section.id}"]),
+               "Anime"
+             )
+    end
+
+    test "the notice falls back to aggregate wording when more than one section claims", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, _other} =
+        Collections.create_collection(user, %{
+          name: "Retro",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{"field" => "category", "operator" => "in", "value" => ["cartoon_series"]}
+              ]
+            }),
+          pinned_position: 1,
+          exclusive: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert has_element?(view, "#excluded-notice", "in your pinned sections")
+      refute has_element?(view, "#excluded-notice a")
+    end
+
     test "the sidebar shows the pinned section", %{conn: conn, section: section} do
       {:ok, view, _html} = live(conn, ~p"/tv")
 
@@ -248,6 +286,72 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       view |> element("#open-section-settings") |> render_click()
 
       refute has_element?(view, "#section-exclusive-toggle")
+    end
+  end
+
+  describe "section settings ownership" do
+    test "the gear icon is shown to the section's owner", %{conn: conn, section: section} do
+      {:ok, view, _html} = live(conn, ~p"/sections/#{section.id}")
+
+      assert has_element?(view, "#open-section-settings")
+    end
+
+    test "the gear icon is hidden from a viewer who does not own a shared section", %{
+      user: owner
+    } do
+      {:ok, shared} =
+        Collections.create_collection(owner, %{
+          name: "Everyone's Picks",
+          type: "smart",
+          visibility: "shared",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{"field" => "category", "operator" => "in", "value" => ["anime_movie"]}
+              ]
+            }),
+          pinned_position: 1
+        })
+
+      viewer = user_fixture(%{role: "admin"})
+      conn = log_in_user(Phoenix.ConnTest.build_conn(), viewer)
+
+      {:ok, view, _html} = live(conn, ~p"/sections/#{shared.id}")
+
+      refute has_element?(view, "#open-section-settings")
+    end
+
+    test "a viewer who does not own the section cannot save changes to it either", %{
+      user: owner
+    } do
+      {:ok, shared} =
+        Collections.create_collection(owner, %{
+          name: "Everyone's Picks",
+          type: "smart",
+          visibility: "shared",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{"field" => "category", "operator" => "in", "value" => ["anime_movie"]}
+              ]
+            }),
+          pinned_position: 1
+        })
+
+      viewer = user_fixture(%{role: "admin"})
+      conn = log_in_user(Phoenix.ConnTest.build_conn(), viewer)
+
+      {:ok, view, _html} = live(conn, ~p"/sections/#{shared.id}")
+
+      render_click(view, "save_section", %{
+        "section" => %{
+          "name" => "Hijacked",
+          "sidebar_icon" => "hero-fire",
+          "exclusive" => "false"
+        }
+      })
+
+      assert Collections.get_collection_by_id(shared.id).name == "Everyone's Picks"
     end
   end
 
