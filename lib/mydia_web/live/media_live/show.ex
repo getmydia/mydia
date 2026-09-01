@@ -151,10 +151,20 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:media_file_subtitle_tracks, load_media_file_subtitle_tracks(media_item))
      |> assign(:show_subtitle_upload_modal, false)
      |> assign(:subtitle_upload_error, nil)
-     # accept only screens the filename; Mydia.Subtitles.Format.detect/1 on the
-     # received bytes is the real gate, in SubtitleEvents.finish_upload/6.
+     # The extension filter lives on the file input itself, in SubtitleModal,
+     # not here. `accept:` resolves every entry through MIME.has_type?/1, and
+     # none of the four subtitle extensions is registered by default, so making
+     # it work meant `config :mime, :types`. That configures a dependency's
+     # compile-time key, which any builder that compiles dependencies in
+     # isolation cannot see, and it left the NixOS module of v0.14.0-beta.4
+     # aborting during boot. See dependency_compile_env_test.exs.
+     #
+     # Nothing is lost: accept only ever screened the client-supplied filename.
+     # Mydia.Subtitles.Format.detect/1 on the received bytes is the real gate,
+     # in SubtitleEvents.finish_upload/6, and the size and count limits below
+     # are independent of accept.
      |> allow_upload(:subtitle,
-       accept: ~w(.srt .ass .ssa .vtt),
+       accept: :any,
        max_entries: 1,
        max_file_size: 2_000_000
      )

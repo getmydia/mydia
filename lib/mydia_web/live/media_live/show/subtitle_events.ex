@@ -295,9 +295,11 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply, socket}
   end
 
-  # allow_upload validates on every phx-change automatically (size, count,
-  # accepted extensions); there is nothing extra to do here. The handler
-  # still has to exist because the form declares phx-change.
+  # allow_upload validates size and count on every phx-change automatically;
+  # there is nothing extra to do here. It no longer screens the extension,
+  # which the file input's own accept attribute does on the client and
+  # Mydia.Subtitles.Format.detect/1 settles on the bytes. The handler still
+  # has to exist because the form declares phx-change.
   def validate_subtitle_upload(_params, socket), do: {:noreply, socket}
 
   def save_subtitle_upload(params, socket) do
