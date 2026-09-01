@@ -196,10 +196,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     end
   end
 
-  # This is the shared home for auto-search-on-add. AddMediaLive
-  # (lib/mydia_web/live/add_media_live/index.ex) still carries its own
-  # near-identical private maybe_queue_search/2 until a later task removes
-  # that module; until then the logic is duplicated there. Uses
+  # This is the shared home for auto-search-on-add. AddMediaLive used to carry
+  # a near-identical private maybe_queue_search/2, but that module was deleted
+  # once Discover absorbed one-click add, so this is the only copy now. Uses
   # Search.queue_auto_searches/1 rather than enqueuing directly: it is already
   # Oban-dedupe-safe (singular insert/1, not insert_all/1) and is what the
   # media detail page uses.

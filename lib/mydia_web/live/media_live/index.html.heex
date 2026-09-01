@@ -43,13 +43,13 @@
         <%= if @current_user && @current_user.role == "guest" do %>
           <%!-- Guest users see request options --%>
           <%= if @filter_type == "movie" do %>
-            <.link navigate={~p"/request/movie"} class="btn btn-primary btn-sm">
+            <.link navigate={~p"/discover?type=movie"} class="btn btn-primary btn-sm">
               <.icon name="hero-paper-airplane" class="w-5 h-5" />
               <span class="hidden sm:inline ml-1">Request Movie</span>
             </.link>
           <% end %>
           <%= if @filter_type == "tv_show" do %>
-            <.link navigate={~p"/request/series"} class="btn btn-primary btn-sm">
+            <.link navigate={~p"/discover?type=tv_show"} class="btn btn-primary btn-sm">
               <.icon name="hero-paper-airplane" class="w-5 h-5" />
               <span class="hidden sm:inline ml-1">Request Series</span>
             </.link>
@@ -57,13 +57,13 @@
         <% else %>
           <%!-- Admin users see add options --%>
           <%= if @filter_type == "movie" do %>
-            <.link navigate={~p"/add/movie"} class="btn btn-primary btn-sm">
+            <.link navigate={~p"/discover?type=movie"} class="btn btn-primary btn-sm">
               <.icon name="hero-plus" class="w-5 h-5" />
               <span class="hidden sm:inline ml-1">Add Movie</span>
             </.link>
           <% end %>
           <%= if @filter_type == "tv_show" do %>
-            <.link navigate={~p"/add/series"} class="btn btn-primary btn-sm">
+            <.link navigate={~p"/discover?type=tv_show"} class="btn btn-primary btn-sm">
               <.icon name="hero-plus" class="w-5 h-5" />
               <span class="hidden sm:inline ml-1">Add Series</span>
             </.link>
@@ -214,14 +214,14 @@
               <%= cond do %>
                 <% @filter_type == "movie" -> %>
                   <.link
-                    navigate={~p"/add/movie?q=#{@search_query}"}
+                    navigate={~p"/discover?#{%{"type" => "movie", "q" => @search_query}}"}
                     class="link link-primary font-semibold"
                   >
                     Add it to your library
                   </.link>
                 <% @filter_type == "tv_show" -> %>
                   <.link
-                    navigate={~p"/add/series?q=#{@search_query}"}
+                    navigate={~p"/discover?#{%{"type" => "tv_show", "q" => @search_query}}"}
                     class="link link-primary font-semibold"
                   >
                     Add it to your library
@@ -231,14 +231,14 @@
                   <span class="block mt-2">
                     Add as
                     <.link
-                      navigate={~p"/add/movie?q=#{@search_query}"}
+                      navigate={~p"/discover?#{%{"type" => "movie", "q" => @search_query}}"}
                       class="link link-primary font-semibold"
                     >
                       Movie
                     </.link>
                     or
                     <.link
-                      navigate={~p"/add/series?q=#{@search_query}"}
+                      navigate={~p"/discover?#{%{"type" => "tv_show", "q" => @search_query}}"}
                       class="link link-primary font-semibold"
                     >
                       TV Series
@@ -250,14 +250,14 @@
               <%= cond do %>
                 <% @filter_type == "movie" -> %>
                   <.link
-                    navigate={~p"/request/movie?q=#{@search_query}"}
+                    navigate={~p"/discover?#{%{"type" => "movie", "q" => @search_query}}"}
                     class="link link-primary font-semibold"
                   >
                     Request it
                   </.link>
                 <% @filter_type == "tv_show" -> %>
                   <.link
-                    navigate={~p"/request/series?q=#{@search_query}"}
+                    navigate={~p"/discover?#{%{"type" => "tv_show", "q" => @search_query}}"}
                     class="link link-primary font-semibold"
                   >
                     Request it

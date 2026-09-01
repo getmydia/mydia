@@ -159,8 +159,6 @@ defmodule MydiaWeb.Router do
       live "/movies/:id", MediaLive.Show, :show
       live "/tv", MediaLive.Index, :tv_shows
       live "/tv/:id", MediaLive.Show, :show
-      live "/add/movie", AddMediaLive.Index, :add_movie
-      live "/add/series", AddMediaLive.Index, :add_series
       live "/import", ImportMediaLive.Index, :index
       live "/review", ImportMediaLive.Index, :index
       live "/search", SearchLive.Index, :index
@@ -176,8 +174,6 @@ defmodule MydiaWeb.Router do
       live "/play/:type/:id", PlaybackLive.Show, :show
 
       # Guest request routes
-      live "/request/movie", RequestMediaLive.Index, :request_movie
-      live "/request/series", RequestMediaLive.Index, :request_series
       live "/requests", MyRequestsLive.Index, :index
 
       # User profile and preferences (merged into one page)

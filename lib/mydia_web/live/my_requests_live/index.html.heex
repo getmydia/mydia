@@ -9,10 +9,10 @@
         </p>
       </div>
       <div class="flex gap-2">
-        <.link navigate={~p"/request/movie"} class="btn btn-primary btn-sm">
+        <.link navigate={~p"/discover?type=movie"} class="btn btn-primary btn-sm">
           <.icon name="hero-plus" class="w-4 h-4" /> Request Movie
         </.link>
-        <.link navigate={~p"/request/series"} class="btn btn-primary btn-sm">
+        <.link navigate={~p"/discover?type=tv_show"} class="btn btn-primary btn-sm">
           <.icon name="hero-plus" class="w-4 h-4" /> Request Series
         </.link>
       </div>
@@ -67,10 +67,10 @@
           <% end %>
         </p>
         <div class="flex gap-2 justify-center">
-          <.link navigate={~p"/request/movie"} class="btn btn-primary">
+          <.link navigate={~p"/discover?type=movie"} class="btn btn-primary">
             <.icon name="hero-plus" class="w-5 h-5" /> Request Movie
           </.link>
-          <.link navigate={~p"/request/series"} class="btn btn-primary">
+          <.link navigate={~p"/discover?type=tv_show"} class="btn btn-primary">
             <.icon name="hero-plus" class="w-5 h-5" /> Request Series
           </.link>
         </div>
