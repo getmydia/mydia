@@ -6,7 +6,4 @@ defmodule Mydia do
   Contexts are also responsible for managing your data, regardless
   if it comes from the database, an external API or others.
   """
-
-  # tmp: forces the server build path in CI so the BuildKit cache fix can be
-  # measured. Reverted before merge.
 end
