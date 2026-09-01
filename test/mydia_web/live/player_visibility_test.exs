@@ -113,4 +113,45 @@ defmodule MydiaWeb.PlayerVisibilityTest do
     refute has_element?(view, "#download-web")
     assert has_element?(view, "#download-card")
   end
+
+  test "the toggle turns the setting on and hides the sidebar pill in the same render", %{
+    conn: conn,
+    user: user
+  } do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+    assert has_element?(view, "#sidebar-player-link")
+
+    view |> element("#hide-player-toggle") |> render_click()
+
+    refute has_element?(view, "#sidebar-player-link")
+    assert UserPreference.hide_player?(Accounts.get_user_preference!(user))
+  end
+
+  test "the toggle turns the setting back off", %{conn: conn, user: user} do
+    :ok = hide_player(user)
+
+    {:ok, view, _html} = live(conn, ~p"/profile")
+    refute has_element?(view, "#sidebar-player-link")
+
+    view |> element("#hide-player-toggle") |> render_click()
+
+    assert has_element?(view, "#sidebar-player-link")
+    refute UserPreference.hide_player?(Accounts.get_user_preference!(user))
+  end
+
+  test "turning the setting off does not bring back a dismissed banner", %{
+    conn: conn,
+    user: user
+  } do
+    {:ok, _} = Accounts.dismiss_player_banner(user)
+    :ok = hide_player(user)
+
+    {:ok, profile, _html} = live(conn, ~p"/profile")
+    profile |> element("#hide-player-toggle") |> render_click()
+
+    {:ok, dashboard, _html} = live(conn, ~p"/")
+
+    refute has_element?(dashboard, "#player-cta-banner")
+    assert has_element?(dashboard, "#sidebar-player-link")
+  end
 end

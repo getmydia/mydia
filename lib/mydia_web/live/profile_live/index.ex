@@ -132,6 +132,22 @@ defmodule MydiaWeb.ProfileLive.Index do
     end
   end
 
+  @impl true
+  def handle_event("toggle_hide_player", _params, socket) do
+    hidden = !socket.assigns.hide_player
+
+    case Accounts.update_preference(socket.assigns.preference, %{"hide_player" => hidden}) do
+      {:ok, preference} ->
+        {:noreply,
+         socket
+         |> assign(:preference, preference)
+         |> assign(:hide_player, hidden)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Failed to update the player setting")}
+    end
+  end
+
   ## Private Helpers
 
   defp password_changeset(params \\ %{}) do
