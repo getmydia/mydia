@@ -45,4 +45,64 @@ defmodule MydiaWeb.ProfileLive.AddDefaultsTest do
     pref = Accounts.get_user_preference!(user)
     assert UserPreference.add_season_monitoring(pref) == nil
   end
+
+  test "saving monitored-on-add as true persists true, not a falsy placeholder",
+       %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    view
+    |> form("#profile-add-defaults-form", %{"add_monitored" => "true"})
+    |> render_change()
+
+    pref = Accounts.get_user_preference!(user)
+    assert UserPreference.add_monitored(pref) == true
+  end
+
+  test "saving monitored-on-add as false persists false, not inherit", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    view
+    |> form("#profile-add-defaults-form", %{"add_monitored" => "false"})
+    |> render_change()
+
+    pref = Accounts.get_user_preference!(user)
+    assert UserPreference.add_monitored(pref) == false
+  end
+
+  test "saving search-on-add as true persists true, not a falsy placeholder",
+       %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    view
+    |> form("#profile-add-defaults-form", %{"add_search_on_add" => "true"})
+    |> render_change()
+
+    pref = Accounts.get_user_preference!(user)
+    assert UserPreference.add_search_on_add(pref) == true
+  end
+
+  test "saving search-on-add as false persists false, not inherit", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    view
+    |> form("#profile-add-defaults-form", %{"add_search_on_add" => "false"})
+    |> render_change()
+
+    pref = Accounts.get_user_preference!(user)
+    assert UserPreference.add_search_on_add(pref) == false
+  end
+
+  test "saving a movie library override persists the id, not the display text",
+       %{conn: conn, user: user} do
+    library = library_path_fixture(%{type: "movies"})
+
+    {:ok, view, _html} = live(conn, ~p"/profile")
+
+    view
+    |> form("#profile-add-defaults-form", %{"add_movie_library_path_id" => library.id})
+    |> render_change()
+
+    pref = Accounts.get_user_preference!(user)
+    assert UserPreference.add_library_path_id(pref, :movie) == library.id
+  end
 end
