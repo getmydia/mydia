@@ -1103,9 +1103,10 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
     })
 
-    {:ok, view, _html} = live(conn, ~p"/import")
+    {:ok, view, html} = live(conn, ~p"/import")
 
     assert has_element?(view, "#band-queued")
+    refute html =~ "Wandering Aurora"
 
     html = view |> element("#band-queued") |> render_click()
     assert html =~ "Wandering Aurora"
@@ -1123,6 +1124,40 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     {:ok, view, _html} = live(conn, ~p"/import")
 
     assert render(view) =~ "Files in this folder match different titles."
+  end
+
+  test "the Queued view offers no Accept, Re-match, Dismiss, or Restore controls", %{conn: conn} do
+    lp = library_path_fixture()
+
+    candidate =
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Wandering Aurora/s01e01.mkv",
+        provider_type: "tvdb",
+        provider_id: "9001",
+        title: "Wandering Aurora",
+        media_type: "tv_show",
+        confidence: 0.95,
+        queued_op: "accept",
+        queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    view |> element("#band-queued") |> render_click()
+    html = render_click(view, "toggle_group", %{"id" => candidate.anchor_key})
+
+    # None of these controls can do anything on the Queued view -- every one
+    # of them requires a row that is not already queued (Accept, Re-match,
+    # Dismiss) or one that is dismissed (Restore), and a queued group is
+    # neither. Regression coverage for the false-positive "Queued 1 group(s)
+    # for import." flash a since-fixed queue_accept/1 asymmetry would have
+    # produced had Accept still been offered here.
+    refute has_element?(view, "#accept-selected")
+    refute has_element?(view, "#rematch-selected")
+    refute has_element?(view, "#dismiss-selected")
+    refute has_element?(view, "#restore-selected")
+    refute html =~ "Queued 1 group(s) for import."
   end
 
   describe "member episode editing" do

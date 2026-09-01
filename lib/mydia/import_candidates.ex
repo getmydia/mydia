@@ -924,7 +924,15 @@ defmodule Mydia.ImportCandidates do
       broadcast(scope.library_path_id)
     end
 
-    {:ok, %{queued: queued, skipped: selected - queued}}
+    # `queued`/`selected` are read before the UPDATE (see above) and so, on a
+    # `"queued"`-status scope, still count groups whose candidates already
+    # carry a `queued_op` -- the UPDATE's own `is_nil(c.queued_op)` guard then
+    # matches zero rows for them. Gating the return on `row_count` (as
+    # `dismiss/1` and `queue_rematch/1` already do) keeps this from reporting
+    # a queue that did not happen.
+    {queued, skipped} = if row_count > 0, do: {queued, selected - queued}, else: {0, selected}
+
+    {:ok, %{queued: queued, skipped: skipped}}
   end
 
   @doc """

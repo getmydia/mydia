@@ -690,6 +690,28 @@ defmodule Mydia.ImportCandidatesTest do
       assert Repo.get!(ImportCandidate, matched.id).queued_at == at
     end
 
+    test "a \"queued\"-status scope reports nothing queued instead of a false success", %{
+      lp: lp,
+      matched: matched
+    } do
+      pending_scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{})
+      {:ok, %{queued: 1}} = ImportCandidates.queue_accept(pending_scope)
+
+      # `matched` is now queued (queued_op: "accept"). Re-running queue_accept/1
+      # against a "queued"-status scope -- the shape the Queued view's own
+      # selection would build -- must not report a second queue that never
+      # happened: eligible_accept_keys/1 still finds it eligible (single
+      # provider, not local), but the UPDATE's own `is_nil(c.queued_op)` guard
+      # matches zero rows for a candidate that is already queued.
+      queued_scope =
+        lp.id |> SelectionScope.new("queued") |> SelectionScope.select_all_matching(%{})
+
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "import_candidates:#{lp.id}")
+
+      assert {:ok, %{queued: 0, skipped: 1}} = ImportCandidates.queue_accept(queued_scope)
+      refute_receive {:import_candidates_changed, _lp_id}
+    end
+
     test "queue_accept_all_matched/1 queues every matched group", %{lp: lp, matched: matched} do
       assert {:ok, %{queued: 1, skipped: 1}} = ImportCandidates.queue_accept_all_matched(lp.id)
       assert Repo.get!(ImportCandidate, matched.id).queued_op == "accept"
