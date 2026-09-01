@@ -3,7 +3,7 @@ defmodule Mydia.Media.AttrsFromMetadata do
   Builds media item attrs from provider metadata.
 
   Lifted out of `MydiaWeb.SearchLive.Index`, where these were private
-  functions inside a 1500-line LiveView with no way to test them: its own
+  functions inside a large LiveView with no way to test them: its own
   add-to-library test is skipped for want of metadata mocking. They also read
   only `monitor_by_default` and set neither quality profile nor library path,
   so a title created by grabbing a release came out configured differently

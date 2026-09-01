@@ -12,6 +12,7 @@ defmodule Mydia.Media.AttrsFromMetadataTest do
       original_title: "Quiet Harbour",
       year: 2021,
       release_date: "2021-04-02",
+      first_air_date: nil,
       provider_id: "9001",
       provider: :tmdb
     }
@@ -59,6 +60,38 @@ defmodule Mydia.Media.AttrsFromMetadataTest do
       assert attrs.tvdb_id == "9001"
       assert attrs.type == "tv_show"
     end
+
+    test "falls back to the year embedded in a %Date{} release_date" do
+      meta = %{metadata() | year: nil, release_date: ~D[2021-04-02]}
+
+      attrs = AttrsFromMetadata.from_metadata(meta, :movie)
+
+      assert attrs.year == 2021
+    end
+
+    test "falls back to the year embedded in a binary release_date" do
+      meta = %{metadata() | year: nil, release_date: "2021-04-02"}
+
+      attrs = AttrsFromMetadata.from_metadata(meta, :movie)
+
+      assert attrs.year == 2021
+    end
+
+    test "falls back to first_air_date for a tv show when release_date is absent" do
+      meta = %{metadata() | year: nil, release_date: nil, first_air_date: ~D[2019-09-15]}
+
+      attrs = AttrsFromMetadata.from_metadata(meta, :tv_show)
+
+      assert attrs.year == 2019
+    end
+
+    test "leaves year nil when metadata has no year and no dates" do
+      meta = %{metadata() | year: nil, release_date: nil, first_air_date: nil}
+
+      attrs = AttrsFromMetadata.from_metadata(meta, :movie)
+
+      assert attrs.year == nil
+    end
   end
 
   describe "from_parsed/3" do
@@ -87,6 +120,15 @@ defmodule Mydia.Media.AttrsFromMetadataTest do
       attrs = AttrsFromMetadata.from_parsed(parsed, metadata())
 
       assert attrs.library_path_id == library.id
+    end
+
+    test "falls back to the parsed year when metadata has no year and no dates" do
+      meta = %{metadata() | year: nil, release_date: nil, first_air_date: nil}
+      parsed = %{type: :movie, title: "quiet.harbour.2021", year: 2021}
+
+      attrs = AttrsFromMetadata.from_parsed(parsed, meta)
+
+      assert attrs.year == 2021
     end
   end
 end
