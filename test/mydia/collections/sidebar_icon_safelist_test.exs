@@ -13,7 +13,7 @@ defmodule Mydia.Collections.SidebarIconSafelistTest do
 
   @app_css "assets/css/app.css"
 
-  test "every allowlisted sidebar icon is safelisted in app.css" do
+  test "the sidebar icon allowlist and the app.css safelist agree exactly" do
     css = File.read!(@app_css)
 
     safelisted =
@@ -27,14 +27,22 @@ defmodule Mydia.Collections.SidebarIconSafelistTest do
           []
       end
 
-    missing = Collection.valid_sidebar_icons() -- safelisted
+    expected = Collection.valid_sidebar_icons()
+    missing = expected -- safelisted
+    stale = safelisted -- expected
 
-    assert missing == [],
+    assert missing == [] and stale == [],
            """
-           These sidebar icons are offered in the UI but never emitted by
-           Tailwind, so they render as blank boxes: #{inspect(missing)}
+           The sidebar icon allowlist and the #{@app_css} safelist have drifted.
 
-           Add them to the @source inline("hero-{...}") safelist in #{@app_css}.
+           Offered in the UI but never emitted by Tailwind, so they render as
+           blank boxes: #{inspect(missing)}
+
+           Safelisted but no longer offered, so the safelist is carrying dead
+           entries: #{inspect(stale)}
+
+           The allowlist is @sidebar_icons in lib/mydia/collections/collection.ex;
+           the safelist is the @source inline("hero-{...}") line in #{@app_css}.
            """
   end
 end
