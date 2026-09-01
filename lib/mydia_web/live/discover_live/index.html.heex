@@ -14,13 +14,18 @@
         <%!-- Search --%>
         <form id="discover-search-form" phx-submit="search" class="flex items-center gap-2">
           <label class="input input-bordered input-sm flex items-center gap-2 flex-1 max-w-md">
-            <.icon name="hero-magnifying-glass" class="w-4 h-4 opacity-60" />
+            <.icon name="hero-magnifying-glass" class="w-4 h-4 opacity-60" aria-hidden="true" />
             <input
               id="discover-search-input"
               type="text"
               name="q"
               value={@search_query}
               placeholder={
+                if @media_type == :movie,
+                  do: "Search for a movie to add",
+                  else: "Search for a show to add"
+              }
+              aria-label={
                 if @media_type == :movie,
                   do: "Search for a movie to add",
                   else: "Search for a show to add"

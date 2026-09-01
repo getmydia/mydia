@@ -42,7 +42,7 @@ defmodule MydiaWeb.DiscoverLive.SearchTest do
 
     assert has_element?(view, "#discover-search-chip")
     assert has_element?(view, "#discover-search-clear")
-    refute has_element?(view, "[role=tablist] button", "Trending")
+    refute has_element?(view, "[role=tablist]")
   end
 
   test "clearing the search returns to browse mode", %{conn: conn} do
