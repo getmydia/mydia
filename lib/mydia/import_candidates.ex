@@ -270,8 +270,20 @@ defmodule Mydia.ImportCandidates do
     ImportCandidate
     |> where([c], c.library_path_id == ^library_path_id)
     |> filter_status(status)
-    # `library_path_id` is constant across every row here (the WHERE clause
-    # above already pins it), but PostgreSQL still requires a plain
+    |> aggregate_group_query()
+    |> apply_band(Keyword.get(opts, :band))
+    |> apply_search(Keyword.get(opts, :q))
+  end
+
+  # The anchor-key rollup `group_query/2` and `queued_group/3` both build on:
+  # groups an already-scoped base query by anchor, aggregating `count(id)`,
+  # `min(confidence)`, and `count(distinct provider_id)` alongside
+  # representative (`max/1`) provider/title/type values. Every row this
+  # returns is a plain map; convert it with the private `to_group/2`.
+  defp aggregate_group_query(query) do
+    query
+    # `library_path_id` is constant across every row here (the caller's WHERE
+    # clause already pins it), but PostgreSQL still requires a plain
     # (non-aggregate) selected column to appear in GROUP BY -- SQLite is
     # lenient about this and would let it through unmodified, so leaving it
     # out here would work in dev/test on SQLite and break on PostgreSQL.
@@ -290,8 +302,6 @@ defmodule Mydia.ImportCandidates do
       queued_op: max(c.queued_op),
       queue_error: max(c.queue_error)
     })
-    |> apply_band(Keyword.get(opts, :band))
-    |> apply_search(Keyword.get(opts, :q))
   end
 
   # Three mutually exclusive states over two nullable columns. A queued row is
@@ -439,6 +449,39 @@ defmodule Mydia.ImportCandidates do
       nil -> nil
       row -> to_group(row, status)
     end
+  end
+
+  # One anchor's aggregate row, scoped to rows queued for exactly `op` --
+  # unlike `get_group(..., status: "queued")`, which matches *any* queued_op
+  # via `filter_status/2`. An anchor can carry rows queued for different ops
+  # at once (a scan can insert a pending row under an already-queued anchor,
+  # and a second `queued_op` value queues its own subset later), so computing
+  # one op's promotion eligibility (`provider_id`, `provider_count`,
+  # `provider_type`) from the broader "any queued_op" aggregate would compute
+  # it over a superset of what actually gets promoted. Kept separate from
+  # `get_group/3` rather than folded into it, since `get_group/3` has other
+  # callers that depend on its existing `:status` semantics.
+  defp queued_group(library_path_id, anchor_key, op) do
+    library_path_id
+    |> queued_query(op)
+    |> where([c], c.anchor_key == ^anchor_key)
+    |> aggregate_group_query()
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      row -> to_group(row, "queued")
+    end
+  end
+
+  # The op predicate every queued-drain query shares: undismissed rows on one
+  # library path, queued for exactly one op. Never loosen this to "any
+  # queued_op" the way `filter_status(query, "queued")` is for the review
+  # page's status filter -- an anchor can hold rows queued for different ops
+  # at once, and each op's drain must see only its own subset.
+  defp queued_query(library_path_id, op) do
+    ImportCandidate
+    |> where([c], c.library_path_id == ^library_path_id and c.queued_op == ^op)
+    |> where([c], is_nil(c.dismissed_at))
   end
 
   defp apply_cursor(query, nil), do: query
@@ -915,7 +958,7 @@ defmodule Mydia.ImportCandidates do
     do: {:error, :local_show}
 
   defp accept_group(%ImportCandidateGroup{library_path_id: lp_id, anchor_key: key}, opts) do
-    case load_queued_members(lp_id, key) do
+    case load_queued_members(lp_id, key, "accept") do
       [] ->
         {:error, :empty_group}
 
@@ -925,14 +968,20 @@ defmodule Mydia.ImportCandidates do
     end
   end
 
-  # Only the rows the user actually queued. A mixed anchor (queued rows plus a
-  # newcomer a concurrent scan inserted) must promote exactly the queued set,
-  # which is the set `get_group/3` computed the group's eligibility from. The
-  # newcomer stays pending and shows up in the review list on the next pass.
-  defp load_queued_members(library_path_id, anchor_key) do
+  # Only the rows queued for `op`. A mixed anchor (rows queued for `op` plus
+  # either a pending newcomer a concurrent scan inserted, or rows queued for a
+  # different op) must promote exactly its own op's subset, which is the set
+  # `queued_group/3` computed the group's eligibility from. Everything else
+  # stays put and shows up under its own status on the next pass.
+  #
+  # Filtering in memory rather than in SQL is deliberate: `load_all_members/2`
+  # already pages the anchor in bounded chunks and hands back the full
+  # membership, and a mixed anchor holds at most a handful of rows outside
+  # `op`.
+  defp load_queued_members(library_path_id, anchor_key, op) do
     library_path_id
     |> load_all_members(anchor_key)
-    |> Enum.filter(&(&1.queued_op == "accept"))
+    |> Enum.filter(&(&1.queued_op == op))
   end
 
   @doc """
@@ -1006,7 +1055,7 @@ defmodule Mydia.ImportCandidates do
   end
 
   defp promote_queued_anchor(library_path_id, anchor_key, opts, acc) do
-    case get_group(library_path_id, anchor_key, status: "queued") do
+    case queued_group(library_path_id, anchor_key, "accept") do
       nil ->
         # The rows went away mid-drain, which clear_for_library/1 and
         # delete_missing/3 can both do. There is nothing left to promote, so
@@ -1048,9 +1097,8 @@ defmodule Mydia.ImportCandidates do
   end
 
   defp queued_anchor_keys(library_path_id, op, limit) do
-    ImportCandidate
-    |> where([c], c.library_path_id == ^library_path_id and c.queued_op == ^op)
-    |> where([c], is_nil(c.dismissed_at))
+    library_path_id
+    |> queued_query(op)
     |> distinct(true)
     |> order_by([c], asc: c.anchor_key)
     |> select([c], c.anchor_key)
@@ -1059,18 +1107,17 @@ defmodule Mydia.ImportCandidates do
   end
 
   defp queued_count(library_path_id, op) do
-    ImportCandidate
-    |> where([c], c.library_path_id == ^library_path_id and c.queued_op == ^op)
-    |> where([c], is_nil(c.dismissed_at))
+    library_path_id
+    |> queued_query(op)
     |> Repo.aggregate(:count)
   end
 
   defp clear_queue_marker(library_path_id, anchor_key, op, error) do
     now = now()
 
-    ImportCandidate
-    |> where([c], c.library_path_id == ^library_path_id and c.anchor_key == ^anchor_key)
-    |> where([c], c.queued_op == ^op)
+    library_path_id
+    |> queued_query(op)
+    |> where([c], c.anchor_key == ^anchor_key)
     |> Repo.update_all(set: [queued_op: nil, queued_at: nil, queue_error: error, updated_at: now])
   end
 

@@ -164,6 +164,59 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert Repo.get(ImportCandidate, newcomer.id)
     end
 
+    test "an anchor queued for both accept and rematch promotes only the accept-queued row" do
+      lp = library_path_fixture(%{type: "series"})
+
+      accepted =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: "9001",
+          title: "Wandering Aurora",
+          media_type: "tv_show",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+        |> queue()
+
+      # A different provider_id under the same anchor. If eligibility were
+      # ever computed over every queued_op at once (rather than "accept"
+      # alone), this row's presence would flip provider_count to 2 and the
+      # accepted row would wrongly be refused as :conflicting_providers.
+      rematching =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wandering Aurora/s01e02.mkv",
+          provider_type: "tvdb",
+          provider_id: "9002",
+          title: "Wandering Aurora (uncertain)",
+          media_type: "tv_show",
+          confidence: 0.4
+        })
+
+      assert rematching.anchor_key == accepted.anchor_key
+
+      rematching
+      |> Ecto.Changeset.change(%{
+        queued_op: "rematch",
+        queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+      |> Repo.update!()
+
+      assert {:ok, %{promoted: 1, remaining: 0}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      refute Repo.get(ImportCandidate, accepted.id)
+
+      reloaded_rematching = Repo.get!(ImportCandidate, rematching.id)
+      assert reloaded_rematching.queued_op == "rematch"
+      assert is_nil(reloaded_rematching.queue_error)
+    end
+
     test "a library with nothing queued is a no-op" do
       lp = library_path_fixture(%{type: "series"})
 
