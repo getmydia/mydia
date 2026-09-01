@@ -1291,34 +1291,22 @@ defmodule Mydia.Library do
                  new_files: created_count,
                  deleted_files: trashed_count,
                  matched: matched_count,
-                 errors: create_errors
+                 errors: create_errors,
+                 scan_errors: scan_result.errors
                }}
 
             {:error, :not_found} ->
-              # Directory no longer exists — trash all files for the series
-              existing_files =
-                get_media_files_for_item(media_item_id,
-                  preload: [:library_path],
-                  include_extras: true
-                )
-
-              trashed_count =
-                Enum.count(existing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
-
-              Logger.info("Series directory missing, trashed all files",
+              # A base directory that will not resolve is a failed scan, not
+              # proof the library is empty. This branch used to trash every
+              # file for the item, which physically moved the bytes of any
+              # file that was still there: an unmounted share or a renamed
+              # folder emptied the item (#653).
+              Logger.error("Re-scan base directory could not be read",
                 media_item_id: media_item_id,
-                trashed_files: trashed_count
+                directory: base_directory
               )
 
-              {:ok,
-               %{
-                 new_files: 0,
-                 deleted_files: trashed_count,
-                 matched: 0,
-                 errors: []
-               }}
+              {:error, :scan_failed}
 
             {:error, reason} ->
               Logger.error("Failed to scan directory",
@@ -1480,50 +1468,20 @@ defmodule Mydia.Library do
                  new_files: created_count,
                  deleted_files: trashed_count,
                  matched: matched_count,
-                 errors: create_errors
+                 errors: create_errors,
+                 scan_errors: scan_result.errors
                }}
 
             {:error, :not_found} ->
-              # Directory no longer exists — trash all season files
-              existing_files =
-                get_media_files_for_item(media_item_id,
-                  preload: [:library_path, :episode],
-                  include_extras: true
-                )
-
-              season_existing =
-                Enum.filter(existing_files, fn file ->
-                  cond do
-                    file.episode && file.episode.season_number == season_number ->
-                      true
-
-                    is_nil(file.episode) ->
-                      parsed = FileParser.parse(Path.basename(file.relative_path || ""))
-                      parsed.season == season_number
-
-                    true ->
-                      false
-                  end
-                end)
-
-              trashed_count =
-                Enum.count(season_existing, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
-
-              Logger.info("Season directory missing, trashed season files",
+              # See rescan_series/1: a directory that will not resolve is a
+              # failed scan, never a reason to trash the season's files (#653).
+              Logger.error("Season re-scan base directory could not be read",
                 media_item_id: media_item_id,
                 season: season_number,
-                trashed_files: trashed_count
+                directory: base_directory
               )
 
-              {:ok,
-               %{
-                 new_files: 0,
-                 deleted_files: trashed_count,
-                 matched: 0,
-                 errors: []
-               }}
+              {:error, :scan_failed}
 
             {:error, reason} ->
               Logger.error("Failed to scan directory for season",
@@ -1642,33 +1600,19 @@ defmodule Mydia.Library do
                %{
                  new_files: created_count,
                  deleted_files: trashed_count,
-                 errors: create_errors
+                 errors: create_errors,
+                 scan_errors: scan_result.errors
                }}
 
             {:error, :not_found} ->
-              # Directory no longer exists — trash all files for the movie
-              existing_files =
-                get_media_files_for_item(media_item_id,
-                  preload: [:library_path],
-                  include_extras: true
-                )
-
-              trashed_count =
-                Enum.count(existing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
-
-              Logger.info("Movie directory missing, trashed all files",
+              # See rescan_series/1: a directory that will not resolve is a
+              # failed scan, never a reason to trash the movie's files (#653).
+              Logger.error("Movie re-scan base directory could not be read",
                 media_item_id: media_item_id,
-                trashed_files: trashed_count
+                directory: base_directory
               )
 
-              {:ok,
-               %{
-                 new_files: 0,
-                 deleted_files: trashed_count,
-                 errors: []
-               }}
+              {:error, :scan_failed}
 
             {:error, reason} ->
               Logger.error("Failed to scan directory",

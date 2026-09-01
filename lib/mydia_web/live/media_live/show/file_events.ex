@@ -769,6 +769,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
 
     parts = parts ++ ["refreshed metadata for #{refreshed} file(s)"]
 
+    scan_errors = Map.get(scan_result, :scan_errors, [])
+
+    parts =
+      if Enum.empty?(scan_errors),
+        do: parts,
+        else: parts ++ ["#{length(scan_errors)} file(s) could not be read"]
+
     parts =
       if Enum.empty?(scan_result.errors),
         do: parts,
