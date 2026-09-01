@@ -11,6 +11,27 @@
     <%!-- Controls card --%>
     <div class="card bg-base-100 shadow-sm">
       <div class="card-body p-3 md:p-4 space-y-3">
+        <%!-- Search --%>
+        <form id="discover-search-form" phx-submit="search" class="flex items-center gap-2">
+          <label class="input input-bordered input-sm flex items-center gap-2 flex-1 max-w-md">
+            <.icon name="hero-magnifying-glass" class="w-4 h-4 opacity-60" />
+            <input
+              id="discover-search-input"
+              type="text"
+              name="q"
+              value={@search_query}
+              placeholder={
+                if @media_type == :movie,
+                  do: "Search for a movie to add",
+                  else: "Search for a show to add"
+              }
+              class="grow"
+              autocomplete="off"
+            />
+          </label>
+          <button type="submit" class="btn btn-sm btn-primary">Search</button>
+        </form>
+
         <%!-- Media type toggle + category tabs --%>
         <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
           <div id="discover-view-controls" class="flex flex-wrap items-center gap-3">
@@ -34,26 +55,41 @@
             <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
           </div>
 
-          <div role="tablist" class="tabs tabs-box w-fit">
-            <%= for {cat_key, cat_label} <- @categories do %>
+          <%= if @search_mode do %>
+            <div id="discover-search-chip" class="badge badge-lg gap-2">
+              Results for "{@search_query}"
+              <button
+                id="discover-search-clear"
+                type="button"
+                phx-click="clear_search"
+                class="btn btn-ghost btn-xs btn-circle"
+                aria-label="Clear search"
+              >
+                <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          <% else %>
+            <div role="tablist" class="tabs tabs-box w-fit">
+              <%= for {cat_key, cat_label} <- @categories do %>
+                <button
+                  role="tab"
+                  phx-click="switch_category"
+                  phx-value-category={cat_key}
+                  class={["tab tab-sm", @category == cat_key && "tab-active"]}
+                >
+                  {cat_label}
+                </button>
+              <% end %>
               <button
                 role="tab"
                 phx-click="switch_category"
-                phx-value-category={cat_key}
-                class={["tab tab-sm", @category == cat_key && "tab-active"]}
+                phx-value-category="discover"
+                class={["tab tab-sm gap-1", @category == :discover && "tab-active"]}
               >
-                {cat_label}
+                <.icon name="hero-adjustments-horizontal" class="w-3.5 h-3.5" /> Custom
               </button>
-            <% end %>
-            <button
-              role="tab"
-              phx-click="switch_category"
-              phx-value-category="discover"
-              class={["tab tab-sm gap-1", @category == :discover && "tab-active"]}
-            >
-              <.icon name="hero-adjustments-horizontal" class="w-3.5 h-3.5" /> Custom
-            </button>
-          </div>
+            </div>
+          <% end %>
         </div>
 
         <%!-- Filter controls — only visible in custom/discover mode --%>
