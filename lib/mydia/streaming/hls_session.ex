@@ -408,6 +408,7 @@ defmodule Mydia.Streaming.HlsSession do
           start_number: first_index,
           grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate),
           absolute_timestamps: playlist_mode == :full,
+          playlist_mode: playlist_mode,
           audio_language: playback.audio_language,
           show_audio_language: playback.show_audio_language
         ]
@@ -611,6 +612,16 @@ defmodule Mydia.Streaming.HlsSession do
       when generation != current do
     # A dead backend's final poll. Its indices belong to a window that has
     # already been replaced.
+    {:noreply, state}
+  end
+
+  # A :window session has no TranscodeWindow to mark ready and no segment
+  # waiters to answer (see start_backend/6, which no longer wires on_segments
+  # for this mode). This clause is defence in depth: TranscodeWindow.mark_ready/2
+  # pattern-matches %TranscodeWindow{} in its head, so a nil window here would
+  # crash the whole session GenServer the moment any caller re-introduces the
+  # callback for :window sessions.
+  def handle_cast({:segments_ready, _generation, _indices}, %{window: nil} = state) do
     {:noreply, state}
   end
 
@@ -835,6 +846,11 @@ defmodule Mydia.Streaming.HlsSession do
           else: []
         )
 
+    # Only a :full session has a TranscodeWindow to mark ready, so only wire
+    # the callback that reports segment completion for that mode. A :window
+    # session has no window and no segment waiters, so notify_segments would
+    # be pure overhead even if handle_cast tolerated a nil window (see the
+    # {segments_ready, _, _} clause guarding on `window: nil` below).
     transcoder_opts =
       base_opts ++
         [
@@ -867,11 +883,17 @@ defmodule Mydia.Streaming.HlsSession do
           end,
           on_error: fn error ->
             Logger.error("FFmpeg transcoding error for #{absolute_path}: #{error}")
-          end,
-          on_segments: fn indices ->
-            __MODULE__.notify_segments(session_pid, generation, indices)
           end
-        ]
+        ] ++
+        if Keyword.get(opts, :playlist_mode) == :full do
+          [
+            on_segments: fn indices ->
+              __MODULE__.notify_segments(session_pid, generation, indices)
+            end
+          ]
+        else
+          []
+        end
 
     # Overridable per-session so a test can drive relocation without spawning
     # real FFmpeg (see test/mydia/streaming/hls_session_segments_test.exs).
