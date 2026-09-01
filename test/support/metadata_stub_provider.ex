@@ -278,11 +278,10 @@ defmodule Mydia.MetadataStubProvider do
     }
   end
 
-  # provider: :tvdb is load-bearing for `series_search_result/0` even though
-  # `MediaRequestHelpers.handle_request_media/3` does not currently branch on
-  # it (it always stores the id as tmdb_id, see the guest-request tv lifecycle
-  # tests skipped for this reason). Kept `:tvdb` rather than `:metadata_relay`
-  # so those tests read correctly once that gap is closed.
+  # provider: :tvdb is load-bearing for `series_search_result/0`:
+  # `MediaRequestHelpers.handle_request_media/3` branches on it to store the
+  # id under tvdb_id rather than tmdb_id for a TV show request. See the
+  # guest-request tv lifecycle tests in guest_request_flow_test.exs.
   defp series_search_result do
     %SearchResult{
       provider_id: to_string(@series_tvdb_id),

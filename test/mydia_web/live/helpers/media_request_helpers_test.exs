@@ -2,6 +2,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
   use Mydia.DataCase, async: true
 
   alias Mydia.{Accounts, MediaRequests}
+  alias Mydia.Media.MediaRequest
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
   defp guest do
@@ -20,6 +21,10 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
 
   defp item(tmdb_id, title \\ "Card Movie") do
     %{provider_id: to_string(tmdb_id), title: title, year: 2024}
+  end
+
+  defp tvdb_item(tvdb_id, title \\ "Card Series") do
+    %{provider_id: to_string(tvdb_id), title: title, year: 2024, provider: :tvdb}
   end
 
   describe "handle_request_media/3" do
@@ -67,6 +72,32 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
 
       assert is_nil(request.poster_path)
     end
+
+    test "stores a TVDB-sourced TV show request under tvdb_id, not tmdb_id" do
+      user = guest()
+      tvdb_id = System.unique_integer([:positive])
+
+      assert {:ok, request, map} =
+               MediaRequestHelpers.handle_request_media(tvdb_item(tvdb_id), :tv_show, user.id)
+
+      assert request.tvdb_id == tvdb_id
+      assert is_nil(request.tmdb_id)
+      assert MediaRequest.external_ref(request) == {:tvdb, tvdb_id}
+      assert map[tvdb_id] == "pending"
+    end
+
+    test "still stores a movie under tmdb_id even when the card is tagged provider: :tvdb" do
+      user = guest()
+      tmdb_id = System.unique_integer([:positive])
+      mistagged_item = Map.put(item(tmdb_id), :provider, :tvdb)
+
+      assert {:ok, request, map} =
+               MediaRequestHelpers.handle_request_media(mistagged_item, :movie, user.id)
+
+      assert request.tmdb_id == tmdb_id
+      assert is_nil(request.tvdb_id)
+      assert map[tmdb_id] == "pending"
+    end
   end
 
   describe "request_status_map/0" do
@@ -87,6 +118,21 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       # rejects duplicates globally, so an enabled button would only error.
       assert MediaRequestHelpers.request_status_map()[tmdb_id] == "pending"
       assert second.id != first.id
+    end
+
+    test "includes a TVDB-sourced pending request" do
+      guest_user = guest()
+      tvdb_id = System.unique_integer([:positive])
+
+      {:ok, _request} =
+        MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "Someone Else's Series",
+          tvdb_id: tvdb_id,
+          requester_id: guest_user.id
+        })
+
+      assert MediaRequestHelpers.request_status_map()[tvdb_id] == "pending"
     end
   end
 

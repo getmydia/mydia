@@ -36,9 +36,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
     @outstanding
     |> Enum.flat_map(&MediaRequests.list_requests(status: &1))
     |> Enum.reduce(%{}, fn request, acc ->
-      case request.tmdb_id do
+      # A request stores exactly one of tmdb_id/tvdb_id (see
+      # handle_request_media/3), so this key is whichever provider it was
+      # made under, matching what enrich_with_request_status/2 looks up.
+      case request.tmdb_id || request.tvdb_id do
         nil -> acc
-        tmdb_id -> Map.put_new(acc, tmdb_id, request.status)
+        provider_id -> Map.put_new(acc, provider_id, request.status)
       end
     end)
   end
@@ -66,19 +69,28 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   @spec handle_request_media(map(), :movie | :tv_show, String.t()) ::
           {:ok, Mydia.Media.MediaRequest.t(), map()} | {:error, term()}
   def handle_request_media(item, media_type, requester_id) do
-    tmdb_id = Add.parse_provider_id(item.provider_id)
+    provider_id = Add.parse_provider_id(item.provider_id)
 
-    attrs = %{
+    base = %{
       media_type: if(media_type == :movie, do: "movie", else: "tv_show"),
       title: item.title,
       year: Map.get(item, :year),
-      tmdb_id: tmdb_id,
       poster_path: Map.get(item, :poster_path),
       requester_id: requester_id
     }
 
+    # A TV show sourced from TVDB stores tvdb_id instead of tmdb_id; every
+    # other case (movies always, TV shows sourced from TMDB) is unchanged.
+    # Mirrors the deleted RequestMediaLive.Index.build_request_attrs/3.
+    attrs =
+      if media_type == :tv_show and Map.get(item, :provider) == :tvdb do
+        Map.put(base, :tvdb_id, provider_id)
+      else
+        Map.put(base, :tmdb_id, provider_id)
+      end
+
     case MediaRequests.create_request(attrs) do
-      {:ok, request} -> {:ok, request, %{tmdb_id => request.status}}
+      {:ok, request} -> {:ok, request, %{provider_id => request.status}}
       {:error, reason} -> {:error, reason}
     end
   end

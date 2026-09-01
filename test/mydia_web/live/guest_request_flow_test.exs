@@ -121,18 +121,16 @@ defmodule MydiaWeb.GuestRequestFlowTest do
   end
 
   describe "tv request lifecycle" do
-    # `MediaRequestHelpers.handle_request_media/3` always stores the provider
-    # id as tmdb_id, even for a `provider: :tvdb` search result. The deleted
-    # `RequestMediaLive.Index.build_request_attrs/3` branched on the result's
-    # provider and stored tvdb_id for exactly this case; that branch was
-    # dropped somewhere between the two implementations, so a TVDB-sourced TV
-    # request is currently misfiled under tmdb_id (and MediaRequests'
-    # tmdb_id-only duplicate checks silently skip it). Skipped rather than
-    # rewritten to match the current behavior, since asserting the buggy
-    # behavior as correct would hide a real defect. Unskip once
-    # handle_request_media/3 is fixed to match build_request_attrs/3's old
-    # provider branching.
-    @tag :skip
+    # `MediaRequestHelpers.handle_request_media/3` used to store the provider
+    # id as tmdb_id unconditionally, even for a `provider: :tvdb` search
+    # result. The deleted `RequestMediaLive.Index.build_request_attrs/3`
+    # branched on the result's provider and stored tvdb_id for exactly this
+    # case; that branch had been dropped somewhere between the two
+    # implementations, so a TVDB-sourced TV request was misfiled under
+    # tmdb_id (and MediaRequests' tmdb_id-only duplicate checks silently
+    # skipped it). handle_request_media/3 now restores that branching, and
+    # check_duplicate_media/1 and check_duplicate_request/1 also check
+    # tvdb_id.
     test "guest submits a series request stored by tvdb id and approval creates the show",
          %{conn: conn, guest: guest, admin: admin} do
       warm_genre_cache(:tv_show, [])

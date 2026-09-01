@@ -63,12 +63,11 @@ defmodule MydiaWeb.RequestMediaPosterTest do
     assert request.poster_path == "/stub-movie-poster.jpg"
   end
 
-  # `MediaRequestHelpers.handle_request_media/3` always stores the provider id
-  # as tmdb_id, even for this provider: :tvdb search result, so no row is ever
-  # created under tvdb_id (see the identical skip and note in
-  # guest_request_flow_test.exs). Skipped rather than rewritten to assert on
-  # tmdb_id, since that would document the bug as intended behavior.
-  @tag :skip
+  # `MediaRequestHelpers.handle_request_media/3` used to store the provider id
+  # as tmdb_id unconditionally, even for this provider: :tvdb search result,
+  # so no row was ever created under tvdb_id (see the identical note in
+  # guest_request_flow_test.exs). Now fixed to branch on the result's
+  # provider.
   test "a submitted series request carries the search result's poster", %{
     conn: conn,
     guest: guest
