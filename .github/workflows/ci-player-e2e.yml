@@ -339,17 +339,85 @@ jobs:
           echo "Toolbox image: $TOOLBOX"
           echo "Relay image: $RELAY"
 
+      # Two retry granularities, because the two known flakes cost very
+      # different amounts.
+      #
+      # `e2e_relay` intermittently dies at boot with `sys_sigaltstack():
+      # Internal error: Failed to set alternate signal stack` (exit 134)
+      # before any test runs. That was 3 of the 10 failures across the 12
+      # master pushes surveyed on 2026-08-31, and it hit a docs-only PR and a
+      # CI-config PR, so it is environmental, not a code regression. Retrying
+      # startup costs seconds, so it gets 3 attempts.
+      #
+      # A test failure costs a full ~6m30s cycle, so it gets exactly one
+      # retry. The stack is torn down first: the mydia container is seeded at
+      # boot and the tests mutate it, so reusing it would not be a clean
+      # retry.
+      #
+      # A pass on cycle 2 is reported as a warning, not silence. A retried
+      # pass is a flaky run and the log must say so, or this step quietly
+      # hides the regressions the job exists to catch.
       - name: Run player E2E tests
         if: steps.should.outputs.run == 'true'
-        run: |
-          docker compose -f compose.player-e2e.yml up \
-            --abort-on-container-exit \
-            --exit-code-from test
         env:
           E2E_TEST_TARGET: integration_test/all_tests.dart
           MYDIA_E2E_IMAGE: ${{ steps.server.outputs.image }}
           PLAYER_E2E_TOOLBOX_IMAGE: ${{ steps.aux.outputs.toolbox }}
           RELAY_E2E_IMAGE: ${{ steps.aux.outputs.relay }}
+        run: |
+          # The default shell for a `run:` block is `bash -e {0}`, so -e is
+          # already ON. Left alone it aborts the step on the first failing
+          # compose call and no retry ever runs. `set -uo pipefail` does not
+          # turn it off; only `set +e` does.
+          set +e
+          set -uo pipefail
+
+          compose() { docker compose -f compose.player-e2e.yml "$@"; }
+
+          start_deps() {
+            local attempt
+            for attempt in 1 2 3; do
+              echo "::group::Dependency startup attempt ${attempt}/3"
+              if compose up -d --wait relay mydia; then
+                echo "::endgroup::"
+                echo "::notice::Dependencies healthy on attempt ${attempt}/3."
+                return 0
+              fi
+              echo "::endgroup::"
+              echo "::warning::Dependency startup failed on attempt ${attempt}/3."
+              compose logs --no-color relay mydia || true
+              compose down -v || true
+            done
+            return 1
+          }
+
+          for cycle in 1 2; do
+            if ! start_deps; then
+              echo "::error::Dependencies failed to start after 3 attempts (cycle ${cycle}/2)."
+              exit 1
+            fi
+
+            echo "::group::Test cycle ${cycle}/2"
+            compose up --abort-on-container-exit --exit-code-from test test
+            status=$?
+            echo "::endgroup::"
+
+            if [ "$status" -eq 0 ]; then
+              if [ "$cycle" -gt 1 ]; then
+                echo "::warning::Player E2E passed only on cycle ${cycle}. This run is FLAKY, not clean. See e2e-cycle-1-logs.txt in the artifacts."
+              fi
+              exit 0
+            fi
+
+            if [ "$cycle" -lt 2 ]; then
+              echo "::warning::Player E2E failed on cycle 1 (exit ${status}); retrying once from a clean stack."
+              compose logs --no-color > e2e-cycle-1-logs.txt 2>&1 || true
+              compose down -v || true
+            fi
+          done
+
+          echo "::error::Player E2E failed on both cycles."
+          exit 1
 
       - name: Collect service logs
         if: failure() && steps.should.outputs.run == 'true'
@@ -363,10 +431,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: player-e2e-logs
+          # e2e-cycle-1-logs.txt exists only when a first test cycle failed
+          # and was retried. upload-artifact defaults to if-no-files-found:
+          # warn, so its absence is not an error.
           path: |
             mydia-logs.txt
             relay-logs.txt
             test-logs.txt
+            e2e-cycle-1-logs.txt
           retention-days: 7
 
       - name: Cleanup
