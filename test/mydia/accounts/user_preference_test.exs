@@ -88,5 +88,36 @@ defmodule Mydia.Accounts.UserPreferenceTest do
 
       assert UserPreference.add_quality_profile_id(updated) == profile.id
     end
+
+    test "does not re-validate a stale reference when saving an unrelated preference" do
+      user = user_fixture()
+      profile = quality_profile_fixture()
+      pref = Accounts.get_user_preference!(user)
+
+      {:ok, pref} =
+        Accounts.update_preference(pref, %{
+          "preferences" => %{"add_quality_profile_id" => profile.id}
+        })
+
+      # Simulate an admin deleting the profile out of band, after it was
+      # already stored as a valid reference.
+      Mydia.Repo.delete!(profile)
+
+      assert {:ok, updated} = Accounts.update_preference(pref, %{"theme" => "dark"})
+      assert UserPreference.theme(updated) == "dark"
+      assert UserPreference.add_quality_profile_id(updated) == profile.id
+    end
+
+    test "rejects a malformed id instead of raising" do
+      user = user_fixture()
+      pref = Accounts.get_user_preference!(user)
+
+      assert {:error, changeset} =
+               Accounts.update_preference(pref, %{
+                 "preferences" => %{"add_quality_profile_id" => "not-a-uuid"}
+               })
+
+      refute changeset.valid?
+    end
   end
 end

@@ -439,48 +439,71 @@ defmodule Mydia.Accounts do
 
     preference
     |> UserPreference.update_preferences_changeset(delta)
-    |> validate_add_references()
+    |> validate_add_references(delta)
     |> Repo.update()
   end
 
   # The two ID-valued add preferences point at rows, which the schema module
-  # cannot check without pulling Repo into it. A stale value is still tolerated
-  # at read time by `Mydia.Media.AddDefaults`; this only stops a user storing an
-  # ID that was already wrong when they saved it.
-  defp validate_add_references(changeset) do
+  # cannot check without pulling Repo into it. A stale value already stored is
+  # tolerated at read time by `Mydia.Media.AddDefaults`; this only stops a user
+  # storing an ID that is already wrong when they save it.
+  #
+  # Validation reads `delta`, the raw map this call was asked to write, never
+  # the changeset's merged `:preferences` (which also carries every value
+  # already on the row). Checking the merged map would re-validate untouched
+  # keys on every save, so if an admin later deletes a quality profile or
+  # library path a user has stored here, that user's next unrelated
+  # preference update (e.g. a theme change) would fail on a value they are
+  # not even editing.
+  defp validate_add_references(changeset, delta) do
     changeset
-    |> validate_reference("add_quality_profile_id", &quality_profile_exists?/1)
-    |> validate_reference("add_movie_library_path_id", &library_path_exists?/1)
-    |> validate_reference("add_series_library_path_id", &library_path_exists?/1)
+    |> validate_reference(delta, "add_quality_profile_id", &quality_profile_exists?/1)
+    |> validate_reference(delta, "add_movie_library_path_id", &library_path_exists?/1)
+    |> validate_reference(delta, "add_series_library_path_id", &library_path_exists?/1)
   end
 
-  defp validate_reference(changeset, key, exists?) do
-    case Ecto.Changeset.get_change(changeset, :preferences) do
-      prefs when is_map(prefs) ->
-        case Map.get(prefs, key) do
-          nil ->
-            changeset
-
-          "" ->
-            changeset
-
-          id ->
-            if exists?.(id),
-              do: changeset,
-              else: Ecto.Changeset.add_error(changeset, :preferences, "unknown #{key}: #{id}")
-        end
-
-      _ ->
+  defp validate_reference(changeset, delta, key, exists?) do
+    case delta_fetch(delta, key) do
+      nil ->
         changeset
+
+      "" ->
+        changeset
+
+      id ->
+        if exists?.(id),
+          do: changeset,
+          else: Ecto.Changeset.add_error(changeset, :preferences, "unknown #{key}: #{id}")
     end
   end
 
+  # `key` is always one of a handful of literals this module passes in
+  # (never derived from user input), so converting it to check an
+  # atom-keyed delta alongside a string-keyed one carries none of the
+  # unbounded-atom-creation risk `String.to_atom/1` normally has.
+  defp delta_fetch(delta, key) when is_map(delta) do
+    Map.get(delta, key) || Map.get(delta, String.to_atom(key))
+  end
+
+  defp delta_fetch(_delta, _key), do: nil
+
+  # A malformed id cannot be cast to the `:binary_id` column on PostgreSQL,
+  # which raises `Ecto.Query.CastError` inside `Repo.exists?` instead of
+  # returning false. SQLite stores `binary_id` as unconstrained TEXT, so no
+  # cast error fires there; a malformed id there simply matches no row. This
+  # mirrors the adapter split documented in `Mydia.Repo.ForeignKeyGuard`
+  # (lib/mydia/repo/foreign_key_guard.ex) for the identical pattern: a value
+  # the adapter cannot even cast certainly does not exist.
   defp quality_profile_exists?(id) do
     Repo.exists?(from p in Mydia.Settings.QualityProfile, where: p.id == ^id)
+  rescue
+    Ecto.Query.CastError -> false
   end
 
   defp library_path_exists?(id) do
     Repo.exists?(from l in Mydia.Settings.LibraryPath, where: l.id == ^id)
+  rescue
+    Ecto.Query.CastError -> false
   end
 
   @doc """
