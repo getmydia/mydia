@@ -68,6 +68,11 @@ defmodule Mydia.ImportCandidates do
   # allocation, while still being processed as a single logical group.
   @member_page_size 500
   @accept_group_page_size 50
+  @queue_anchor_page_size 25
+
+  # Refusals that will fail identically on every retry, so the marker is cleared
+  # and the reason surfaced instead of burning the retry budget.
+  @terminal_accept_errors [:no_match, :conflicting_providers, :local_show, :empty_group]
 
   @type cursor :: {non_neg_integer(), String.t()}
 
@@ -910,7 +915,7 @@ defmodule Mydia.ImportCandidates do
     do: {:error, :local_show}
 
   defp accept_group(%ImportCandidateGroup{library_path_id: lp_id, anchor_key: key}, opts) do
-    case load_all_members(lp_id, key) do
+    case load_queued_members(lp_id, key) do
       [] ->
         {:error, :empty_group}
 
@@ -919,6 +924,163 @@ defmodule Mydia.ImportCandidates do
         CandidatePromotion.promote_group(candidates, match, opts)
     end
   end
+
+  # Only the rows the user actually queued. A mixed anchor (queued rows plus a
+  # newcomer a concurrent scan inserted) must promote exactly the queued set,
+  # which is the set `get_group/3` computed the group's eligibility from. The
+  # newcomer stays pending and shows up in the review list on the next pass.
+  defp load_queued_members(library_path_id, anchor_key) do
+    library_path_id
+    |> load_all_members(anchor_key)
+    |> Enum.filter(&(&1.queued_op == "accept"))
+  end
+
+  @doc """
+  Promotes every group queued for accept on one library path.
+
+  Discovers its own work from `queued_op`, so a restarted job resumes where it
+  stopped and a second accept queued while this runs is picked up by the same
+  loop. Groups are drained one anchor page at a time; the whole membership of
+  one group still goes to `CandidatePromotion.promote_group/3` in a single call,
+  which is the only transaction boundary here.
+
+  A terminal refusal (no provider match, files matching different titles, a
+  synthetic local show, a group whose rows vanished) clears the marker and
+  records `queue_error`, returning the group to the pending list with an
+  explanation rather than leaving it queued forever. Anything else leaves the
+  marker in place, so `remaining` is non-zero and the worker reports failure for
+  Oban to retry.
+  """
+  @spec drain_accepted(binary(), keyword()) ::
+          {:ok,
+           %{
+             promoted: non_neg_integer(),
+             failed: non_neg_integer(),
+             remaining: non_neg_integer()
+           }}
+  def drain_accepted(library_path_id, opts \\ []) do
+    page_size = Keyword.get(opts, :anchor_page_size, @queue_anchor_page_size)
+
+    result =
+      drain_accepted_pages(
+        library_path_id,
+        opts,
+        page_size,
+        queued_count(library_path_id, "accept"),
+        %{promoted: 0, failed: 0}
+      )
+
+    broadcast(library_path_id)
+    result
+  end
+
+  defp drain_accepted_pages(library_path_id, opts, page_size, remaining_before, acc) do
+    keys = queued_anchor_keys(library_path_id, "accept", page_size)
+
+    if keys == [] do
+      {:ok, Map.put(acc, :remaining, 0)}
+    else
+      acc = Enum.reduce(keys, acc, &promote_queued_anchor(library_path_id, &1, opts, &2))
+
+      # One broadcast per page, not per group: the review page's Queued chip
+      # drains visibly while the job runs, and the LiveView's own burst debounce
+      # keeps that from becoming a re-render storm.
+      broadcast(library_path_id)
+
+      remaining = queued_count(library_path_id, "accept")
+
+      cond do
+        remaining == 0 ->
+          {:ok, Map.put(acc, :remaining, 0)}
+
+        remaining < remaining_before ->
+          drain_accepted_pages(library_path_id, opts, page_size, remaining, acc)
+
+        # No progress: every group on that page failed without clearing its
+        # marker, so another pass would fetch the same anchors and fail
+        # identically. Stop and let the worker's retry handle it.
+        true ->
+          {:ok, Map.put(acc, :remaining, remaining)}
+      end
+    end
+  end
+
+  defp promote_queued_anchor(library_path_id, anchor_key, opts, acc) do
+    case get_group(library_path_id, anchor_key, status: "queued") do
+      nil ->
+        # The rows went away mid-drain, which clear_for_library/1 and
+        # delete_missing/3 can both do. There is nothing left to promote, so
+        # this is not a retryable failure.
+        %{acc | failed: acc.failed + 1}
+
+      group ->
+        promote_queued_group(library_path_id, anchor_key, group, opts, acc)
+    end
+  end
+
+  defp promote_queued_group(library_path_id, anchor_key, group, opts, acc) do
+    case accept_group(group, opts) do
+      {:ok, _media_files} ->
+        %{acc | promoted: acc.promoted + 1}
+
+      {:error, reason} when reason in @terminal_accept_errors ->
+        clear_queue_marker(library_path_id, anchor_key, "accept", queue_error_message(reason))
+        %{acc | failed: acc.failed + 1}
+
+      {:error, reason} ->
+        Logger.warning("A queued import group did not promote, leaving it queued for retry",
+          library_path_id: library_path_id,
+          anchor_key: anchor_key,
+          reason: inspect(reason)
+        )
+
+        %{acc | failed: acc.failed + 1}
+    end
+  rescue
+    error ->
+      Logger.error("Promoting a queued import group raised, leaving it queued for retry",
+        library_path_id: library_path_id,
+        anchor_key: anchor_key,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      %{acc | failed: acc.failed + 1}
+  end
+
+  defp queued_anchor_keys(library_path_id, op, limit) do
+    ImportCandidate
+    |> where([c], c.library_path_id == ^library_path_id and c.queued_op == ^op)
+    |> where([c], is_nil(c.dismissed_at))
+    |> distinct(true)
+    |> order_by([c], asc: c.anchor_key)
+    |> select([c], c.anchor_key)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
+  defp queued_count(library_path_id, op) do
+    ImportCandidate
+    |> where([c], c.library_path_id == ^library_path_id and c.queued_op == ^op)
+    |> where([c], is_nil(c.dismissed_at))
+    |> Repo.aggregate(:count)
+  end
+
+  defp clear_queue_marker(library_path_id, anchor_key, op, error) do
+    now = now()
+
+    ImportCandidate
+    |> where([c], c.library_path_id == ^library_path_id and c.anchor_key == ^anchor_key)
+    |> where([c], c.queued_op == ^op)
+    |> Repo.update_all(set: [queued_op: nil, queued_at: nil, queue_error: error, updated_at: now])
+  end
+
+  defp queue_error_message(:no_match), do: "No provider match to import from."
+
+  defp queue_error_message(:conflicting_providers),
+    do: "Files in this folder match different titles."
+
+  defp queue_error_message(:local_show), do: "Local shows are created directly, not imported."
+  defp queue_error_message(:empty_group), do: "No files left to import."
 
   @doc """
   Accepts every pending provider-matched group for one library path.
