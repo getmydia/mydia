@@ -100,6 +100,21 @@ defmodule Mydia.Collections do
   def claimed_categories(sections) when is_list(sections) do
     sections
     |> Enum.filter(& &1.exclusive)
+    |> pinned_categories()
+  end
+
+  @doc """
+  Returns the category names covered by every pinned section, whether or not
+  that section is exclusive.
+
+  `claimed_categories/1` answers "what has been taken away from Movies and TV".
+  This answers the broader "does a section for these categories already exist",
+  which is what decides whether to stop suggesting the user create one. A
+  non-exclusive section is still a section the user made on purpose.
+  """
+  @spec pinned_categories([Collection.t()]) :: [binary()]
+  def pinned_categories(sections) when is_list(sections) do
+    sections
     |> Enum.flat_map(&section_categories/1)
     |> Enum.uniq()
   end

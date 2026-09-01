@@ -453,5 +453,48 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert created.name == "Anime"
       assert path == "/sections/#{created.id}"
     end
+
+    test "accepting silences the nudge even after the section is removed", %{
+      conn: conn,
+      user: user
+    } do
+      for n <- 1..10 do
+        categorized_media_item_fixture(
+          %{title: "Signal Garden #{n}", type: "tv_show"},
+          :anime_series
+        )
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      {:error, {:live_redirect, %{to: _path}}} =
+        view |> element("#accept-anime-nudge") |> render_click()
+
+      [created] = Collections.list_pinned_sections(user)
+      {:ok, _unpinned} = Collections.unpin_section(user, created)
+
+      {:ok, view2, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view2, "#anime-nudge")
+    end
+
+    test "a non-exclusive anime section silences the nudge", %{
+      conn: conn,
+      user: user,
+      section: section
+    } do
+      for n <- 1..10 do
+        categorized_media_item_fixture(
+          %{title: "Signal Garden #{n}", type: "tv_show"},
+          :anime_series
+        )
+      end
+
+      {:ok, _} = Collections.pin_section(user, section, exclusive: false)
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view, "#anime-nudge")
+    end
   end
 end

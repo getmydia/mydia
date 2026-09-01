@@ -135,10 +135,11 @@ defmodule MydiaWeb.MediaLive.Index do
   defp anime_nudge?(socket) do
     user = socket.assigns.current_user
     anime = Enum.map(Mydia.Media.MediaCategory.anime_categories(), &Atom.to_string/1)
+    pinned = Collections.pinned_categories(socket.assigns[:sections] || [])
 
     cond do
-      Enum.any?(anime, &(&1 in (socket.assigns[:excluded_categories] || []))) -> false
       Accounts.anime_nudge_dismissed?(user) -> false
+      Enum.any?(anime, &(&1 in pinned)) -> false
       true -> Media.count_media_items(category_in: anime) >= @anime_nudge_threshold
     end
   end
@@ -707,6 +708,7 @@ defmodule MydiaWeb.MediaLive.Index do
              sidebar_icon: preset.icon,
              exclusive: preset.exclusive
            ) do
+      Accounts.dismiss_anime_nudge(user)
       {:noreply, push_navigate(socket, to: ~p"/sections/#{pinned.id}")}
     else
       {:error, _changeset} ->
