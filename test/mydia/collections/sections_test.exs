@@ -60,4 +60,155 @@ defmodule Mydia.Collections.SectionsTest do
       assert "hero-sparkles" in Collection.valid_sidebar_icons()
     end
   end
+
+  describe "list_pinned_sections/1" do
+    test "returns only the user's pinned collections, in position order" do
+      user = user_fixture()
+
+      {:ok, second} = pinned(user, "Cartoons", 1, ["cartoon_movie"])
+      {:ok, first} = pinned(user, "Anime", 0, ["anime_movie"])
+      {:ok, _unpinned} = Collections.create_collection(user, plain_attrs("Not Pinned"))
+
+      assert [^first, ^second] = Collections.list_pinned_sections(user)
+    end
+
+    test "does not return another user's pinned collection, even when shared" do
+      owner = admin_user_fixture()
+      other = user_fixture()
+
+      {:ok, collection} = pinned(owner, "Anime", 0, ["anime_movie"])
+      {:ok, _} = Collections.update_collection(owner, collection, %{visibility: "shared"})
+
+      assert Collections.list_pinned_sections(other) == []
+    end
+  end
+
+  describe "claimed_categories/1" do
+    test "returns the categories of an exclusive pure-category section" do
+      user = user_fixture()
+      {:ok, _} = pinned(user, "Anime", 0, ["anime_movie", "anime_series"], exclusive: true)
+
+      assert Enum.sort(Collections.claimed_categories(user)) ==
+               ["anime_movie", "anime_series"]
+    end
+
+    test "returns nothing when the section is not exclusive" do
+      user = user_fixture()
+      {:ok, _} = pinned(user, "Anime", 0, ["anime_movie"], exclusive: false)
+
+      assert Collections.claimed_categories(user) == []
+    end
+
+    test "returns nothing when the rules are not a single category condition" do
+      user = user_fixture()
+
+      rules =
+        ~s({"conditions":[{"field":"category","operator":"in","value":["anime_movie"]},) <>
+          ~s({"field":"year","operator":"gte","value":2020}]})
+
+      {:ok, _} =
+        Collections.create_collection(user, %{
+          name: "Recent Anime",
+          type: "smart",
+          visibility: "private",
+          smart_rules: rules,
+          pinned_position: 0,
+          exclusive: true
+        })
+
+      assert Collections.claimed_categories(user) == []
+    end
+
+    test "returns nothing and does not raise when the rules are unparseable" do
+      user = user_fixture()
+      {:ok, collection} = pinned(user, "Anime", 0, ["anime_movie"], exclusive: true)
+
+      # Bypass the changeset to simulate rules corrupted outside the app.
+      collection
+      |> Ecto.Changeset.change(%{smart_rules: "{not json"})
+      |> Mydia.Repo.update!()
+
+      assert Collections.claimed_categories(user) == []
+    end
+
+    test "ignores category values that are not real categories" do
+      user = user_fixture()
+      {:ok, _} = pinned(user, "Bogus", 0, ["anime_movie", "not_a_category"], exclusive: true)
+
+      assert Collections.claimed_categories(user) == ["anime_movie"]
+    end
+  end
+
+  describe "pin_section/3 and unpin_section/2" do
+    test "pinning appends to the end of the existing sections" do
+      user = user_fixture()
+      {:ok, _} = pinned(user, "Anime", 0, ["anime_movie"])
+
+      {:ok, collection} =
+        Collections.create_collection(user, smart_attrs("Cartoons", ["cartoon_movie"]))
+
+      {:ok, pinned_collection} =
+        Collections.pin_section(user, collection, sidebar_icon: "hero-face-smile")
+
+      assert pinned_collection.pinned_position == 1
+      assert pinned_collection.sidebar_icon == "hero-face-smile"
+    end
+
+    test "unpinning clears the position and exclusivity" do
+      user = user_fixture()
+      {:ok, collection} = pinned(user, "Anime", 0, ["anime_movie"], exclusive: true)
+
+      {:ok, unpinned} = Collections.unpin_section(user, collection)
+
+      assert is_nil(unpinned.pinned_position)
+      assert unpinned.exclusive == false
+      assert Collections.claimed_categories(user) == []
+    end
+  end
+
+  describe "exclusive_eligible?/1" do
+    test "true for a single category-in condition" do
+      user = user_fixture()
+      {:ok, collection} = pinned(user, "Anime", 0, ["anime_movie"])
+
+      assert Collections.exclusive_eligible?(collection)
+    end
+
+    test "false for a manual collection" do
+      user = user_fixture()
+      {:ok, collection} = Collections.create_collection(user, plain_attrs("Manual"))
+
+      refute Collections.exclusive_eligible?(collection)
+    end
+  end
+
+  defp plain_attrs(name) do
+    %{name: name, type: "manual", visibility: "private"}
+  end
+
+  defp smart_attrs(name, categories) do
+    %{
+      name: name,
+      type: "smart",
+      visibility: "private",
+      smart_rules:
+        Jason.encode!(%{
+          "conditions" => [
+            %{"field" => "category", "operator" => "in", "value" => categories}
+          ]
+        })
+    }
+  end
+
+  defp pinned(user, name, position, categories, opts \\ []) do
+    attrs =
+      name
+      |> smart_attrs(categories)
+      |> Map.merge(%{
+        pinned_position: position,
+        exclusive: Keyword.get(opts, :exclusive, false)
+      })
+
+    Collections.create_collection(user, attrs)
+  end
 end
