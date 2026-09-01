@@ -1088,6 +1088,43 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert fetch_group(lp, "readonly-restore", status: "ignored")
   end
 
+  test "queued groups appear under the Queued chip, not the pending list", %{conn: conn} do
+    lp = library_path_fixture()
+
+    import_candidate_fixture(%{
+      library_path_id: lp.id,
+      relative_path: "Wandering Aurora/s01e01.mkv",
+      provider_type: "tvdb",
+      provider_id: "9001",
+      title: "Wandering Aurora",
+      media_type: "tv_show",
+      confidence: 0.95,
+      queued_op: "accept",
+      queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert has_element?(view, "#band-queued")
+
+    html = view |> element("#band-queued") |> render_click()
+    assert html =~ "Wandering Aurora"
+  end
+
+  test "a group that failed to import shows its reason", %{conn: conn} do
+    lp = library_path_fixture()
+
+    import_candidate_fixture(%{
+      library_path_id: lp.id,
+      relative_path: "Split Anchor/a.mkv",
+      queue_error: "Files in this folder match different titles."
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    assert render(view) =~ "Files in this folder match different titles."
+  end
+
   describe "member episode editing" do
     test "renders filename, folder, matched episode badge, and inline S/E inputs", %{conn: conn} do
       lp = library_path_fixture(%{type: "series"})

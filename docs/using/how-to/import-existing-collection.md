@@ -65,6 +65,13 @@ Below the scan controls, results are grouped by folder and filtered into
 chip for anything you have dismissed. Dismissing a result is durable: it
 survives later scans of the same library, and survives **Clear** too.
 
+**Queued** holds the groups whose import is already under way. Accepting a
+selection does not import it on the spot: it hands the work to a background job,
+so you can close the page and the import carries on. Groups leave Queued as they
+finish. A group that could not be imported returns to the main list with a short
+note explaining why, most often because its files match more than one title or
+because no provider recognised them.
+
 **Clear** removes unresolved scan results and finished scan history for the
 selected library so the next scan starts fresh, but it never removes a result
 you have already dismissed -- that decision stays exactly as you left it.

@@ -109,6 +109,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               {:ready, "band-ready", "Ready"},
               {:needs_attention, "band-needs-attention", "Needs attention"},
               {:no_match, "band-no-match", "No match"},
+              {:queued, "band-queued", "Queued"},
               {:ignored, "band-ignored", "Ignored"}
             ]
           }
@@ -322,6 +323,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <span class={["badge badge-sm shrink-0 font-medium", band_class(@band)]}>
           {band_label(@band)}
         </span>
+        <span :if={@group.queued?} class="badge badge-sm badge-info gap-1 shrink-0">
+          <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> Queued
+        </span>
       </div>
 
       <div class="pl-7 sm:pl-9 flex items-center justify-between gap-3 flex-wrap">
@@ -334,6 +338,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             class="badge badge-warning/20 text-warning badge-xs"
           >
             {disagreement_label(@group)}
+          </span>
+          <span :if={@group.queue_error} class="badge badge-warning/20 text-warning badge-xs">
+            {@group.queue_error}
           </span>
         </div>
 
