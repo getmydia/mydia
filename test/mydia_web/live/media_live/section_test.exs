@@ -250,4 +250,87 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       refute has_element?(view, "#section-exclusive-toggle")
     end
   end
+
+  describe "anime nudge" do
+    setup %{user: user, section: section} do
+      # These tests are about a library with no anime section yet. Rebind
+      # :section to the fresh struct: reusing the stale pre-unpin one would let
+      # a later pin_section/3 in the same test see no field-level change (its
+      # in-memory pinned_position/exclusive already matched the intended
+      # values), so Ecto would silently skip persisting them.
+      {:ok, section} = Collections.unpin_section(user, section)
+      %{section: section}
+    end
+
+    test "does not appear below the threshold", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view, "#anime-nudge")
+    end
+
+    test "appears once the library has enough anime", %{conn: conn} do
+      for n <- 1..10 do
+        categorized_media_item_fixture(
+          %{title: "Signal Garden #{n}", type: "tv_show"},
+          :anime_series
+        )
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      assert has_element?(view, "#anime-nudge")
+    end
+
+    test "does not appear when a section already claims anime", %{
+      conn: conn,
+      user: user,
+      section: section
+    } do
+      for n <- 1..10 do
+        categorized_media_item_fixture(
+          %{title: "Signal Garden #{n}", type: "tv_show"},
+          :anime_series
+        )
+      end
+
+      {:ok, _} = Collections.pin_section(user, section, exclusive: true)
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view, "#anime-nudge")
+    end
+
+    test "dismissal survives a remount", %{conn: conn} do
+      for n <- 1..10 do
+        categorized_media_item_fixture(
+          %{title: "Signal Garden #{n}", type: "tv_show"},
+          :anime_series
+        )
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+      view |> element("#dismiss-anime-nudge") |> render_click()
+
+      {:ok, view2, _html} = live(conn, ~p"/tv")
+      refute has_element?(view2, "#anime-nudge")
+    end
+
+    test "accepting creates the anime section", %{conn: conn, user: user} do
+      for n <- 1..10 do
+        categorized_media_item_fixture(
+          %{title: "Signal Garden #{n}", type: "tv_show"},
+          :anime_series
+        )
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      {:error, {:live_redirect, %{to: path}}} =
+        view |> element("#accept-anime-nudge") |> render_click()
+
+      assert [created] = Collections.list_pinned_sections(user)
+      assert created.name == "Anime"
+      assert path == "/sections/#{created.id}"
+    end
+  end
 end

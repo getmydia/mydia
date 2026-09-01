@@ -237,6 +237,29 @@
       </.form>
     </div>
 
+    <div :if={@show_anime_nudge} id="anime-nudge" class="alert alert-info mb-4">
+      <.icon name="hero-sparkles" class="w-5 h-5" />
+      <span>
+        You have a fair bit of anime mixed in here. Want it in its own sidebar section?
+      </span>
+      <div class="flex gap-2">
+        <button
+          id="accept-anime-nudge"
+          phx-click="accept_anime_nudge"
+          class="btn btn-sm btn-primary"
+        >
+          Create Anime section
+        </button>
+        <button
+          id="dismiss-anime-nudge"
+          phx-click="dismiss_anime_nudge"
+          class="btn btn-sm btn-ghost"
+        >
+          No thanks
+        </button>
+      </div>
+    </div>
+
     <div
       :if={@excluded_count > 0 and is_nil(@section)}
       id="excluded-notice"

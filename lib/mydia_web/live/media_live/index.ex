@@ -1,5 +1,6 @@
 defmodule MydiaWeb.MediaLive.Index do
   use MydiaWeb, :live_view
+  alias Mydia.Accounts
   alias Mydia.Media
   alias Mydia.Media.AvailabilityStatus
   alias Mydia.Metadata.Structs.MediaMetadata
@@ -20,6 +21,10 @@ defmodule MydiaWeb.MediaLive.Index do
   @items_per_page 50
   @items_per_scroll 25
   @auto_search_confirm_threshold 50
+
+  # Ten is enough anime to be a nuisance in a mixed list and few enough that a
+  # library with a handful of stray titles is left alone.
+  @anime_nudge_threshold 10
 
   @impl true
   def mount(_params, _session, socket) do
@@ -57,6 +62,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:show_section_settings, false)
      |> assign(:section_form, nil)
      |> assign(:section_exclusive_eligible, false)
+     |> assign(:show_anime_nudge, false)
      |> assign(:show_add_to_collection_modal, false)
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
@@ -73,6 +79,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
     |> assign(:excluded_count, excluded_count(socket, "movie"))
+    |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> load_media_items(reset: true)
   end
 
@@ -81,6 +88,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
     |> assign(:excluded_count, excluded_count(socket, "tv_show"))
+    |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> load_media_items(reset: true)
   end
 
@@ -121,6 +129,17 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:all_visible_ids, MapSet.new())
         |> assign(:has_more, false)
         |> stream(:media_items, [], reset: true)
+    end
+  end
+
+  defp anime_nudge?(socket) do
+    user = socket.assigns.current_user
+    anime = Enum.map(Mydia.Media.MediaCategory.anime_categories(), &Atom.to_string/1)
+
+    cond do
+      Enum.any?(anime, &(&1 in (socket.assigns[:excluded_categories] || []))) -> false
+      Accounts.anime_nudge_dismissed?(user) -> false
+      true -> Media.count_media_items(category_in: anime) >= @anime_nudge_threshold
     end
   end
 
@@ -671,6 +690,34 @@ defmodule MydiaWeb.MediaLive.Index do
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Could not remove the section")}
+    end
+  end
+
+  def handle_event("dismiss_anime_nudge", _params, socket) do
+    Accounts.dismiss_anime_nudge(socket.assigns.current_user)
+    {:noreply, assign(socket, :show_anime_nudge, false)}
+  end
+
+  def handle_event("accept_anime_nudge", _params, socket) do
+    user = socket.assigns.current_user
+    preset = Mydia.Collections.SectionPresets.get("anime")
+
+    with {:ok, collection} <-
+           Collections.create_collection(user, %{
+             name: preset.name,
+             type: "smart",
+             visibility: "private",
+             smart_rules: Jason.encode!(preset.rules)
+           }),
+         {:ok, pinned} <-
+           Collections.pin_section(user, collection,
+             sidebar_icon: preset.icon,
+             exclusive: preset.exclusive
+           ) do
+      {:noreply, push_navigate(socket, to: ~p"/sections/#{pinned.id}")}
+    else
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not create the Anime section")}
     end
   end
 
