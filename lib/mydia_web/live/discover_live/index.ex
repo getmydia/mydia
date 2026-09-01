@@ -326,7 +326,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
       Accounts.update_preference(preference, %{"preferences" => %{"discover_hide_owned" => value}})
     end
 
-    {:noreply, socket |> assign(:hide_owned, value) |> assign_visible_items()}
+    socket =
+      socket
+      |> assign(:hide_owned, value)
+      |> assign_visible_items()
+      |> maybe_auto_advance(0)
+
+    {:noreply, socket}
   end
 
   # Info handlers
