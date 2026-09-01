@@ -380,4 +380,20 @@ defmodule Mydia.Collections.SectionsTest do
       assert Collections.claimed_categories(sections) == ["anime_series"]
     end
   end
+
+  describe "section presets" do
+    test "the anime preset uses an icon with no AI connotation" do
+      preset = Mydia.Collections.SectionPresets.get("anime")
+
+      assert preset.icon == "hero-bolt"
+      assert preset.icon in Collection.valid_sidebar_icons()
+    end
+
+    test "every preset icon is allowlisted" do
+      for preset <- Mydia.Collections.SectionPresets.all() do
+        assert preset.icon in Collection.valid_sidebar_icons(),
+               "#{preset.key} uses #{preset.icon}, which is not allowlisted"
+      end
+    end
+  end
 end
