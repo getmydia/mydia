@@ -303,9 +303,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       ),
                       const SizedBox(width: 4),
                       // LibraryScreen keeps a real app bar on every platform
-                      // (unlike the desktop-suppressed browse screens), so it
+                      // (unlike the desktop-suppressed Home screen), so it
                       // carries its own cast affordance instead of the
-                      // shell's overlay — see AppShell._hasOwnCastButton.
+                      // shell's overlay. See AppShell.needsCastOverlay.
                       CastButton(
                         onPressed: () => pickCastDevice(context, ref),
                       ),

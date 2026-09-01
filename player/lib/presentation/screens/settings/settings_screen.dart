@@ -64,7 +64,7 @@ class SettingsScreen extends ConsumerWidget {
         title: const Text('Settings'),
         // SettingsScreen's app bar is always visible (no desktop
         // suppression), so it carries its own cast affordance instead of
-        // the shell's overlay. See AppShell._hasOwnCastButton.
+        // the shell's overlay. See AppShell.needsCastOverlay.
         actions: [
           CastButton(onPressed: () => pickCastDevice(context, ref)),
           const SizedBox(width: 8),
