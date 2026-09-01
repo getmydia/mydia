@@ -37,7 +37,7 @@ defmodule MydiaWeb.SectionLive.NewTest do
     assert [section] = Collections.list_pinned_sections(user)
     assert section.name == "Anime"
     assert section.exclusive
-    assert section.sidebar_icon == "hero-sparkles"
+    assert section.sidebar_icon == "hero-bolt"
     assert path == "/sections/#{section.id}"
   end
 
