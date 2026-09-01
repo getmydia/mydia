@@ -132,14 +132,14 @@ RUN mix local.hex --force && mix local.rebar --force
 # It CANNOT be changed at runtime - each Docker image is built for a specific database
 ARG DATABASE_TYPE=sqlite
 
-# Build commit hash for development/master builds
-# When set, the version will display as "X.Y.Z*<short-commit>" instead of just "X.Y.Z"
-ARG BUILD_COMMIT=""
+# BUILD_COMMIT is deliberately not declared here. Its value changes on every
+# commit, so setting it at this height makes every RUN below uncacheable. It
+# lives beside BUILD_VERSION just above `mix compile`; the full explanation is
+# in the comment there, and ci.yml fails the build if it moves back up.
 
 # Set build environment
 ENV MIX_ENV=prod
 ENV DATABASE_TYPE=${DATABASE_TYPE}
-ENV BUILD_COMMIT=${BUILD_COMMIT}
 
 # Create app directory
 WORKDIR /app
@@ -178,9 +178,31 @@ COPY plugins ./plugins
 # Copy Flutter build output from flutter-builder stage
 COPY --from=flutter-builder /app/player/build/web ./priv/static/player
 
-# Application version: set by CI from the git tag, defaults to "dev" for local builds
+# Build identity. BUILD_VERSION is set by CI from the git tag and defaults to
+# "dev" for local builds. BUILD_COMMIT is the SHA, set for master and release
+# builds so the version renders as "X.Y.Z*<short-commit>".
+#
+# Both are read at compile time: mix.exs reads BUILD_VERSION for the project
+# version, and Mydia.System captures BUILD_COMMIT into a module attribute. Both
+# also change per build, so this position, below the dependency layers and above
+# `mix compile`, is load-bearing in both directions.
+#
+# Higher is wrong. BuildKit folds a RUN's environment into its ExecOp cache key,
+# while a COPY is a FileOp that ignores it, so a commit-varying ENV above
+# `mix deps.get` and `mix deps.compile` leaves those two permanently uncacheable
+# in ci-docker.yml, release.yml and ci-player-e2e.yml at once. That asymmetry is
+# what hid the bug for so long: the build log showed `COPY mix.exs mix.lock` as
+# CACHED with every RUN beneath it missing, which reads as impossible. Here it
+# costs nothing, because the source COPYs above already vary per commit.
+#
+# Lower is also wrong. `mix release` recompiles nothing, so setting BUILD_COMMIT
+# after `mix compile` leaves Mydia.System's attribute nil and drops the commit
+# suffix from the version and from crash reports, with no build or test failure
+# to catch it. ci.yml guards this placement.
 ARG BUILD_VERSION=""
 ENV BUILD_VERSION=${BUILD_VERSION}
+ARG BUILD_COMMIT=""
+ENV BUILD_COMMIT=${BUILD_COMMIT}
 
 # Compile application (includes building Rust NIFs via Rustler)
 # Cache cargo for Rust NIF compilation

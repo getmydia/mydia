@@ -143,6 +143,60 @@ jobs:
           fi
           exit "$FAIL"
 
+      # BUILD_COMMIT's value changes on every commit, and BuildKit folds a RUN's
+      # environment into its ExecOp cache key while a COPY is a FileOp that
+      # ignores it. Declared above the dependency layers it therefore leaves
+      # `mix deps.get` and `mix deps.compile` permanently uncacheable across
+      # commits, in ci-docker.yml, release.yml and ci-player-e2e.yml at once,
+      # while the build log still reports the COPY above them as CACHED. That
+      # asymmetry hid the bug from the day it was introduced.
+      #
+      # Below `mix compile` is wrong for the opposite reason: Mydia.System
+      # captures BUILD_COMMIT into a module attribute, `mix release` recompiles
+      # nothing, and the commit suffix would disappear from the version and from
+      # crash reports with no build or test failure. Both bounds are checked.
+      #
+      # Comments are blanked rather than deleted, so line numbers survive,
+      # before matching. The Dockerfile comment explaining this rule quotes
+      # every string the guard searches for, which is the same trap the two
+      # guards below already document.
+      - name: Guard the Docker build-identity placement
+        run: |
+          set -euo pipefail
+          scrub="$(mktemp)"
+          sed 's/^[[:space:]]*#.*//' Dockerfile > "$scrub"
+
+          find_line() { grep -nE "$1" "$scrub" | head -1 | cut -d: -f1 || true; }
+
+          deps=$(find_line '^[[:space:]]*mix deps\.compile$')
+          comp=$(find_line '^[[:space:]]*mix compile$')
+          argline=$(find_line '^ARG BUILD_COMMIT')
+          envline=$(find_line '^ENV BUILD_COMMIT')
+
+          FAIL=0
+          for a in "mix deps.compile:$deps" "mix compile:$comp" \
+                   "ARG BUILD_COMMIT:$argline" "ENV BUILD_COMMIT:$envline"; do
+            if [ -z "${a##*:}" ]; then
+              echo "::error::Docker build-identity guard lost its anchor (${a%%:*}); update this step in ci.yml"
+              FAIL=1
+            fi
+          done
+          [ "$FAIL" = 0 ] || exit 1
+
+          for pair in "ARG:$argline" "ENV:$envline"; do
+            kind=${pair%%:*}
+            line=${pair##*:}
+            if [ "$line" -lt "$deps" ]; then
+              echo "::error file=Dockerfile,line=$line::$kind BUILD_COMMIT sits above 'mix deps.compile' (line $deps). Its value changes on every commit, so every RUN below it misses cache in ci-docker.yml, release.yml and ci-player-e2e.yml. Keep it beside BUILD_VERSION, just above 'mix compile'."
+              FAIL=1
+            fi
+            if [ "$line" -gt "$comp" ]; then
+              echo "::error file=Dockerfile,line=$line::$kind BUILD_COMMIT sits below 'mix compile' (line $comp). Mydia.System captures it into a module attribute at compile time and 'mix release' recompiles nothing, so the commit suffix would silently vanish from the version and from crash reports."
+              FAIL=1
+            fi
+          done
+          exit "$FAIL"
+
       # This task runs from devenv's mydia:ecto against a database that may have
       # no tables yet. Booting the supervision tree there is fatal, because
       # ClientHealth.init/1 queries download_client_configs synchronously, and
