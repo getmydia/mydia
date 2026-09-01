@@ -1,12 +1,8 @@
 defmodule Mydia.ImportCandidatesTest do
-  # Some describe blocks swap in Mydia.MetadataStubProvider, a process-global
-  # registration -- see Mydia.MetadataStub's moduledoc for why every test
-  # using it (and therefore this whole module) must run synchronously.
   use Mydia.DataCase, async: false
 
   import Ecto.Query
   import Mydia.MediaFixtures
-  import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
   alias Mydia.ImportCandidates
@@ -519,6 +515,58 @@ defmodule Mydia.ImportCandidatesTest do
       assert {:error, :not_found} = ImportCandidates.create_local_show(lp.id, "missing")
     end
 
+    test "leaves an accept-queued sibling row untouched instead of linking or overwriting it" do
+      lp = library_path_fixture(%{type: "series", path: "/media/Series"})
+
+      # The pending subset of this anchor has no provider match -- what makes
+      # it show up as :no_match and offer "Create show from folder" in the
+      # first place.
+      pending =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "split anchor",
+          relative_path: "Split Anchor/Season 01/ep1.mkv",
+          media_type: "tv_show",
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+
+      # A second file under the same folder that a scan discovered after this
+      # anchor was already queued for accept -- it carries a real provider
+      # match and is eligible for CandidatePromotion.promote_group/3 once the
+      # drain reaches it.
+      queued =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "split anchor",
+          relative_path: "Split Anchor/Season 01/ep2.mkv",
+          media_type: "tv_show",
+          provider_type: "tvdb",
+          provider_id: "9001",
+          title: "Split Anchor",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [2]},
+          queued_op: "accept",
+          queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      assert {:ok, item} = ImportCandidates.create_local_show(lp.id, "split anchor")
+
+      # Only the pending row was linked into the new local show.
+      refute Repo.get(ImportCandidate, pending.id)
+
+      episodes = Repo.all(from(e in Mydia.Media.Episode, where: e.media_item_id == ^item.id))
+      assert length(episodes) == 1
+      assert hd(episodes).episode_number == 1
+
+      # The queued row survived: not linked, not deleted, not overwritten
+      # with the synthetic local provider identity, and still carrying its
+      # own queued_op for the drain to promote normally.
+      reloaded = Repo.get!(ImportCandidate, queued.id)
+      assert reloaded.queued_op == "accept"
+      assert reloaded.provider_type == "tvdb"
+      assert reloaded.provider_id == "9001"
+    end
+
     test "a repeat call against the same anchor is refused instead of creating a second show" do
       lp = library_path_fixture(%{type: "series", path: "/media/Series"})
 
@@ -577,7 +625,7 @@ defmodule Mydia.ImportCandidatesTest do
     end
   end
 
-  describe "rematch/2" do
+  describe "queue_rematch/1 and drain_rematch/2" do
     test "matches selected candidates and writes results back onto them" do
       lp = library_path_fixture(%{type: "series", path: "/media/Series"})
 
@@ -590,9 +638,10 @@ defmodule Mydia.ImportCandidatesTest do
         })
 
       scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["doctor who"])
+      {:ok, _} = ImportCandidates.queue_rematch(scope)
 
       assert {:ok, %{files: 1, failures: 0}} =
-               ImportCandidates.rematch(scope, matcher: Mydia.Library.ParsedInfoMatcher)
+               ImportCandidates.drain_rematch(lp.id, matcher: Mydia.Library.ParsedInfoMatcher)
 
       reloaded = Repo.reload!(candidate)
       assert reloaded.provider_id == "stub"
@@ -609,165 +658,261 @@ defmodule Mydia.ImportCandidatesTest do
         relative_path: "Doctor Who (2005)/Season 01/Doctor Who - S01E01.mkv"
       })
 
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["doctor who"])
+      {:ok, _} = ImportCandidates.queue_rematch(scope)
+
       Phoenix.PubSub.subscribe(Mydia.PubSub, "import_candidates:#{lp.id}")
 
-      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["doctor who"])
-
       assert {:ok, %{files: 0, failures: 1}} =
-               ImportCandidates.rematch(scope, matcher: Mydia.Library.CrashingMatcher)
+               ImportCandidates.drain_rematch(lp.id, matcher: Mydia.Library.CrashingMatcher)
 
       assert_receive {:import_candidates_changed, lp_id}
       assert lp_id == lp.id
     end
   end
 
-  describe "accept/2 and accept_all_matched/2" do
-    setup :setup_metadata_stub
-
-    test "accept/2 promotes a matched group and skips a no-match one" do
-      lp = library_path_fixture(%{type: "movies"})
-
-      movie =
-        media_item_fixture(%{type: "movie", tmdb_id: Mydia.MetadataStubProvider.movie_tmdb_id()})
+  describe "queue_accept/1 and queue_accept_all_matched/1" do
+    setup do
+      lp = library_path_fixture(%{type: "series"})
 
       matched =
         import_candidate_fixture(%{
           library_path_id: lp.id,
-          anchor_key: "matched",
-          media_type: "movie",
-          provider_type: "tmdb",
-          provider_id: to_string(movie.tmdb_id),
-          title: movie.title,
-          year: movie.year,
-          confidence: 0.95,
-          parsed_info: %{"type" => "movie"}
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: "9001",
+          title: "Wandering Aurora",
+          media_type: "tv_show",
+          confidence: 0.95
         })
 
       unmatched =
         import_candidate_fixture(%{
           library_path_id: lp.id,
-          anchor_key: "unmatched",
-          media_type: "movie",
-          parsed_info: %{"type" => "movie"}
+          relative_path: "Unknown Folder/file.mkv"
         })
 
-      scope =
-        lp.id |> SelectionScope.new() |> SelectionScope.select_page(["matched", "unmatched"])
-
-      assert {:ok, %{accepted: 1, skipped: 1}} =
-               ImportCandidates.accept(scope, config: Mydia.Metadata.default_relay_config())
-
-      refute Repo.get(ImportCandidate, matched.id)
-      assert Repo.get(ImportCandidate, unmatched.id)
-      assert Repo.exists?(from(f in MediaFile, where: f.media_item_id == ^movie.id))
+      %{lp: lp, matched: matched, unmatched: unmatched}
     end
 
-    test "accept_all_matched/2 imports every matched group and excludes no-match groups" do
-      lp = library_path_fixture(%{type: "movies"})
-
-      movie =
-        media_item_fixture(%{type: "movie", tmdb_id: Mydia.MetadataStubProvider.movie_tmdb_id()})
-
-      import_candidate_fixture(%{
-        library_path_id: lp.id,
-        anchor_key: "matched",
-        media_type: "movie",
-        provider_type: "tmdb",
-        provider_id: to_string(movie.tmdb_id),
-        title: movie.title,
-        year: movie.year,
-        confidence: 0.95,
-        parsed_info: %{"type" => "movie"}
-      })
-
-      import_candidate_fixture(%{
-        library_path_id: lp.id,
-        anchor_key: "unmatched",
-        media_type: "movie",
-        parsed_info: %{"type" => "movie"}
-      })
-
-      assert {:ok, %{accepted: 1, skipped: 1}} =
-               ImportCandidates.accept_all_matched(lp.id,
-                 config: Mydia.Metadata.default_relay_config()
-               )
-
-      assert {[group], nil} = ImportCandidates.page(lp.id)
-      assert group.anchor_key == "unmatched"
-    end
-
-    test "accept and import-all both reject a group with conflicting providers" do
-      lp = library_path_fixture(%{type: "movies"})
-      first_movie = media_item_fixture(%{type: "movie", tmdb_id: 61_001})
-      second_movie = media_item_fixture(%{type: "movie", tmdb_id: 61_002})
-
-      first =
-        import_candidate_fixture(%{
-          library_path_id: lp.id,
-          anchor_key: "conflict",
-          relative_path: "Conflict/a.mkv",
-          media_type: "movie",
-          provider_type: "tmdb",
-          provider_id: to_string(first_movie.tmdb_id),
-          confidence: 1.0,
-          parsed_info: %{"type" => "movie"}
-        })
-
-      second =
-        import_candidate_fixture(%{
-          library_path_id: lp.id,
-          anchor_key: "conflict",
-          relative_path: "Conflict/b.mkv",
-          media_type: "movie",
-          provider_type: "tmdb",
-          provider_id: to_string(second_movie.tmdb_id),
-          confidence: 1.0,
-          parsed_info: %{"type" => "movie"}
-        })
-
-      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page(["conflict"])
-
-      assert {:ok, %{accepted: 0, skipped: 1}} = ImportCandidates.accept(scope)
-      assert {:ok, %{accepted: 0, skipped: 1}} = ImportCandidates.accept_all_matched(lp.id)
-
-      assert Repo.get(ImportCandidate, first.id)
-      assert Repo.get(ImportCandidate, second.id)
-      refute Repo.exists?(MediaFile)
-    end
-
-    test "accept keyset-pages selected groups instead of materializing the full selection" do
-      lp = library_path_fixture(%{type: "movies"})
-      movie = media_item_fixture(%{type: "movie", tmdb_id: 61_003})
-
-      for n <- 1..5 do
-        import_candidate_fixture(%{
-          library_path_id: lp.id,
-          anchor_key: "movie-#{n}",
-          relative_path: "Movie #{n}/movie.mkv",
-          media_type: "movie",
-          provider_type: "tmdb",
-          provider_id: to_string(movie.tmdb_id),
-          title: movie.title,
-          year: movie.year,
-          confidence: 1.0,
-          parsed_info: %{"type" => "movie"}
-        })
-      end
-
-      parent = self()
+    test "marks matched groups and skips unmatched ones", %{
+      lp: lp,
+      matched: matched,
+      unmatched: unmatched
+    } do
       scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{})
 
-      assert {:ok, %{accepted: 5, skipped: 0}} =
-               ImportCandidates.accept(scope,
-                 group_page_size: 2,
-                 after_group_page: fn groups -> send(parent, {:group_page, length(groups)}) end
-               )
+      assert {:ok, %{queued: 1, skipped: 1}} = ImportCandidates.queue_accept(scope)
 
-      assert_receive {:group_page, 2}
-      assert_receive {:group_page, 2}
-      assert_receive {:group_page, 1}
-      refute_receive {:group_page, _}
-      assert Repo.aggregate(MediaFile, :count) == 5
+      assert Repo.get!(ImportCandidate, matched.id).queued_op == "accept"
+      assert is_nil(Repo.get!(ImportCandidate, unmatched.id).queued_op)
+    end
+
+    test "a queued group leaves the pending list", %{lp: lp, unmatched: unmatched} do
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{})
+      {:ok, _} = ImportCandidates.queue_accept(scope)
+
+      {groups, _cursor} = ImportCandidates.page(lp.id, status: "pending")
+      assert Enum.map(groups, & &1.anchor_key) == [unmatched.anchor_key]
+
+      {queued_groups, _cursor} = ImportCandidates.page(lp.id, status: "queued")
+      assert length(queued_groups) == 1
+    end
+
+    test "clears a stale queue_error when re-queued", %{lp: lp, matched: matched} do
+      matched
+      |> Ecto.Changeset.change(%{queue_error: "No provider match to import from."})
+      |> Repo.update!()
+
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{})
+      {:ok, _} = ImportCandidates.queue_accept(scope)
+
+      assert is_nil(Repo.get!(ImportCandidate, matched.id).queue_error)
+    end
+
+    test "does not re-mark a group that is already queued", %{lp: lp, matched: matched} do
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{})
+      {:ok, %{queued: 1}} = ImportCandidates.queue_accept(scope)
+
+      at = Repo.get!(ImportCandidate, matched.id).queued_at
+
+      # The second call sees a selection whose only remaining pending group is
+      # the unmatched one, so nothing new is queued and the timestamp stands.
+      assert {:ok, %{queued: 0, skipped: 1}} = ImportCandidates.queue_accept(scope)
+      assert Repo.get!(ImportCandidate, matched.id).queued_at == at
+    end
+
+    test "a \"queued\"-status scope reports nothing queued instead of a false success", %{
+      lp: lp,
+      matched: matched
+    } do
+      pending_scope = lp.id |> SelectionScope.new() |> SelectionScope.select_all_matching(%{})
+      {:ok, %{queued: 1}} = ImportCandidates.queue_accept(pending_scope)
+
+      # `matched` is now queued (queued_op: "accept"). Re-running queue_accept/1
+      # against a "queued"-status scope -- the shape the Queued view's own
+      # selection would build -- must not report a second queue that never
+      # happened: eligible_accept_keys/1 still finds it eligible (single
+      # provider, not local), but the UPDATE's own `is_nil(c.queued_op)` guard
+      # matches zero rows for a candidate that is already queued.
+      queued_scope =
+        lp.id |> SelectionScope.new("queued") |> SelectionScope.select_all_matching(%{})
+
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "import_candidates:#{lp.id}")
+
+      assert {:ok, %{queued: 0, skipped: 1}} = ImportCandidates.queue_accept(queued_scope)
+      refute_receive {:import_candidates_changed, _lp_id}
+    end
+
+    test "queue_accept_all_matched/1 queues every matched group", %{lp: lp, matched: matched} do
+      assert {:ok, %{queued: 1, skipped: 1}} = ImportCandidates.queue_accept_all_matched(lp.id)
+      assert Repo.get!(ImportCandidate, matched.id).queued_op == "accept"
+    end
+
+    test "a local-show group is skipped", %{lp: lp} do
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Home Videos/clip.mkv",
+        provider_type: "local",
+        provider_id: "local:home-videos",
+        media_type: "tv_show",
+        confidence: 1.0
+      })
+
+      assert {:ok, %{queued: 1, skipped: 2}} = ImportCandidates.queue_accept_all_matched(lp.id)
+    end
+  end
+
+  describe "queue marker fields" do
+    test "a candidate round-trips its queue markers" do
+      lp = library_path_fixture()
+      at = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      candidate =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          queued_op: "accept",
+          queued_at: at,
+          queue_error: "No provider match to import from."
+        })
+
+      reloaded = Mydia.Repo.get!(Mydia.Library.ImportCandidate, candidate.id)
+
+      assert reloaded.queued_op == "accept"
+      assert reloaded.queued_at == at
+      assert reloaded.queue_error == "No provider match to import from."
+    end
+
+    test "queue markers default to nil" do
+      lp = library_path_fixture()
+      candidate = import_candidate_fixture(%{library_path_id: lp.id})
+
+      assert is_nil(candidate.queued_op)
+      assert is_nil(candidate.queued_at)
+      assert is_nil(candidate.queue_error)
+    end
+  end
+
+  describe "queued status" do
+    setup do
+      lp = library_path_fixture()
+
+      pending =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Wandering Aurora/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: "9001",
+          title: "Wandering Aurora",
+          media_type: "tv_show",
+          confidence: 0.95
+        })
+
+      queued =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Glass Harbour/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: "9002",
+          title: "Glass Harbour",
+          media_type: "tv_show",
+          confidence: 0.95,
+          queued_op: "accept",
+          queued_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      %{lp: lp, pending: pending, queued: queued}
+    end
+
+    test "pending excludes queued groups", %{lp: lp, pending: pending} do
+      {groups, _cursor} = ImportCandidates.page(lp.id, status: "pending")
+
+      assert Enum.map(groups, & &1.anchor_key) == [pending.anchor_key]
+    end
+
+    test "queued returns only queued groups", %{lp: lp, queued: queued} do
+      {groups, _cursor} = ImportCandidates.page(lp.id, status: "queued")
+
+      assert [group] = groups
+      assert group.anchor_key == queued.anchor_key
+      assert group.queued? == true
+      assert group.dismissed? == false
+    end
+
+    test "count_by_status/2 counts queued groups", %{lp: lp} do
+      assert ImportCandidates.count_by_status(lp.id, "queued") == 1
+      assert ImportCandidates.count_by_status(lp.id, "pending") == 1
+    end
+
+    test "count_pending/0 excludes queued groups", %{lp: _lp} do
+      assert ImportCandidates.count_pending() == 1
+    end
+
+    test "a queued group carries its queue_error", %{lp: lp} do
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Paper Lantern/s01e01.mkv",
+        queued_op: "accept",
+        queue_error: "Files in this folder match different titles."
+      })
+
+      {groups, _cursor} = ImportCandidates.page(lp.id, status: "queued")
+
+      assert Enum.any?(
+               groups,
+               &(&1.queue_error == "Files in this folder match different titles.")
+             )
+    end
+
+    test "dismiss/1 leaves a queued row alone when its anchor is also pending", %{
+      lp: lp,
+      queued: queued
+    } do
+      # The guard only matters for a mixed anchor, and a mixed anchor is a real
+      # state: a scan that discovers a new file inside a folder whose import is
+      # already queued inserts a pending row beside the queued ones.
+      # `SelectionScope.to_query/1` groups by anchor_key, so the pending row
+      # pulls the whole anchor into a "pending" selection, and
+      # `candidate_query/1` then matches every row under that key, queued rows
+      # included. Without the guard, dismiss/1 would stamp them.
+      newcomer =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: Path.join(Path.dirname(queued.relative_path), "s01e02.mkv")
+        })
+
+      assert newcomer.anchor_key == queued.anchor_key
+
+      scope =
+        lp.id
+        |> SelectionScope.new()
+        |> SelectionScope.select_all_matching(%{})
+
+      {:ok, _count} = ImportCandidates.dismiss(scope)
+
+      assert is_nil(Mydia.Repo.get!(Mydia.Library.ImportCandidate, queued.id).dismissed_at)
+      refute is_nil(Mydia.Repo.get!(Mydia.Library.ImportCandidate, newcomer.id).dismissed_at)
     end
   end
 end

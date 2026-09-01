@@ -67,7 +67,11 @@ defmodule Mydia.ImportCandidates do
   # group the size of a whole season tree never becomes one unbounded
   # allocation, while still being processed as a single logical group.
   @member_page_size 500
-  @accept_group_page_size 50
+  @queue_anchor_page_size 25
+
+  # Refusals that will fail identically on every retry, so the marker is cleared
+  # and the reason surfaced instead of burning the retry budget.
+  @terminal_accept_errors [:no_match, :conflicting_providers, :local_show, :empty_group]
 
   @type cursor :: {non_neg_integer(), String.t()}
 
@@ -255,9 +259,8 @@ defmodule Mydia.ImportCandidates do
   straight off it, e.g. as a subquery of matching anchor keys (see
   `Mydia.Library.SelectionScope.to_query/1`, which delegates here).
 
-  `:status` (default `"pending"`) selects undismissed candidates; anything
-  else selects dismissed ones. `:band` and `:q` apply the same predicates
-  `page/2` exposes.
+  `:status` (default `"pending"`) is `"pending"`, `"queued"`, or anything else
+  for dismissed. `:band` and `:q` apply the same predicates `page/2` exposes.
   """
   @spec group_query(binary(), keyword()) :: Ecto.Query.t()
   def group_query(library_path_id, opts \\ []) do
@@ -265,9 +268,21 @@ defmodule Mydia.ImportCandidates do
 
     ImportCandidate
     |> where([c], c.library_path_id == ^library_path_id)
-    |> filter_dismissed(status)
-    # `library_path_id` is constant across every row here (the WHERE clause
-    # above already pins it), but PostgreSQL still requires a plain
+    |> filter_status(status)
+    |> aggregate_group_query()
+    |> apply_band(Keyword.get(opts, :band))
+    |> apply_search(Keyword.get(opts, :q))
+  end
+
+  # The anchor-key rollup `group_query/2` and `queued_group/3` both build on:
+  # groups an already-scoped base query by anchor, aggregating `count(id)`,
+  # `min(confidence)`, and `count(distinct provider_id)` alongside
+  # representative (`max/1`) provider/title/type values. Every row this
+  # returns is a plain map; convert it with the private `to_group/2`.
+  defp aggregate_group_query(query) do
+    query
+    # `library_path_id` is constant across every row here (the caller's WHERE
+    # clause already pins it), but PostgreSQL still requires a plain
     # (non-aggregate) selected column to appear in GROUP BY -- SQLite is
     # lenient about this and would let it through unmodified, so leaving it
     # out here would work in dev/test on SQLite and break on PostgreSQL.
@@ -282,14 +297,23 @@ defmodule Mydia.ImportCandidates do
       provider_type: max(c.provider_type),
       suggested_title: max(c.title),
       suggested_year: max(c.year),
-      media_type: max(c.media_type)
+      media_type: max(c.media_type),
+      queued_op: max(c.queued_op),
+      queue_error: max(c.queue_error)
     })
-    |> apply_band(Keyword.get(opts, :band))
-    |> apply_search(Keyword.get(opts, :q))
   end
 
-  defp filter_dismissed(query, "pending"), do: where(query, [c], is_nil(c.dismissed_at))
-  defp filter_dismissed(query, _status), do: where(query, [c], not is_nil(c.dismissed_at))
+  # Three mutually exclusive states over two nullable columns. A queued row is
+  # never dismissed (queue_accept/1 and queue_rematch/1 only mark undismissed
+  # rows) and a dismissed row is never queued (dismiss/1 skips queued rows), so
+  # "pending" has to exclude both while the other two each name one.
+  defp filter_status(query, "pending"),
+    do: where(query, [c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
+
+  defp filter_status(query, "queued"),
+    do: where(query, [c], is_nil(c.dismissed_at) and not is_nil(c.queued_op))
+
+  defp filter_status(query, _status), do: where(query, [c], not is_nil(c.dismissed_at))
 
   defp apply_band(query, nil), do: query
   defp apply_band(query, :all), do: query
@@ -426,6 +450,39 @@ defmodule Mydia.ImportCandidates do
     end
   end
 
+  # One anchor's aggregate row, scoped to rows queued for exactly `op` --
+  # unlike `get_group(..., status: "queued")`, which matches *any* queued_op
+  # via `filter_status/2`. An anchor can carry rows queued for different ops
+  # at once (a scan can insert a pending row under an already-queued anchor,
+  # and a second `queued_op` value queues its own subset later), so computing
+  # one op's promotion eligibility (`provider_id`, `provider_count`,
+  # `provider_type`) from the broader "any queued_op" aggregate would compute
+  # it over a superset of what actually gets promoted. Kept separate from
+  # `get_group/3` rather than folded into it, since `get_group/3` has other
+  # callers that depend on its existing `:status` semantics.
+  defp queued_group(library_path_id, anchor_key, op) do
+    library_path_id
+    |> queued_query(op)
+    |> where([c], c.anchor_key == ^anchor_key)
+    |> aggregate_group_query()
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      row -> to_group(row, "queued")
+    end
+  end
+
+  # The op predicate every queued-drain query shares: undismissed rows on one
+  # library path, queued for exactly one op. Never loosen this to "any
+  # queued_op" the way `filter_status(query, "queued")` is for the review
+  # page's status filter -- an anchor can hold rows queued for different ops
+  # at once, and each op's drain must see only its own subset.
+  defp queued_query(library_path_id, op) do
+    ImportCandidate
+    |> where([c], c.library_path_id == ^library_path_id and c.queued_op == ^op)
+    |> where([c], is_nil(c.dismissed_at))
+  end
+
   defp apply_cursor(query, nil), do: query
 
   defp apply_cursor(query, {file_count, anchor_key}) do
@@ -455,7 +512,9 @@ defmodule Mydia.ImportCandidates do
       media_type: row.media_type,
       min_confidence: min_confidence,
       provider_count: row.provider_count,
-      dismissed?: status != "pending"
+      dismissed?: status == "ignored",
+      queued?: status == "queued",
+      queue_error: row.queue_error
     }
   end
 
@@ -500,7 +559,7 @@ defmodule Mydia.ImportCandidates do
   @spec count_pending() :: non_neg_integer()
   def count_pending do
     ImportCandidate
-    |> where([c], is_nil(c.dismissed_at))
+    |> where([c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
     |> join(:inner, [c], lp in LibraryPath, on: lp.id == c.library_path_id)
     |> where([c, lp], lp.type in ^ImportRun.importable_types())
     |> group_by([c], [c.library_path_id, c.anchor_key])
@@ -617,6 +676,9 @@ defmodule Mydia.ImportCandidates do
     |> where([c], is_nil(c.next_retry_at) or c.next_retry_at <= ^now)
   end
 
+  defp maybe_after_id(query, nil), do: query
+  defp maybe_after_id(query, id), do: where(query, [c], c.id > ^id)
+
   # Walks a whole group's undismissed candidates in keyset pages of
   # #{@member_page_size}, so a group the size of a full season tree is never
   # one unbounded allocation, while still handing callers (`accept/2`,
@@ -657,7 +719,7 @@ defmodule Mydia.ImportCandidates do
 
     {row_count, _} =
       candidate_query(scope)
-      |> where([c], is_nil(c.dismissed_at))
+      |> where([c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
       |> Repo.update_all(set: [dismissed_at: now, updated_at: now])
 
     if row_count > 0, do: broadcast(scope.library_path_id)
@@ -822,70 +884,108 @@ defmodule Mydia.ImportCandidates do
   defp parse_int(_), do: nil
 
   @doc """
-  Accepts a selection: promotes every selected group whose candidates carry a
-  real provider match, one group at a time.
+  Queues a selection for import.
 
-  A group with no provider match (`:no_match`), or whose provider identity is
-  the synthetic `"local"` marker (see `create_local_show/2`), has nothing for
-  `Mydia.Library.CandidatePromotion` to enrich from and is skipped rather than
-  attempted. Each accepted group's full membership is loaded in bounded pages
-  (see `load_all_members/2`) and handed to `CandidatePromotion.promote_group/3`
-  in one call, so the whole group's ownership change commits as the one
-  transaction that function already guarantees -- this function opens no
-  transaction of its own, and does no provider/network work inside one.
+  One `UPDATE ... WHERE` marks every eligible candidate in the selected anchors,
+  then one Oban job is enqueued for the library path. A `:filter`-mode selection
+  carries no ids, so this stays a single statement no matter how many groups it
+  covers, and the snapshot is taken against what the user was looking at rather
+  than re-derived when the job eventually runs.
+
+  Eligibility is applied here rather than in the worker. A group with no
+  provider match, or with files matching different titles, or carrying the
+  synthetic `"local"` provider can never be promoted, so letting it move into
+  Queued and bounce straight back with an error would be churn on the most
+  common bulk path.
   """
-  @spec accept(SelectionScope.t(), keyword()) ::
-          {:ok, %{accepted: non_neg_integer(), skipped: non_neg_integer()}}
-  def accept(%SelectionScope{} = scope, opts \\ []) do
-    page_size = Keyword.get(opts, :group_page_size, @accept_group_page_size)
+  @spec queue_accept(SelectionScope.t()) ::
+          {:ok, %{queued: non_neg_integer(), skipped: non_neg_integer()}}
+  def queue_accept(%SelectionScope{} = scope) do
+    now = now()
+    eligible = eligible_accept_keys(scope)
 
-    result = accept_group_pages(scope, opts, page_size, nil, %{accepted: 0, skipped: 0})
+    # Both counts have to be read before the UPDATE. Marking a row sets
+    # `queued_op`, which `filter_status/2` excludes from "pending", so the same
+    # two queries run afterwards would count only what was left behind.
+    queued = eligible |> subquery() |> Repo.aggregate(:count)
+    selected = selected_group_count(scope)
 
-    if result.accepted > 0, do: broadcast(scope.library_path_id)
-    {:ok, result}
+    {row_count, _} =
+      ImportCandidate
+      |> where([c], c.library_path_id == ^scope.library_path_id)
+      |> where([c], c.anchor_key in subquery(eligible))
+      |> where([c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
+      |> Repo.update_all(
+        set: [queued_op: "accept", queued_at: now, queue_error: nil, updated_at: now]
+      )
+
+    if row_count > 0 do
+      enqueue(Mydia.Jobs.ApplyImportCandidates, scope.library_path_id)
+      broadcast(scope.library_path_id)
+    end
+
+    # `queued`/`selected` are read before the UPDATE (see above) and so, on a
+    # `"queued"`-status scope, still count groups whose candidates already
+    # carry a `queued_op` -- the UPDATE's own `is_nil(c.queued_op)` guard then
+    # matches zero rows for them. Gating the return on `row_count` (as
+    # `dismiss/1` and `queue_rematch/1` already do) keeps this from reporting
+    # a queue that did not happen.
+    {queued, skipped} = if row_count > 0, do: {queued, selected - queued}, else: {0, selected}
+
+    {:ok, %{queued: queued, skipped: skipped}}
   end
 
-  defp accept_group_pages(scope, opts, page_size, after_anchor, result) do
-    groups =
-      scope
-      |> SelectionScope.to_query()
-      |> maybe_after_anchor(after_anchor)
-      |> order_by([c], asc: c.anchor_key)
-      |> limit(^page_size)
-      |> Repo.all()
-      |> Enum.map(&to_group(&1, scope.status))
+  @doc """
+  Queues every pending provider-matched group for one library path.
 
-    case groups do
-      [] ->
-        result
-
-      groups ->
-        after_group_page(opts, groups)
-
-        result =
-          Enum.reduce(groups, result, fn group, acc ->
-            case accept_group(group, opts) do
-              {:ok, _media_files} -> %{acc | accepted: acc.accepted + 1}
-              {:error, _reason} -> %{acc | skipped: acc.skipped + 1}
-            end
-          end)
-
-        if length(groups) < page_size do
-          result
-        else
-          accept_group_pages(scope, opts, page_size, List.last(groups).anchor_key, result)
-        end
-    end
+  Confidence is deliberately not filtered: this is the explicit human override
+  behind the review page's "Import all" control.
+  """
+  @spec queue_accept_all_matched(binary()) ::
+          {:ok, %{queued: non_neg_integer(), skipped: non_neg_integer()}}
+  def queue_accept_all_matched(library_path_id) do
+    library_path_id
+    |> SelectionScope.new()
+    |> SelectionScope.select_all_matching(%{})
+    |> queue_accept()
   end
 
-  defp maybe_after_anchor(query, nil), do: query
-  defp maybe_after_anchor(query, anchor), do: where(query, [c], c.anchor_key > ^anchor)
+  # The selected anchors that `accept_group/2` would actually accept, as a
+  # grouped subquery of anchor keys. `count(provider_id, :distinct) == 1`
+  # subsumes the no-match case as well: SQL counts of a nullable column ignore
+  # NULLs, so a group with no provider match counts zero.
+  defp eligible_accept_keys(%SelectionScope{} = scope) do
+    scope
+    |> SelectionScope.to_query()
+    |> exclude(:select)
+    |> having([c], count(c.provider_id, :distinct) == 1)
+    |> having([c], is_nil(max(c.provider_type)) or max(c.provider_type) != "local")
+    |> select([c], c.anchor_key)
+  end
 
-  defp after_group_page(opts, groups) do
-    case Keyword.get(opts, :after_group_page) do
-      callback when is_function(callback, 1) -> callback.(groups)
-      _ -> :ok
-    end
+  # Oban's engine is disabled in test (config/test.exs sets `engine: false`), so
+  # Oban.insert/1 raises there. See test/README.md and
+  # Mydia.Downloads.Queue.insert_job/1, which uses the same fallback.
+  #
+  # `states:` is overridden here rather than declared on `use Oban.Worker` in
+  # the worker modules themselves, so it deliberately excludes `:executing`: a
+  # click landing while a drain is already running must enqueue a fresh job
+  # rather than be swallowed by the uniqueness guard (see both workers'
+  # moduledocs). Declaring that narrowed list statically trips Oban's own
+  # `--warnings-as-errors` compile check (it warns whenever `:states` omits
+  # any incomplete state); overriding it only here, at the single call site
+  # both workers share, avoids the warning the same way
+  # `Jobs.MediaImport.schedule_snooze_retry/2` does for its own narrowed case.
+  defp enqueue(worker, library_path_id) do
+    %{"library_path_id" => library_path_id}
+    |> worker.new(unique: [states: [:available, :scheduled, :retryable]])
+    |> insert_job()
+  end
+
+  defp insert_job(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
   end
 
   defp accept_group(%ImportCandidateGroup{provider_id: nil}, _opts), do: {:error, :no_match}
@@ -898,7 +998,7 @@ defmodule Mydia.ImportCandidates do
     do: {:error, :local_show}
 
   defp accept_group(%ImportCandidateGroup{library_path_id: lp_id, anchor_key: key}, opts) do
-    case load_all_members(lp_id, key) do
+    case load_queued_members(lp_id, key, "accept") do
       [] ->
         {:error, :empty_group}
 
@@ -908,81 +1008,300 @@ defmodule Mydia.ImportCandidates do
     end
   end
 
-  @doc """
-  Accepts every pending provider-matched group for one library path.
-
-  Unmatched and synthetic local groups are excluded by `accept/2` itself.
-  Confidence is deliberately not filtered here: this is the explicit human
-  override behind the review page's "Import all" control.
-  """
-  @spec accept_all_matched(binary(), keyword()) ::
-          {:ok, %{accepted: non_neg_integer(), skipped: non_neg_integer()}}
-  def accept_all_matched(library_path_id, opts \\ []) do
+  # Only the rows queued for `op`. A mixed anchor (rows queued for `op` plus
+  # either a pending newcomer a concurrent scan inserted, or rows queued for a
+  # different op) must promote exactly its own op's subset, which is the set
+  # `queued_group/3` computed the group's eligibility from. Everything else
+  # stays put and shows up under its own status on the next pass.
+  #
+  # Filtering in memory rather than in SQL is deliberate: `load_all_members/2`
+  # already pages the anchor in bounded chunks and hands back the full
+  # membership, and a mixed anchor holds at most a handful of rows outside
+  # `op`.
+  defp load_queued_members(library_path_id, anchor_key, op) do
     library_path_id
-    |> SelectionScope.new()
-    |> SelectionScope.select_all_matching(%{})
-    |> accept(opts)
+    |> load_all_members(anchor_key)
+    |> Enum.filter(&(&1.queued_op == op))
+  end
+
+  # The pending (queued_op IS NULL) subset of one anchor's membership -- the
+  # counterpart to `load_queued_members/3` for callers that act on whatever
+  # has not already been claimed by a queued op. `create_local_show/2` uses
+  # this rather than `load_all_members/2`: a scan can insert a pending row
+  # under an anchor whose import is already queued (see the moduledoc on that
+  # theme), and a queued row's provider identity and eventual promotion must
+  # not be disturbed by an unrelated "create local show from folder" call
+  # against the same anchor.
+  defp load_pending_members(library_path_id, anchor_key) do
+    library_path_id
+    |> load_all_members(anchor_key)
+    |> Enum.filter(&is_nil(&1.queued_op))
   end
 
   @doc """
-  Re-runs metadata matching for the candidates in a selection.
+  Promotes every group queued for accept on one library path.
 
-  Matches through `Mydia.Library.BatchMatcher` in bounded pages, writes each
-  result back onto its candidate via `Mydia.Library.FileIngest.ingest/3` under
-  the `:review` policy (write the verdict, never auto-promote), and broadcasts
-  one change event after the whole pass -- not once per page or per file.
+  Discovers its own work from `queued_op`, so a restarted job resumes where it
+  stopped and a second accept queued while this runs is picked up by the same
+  loop. Groups are drained in anchor pages, but every currently-queued anchor
+  is swept once (in keyset-paged pages of `:anchor_page_size`) before this
+  decides whether the pass made progress -- an early anchor that fails
+  without clearing its marker cannot strand anchors ordered after it, only
+  slow down how many full sweeps a stuck queue costs. The whole membership of
+  one group still goes to `CandidatePromotion.promote_group/3` in a single
+  call, which is the only transaction boundary here.
+
+  A terminal refusal (no provider match, files matching different titles, a
+  synthetic local show, a group whose rows vanished) clears the marker and
+  records `queue_error`, returning the group to the pending list with an
+  explanation rather than leaving it queued forever. Anything else leaves the
+  marker in place, so `remaining` is non-zero and the worker reports failure for
+  Oban to retry.
   """
-  @spec rematch(SelectionScope.t(), keyword()) ::
-          {:ok, %{files: non_neg_integer(), failures: non_neg_integer()}}
-  def rematch(%SelectionScope{} = scope, opts \\ []) do
-    library_path = Settings.get_library_path!(scope.library_path_id)
+  @spec drain_accepted(binary(), keyword()) ::
+          {:ok,
+           %{
+             promoted: non_neg_integer(),
+             failed: non_neg_integer(),
+             remaining: non_neg_integer()
+           }}
+  def drain_accepted(library_path_id, opts \\ []) do
+    page_size = Keyword.get(opts, :anchor_page_size, @queue_anchor_page_size)
+
+    result =
+      drain_accepted_pages(
+        library_path_id,
+        opts,
+        page_size,
+        queued_count(library_path_id, "accept"),
+        %{promoted: 0, failed: 0}
+      )
+
+    broadcast(library_path_id)
+    result
+  end
+
+  # A "no progress" stop has to be decided across one *complete* sweep of
+  # every currently-queued anchor, not one anchor page: `queued_anchor_keys/4`
+  # is keyset-paged, and an early page that makes zero progress must not
+  # short-circuit the anchors past it. Deciding per-page (as this used to)
+  # left later-ordered anchors permanently stranded behind a page-size-or-more
+  # run of identically-failing early ones, across every one of Oban's
+  # retries -- see the finding this fixed. `sweep_accepted/5` walks the whole
+  # queued set once, advancing its cursor past every anchor it touches
+  # regardless of outcome; only once that full walk completes does this
+  # compare `remaining` against `remaining_before` to decide whether another
+  # sweep is worth attempting or the loop should stop and let the worker's
+  # retry (or a stuck anchor's terminal clear) take over.
+  defp drain_accepted_pages(library_path_id, opts, page_size, remaining_before, acc) do
+    acc = sweep_accepted(library_path_id, opts, page_size, nil, acc)
+    remaining = queued_count(library_path_id, "accept")
+
+    cond do
+      remaining == 0 ->
+        {:ok, Map.put(acc, :remaining, 0)}
+
+      remaining < remaining_before ->
+        drain_accepted_pages(library_path_id, opts, page_size, remaining, acc)
+
+      # No progress across a whole sweep: every still-queued anchor failed
+      # without clearing its marker, so another sweep would fetch the same
+      # anchors and fail identically. Stop and let the worker's retry handle
+      # it.
+      true ->
+        {:ok, Map.put(acc, :remaining, remaining)}
+    end
+  end
+
+  # One full keyset walk over every anchor currently queued for accept,
+  # advancing `after_key` past each page regardless of whether its anchors
+  # promoted or failed -- unlike re-fetching from the same cursor, a failure
+  # can never cause this to refetch (and re-attempt) the anchor(s) that just
+  # failed, so no later-ordered anchor is ever left unreached by a stuck
+  # earlier one.
+  defp sweep_accepted(library_path_id, opts, page_size, after_key, acc) do
+    keys = queued_anchor_keys(library_path_id, "accept", page_size, after_key)
+
+    if keys == [] do
+      acc
+    else
+      acc = Enum.reduce(keys, acc, &promote_queued_anchor(library_path_id, &1, opts, &2))
+
+      # One broadcast per page, not per group: the review page's Queued chip
+      # drains visibly while the job runs, and the LiveView's own burst debounce
+      # keeps that from becoming a re-render storm.
+      broadcast(library_path_id)
+
+      sweep_accepted(library_path_id, opts, page_size, List.last(keys), acc)
+    end
+  end
+
+  defp promote_queued_anchor(library_path_id, anchor_key, opts, acc) do
+    case queued_group(library_path_id, anchor_key, "accept") do
+      nil ->
+        # The rows went away mid-drain, which clear_for_library/1 and
+        # delete_missing/3 can both do. There is nothing left to promote, so
+        # this is not a retryable failure.
+        %{acc | failed: acc.failed + 1}
+
+      group ->
+        promote_queued_group(library_path_id, anchor_key, group, opts, acc)
+    end
+  end
+
+  defp promote_queued_group(library_path_id, anchor_key, group, opts, acc) do
+    case accept_group(group, opts) do
+      {:ok, _media_files} ->
+        %{acc | promoted: acc.promoted + 1}
+
+      {:error, reason} when reason in @terminal_accept_errors ->
+        clear_queue_marker(library_path_id, anchor_key, "accept", queue_error_message(reason))
+        %{acc | failed: acc.failed + 1}
+
+      {:error, reason} ->
+        Logger.warning("A queued import group did not promote, leaving it queued for retry",
+          library_path_id: library_path_id,
+          anchor_key: anchor_key,
+          reason: inspect(reason)
+        )
+
+        %{acc | failed: acc.failed + 1}
+    end
+  rescue
+    error ->
+      Logger.error("Promoting a queued import group raised, leaving it queued for retry",
+        library_path_id: library_path_id,
+        anchor_key: anchor_key,
+        error: Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      %{acc | failed: acc.failed + 1}
+  end
+
+  defp queued_anchor_keys(library_path_id, op, limit, after_key) do
+    library_path_id
+    |> queued_query(op)
+    |> maybe_after_anchor_key(after_key)
+    |> distinct(true)
+    |> order_by([c], asc: c.anchor_key)
+    |> select([c], c.anchor_key)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
+  defp maybe_after_anchor_key(query, nil), do: query
+  defp maybe_after_anchor_key(query, key), do: where(query, [c], c.anchor_key > ^key)
+
+  defp queued_count(library_path_id, op) do
+    library_path_id
+    |> queued_query(op)
+    |> Repo.aggregate(:count)
+  end
+
+  defp clear_queue_marker(library_path_id, anchor_key, op, error) do
+    now = now()
+
+    library_path_id
+    |> queued_query(op)
+    |> where([c], c.anchor_key == ^anchor_key)
+    |> Repo.update_all(set: [queued_op: nil, queued_at: nil, queue_error: error, updated_at: now])
+  end
+
+  defp queue_error_message(:no_match), do: "No provider match to import from."
+
+  defp queue_error_message(:conflicting_providers),
+    do: "Files in this folder match different titles."
+
+  defp queue_error_message(:local_show), do: "Local shows are created directly, not imported."
+  defp queue_error_message(:empty_group), do: "No files left to import."
+
+  @rematch_page_size 250
+
+  @doc """
+  Queues a selection for re-matching.
+
+  Same shape as `queue_accept/1` with no eligibility filter, since any candidate
+  can be re-matched.
+  """
+  @spec queue_rematch(SelectionScope.t()) :: {:ok, %{queued: non_neg_integer()}}
+  def queue_rematch(%SelectionScope{} = scope) do
+    now = now()
+    group_count = selected_group_count(scope)
+
+    {row_count, _} =
+      scope
+      |> candidate_query()
+      |> where([c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
+      |> Repo.update_all(
+        set: [queued_op: "rematch", queued_at: now, queue_error: nil, updated_at: now]
+      )
+
+    if row_count > 0 do
+      enqueue(Mydia.Jobs.RematchImportCandidates, scope.library_path_id)
+      broadcast(scope.library_path_id)
+    end
+
+    {:ok, %{queued: if(row_count > 0, do: group_count, else: 0)}}
+  end
+
+  @doc """
+  Re-runs metadata matching for every candidate queued for re-match on one
+  library path.
+
+  Matches through `Mydia.Library.BatchMatcher` in bounded pages and writes each
+  result back with `Mydia.Library.FileIngest.ingest/3` under the `:review`
+  policy, which records the verdict and never auto-promotes. Every row in a page
+  has its marker cleared once the page is ingested, whether it matched or not, so
+  the loop always makes progress and a re-match is never retried forever over a
+  file no provider recognises.
+  """
+  @spec drain_rematch(binary(), keyword()) ::
+          {:ok,
+           %{files: non_neg_integer(), failures: non_neg_integer(), remaining: non_neg_integer()}}
+  def drain_rematch(library_path_id, opts \\ []) do
+    library_path = Settings.get_library_path!(library_path_id)
     matcher = Keyword.get(opts, :matcher, Mydia.Library.MetadataMatcher)
     config = Keyword.get(opts, :config) || Metadata.default_relay_config()
-    page_size = Keyword.get(opts, :page_size, 250)
+    page_size = Keyword.get(opts, :page_size, @rematch_page_size)
 
-    base_query = candidate_query(scope) |> where([c], is_nil(c.dismissed_at))
+    result =
+      drain_rematch_pages(library_path, matcher, config, page_size, %{files: 0, failures: 0})
 
-    stats =
-      rematch_pages(base_query, library_path, matcher, config, page_size, nil, %{
-        files: 0,
-        failures: 0
-      })
-
-    broadcast(scope.library_path_id)
-
-    {:ok, stats}
+    broadcast(library_path_id)
+    result
   end
 
-  defp rematch_pages(base_query, library_path, matcher, config, page_size, after_id, stats) do
+  defp drain_rematch_pages(library_path, matcher, config, page_size, acc) do
     rows =
-      base_query
-      |> maybe_after_id(after_id)
+      library_path.id
+      |> queued_query("rematch")
       |> order_by([c], asc: c.id)
       |> limit(^page_size)
       |> Repo.all()
 
-    case rows do
-      [] ->
-        stats
+    if rows == [] do
+      {:ok, Map.put(acc, :remaining, 0)}
+    else
+      page_stats = rematch_rows(rows, library_path, matcher, config)
+      clear_rematch_markers(Enum.map(rows, & &1.id))
 
-      rows ->
-        page_stats = rematch_rows(rows, library_path, matcher, config)
-        stats = Map.merge(stats, page_stats, fn _key, left, right -> left + right end)
+      # One broadcast per page so the Queued chip drains visibly.
+      broadcast(library_path.id)
 
-        rematch_pages(
-          base_query,
-          library_path,
-          matcher,
-          config,
-          page_size,
-          List.last(rows).id,
-          stats
-        )
+      acc = Map.merge(acc, page_stats, fn _key, left, right -> left + right end)
+      drain_rematch_pages(library_path, matcher, config, page_size, acc)
     end
   end
 
-  defp maybe_after_id(query, nil), do: query
-  defp maybe_after_id(query, id), do: where(query, [c], c.id > ^id)
+  # Conditional on the op, so a row the user has since queued for accept keeps
+  # its new marker instead of being cleared by an in-flight re-match.
+  defp clear_rematch_markers(ids) do
+    now = now()
+
+    ImportCandidate
+    |> where([c], c.id in ^ids and c.queued_op == "rematch")
+    |> Repo.update_all(set: [queued_op: nil, queued_at: nil, updated_at: now])
+  end
 
   defp rematch_rows(rows, library_path, matcher, config) do
     rows_by_path = Map.new(rows, &{Path.join(library_path.path, &1.relative_path), &1})
@@ -1087,6 +1406,15 @@ defmodule Mydia.ImportCandidates do
   `band/1` and `group_query/2` already give a provider-matched local group),
   but this function's own precondition -- every remaining candidate already
   local-marked -- is what a second click actually hits.
+
+  Scoped to the anchor's *pending* subset (`queued_op IS NULL`) via
+  `load_pending_members/2`, not its full membership: a scan can insert a
+  pending row under an anchor whose import is already queued for accept, and
+  that queued row carries a real provider match this function must not
+  overwrite with a generic local identity, nor delete out from under the
+  drain that is about to promote it. The queued row is left untouched --
+  `queued_op`, its provider fields, and its existence all survive -- and
+  continues to be promoted normally.
   """
   @spec create_local_show(binary(), String.t()) :: {:ok, Media.MediaItem.t()} | {:error, term()}
   def create_local_show(library_path_id, anchor_key) do
@@ -1098,7 +1426,7 @@ defmodule Mydia.ImportCandidates do
   end
 
   defp create_local_show_transaction(library_path_id, anchor_key) do
-    case load_all_members(library_path_id, anchor_key) do
+    case load_pending_members(library_path_id, anchor_key) do
       [] ->
         {:error, :not_found}
 
@@ -1130,16 +1458,23 @@ defmodule Mydia.ImportCandidates do
   end
 
   # Every candidate `link_local_candidate/2` successfully linked is already
-  # deleted by the time this runs; what remains is exactly the unnumbered
-  # leftovers `create_local_show/2`'s doc promises to leave visible. Stamping
-  # them here (not before creating `item`, since `provider_id` needs its id)
-  # is what makes a second call against the same anchor see an
-  # all-local-marked group and refuse rather than minting a second show.
+  # deleted by the time this runs; what remains among the *pending* subset is
+  # exactly the unnumbered leftovers `create_local_show/2`'s doc promises to
+  # leave visible. Stamping them here (not before creating `item`, since
+  # `provider_id` needs its id) is what makes a second call against the same
+  # anchor see an all-local-marked pending group and refuse rather than
+  # minting a second show.
+  #
+  # Scoped to `is_nil(queued_op)`, matching `load_pending_members/2` above:
+  # `for_anchor/3` alone would also overwrite any row already queued for
+  # accept/rematch under this anchor, discarding its real provider identity
+  # in favour of this synthetic local one.
   defp mark_leftover_candidates_local(library_path_id, anchor_key, item) do
     now = now()
 
     ImportCandidate
     |> for_anchor(library_path_id, anchor_key)
+    |> where([c], is_nil(c.queued_op))
     |> Repo.update_all(set: [provider_type: "local", provider_id: item.id, updated_at: now])
   end
 

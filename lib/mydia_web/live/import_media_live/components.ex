@@ -109,6 +109,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               {:ready, "band-ready", "Ready"},
               {:needs_attention, "band-needs-attention", "Needs attention"},
               {:no_match, "band-no-match", "No match"},
+              {:queued, "band-queued", "Queued"},
               {:ignored, "band-ignored", "Ignored"}
             ]
           }
@@ -214,46 +215,56 @@ defmodule MydiaWeb.ImportMediaLive.Components do
       </div>
 
       <div class="flex items-center gap-2 ml-auto flex-wrap">
-        <%= if @band == :ignored do %>
-          <button
-            id="restore-selected"
-            class="btn btn-sm btn-primary"
-            disabled={@count == 0}
-            phx-click="restore_selected"
-          >
-            <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> Restore {@count}
-          </button>
-          <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
-            Clear
-          </button>
-        <% else %>
-          <button
-            id="accept-selected"
-            class="btn btn-sm btn-primary"
-            disabled={@count == 0}
-            phx-click="accept_selected"
-          >
-            <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept {@count}
-          </button>
-          <button
-            id="rematch-selected"
-            class="btn btn-sm btn-outline"
-            disabled={@count == 0}
-            phx-click="rematch_selected"
-          >
-            <.icon name="hero-arrow-path" class="w-4 h-4 mr-1" /> Re-match
-          </button>
-          <button
-            id="dismiss-selected"
-            class="btn btn-sm btn-ghost"
-            disabled={@count == 0}
-            phx-click="dismiss_selected"
-          >
-            Dismiss
-          </button>
-          <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
-            Clear
-          </button>
+        <%= cond do %>
+          <% @band == :ignored -> %>
+            <button
+              id="restore-selected"
+              class="btn btn-sm btn-primary"
+              disabled={@count == 0}
+              phx-click="restore_selected"
+            >
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> Restore {@count}
+            </button>
+            <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
+              Clear
+            </button>
+            <%!-- The Queued view's groups are already mid-import: Accept, Re-match,
+            Dismiss, and Restore all no-op there (their queries all require either
+            no queued_op or a dismissed_at that a queued group never has), so none
+            of them are offered here -- same reasoning as the Ignored view's own
+            omission of Accept/Re-match/Dismiss above. --%>
+          <% @band == :queued -> %>
+            <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
+              Clear
+            </button>
+          <% true -> %>
+            <button
+              id="accept-selected"
+              class="btn btn-sm btn-primary"
+              disabled={@count == 0}
+              phx-click="accept_selected"
+            >
+              <.icon name="hero-check" class="w-4 h-4 mr-1" /> Accept {@count}
+            </button>
+            <button
+              id="rematch-selected"
+              class="btn btn-sm btn-outline"
+              disabled={@count == 0}
+              phx-click="rematch_selected"
+            >
+              <.icon name="hero-arrow-path" class="w-4 h-4 mr-1" /> Re-match
+            </button>
+            <button
+              id="dismiss-selected"
+              class="btn btn-sm btn-ghost"
+              disabled={@count == 0}
+              phx-click="dismiss_selected"
+            >
+              Dismiss
+            </button>
+            <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
+              Clear
+            </button>
         <% end %>
       </div>
     </div>
@@ -322,6 +333,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <span class={["badge badge-sm shrink-0 font-medium", band_class(@band)]}>
           {band_label(@band)}
         </span>
+        <span :if={@group.queued?} class="badge badge-sm badge-info gap-1 shrink-0">
+          <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> Queued
+        </span>
       </div>
 
       <div class="pl-7 sm:pl-9 flex items-center justify-between gap-3 flex-wrap">
@@ -334,6 +348,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             class="badge badge-warning/20 text-warning badge-xs"
           >
             {disagreement_label(@group)}
+          </span>
+          <span :if={@group.queue_error} class="badge badge-warning/20 text-warning badge-xs">
+            {@group.queue_error}
           </span>
         </div>
 
