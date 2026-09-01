@@ -404,16 +404,23 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
           window: nil
         )
 
-      {:ok, pid} = Harness.start_link(state)
+      # Trapping exits keeps a crash from taking the test process down with the
+      # link, so the failure surfaces as :sys.get_state/1 exiting with :noproc
+      # rather than as an unrelated-looking test process death.
       Process.flag(:trap_exit, true)
+      {:ok, pid} = Harness.start_link(state)
 
       # window_generation defaults to 0 in base_state/1; matching it here
       # means this notification is not discarded by the stale-generation
       # guard clause and actually reaches the window: nil clause under test.
       HlsSession.notify_segments(pid, 0, [0])
 
-      refute_receive {:EXIT, ^pid, _reason}, 200
-      assert Process.alive?(pid)
+      # :sys.get_state/1 is a synchronous system message. Sent from the same
+      # process right after the cast, it is guaranteed to be handled after it,
+      # so this synchronises on the cast actually being processed instead of
+      # sleeping and hoping. If the cast crashed the session, the call exits
+      # with :noproc and the test fails.
+      assert %{window: nil} = :sys.get_state(pid)
     end
   end
 end
