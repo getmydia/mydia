@@ -1,16 +1,28 @@
 <Layouts.app {assigns}>
   <%!-- Page Container --%>
   <div class="relative -mx-3 -mt-3 sm:-mx-4 sm:-mt-4 md:-mx-6 md:-mt-6 lg:-mx-8 lg:-mt-8 mb-4">
-    <%!-- Backdrop Image (if available) --%>
+    <%!-- Backdrop. Anchored to the viewport, not to this wrapper.
+
+          Sized `absolute inset-0` this layer's containing block was the
+          wrapper below, which holds the entire page grid. `object-cover` in a
+          box 3000 to 4000px tall upscaled the art about 3x, the gradient was
+          stretched over that same height so it never finished, and both layers
+          stopped at the wrapper's bottom edge, wherever the content happened to
+          end. That edge is the hard cutoff line reported in discussion #642.
+
+          Keep this OUTSIDE the `@container` element below. `container-type:
+          inline-size` establishes a containing block for fixed descendants, so
+          moving it in there turns `fixed` back into `absolute` with no error
+          and no visible clue until the cutoff returns. --%>
     <%= if backdrop_url = get_backdrop_url(@media_item) do %>
-      <div id="page-backdrop" class="absolute inset-0 overflow-hidden">
-        <img
-          src={backdrop_url}
-          alt={@media_item.title}
-          class="w-full h-full object-cover opacity-30"
-        />
-      </div>
-      <div class="absolute inset-0 bg-gradient-to-b from-transparent via-base-100/80 to-base-100">
+      <div
+        id="page-backdrop"
+        class="fixed inset-0 lg:left-64 overflow-hidden pointer-events-none"
+        aria-hidden="true"
+      >
+        <img src={backdrop_url} alt="" class="w-full h-full object-cover opacity-30" />
+        <div class="absolute inset-0 bg-gradient-to-b from-transparent from-0% via-base-200/85 via-35% to-base-200 to-60%">
+        </div>
       </div>
     <% end %>
     <%!-- @container, not a viewport breakpoint. `xl:` measures the window, but
