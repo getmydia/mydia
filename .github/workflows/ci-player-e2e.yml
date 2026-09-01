@@ -277,19 +277,19 @@ jobs:
           # docker-sqlite scope: the GHA cache is capped at 10 GB with LRU
           # eviction, and docker-sqlite is populated by a different workflow,
           # so writing to it here would evict entries that workflow depends
-          # on. player-toolbox and relay-master are different: only jobs in
-          # this file ever write to them, so there is no cross-workflow
-          # contention. Populating them on non-PR builds means even a
-          # timed-out first run (see timeout-minutes above) leaves a warm
-          # cache behind, so the next push is fast instead of repeating the
-          # same cold build. Restricted to non-PR events to match the two
-          # registry tags themselves, which publish-toolbox and ci-relay.yml
-          # only ever push on push events; a PR build's layers are not
-          # something master's cache should be seeded from.
-          TOOLBOX_CACHE_TO=()
+          # on. relay-master is an exception: only ci-relay.yml and this job
+          # ever write to it, and ci-relay.yml runs only on metadata-relay
+          # paths so concurrency is rare. publish-toolbox owns the
+          # player-toolbox scope exclusively since Task 2 broke the deadlock
+          # that justified populating it from here; this job reads the scope
+          # but does not write it. Populating relay on non-PR builds means
+          # even a timed-out first run leaves a warm cache behind, so the
+          # next push is fast instead of repeating the same cold build.
+          # Restricted to non-PR events to match the registry tags themselves,
+          # which ci-relay.yml only ever pushes on push events; a PR build's
+          # layers are not something master's cache should be seeded from.
           RELAY_CACHE_TO=()
           if [ "${{ github.event_name }}" != "pull_request" ]; then
-            TOOLBOX_CACHE_TO=(--cache-to type=gha,mode=max,scope=player-toolbox)
             RELAY_CACHE_TO=(--cache-to type=gha,mode=max,scope=relay-master)
           fi
 
@@ -310,7 +310,6 @@ jobs:
             docker buildx build \
               --file player/Dockerfile.test \
               --cache-from type=gha,scope=player-toolbox \
-              "${TOOLBOX_CACHE_TO[@]}" \
               --load --tag "$TOOLBOX" .
           fi
 
