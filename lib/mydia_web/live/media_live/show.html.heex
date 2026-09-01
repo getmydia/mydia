@@ -3,7 +3,7 @@
   <div class="relative -mx-3 -mt-3 sm:-mx-4 sm:-mt-4 md:-mx-6 md:-mt-6 lg:-mx-8 lg:-mt-8 mb-4">
     <%!-- Backdrop Image (if available) --%>
     <%= if backdrop_url = get_backdrop_url(@media_item) do %>
-      <div class="absolute inset-0 overflow-hidden">
+      <div id="page-backdrop" class="absolute inset-0 overflow-hidden">
         <img
           src={backdrop_url}
           alt={@media_item.title}
