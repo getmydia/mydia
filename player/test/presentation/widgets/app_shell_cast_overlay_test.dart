@@ -19,9 +19,15 @@
 // `AppShell`, which needs a GoRouter ancestor plus the auth/connection/
 // download provider graph, and no existing shell test does that; see
 // app_shell_backdrop_test.dart and app_shell_search_nav_test.dart, which both
-// use lightweight stand-ins instead) and then exercised against a Stack that
-// reproduces the shell's exact `if (showCastOverlay) CastOverlayButton(...)`
-// pattern, so a regression in either the predicate or the wiring is caught.
+// use lightweight stand-ins instead), and the rendering is then driven
+// through `AppShell.castOverlaySlot`, the same seam the shell's two branches
+// drop into their own `Stack`.
+//
+// The slot matters: an earlier draft of this file rebuilt the shell's
+// `if (showCastOverlay) ...` conditional inside the test instead, which
+// CodeRabbit flagged on #645 as proving only that the test's own copy worked.
+// The conditional now lives in the seam, so these cases fail if the shell's
+// routing decision regresses rather than passing against a mirror.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,7 +35,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
-import 'package:player/presentation/widgets/cast_actions.dart';
 
 void main() {
   group('AppShell.needsCastOverlay', () {
@@ -70,12 +75,9 @@ void main() {
     });
   });
 
-  group('the shell Stack, gated by needsCastOverlay', () {
-    /// Reproduces the exact conditional the shell's own Stack children use:
-    /// `if (AppShell.needsCastOverlay(location)) CastOverlayButton(...)`.
-    Widget stackFor(String location) {
-      final showCastOverlay = AppShell.needsCastOverlay(location);
-
+  group('AppShell.castOverlaySlot', () {
+    /// Mounts the real seam, in the `Stack` it is built for.
+    Widget slotFor(String location, {bool isDesktop = true}) {
       return ProviderScope(
         overrides: [
           castCapabilitiesProvider.overrideWithValue(
@@ -87,7 +89,10 @@ void main() {
             body: Stack(
               children: [
                 const SizedBox.expand(),
-                if (showCastOverlay) const CastOverlayButton(topInset: 40),
+                AppShell.castOverlaySlot(
+                  location: location,
+                  isDesktop: isDesktop,
+                ),
               ],
             ),
           ),
@@ -97,7 +102,7 @@ void main() {
 
     testWidgets('renders no cast button on a route with its own (e.g. /movies)',
         (tester) async {
-      await tester.pumpWidget(stackFor('/movies'));
+      await tester.pumpWidget(slotFor('/movies'));
       await tester.pump();
 
       expect(find.byKey(const Key('cast-button')), findsNothing);
@@ -105,7 +110,15 @@ void main() {
 
     testWidgets('renders no cast button on /calendar, which has its own',
         (tester) async {
-      await tester.pumpWidget(stackFor('/calendar'));
+      await tester.pumpWidget(slotFor('/calendar'));
+      await tester.pump();
+
+      expect(find.byKey(const Key('cast-button')), findsNothing);
+    });
+
+    testWidgets('renders no cast button on /filter/1, which has its own',
+        (tester) async {
+      await tester.pumpWidget(slotFor('/filter/1'));
       await tester.pump();
 
       expect(find.byKey(const Key('cast-button')), findsNothing);
@@ -114,9 +127,19 @@ void main() {
     testWidgets(
         'renders exactly one overlay cast button on a route with no app-bar '
         'affordance (e.g. /)', (tester) async {
-      await tester.pumpWidget(stackFor('/'));
+      await tester.pumpWidget(slotFor('/'));
       await tester.pump();
 
+      expect(find.byKey(const Key('cast-button')), findsOneWidget);
+    });
+
+    testWidgets('does the same on the mobile branch', (tester) async {
+      await tester.pumpWidget(slotFor('/calendar', isDesktop: false));
+      await tester.pump();
+      expect(find.byKey(const Key('cast-button')), findsNothing);
+
+      await tester.pumpWidget(slotFor('/', isDesktop: false));
+      await tester.pump();
       expect(find.byKey(const Key('cast-button')), findsOneWidget);
     });
   });

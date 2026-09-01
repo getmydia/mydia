@@ -70,7 +70,7 @@ class AppShell extends ConsumerStatefulWidget {
   /// mobile app bar — never `MediaQuery.paddingOf(context).top` folded in on
   /// top of that, or the button sits under the strip twice.
   ///
-  /// Public (rather than inlined at each call site) and annotated
+  /// Public (rather than inlined in [castOverlaySlot]) and annotated
   /// `@visibleForTesting` so a test can exercise the exact value this shell
   /// computes for each branch directly, instead of re-declaring the numbers
   /// in a mirror that can silently drift from the real call sites.
@@ -78,6 +78,33 @@ class AppShell extends ConsumerStatefulWidget {
   static Widget castOverlay({required bool isDesktop}) => CastOverlayButton(
         topInset: isDesktop ? 12 : kToolbarHeight + 8,
       );
+
+  /// The overlay slot both branches drop into their `Stack`: the real
+  /// [castOverlay] on a route that needs one, an inert zero-size box
+  /// otherwise.
+  ///
+  /// The routing decision lives in here, rather than as an `if` at the two
+  /// call sites, so that a test can exercise it for real. When the `if` was
+  /// at the call sites, the only way to cover it was for the test to rebuild
+  /// the same conditional around [needsCastOverlay], a mirror, which proves
+  /// the mirror works and nothing about the shell. Reviewing #645, CodeRabbit
+  /// caught exactly that: the `/calendar` case would have passed even if this
+  /// widget still used the old predicate. Calling the seam removes the mirror,
+  /// the same way [castOverlay] already removed the one around its `topInset`
+  /// arithmetic.
+  ///
+  /// `SizedBox.shrink()` rather than omitting the child: [CastOverlayButton]
+  /// builds a `Positioned`, so the slot is a `Stack` child either way, and a
+  /// zero-size unpositioned child cannot grow a loose `Stack` or paint
+  /// anything.
+  @visibleForTesting
+  static Widget castOverlaySlot({
+    required String location,
+    required bool isDesktop,
+  }) =>
+      needsCastOverlay(location)
+          ? castOverlay(isDesktop: isDesktop)
+          : const SizedBox.shrink();
 
   /// The gutter both the desktop and mobile branches wrap their main content
   /// column in: a `SafeArea` that consumes the ambient `MediaQuery.padding`
@@ -291,7 +318,6 @@ class _AppShellState extends ConsumerState<AppShell>
     // proper repaint propagation on mobile when combined with GlobalKey
     // on the Scaffold (causing the "stuck navigation" bug).
     final isDesktop = Breakpoints.isDesktop(context);
-    final showCastOverlay = AppShell.needsCastOverlay(location);
 
     // Shell-level ambient backdrop, fed by the active browse screen. Sits behind
     // the (now transparent) in-shell Scaffolds for all browse screens (plan U5).
@@ -328,7 +354,7 @@ class _AppShellState extends ConsumerState<AppShell>
                 ),
               ],
             ),
-            if (showCastOverlay) AppShell.castOverlay(isDesktop: true),
+            AppShell.castOverlaySlot(location: location, isDesktop: true),
           ],
         ),
       );
@@ -364,7 +390,7 @@ class _AppShellState extends ConsumerState<AppShell>
               ],
             ),
           ),
-          if (showCastOverlay) AppShell.castOverlay(isDesktop: false),
+          AppShell.castOverlaySlot(location: location, isDesktop: false),
         ],
       ),
       bottomNavigationBar: AppShell.dockChrome(
