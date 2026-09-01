@@ -1081,11 +1081,49 @@ defmodule Mydia.ImportCandidates do
     result
   end
 
+  # A "no progress" stop has to be decided across one *complete* sweep of
+  # every currently-queued anchor, not one anchor page: `queued_anchor_keys/4`
+  # is keyset-paged, and an early page that makes zero progress must not
+  # short-circuit the anchors past it. Deciding per-page (as this used to)
+  # left later-ordered anchors permanently stranded behind a page-size-or-more
+  # run of identically-failing early ones, across every one of Oban's
+  # retries -- see the finding this fixed. `sweep_accepted/5` walks the whole
+  # queued set once, advancing its cursor past every anchor it touches
+  # regardless of outcome; only once that full walk completes does this
+  # compare `remaining` against `remaining_before` to decide whether another
+  # sweep is worth attempting or the loop should stop and let the worker's
+  # retry (or a stuck anchor's terminal clear) take over.
   defp drain_accepted_pages(library_path_id, opts, page_size, remaining_before, acc) do
-    keys = queued_anchor_keys(library_path_id, "accept", page_size)
+    acc = sweep_accepted(library_path_id, opts, page_size, nil, acc)
+    remaining = queued_count(library_path_id, "accept")
+
+    cond do
+      remaining == 0 ->
+        {:ok, Map.put(acc, :remaining, 0)}
+
+      remaining < remaining_before ->
+        drain_accepted_pages(library_path_id, opts, page_size, remaining, acc)
+
+      # No progress across a whole sweep: every still-queued anchor failed
+      # without clearing its marker, so another sweep would fetch the same
+      # anchors and fail identically. Stop and let the worker's retry handle
+      # it.
+      true ->
+        {:ok, Map.put(acc, :remaining, remaining)}
+    end
+  end
+
+  # One full keyset walk over every anchor currently queued for accept,
+  # advancing `after_key` past each page regardless of whether its anchors
+  # promoted or failed -- unlike re-fetching from the same cursor, a failure
+  # can never cause this to refetch (and re-attempt) the anchor(s) that just
+  # failed, so no later-ordered anchor is ever left unreached by a stuck
+  # earlier one.
+  defp sweep_accepted(library_path_id, opts, page_size, after_key, acc) do
+    keys = queued_anchor_keys(library_path_id, "accept", page_size, after_key)
 
     if keys == [] do
-      {:ok, Map.put(acc, :remaining, 0)}
+      acc
     else
       acc = Enum.reduce(keys, acc, &promote_queued_anchor(library_path_id, &1, opts, &2))
 
@@ -1094,21 +1132,7 @@ defmodule Mydia.ImportCandidates do
       # keeps that from becoming a re-render storm.
       broadcast(library_path_id)
 
-      remaining = queued_count(library_path_id, "accept")
-
-      cond do
-        remaining == 0 ->
-          {:ok, Map.put(acc, :remaining, 0)}
-
-        remaining < remaining_before ->
-          drain_accepted_pages(library_path_id, opts, page_size, remaining, acc)
-
-        # No progress: every group on that page failed without clearing its
-        # marker, so another pass would fetch the same anchors and fail
-        # identically. Stop and let the worker's retry handle it.
-        true ->
-          {:ok, Map.put(acc, :remaining, remaining)}
-      end
+      sweep_accepted(library_path_id, opts, page_size, List.last(keys), acc)
     end
   end
 
@@ -1154,15 +1178,19 @@ defmodule Mydia.ImportCandidates do
       %{acc | failed: acc.failed + 1}
   end
 
-  defp queued_anchor_keys(library_path_id, op, limit) do
+  defp queued_anchor_keys(library_path_id, op, limit, after_key) do
     library_path_id
     |> queued_query(op)
+    |> maybe_after_anchor_key(after_key)
     |> distinct(true)
     |> order_by([c], asc: c.anchor_key)
     |> select([c], c.anchor_key)
     |> limit(^limit)
     |> Repo.all()
   end
+
+  defp maybe_after_anchor_key(query, nil), do: query
+  defp maybe_after_anchor_key(query, key), do: where(query, [c], c.anchor_key > ^key)
 
   defp queued_count(library_path_id, op) do
     library_path_id

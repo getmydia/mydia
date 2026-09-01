@@ -217,6 +217,68 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
       assert is_nil(reloaded_rematching.queue_error)
     end
 
+    test "an early anchor stuck in a transient failure does not strand a later, healthy anchor" do
+      lp = library_path_fixture(%{type: "series"})
+      series_id = to_string(Mydia.MetadataStubProvider.series_tvdb_id())
+
+      # "blocked" sorts before "healthy", so with anchor_page_size: 1 it lands
+      # on the drain's first anchor page, ahead of the healthy anchor below.
+      stuck =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "blocked show",
+          relative_path: "Blocked Show/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: series_id,
+          title: "Blocked Show",
+          media_type: "tv_show",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+        |> queue()
+
+      # A MediaFile already occupying the queued candidate's path makes
+      # CandidatePromotion's ensure_path_available/1 fail with
+      # {:error, {:duplicate_path, _, _}} -- a transient, non-terminal error
+      # (not in @terminal_accept_errors) that leaves queued_op in place for
+      # retry rather than clearing the marker. An episode-owned file, not a
+      # movie one, since `lp` is a series library path.
+      other_episode = episode_fixture()
+
+      media_file_fixture(%{
+        library_path_id: lp.id,
+        episode_id: other_episode.id,
+        relative_path: stuck.relative_path
+      })
+
+      healthy =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "healthy show",
+          relative_path: "Healthy Show/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: series_id,
+          title: "Healthy Show",
+          media_type: "tv_show",
+          confidence: 0.95,
+          parsed_info: %{"season" => 1, "episodes" => [1]}
+        })
+        |> queue()
+
+      assert {:ok, %{promoted: 1, remaining: 1}} =
+               ImportCandidates.drain_accepted(lp.id,
+                 anchor_page_size: 1,
+                 config: Mydia.Metadata.default_relay_config(),
+                 allow_episode_creation: true
+               )
+
+      refute Repo.get(ImportCandidate, healthy.id)
+
+      reloaded_stuck = Repo.get!(ImportCandidate, stuck.id)
+      assert reloaded_stuck.queued_op == "accept"
+      assert is_nil(reloaded_stuck.queue_error)
+    end
+
     test "a library with nothing queued is a no-op" do
       lp = library_path_fixture(%{type: "series"})
 
