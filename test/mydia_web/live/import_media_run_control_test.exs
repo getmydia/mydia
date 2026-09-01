@@ -555,6 +555,54 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     assert is_nil(Repo.reload!(other).queued_op)
   end
 
+  test "queuing an accept enqueues the accept-drain worker", %{
+    conn: conn,
+    library_path: lp
+  } do
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 9101})
+
+    import_candidate_fixture(%{
+      library_path_id: lp.id,
+      anchor_key: "queue worker movie",
+      media_type: "movie",
+      provider_type: "tmdb",
+      provider_id: to_string(movie.tmdb_id),
+      title: movie.title,
+      year: movie.year,
+      confidence: 0.99,
+      parsed_info: %{"type" => "movie"}
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{lp.id}")
+
+    view |> element("#import-all-results") |> render_click()
+
+    assert_enqueued(
+      worker: Mydia.Jobs.ApplyImportCandidates,
+      queue: :default,
+      args: %{"library_path_id" => lp.id}
+    )
+  end
+
+  test "queuing a re-match enqueues the rematch-drain worker", %{
+    conn: conn,
+    library_path: lp
+  } do
+    candidate =
+      import_candidate_fixture(%{library_path_id: lp.id, anchor_key: "queue worker rematch"})
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{lp.id}")
+
+    render_click(view, "toggle_group", %{"id" => candidate.anchor_key})
+    view |> element("#rematch-selected") |> render_click()
+
+    assert_enqueued(
+      worker: Mydia.Jobs.RematchImportCandidates,
+      queue: :default,
+      args: %{"library_path_id" => lp.id}
+    )
+  end
+
   test "scan controls and review are both visible while idle", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/import")
 
