@@ -1,14 +1,29 @@
 name: CI / Player E2E
 
 on:
-  # Push only. This job's internal dorny/paths-filter treats lib/**, config/**,
-  # priv/**, mix.exs and Dockerfile as relevant on purpose, so backend PRs pulled
-  # the full 20-minute run. Narrowing that list was rejected: the filter block
-  # documents an invariant that `relevant` must be a superset of `server`,
-  # `toolbox` and `relay`, and records two past bugs from violating it. Dropping
-  # the PR trigger sidesteps the filter entirely. The filter itself is guarded
-  # on `github.event_name == 'pull_request'`, so it goes inert on its own and is
-  # left in place to keep a revert to a one-line change.
+  # Runs on PRs and on push to master. The internal dorny/paths-filter decides
+  # what actually executes: `relevant` gates whether the job runs at all, and
+  # the per-image filters choose pull-versus-build for each of the three
+  # images independently.
+  #
+  # This trigger was removed on 2026-08-12 because every backend PR paid a
+  # from-source server build, at roughly 20 minutes. It is restored because
+  # that build was far more expensive than it needed to be: every cache flag
+  # in this job was a silent no-op until 2026-09-01, so those runs were fully
+  # cold. See the "Expose GitHub Actions runtime for BuildKit" step.
+  #
+  # Expected job time by PR shape:
+  #   player, docs or CI paths only  pull all three images, around 10m
+  #   backend paths                  build the server, pull the rest, ~19m
+  #   nothing under `relevant`       skipped in seconds
+  #
+  # If backend PRs still feel slow, the next lever is NOT narrowing the
+  # `relevant` filter, which the filter block explains would reintroduce two
+  # past bugs. It is warming the Rust build: roughly 6m20s of `mix compile` is
+  # mydia_p2p and mydia_subsync compiling in release mode from a cold
+  # target/, which no BuildKit cache backend can carry because it lives in a
+  # RUN --mount=type=cache. That needs a Dockerfile change.
+  pull_request:
   push:
     branches: [master, main]
   workflow_dispatch:
