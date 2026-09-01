@@ -1,6 +1,6 @@
 <Layouts.app {assigns}>
   <%!-- Page Container --%>
-  <div class="relative -mx-3 -mt-3 sm:-mx-4 sm:-mt-4 md:-mx-6 md:-mt-6 lg:-mx-8 lg:-mt-8 mb-4">
+  <div class="relative mb-4">
     <%!-- Backdrop. Anchored to the viewport, not to this wrapper.
 
           Sized `absolute inset-0` this layer's containing block was the
@@ -51,7 +51,7 @@
           plain z-50 element and a daisyUI dropdown-content z-50 still win
           elementFromPoint over the sidebar, identically to the uncontained
           control. --%>
-    <div class="@container relative pt-8 md:pt-16 pb-8 px-3 sm:px-4 md:px-6 lg:px-8">
+    <div class="@container relative pt-5 sm:pt-4 md:pt-10 lg:pt-8 pb-8">
       <div
         id="page-grid"
         class={[
