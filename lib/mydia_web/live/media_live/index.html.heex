@@ -411,7 +411,7 @@
               />
             </button>
 
-            <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
+            <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
               <.link navigate={~p"/media/#{item.id}"}>
                 <% progress = get_progress(item) %>
                 <.poster_figure src={get_poster_url(item)} alt={item.title}>
@@ -427,38 +427,37 @@
                   </:overlay>
                 </.poster_figure>
               </.link>
-              <div class="card-body p-3">
-                <h3 class="card-title text-sm line-clamp-2" title={item.title}>
-                  {item.title}
-                </h3>
-                <%!-- Status badge and year --%>
-                <% status = get_media_item_status(item) %>
-                <div class="flex flex-col gap-1">
-                  <div class="flex items-center justify-between gap-2">
-                    <div class="flex items-center gap-1">
-                      <div class="tooltip tooltip-right" data-tip={media_status_label(status)}>
-                        <span class={["badge badge-xs", media_status_color(status)]}>
-                          <.icon name={media_status_icon(status)} class="w-3 h-3" />
-                        </span>
-                      </div>
-                      <%!-- Category badge --%>
-                      <%= if item.category do %>
-                        <div>
-                          <.category_badge
-                            category={item.category}
-                            override={item.category_override}
-                            size="xs"
-                          />
+              <% status = get_media_item_status(item) %>
+              <.poster_card_body title={item.title}>
+                <:meta>
+                  <%!-- Status badge and year --%>
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-1">
+                        <div class="tooltip tooltip-right" data-tip={media_status_label(status)}>
+                          <span class={["badge badge-xs", media_status_color(status)]}>
+                            <.icon name={media_status_icon(status)} class="w-3 h-3" />
+                          </span>
                         </div>
-                      <% end %>
+                        <%!-- Category badge --%>
+                        <%= if item.category do %>
+                          <div>
+                            <.category_badge
+                              category={item.category}
+                              override={item.category_override}
+                              size="xs"
+                            />
+                          </div>
+                        <% end %>
+                      </div>
+                      <span class="text-xs text-base-content/70">{format_year(item.year)}</span>
                     </div>
-                    <span class="text-xs text-base-content/70">{format_year(item.year)}</span>
+                    <%= if episode_count = format_episode_count(status) do %>
+                      <span class="text-xs text-base-content/70">{episode_count}</span>
+                    <% end %>
                   </div>
-                  <%= if episode_count = format_episode_count(status) do %>
-                    <span class="text-xs text-base-content/70">{episode_count}</span>
-                  <% end %>
-                </div>
-              </div>
+                </:meta>
+              </.poster_card_body>
             </div>
           </div>
         <% else %>
