@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Settings
   alias Mydia.Collections
+  alias Mydia.Collections.SmartRules
   alias Mydia.Downloads.DownloadService
   alias Mydia.Search
   alias MydiaWeb.Live.Authorization
@@ -48,6 +49,9 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:scanning, false)
      |> assign(:scan_result, nil)
      |> assign(:scan_progress, nil)
+     |> assign(:section, nil)
+     |> assign(:section_query, nil)
+     |> assign(:section_error, false)
      |> assign(:show_add_to_collection_modal, false)
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
@@ -71,6 +75,46 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
     |> load_media_items(reset: true)
+  end
+
+  defp apply_action(socket, :section, %{"id" => id}) do
+    case Collections.get_collection(socket.assigns.current_user, id) do
+      nil ->
+        socket
+        |> put_flash(:error, "That section is no longer available.")
+        |> push_navigate(to: ~p"/")
+
+      collection ->
+        socket
+        |> assign(:page_title, collection.name)
+        # mount/3 does not assign :filter_type; only :movies and :tv_shows do.
+        # The library scan handlers read it unguarded, and their existing
+        # {nil, _} clause is the right behaviour for a section.
+        |> assign(:filter_type, nil)
+        |> assign(:section, collection)
+        |> load_section(collection)
+    end
+  end
+
+  defp load_section(socket, collection) do
+    case SmartRules.query(collection.smart_rules || "{}") do
+      {:ok, query} ->
+        socket
+        |> assign(:section_query, query)
+        |> assign(:section_error, false)
+        |> load_media_items(reset: true)
+
+      {:error, reason} ->
+        Logger.warning("Section #{collection.id} has unusable rules: #{inspect(reason)}")
+
+        socket
+        |> assign(:section_query, nil)
+        |> assign(:section_error, true)
+        |> assign(:media_items_empty?, true)
+        |> assign(:all_visible_ids, MapSet.new())
+        |> assign(:has_more, false)
+        |> stream(:media_items, [], reset: true)
+    end
   end
 
   @impl true
@@ -733,6 +777,7 @@ defmodule MydiaWeb.MediaLive.Index do
     active_files_query = Mydia.Library.MediaFile.versions()
 
     []
+    |> maybe_add_filter(:base_query, assigns[:section_query])
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
     |> Keyword.put(:preload, [
@@ -743,6 +788,7 @@ defmodule MydiaWeb.MediaLive.Index do
     ])
   end
 
+  defp maybe_add_filter(opts, _key, []), do: opts
   defp maybe_add_filter(opts, _key, nil), do: opts
   defp maybe_add_filter(opts, key, value), do: Keyword.put(opts, key, value)
 
