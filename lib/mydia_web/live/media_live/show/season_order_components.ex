@@ -56,7 +56,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderComponents do
             <button
               type="button"
               id="season-order-accept"
-              class="btn btn-sm btn-primary"
+              class="btn btn-sm btn-neutral"
               phx-click="change_season_order"
               phx-value-order="dvd"
             >

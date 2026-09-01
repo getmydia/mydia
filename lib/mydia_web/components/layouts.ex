@@ -104,7 +104,7 @@ defmodule MydiaWeb.Layouts do
               </span>
             </div>
             <div class="flex items-center gap-2">
-              <.link navigate={~p"/changelog"} class="btn btn-sm btn-primary">
+              <.link navigate={~p"/changelog"} class="btn btn-sm btn-neutral">
                 See what's new
               </.link>
               <button
