@@ -148,11 +148,15 @@ defmodule Mydia.Collections do
 
     exclusive = Keyword.get(opts, :exclusive, false) and exclusive_eligible?(collection)
 
-    update_collection(user, collection, %{
-      pinned_position: next_position,
-      sidebar_icon: Keyword.get(opts, :sidebar_icon),
-      exclusive: exclusive
-    })
+    attrs = %{pinned_position: next_position, exclusive: exclusive}
+
+    attrs =
+      case Keyword.fetch(opts, :sidebar_icon) do
+        {:ok, icon} -> Map.put(attrs, :sidebar_icon, icon)
+        :error -> attrs
+      end
+
+    update_collection(user, collection, attrs)
   end
 
   @doc """

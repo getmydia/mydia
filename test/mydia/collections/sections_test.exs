@@ -172,6 +172,44 @@ defmodule Mydia.Collections.SectionsTest do
       assert Collections.pin_section(user, collection) == {:error, :not_smart}
       assert Collections.list_pinned_sections(user) == []
     end
+
+    test "re-pinning with no opts keeps a previously customized icon" do
+      user = user_fixture()
+
+      {:ok, collection} =
+        Collections.create_collection(user, smart_attrs("Anime", ["anime_movie"]))
+
+      {:ok, pinned_collection} =
+        Collections.pin_section(user, collection, sidebar_icon: "hero-face-smile")
+
+      # Simulate customizing the icon via the section settings gear, which
+      # goes through update_collection/3, not pin_section/3.
+      {:ok, customized} =
+        Collections.update_collection(user, pinned_collection, %{sidebar_icon: "hero-star"})
+
+      {:ok, unpinned} = Collections.unpin_section(user, customized)
+
+      {:ok, repinned} = Collections.pin_section(user, unpinned)
+
+      assert repinned.sidebar_icon == "hero-star"
+    end
+
+    test "re-pinning with an explicit sidebar_icon still overwrites it" do
+      user = user_fixture()
+
+      {:ok, collection} =
+        Collections.create_collection(user, smart_attrs("Anime", ["anime_movie"]))
+
+      {:ok, pinned_collection} =
+        Collections.pin_section(user, collection, sidebar_icon: "hero-star")
+
+      {:ok, unpinned} = Collections.unpin_section(user, pinned_collection)
+
+      {:ok, repinned} =
+        Collections.pin_section(user, unpinned, sidebar_icon: "hero-face-smile")
+
+      assert repinned.sidebar_icon == "hero-face-smile"
+    end
   end
 
   describe "exclusive_eligible?/1" do
