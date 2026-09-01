@@ -188,6 +188,89 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     end
   end
 
+  # Configure is also reachable from a caret inside the recommendations rail
+  # while the trending-detail modal is open (TrendingDetailModal's own
+  # header caret needs the same fix, but the rail is where the reviewed
+  # regression was found). Opening it clears @library_picker, so
+  # picker_open alone reads false again the instant Configure opens; without
+  # TrendingDetailModal's config_open guard, one Escape press fires both
+  # close_add_config and close_details and silently closes the detail view.
+  describe "Escape while the detail modal is also open" do
+    setup %{provider_id: provider_id} do
+      # A second candidate library so the caret is visible on its ordinary
+      # `> 1` gate: the recommendations rail's cards do not carry Discover's
+      # main-grid always_show_caret override.
+      library_path_fixture(%{type: :movies})
+
+      recommended_id = unique_provider_id()
+
+      warm_recommendations_cache(provider_id, :movie, [
+        %{"id" => recommended_id, "title" => "Second Reef", "release_date" => "2023-01-01"}
+      ])
+
+      bypass = Bypass.open()
+      previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_metadata_relay_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      # The detail modal's own metadata fetch (fetch_detail_metadata ->
+      # Metadata.fetch_by_id) is uncached, matching the add flow's own fetch
+      # in the describe block above.
+      Bypass.expect(bypass, "GET", "/tmdb/movies/#{provider_id}", fn conn ->
+        body = %{
+          "id" => provider_id,
+          "title" => "Quiet Harbour",
+          "release_date" => "2024-05-01",
+          "belongs_to_collection" => nil
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      %{recommended_id: recommended_id}
+    end
+
+    test "pressing Escape while Configure is open over the detail modal closes only Configure",
+         %{conn: conn, provider_id: provider_id, recommended_id: recommended_id} do
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
+
+      view
+      |> element("div[phx-click='show_details'][phx-value-id='#{provider_id}']")
+      |> render_click()
+
+      assert has_element?(view, "#discover-detail-modal[open]")
+
+      render_async(view, 5000)
+
+      rail_caret =
+        "#discover-recommendations-rail-item-#{recommended_id} [data-test='library-picker-caret']"
+
+      assert has_element?(view, rail_caret)
+
+      view |> element(rail_caret) |> render_click()
+      view |> element("#discover-configure-add") |> render_click()
+
+      assert has_element?(view, "#add-config-modal[open]")
+
+      # The detail modal's own Escape binding must be suppressed while
+      # Configure is open, or a real Escape press would fire both handlers.
+      refute has_element?(view, "#discover-detail-modal[phx-window-keydown]")
+
+      view |> element("#add-config-modal") |> render_keydown(%{"key" => "Escape"})
+
+      refute has_element?(view, "#add-config-modal[open]")
+      assert has_element?(view, "#discover-detail-modal[open]")
+    end
+  end
+
   # The add completes in a handle_info the submit's render_submit/render_hook
   # round trip does not wait on: it fetches metadata over Bypass before
   # creating the row. Matches the wait_until/1 helper hide_owned_test.exs

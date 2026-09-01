@@ -33,7 +33,8 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModalActionsTest do
       current_user: %{role: "admin"},
       open: true,
       libraries: [],
-      picker_open: false
+      picker_open: false,
+      config_open: false
     }
   end
 
