@@ -92,8 +92,14 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       {:ok, theirs} =
         Collections.create_collection(stranger, %{
           name: "Private",
-          type: "manual",
+          type: "smart",
           visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [
+                %{"field" => "category", "operator" => "in", "value" => ["anime_movie"]}
+              ]
+            }),
           pinned_position: 0
         })
 

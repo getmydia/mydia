@@ -59,6 +59,46 @@ defmodule Mydia.Collections.SectionsTest do
       assert Enum.all?(Collection.valid_sidebar_icons(), &String.starts_with?(&1, "hero-"))
       assert "hero-sparkles" in Collection.valid_sidebar_icons()
     end
+
+    test "a manual collection with a pinned_position is rejected" do
+      changeset =
+        Collection.changeset(%Collection{}, %{
+          name: "Watchlist",
+          type: "manual",
+          visibility: "private",
+          pinned_position: 0
+        })
+
+      refute changeset.valid?
+
+      assert %{pinned_position: ["only smart collections can be pinned"]} =
+               errors_on(changeset)
+    end
+
+    test "an unpinned manual collection still validates" do
+      changeset =
+        Collection.changeset(%Collection{}, %{
+          name: "Watchlist",
+          type: "manual",
+          visibility: "private"
+        })
+
+      assert changeset.valid?
+    end
+
+    test "a pinned smart collection still validates" do
+      changeset =
+        Collection.changeset(%Collection{}, %{
+          name: "Anime",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            ~s({"conditions":[{"field":"category","operator":"in","value":["anime_movie"]}]}),
+          pinned_position: 0
+        })
+
+      assert changeset.valid?
+    end
   end
 
   describe "list_pinned_sections/1" do

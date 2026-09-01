@@ -100,6 +100,7 @@ defmodule Mydia.Collections.Collection do
     |> validate_inclusion(:sort_order, @sort_order_values)
     |> validate_inclusion(:sidebar_icon, @sidebar_icons, message: "is not a supported icon")
     |> validate_smart_rules()
+    |> validate_pinned_section_type()
     |> foreign_key_constraint(:user_id)
   end
 
@@ -165,6 +166,20 @@ defmodule Mydia.Collections.Collection do
 
       true ->
         changeset
+    end
+  end
+
+  # Only smart collections may be pinned as sidebar sections: pin_section/3
+  # and the :section LiveView route both already guard against a manual
+  # collection reaching /sections/:id, since smart_rules: nil would build an
+  # unfiltered query. This is the third layer, closing off the changeset
+  # itself as a way to bypass those guards.
+  defp validate_pinned_section_type(changeset) do
+    if get_field(changeset, :type) == "manual" and
+         not is_nil(get_field(changeset, :pinned_position)) do
+      add_error(changeset, :pinned_position, "only smart collections can be pinned")
+    else
+      changeset
     end
   end
 
