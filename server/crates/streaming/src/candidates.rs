@@ -55,10 +55,21 @@ pub fn build(facts: &Facts) -> Vec<Candidate> {
     );
 
     match mode {
+        // HLS_COPY sits between the two for clients that cannot take
+        // DIRECT_PLAY even when they qualify. The web player is all of that
+        // set: it always plays through an HLS session, so a two-rung list left
+        // it re-encoding a file its own device profile had just approved
+        // untouched. Native still reads DIRECT_PLAY off the front, unchanged.
         Mode::DirectPlay => vec![
             candidate(
                 Strategy::DirectPlay,
                 &container,
+                video.as_deref(),
+                audio.as_deref(),
+            ),
+            candidate(
+                Strategy::HlsCopy,
+                TRANSCODE_CONTAINER,
                 video.as_deref(),
                 audio.as_deref(),
             ),
@@ -132,12 +143,15 @@ mod tests {
     }
 
     #[test]
-    fn a_direct_playable_file_offers_direct_play_then_transcode() {
-        // candidates.ex:102-108.
+    fn a_direct_playable_file_offers_direct_play_then_hls_copy_then_transcode() {
+        // candidates.ex, :direct_play branch.
         let list = build(&facts("mp4", "H.264 (High)", Some("AAC")));
 
-        assert_eq!(list.len(), 2);
-        assert_eq!(list[0].strategy, Strategy::DirectPlay);
+        assert_eq!(
+            list.iter().map(|c| c.strategy).collect::<Vec<_>>(),
+            vec![Strategy::DirectPlay, Strategy::HlsCopy, Strategy::Transcode]
+        );
+
         assert_eq!(list[0].container, "mp4");
         assert_eq!(list[0].video_codec.as_deref(), Some("avc1.640028"));
         assert_eq!(list[0].audio_codec.as_deref(), Some("mp4a.40.2"));
@@ -146,10 +160,34 @@ mod tests {
             r#"video/mp4; codecs="avc1.640028, mp4a.40.2""#
         );
 
-        assert_eq!(list[1].strategy, Strategy::Transcode);
+        // A stream copy, so it repackages into ts and keeps the file's own
+        // codecs rather than the transcode ladder's.
         assert_eq!(list[1].container, "ts");
-        assert_eq!(list[1].video_codec.as_deref(), Some("avc1.640028"));
-        assert_eq!(list[1].audio_codec.as_deref(), Some("mp4a.40.2"));
+        assert_eq!(list[1].video_codec, list[0].video_codec);
+        assert_eq!(list[1].audio_codec, list[0].audio_codec);
+
+        assert_eq!(list[2].strategy, Strategy::Transcode);
+        assert_eq!(list[2].container, "ts");
+        assert_eq!(list[2].video_codec.as_deref(), Some("avc1.640028"));
+        assert_eq!(list[2].audio_codec.as_deref(), Some("mp4a.40.2"));
+    }
+
+    #[test]
+    fn every_mode_offers_a_web_reachable_rung_behind_the_leader() {
+        // The web player never takes DIRECT_PLAY (it forces an HLS session)
+        // and refuses a *leading* HLS_COPY, so a list whose only non-leading
+        // rung is TRANSCODE means a re-encode. HEVC-needing-transcode is the
+        // one mode where that is the correct answer.
+        for (container, video, audio) in [
+            ("mp4", "H.264 (High)", Some("AAC")),
+            ("mkv", "H.264 (High)", Some("AAC")),
+        ] {
+            let list = build(&facts(container, video, audio));
+            assert!(
+                list[1..].iter().any(|c| c.strategy == Strategy::HlsCopy),
+                "{container}/{video} leaves web with nothing but TRANSCODE"
+            );
+        }
     }
 
     #[test]
