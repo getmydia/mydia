@@ -168,11 +168,22 @@ defmodule Mydia.Library.FileIngestTest do
   # Timeouts here are generous on purpose. This test escapes the sandbox and
   # races two real connections through the SQLite write lock, so every wait is
   # for another OS process to be scheduled rather than for anything this test
-  # computes. It runs in well under a second locally and still timed out on
-  # two of three CI runs at the two second budget it used to carry, which is a
-  # loaded runner, not a regression. The numbers below are large enough that
-  # only a genuine hang reaches them; a real failure still fails, just later.
-  @ownership_await 30_000
+  # computes. It runs in well under a second locally.
+  #
+  # `@ownership_await` must stay clear of SQLite's busy handler. While the
+  # winner works, the loser is parked in `BEGIN IMMEDIATE` retrying, and
+  # `config/test.exs` sets `busy_timeout: 30_000`, so a single contended
+  # statement may legitimately block for thirty full seconds. This budget was
+  # once 2_000 and then 30_000, the latter landing exactly on `busy_timeout`:
+  # at any value at or below it, one ordinary lock wait exhausts the budget and
+  # `Task.await` gives up on a test that was never stuck. That is why raising
+  # 2_000 to 30_000 did not move the failure rate, which stayed around two runs
+  # in three -- evidence against "slow runner" and for a bounded lock wait.
+  #
+  # 90_000 is above Ecto's own `timeout: 60_000`, so a query that really is
+  # stuck now raises a DBConnection timeout with a stacktrace before this
+  # budget expires. A `Task.await` timeout here once again means a hang.
+  @ownership_await 90_000
   @ownership_receive 10_000
 
   test "a losing promotion failure cannot resurrect the winner's deleted candidate" do

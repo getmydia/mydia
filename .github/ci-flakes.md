@@ -369,6 +369,38 @@ under a different pid is this bug, not load.
 Note its `on_exit` deletes rows through another `unboxed_run`, so a failed run
 can leave real rows behind in the shared SQLite test database.
 
+**`Mydia.Library.FileIngestTest`, "a losing promotion failure cannot resurrect
+the winner's deleted candidate"** (`file_ingest_test.exs:178`). **Fixed
+2026-09-01, same day, and it was a timeout budget, not load.** Fails as
+`** (exit) exited in: Task.await(...)` at `assert {:promoted, [_]} =
+Task.await(winner, @ownership_await)`, SQLite job only.
+
+The budget was the bug. While the winner holds the writer lock the loser is
+parked in `BEGIN IMMEDIATE` retrying, and `config/test.exs` sets
+`busy_timeout: 30_000`, so one contended statement may legitimately block for
+thirty full seconds. `@ownership_await` was **also** `30_000`. At any value at
+or below `busy_timeout`, a single ordinary lock wait exhausts the whole budget
+and `Task.await` gives up on a test that was never stuck.
+
+The rate is what proves it. The budget was raised from `2_000` to `30_000`
+precisely to stop this, and the failure rate did not move: roughly two runs in
+three before, and it still failed twice consecutively afterwards, including a
+`gh run rerun --failed`. Ordinary slowness would have improved fifteenfold.
+A bounded thirty-second lock wait would not improve at all, which is what was
+observed.
+
+Raised to `90_000`, above Ecto's own `timeout: 60_000`, so a genuinely stuck
+query raises a `DBConnection` timeout with a stacktrace before the budget
+expires, and a `Task.await` timeout here means a hang again.
+
+**Generalise from this too.** A timeout budget must exceed the longest wait the
+system is allowed to impose, or it measures the lock manager rather than the
+code. Compare any `Task.await`/`assert_receive` budget against `busy_timeout`,
+`pool_timeout` and `timeout` in `config/test.exs` before calling it generous. A
+budget equal to one of them is not a generous budget, it is a coin flip. And
+when raising a budget does not move a failure rate, stop raising it: that is
+evidence the wait is bounded by configuration, not by load.
+
 ### Postgres job
 
 **`CrashReporter.TowerReporterTest`**, high rate, roughly 3 in 5 runs. Fails

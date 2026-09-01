@@ -365,12 +365,14 @@ defmodule Mydia.Library.CandidatePromotionTest do
     end
   end
 
-  # Same reasoning as the ownership race in file_ingest_test.exs: this escapes
-  # the sandbox and waits on real connections being scheduled, so its budgets
-  # measure runner load rather than anything it computes. It was caught twice
-  # in .github/ci-flakes.md at the old one and two second values, on both
-  # adapters, and runs in a fraction of a second locally.
-  @ownership_await 30_000
+  # Same reasoning as the ownership race in file_ingest_test.exs, including why
+  # `@ownership_await` has to clear SQLite's `busy_timeout: 30_000` rather than
+  # sit exactly on it: while one promotion holds the writer lock the other is
+  # parked in `BEGIN IMMEDIATE` retrying, so a single contended statement can
+  # legitimately block for the full thirty seconds. See that file for the
+  # detail. This test escapes the sandbox too and runs in a fraction of a
+  # second locally.
+  @ownership_await 90_000
   @ownership_receive 10_000
 
   test "separate database connections serialize competing promotions at ownership" do
