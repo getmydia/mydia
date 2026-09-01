@@ -165,13 +165,11 @@ defmodule Mydia.Collections.SmartRules do
   def execute_query(rules, opts \\ [])
 
   def execute_query(rules, opts) when is_map(rules) do
-    # First validate the rules
-    case validate(rules) do
-      {:ok, _} ->
+    case query(rules) do
+      {:ok, q} ->
         try do
           items =
-            rules
-            |> build_query()
+            q
             |> apply_sort(rules)
             |> apply_limit(rules, opts)
             |> apply_offset(opts)
@@ -187,8 +185,8 @@ defmodule Mydia.Collections.SmartRules do
             {:error, "Query failed: #{Exception.message(e)}"}
         end
 
-      {:error, errors} ->
-        {:error, "Invalid rules: #{Enum.join(errors, ", ")}"}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
