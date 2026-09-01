@@ -33,6 +33,18 @@
           selected_count={MapSet.size(@selected_ids)}
         />
 
+        <%!-- Section settings (shown on section pages only) --%>
+        <button
+          :if={@section}
+          id="open-section-settings"
+          type="button"
+          phx-click="open_section_settings"
+          class="btn btn-ghost btn-sm btn-circle"
+          aria-label="Section settings"
+        >
+          <.icon name="hero-cog-6-tooth" class="w-5 h-5" />
+        </button>
+
         <%!-- Re-scan button (shown on Movies and TV Shows pages) --%>
         <%= if @filter_type in ["movie", "tv_show"] do %>
           <button
@@ -108,6 +120,14 @@
         />
       </div>
     </div>
+
+    <.section_settings_modal
+      :if={@section && @section_form}
+      section={@section}
+      form={@section_form}
+      exclusive_eligible={@section_exclusive_eligible}
+      open={@show_section_settings}
+    />
 
     <%!-- Hidden debug info for tests --%>
     <div

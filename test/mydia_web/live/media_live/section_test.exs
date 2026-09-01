@@ -184,4 +184,70 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       assert Mydia.Collections.list_pinned_sections(other) == []
     end
   end
+
+  describe "section settings" do
+    test "unpinning removes the section and returns to the library", %{
+      conn: conn,
+      user: user,
+      section: section
+    } do
+      {:ok, view, _html} = live(conn, ~p"/sections/#{section.id}")
+
+      view |> element("#open-section-settings") |> render_click()
+
+      {:error, {:live_redirect, %{to: "/tv"}}} =
+        view |> element("#unpin-section") |> render_click()
+
+      assert Collections.list_pinned_sections(user) == []
+      assert Collections.get_collection(user, section.id)
+    end
+
+    test "unpinning restores the items to the TV page", %{
+      conn: conn,
+      section: section,
+      anime: anime
+    } do
+      {:ok, view, _html} = live(conn, ~p"/sections/#{section.id}")
+      view |> element("#open-section-settings") |> render_click()
+      view |> element("#unpin-section") |> render_click()
+
+      {:ok, _view, html} = live(conn, ~p"/tv")
+
+      assert html =~ anime.title
+    end
+
+    test "renaming the section updates the heading", %{conn: conn, section: section} do
+      {:ok, view, _html} = live(conn, ~p"/sections/#{section.id}")
+
+      view |> element("#open-section-settings") |> render_click()
+
+      view
+      |> form("#section-settings-form", section: %{name: "Animation", exclusive: "true"})
+      |> render_submit()
+
+      assert has_element?(view, "#section-heading", "Animation")
+    end
+
+    test "the exclusive toggle is absent when the rules are not category-only", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, complex} =
+        Collections.create_collection(user, %{
+          name: "Recent",
+          type: "smart",
+          visibility: "private",
+          smart_rules:
+            Jason.encode!(%{
+              "conditions" => [%{"field" => "year", "operator" => "gte", "value" => 2020}]
+            }),
+          pinned_position: 1
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/sections/#{complex.id}")
+      view |> element("#open-section-settings") |> render_click()
+
+      refute has_element?(view, "#section-exclusive-toggle")
+    end
+  end
 end

@@ -13,6 +13,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.MediaLive.Show.Helpers, as: MediaFileHelpers
 
   import MydiaWeb.GridDensityComponents
+  import MydiaWeb.MediaLive.Index.SectionComponents
 
   require Logger
 
@@ -53,6 +54,9 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:section_query, nil)
      |> assign(:section_error, false)
      |> assign(:excluded_count, 0)
+     |> assign(:show_section_settings, false)
+     |> assign(:section_form, nil)
+     |> assign(:section_exclusive_eligible, false)
      |> assign(:show_add_to_collection_modal, false)
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
@@ -603,6 +607,70 @@ defmodule MydiaWeb.MediaLive.Index do
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Failed to start library scan")}
+    end
+  end
+
+  def handle_event("open_section_settings", _params, socket) do
+    section = socket.assigns.section
+
+    {:noreply,
+     socket
+     |> assign(:show_section_settings, true)
+     |> assign(:section_exclusive_eligible, Collections.exclusive_eligible?(section))
+     |> assign(
+       :section_form,
+       to_form(
+         %{
+           "name" => section.name,
+           "sidebar_icon" => section.sidebar_icon,
+           "exclusive" => section.exclusive
+         },
+         as: :section
+       )
+     )}
+  end
+
+  def handle_event("close_section_settings", _params, socket) do
+    {:noreply, assign(socket, :show_section_settings, false)}
+  end
+
+  def handle_event("save_section", %{"section" => params}, socket) do
+    user = socket.assigns.current_user
+    section = socket.assigns.section
+
+    attrs = %{
+      name: params["name"],
+      sidebar_icon: params["sidebar_icon"],
+      exclusive: params["exclusive"] == "true" and Collections.exclusive_eligible?(section)
+    }
+
+    case Collections.update_collection(user, section, attrs) do
+      {:ok, updated} ->
+        {:noreply,
+         socket
+         |> assign(:section, updated)
+         |> assign(:page_title, updated.name)
+         |> assign(:show_section_settings, false)
+         |> assign(:excluded_categories, Collections.claimed_categories(user))
+         |> put_flash(:info, "Section updated")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not update the section")}
+    end
+  end
+
+  def handle_event("unpin_section", _params, socket) do
+    user = socket.assigns.current_user
+
+    case Collections.unpin_section(user, socket.assigns.section) do
+      {:ok, _collection} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Section removed from the sidebar")
+         |> push_navigate(to: ~p"/tv")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not remove the section")}
     end
   end
 
