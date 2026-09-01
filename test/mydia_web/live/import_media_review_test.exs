@@ -312,22 +312,26 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     assert has_element?(view, "#group-toggle-#{dom_b} .hero-chevron-down")
   end
 
-  test "select all matching the filter accepts every ready group", %{conn: conn} do
+  test "select all matching the filter queues every ready group for import", %{conn: conn} do
     lp = library_path_fixture(%{type: "movies"})
 
-    for n <- 1..3 do
-      movie = media_item_fixture(%{type: "movie", tmdb_id: 1_000 + n})
+    ready_candidates =
+      for n <- 1..3 do
+        movie = media_item_fixture(%{type: "movie", tmdb_id: 1_000 + n})
 
-      seed_group(lp, "r#{n}", %{
-        media_type: "movie",
-        provider_type: "tmdb",
-        provider_id: to_string(movie.tmdb_id),
-        title: movie.title,
-        year: movie.year,
-        confidence: 1.0,
-        parsed_info: %{"type" => "movie"}
-      })
-    end
+        [candidate] =
+          seed_group(lp, "r#{n}", %{
+            media_type: "movie",
+            provider_type: "tmdb",
+            provider_id: to_string(movie.tmdb_id),
+            title: movie.title,
+            year: movie.year,
+            confidence: 1.0,
+            parsed_info: %{"type" => "movie"}
+          })
+
+        candidate
+      end
 
     seed_group(lp, "low", %{media_type: "movie", confidence: 0.7})
 
@@ -337,8 +341,43 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     view |> element("#select-all-matching") |> render_click()
     view |> element("#accept-selected") |> render_click()
 
-    assert Repo.aggregate(from(f in Mydia.Library.MediaFile), :count) == 3
+    assert Enum.all?(ready_candidates, &(Repo.reload!(&1).queued_op == "accept"))
     assert ImportCandidates.count_pending() == 1
+  end
+
+  test "accepting a selection queues it and reports the skipped groups", %{conn: conn} do
+    lp = library_path_fixture(%{type: "series"})
+
+    matched =
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: "Wandering Aurora/s01e01.mkv",
+        provider_type: "tvdb",
+        provider_id: "9001",
+        title: "Wandering Aurora",
+        media_type: "tv_show",
+        confidence: 0.95
+      })
+
+    import_candidate_fixture(%{
+      library_path_id: lp.id,
+      relative_path: "Unknown Folder/file.mkv"
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/import")
+
+    # bulk_bar (and its select-all-matching shortcut) only renders once
+    # something is selected or the band/search narrows the page -- toggling
+    # one group first makes it appear without narrowing the band away from
+    # :all, so select_all_matching/1's fresh filter-mode selection spans
+    # every band and picks up both the matched and the unmatched group.
+    render_click(view, "toggle_group", %{"id" => matched.anchor_key})
+
+    view |> element("#select-all-matching") |> render_click()
+    html = view |> element("#accept-selected") |> render_click()
+
+    assert html =~ "Queued 1 group(s) for import."
+    assert html =~ "1 skipped"
   end
 
   test "select all matching and clear both redraw every checkbox on screen", %{conn: conn} do
@@ -378,20 +417,12 @@ defmodule MydiaWeb.ImportMediaReviewTest do
        %{conn: conn} do
     lp = library_path_fixture(%{type: "movies", path: "/media/Movies"})
     # ImportCandidates' default page size is 50; 55 forces the filter-mode
-    # accept to reach past a single page or this assertion catches it at 50.
-    # A real (non-"local") provider per group, at a needs_attention
-    # confidence, is deliberate: accept_group/2 refuses provider_type:
-    # "local" outright ({:error, :local_show}), so a "local" fixture here
-    # would make every click of #accept-selected a guaranteed no-op and this
-    # test would stop proving anything about the page boundary at all.
-    #
-    # Each movie is pre-created locally (not resolved through a fresh relay
-    # fetch) so promotion takes MetadataEnricher's "update existing item by
-    # id" branch: MetadataStubProvider.fetch_by_id/3 always returns the same
-    # canned movie regardless of the id requested, so 55 *new* creates driven
-    # by a stub fetch would all race to persist the *same* stubbed tmdb_id
-    # and only the first would ever land -- not a page-boundary bug, but a
-    # fixture-shape trap this test fell into once already.
+    # queue_accept to reach past a single page or this assertion catches it
+    # at 50. A real (non-"local") provider per group, at a needs_attention
+    # confidence, is deliberate: eligible_accept_keys/1 excludes
+    # provider_type: "local" outright, so a "local" fixture here would make
+    # every click of #accept-selected a guaranteed no-op and this test would
+    # stop proving anything about the page boundary at all.
     for n <- 1..55 do
       movie = insert(:media_item, type: "movie", tmdb_id: 9000 + n)
 
@@ -413,7 +444,9 @@ defmodule MydiaWeb.ImportMediaReviewTest do
     view |> element("#accept-selected") |> render_click()
 
     assert Repo.aggregate(
-             from(f in Mydia.Library.MediaFile, where: f.library_path_id == ^lp.id),
+             from(c in ImportCandidate,
+               where: c.library_path_id == ^lp.id and c.queued_op == "accept"
+             ),
              :count
            ) == 55
 

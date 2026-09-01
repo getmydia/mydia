@@ -67,7 +67,6 @@ defmodule Mydia.ImportCandidates do
   # group the size of a whole season tree never becomes one unbounded
   # allocation, while still being processed as a single logical group.
   @member_page_size 500
-  @accept_group_page_size 50
   @queue_anchor_page_size 25
 
   # Refusals that will fail identically on every retry, so the marker is cleared
@@ -882,70 +881,90 @@ defmodule Mydia.ImportCandidates do
   defp parse_int(_), do: nil
 
   @doc """
-  Accepts a selection: promotes every selected group whose candidates carry a
-  real provider match, one group at a time.
+  Queues a selection for import.
 
-  A group with no provider match (`:no_match`), or whose provider identity is
-  the synthetic `"local"` marker (see `create_local_show/2`), has nothing for
-  `Mydia.Library.CandidatePromotion` to enrich from and is skipped rather than
-  attempted. Each accepted group's full membership is loaded in bounded pages
-  (see `load_all_members/2`) and handed to `CandidatePromotion.promote_group/3`
-  in one call, so the whole group's ownership change commits as the one
-  transaction that function already guarantees -- this function opens no
-  transaction of its own, and does no provider/network work inside one.
+  One `UPDATE ... WHERE` marks every eligible candidate in the selected anchors,
+  then one Oban job is enqueued for the library path. A `:filter`-mode selection
+  carries no ids, so this stays a single statement no matter how many groups it
+  covers, and the snapshot is taken against what the user was looking at rather
+  than re-derived when the job eventually runs.
+
+  Eligibility is applied here rather than in the worker. A group with no
+  provider match, or with files matching different titles, or carrying the
+  synthetic `"local"` provider can never be promoted, so letting it move into
+  Queued and bounce straight back with an error would be churn on the most
+  common bulk path.
   """
-  @spec accept(SelectionScope.t(), keyword()) ::
-          {:ok, %{accepted: non_neg_integer(), skipped: non_neg_integer()}}
-  def accept(%SelectionScope{} = scope, opts \\ []) do
-    page_size = Keyword.get(opts, :group_page_size, @accept_group_page_size)
+  @spec queue_accept(SelectionScope.t()) ::
+          {:ok, %{queued: non_neg_integer(), skipped: non_neg_integer()}}
+  def queue_accept(%SelectionScope{} = scope) do
+    now = now()
+    eligible = eligible_accept_keys(scope)
 
-    result = accept_group_pages(scope, opts, page_size, nil, %{accepted: 0, skipped: 0})
+    # Both counts have to be read before the UPDATE. Marking a row sets
+    # `queued_op`, which `filter_status/2` excludes from "pending", so the same
+    # two queries run afterwards would count only what was left behind.
+    queued = eligible |> subquery() |> Repo.aggregate(:count)
+    selected = selected_group_count(scope)
 
-    if result.accepted > 0, do: broadcast(scope.library_path_id)
-    {:ok, result}
+    {row_count, _} =
+      ImportCandidate
+      |> where([c], c.library_path_id == ^scope.library_path_id)
+      |> where([c], c.anchor_key in subquery(eligible))
+      |> where([c], is_nil(c.dismissed_at) and is_nil(c.queued_op))
+      |> Repo.update_all(
+        set: [queued_op: "accept", queued_at: now, queue_error: nil, updated_at: now]
+      )
+
+    if row_count > 0 do
+      enqueue(Mydia.Jobs.ApplyImportCandidates, scope.library_path_id)
+      broadcast(scope.library_path_id)
+    end
+
+    {:ok, %{queued: queued, skipped: selected - queued}}
   end
 
-  defp accept_group_pages(scope, opts, page_size, after_anchor, result) do
-    groups =
-      scope
-      |> SelectionScope.to_query()
-      |> maybe_after_anchor(after_anchor)
-      |> order_by([c], asc: c.anchor_key)
-      |> limit(^page_size)
-      |> Repo.all()
-      |> Enum.map(&to_group(&1, scope.status))
+  @doc """
+  Queues every pending provider-matched group for one library path.
 
-    case groups do
-      [] ->
-        result
-
-      groups ->
-        after_group_page(opts, groups)
-
-        result =
-          Enum.reduce(groups, result, fn group, acc ->
-            case accept_group(group, opts) do
-              {:ok, _media_files} -> %{acc | accepted: acc.accepted + 1}
-              {:error, _reason} -> %{acc | skipped: acc.skipped + 1}
-            end
-          end)
-
-        if length(groups) < page_size do
-          result
-        else
-          accept_group_pages(scope, opts, page_size, List.last(groups).anchor_key, result)
-        end
-    end
+  Confidence is deliberately not filtered: this is the explicit human override
+  behind the review page's "Import all" control.
+  """
+  @spec queue_accept_all_matched(binary()) ::
+          {:ok, %{queued: non_neg_integer(), skipped: non_neg_integer()}}
+  def queue_accept_all_matched(library_path_id) do
+    library_path_id
+    |> SelectionScope.new()
+    |> SelectionScope.select_all_matching(%{})
+    |> queue_accept()
   end
 
-  defp maybe_after_anchor(query, nil), do: query
-  defp maybe_after_anchor(query, anchor), do: where(query, [c], c.anchor_key > ^anchor)
+  # The selected anchors that `accept_group/2` would actually accept, as a
+  # grouped subquery of anchor keys. `count(provider_id, :distinct) == 1`
+  # subsumes the no-match case as well: SQL counts of a nullable column ignore
+  # NULLs, so a group with no provider match counts zero.
+  defp eligible_accept_keys(%SelectionScope{} = scope) do
+    scope
+    |> SelectionScope.to_query()
+    |> exclude(:select)
+    |> having([c], count(c.provider_id, :distinct) == 1)
+    |> having([c], is_nil(max(c.provider_type)) or max(c.provider_type) != "local")
+    |> select([c], c.anchor_key)
+  end
 
-  defp after_group_page(opts, groups) do
-    case Keyword.get(opts, :after_group_page) do
-      callback when is_function(callback, 1) -> callback.(groups)
-      _ -> :ok
-    end
+  # Oban's engine is disabled in test (config/test.exs sets `engine: false`), so
+  # Oban.insert/1 raises there. See test/README.md and
+  # Mydia.Downloads.Queue.insert_job/1, which uses the same fallback.
+  defp enqueue(worker, library_path_id) do
+    %{"library_path_id" => library_path_id}
+    |> worker.new()
+    |> insert_job()
+  end
+
+  defp insert_job(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
   end
 
   defp accept_group(%ImportCandidateGroup{provider_id: nil}, _opts), do: {:error, :no_match}
@@ -1128,22 +1147,6 @@ defmodule Mydia.ImportCandidates do
 
   defp queue_error_message(:local_show), do: "Local shows are created directly, not imported."
   defp queue_error_message(:empty_group), do: "No files left to import."
-
-  @doc """
-  Accepts every pending provider-matched group for one library path.
-
-  Unmatched and synthetic local groups are excluded by `accept/2` itself.
-  Confidence is deliberately not filtered here: this is the explicit human
-  override behind the review page's "Import all" control.
-  """
-  @spec accept_all_matched(binary(), keyword()) ::
-          {:ok, %{accepted: non_neg_integer(), skipped: non_neg_integer()}}
-  def accept_all_matched(library_path_id, opts \\ []) do
-    library_path_id
-    |> SelectionScope.new()
-    |> SelectionScope.select_all_matching(%{})
-    |> accept(opts)
-  end
 
   @doc """
   Re-runs metadata matching for the candidates in a selection.

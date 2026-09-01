@@ -243,9 +243,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
            socket.assigns.selected_library_path_id do
       {:noreply,
        socket
-       |> accept_result(
-         ImportCandidates.accept_all_matched(library_path_id, allow_episode_creation: true)
-       )}
+       |> queue_result(ImportCandidates.queue_accept_all_matched(library_path_id))}
     else
       {:unauthorized, socket} -> {:noreply, socket}
       nil -> {:noreply, put_flash(socket, :error, "Select a library before importing results.")}
@@ -401,11 +399,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("accept_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      {:noreply,
-       socket
-       |> accept_result(
-         ImportCandidates.accept(socket.assigns.selection, allow_episode_creation: true)
-       )}
+      {:noreply, queue_result(socket, ImportCandidates.queue_accept(socket.assigns.selection))}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -814,13 +808,26 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     "Cleared #{candidates} scan result(s). Dismissed decisions are preserved."
   end
 
-  defp accept_result(socket, {:ok, %{accepted: accepted}}) do
+  defp queue_result(socket, {:ok, %{queued: queued, skipped: skipped}}) do
     socket
-    |> put_flash(:info, "Accepted #{accepted} group(s).")
+    |> put_flash(:info, queue_message(queued, skipped))
     |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
     |> load_groups()
     |> refresh_counts()
   end
+
+  # The skipped count was previously dropped on the floor, so a user who
+  # selected 40 groups and saw 12 promoted was told "Accepted 12 group(s)" with
+  # no account of the rest. The wording stays generic because a skip covers
+  # three distinct causes and the flash has no room to distinguish them; the
+  # per-group reason lands on the row as queue_error.
+  defp queue_message(queued, 0), do: "Queued #{queued} group(s) for import."
+
+  defp queue_message(0, skipped),
+    do: "Nothing queued. #{skipped} group(s) have nothing to import from."
+
+  defp queue_message(queued, skipped),
+    do: "Queued #{queued} group(s) for import. #{skipped} skipped, nothing to import from."
 
   defp show_outcome(socket, run) do
     socket =
