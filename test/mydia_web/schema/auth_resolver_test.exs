@@ -133,6 +133,48 @@ defmodule MydiaWeb.Schema.AuthResolverTest do
         assert message =~ "Invalid"
       end
     end
+
+    test "creates one device per client device id and issues a device-scoped token",
+         %{user: user} do
+      variables = %{
+        "username" => user.username,
+        "password" => "correct-horse-battery-staple",
+        "deviceId" => "client-abc",
+        "deviceName" => "Test Laptop",
+        "platform" => "macos"
+      }
+
+      assert {:ok, %{data: %{"login" => %{"token" => token}}}} = run_query(variables)
+
+      assert {:ok, _user, claims} = Mydia.Auth.Guardian.verify_token_with_claims(token)
+      assert is_binary(claims["device_id"])
+
+      devices = Mydia.RemoteAccess.list_devices(user.id)
+      assert [device] = devices
+      assert device.client_device_id == "client-abc"
+      assert device.id == claims["device_id"]
+
+      # A second login from the same client must reuse the row, not add one.
+      assert {:ok, %{data: %{"login" => _}}} = run_query(variables, unique_caller())
+      assert length(Mydia.RemoteAccess.list_devices(user.id)) == 1
+    end
+
+    test "a different client device id gets its own device row", %{user: user} do
+      base = %{
+        "username" => user.username,
+        "password" => "correct-horse-battery-staple",
+        "deviceName" => "Test Laptop",
+        "platform" => "macos"
+      }
+
+      assert {:ok, %{data: %{"login" => _}}} =
+               run_query(Map.put(base, "deviceId", "client-abc"))
+
+      assert {:ok, %{data: %{"login" => _}}} =
+               run_query(Map.put(base, "deviceId", "client-def"), unique_caller())
+
+      assert length(Mydia.RemoteAccess.list_devices(user.id)) == 2
+    end
   end
 
   defp run_query(input, context \\ %{}) do

@@ -67,18 +67,26 @@ defmodule Mydia.RemoteAccess.RemoteDevice do
   @doc """
   Changeset for a device created by a password login rather than by pairing.
 
-  Distinct from `changeset/2` because that one requires `:token`: pairing
-  always mints a device token, while a password login authenticates the user
-  directly and has no device token to hash.
+  Distinct from `changeset/2` in that it also handles `:client_device_id` and
+  carries `unique_constraint([:user_id, :client_device_id])`. It still
+  requires and hashes `:token` exactly like `changeset/2` does, but the
+  caller generates that token itself and discards the plaintext immediately
+  after this changeset is applied. Nobody ever holds the preimage, so the
+  resulting `token_hash` is a unique value that can never authenticate
+  anything, on purpose: a password-login device re-authenticates with the
+  user's own credentials, never with a device token. This keeps `token_hash`
+  satisfying its `NOT NULL` and `UNIQUE` constraints without weakening them.
   """
   def login_changeset(device, attrs) do
     device
-    |> cast(attrs, [:client_device_id, :device_name, :platform, :user_id])
-    |> validate_required([:client_device_id, :device_name, :platform, :user_id])
+    |> cast(attrs, [:client_device_id, :device_name, :platform, :token, :user_id])
+    |> validate_required([:client_device_id, :device_name, :platform, :token, :user_id])
     |> validate_length(:client_device_id, min: 1, max: 255)
     |> validate_length(:device_name, min: 1, max: 100)
     |> validate_length(:platform, min: 1, max: 50)
+    |> hash_token()
     |> unique_constraint([:user_id, :client_device_id])
+    |> unique_constraint(:token_hash)
   end
 
   @doc """

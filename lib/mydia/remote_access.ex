@@ -222,6 +222,45 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
+  Finds or creates the device row for a password login.
+
+  Pairing mints a device token and goes through `create_device/1`; a password
+  login authenticates the user directly, with no pairing flow to hand it a
+  device token. `remote_devices.token_hash` is still `NOT NULL` and `UNIQUE`
+  though, so this generates a random token exactly like pairing does, hashes
+  it into the new row, and discards the plaintext, on purpose: nobody ever
+  holds the preimage, so the row can never authenticate as a device token,
+  matching the reality that this device re-authenticates with the user's own
+  credentials. Both paths must end with a `RemoteDevice`, because that row is
+  what `registerDeviceNode` keys on and therefore what makes a player
+  discoverable at all.
+
+  Keyed on the client-supplied `client_device_id` so a returning client reuses
+  its row instead of adding one on every launch. The token is only generated
+  on the insert branch: a returning client keeps its original row and hash
+  untouched.
+  """
+  def find_or_create_login_device(%{user_id: user_id, client_device_id: client_device_id} = attrs) do
+    case Repo.get_by(RemoteDevice, user_id: user_id, client_device_id: client_device_id) do
+      nil ->
+        %RemoteDevice{}
+        |> RemoteDevice.login_changeset(Map.put(attrs, :token, generate_login_device_token()))
+        |> Repo.insert()
+
+      device ->
+        {:ok, device}
+    end
+  end
+
+  # Unused, unretrievable token for a password-login device. Hashed into
+  # token_hash and immediately discarded, so the row satisfies the NOT NULL
+  # and UNIQUE constraints on that column while remaining unable to
+  # authenticate as a device token.
+  defp generate_login_device_token do
+    :crypto.strong_rand_bytes(32) |> Base.encode64(padding: false)
+  end
+
+  @doc """
   Updates the last seen timestamp for a device.
   """
   def touch_device(device) do
