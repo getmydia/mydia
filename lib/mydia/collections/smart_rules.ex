@@ -341,7 +341,7 @@ defmodule Mydia.Collections.SmartRules do
   end
 
   defp validate_field_value_type(field, _value, "within_last", prefix, errors)
-       when not is_nil(field) and field not in @date_fields do
+       when field not in @date_fields do
     ["#{prefix}: within_last is only valid on date fields" | errors]
   end
 

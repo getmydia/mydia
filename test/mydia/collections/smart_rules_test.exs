@@ -465,13 +465,14 @@ defmodule Mydia.Collections.SmartRulesTest do
     end
 
     test "excludes an item inserted before the window" do
-      item = media_item_fixture(%{title: "Quiet Harvest"})
+      old_item = media_item_fixture(%{title: "Quiet Harvest"})
+      recent_item = media_item_fixture(%{title: "Copper Ridge"})
 
       old = DateTime.add(DateTime.utc_now(), -90, :day) |> DateTime.truncate(:second)
 
       {1, _} =
         Mydia.Repo.update_all(
-          from(m in Mydia.Media.MediaItem, where: m.id == ^item.id),
+          from(m in Mydia.Media.MediaItem, where: m.id == ^old_item.id),
           set: [inserted_at: old]
         )
 
@@ -483,7 +484,8 @@ defmodule Mydia.Collections.SmartRulesTest do
       }
 
       ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
-      refute item.id in ids
+      refute old_item.id in ids
+      assert recent_item.id in ids
     end
 
     test "validation rejects zero, negative, and non-integer values" do
@@ -498,6 +500,15 @@ defmodule Mydia.Collections.SmartRulesTest do
         assert {:error, _errors} = SmartRules.validate(rules),
                "expected within_last to reject #{inspect(bad)}"
       end
+
+      valid_rules = %{
+        "match_type" => "all",
+        "conditions" => [
+          %{"field" => "inserted_at", "operator" => "within_last", "value" => 30}
+        ]
+      }
+
+      assert {:ok, _} = SmartRules.validate(valid_rules)
     end
 
     test "validation rejects within_last on a non-date field" do
