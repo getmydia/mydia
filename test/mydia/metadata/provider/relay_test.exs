@@ -117,7 +117,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, metadata} = Relay.fetch_by_id(@config, "603", media_type: :movie)
 
       assert metadata.provider_id == "603"
-      assert metadata.provider == :metadata_relay
+      assert metadata.provider == :tmdb
       assert metadata.media_type == :movie
       assert metadata.title == "The Matrix"
       assert metadata.year == 1999
@@ -179,7 +179,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
       # Required fields
       assert is_binary(metadata.provider_id)
-      assert metadata.provider == :metadata_relay
+      assert metadata.provider == :tmdb
       assert metadata.media_type in [:movie, :tv_show]
       assert is_binary(metadata.title)
 
