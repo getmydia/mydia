@@ -144,7 +144,7 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       assert Library.get_import_run(run.id).files_discovered == 2
     end
 
-    test "tolerates duplicate parented rows for one path without crashing, and still skips it",
+    test "tolerates an active and a trashed row sharing one path without crashing, and skips it",
          %{run: run, library_path: lp} do
       # The data anomaly that used to strand a run: two builds of the scanner
       # (or a scanner racing the import coordinator) created two rows for the
@@ -153,19 +153,42 @@ defmodule Mydia.Jobs.ImportRunJobTest do
       # retries, leaving the run row :running forever -- this is why phase 1
       # checks ownership with the duplicate-safe
       # `list_media_files_by_relative_path/3` instead.
+      #
+      # Two ACTIVE rows for one path are no longer reachable this way:
+      # migration 20260901234336_fold_duplicate_media_files_and_enforce_path_uniqueness
+      # added a partial unique index on (library_path_id, relative_path)
+      # scoped `WHERE trashed_at IS NULL`, and `Library.create_media_file/1`
+      # now refuses the second insert. The index does not reach a trashed
+      # row, though, so a live row and a trashed row can still share a path
+      # -- a file gets trashed, then the same path is re-imported or
+      # rediscovered -- and `owned_path?/2` in import_run.ex deliberately
+      # queries `list_media_files_by_relative_path/3` with
+      # `include_trashed: true` to see both. That is what still exercises
+      # the duplicate-safe read this test guards.
       relative_path = "Season 01/Bluey.S01E01.mkv"
       show = media_item_fixture(%{type: "tv_show"})
       episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
 
-      for _ <- 1..2 do
-        {:ok, _} =
-          Library.create_media_file(%{
-            library_path_id: lp.id,
-            relative_path: relative_path,
-            episode_id: episode.id,
-            size: 1_000
-          })
-      end
+      {:ok, trashed} =
+        Library.create_media_file(%{
+          library_path_id: lp.id,
+          relative_path: relative_path,
+          episode_id: episode.id,
+          size: 1_000
+        })
+
+      {:ok, _trashed} =
+        trashed
+        |> Ecto.Changeset.change(trashed_at: DateTime.utc_now() |> DateTime.truncate(:second))
+        |> Repo.update()
+
+      {:ok, _active} =
+        Library.create_media_file(%{
+          library_path_id: lp.id,
+          relative_path: relative_path,
+          episode_id: episode.id,
+          size: 1_000
+        })
 
       assert :ok = ImportRunJob.run_scan_phase(Library.get_import_run(run.id))
 

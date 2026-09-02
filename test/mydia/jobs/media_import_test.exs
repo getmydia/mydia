@@ -1533,9 +1533,8 @@ defmodule Mydia.Jobs.MediaImportTest do
       # Regression for the production incident where season-pack imports
       # failed with only the generic "Some files could not be imported. Check
       # library path permissions and available disk space." while the real
-      # cause was duplicate media_files rows making Repo.one/1 raise
-      # "expected at most one result" on the reuse-existing-file path.
-      {download, download_dir} = duplicate_media_file_scenario(tmp_dir)
+      # cause was a per-file error being swallowed into that generic hint.
+      {download, download_dir} = partial_import_error_scenario(tmp_dir)
 
       assert {:error, _reason} =
                perform_job(MediaImport, %{
@@ -1551,7 +1550,7 @@ defmodule Mydia.Jobs.MediaImportTest do
       # ...but the human message must name the real underlying error, not
       # just the generic permissions/disk-space hint.
       assert updated.import_last_error =~ "Some files could not be imported"
-      assert updated.import_last_error =~ "First error: expected at most one result"
+      assert updated.import_last_error =~ "First error: {:destination_not_accessible"
       refute updated.import_last_error =~ "Check library path permissions"
     end
 
@@ -1563,7 +1562,7 @@ defmodule Mydia.Jobs.MediaImportTest do
       # must match the tuple too — otherwise an unfixable partial import falls
       # through to the catch-all, never cancels, and re-walks the whole
       # download for all 1000 of Oban's attempts.
-      {download, download_dir} = duplicate_media_file_scenario(tmp_dir)
+      {download, download_dir} = partial_import_error_scenario(tmp_dir)
 
       assert {:cancel, {:partial_import, _reason}} =
                perform_job(
@@ -1573,43 +1572,48 @@ defmodule Mydia.Jobs.MediaImportTest do
                )
     end
 
-    # Builds the production shape: a two-episode season pack where S01E01's
-    # destination already exists and carries TWO media_files rows for the same
-    # (library_path_id, relative_path), so the reuse-existing-file path raises
-    # while S01E02 imports cleanly — i.e. a genuine partial import.
-    defp duplicate_media_file_scenario(tmp_dir) do
+    # Builds a genuine partial import: a two-episode pack spanning two seasons
+    # where season 1's destination directory is squatted by a plain file, so
+    # `File.mkdir_p/1` fails with :enotdir when the importer tries to create
+    # it, while season 2 is left clear. One file imports cleanly and the
+    # other fails with a real filesystem error.
+    #
+    # This used to build the same shape by giving one path two live
+    # media_files rows, so the reuse-existing-file lookup raised
+    # `Ecto.MultipleResultsError`. Migration
+    # 20260901234336_fold_duplicate_media_files_and_enforce_path_uniqueness
+    # folds any such duplicates and adds a partial unique index on
+    # (library_path_id, relative_path) for active rows, and every insert now
+    # goes through a changeset that enforces it, so two live rows sharing a
+    # path can no longer be constructed at all — not even directly through
+    # `media_file_fixture/1`, which now fails on the second call. The
+    # behavior these two tests guard (a per-file failure inside a partial
+    # import surfaces its real reason, and the tagged `{:partial_import,
+    # reason}` is still treated as terminal) does not depend on *how* the
+    # per-file failure happens, so a filesystem error stands in for the
+    # now-unreachable duplicate-row crash.
+    defp partial_import_error_scenario(tmp_dir) do
       library_path = create_test_library_path(tmp_dir, :series, auto_rename: false)
 
       download_dir = Path.join(tmp_dir, "downloads")
       File.mkdir_p!(download_dir)
 
       File.write!(Path.join(download_dir, "Mystery.Show.S01E01.mkv"), "fake video 1")
-      File.write!(Path.join(download_dir, "Mystery.Show.S01E02.mkv"), "fake video 2")
+      File.write!(Path.join(download_dir, "Mystery.Show.S02E01.mkv"), "fake video 2")
 
       media_item = media_item_fixture(%{type: "tv_show", title: "Mystery Show"})
 
-      ep_s1e1 =
+      _ep_s1e1 =
         episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 1})
 
-      _ep_s1e2 =
-        episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 2})
+      _ep_s2e1 =
+        episode_fixture(%{media_item_id: media_item.id, season_number: 2, episode_number: 1})
 
-      dest_dir =
-        Path.join(MediaImport.build_series_base_path(media_item, library_path), "Season 01")
-
-      File.mkdir_p!(dest_dir)
-      dest_file = Path.join(dest_dir, "Mystery.Show.S01E01.mkv")
-      File.write!(dest_file, "existing video")
-      relative_path = Path.relative_to(dest_file, library_path.path)
-
-      existing_files =
-        for _ <- 1..2 do
-          media_file_fixture(%{
-            library_path_id: library_path.id,
-            episode_id: ep_s1e1.id,
-            relative_path: relative_path
-          })
-        end
+      base_dir = MediaImport.build_series_base_path(media_item, library_path)
+      File.mkdir_p!(base_dir)
+      # Squat season 1's destination directory with a plain file so the
+      # importer's `File.mkdir_p/1` fails with :enotdir. Season 2 stays free.
+      File.write!(Path.join(base_dir, "Season 01"), "not a directory")
 
       {:ok, _} =
         Settings.create_download_client_config(%{
@@ -1633,12 +1637,7 @@ defmodule Mydia.Jobs.MediaImportTest do
           metadata: %{
             "season_pack" => true,
             "season_number" => 1,
-            # Marked as an upgrade so the already-filed-episode skip does not
-            # intercept this file. Upgrades are exempt from that skip by design,
-            # since they target episodes that already have files, which makes
-            # this the path where a duplicate-row Repo.one crash is still
-            # reachable and therefore still worth surfacing properly.
-            "upgrade_target_media_file_id" => hd(existing_files).id
+            "episode_count" => 2
           }
         })
 
@@ -1715,6 +1714,109 @@ defmodule Mydia.Jobs.MediaImportTest do
       |> File.ls!()
       |> Enum.filter(&(&1 != "Conflict Movie (2024).mkv" and String.ends_with?(&1, ".mkv")))
       |> Enum.sort()
+    end
+  end
+
+  describe "duplicate active path race" do
+    @tag :tmp_dir
+    test "adopts the row that already occupies the destination instead of failing the import",
+         %{tmp_dir: tmp_dir} do
+      # Migration 20260901234336 added a partial unique index on
+      # (library_path_id, relative_path) WHERE trashed_at IS NULL, so a
+      # concurrent insert that lands on a path this job also resolves to now
+      # surfaces as a changeset error instead of silently creating a second
+      # row. duplicate_active_path_error?/1 and adopt_duplicate_active_path/3
+      # catch that specific violation and adopt the row that won the race —
+      # nothing exercised that path before this test.
+      #
+      # auto_rename: false pins the destination filename to the source
+      # filename, so the exact (library_path_id, relative_path) pair this
+      # import will hit is known up front and can be pre-occupied by another
+      # row.
+      library_path = create_test_library_path(tmp_dir, :movies, auto_rename: false)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      source_name = "Umbra.Vale.2015.1080p.BluRay.x264-FICTION.mkv"
+      File.write!(Path.join(download_dir, source_name), "the freshly downloaded copy")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Umbra Vale", year: 2015})
+
+      relative_path = "Umbra Vale (2015)/#{source_name}"
+      dest_path = Path.join(library_path.path, relative_path)
+
+      # Pre-existing active row at the exact (library_path_id, relative_path)
+      # pair the import will resolve to — standing in for the row a
+      # concurrent import already committed. Its physical file is
+      # deliberately never written, which is what forces the code past the
+      # `File.exists?(dest_path)` reuse branch in
+      # import_file_to_existing_dir/6 (media_import.ex:1478) — that earlier
+      # branch would short-circuit the whole test if the file existed,
+      # without ever reaching create_media_file_record/5's insert.
+      existing =
+        media_file_fixture(%{
+          library_path_id: library_path.id,
+          media_item_id: media_item.id,
+          relative_path: relative_path
+        })
+
+      refute File.exists?(dest_path),
+             "setup must leave the destination unwritten so the import reaches the insert " <>
+               "instead of the earlier File.exists? reuse branch"
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "RaceClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "RaceClient",
+          download_client_id: "race-1"
+        })
+
+      args = %{"download_id" => download.id, "save_path" => download_dir}
+
+      # The pre-existing row above is active (trashed_at nil), so the partial
+      # unique index unconditionally rejects any insert at this
+      # (library_path_id, relative_path) pair — this is not a race that
+      # might not fire, it fires every time. The only way perform_job/1 can
+      # return {:ok, :imported} here rather than crash the job (a raised
+      # Exqlite/Postgrex error, if the changeset's unique_constraint names
+      # did not match the driver's reported constraint) or return an
+      # {:error, ...} tuple (a mismatch caught by duplicate_active_path_error?/1
+      # that fell through to the generic :database_error branch) is for
+      # duplicate_active_path_error?/1 to recognize the violation and
+      # adopt_duplicate_active_path/3 to look up and return the row that was
+      # already there. There is no other branch in create_media_file_record/5
+      # that produces this outcome.
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+
+      assert File.exists?(dest_path),
+             "the file placement that races the insert must still have happened"
+
+      rows =
+        Repo.all(
+          from(f in Library.MediaFile,
+            where: f.library_path_id == ^library_path.id and f.relative_path == ^relative_path
+          )
+        )
+
+      assert [%{id: id}] = rows,
+             "the unique index must prevent a second row from ever existing at this path"
+
+      assert id == existing.id,
+             "the surviving row must be the one that already existed, not a fresh insert"
     end
   end
 

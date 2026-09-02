@@ -206,3 +206,31 @@ would have reached the screen.
 It survived because the ordering test gave every entry the same air date and
 exercised only the tiebreaks. A sort test whose fixtures share one date cannot
 catch this. Make the fixtures cross a month boundary.
+
+## ecto_sqlite3 guesses the wrong name on a partial unique index violation
+
+A `unique_constraint/3` keyed only to a partial index's real name silently
+never fires on SQLite: the insert raises `Exqlite.Error` instead of returning
+a changeset error, even though the identical code correctly returns
+`{:error, changeset}` on PostgreSQL.
+
+PostgreSQL's driver reports the actual index name in the constraint
+violation, so `unique_constraint(:field, name: :the_real_index_name)` matches
+it directly. SQLite's driver gets nothing back from a partial-unique
+violation beyond `UNIQUE constraint failed: <table>.<col>, ...`, so
+`ecto_sqlite3` falls back to guessing a name from Ecto's naming convention
+(`<table>_<col>_..._index`) — a name that a deliberately-named partial index
+never has.
+
+The fix is to declare the same `unique_constraint/3` twice: once under the
+index's real name (matches on PostgreSQL) and once under Ecto's conventional
+guess (matches on SQLite). Both point at the same underlying index, so
+exactly one of the two ever matches on a given adapter. Keep both
+declarations in one shared private function so the two names cannot drift
+apart when the index is renamed later.
+
+Two in-repo examples: `guard_unique_active_path/1` in
+`lib/mydia/library/media_file.ex` (the partial unique index on
+`(library_path_id, relative_path) WHERE trashed_at IS NULL`) and
+`guard_single_active_run/1` in `lib/mydia/library/import_run.ex` (the
+partial unique index enforcing one active import run per library path).

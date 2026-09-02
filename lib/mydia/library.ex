@@ -651,13 +651,22 @@ defmodule Mydia.Library do
   present could not be moved. A row marked trashed while its file sits in the
   library is precisely the inconsistency this move exists to remove, so the two
   are kept in step or neither changes.
+
+  ## Options
+
+  Passed straight through to `Mydia.Library.TrashStore.store/2`; see its docs.
+  Notably `:move` (default `true`) - `move: false` refuses to move a file that
+  is present on disk instead of trashing it, leaving the row untouched. The
+  three re-scan functions in this module pass it: a file the diff called
+  missing but that has since reappeared must never be moved out of the
+  library.
   """
-  @spec trash_media_file(MediaFile.t()) ::
+  @spec trash_media_file(MediaFile.t(), keyword()) ::
           {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
-  def trash_media_file(%MediaFile{} = media_file) do
+  def trash_media_file(%MediaFile{} = media_file, opts \\ []) do
     media_file = Repo.preload(media_file, :library_path)
 
-    case TrashStore.store(media_file) do
+    case TrashStore.store(media_file, opts) do
       {:ok, outcome} ->
         media_file
         |> Ecto.Changeset.change(
@@ -679,6 +688,53 @@ defmodule Mydia.Library do
       {:error, reason} ->
         {:error, {:trash_move_failed, reason}}
     end
+  end
+
+  # The directory diff in the three re-scan paths proposes files as missing by
+  # comparing path strings against a scan of one inferred directory. This is
+  # the operator-facing check that confirms it: it names the path in a
+  # warning log so a wrongly-called-missing row is visible, and it keeps the
+  # re-scan from even attempting a trash that would now fail anyway.
+  #
+  # A row the diff called missing whose file is nevertheless sitting on disk is
+  # not missing: it is a row whose stored path did not match the scan for some
+  # other reason. A second row for the same file, a path that normalises
+  # differently, a scan that could not read the directory, a file whose
+  # extension is outside Scanner's list. Trashing it moves bytes out of the
+  # library, which is how #653 emptied people's libraries.
+  #
+  # This check and trash_media_file/2's `move: false` run at different
+  # times, so a file that reappears on disk in the gap between them (a
+  # reconnecting mount, a concurrent import) can still slip past this
+  # function. The `move: false` option the three re-scan callers pass is the
+  # backstop for that: it refuses to move a file TrashStore finds present at
+  # the moment it actually acts, no matter what this function saw earlier.
+  # This function stays first because it is the only one of the two that can
+  # name the path in a warning log.
+  #
+  # A row with no resolvable path is kept in the list. There is nothing to
+  # check, and TrashStore.store/2 has nothing to move for it either.
+  @spec reject_files_still_on_disk([MediaFile.t()]) :: [MediaFile.t()]
+  defp reject_files_still_on_disk(candidates) do
+    Enum.reject(candidates, fn media_file ->
+      case MediaFile.absolute_path(media_file) do
+        nil ->
+          false
+
+        path ->
+          present? = File.exists?(path)
+
+          if present? do
+            Logger.warning(
+              "Re-scan called a file missing that is still on disk; refusing to trash it",
+              media_file_id: media_file.id,
+              path: path
+            )
+          end
+
+          present?
+      end
+    end)
   end
 
   @doc """
@@ -1210,8 +1266,10 @@ defmodule Mydia.Library do
                 end)
 
               trashed_count =
-                Enum.count(missing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
+                missing_files
+                |> reject_files_still_on_disk()
+                |> Enum.count(fn file ->
+                  match?({:ok, _}, trash_media_file(file, move: false))
                 end)
 
               Logger.info("Found new files during re-scan",
@@ -1255,34 +1313,22 @@ defmodule Mydia.Library do
                  new_files: created_count,
                  deleted_files: trashed_count,
                  matched: matched_count,
-                 errors: create_errors
+                 errors: create_errors,
+                 scan_errors: scan_result.errors
                }}
 
             {:error, :not_found} ->
-              # Directory no longer exists — trash all files for the series
-              existing_files =
-                get_media_files_for_item(media_item_id,
-                  preload: [:library_path],
-                  include_extras: true
-                )
-
-              trashed_count =
-                Enum.count(existing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
-
-              Logger.info("Series directory missing, trashed all files",
+              # A base directory that will not resolve is a failed scan, not
+              # proof the library is empty. This branch used to trash every
+              # file for the item, which physically moved the bytes of any
+              # file that was still there: an unmounted share or a renamed
+              # folder emptied the item (#653).
+              Logger.error("Series re-scan base directory could not be read",
                 media_item_id: media_item_id,
-                trashed_files: trashed_count
+                directory: base_directory
               )
 
-              {:ok,
-               %{
-                 new_files: 0,
-                 deleted_files: trashed_count,
-                 matched: 0,
-                 errors: []
-               }}
+              {:error, :scan_failed}
 
             {:error, reason} ->
               Logger.error("Failed to scan directory",
@@ -1395,8 +1441,10 @@ defmodule Mydia.Library do
                 end)
 
               trashed_count =
-                Enum.count(missing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
+                missing_files
+                |> reject_files_still_on_disk()
+                |> Enum.count(fn file ->
+                  match?({:ok, _}, trash_media_file(file, move: false))
                 end)
 
               Logger.info("Found new files for season during re-scan",
@@ -1444,50 +1492,20 @@ defmodule Mydia.Library do
                  new_files: created_count,
                  deleted_files: trashed_count,
                  matched: matched_count,
-                 errors: create_errors
+                 errors: create_errors,
+                 scan_errors: scan_result.errors
                }}
 
             {:error, :not_found} ->
-              # Directory no longer exists — trash all season files
-              existing_files =
-                get_media_files_for_item(media_item_id,
-                  preload: [:library_path, :episode],
-                  include_extras: true
-                )
-
-              season_existing =
-                Enum.filter(existing_files, fn file ->
-                  cond do
-                    file.episode && file.episode.season_number == season_number ->
-                      true
-
-                    is_nil(file.episode) ->
-                      parsed = FileParser.parse(Path.basename(file.relative_path || ""))
-                      parsed.season == season_number
-
-                    true ->
-                      false
-                  end
-                end)
-
-              trashed_count =
-                Enum.count(season_existing, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
-
-              Logger.info("Season directory missing, trashed season files",
+              # See rescan_series/1: a directory that will not resolve is a
+              # failed scan, never a reason to trash the season's files (#653).
+              Logger.error("Season re-scan base directory could not be read",
                 media_item_id: media_item_id,
                 season: season_number,
-                trashed_files: trashed_count
+                directory: base_directory
               )
 
-              {:ok,
-               %{
-                 new_files: 0,
-                 deleted_files: trashed_count,
-                 matched: 0,
-                 errors: []
-               }}
+              {:error, :scan_failed}
 
             {:error, reason} ->
               Logger.error("Failed to scan directory for season",
@@ -1581,8 +1599,10 @@ defmodule Mydia.Library do
                 end)
 
               trashed_count =
-                Enum.count(missing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
+                missing_files
+                |> reject_files_still_on_disk()
+                |> Enum.count(fn file ->
+                  match?({:ok, _}, trash_media_file(file, move: false))
                 end)
 
               Logger.info("Found new files during movie re-scan",
@@ -1606,33 +1626,19 @@ defmodule Mydia.Library do
                %{
                  new_files: created_count,
                  deleted_files: trashed_count,
-                 errors: create_errors
+                 errors: create_errors,
+                 scan_errors: scan_result.errors
                }}
 
             {:error, :not_found} ->
-              # Directory no longer exists — trash all files for the movie
-              existing_files =
-                get_media_files_for_item(media_item_id,
-                  preload: [:library_path],
-                  include_extras: true
-                )
-
-              trashed_count =
-                Enum.count(existing_files, fn file ->
-                  match?({:ok, _}, trash_media_file(file))
-                end)
-
-              Logger.info("Movie directory missing, trashed all files",
+              # See rescan_series/1: a directory that will not resolve is a
+              # failed scan, never a reason to trash the movie's files (#653).
+              Logger.error("Movie re-scan base directory could not be read",
                 media_item_id: media_item_id,
-                trashed_files: trashed_count
+                directory: base_directory
               )
 
-              {:ok,
-               %{
-                 new_files: 0,
-                 deleted_files: trashed_count,
-                 errors: []
-               }}
+              {:error, :scan_failed}
 
             {:error, reason} ->
               Logger.error("Failed to scan directory",

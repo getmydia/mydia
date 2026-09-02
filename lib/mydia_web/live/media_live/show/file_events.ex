@@ -376,7 +376,11 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     do: "Media file removed from library, file kept on disk"
 
   def show_file_details(%{"file-id" => file_id}, socket) do
-    file = Library.get_media_file!(file_id)
+    # Without the preload, MediaFile.absolute_path/1 hits its
+    # Ecto.Association.NotLoaded clause, logs a warning and returns nil, and
+    # display_path/1 falls back to the relative path. This modal is the one
+    # surface that is supposed to show the full path.
+    file = Library.get_media_file!(file_id, preload: [:library_path])
 
     {:noreply,
      socket
@@ -768,6 +772,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         else: parts
 
     parts = parts ++ ["refreshed metadata for #{refreshed} file(s)"]
+
+    scan_errors = Map.get(scan_result, :scan_errors, [])
+
+    parts =
+      if Enum.empty?(scan_errors),
+        do: parts,
+        else: parts ++ ["#{length(scan_errors)} file(s) could not be read"]
 
     parts =
       if Enum.empty?(scan_result.errors),
