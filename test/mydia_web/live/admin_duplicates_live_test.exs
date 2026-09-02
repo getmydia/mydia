@@ -26,9 +26,9 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
   end
 
   @two_files [
-    {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.1080p.BluRay.x265.mp4",
+    {"Harbor Lights/Season 02/Harbor.Lights.S02E03.1080p.BluRay.x265.mp4",
      %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656}},
-    {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.360p.WEBRip.x264.mp4",
+    {"Harbor Lights/Season 02/Harbor.Lights.S02E03.360p.WEBRip.x264.mp4",
      %{resolution: "360p", codec: "h264", bitrate: 1_000_000}}
   ]
 
@@ -37,12 +37,12 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
   # the selection and there is nothing left to assert about.
   @three_files @two_files ++
                  [
-                   {"Rick and Morty/Season 02/Rick.and.Morty.S02E03.480p.WEBRip.x264.mp4",
+                   {"Harbor Lights/Season 02/Harbor.Lights.S02E03.480p.WEBRip.x264.mp4",
                     %{resolution: "480p", codec: "h264", bitrate: 500_000}}
                  ]
 
   defp duplicated_episode(specs \\ @two_files) do
-    show = media_item_fixture(%{type: "tv_show", title: "Rick and Morty", year: 2013})
+    show = media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013})
     episode = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 3})
     lp = library_path_fixture(%{type: "series"})
 
@@ -62,12 +62,12 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
   end
 
   defp refused_movie do
-    movie = media_item_fixture(%{type: "movie", title: "Monsters University", year: 2013})
+    movie = media_item_fixture(%{type: "movie", title: "Tidepool Academy", year: 2013})
     lp = library_path_fixture(%{type: "movies"})
 
     for {name, duration} <- [
-          {"MU/Monsters University (2013).mkv", 6360.0},
-          {"MU/Campus Life.mkv", 280.0}
+          {"TA/Tidepool Academy (2013).mkv", 6360.0},
+          {"TA/Orientation Week.mkv", 280.0}
         ] do
       media_file_fixture(%{
         media_item_id: movie.id,
