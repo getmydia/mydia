@@ -9,6 +9,14 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
   import Mydia.SettingsFixtures
   import Mydia.MetadataCacheHelpers
 
+  # wait_until_media_item/1 returns as soon as the media_items row lands, but
+  # the search job is inserted after it, in the same handle_info. A bare
+  # assert_enqueued therefore races the insert: on PostgreSQL it failed while
+  # reporting the very job it was looking for under "Instead found", because
+  # the job arrived between the matching query and the error message's own
+  # query. Oban's timeout form retries instead.
+  @enqueue_timeout 2_000
+
   setup %{conn: conn} do
     # DiscoverLive.Index unconditionally loads the movie genre list on
     # connected mount (#530), and the plain `/discover` mount (no search
@@ -137,8 +145,11 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
       assert media_item.monitored == true
 
       assert_enqueued(
-        worker: Mydia.Jobs.MovieSearch,
-        args: %{mode: "specific", media_item_id: media_item.id}
+        [
+          worker: Mydia.Jobs.MovieSearch,
+          args: %{mode: "specific", media_item_id: media_item.id}
+        ],
+        @enqueue_timeout
       )
     end
 
@@ -191,8 +202,11 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
       media_item = wait_until_media_item(provider_id)
 
       assert_enqueued(
-        worker: Mydia.Jobs.MovieSearch,
-        args: %{mode: "specific", media_item_id: media_item.id}
+        [
+          worker: Mydia.Jobs.MovieSearch,
+          args: %{mode: "specific", media_item_id: media_item.id}
+        ],
+        @enqueue_timeout
       )
     end
 
@@ -213,7 +227,12 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
 
       media_item = wait_until_media_item(provider_id)
 
-      refute_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: media_item.id})
+      # Given a timeout for the mirror-image reason: without one this would
+      # also pass while the insert was merely still in flight.
+      refute_enqueued(
+        [worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: media_item.id}],
+        @enqueue_timeout
+      )
     end
   end
 
