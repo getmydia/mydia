@@ -301,4 +301,121 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
 
     refute has_element?(view, ~s(#media-detail-modal-rail a[href^="/media/"]))
   end
+
+  test "a guest requesting a title from inside the dialog's own rail creates the request",
+       %{conn: conn} do
+    source_tmdb_id = unique_provider_id()
+    recommended_tmdb_id = unique_provider_id()
+    dialog_only_tmdb_id = unique_provider_id()
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Harrow Lane",
+        year: 2021,
+        tmdb_id: source_tmdb_id
+      })
+
+    warm_recommendations_cache(source_tmdb_id, :movie, [
+      %{"id" => recommended_tmdb_id, "title" => "Salt Verge", "release_date" => "2019-04-11"}
+    ])
+
+    warm_recommendations_cache(recommended_tmdb_id, :movie, [
+      %{"id" => dialog_only_tmdb_id, "title" => "Ninth Tide", "release_date" => "2015-08-03"}
+    ])
+
+    conn = log_in_user(conn, user_fixture(%{role: "guest"}))
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    view
+    |> element(
+      ~s(#recommendations-rail div[phx-click="show_details"][phx-value-id="#{recommended_tmdb_id}"])
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    # dialog_only_tmdb_id lives only in :selected_recommendations, never in
+    # this page's own :recommendations. Regression: request_recommendation/2
+    # used to search only :recommendations, so a guest's Request click on a
+    # card reached only through the dialog's own rail fell into the nil branch
+    # and silently did nothing. Mirrors the fix Discover already shipped for
+    # its own modal, see the comment on its `{:request_media, ...}` clause.
+    view
+    |> element(
+      ~s(#media-detail-modal-rail button[phx-click="request_selected_item"][phx-value-tmdb_id="#{dialog_only_tmdb_id}"]),
+      "Request"
+    )
+    |> render_click()
+
+    assert [request] = Mydia.MediaRequests.list_requests(status: "pending")
+    assert request.tmdb_id == dialog_only_tmdb_id
+    assert request.title == "Ninth Tide"
+  end
+
+  test "adding a missing franchise entry from inside the dialog refreshes its header",
+       %{conn: conn} do
+    source_tmdb_id = unique_provider_id()
+    collection_id = unique_provider_id()
+    missing_tmdb_id = unique_provider_id()
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Harrow Lane",
+        year: 2021,
+        tmdb_id: source_tmdb_id,
+        metadata: %{
+          "provider_id" => to_string(source_tmdb_id),
+          "provider" => "metadata_relay",
+          "media_type" => "movie",
+          "title" => "Harrow Lane",
+          "collection_id" => collection_id,
+          "collection_name" => "Vault Chronicles Collection"
+        }
+      })
+
+    warm_collection_cache(collection_id, [
+      %{"id" => source_tmdb_id, "title" => "Harrow Lane", "release_date" => "2021-03-01"},
+      %{"id" => missing_tmdb_id, "title" => "Salt Verge", "release_date" => "2019-04-11"}
+    ])
+
+    # The page's own recommendations rail (any movie/show with a tmdb_id starts
+    # this lookup on connect) and the dialog's own rail for whatever it opens
+    # over both need warming, same reasoning as movie_with_recommendation/1.
+    warm_recommendations_cache(source_tmdb_id, :movie, [])
+    warm_recommendations_cache(missing_tmdb_id, :movie, [])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    view
+    |> element(~s(#franchise-section-item-#{missing_tmdb_id} div[phx-click="show_details"]))
+    |> render_click()
+
+    render_async(view, 5000)
+
+    assert has_element?(
+             view,
+             ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-tmdb_id="#{missing_tmdb_id}"])
+           )
+
+    view
+    |> element(
+      ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-tmdb_id="#{missing_tmdb_id}"])
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    # Regression: DetailModalEvents.item_lists(socket) was an argument
+    # expression inside the pipeline that assigns :franchise, so it was
+    # evaluated against that function's own `socket` parameter, which still
+    # carried the pre-add franchise. The dialog's header kept offering "Add to
+    # Library" for a title that had just been added from inside it.
+    refute has_element?(view, ~s(#media-detail-modal button[phx-click="add_selected_item"]))
+    assert has_element?(view, "#trending-detail-modal-actions a", "Go to Movie")
+  end
 end

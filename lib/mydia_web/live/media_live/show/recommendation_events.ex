@@ -138,7 +138,14 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   """
   def request_recommendation(%{"tmdb_id" => tmdb_id}, socket) do
     with :ok <- Authorization.authorize_submit_request(socket) do
-      case Enum.find(socket.assigns.recommendations, &(to_string(&1.provider_id) == tmdb_id)) do
+      # Also resolves against the franchise strip and the dialog's own rail
+      # (:selected_recommendations). A title reached only by opening the dialog
+      # over a franchise entry, or by scrolling the rail inside the dialog
+      # itself, is in neither of this page's own lists, and searching just
+      # :recommendations dropped a guest's Request click there silently.
+      # Discover hit the same failure for its modal; see the explanatory
+      # comment on its `{:request_media, ...}` handle_info clause.
+      case DetailModal.find_selectable_item(DetailModalEvents.item_lists(socket), tmdb_id) do
         nil -> {:noreply, socket}
         item -> submit_request(item, tmdb_id, socket)
       end
