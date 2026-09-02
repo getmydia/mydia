@@ -374,6 +374,47 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
 
       assert html =~ "Plugin update available: tmdb-art 1.0.0 to 1.2.0"
     end
+
+    test "expands a monitored change with humanized field and values", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.updated",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{
+            "title" => "Nightfall Station",
+            "reason" => "Monitoring disabled",
+            "changes" => %{"monitored" => %{"old" => true, "new" => false}}
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "Monitoring"
+      assert html =~ "not monitored"
+    end
+
+    test "expands a monitor_new_seasons change with humanized field and values", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.updated",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{
+            "title" => "Nightfall Station",
+            "reason" => "Updated",
+            "changes" => %{"monitor_new_seasons" => %{"old" => "all", "new" => "none"}}
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "New season monitoring"
+      assert html =~ "all seasons"
+      assert html =~ "no seasons"
+    end
   end
 
   describe "Activity feed as a guest" do

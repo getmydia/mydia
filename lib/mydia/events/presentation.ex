@@ -569,7 +569,7 @@ defmodule Mydia.Events.Presentation do
 
     simple_fields =
       changes
-      |> Map.take(["title", "original_title", "year"])
+      |> Map.take(["title", "original_title", "year", "monitored", "monitor_new_seasons"])
       |> Map.keys()
 
     case metadata_fields ++ simple_fields do

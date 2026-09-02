@@ -146,6 +146,40 @@ defmodule Mydia.Events.PresentationTest do
       assert detail == "Arrival, metadata refresh (title)"
     end
 
+    test "updated includes a monitored change in the summary" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Arrival",
+              "reason" => "Monitoring disabled",
+              "changes" => %{"monitored" => %{"old" => true, "new" => false}}
+            }
+          )
+        )
+
+      assert detail == "Arrival, monitoring disabled (monitored)"
+    end
+
+    test "updated includes a monitor_new_seasons change in the summary" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Severance",
+              "reason" => "Updated",
+              "changes" => %{
+                "monitor_new_seasons" => %{"old" => "all", "new" => "none"}
+              }
+            }
+          )
+        )
+
+      assert detail == "Severance, updated (monitor_new_seasons)"
+    end
+
     test "updated degrades to the title alone" do
       assert Presentation.detail(
                event(type: "media_item.updated", metadata: %{"title" => "Arrival"})

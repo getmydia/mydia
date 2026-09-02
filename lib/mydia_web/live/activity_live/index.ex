@@ -405,7 +405,7 @@ defmodule MydiaWeb.ActivityLive.Index do
   defp format_change_details(changes) do
     simple_changes =
       changes
-      |> Map.take(["title", "original_title", "year"])
+      |> Map.take(["title", "original_title", "year", "monitored", "monitor_new_seasons"])
       |> Enum.map(fn {field, change} ->
         %{
           field: humanize_field_name(field),
@@ -447,8 +447,14 @@ defmodule MydiaWeb.ActivityLive.Index do
   defp humanize_field_name("title"), do: "Title"
   defp humanize_field_name("original_title"), do: "Original Title"
   defp humanize_field_name("year"), do: "Year"
+  defp humanize_field_name("monitored"), do: "Monitoring"
+  defp humanize_field_name("monitor_new_seasons"), do: "New season monitoring"
   defp humanize_field_name(field), do: Phoenix.Naming.humanize(field)
 
+  defp format_change_value("monitored", true), do: "monitored"
+  defp format_change_value("monitored", false), do: "not monitored"
+  defp format_change_value("monitor_new_seasons", "all"), do: "all seasons"
+  defp format_change_value("monitor_new_seasons", "none"), do: "no seasons"
   defp format_change_value(_field, nil), do: "none"
   defp format_change_value(_field, value), do: to_string(value)
 
