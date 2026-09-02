@@ -59,4 +59,17 @@ defmodule MydiaWeb.DashboardLive.LoadingSkeletonTest do
     refute has_element?(view, "#trending-movies-skeleton")
     refute has_element?(view, "#trending-tv-skeleton")
   end
+
+  test "each skeleton renders 10 placeholder cards, matching the Enum.take(10) real rails use",
+       %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/")
+
+    doc = LazyHTML.from_document(html)
+
+    movies_cards = doc |> LazyHTML.query("#trending-movies-skeleton div.card") |> Enum.count()
+    tv_cards = doc |> LazyHTML.query("#trending-tv-skeleton div.card") |> Enum.count()
+
+    assert movies_cards == 10
+    assert tv_cards == 10
+  end
 end
