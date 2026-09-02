@@ -503,8 +503,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, socket}
   end
 
-  def handle_info({:fetch_detail_metadata, tmdb_id, media_type}, socket) do
-    case MediaAddHelpers.fetch_detail_metadata(tmdb_id, media_type) do
+  def handle_info({:fetch_detail_metadata, provider_id, media_type}, socket) do
+    opts = put_source_provider([], provider_id, socket)
+
+    case MediaAddHelpers.fetch_detail_metadata(provider_id, media_type, nil, opts) do
       {:ok, metadata} ->
         {:noreply,
          socket
@@ -563,6 +565,35 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  # Tells the add flow which provider the clicked id came from.
+  #
+  # `Relay.search/3` routes every TV search to TVDB, so a TV search result's
+  # `provider_id` is a TVDB series id even though the card ships it in a param
+  # named `tmdb_id`. `Mydia.Media.Add` defaults to TMDB, so without this the
+  # add fetches a TVDB id from `/tmdb/tv/shows/:id`: usually a 404 surfaced as
+  # "Failed to fetch metadata: ... Media not found", and worse when the id
+  # happens to name a real TMDB show, since the row is then built from the
+  # wrong title.
+  #
+  # Resolved from the item server-side rather than trusted from the click,
+  # mirroring `MediaRequestHelpers.build_request_attrs/3`, which has branched on
+  # `item.provider` for the Request button all along. An id that no longer
+  # resolves against the current page falls through to the TMDB default, which
+  # is what trending, discover and the recommendations rail all return.
+  defp put_source_provider(opts, provider_id, socket) do
+    item =
+      find_selectable_item(
+        socket.assigns.items,
+        socket.assigns.selected_recommendations,
+        provider_id
+      )
+
+    case item && Map.get(item, :provider) do
+      :tvdb -> Keyword.put(opts, :provider, :tvdb)
+      _ -> opts
+    end
+  end
+
   # The picker's blank placeholder ("") and an ordinary card click's nil both
   # mean "no explicit choice"; anything else is a client-supplied library id
   # override for the resolver.
@@ -576,7 +607,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
            media_type,
            socket.assigns.library_status_map,
            nil,
-           opts
+           put_source_provider(opts, provider_id, socket)
          ) do
       {:ok, media_item, updated_map} ->
         items =
