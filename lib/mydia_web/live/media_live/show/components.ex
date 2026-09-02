@@ -734,7 +734,17 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     ~H"""
     <%= if @files != [] do %>
       <div id="media-files-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
-        <div class="card-body p-4 md:p-6">
+        <%!-- The `mfrow` size container. Named, not bare: show.html.heex
+              declares an unnamed `@container` around the whole page grid, and
+              a bare `@lg:` here would query that instead. It measures 744px at
+              a 1024px viewport, where this card is 312px wide.
+
+              PR #616 fixed this card on a phone with `sm:`, which was right
+              about the phone and wrong about everything else: at 1024px the
+              app drawer and the page rail both open, the card drops to 312px,
+              and a 248px button strip left the filename 16px. That rendered
+              two characters of an 84-character name. --%>
+        <div class="@container/mfrow card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
           <%!-- DaisyUI list component.
 
@@ -771,9 +781,12 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <ul class="menu w-full flex-nowrap bg-base-100 rounded-box p-0">
             <li :for={file <- @versions} id={"version-#{file.id}"} class="min-w-0 flex-nowrap">
               <div class="min-w-0 items-stretch flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
-                <div class="min-w-0 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div
+                  id={"version-row-#{file.id}"}
+                  class="min-w-0 flex flex-col gap-3 @lg/mfrow:flex-row @lg/mfrow:items-start @lg/mfrow:justify-between @lg/mfrow:gap-4"
+                >
                   <%!-- Left side: File info --%>
-                  <div class="min-w-0 sm:flex-1 flex flex-col gap-2">
+                  <div class="min-w-0 @lg/mfrow:flex-1 flex flex-col gap-2">
                     <%!-- File name. The full path lives on the title attribute
                           and in the file details modal. Rendered here it left
                           about 90px of column beside the button strip on a
@@ -829,7 +842,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="open_subtitle_manage"
                       phx-value-media-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
                       aria-label="Manage subtitles"
                       title="Subtitles"
                     >
@@ -845,7 +858,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                         <div
                           tabindex="0"
                           role="button"
-                          class="btn btn-ghost btn-square sm:btn-sm"
+                          class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
                           title="Pre-transcode"
                         >
                           <.icon name="hero-wrench" class="w-5 h-5" />
@@ -871,7 +884,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="show_file_details"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
                       aria-label="View file details"
                       title="View file details"
                     >
@@ -881,7 +894,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="mark_file_preferred"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
                       aria-label="Mark this file as preferred"
                       title="Mark as preferred"
                     >
@@ -896,7 +909,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="not_this_item"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
                       aria-label={
                         if @media_item.type == "movie",
                           do: "This file is not this movie",
@@ -915,7 +928,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="show_file_delete_confirm"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm text-error hover:bg-error hover:text-error-content"
+                      class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @lg/mfrow:btn-sm"
                       aria-label="Delete this file"
                       title="Delete file"
                     >
@@ -927,7 +940,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     <button
                       id={"demote-#{file.id}"}
                       type="button"
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
                       aria-label="Move this file to extras"
                       title="This is an extra, not a version"
                       phx-click="demote_to_extra"
