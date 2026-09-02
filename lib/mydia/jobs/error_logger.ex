@@ -2,11 +2,14 @@ defmodule Mydia.Jobs.ErrorLogger do
   @moduledoc """
   Logs Oban job failures.
 
-  Oban emits `[:oban, :job, :exception]` for every failed attempt, but nothing
-  in this application listened for it and `Oban.Telemetry.attach_default_logger/1`
-  was never called. A worker that raised produced no output at all: the crash
-  was recorded only in the `errors` column of `oban_jobs`, and a job that
-  exhausted `max_attempts` was discarded in silence.
+  Oban emits `[:oban, :job, :exception]` for every failed attempt.
+  `Mydia.Jobs.Broadcaster` already listens for it, but only to broadcast job
+  status over PubSub and to record the failure as an event for the UI and
+  audit trail. Nothing wrote the failure to the application log, and
+  `Oban.Telemetry.attach_default_logger/1` was never called. A worker that
+  raised produced no log output at all: the crash was recorded only in the
+  `errors` column of `oban_jobs`, and a job that exhausted `max_attempts` was
+  discarded in silence.
 
   That is how a TV search which crashed on every one of its three attempts
   looked, from the logs, exactly like a search that found nothing worth
@@ -31,14 +34,16 @@ defmodule Mydia.Jobs.ErrorLogger do
 
   @doc false
   def handle_event(@event, _measurements, %{job: job} = metadata, _config) do
+    reason = format_error(metadata)
+
     Logger.error(
-      "Oban job failed: #{job.worker} (attempt #{job.attempt}/#{job.max_attempts})",
+      "Oban job failed: #{job.worker} (attempt #{job.attempt}/#{job.max_attempts}): #{reason}",
       oban_job_id: job.id,
       oban_worker: job.worker,
       oban_args: inspect(job.args),
       oban_attempt: job.attempt,
       oban_max_attempts: job.max_attempts,
-      oban_error: format_error(metadata)
+      oban_error: reason
     )
   end
 
