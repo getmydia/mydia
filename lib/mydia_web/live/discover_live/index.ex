@@ -48,6 +48,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # next page when that happens, bounded so a fully-owned category cannot spin.
   @max_auto_advance 3
 
+  @unsupported_media_type "That media type is not supported."
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -69,8 +71,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:request_status_map, %{})
       |> DetailModal.init()
       |> assign(:load_error, nil)
-      |> assign(:libraries, [])
-      |> assign(:library_picker, nil)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current()
@@ -124,7 +124,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:loading, true)
         |> assign(:load_error, nil)
         |> assign(:has_more, false)
-        |> assign(:libraries, MediaAddHelpers.candidate_libraries(media_type))
 
       # Load genres if not loaded yet or media type changed
       socket =
@@ -159,9 +158,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:selected_language, nil)
        |> assign(:selected_year, nil)
        |> assign(:min_rating, nil)
-       |> assign(:sort_by, "popularity.desc")
-       |> assign(:libraries, MediaAddHelpers.candidate_libraries(:movie))
-       |> assign(:library_picker, nil)}
+       |> assign(:sort_by, "popularity.desc")}
     end
   end
 
@@ -224,75 +221,39 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  def handle_event("open_library_picker", params, socket) do
-    {:noreply, MediaAddHelpers.put_library_picker(socket, params)}
-  end
-
-  def handle_event("close_library_picker", _params, socket) do
-    {:noreply, MediaAddHelpers.clear_library_picker(socket)}
-  end
-
-  # Reached from the Configure entry inside library_picker_dialog/1. The item
-  # is looked up from the current grid/rail rather than carried in the click's
-  # own params: the caret only ever sends ref and media_type, and the preview
-  # panel needs the title, poster and overview that only a real SearchResult
-  # carries.
-  def handle_event(
-        "open_add_config",
-        %{"ref" => raw_ref, "media_type" => media_type},
-        socket
-      ) do
-    with {:ok, ref} <- Ref.parse(raw_ref),
-         {:ok, media_type_atom} <- parse_event_media_type(media_type) do
-      defaults = AddDefaults.resolve(socket.assigns.current_user, media_type_atom)
-
-      item =
-        DetailModal.find_selectable_item(
-          [socket.assigns.items, socket.assigns.selected_recommendations],
-          Ref.id(ref)
-        )
-
-      {:noreply,
-       socket
-       |> MediaAddHelpers.clear_library_picker()
-       |> assign(:add_config, %{
-         ref: ref,
-         media_type: media_type_atom,
-         defaults: defaults,
-         item: item
-       })}
-    else
-      :error -> {:noreply, put_flash(socket, :error, "Could not configure that item")}
-    end
+  # Reached from the Configure caret. The preview is resolved from the current
+  # grid and rail rather than carried in the click's own params: the caret only
+  # sends ref, media_type and title, and the preview panel wants the poster
+  # and overview that only a real SearchResult carries.
+  def handle_event("open_add_config", params, socket) do
+    {:noreply,
+     MediaAddHelpers.put_add_config(
+       socket,
+       params,
+       socket.assigns.current_user,
+       [socket.assigns.items, socket.assigns.selected_recommendations]
+     )}
   end
 
   def handle_event("close_add_config", _params, socket) do
-    {:noreply, assign(socket, :add_config, nil)}
+    {:noreply, MediaAddHelpers.clear_add_config(socket)}
   end
 
+  # Goes through the same in-flight guard a plain click uses. Before the merge
+  # this path bypassed it, so a double submit could race itself onto the
+  # tmdb_id unique index.
   def handle_event("submit_add_config", %{"config" => params}, socket) do
-    with :ok <- Authorization.authorize_create_media(socket),
-         %{ref: ref, media_type: media_type} <- socket.assigns.add_config do
-      defaults =
-        AddDefaults.resolve(socket.assigns.current_user, media_type,
-          library_path_id: presence(params["library_path_id"]),
-          quality_profile_id: presence(params["quality_profile_id"]),
-          monitored: params["monitored"] == "true",
-          season_monitoring: presence(params["season_monitoring"]),
-          search_on_add: params["search_on_add"] == "true"
-        )
+    case MediaAddHelpers.resolve_add_config_submit(socket, params) do
+      {:ok, ref, media_type, opts, socket} ->
+        {:noreply,
+         MediaAddHelpers.queue_add(
+           socket,
+           ref,
+           {:add_media_to_library_with_opts, ref, media_type, opts}
+         )}
 
-      opts =
-        defaults
-        |> AddDefaults.to_add_opts()
-        |> Keyword.put(:search_on_add, defaults.search_on_add)
-
-      send(self(), {:add_media_to_library_with_opts, ref, media_type, opts})
-
-      {:noreply, assign(socket, :add_config, nil)}
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-      nil -> {:noreply, socket}
+      {:halt, socket} ->
+        {:noreply, socket}
     end
   end
 
@@ -302,26 +263,18 @@ defmodule MydiaWeb.DiscoverLive.Index do
         socket
       ) do
     with :ok <- Authorization.authorize_create_media(socket),
-         {:ok, ref} <- Ref.parse(raw_ref),
-         {:ok, media_type_atom} <- parse_event_media_type(media_type) do
-      socket = MediaAddHelpers.clear_library_picker(socket)
+         {:ok, ref} <- Ref.parse(raw_ref) do
+      case parse_event_media_type(media_type) do
+        {:ok, media_type_atom} ->
+          {:noreply,
+           MediaAddHelpers.queue_add(
+             socket,
+             ref,
+             {:add_media_to_library, ref, media_type_atom, params["library_path_id"]}
+           )}
 
-      # An impatient double-click sends the event twice before the first
-      # handle_info runs. Without this guard the second add lands on a title
-      # the first just created, and resolves to :already_in_library, flashing
-      # a false failure for a title the user only meant to add once.
-      if MapSet.member?(socket.assigns.adding_item_ids, ref) do
-        {:noreply, socket}
-      else
-        socket =
-          assign(socket, :adding_item_ids, MapSet.put(socket.assigns.adding_item_ids, ref))
-
-        send(
-          self(),
-          {:add_media_to_library, ref, media_type_atom, params["library_path_id"]}
-        )
-
-        {:noreply, socket}
+        :error ->
+          {:noreply, put_flash(socket, :error, @unsupported_media_type)}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}

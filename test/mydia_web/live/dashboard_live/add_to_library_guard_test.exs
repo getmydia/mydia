@@ -15,6 +15,8 @@ defmodule MydiaWeb.DashboardLive.AddToLibraryGuardTest do
 
   use Mydia.DataCase, async: false
 
+  import Mydia.AccountsFixtures
+
   alias MydiaWeb.DashboardLive.Index
 
   defp stub_socket(adding_item_ids) do
@@ -22,7 +24,8 @@ defmodule MydiaWeb.DashboardLive.AddToLibraryGuardTest do
       assigns: %{
         __changed__: %{},
         flash: %{},
-        adding_item_ids: adding_item_ids
+        adding_item_ids: adding_item_ids,
+        current_user: user_fixture(%{role: "user"})
       }
     }
   end

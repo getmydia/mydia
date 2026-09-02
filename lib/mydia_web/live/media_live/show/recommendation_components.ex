@@ -29,7 +29,6 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationComponents do
   attr :adding_ids, MapSet, required: true
   attr :requesting_item_id, :string, default: nil
   attr :can_add, :boolean, required: true
-  attr :libraries, :list, default: []
 
   def recommendations_section(assigns) do
     tv_show? = assigns.media_item.type == "tv_show"
@@ -51,7 +50,6 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationComponents do
       adding_ids={@adding_ids}
       requesting_item_id={@requesting_item_id}
       can_add={@can_add}
-      libraries={@libraries}
       on_select="show_details"
       add_event="add_recommendation"
       request_event="request_recommendation"

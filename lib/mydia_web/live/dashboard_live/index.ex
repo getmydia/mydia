@@ -26,6 +26,8 @@ defmodule MydiaWeb.DashboardLive.Index do
   # reintroducing the layout shift this feature exists to prevent.
   @trending_rail_limit 10
 
+  @unsupported_media_type "That media type is not supported."
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -43,9 +45,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:requesting_item_id, nil)
         |> assign(:request_status_map, %{})
         |> DetailModal.init()
-        |> assign(:movie_libraries, MediaAddHelpers.candidate_libraries(:movie))
-        |> assign(:show_libraries, MediaAddHelpers.candidate_libraries(:tv_show))
-        |> assign(:library_picker, nil)
+        |> assign(:add_config, nil)
+        |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
         |> load_dashboard_data()
       else
         socket
@@ -67,9 +68,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:request_status_map, %{})
         |> assign(:pending_requests_count, 0)
         |> DetailModal.init()
-        |> assign(:movie_libraries, [])
-        |> assign(:show_libraries, [])
-        |> assign(:library_picker, nil)
+        |> assign(:add_config, nil)
+        |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
       end
 
     {:ok, socket}
@@ -152,12 +152,33 @@ defmodule MydiaWeb.DashboardLive.Index do
     end
   end
 
-  def handle_event("open_library_picker", params, socket) do
-    {:noreply, MediaAddHelpers.put_library_picker(socket, params)}
+  def handle_event("open_add_config", params, socket) do
+    {:noreply,
+     MediaAddHelpers.put_add_config(
+       socket,
+       params,
+       socket.assigns.current_user,
+       [socket.assigns.trending_movies, socket.assigns.trending_tv]
+     )}
   end
 
-  def handle_event("close_library_picker", _params, socket) do
-    {:noreply, MediaAddHelpers.clear_library_picker(socket)}
+  def handle_event("close_add_config", _params, socket) do
+    {:noreply, MediaAddHelpers.clear_add_config(socket)}
+  end
+
+  def handle_event("submit_add_config", %{"config" => params}, socket) do
+    case MediaAddHelpers.resolve_add_config_submit(socket, params) do
+      {:ok, ref, media_type, opts, socket} ->
+        {:noreply,
+         MediaAddHelpers.queue_add(
+           socket,
+           ref,
+           {:add_media_to_library_with_opts, ref, media_type, opts}
+         )}
+
+      {:halt, socket} ->
+        {:noreply, socket}
+    end
   end
 
   def handle_event(
@@ -165,29 +186,22 @@ defmodule MydiaWeb.DashboardLive.Index do
         %{"ref" => raw_ref, "media_type" => media_type} = params,
         socket
       ) do
-    with {:ok, ref} <- Ref.parse(raw_ref),
-         {:ok, media_type_atom} <- parse_event_media_type(media_type) do
-      socket = MediaAddHelpers.clear_library_picker(socket)
+    with :ok <- LiveAuthorization.authorize_create_media(socket),
+         {:ok, ref} <- Ref.parse(raw_ref) do
+      case parse_event_media_type(media_type) do
+        {:ok, media_type_atom} ->
+          {:noreply,
+           MediaAddHelpers.queue_add(
+             socket,
+             ref,
+             {:add_media_to_library, ref, media_type_atom, params["library_path_id"]}
+           )}
 
-      # An impatient double-click sends the event twice before the first
-      # handle_info runs. Without this guard the second add lands on a title
-      # the first just created, and resolves to :already_in_library, flashing
-      # a false failure for a title the user only meant to add once.
-      if MapSet.member?(socket.assigns.adding_item_ids, ref) do
-        {:noreply, socket}
-      else
-        socket =
-          assign(socket, :adding_item_ids, MapSet.put(socket.assigns.adding_item_ids, ref))
-
-        # Start async task to add media
-        send(
-          self(),
-          {:add_media_to_library, ref, media_type_atom, params["library_path_id"]}
-        )
-
-        {:noreply, socket}
+        :error ->
+          {:noreply, put_flash(socket, :error, @unsupported_media_type)}
       end
     else
+      {:unauthorized, socket} -> {:noreply, socket}
       :error -> {:noreply, put_flash(socket, :error, "Could not add that item")}
     end
   end
@@ -299,6 +313,10 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:ok, opts} ->
         add_with_opts(ref, media_type, opts, socket)
     end
+  end
+
+  def handle_info({:add_media_to_library_with_opts, ref, media_type, opts}, socket) do
+    add_with_opts(ref, media_type, opts, socket)
   end
 
   def handle_info({:request_media, ref, media_type}, socket) do

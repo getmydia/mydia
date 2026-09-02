@@ -12,7 +12,7 @@ defmodule MydiaWeb.Features.DockNavTest do
   as `<nav id="mobile-dock" phx-hook="DockNav" class="lg:hidden ...">`, so it
   only paints below Tailwind's `lg` breakpoint (1024px). Every test here
   resizes to a mobile viewport first, matching the precedent already set in
-  `library_picker_test.exs` for hit-testing this same element.
+  `add_config_flow_test.exs` for hit-testing this same element.
   """
 
   use MydiaWeb.FeatureCase, async: false

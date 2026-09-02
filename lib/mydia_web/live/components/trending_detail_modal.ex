@@ -15,8 +15,6 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
         loading={@detail_loading}
         current_user={@current_user}
         open={@selected_item != nil}
-        libraries={@libraries}
-        picker_open={@library_picker != nil}
         config_open={false}
       />
 
@@ -44,33 +42,22 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   and replaces the defaults outright, because Add to Library there would
   create the media item while leaving the request pending.
 
-  ## `picker_open` and `config_open`
+  ## `config_open`
 
-  Both host LiveViews also render `MydiaWeb.Components.LibraryComponents.library_picker_dialog/1`
-  once per page, at `z-[1000]`, above this modal's `z-999`. That dialog can be
-  opened from this modal's header actions, and both dialogs bind
-  `phx-window-keydown` with `phx-key="Escape"` as a workaround for
-  `open`-attribute dialogs getting no native Escape handling.
+  Every host LiveView also renders `MydiaWeb.AddMediaComponents.add_config_modal/1`
+  once per page, at `z-[1000]`, above this modal's `z-999`. It can be opened
+  from a caret inside this modal's own header actions and recommendations rail,
+  and both dialogs bind `phx-window-keydown` with `phx-key="Escape"` as a
+  workaround for `open`-attribute dialogs getting no native Escape handling.
   `phx-window-keydown` is not scoped by visual stacking, so without
-  `picker_open` a single Escape press would close both layers at once instead
-  of only the top one.
+  `config_open` a single Escape press would close both layers at once instead of
+  only the top one.
 
-  Discover carries a third layer on top of that: `MydiaWeb.AddMediaComponents.add_config_modal/1`,
-  reached from `library_picker_dialog/1`'s Configure entry, which is itself
-  reachable from a caret inside this modal's own recommendations rail.
-  `config_open` guards against exactly the same hazard for that layer:
-  without it, opening Configure from the rail while this modal is still open
-  clears `@library_picker` (so `picker_open` alone reads false again) and a
-  single Escape press would fire both `close_add_config` and `close_details`,
-  silently closing the detail view the user never asked to leave.
-
-  Every caller must pass `picker_open` and `config_open` (whether the library
-  picker dialog and the configure-before-adding modal, respectively, are
-  currently open for this LiveView). There is deliberately no default for
-  either: a future caller that forgets to pass one fails loudly at render
-  instead of silently regressing Escape handling. A caller with no configure
-  modal of its own (Dashboard, the request pages) always passes
-  `config_open={false}`.
+  Every caller must pass `config_open`, whether the configure-before-adding
+  dialog is currently open for this LiveView. There is deliberately no default:
+  a future caller that forgets it fails loudly at render instead of silently
+  regressing Escape handling. A caller with no configure dialog of its own (the
+  two request pages) always passes `config_open={false}`.
   """
   use MydiaWeb, :live_component
 
@@ -86,7 +73,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
       id={@id}
       class="modal"
       open={@open}
-      phx-window-keydown={@open && not @picker_open && not @config_open && "close_details"}
+      phx-window-keydown={@open && not @config_open && "close_details"}
       phx-key="Escape"
     >
       <%= if @open do %>
@@ -189,7 +176,6 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                             <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
                           </button>
                           <.library_picker_button
-                            libraries={@libraries}
                             ref={@item_ref}
                             media_type={media_type_string(@item)}
                             title={@item.title}
@@ -306,7 +292,6 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign_new(:open, fn -> false end)
      |> assign_new(:loading, fn -> false end)
      |> assign_new(:metadata, fn -> nil end)
-     |> assign_new(:libraries, fn -> [] end)
      # Optional slot: the dashboard renders this modal without one.
      |> assign_new(:rail, fn -> [] end)
      # Optional slot: Dashboard and Discovery render the default header actions.

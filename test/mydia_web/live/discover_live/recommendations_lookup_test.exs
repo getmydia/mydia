@@ -12,7 +12,7 @@ defmodule MydiaWeb.DiscoverLive.RecommendationsLookupTest do
   under test.
 
   The rail also gets a rendering test, unlike the rest of Discover (see the
-  header of library_picker_test.exs for why those stay unit-only): Discover
+  header of add_config_flow_test.exs for why those stay unit-only): Discover
   routes every TV search to TVDB, so a TV search result's own ref can never
   reach TMDB's recommendations route. The only way to prove the rail still
   populates when TMDB does know the show is to drive the real handle_info

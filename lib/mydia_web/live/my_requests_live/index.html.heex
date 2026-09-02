@@ -122,8 +122,8 @@
       </div>
     <% end %>
 
-    <%!-- Detail popup. picker_open is false because this page never opens the
-          library picker, and libraries is empty for the same reason. --%>
+    <%!-- Detail popup. config_open is false because this page never opens the
+          configure-before-adding dialog. --%>
     <.live_component
       module={MydiaWeb.Live.Components.TrendingDetailModal}
       id="request-detail-modal"
@@ -132,8 +132,6 @@
       loading={@detail_loading}
       current_user={@current_user}
       open={@detail_item != nil}
-      libraries={[]}
-      picker_open={false}
       config_open={false}
     >
       <:actions>

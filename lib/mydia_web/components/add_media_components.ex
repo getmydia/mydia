@@ -1,58 +1,70 @@
 defmodule MydiaWeb.AddMediaComponents do
   @moduledoc """
-  The configure-before-adding modal.
+  The Configure Before Adding dialog.
 
-  Ported from the deleted `AddMediaLive`, which reached it through a split
-  button. On Discover it hangs off the library caret so the primary button
-  stays a one-click add on resolved defaults.
+  This is the only add dialog. It replaced a two-step flow where a caret opened
+  `LibraryComponents.library_picker_dialog/1` ("Add to which library?") and that
+  dialog carried a Configure entry to reach this one. The picker is gone; the
+  caret opens this directly on every host.
 
-  It lives here rather than in `discover_components.ex`, which would cross the
-  ~500 LOC guideline with this added. It is used by one LiveView (Discover),
-  so it is imported there directly rather than added to `html_helpers`.
+  Everything item-specific arrives in one `config` map so a host's page-level
+  media type cannot diverge from the clicked item's own, which it could when
+  Discover passed `media_type` and `libraries` separately.
+
+  Hosted by DiscoverLive, DashboardLive and MediaLive.Show. It is imported
+  directly by each rather than added to `html_helpers`, and lives here rather
+  than in `discover_components.ex`, which would cross the ~500 LOC guideline.
   """
   use MydiaWeb, :html
 
-  alias Mydia.Media.AddDefaults
+  @doc """
+  Renders the dialog for the card in `config`, or nothing when `config` is nil.
 
-  attr :open, :boolean, default: false
-  attr :item, :map, default: nil
-  attr :media_type, :atom, required: true
-  attr :libraries, :list, default: []
+  `config` is `%{ref:, media_type:, defaults:, preview:, libraries:}`,
+  built by `MydiaWeb.Live.Helpers.MediaAddHelpers.put_add_config/4`. `preview`
+  is `%{title:, year:, poster_path:, overview:}` and any of its values except
+  the title may be nil.
+
+  `z-[1000]` puts this above `TrendingDetailModal`, itself a `.modal` at
+  z-index 999, without depending on template ordering: the caret that opens
+  this is also reachable from the recommendations rail inside that modal.
+
+  `phx-window-keydown` with `phx-key="Escape"` exists because a `<dialog>`
+  toggled through the `open` attribute, unlike one opened with `showModal()`,
+  gets neither native Escape handling nor a `::backdrop`. The explicit
+  `modal-backdrop` click target is the other half of that workaround. Hosts
+  that also render `TrendingDetailModal` must pass it `config_open` so a single
+  Escape press does not close both layers.
+  """
+  attr :config, :map, default: nil
   attr :quality_profiles, :list, default: []
-  attr :defaults, AddDefaults, default: nil
 
-  # z-[1000] mirrors LibraryComponents.library_picker_dialog/1: the
-  # Configure entry it hosts is also reachable from the recommendations rail
-  # inside the trending-detail modal (itself a `.modal`), so this must not
-  # depend on rendering after that modal in the template to paint on top.
-  #
-  # phx-window-keydown/phx-key mirror the same sibling for the same reason: a
-  # <dialog open={...}> toggled via the `open` attribute, unlike one opened
-  # with showModal(), gets no native Escape handling on its own.
   def add_config_modal(assigns) do
     ~H"""
     <dialog
       id="add-config-modal"
       class="modal z-[1000]"
-      open={@open and @item != nil}
-      phx-window-keydown={(@open and @item != nil) && "close_add_config"}
+      open={@config != nil}
+      phx-window-keydown={@config && "close_add_config"}
       phx-key="Escape"
     >
-      <div :if={@item} class="modal-box max-w-2xl">
+      <div :if={@config} class="modal-box max-w-2xl">
         <h3 class="font-bold text-lg mb-4">Configure Before Adding</h3>
         <%!-- Media Preview --%>
         <div class="flex gap-4 mb-6 bg-base-300 p-4 rounded-lg">
           <div class="w-20 flex-shrink-0">
-            <img src={get_poster_url(@item)} alt={@item.title || @item.name} class="w-full rounded" />
+            <img
+              src={get_poster_url(@config.preview)}
+              alt={@config.preview.title}
+              class="w-full rounded"
+            />
           </div>
           <div class="flex-1 min-w-0">
-            <h4 class="font-bold text-base">
-              {@item.title || @item.name}
-            </h4>
-            <p class="text-sm text-base-content/70">{format_year(@item)}</p>
-            <%= if @item.overview do %>
+            <h4 class="font-bold text-base">{@config.preview.title}</h4>
+            <p class="text-sm text-base-content/70">{format_year(@config.preview)}</p>
+            <%= if @config.preview.overview do %>
               <p class="text-xs text-base-content/60 mt-2 line-clamp-3">
-                {@item.overview}
+                {@config.preview.overview}
               </p>
             <% end %>
           </div>
@@ -65,7 +77,7 @@ defmodule MydiaWeb.AddMediaComponents do
               <span class="label-text font-semibold">Root Folder</span>
               <span class="label-text-alt text-error">*</span>
             </label>
-            <%= if @libraries == [] do %>
+            <%= if @config.libraries == [] do %>
               <div class="alert alert-warning">
                 <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
                 <span>No library paths configured. Please configure a library path first.</span>
@@ -73,9 +85,12 @@ defmodule MydiaWeb.AddMediaComponents do
             <% else %>
               <select name="config[library_path_id]" class="select select-bordered" required>
                 <option value="">Select a folder...</option>
-                <%= for path <- @libraries do %>
-                  <option value={path.id} selected={@defaults.library_path_id == path.id}>
-                    {path.path} ({path.type})
+                <%= for path <- @config.libraries do %>
+                  <option
+                    value={path.id}
+                    selected={@config.defaults.library_path_id == path.id}
+                  >
+                    {Path.basename(path.path)} · {path.path}
                   </option>
                 <% end %>
               </select>
@@ -89,7 +104,10 @@ defmodule MydiaWeb.AddMediaComponents do
             <select name="config[quality_profile_id]" class="select select-bordered">
               <option value="">Use server default</option>
               <%= for profile <- @quality_profiles do %>
-                <option value={profile.id} selected={@defaults.quality_profile_id == profile.id}>
+                <option
+                  value={profile.id}
+                  selected={@config.defaults.quality_profile_id == profile.id}
+                >
                   {profile.name}
                 </option>
               <% end %>
@@ -104,11 +122,11 @@ defmodule MydiaWeb.AddMediaComponents do
                 name="config[monitored]"
                 value="true"
                 class="toggle toggle-primary"
-                checked={@defaults.monitored}
+                checked={@config.defaults.monitored}
               />
               <div>
                 <span class="label-text font-semibold">
-                  Monitor this {(@media_type == :movie && "movie") || "series"}
+                  Monitor this {(@config.media_type == :movie && "movie") || "series"}
                 </span>
                 <p class="text-xs text-base-content/60">
                   Automatically search for and download new releases
@@ -117,22 +135,22 @@ defmodule MydiaWeb.AddMediaComponents do
             </label>
           </div>
           <%!-- Season Monitoring for TV --%>
-          <%= if @media_type == :tv_show do %>
+          <%= if @config.media_type == :tv_show do %>
             <div class="form-control mb-4">
               <label class="label">
                 <span class="label-text font-semibold">Season Monitoring</span>
               </label>
               <select name="config[season_monitoring]" class="select select-bordered">
-                <option value="all" selected={@defaults.season_monitoring == "all"}>
+                <option value="all" selected={@config.defaults.season_monitoring == "all"}>
                   Monitor All Seasons
                 </option>
-                <option value="first" selected={@defaults.season_monitoring == "first"}>
+                <option value="first" selected={@config.defaults.season_monitoring == "first"}>
                   Monitor First Season Only
                 </option>
-                <option value="future" selected={@defaults.season_monitoring == "future"}>
+                <option value="future" selected={@config.defaults.season_monitoring == "future"}>
                   Monitor Future Seasons
                 </option>
-                <option value="none" selected={@defaults.season_monitoring == "none"}>
+                <option value="none" selected={@config.defaults.season_monitoring == "none"}>
                   Don't Monitor Any Seasons
                 </option>
               </select>
@@ -147,7 +165,7 @@ defmodule MydiaWeb.AddMediaComponents do
                 name="config[search_on_add]"
                 value="true"
                 class="toggle toggle-primary"
-                checked={@defaults.search_on_add}
+                checked={@config.defaults.search_on_add}
               />
               <div>
                 <span class="label-text font-semibold">Search on Add</span>
@@ -162,7 +180,7 @@ defmodule MydiaWeb.AddMediaComponents do
             <button type="button" class="btn btn-ghost" phx-click="close_add_config">
               Cancel
             </button>
-            <button type="submit" class="btn btn-primary" disabled={@libraries == []}>
+            <button type="submit" class="btn btn-primary" disabled={@config.libraries == []}>
               <.icon name="hero-plus" class="w-5 h-5" /> Add to Library
             </button>
           </div>
@@ -175,8 +193,8 @@ defmodule MydiaWeb.AddMediaComponents do
 
   defp get_poster_url(%{poster_path: nil}), do: "/images/no-poster.svg"
   defp get_poster_url(%{poster_path: path}), do: ImageUrl.poster_url(path)
-  defp get_poster_url(_), do: "/images/no-poster.svg"
+  defp get_poster_url(_preview), do: "/images/no-poster.svg"
 
   defp format_year(%{year: year}) when is_integer(year), do: to_string(year)
-  defp format_year(_), do: "N/A"
+  defp format_year(_preview), do: "N/A"
 end

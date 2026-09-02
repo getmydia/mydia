@@ -12,7 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   own lists and resolving against those alone would drop the click silently.
 
   Adds and requests are dispatched by franchise membership, the same way
-  `LibraryPickerEvents` already routes the page's single library picker. An item
+  `AddConfigEvents` already routes the page's single configure dialog. An item
   that is in neither of the page's lists falls to the recommendation branch,
   which is correct: both paths add by TMDB id, and
   `RecommendationEvents.perform_add/4` inherits the viewed item's monitored flag
@@ -26,9 +26,9 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.MediaLive.Show.AddConfigEvents
   alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
-  alias MydiaWeb.MediaLive.Show.LibraryPickerEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
 
   require Logger
@@ -58,7 +58,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   def add_selected_item(%{"ref" => raw_ref} = params, socket) do
     case Ref.parse(raw_ref) do
       {:ok, ref} ->
-        if LibraryPickerEvents.franchise_entry?(socket.assigns[:franchise], Ref.id(ref)) do
+        if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], Ref.id(ref)) do
           FranchiseEvents.add_franchise_movie(params, socket)
         else
           RecommendationEvents.add_recommendation(params, socket)
@@ -75,7 +75,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   def request_selected_item(%{"ref" => raw_ref} = params, socket) do
     case Ref.parse(raw_ref) do
       {:ok, ref} ->
-        if LibraryPickerEvents.franchise_entry?(socket.assigns[:franchise], Ref.id(ref)) do
+        if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], Ref.id(ref)) do
           FranchiseEvents.request_franchise_movie(params, socket)
         else
           RecommendationEvents.request_recommendation(params, socket)

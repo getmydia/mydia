@@ -3,7 +3,7 @@ defmodule MydiaWeb.DiscoverLive.IndexTest do
   Covers the media-type segmented control (`#discover-media-type`, event
   `switch_media_type`, param `type`).
 
-  This call site has no other rendering test: library_picker_test.exs and
+  This call site has no other rendering test: add_config_flow_test.exs and
   friends in this directory only exercise handle_event/3 directly or unit
   functions, and grid_density_test.exs (in the parent directory) covers the
   density toggle, not the media-type one. A wrong param name or a

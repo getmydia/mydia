@@ -42,7 +42,6 @@ defmodule MydiaWeb.DiscoverComponents do
   # `item.provider_id`.
   attr :adding_ids, MapSet, default: MapSet.new()
   attr :requesting_item_id, :string, default: nil
-  attr :libraries, :list, default: []
   # :any rather than :string because nil is a meaningful value here: it renders
   # an inert poster, which is what a LiveView with no select handler needs.
   # Typing this :string makes `on_select={nil}` a compile error under
@@ -70,10 +69,6 @@ defmodule MydiaWeb.DiscoverComponents do
   # w500 is the right size for a grid card; a rail card is w-36 (144px), which
   # wants the smaller w342 step.
   attr :poster_size, :string, default: "w500"
-  # Forwarded to LibraryComponents.library_picker_button/1's `always_show`.
-  # Discover's main grid sets this so the caret (and the Configure entry
-  # behind it) stays reachable even with zero or one candidate library.
-  attr :always_show_caret, :boolean, default: false
 
   def trending_card(assigns) do
     assigns = assign(assigns, :adding?, adding?(assigns))
@@ -160,11 +155,9 @@ defmodule MydiaWeb.DiscoverComponents do
             current_user={@current_user}
             adding={@adding?}
             requesting_item_id={@requesting_item_id}
-            libraries={@libraries}
             add_event={@add_event}
             request_event={@request_event}
             can_add={@can_add}
-            always_show_caret={@always_show_caret}
           />
         </:meta>
       </.poster_card_body>
@@ -208,11 +201,6 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :current_user, :map, required: true
   attr :adding_ids, MapSet, default: MapSet.new()
   attr :requesting_item_id, :string, default: nil
-  # The rail is a horizontal scroll container, so the old anchored dropdown
-  # could not escape it at any placement and was withdrawn here (#465). The
-  # picker is now a page-level dialog, which no ancestor's overflow can clip,
-  # so the attr is back. A host that passes nothing still gets no caret.
-  attr :libraries, :list, default: []
 
   attr :id, :string, default: "media-rail"
   attr :title, :string, default: "More like this"
@@ -289,7 +277,6 @@ defmodule MydiaWeb.DiscoverComponents do
             adding_ids={@adding_ids}
             current={Map.get(item, :current, false)}
             requesting_item_id={@requesting_item_id}
-            libraries={@libraries}
             on_select={@on_select}
             navigate={Map.get(item, :navigate)}
             add_event={@add_event}
@@ -308,11 +295,9 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :current_user, :map, required: true
   attr :adding, :boolean, default: false
   attr :requesting_item_id, :string, default: nil
-  attr :libraries, :list, default: []
   attr :add_event, :string, default: "add_to_library"
   attr :request_event, :string, default: "request_media"
   attr :can_add, :boolean, default: true
-  attr :always_show_caret, :boolean, default: false
 
   defp trending_card_action(assigns) do
     assigns = assign(assigns, :ref_param, Ref.to_param(Ref.from_search_result(assigns.item)))
@@ -362,11 +347,9 @@ defmodule MydiaWeb.DiscoverComponents do
             <% end %>
           </button>
           <LibraryComponents.library_picker_button
-            libraries={@libraries}
             ref={@ref_param}
             media_type={@media_type}
             title={@item.title}
-            always_show={@always_show_caret}
           />
         </div>
       <% @item.in_library -> %>

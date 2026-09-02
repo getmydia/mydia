@@ -60,8 +60,8 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   # `<%= if @open do %>` (trending_detail_modal.ex:40), so omitting it renders
   # an empty dialog and every assertion below fails for the wrong reason.
   # `rail: []` is an undeclared slot the template calls `render_slot/1` on;
-  # without it the render raises KeyError. `picker_open` and `config_open`
-  # have no default (see the moduledoc) so both must always be passed too.
+  # without it the render raises KeyError. `config_open` has no default (see
+  # the moduledoc) so it must always be passed too.
   defp render_modal(item, metadata, opts \\ []) do
     render_component(TrendingDetailModal,
       id: "trending-detail-modal",
@@ -70,9 +70,7 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       metadata: metadata,
       loading: false,
       current_user: %{id: Ecto.UUID.generate(), role: "admin", username: "admin"},
-      libraries: [],
       rail: [],
-      picker_open: Keyword.get(opts, :picker_open, false),
       config_open: Keyword.get(opts, :config_open, false)
     )
   end
@@ -97,47 +95,25 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   end
 
   describe "Escape keydown binding" do
-    # Both this modal and the library picker dialog it can open
-    # (MydiaWeb.Components.LibraryComponents.library_picker_dialog/1) bind
-    # `phx-window-keydown` with `phx-key="Escape"` as a workaround for
-    # `open`-attribute dialogs getting no native Escape handling. That
-    # binding attaches per DOM node rather than by visual stacking order, so
-    # without `picker_open` a single Escape press would fire both handlers
-    # in the same LiveView process and close this modal out from under the
-    # picker instead of only the top layer.
-    test "binds close_details on Escape when no other dialog is on top" do
-      html = render_modal(item(), metadata(%{number_of_seasons: 3}), picker_open: false)
-      document = LazyHTML.from_fragment(html)
+    # The configure dialog sits above this modal at z-[1000] and binds its own
+    # phx-window-keydown for Escape. phx-window-keydown is not scoped by visual
+    # stacking, so without config_open a single Escape press would fire both
+    # close_add_config and close_details, silently closing the detail view the
+    # user never asked to leave.
+    test "binds Escape to close_details when no dialog is open above it" do
+      html = render_modal(item(), metadata(%{number_of_seasons: 3}), config_open: false)
 
-      dialog = LazyHTML.filter(document, "dialog")
-
-      assert Enum.count(dialog) == 1
-      assert LazyHTML.attribute(dialog, "phx-window-keydown") == ["close_details"]
+      assert LazyHTML.from_fragment(html)
+             |> LazyHTML.query(~s(dialog[phx-key="Escape"]))
+             |> LazyHTML.attribute("phx-window-keydown") == ["close_details"]
     end
 
-    test "does not bind Escape while the library picker dialog is open" do
-      html = render_modal(item(), metadata(%{number_of_seasons: 3}), picker_open: true)
-      document = LazyHTML.from_fragment(html)
-
-      dialog = LazyHTML.filter(document, "dialog")
-
-      assert Enum.count(dialog) == 1
-      assert LazyHTML.attribute(dialog, "phx-window-keydown") == []
-    end
-
-    # Discover's Configure entry (MydiaWeb.AddMediaComponents.add_config_modal/1)
-    # is reachable from a caret inside this modal's own recommendations rail,
-    # and opening it clears @library_picker (so picker_open alone reads false
-    # again). Without this guard a single Escape press would fire both
-    # close_add_config and close_details.
-    test "does not bind Escape while the configure-before-adding modal is open" do
+    test "drops the Escape binding while the configure dialog is open" do
       html = render_modal(item(), metadata(%{number_of_seasons: 3}), config_open: true)
-      document = LazyHTML.from_fragment(html)
 
-      dialog = LazyHTML.filter(document, "dialog")
-
-      assert Enum.count(dialog) == 1
-      assert LazyHTML.attribute(dialog, "phx-window-keydown") == []
+      assert LazyHTML.from_fragment(html)
+             |> LazyHTML.query(~s(dialog[phx-key="Escape"]))
+             |> LazyHTML.attribute("phx-window-keydown") == []
     end
   end
 

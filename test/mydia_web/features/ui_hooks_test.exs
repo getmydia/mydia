@@ -23,7 +23,7 @@ defmodule MydiaWeb.Features.UiHooksTest do
     # this is safe at any viewport, but pinning the viewport makes which copy
     # is exercised deterministic instead of depending on the local shell's
     # default (headless-Chrome) window size vs. CI's 1920x1080. Desktop,
-    # matching the convention in library_picker_test.exs, exercises the
+    # matching the convention in add_config_flow_test.exs, exercises the
     # sidebar copy.
     #
     # The hook itself (`phx-hook="ThemeToggle"`) only tracks the indicator
