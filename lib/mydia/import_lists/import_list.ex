@@ -25,6 +25,15 @@ defmodule Mydia.ImportLists.ImportList do
 
   @media_type_values ~w(movie tv_show)
 
+  # Types restricted to a single media type. TMDB has no "upcoming TV shows"
+  # or "now playing TV shows" endpoint, and no "movies on the air" or
+  # "movies airing today" endpoint, so pairing these types with the wrong
+  # media_type has no real target and must be rejected up front rather than
+  # silently fetching the wrong content (see
+  # Mydia.ImportLists.Provider.TMDB.build_endpoint/2).
+  @movie_only_types ~w(tmdb_upcoming tmdb_now_playing)
+  @tv_only_types ~w(tmdb_on_the_air tmdb_airing_today)
+
   @sync_interval_values [60, 360, 720, 1440]
 
   @type t :: %__MODULE__{
@@ -96,6 +105,7 @@ defmodule Mydia.ImportLists.ImportList do
     |> validate_inclusion(:type, @type_values)
     |> validate_inclusion(:media_type, @media_type_values)
     |> validate_inclusion(:sync_interval, @sync_interval_values)
+    |> validate_media_type_compatibility()
     |> validate_list_url()
     |> store_list_url_in_config()
     |> maybe_add_unique_constraint()
@@ -103,6 +113,35 @@ defmodule Mydia.ImportLists.ImportList do
     |> foreign_key_constraint(:library_path_id)
     |> foreign_key_constraint(:target_collection_id)
   end
+
+  # Rejects a type/media_type pair with no real target, e.g. tmdb_upcoming
+  # (movie-only) paired with media_type "tv_show". Runs after
+  # validate_inclusion/3 on both fields so it only has to reason about
+  # already-valid values; an unrecognized type or media_type is reported by
+  # those validations instead.
+  defp validate_media_type_compatibility(changeset) do
+    type = get_field(changeset, :type)
+    media_type = get_field(changeset, :media_type)
+
+    if is_nil(type) or is_nil(media_type) or supports_media_type?(type, media_type) do
+      changeset
+    else
+      add_error(
+        changeset,
+        :media_type,
+        "is not supported by this list type (#{type_label(type)} only supports #{compatible_media_types_label(type)})"
+      )
+    end
+  end
+
+  defp compatible_media_types_label(type) do
+    type
+    |> compatible_media_types()
+    |> Enum.map_join(" or ", &media_type_label/1)
+  end
+
+  defp media_type_label("movie"), do: "movies"
+  defp media_type_label("tv_show"), do: "TV shows"
 
   # Validates that list_url is provided when the type requires config
   defp validate_list_url(changeset) do
@@ -216,6 +255,39 @@ defmodule Mydia.ImportLists.ImportList do
   def source_category("tmdb_" <> _), do: :tmdb
   def source_category("custom_url"), do: :custom
   def source_category(_), do: :unknown
+
+  @doc """
+  Returns the media types a given list type can be configured with.
+
+  Most types accept either `"movie"` or `"tv_show"`. A handful of TMDB
+  preset types have no counterpart endpoint for the other media type
+  (`tmdb_upcoming`/`tmdb_now_playing` are movie-only, `tmdb_on_the_air`/
+  `tmdb_airing_today` are TV-only) and so only accept one. A LiveView form
+  can use this to filter the Media Type select's options for the chosen
+  type.
+
+  ## Examples
+
+      iex> Mydia.ImportLists.ImportList.compatible_media_types("tmdb_upcoming")
+      ["movie"]
+
+      iex> Mydia.ImportLists.ImportList.compatible_media_types("tmdb_trending")
+      ["movie", "tv_show"]
+  """
+  @spec compatible_media_types(String.t()) :: [String.t()]
+  def compatible_media_types(type) when type in @movie_only_types, do: ["movie"]
+  def compatible_media_types(type) when type in @tv_only_types, do: ["tv_show"]
+  def compatible_media_types(_type), do: @media_type_values
+
+  @doc """
+  Returns true if `media_type` is a valid pairing for list `type`.
+
+  See `compatible_media_types/1` for the compatibility rule.
+  """
+  @spec supports_media_type?(String.t(), String.t()) :: boolean()
+  def supports_media_type?(type, media_type) do
+    media_type in compatible_media_types(type)
+  end
 
   @doc """
   Returns true if this list type requires a URL or ID config.

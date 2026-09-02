@@ -98,8 +98,24 @@ Configure additional libraries using numbered variables (`<N>` = 1, 2, 3, etc.):
 |----------|-------------|---------|
 | `ENABLE_PLAYBACK` | Enable media playback controls and HLS streaming | `true` |
 | `ENABLE_CARDIGANN` | Enable native Cardigann indexer support | `true` |
-| `ENABLE_IMPORT_LISTS` | Enable import lists for syncing external lists (TMDB watchlists, popular, etc.) | `false` |
+| `ENABLE_IMPORT_LISTS` | Enable import lists for syncing external lists (TMDB watchlists, popular, etc.) | `true` |
 | `ENABLE_REMOTE_ACCESS` | Enable P2P remote access for the Flutter player | `false` |
+
+## Import Lists
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `IMPORT_LISTS_ALLOW_PRIVATE_DESTINATIONS` | Allow a Custom URL import list to fetch from private, loopback or link-local addresses | `false` |
+
+!!! warning "Only enable this for a list you host yourself"
+    A Custom URL list is fetched by the Mydia server, not by your browser, so the
+    URL can reach anything the server can reach: other containers, your router,
+    a cloud metadata endpoint. Mydia refuses those destinations by default and
+    revalidates every redirect hop.
+
+    Set this to `true` only if you serve the list from your own LAN or container
+    network, for example a JSON file on a NAS. It never relaxes the scheme
+    allowlist, which is always limited to `http` and `https`.
 
 ## Download Clients
 

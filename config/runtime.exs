@@ -250,9 +250,21 @@ if config_env() == :prod do
 
   import_lists_enabled =
     case System.get_env("ENABLE_IMPORT_LISTS") do
-      "true" -> true
-      "false" -> false
-      _ -> Application.get_env(:mydia, :features)[:import_lists_enabled] || false
+      "true" ->
+        true
+
+      "false" ->
+        false
+
+      _ ->
+        # An explicit `false` configured elsewhere must still win: only a
+        # genuinely missing key falls back to the compile-time default
+        # (true), so `Keyword.get/3` (which can't tell "missing" from
+        # "explicitly false") would be wrong here.
+        case Keyword.fetch(Application.get_env(:mydia, :features, []), :import_lists_enabled) do
+          {:ok, value} -> value
+          :error -> true
+        end
     end
 
   remote_access_enabled =
@@ -411,9 +423,21 @@ if config_env() in [:dev, :test] do
 
   import_lists_enabled =
     case System.get_env("ENABLE_IMPORT_LISTS") do
-      "true" -> true
-      "false" -> false
-      _ -> Application.get_env(:mydia, :features)[:import_lists_enabled] || false
+      "true" ->
+        true
+
+      "false" ->
+        false
+
+      _ ->
+        # An explicit `false` configured elsewhere must still win: only a
+        # genuinely missing key falls back to the compile-time default
+        # (true), so `Keyword.get/3` (which can't tell "missing" from
+        # "explicitly false") would be wrong here.
+        case Keyword.fetch(Application.get_env(:mydia, :features, []), :import_lists_enabled) do
+          {:ok, value} -> value
+          :error -> true
+        end
     end
 
   remote_access_enabled =
@@ -429,6 +453,14 @@ if config_env() in [:dev, :test] do
     import_lists_enabled: import_lists_enabled,
     remote_access_enabled: remote_access_enabled
 end
+
+# A custom-URL import list is fetched by the server, so an admin-supplied URL is
+# a way to reach anything the server can reach. Private, loopback and link-local
+# destinations are refused by default. Operators who legitimately serve a list
+# from their own LAN or container network can opt back in here.
+config :mydia,
+       :import_lists_allow_private_destinations,
+       System.get_env("IMPORT_LISTS_ALLOW_PRIVATE_DESTINATIONS") == "true"
 
 # P2P bind port configuration (all environments)
 # Required for hole punching when running in Docker

@@ -18,7 +18,7 @@ A modern, self-hosted media management platform for tracking, organizing, and mo
 - **Multi-User System** - Built-in admin/guest roles with request approval workflow
 - **SSO Support** - Local authentication plus OIDC/OpenID Connect integration
 - **Release Calendar** - Track upcoming releases and monitor episodes
-- **Import Lists** - Sync external lists from TMDB (watchlists, popular, trending) to auto-add content (experimental)
+- **Import Lists** - Sync external lists from TMDB (watchlists, popular, trending) to auto-add content
 - **Remote Access** - P2P connectivity for the Flutter player via iroh (experimental)
 - **Media Playback** - HLS streaming with on-the-fly transcoding (experimental)
 - **Trakt.tv Integration** - Scrobbling and library sync
