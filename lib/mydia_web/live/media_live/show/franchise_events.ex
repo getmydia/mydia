@@ -78,6 +78,17 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
     end
   end
 
+  @doc """
+  Adds a franchise movie with opts already resolved by the configure dialog.
+
+  Skips `library_path_opts/2` because
+  `MediaAddHelpers.add_opts_from_config/3` has already run it, and running it
+  twice on the expanded opts list would reject the valid id it produced.
+  """
+  def add_franchise_movie_with_opts(tmdb_id, opts, socket) do
+    start_add(tmdb_id, opts, socket)
+  end
+
   defp start_add(tmdb_id, opts, socket) do
     case Integer.parse(tmdb_id) do
       {tmdb_id, ""} -> dispatch_add(tmdb_id, opts, socket)

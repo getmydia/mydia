@@ -102,6 +102,19 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     end
   end
 
+  @doc """
+  Adds a recommendation with opts already resolved by the configure dialog.
+
+  Skips `library_path_opts/2` because
+  `MediaAddHelpers.add_opts_from_config/3` has already run it.
+  """
+  def add_recommendation_with_opts(tmdb_id, opts, socket) do
+    case Integer.parse(tmdb_id) do
+      {parsed, ""} -> dispatch_add(parsed, opts, socket)
+      _ -> {:noreply, socket}
+    end
+  end
+
   # An impatient double-click sends the event twice. The second add would hit the
   # tmdb_id unique index and flash a failure for a row the first add just
   # created, so a repeat for an id already in flight is dropped.
