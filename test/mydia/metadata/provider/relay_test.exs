@@ -59,7 +59,12 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert results != []
 
       first_result = List.first(results)
-      assert first_result.provider == :metadata_relay
+      # No `provider: :tmdb` opt is passed, so this legitimately routes to
+      # TVDB (see the routing comment on `Relay.search/3`): TV search
+      # defaults to TVDB, not TMDB, and that default is intentional, not the
+      # legacy id-guessing this branch removed. `:tmdb` here would assert
+      # against the code's own documented behavior.
+      assert first_result.provider == :tvdb
       assert first_result.media_type == :tv_show
       assert String.contains?(String.downcase(first_result.title), "breaking")
     end
@@ -134,7 +139,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, metadata} = Relay.fetch_by_ref(@config, {:tmdb, 1396}, media_type: :tv_show)
 
       assert metadata.provider_id == "1396"
-      assert metadata.provider == :metadata_relay
+      assert metadata.provider == :tmdb
       assert metadata.media_type == :tv_show
       assert metadata.title == "Breaking Bad"
       assert is_binary(metadata.overview)

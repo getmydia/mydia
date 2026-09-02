@@ -25,7 +25,7 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       Enum.into(attrs, %{
         id: nil,
         provider_id: "101",
-        title: "The Eternal Daughter",
+        title: "The Quiet Orchard",
         year: 2022,
         poster_path: "/poster.jpg",
         backdrop_path: "/backdrop.jpg",
@@ -53,7 +53,7 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   end
 
   defp metadata(attrs) do
-    struct(MediaMetadata, Enum.into(attrs, %{title: "The Eternal Daughter", year: 2022}))
+    struct(MediaMetadata, Enum.into(attrs, %{title: "The Quiet Orchard", year: 2022}))
   end
 
   # `open: true` is mandatory. The whole modal body sits behind

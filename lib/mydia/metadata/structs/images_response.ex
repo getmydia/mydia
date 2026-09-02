@@ -1,6 +1,6 @@
 defmodule Mydia.Metadata.Structs.ImagesResponse do
   @moduledoc """
-  Represents a collection of images returned by metadata provider's fetch_images/3 callback.
+  Represents a collection of images returned by metadata provider's fetch_images_by_ref/3 callback.
 
   This struct provides compile-time safety for image collection responses from external
   metadata providers. Individual images are represented as ImageData structs.

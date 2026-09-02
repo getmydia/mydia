@@ -19,9 +19,9 @@ defmodule MydiaWeb.DiscoverComponentsTest do
         provider_id: "693134",
         provider: :tmdb,
         media_type: :movie,
-        title: "Dune: Part Two",
+        title: "Vertex Horizon",
         year: 2024,
-        poster_path: "/dune.jpg"
+        poster_path: "/vertex.jpg"
       }
       |> Map.merge(%{in_library: false, monitored: false, id: nil, request_status: nil})
       |> Map.merge(Map.get(assigns_overrides, :item, %{}))
@@ -63,9 +63,9 @@ defmodule MydiaWeb.DiscoverComponentsTest do
         provider_id: "693134",
         provider: :tmdb,
         media_type: :movie,
-        title: "Dune: Part Two",
+        title: "Vertex Horizon",
         year: 2024,
-        poster_path: "/dune.jpg"
+        poster_path: "/vertex.jpg"
       }
       |> Map.merge(%{in_library: false, monitored: false, id: nil, request_status: nil})
 
@@ -127,14 +127,14 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       html = card(%{})
 
       assert html =~ ~s(loading="lazy")
-      assert html =~ "/w500/dune.jpg"
+      assert html =~ "/w500/vertex.jpg"
     end
 
     test "loading={nil} opts a card out of lazy loading" do
       html = card(%{loading: nil})
 
       refute html =~ "loading="
-      assert html =~ "/w500/dune.jpg"
+      assert html =~ "/w500/vertex.jpg"
     end
   end
 

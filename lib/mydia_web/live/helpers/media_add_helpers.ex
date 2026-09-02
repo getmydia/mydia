@@ -242,9 +242,11 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   """
   def fetch_detail_metadata(ref, media_type, config \\ nil)
 
-  def fetch_detail_metadata(ref, :movie, config) do
+  def fetch_detail_metadata({:tmdb, _} = ref, :movie, config) do
     Metadata.fetch_by_ref(config || Metadata.default_relay_config(), ref, media_type: :movie)
   end
+
+  def fetch_detail_metadata({:tvdb, _}, :movie, _config), do: {:error, :tvdb_ref_for_movie}
 
   def fetch_detail_metadata({:tvdb, _} = ref, :tv_show, config) do
     Metadata.fetch_by_ref(config || Metadata.default_relay_config(), ref, media_type: :tv_show)

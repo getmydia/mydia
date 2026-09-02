@@ -55,7 +55,8 @@ defmodule Mydia.Media.Add do
     config = config || Metadata.default_relay_config()
 
     case {media_type, ref} do
-      {:movie, _} -> resolve_movie_attrs(ref, config, opts)
+      {:movie, {:tmdb, _}} -> resolve_movie_attrs(ref, config, opts)
+      {:movie, {:tvdb, _}} -> {:error, {:metadata, :tvdb_ref_for_movie}}
       {:tv_show, {:tvdb, _}} -> resolve_tv_show_attrs_from_tvdb(ref, config, opts)
       {:tv_show, {:tmdb, _}} -> resolve_tv_show_attrs_from_tmdb(ref, config, opts)
     end

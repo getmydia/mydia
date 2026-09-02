@@ -56,7 +56,7 @@ defmodule MydiaWeb.Api.MediaController do
 
   Returns:
     - 200: Media item successfully matched and updated
-    - 400: Invalid request (missing provider_id, invalid provider_type)
+    - 400: Invalid request (missing provider_id, non-numeric provider_id, invalid provider_type)
     - 404: Media item not found
     - 422: Metadata fetch failed or update failed
   """
@@ -119,6 +119,32 @@ defmodule MydiaWeb.Api.MediaController do
   defp parse_media_type(_), do: :movie
 
   defp perform_manual_match(conn, media_item, provider_id, provider_type, fetch_episodes) do
+    case Integer.parse(provider_id) do
+      {provider_id_int, ""} ->
+        do_perform_manual_match(
+          conn,
+          media_item,
+          provider_id,
+          provider_id_int,
+          provider_type,
+          fetch_episodes
+        )
+
+      _ ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "provider_id must be numeric"})
+    end
+  end
+
+  defp do_perform_manual_match(
+         conn,
+         media_item,
+         provider_id,
+         provider_id_int,
+         provider_type,
+         fetch_episodes
+       ) do
     config = Metadata.default_relay_config()
     media_type = parse_media_type(media_item.type)
 
@@ -131,7 +157,7 @@ defmodule MydiaWeb.Api.MediaController do
 
     # Fetch metadata from provider. `provider_type` is explicit request input
     # (validated above to be :tmdb or :tvdb), never guessed from media_type.
-    ref = {provider_type, String.to_integer(provider_id)}
+    ref = {provider_type, provider_id_int}
 
     case Metadata.fetch_by_ref(config, ref, media_type: media_type) do
       {:ok, metadata} ->

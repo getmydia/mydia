@@ -27,7 +27,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       provider_id: "101",
       provider: :tmdb,
       media_type: :movie,
-      title: "The Eternal Daughter",
+      title: "The Quiet Orchard",
       year: 2022,
       poster_path: "/poster.jpg",
       vote_average: 6.9
@@ -52,14 +52,14 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
   test "renders one card per item under the rail id" do
     html =
       render_component(&DiscoverComponents.media_rail/1,
-        items: [item(), item(%{provider_id: "102", title: "Janet Planet"})],
+        items: [item(), item(%{provider_id: "102", title: "Copper Static"})],
         media_type: :movie,
         current_user: user()
       )
 
     assert html =~ ~s(id="media-rail")
-    assert html =~ "The Eternal Daughter"
-    assert html =~ "Janet Planet"
+    assert html =~ "The Quiet Orchard"
+    assert html =~ "Copper Static"
   end
 
   # Regression: card_poster/1 used to hardcode loading="lazy" and w500 for
@@ -215,7 +215,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
     test "gives every item a wrapper id derived from the rail id" do
       html =
         render_component(&DiscoverComponents.media_rail/1,
-          items: [item(), item(%{provider_id: "102", title: "Janet Planet"})],
+          items: [item(), item(%{provider_id: "102", title: "Copper Static"})],
           media_type: :movie,
           current_user: user(),
           id: "franchise-section"
@@ -334,7 +334,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       &DiscoverComponents.media_rail/1,
       Keyword.merge(
         [
-          items: [item(), item(%{provider_id: "102", title: "Janet Planet"})],
+          items: [item(), item(%{provider_id: "102", title: "Copper Static"})],
           media_type: :movie,
           current_user: user(),
           collapsible: true,
@@ -353,7 +353,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       assert html =~ ~s(aria-expanded="false")
       refute html =~ ~s(id="media-rail-items")
       refute html =~ ~s(id="media-rail-item-101")
-      refute html =~ "The Eternal Daughter"
+      refute html =~ "The Quiet Orchard"
     end
 
     test "an expanded rail renders its cards under the strip id" do
@@ -362,7 +362,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       assert html =~ ~s(aria-expanded="true")
       assert html =~ ~s(id="media-rail-items")
       assert html =~ ~s(id="media-rail-item-101")
-      assert html =~ "The Eternal Daughter"
+      assert html =~ "The Quiet Orchard"
     end
 
     # aria-controls must name an element that is actually in the document. The

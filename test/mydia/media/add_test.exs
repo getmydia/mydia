@@ -80,6 +80,19 @@ defmodule Mydia.Media.AddTest do
       assert {:error, {:metadata, _reason}} =
                Add.resolve_attrs({:tmdb, id}, :movie, relay_config(bypass))
     end
+
+    test "rejects a TVDB ref for a movie instead of fetching a series as one" do
+      bypass = Bypass.open()
+      tvdb_id = System.unique_integer([:positive])
+
+      # No stub is registered for a TVDB endpoint: a request here would fail
+      # the test, proving the wrong-provider fetch never happens.
+      assert {:error, {:metadata, _reason}} =
+               Add.resolve_attrs({:tvdb, tvdb_id}, :movie, relay_config(bypass))
+
+      refute Mydia.Media.get_media_item_by_tmdb(tvdb_id)
+      refute Mydia.Media.get_media_item_by_tvdb(tvdb_id)
+    end
   end
 
   describe "from_provider/4" do
@@ -104,6 +117,17 @@ defmodule Mydia.Media.AddTest do
                Add.from_provider({:tmdb, id}, :movie, relay_config(bypass))
 
       refute Mydia.Media.get_media_item_by_tmdb(id)
+    end
+
+    test "creates nothing when a TVDB ref is sent down the movie path" do
+      bypass = Bypass.open()
+      tvdb_id = System.unique_integer([:positive])
+
+      assert {:error, {:metadata, :tvdb_ref_for_movie}} =
+               Add.from_provider({:tvdb, tvdb_id}, :movie, relay_config(bypass))
+
+      refute Mydia.Media.get_media_item_by_tmdb(tvdb_id)
+      refute Mydia.Media.get_media_item_by_tvdb(tvdb_id)
     end
   end
 

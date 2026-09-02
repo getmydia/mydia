@@ -625,8 +625,8 @@ defmodule Mydia.Metadata.Provider.Relay do
   pay for a second series-level request just to pick a different ordering
   out of the same payload.
 
-  Unlike `fetch_season/4` (`Mydia.Metadata.fetch_season_cached/4`), this
-  skips the per-episode translation fetch: callers only need identity and
+  Unlike `fetch_season_by_ref/4` (`Mydia.Metadata.fetch_season_by_ref_cached/4`),
+  this skips the per-episode translation fetch: callers only need identity and
   position to build a `SeasonOrder.remap/3` mapping or count seasons, not
   localized names, so a 170-episode season costs one request instead of 171.
   """
