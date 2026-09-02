@@ -11,49 +11,97 @@
     <%!-- Controls card --%>
     <div class="card bg-base-100 shadow-sm">
       <div class="card-body p-3 md:p-4 space-y-3">
+        <%!-- Search --%>
+        <form id="discover-search-form" phx-submit="search" class="flex items-center gap-2">
+          <label class="input input-bordered input-sm flex items-center gap-2 flex-1 max-w-md">
+            <.icon name="hero-magnifying-glass" class="w-4 h-4 opacity-60" aria-hidden="true" />
+            <input
+              id="discover-search-input"
+              type="text"
+              name="q"
+              value={@search_query}
+              placeholder={
+                if @media_type == :movie,
+                  do: "Search for a movie to add",
+                  else: "Search for a show to add"
+              }
+              aria-label={
+                if @media_type == :movie,
+                  do: "Search for a movie to add",
+                  else: "Search for a show to add"
+              }
+              class="grow"
+              autocomplete="off"
+            />
+          </label>
+          <button type="submit" class="btn btn-sm btn-primary">Search</button>
+        </form>
+
         <%!-- Media type toggle + category tabs --%>
         <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
           <div id="discover-view-controls" class="flex flex-wrap items-center gap-3">
-            <div class="join">
-              <button
-                phx-click="switch_media_type"
-                phx-value-type="movie"
-                class={["join-item btn btn-sm gap-1.5", @media_type == :movie && "btn-active"]}
-              >
-                <.icon name="hero-film" class="w-4 h-4" /> Movies
-              </button>
-              <button
-                phx-click="switch_media_type"
-                phx-value-type="tv_show"
-                class={["join-item btn btn-sm gap-1.5", @media_type == :tv_show && "btn-active"]}
-              >
-                <.icon name="hero-tv" class="w-4 h-4" /> TV Shows
-              </button>
-            </div>
+            <.segmented_control
+              id="discover-media-type"
+              value={@media_type}
+              event="switch_media_type"
+              param="type"
+              label="Media type"
+            >
+              <:option value="movie" label="Movies" icon="hero-film" />
+              <:option value="tv_show" label="TV Shows" icon="hero-tv" />
+            </.segmented_control>
 
             <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
+
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                id="discover-hide-owned"
+                type="checkbox"
+                phx-click="toggle_hide_owned"
+                checked={@hide_owned}
+                class="toggle toggle-sm toggle-primary"
+              />
+              <span class={["text-sm", !@hide_owned && "text-base-content/50"]}>
+                Hide in library
+              </span>
+            </label>
           </div>
 
-          <div role="tablist" class="tabs tabs-box w-fit">
-            <%= for {cat_key, cat_label} <- @categories do %>
+          <%= if @search_mode do %>
+            <div id="discover-search-chip" class="badge badge-lg gap-2">
+              Results for "{@search_query}"
+              <button
+                id="discover-search-clear"
+                type="button"
+                phx-click="clear_search"
+                class="btn btn-ghost btn-xs btn-circle"
+                aria-label="Clear search"
+              >
+                <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          <% else %>
+            <div role="tablist" class="tabs tabs-box w-fit">
+              <%= for {cat_key, cat_label} <- @categories do %>
+                <button
+                  role="tab"
+                  phx-click="switch_category"
+                  phx-value-category={cat_key}
+                  class={["tab tab-sm", @category == cat_key && "tab-active"]}
+                >
+                  {cat_label}
+                </button>
+              <% end %>
               <button
                 role="tab"
                 phx-click="switch_category"
-                phx-value-category={cat_key}
-                class={["tab tab-sm", @category == cat_key && "tab-active"]}
+                phx-value-category="discover"
+                class={["tab tab-sm gap-1", @category == :discover && "tab-active"]}
               >
-                {cat_label}
+                <.icon name="hero-adjustments-horizontal" class="w-3.5 h-3.5" /> Custom
               </button>
-            <% end %>
-            <button
-              role="tab"
-              phx-click="switch_category"
-              phx-value-category="discover"
-              class={["tab tab-sm gap-1", @category == :discover && "tab-active"]}
-            >
-              <.icon name="hero-adjustments-horizontal" class="w-3.5 h-3.5" /> Custom
-            </button>
-          </div>
+            </div>
+          <% end %>
         </div>
 
         <%!-- Filter controls — only visible in custom/discover mode --%>
@@ -130,12 +178,11 @@
     <%!-- Results --%>
     <%= cond do %>
       <% @loading -> %>
-        <div class="flex flex-col items-center justify-center py-16 gap-3">
-          <span class="loading loading-spinner loading-lg text-primary"></span>
-          <p class="text-sm text-base-content/60">
-            Loading {if @media_type == :movie, do: "movies", else: "TV shows"}...
-          </p>
-        </div>
+        <.poster_card_grid_skeleton
+          id="discover-grid-skeleton"
+          columns={grid_columns_class(@grid_density)}
+          gap="gap-4 md:gap-5"
+        />
       <% @load_error != nil and @items == [] -> %>
         <div class="flex flex-col items-center justify-center py-16 gap-4">
           <div class="bg-error/10 rounded-full p-6">
@@ -148,7 +195,7 @@
             </p>
           </div>
         </div>
-      <% @items == [] -> %>
+      <% @visible_items == [] -> %>
         <div class="flex flex-col items-center justify-center py-16 gap-4">
           <div class="bg-base-200 rounded-full p-6">
             <.icon name="hero-magnifying-glass" class="w-10 h-10 text-base-content/40" />
@@ -158,6 +205,9 @@
             <p class="text-sm text-base-content/50 mt-1">
               Try adjusting your filters or search terms
             </p>
+            <p :if={@hide_owned} class="text-sm text-base-content/50 mt-1">
+              Titles already in your library are hidden.
+            </p>
           </div>
         </div>
       <% true -> %>
@@ -165,7 +215,7 @@
           id="discover-grid"
           class={["grid gap-4 md:gap-5", grid_columns_class(@grid_density)]}
         >
-          <%= for {item, index} <- Enum.with_index(@items) do %>
+          <%= for {item, index} <- Enum.with_index(@visible_items) do %>
             <.trending_card
               item={item}
               media_type={item.media_type || @media_type}
@@ -173,6 +223,7 @@
               adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
               libraries={@libraries}
+              always_show_caret={true}
               loading={if(index < 6, do: nil, else: "lazy")}
             />
           <% end %>
@@ -208,6 +259,7 @@
     open={@selected_item != nil}
     libraries={@libraries}
     picker_open={@library_picker != nil}
+    config_open={@add_config != nil}
   >
     <:rail>
       <.media_rail
@@ -225,5 +277,14 @@
 
   <%!-- Rendered once per page rather than once per card. See
         library_picker_dialog/1 for why an anchored menu cannot work here. --%>
-  <.library_picker_dialog picker={@library_picker} />
+  <.library_picker_dialog picker={@library_picker} configure_event="open_add_config" />
+
+  <.add_config_modal
+    open={@add_config != nil}
+    item={@add_config && @add_config.item}
+    media_type={@media_type}
+    libraries={@libraries}
+    quality_profiles={@quality_profiles}
+    defaults={@add_config && @add_config.defaults}
+  />
 </Layouts.app>

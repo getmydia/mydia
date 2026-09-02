@@ -8,27 +8,9 @@ defmodule MydiaWeb.GridDensityComponents do
   `"grid-cols-\#{n}"` is never generated and the grid silently keeps whatever
   columns it had. Any new level must be added here as complete literals.
 
-  The buttons are icon-only. `aria-label` therefore carries each button's
-  accessible name and `aria-pressed` its state, since `btn-primary` alone
-  says nothing to a screen reader. `aria-pressed` is wrapped in `to_string/1`
-  on purpose: HEEx renders a `true` attribute value as a bare attribute and
-  omits it entirely for `false`, and ARIA needs the literal strings.
-
-  The tooltip lives on a wrapper `div`, never on the `<button>` itself.
-  daisyUI shows the tip on `.tooltip-open`, `:hover` and `.tooltip:has(:focus-visible)`,
-  and `:has()` carries an implicit descendant combinator: it matches when a
-  *descendant* is focused, not the element itself. A `.tooltip` button whose
-  only descendant is the non-focusable `<span>` from `icon/1` therefore never
-  shows its tip on keyboard focus, leaving a tabbing user with a bare icon.
-  Wrapping is the form every focusable tooltip in this app already uses.
-
-  `join-item` stays on the button and is deliberately kept off that wrapper.
-  daisyUI's `.join-item > *` resets `--join-ss`/`--join-se`/`--join-es`/`--join-ee`
-  to `initial`, so a button nested inside a `join-item` wrapper computes all
-  four corners to 0 and the filled active button spills square out of the
-  join's rounded end cap. With the wrapper left plain, the join's radius
-  variables inherit straight through to the button and the caps render as
-  they did before the tooltip moved.
+  The buttons are icon-only. `MydiaWeb.SegmentedControl` owns the accessible
+  naming, the tooltip wrapper and the `join-item` placement that icon-only
+  segments need; see its moduledoc for why each is shaped the way it is.
 
   Kept in step with `MydiaWeb.LibraryComponents.view_mode_toggle/1`, which is
   icon-only for the same reasons; the two sit side by side on the Libraries
@@ -41,7 +23,7 @@ defmodule MydiaWeb.GridDensityComponents do
 
   use Phoenix.Component
 
-  import MydiaWeb.CoreComponents, only: [icon: 1]
+  import MydiaWeb.SegmentedControl, only: [segmented_control: 1]
 
   @default "comfortable"
 
@@ -86,28 +68,21 @@ defmodule MydiaWeb.GridDensityComponents do
     assigns = assign(assigns, :levels, @levels)
 
     ~H"""
-    <div class="join" id={@id} role="group" aria-label="Grid density">
-      <div
+    <.segmented_control
+      id={@id}
+      value={@density}
+      event="set_grid_density"
+      param="density"
+      label="Grid density"
+      icon_only
+    >
+      <:option
         :for={{value, label, icon_name} <- @levels}
-        class="tooltip tooltip-bottom"
-        data-tip={label}
-      >
-        <button
-          type="button"
-          class={[
-            "btn btn-sm btn-square join-item",
-            @density == value && "btn-primary",
-            @density != value && "btn-ghost"
-          ]}
-          phx-click="set_grid_density"
-          phx-value-density={value}
-          aria-label={label}
-          aria-pressed={to_string(@density == value)}
-        >
-          <.icon name={icon_name} class="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+        value={value}
+        label={label}
+        icon={icon_name}
+      />
+    </.segmented_control>
     """
   end
 end

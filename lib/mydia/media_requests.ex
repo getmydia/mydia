@@ -236,21 +236,32 @@ defmodule Mydia.MediaRequests do
 
   defp check_duplicate_media(changeset) do
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
+    tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
 
-    if tmdb_id && Media.get_media_item_by_tmdb(tmdb_id) do
-      {:error, :duplicate_media}
-    else
-      :ok
+    cond do
+      tmdb_id && Media.get_media_item_by_tmdb(tmdb_id) -> {:error, :duplicate_media}
+      tvdb_id && Media.get_media_item_by_tvdb(tvdb_id) -> {:error, :duplicate_media}
+      true -> :ok
     end
   end
 
   defp check_duplicate_request(changeset) do
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
+    tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
 
-    if tmdb_id && pending_request_exists?(tmdb_id) do
-      {:error, :duplicate_request}
-    else
-      :ok
+    cond do
+      tmdb_id && pending_request_exists?(tmdb_id) -> {:error, :duplicate_request}
+      tvdb_id && pending_tvdb_request_exists?(tvdb_id) -> {:error, :duplicate_request}
+      true -> :ok
     end
+  end
+
+  # A TVDB-sourced request has no tmdb_id, so pending_request_exists?/1 (which
+  # is documented and tested as TMDB-only) never sees it. Kept private and
+  # separate rather than widening that public function's contract.
+  defp pending_tvdb_request_exists?(tvdb_id) do
+    MediaRequest
+    |> where([r], r.tvdb_id == ^tvdb_id and r.status == "pending")
+    |> Repo.exists?()
   end
 end

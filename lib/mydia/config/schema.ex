@@ -28,6 +28,16 @@ defmodule Mydia.Config.Schema do
   # as clamp_scan_interval/1 does.
   @removed_library_types [:music, :books, :adult]
 
+  @season_monitoring_values ~w(all first future none)
+
+  @doc """
+  Valid season monitoring values.
+
+  Exposed so `Mydia.Accounts.UserPreference` and the add UI validate against the
+  same list this schema does, rather than each keeping its own copy.
+  """
+  def season_monitoring_values, do: @season_monitoring_values
+
   @type t :: %__MODULE__{
           server: __MODULE__.Server.t() | nil,
           database: __MODULE__.Database.t() | nil,
@@ -89,6 +99,7 @@ defmodule Mydia.Config.Schema do
       field :movies_auto_organize, :boolean, default: false
       field :tv_auto_organize, :boolean, default: false
       field :auto_search_on_add, :boolean, default: true
+      field :default_season_monitoring, :string, default: "all"
       field :monitor_by_default, :boolean, default: true
       field :season_refresh_threshold_hours, :integer, default: 24
       field :completed_show_refresh_threshold_hours, :integer, default: 168
@@ -421,6 +432,7 @@ defmodule Mydia.Config.Schema do
       :movies_auto_organize,
       :tv_auto_organize,
       :auto_search_on_add,
+      :default_season_monitoring,
       :monitor_by_default,
       :season_refresh_threshold_hours,
       :completed_show_refresh_threshold_hours
@@ -428,6 +440,7 @@ defmodule Mydia.Config.Schema do
     # movies_path and tv_path are optional legacy fields
     |> validate_number(:season_refresh_threshold_hours, greater_than: 0)
     |> validate_number(:completed_show_refresh_threshold_hours, greater_than: 0)
+    |> validate_inclusion(:default_season_monitoring, @season_monitoring_values)
   end
 
   defp metadata_changeset(schema, attrs) do

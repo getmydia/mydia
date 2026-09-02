@@ -75,6 +75,75 @@ the unchecked state keeps daisyUI's default outline. Verified by building
 chromium in both themes. Live at
 `lib/mydia_web/live/admin_duplicates_live/components.ex`.
 
+## Inactive segments must not be btn-ghost
+
+daisyUI defines `btn-ghost` as `--btn-bg: #0000` and `--btn-border: #0000`, so
+a `btn-ghost` button computes to `alpha=0` and paints whatever is behind it.
+That is fine for an action strip, and wrong for one option of a segmented
+control, because the option ends up with no body at all.
+
+Measured on the `mydia-dark` theme, against the built stylesheet:
+
+| Surface | sRGB | vs page | vs inactive |
+| --- | --- | --- | --- |
+| page, `base-100` | `29,35,42` | | |
+| inactive segment as `btn-ghost` | `alpha=0` | 1.000 | |
+| inactive segment as plain `.btn` | `42,49,58` | 1.206 | |
+| active segment, `btn-primary` | `0,125,255` | 4.055 | 3.363 |
+
+`btn-active` is not a usable selection marker either. daisyUI sets it to
+`color-mix(in oklab, base-200, #000 5%)`, which measures `38,45,53`, a
+contrast of 1.059 against a plain button and darker than it. On a dark theme
+the selected option reads as recessed rather than chosen.
+
+Use `MydiaWeb.SegmentedControl` rather than hand-rolling either. It marks the
+selected option `btn-primary` and gives unselected options no colour class,
+which leaves them as plain opaque `.btn`.
+
+`test/mydia_web/components/no_ghost_segments_test.exs` fails the build if any
+`join` in `lib/mydia_web` pairs `btn-ghost` with `btn-primary`.
+
+## Every hover in Mydia gets darker, including on the dark theme
+
+daisyUI's `.btn:hover` sets `--btn-bg: color-mix(in oklab, base-200, #000 7%)`.
+It mixes toward black regardless of theme, so in dark mode a hovered button
+moves from `42,49,58` to `37,44,51`. That is a contrast of 1.075, and it is
+the wrong direction: the surface recedes instead of lifting.
+
+Segmented controls override it with `dark:hover:bg-base-300` (`65,74,84`, a
+1.459 step, lighter). Light mode keeps the daisyUI default, which is already
+1.226 there and stronger than `base-300` would be.
+
+The rest of the app still darkens on hover. Fixing that everywhere needs its
+own visual pass.
+
+## The dark: variant targets mydia-dark
+
+`app.css` declares Tailwind's `dark:` variant by hand. It originally read
+
+```css
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+```
+
+but `root.html.heex` only ever sets `mydia-dark` or `mydia-light`, so the
+variant matched no element that exists and every `dark:` utility silently
+produced nothing. Nothing errors when this regresses, which is why
+`test/mydia_web/components/dark_variant_test.exs` guards it.
+
+Tailwind utilities beat daisyUI's component rules, so `dark:hover:bg-base-300`
+overrides `background-color: var(--btn-bg)`. Tailwind emits utilities directly
+in `@layer utilities` while daisyUI's declaration sits in a nested `daisyui.l1`
+sublayer, and cascade layers beat specificity outright.
+
+One caution when checking any of this. Tailwind only generates classes it finds
+in the `@source` globs, so a class written into a scratch HTML file is never
+built and reads as "the rule does not work". Confirm the class is present in
+the built CSS before concluding anything:
+
+```
+./_build/tailwind-linux-x64-4.3.3 --input=assets/css/app.css --output=/tmp/app.css
+```
+
 ## No card-level dropdown can win on z-index
 
 Two traps, and the second is the fatal one.

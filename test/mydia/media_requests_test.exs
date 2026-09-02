@@ -163,6 +163,35 @@ defmodule Mydia.MediaRequestsTest do
 
       assert {:error, :duplicate_media} = MediaRequests.create_request(attrs)
     end
+
+    test "prevents duplicate requests for the same TVDB ID", %{user: user} do
+      attrs = %{
+        media_type: "tv_show",
+        title: "Test Series",
+        tvdb_id: 54321,
+        requester_id: user.id
+      }
+
+      assert {:ok, _request} = MediaRequests.create_request(attrs)
+      assert {:error, :duplicate_request} = MediaRequests.create_request(attrs)
+    end
+
+    test "prevents requests for media that already exists by TVDB ID", %{user: user} do
+      {:ok, _media_item} =
+        Media.create_media_item(
+          %{type: "tv_show", title: "Existing Series", tvdb_id: 54321},
+          skip_episode_refresh: true
+        )
+
+      attrs = %{
+        media_type: "tv_show",
+        title: "Existing Series",
+        tvdb_id: 54321,
+        requester_id: user.id
+      }
+
+      assert {:error, :duplicate_media} = MediaRequests.create_request(attrs)
+    end
   end
 
   describe "approve_request/2" do

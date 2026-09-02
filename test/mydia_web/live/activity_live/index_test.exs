@@ -374,6 +374,116 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
 
       assert html =~ "Plugin update available: tmdb-art 1.0.0 to 1.2.0"
     end
+
+    test "expands a monitored change with humanized field and values", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.updated",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{
+            "title" => "Nightfall Station",
+            "reason" => "Monitoring disabled",
+            "changes" => %{"monitored" => %{"old" => true, "new" => false}}
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "Monitoring"
+      assert html =~ "not monitored"
+    end
+
+    test "expands a monitor_new_seasons change with humanized field and values", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.updated",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{
+            "title" => "Nightfall Station",
+            "reason" => "Updated",
+            "changes" => %{"monitor_new_seasons" => %{"old" => "all", "new" => "none"}}
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "New season monitoring"
+      assert html =~ "all seasons"
+      assert html =~ "no seasons"
+    end
+
+    test "the date filter defaults to All with the other presets unselected", %{conn: conn} do
+      {:ok, view, html} = live(conn, ~p"/activity")
+
+      assert html =~ ~s(id="activity-date-filter")
+
+      assert has_element?(
+               view,
+               "#activity-date-filter button[phx-value-date='all'][aria-pressed='true']"
+             )
+
+      for preset <- ~w(today yesterday week month) do
+        assert has_element?(
+                 view,
+                 "#activity-date-filter button[phx-value-date='#{preset}'][aria-pressed='false']"
+               ),
+               "#{preset} should not be selected on mount"
+      end
+    end
+
+    test "choosing a date preset dispatches filter_date and moves the selection", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      view
+      |> element("#activity-date-filter button[phx-value-date='week']")
+      |> render_click()
+
+      # The selection is server-rendered from @date_filter, so a wrong param
+      # name or a handle_event clause that stopped matching would leave All
+      # selected instead of moving to 7 Days.
+      assert has_element?(
+               view,
+               "#activity-date-filter button[phx-value-date='week'][aria-pressed='true']"
+             )
+
+      assert has_element?(
+               view,
+               "#activity-date-filter button[phx-value-date='all'][aria-pressed='false']"
+             )
+    end
+
+    test "renders a metadata_fields change whose field name is malformed", %{conn: conn} do
+      # format_change_details/1 passes field_change["field"] straight to
+      # Presentation.field_label/1. A hand-edited or legacy row can carry
+      # nil (or any other non-string) there, and that used to raise
+      # FunctionClauseError out of Phoenix.Naming.humanize/1, crashing the
+      # whole Activity Feed render over one bad event.
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.updated",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{
+            "title" => "Nightfall Station",
+            "reason" => "Metadata refreshed",
+            "changes" => %{
+              "metadata_fields" => [
+                %{"field" => nil, "old" => "a", "new" => "b"}
+              ]
+            }
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "Nightfall Station"
+      assert html =~ "Unknown field"
+    end
   end
 
   describe "Activity feed as a guest" do

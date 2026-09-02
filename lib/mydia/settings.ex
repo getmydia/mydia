@@ -327,6 +327,12 @@ defmodule Mydia.Settings do
           {:ok, ConfigSetting.t() | nil} | {:error, Ecto.Changeset.t()}
   defdelegate set_default_quality_profile(profile_id), to: Mydia.Settings.QualityProfiles
 
+  @doc """
+  Whether a quality profile with `id` exists.
+  """
+  @spec quality_profile_exists?(term()) :: boolean()
+  defdelegate quality_profile_exists?(id), to: Mydia.Settings.QualityProfiles
+
   # ── Service Configs (Download Clients, Indexers, Media Servers) ──────
 
   @doc """
@@ -758,6 +764,12 @@ defmodule Mydia.Settings do
   """
   @spec default_library_for(:movies | :series) :: LibraryPath.t() | nil
   defdelegate default_library_for(kind), to: Mydia.Settings.LibraryPaths
+
+  @doc """
+  Whether a library path with `id` exists and has one of `allowed_types`.
+  """
+  @spec library_path_exists_as_type?(term(), [atom()]) :: boolean()
+  defdelegate library_path_exists_as_type?(id, allowed_types), to: Mydia.Settings.LibraryPaths
 
   # ── Runtime Configuration ────────────────────────────────────────────
 

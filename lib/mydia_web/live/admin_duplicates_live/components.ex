@@ -9,6 +9,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   left with an unlabelled red checkbox on the right, which left an operator
   with two controls, no labels, and no way to tell which one decided the
   file's fate.
+
+  Each group carries two buttons rather than one that swaps meaning: a marking
+  toggle, and a button that actually trashes. The marking half still swaps its
+  label so the row never goes dead once everything in it is kept.
   """
 
   use MydiaWeb, :html
@@ -64,9 +68,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         Items holding more than one file, where every copy is proven to be the same content.
         Each file is set to either <span class="font-medium text-base-content">Keep</span>
         or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
-        kept, the rest are already marked for trash, so one click on the Trash button clears them.
-        Every item always keeps at least one file. Trashed files are held for {@retention_days} days
-        before permanent deletion.
+        kept, the rest are already marked for trash. Trash one item with its own button, or
+        every item with the button above. Every item always keeps at least one file. Trashed
+        files are held for {@retention_days} days before permanent deletion, and a run can be
+        undone until you leave this page.
       </p>
 
       <%= if @decisions == [] do %>
@@ -115,11 +120,13 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   attr :selected, :any, required: true
 
   defp decision_row(assigns) do
-    selected_count = Enum.count(assigns.decision.losers, &MapSet.member?(assigns.selected, &1.id))
+    selected = assigns.selected
+    marked = Enum.filter(assigns.decision.losers, &MapSet.member?(selected, &1.id))
 
     assigns =
       assigns
-      |> assign(:selected_count, selected_count)
+      |> assign(:selected_count, length(marked))
+      |> assign(:selected_bytes, Enum.reduce(marked, 0, &(&2 + (&1.size || 0))))
       |> assign(:files, [assigns.decision.keeper | assigns.decision.losers])
 
     ~H"""
@@ -139,26 +146,31 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         <span :if={@selected_count == 0} class="badge badge-sm badge-outline">Keeping all</span>
 
         <button
-          :if={@selected_count > 0}
-          id={"duplicates-group-keep-#{@decision.group.subject_id}"}
+          id={"duplicates-group-mark-#{@decision.group.subject_id}"}
           type="button"
           class="btn btn-sm btn-ghost ml-auto sm:ml-2"
-          aria-label={"Keep every file in #{subject_label(@decision.group)}"}
-          phx-click="keep_group"
+          aria-label={
+            if @selected_count > 0,
+              do: "Keep every file in #{subject_label(@decision.group)}",
+              else: "Mark every duplicate in #{subject_label(@decision.group)} for trash"
+          }
+          phx-click={if @selected_count > 0, do: "keep_group", else: "trash_group"}
           phx-value-subject={@decision.group.subject_id}
         >
-          Keep all
+          {if @selected_count > 0, do: "Keep all", else: "Mark all for trash"}
         </button>
         <button
-          :if={@selected_count == 0}
           id={"duplicates-group-trash-#{@decision.group.subject_id}"}
           type="button"
-          class="btn btn-sm btn-ghost ml-auto sm:ml-2"
-          aria-label={"Trash every duplicate in #{subject_label(@decision.group)}"}
-          phx-click="trash_group"
+          class="btn btn-sm btn-error"
+          disabled={@selected_count == 0}
+          aria-label={"Trash the marked duplicates in #{subject_label(@decision.group)}"}
+          phx-click="trash_group_now"
           phx-value-subject={@decision.group.subject_id}
+          phx-disable-with="Trashing..."
         >
-          Trash duplicates
+          <.icon name="hero-trash" class="w-4 h-4" />
+          Trash {file_count(@selected_count)} ({humanize_bytes(@selected_bytes)})
         </button>
       </div>
 
@@ -347,9 +359,61 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
     """
   end
 
-  defp subject_label(%{subject_type: :movie, subject: movie}), do: movie.title
+  @doc """
+  The undo affordance for a completed trash run.
 
-  defp subject_label(%{subject_type: :episode, subject: episode, media_item: show}) do
+  This cannot be a flash. `core_components.ex` puts
+  `phx-click="lv:clear-flash"` on the whole flash container, which would
+  swallow a nested Undo button, and flash values are strings, so the file ids
+  would need an assign regardless.
+
+  It sits bottom-end because the flash group sits top-end, and a partial run
+  shows both: an error flash for what could not move, and this for what did.
+
+  There is no auto-dismiss timer. Any interval is a guess, and an operator
+  reading filenames to check they trashed the right copy will lose that race.
+  """
+  attr :run, :map, required: true
+
+  def undo_toast(assigns) do
+    ~H"""
+    <div id="duplicates-undo-toast" class="toast toast-bottom toast-end z-50" role="status">
+      <div class="alert alert-success w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap">
+        <.icon name="hero-check-circle" class="size-5 shrink-0" />
+        <span class="text-sm">{@run.label}</span>
+        <div class="flex-1" />
+        <button
+          id="duplicates-undo"
+          type="button"
+          class="btn btn-sm btn-ghost"
+          phx-click="undo_trash"
+          phx-disable-with="Undoing..."
+        >
+          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Undo
+        </button>
+        <button
+          id="duplicates-undo-dismiss"
+          type="button"
+          class="group self-start cursor-pointer"
+          aria-label="Dismiss"
+          phx-click="dismiss_undo"
+        >
+          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
+        </button>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  The operator-facing name of a group's subject. Public because the LiveView
+  builds the undo toast's label from it, and a movie title or a
+  "Show S01E02" string is a display concern that belongs here rather than
+  duplicated in the page module.
+  """
+  def subject_label(%{subject_type: :movie, subject: movie}), do: movie.title
+
+  def subject_label(%{subject_type: :episode, subject: episode, media_item: show}) do
     "#{show.title} S#{pad(episode.season_number)}E#{pad(episode.episode_number)}"
   end
 
@@ -360,11 +424,16 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
     [file.resolution, file.codec] |> Enum.reject(&is_nil/1) |> Enum.join(" ")
   end
 
-  defp file_count(1), do: "1 file"
-  defp file_count(n), do: "#{n} files"
+  @doc """
+  Pluralized counts. Public for the same reason `humanize_bytes/1` is: the page
+  module builds the undo toast's label and must count files and items the same
+  way the rows above it do.
+  """
+  def file_count(1), do: "1 file"
+  def file_count(n), do: "#{n} files"
 
-  defp item_count(1), do: "1 item"
-  defp item_count(n), do: "#{n} items"
+  def item_count(1), do: "1 item"
+  def item_count(n), do: "#{n} items"
 
   defp refusal_label(:duplicate_registration), do: "Registered twice"
   defp refusal_label(:unanalyzed), do: "Not analyzed"

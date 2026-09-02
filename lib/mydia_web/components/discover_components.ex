@@ -66,6 +66,10 @@ defmodule MydiaWeb.DiscoverComponents do
   # w500 is the right size for a grid card; a rail card is w-36 (144px), which
   # wants the smaller w342 step.
   attr :poster_size, :string, default: "w500"
+  # Forwarded to LibraryComponents.library_picker_button/1's `always_show`.
+  # Discover's main grid sets this so the caret (and the Configure entry
+  # behind it) stays reachable even with zero or one candidate library.
+  attr :always_show_caret, :boolean, default: false
 
   def trending_card(assigns) do
     assigns = assign(assigns, :adding?, adding?(assigns))
@@ -144,6 +148,7 @@ defmodule MydiaWeb.DiscoverComponents do
             add_event={@add_event}
             request_event={@request_event}
             can_add={@can_add}
+            always_show_caret={@always_show_caret}
           />
         </:meta>
       </.poster_card_body>
@@ -285,6 +290,7 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :add_event, :string, default: "add_to_library"
   attr :request_event, :string, default: "request_media"
   attr :can_add, :boolean, default: true
+  attr :always_show_caret, :boolean, default: false
 
   defp trending_card_action(assigns) do
     ~H"""
@@ -326,6 +332,7 @@ defmodule MydiaWeb.DiscoverComponents do
             tmdb_id={@item.provider_id}
             media_type={@media_type}
             title={@item.title}
+            always_show={@always_show_caret}
           />
         </div>
       <% @item.in_library -> %>
