@@ -2241,6 +2241,27 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  The download a media file was imported from, or `nil`.
+
+  Resolves the `imported_from_download_id` provenance key that
+  `Mydia.Jobs.MediaImport` writes into the file's metadata at import time.
+  This is the inverse of `list_media_files_for_download/2` and uses the same
+  key, which is the download's primary key and therefore collision-free.
+
+  Returns `nil` for a scanner-discovered file, which never carries the key, and
+  for a file whose download row has since been cleared.
+  """
+  @spec origin_download(MediaFile.t()) :: Mydia.Downloads.Download.t() | nil
+  def origin_download(%MediaFile{metadata: %FileMetadata{extra: extra}}) when is_map(extra) do
+    case extra["imported_from_download_id"] do
+      id when is_binary(id) -> Repo.get(Mydia.Downloads.Download, id)
+      _ -> nil
+    end
+  end
+
+  def origin_download(%MediaFile{}), do: nil
+
+  @doc """
   Lists the media files imported from a given download.
 
   Located by the collision-free `imported_from_download_id` provenance key — the

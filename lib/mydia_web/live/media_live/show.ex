@@ -80,6 +80,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:delete_file_from_disk, true)
      |> assign(:show_file_details_modal, false)
      |> assign(:file_details, nil)
+     |> assign(:file_origin, nil)
      |> assign(:show_download_cancel_confirm, false)
      |> assign(:download_to_cancel, nil)
      |> assign(:show_download_delete_confirm, false)
@@ -325,6 +326,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("auto_search_episode", params, socket),
     do: SearchEvents.auto_search_episode(params, socket)
+
+  def handle_event("not_this_item", params, socket),
+    do: FileEvents.not_this_item(params, socket)
 
   def handle_event("show_file_delete_confirm", params, socket),
     do: FileEvents.show_file_delete_confirm(params, socket)

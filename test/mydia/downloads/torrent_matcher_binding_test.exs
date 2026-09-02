@@ -93,4 +93,53 @@ defmodule Mydia.Downloads.TorrentMatcherBindingTest do
       assert {:error, :episode_not_found} = TorrentMatcher.find_match(info)
     end
   end
+
+  describe "binding tiebreak" do
+    test "does not raise the confidence it reports" do
+      movie =
+        insert(:media_item, %{
+          type: "movie",
+          title: "Zephyr Station",
+          year: 2030,
+          monitored: true
+        })
+
+      {:ok, parsed} =
+        Mydia.Downloads.ReleaseIntake.parse_release("Zephyr.Station.2030.1080p.WEB-DL.x265")
+
+      assert {:ok, match} = TorrentMatcher.find_match(parsed)
+      assert match.media_item.id == movie.id
+
+      # An exact title plus an exact year is 0.7 + 0.3. Anything above 1.0 is
+      # impossible, and anything above the unbound score means the tiebreak
+      # leaked into the stored value.
+      assert match.confidence <= 1.0
+      assert_in_delta match.confidence, 1.0, 0.0001
+    end
+
+    test "a near-year release keeps the base score even though the tiebreak nudges the sort key" do
+      movie =
+        insert(:media_item, %{
+          type: "movie",
+          title: "Zephyr Station",
+          year: 2030,
+          monitored: true
+        })
+
+      {:ok, parsed} =
+        Mydia.Downloads.ReleaseIntake.parse_release("Zephyr.Station.2031.1080p.WEB-DL.x265")
+
+      assert {:ok, match} = TorrentMatcher.find_match(parsed)
+      assert match.media_item.id == movie.id
+
+      # Exact title (0.7) + a one-year-off year (+0.15) puts the base at 0.85:
+      # above the 0.8 match threshold, below the 1.0 clamp, so the tiebreak has
+      # room to move it. binding_confidence is 1.0 here (release title and
+      # target title both "Zephyr Station"), so the old code stored
+      # min(1.0, 0.85 + 1.0 * 0.05) = 0.90. If the nudge ever leaks back into
+      # the stored confidence, this assertion catches it; the clamp test above
+      # cannot, since 1.0 + anything still clamps to 1.0.
+      assert_in_delta match.confidence, 0.85, 0.0001
+    end
+  end
 end

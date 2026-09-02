@@ -69,7 +69,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleRowTest do
     test "shows the subtitle button for a file with no tracks" do
       html =
         render_component(&Components.media_files_section/1,
-          media_item: %{media_files: [file()]},
+          media_item: %{type: "movie", media_files: [file()]},
           refreshing_file_metadata: false,
           transcode_jobs: %{},
           media_file_subtitle_tracks: %{}
@@ -86,7 +86,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleRowTest do
     test "renders the badge line for a file with tracks" do
       html =
         render_component(&Components.media_files_section/1,
-          media_item: %{media_files: [file()]},
+          media_item: %{type: "movie", media_files: [file()]},
           refreshing_file_metadata: false,
           transcode_jobs: %{},
           media_file_subtitle_tracks: %{"mf-1" => [track("es")]}

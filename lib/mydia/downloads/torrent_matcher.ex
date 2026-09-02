@@ -20,6 +20,15 @@ defmodule Mydia.Downloads.TorrentMatcher do
   - Prevents false positives from similar titles
   - Takes priority over all title-based matching
 
+  ### 2b. Title Coverage Gate (Hard Reject)
+  Before any title scoring, a candidate must have most of its own words present
+  in the release name (`Mydia.Library.Text.title_token_coverage/2`, floor 0.75).
+  The measure is one-directional: extra words on the release side are normal
+  (subtitles, edition markers), while a missing library word means a different
+  work. This exists because Jaro-Winkler scores character overlap, not words,
+  and rated "Supergirl" against "The Super Mario Galaxy Movie" at 0.853. Not
+  applied to suggestions, which a human reads before choosing.
+
   ### 3. Title-Based Matching (Fallback)
   When ID matching is unavailable, uses sophisticated title comparison:
 
@@ -65,6 +74,7 @@ defmodule Mydia.Downloads.TorrentMatcher do
 
   alias Mydia.Downloads.Structs.CandidatePool
   alias Mydia.Downloads.Structs.TorrentMatchResult
+  alias Mydia.Library.Text
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.ReleaseParser.TargetContext
   alias Mydia.Library.Structs.ParsedFileInfo
@@ -89,9 +99,19 @@ defmodule Mydia.Downloads.TorrentMatcher do
   # Demoted (wrong-show) candidates are capped here: at/below the suggestion floor
   # and below the match threshold, so they surface as suggestions, never matches.
   @suggestion_floor 0.3
-  # binding_confidence contributes only a small tiebreak nudge among survivors
-  # that already clear the match threshold (never lifts a sub-threshold score).
+  # binding_confidence contributes only a small ordering nudge among survivors
+  # that already clear the match threshold. It never lifts a sub-threshold
+  # score and never reaches the stored confidence.
   @binding_tiebreak_weight 0.05
+
+  # Minimum fraction of a candidate title's significant words that must appear
+  # in the release name before the candidate is scored at all.
+  #
+  # Jaro-Winkler measures character overlap, not words, so it cannot separate
+  # "Supergirl" from "The Super Mario Galaxy Movie" (0.853) or "The New Years"
+  # from "New Amsterdam" (0.851). Both were real confident matches. See issue
+  # #653.
+  @title_coverage_floor 0.75
 
   @type match_result :: TorrentMatchResult.t()
 
@@ -239,16 +259,17 @@ defmodule Mydia.Downloads.TorrentMatcher do
     # Find potential matches with similarity scores
     matches =
       movies
+      |> gate_by_title_coverage(torrent_info)
       |> Enum.map(fn movie ->
         confidence = calculate_movie_confidence(movie, torrent_info)
         {movie, confidence}
       end)
       |> refine_scores_with_binding(torrent_info, threshold)
-      |> Enum.filter(fn {_movie, confidence} -> confidence >= threshold end)
-      |> Enum.sort_by(fn {_movie, confidence} -> confidence end, :desc)
+      |> Enum.filter(fn {_movie, confidence, _sort} -> confidence >= threshold end)
+      |> Enum.sort_by(fn {_movie, _confidence, sort} -> sort end, :desc)
 
     case matches do
-      [{movie, confidence} | _] ->
+      [{movie, confidence, _sort} | _] ->
         {:ok,
          TorrentMatchResult.new(%{
            media_item: movie,
@@ -388,16 +409,17 @@ defmodule Mydia.Downloads.TorrentMatcher do
     # Find potential show matches
     show_matches =
       tv_shows
+      |> gate_by_title_coverage(torrent_info)
       |> Enum.map(fn show ->
         confidence = calculate_tv_show_confidence(show, torrent_info)
         {show, confidence}
       end)
       |> refine_scores_with_binding(torrent_info, threshold)
-      |> Enum.filter(fn {_show, confidence} -> confidence >= threshold end)
-      |> Enum.sort_by(fn {_show, confidence} -> confidence end, :desc)
+      |> Enum.filter(fn {_show, confidence, _sort} -> confidence >= threshold end)
+      |> Enum.sort_by(fn {_show, _confidence, sort} -> sort end, :desc)
 
     case show_matches do
-      [{show, confidence} | _] ->
+      [{show, confidence, _sort} | _] ->
         # Found a matching show, now find the specific episode
         case find_episode(show, torrent_info) do
           {:ok, episode} ->
@@ -475,16 +497,17 @@ defmodule Mydia.Downloads.TorrentMatcher do
     # Find potential show matches
     show_matches =
       tv_shows
+      |> gate_by_title_coverage(torrent_info)
       |> Enum.map(fn show ->
         confidence = calculate_tv_show_confidence(show, torrent_info)
         {show, confidence}
       end)
       |> refine_scores_with_binding(torrent_info, threshold)
-      |> Enum.filter(fn {_show, confidence} -> confidence >= threshold end)
-      |> Enum.sort_by(fn {_show, confidence} -> confidence end, :desc)
+      |> Enum.filter(fn {_show, confidence, _sort} -> confidence >= threshold end)
+      |> Enum.sort_by(fn {_show, _confidence, sort} -> sort end, :desc)
 
     case show_matches do
-      [{show, confidence} | _] ->
+      [{show, confidence, _sort} | _] ->
         # For season packs, match the show but don't require a specific episode
         {:ok,
          TorrentMatchResult.new(%{
@@ -627,6 +650,32 @@ defmodule Mydia.Downloads.TorrentMatcher do
         "ID-matched season pack '#{torrent_info.title}' S#{torrent_info.season} to '#{item.title}' via #{id_info} with 98.0% confidence"
     end
   end
+
+  ## Private Functions - Title Coverage Gate
+
+  # Drops candidates whose title the release name does not actually contain.
+  #
+  # Runs before scoring rather than inside it, because the suggestion surface
+  # deliberately keeps near-misses: a person picking from a list sees both
+  # titles and decides, which is the same reason `find_top_candidates_in/3`
+  # already declines the TargetContext binding veto. Do not call this from
+  # there.
+  defp gate_by_title_coverage(items, torrent_info) do
+    Enum.filter(items, &title_covered?(&1, torrent_info))
+  end
+
+  defp title_covered?(item, %{title: release_title})
+       when is_binary(release_title) and release_title != "" do
+    item
+    |> get_title_variants()
+    |> Enum.any?(fn {title, _is_alternative} ->
+      Text.title_token_coverage(title, release_title) >= @title_coverage_floor
+    end)
+  end
+
+  # A release with no parsed title carries no evidence either way. Leave it to
+  # the existing scoring, which already rejects it.
+  defp title_covered?(_item, _torrent_info), do: true
 
   ## Private Functions - Title Variants
 
@@ -907,13 +956,15 @@ defmodule Mydia.Downloads.TorrentMatcher do
 
     Enum.map(scored, fn {item, base} ->
       case Map.fetch(refined_by_id, item.id) do
-        {:ok, score} -> {item, score}
-        :error -> {item, base}
+        {:ok, {confidence, sort_score}} -> {item, confidence, sort_score}
+        :error -> {item, base, base}
       end
     end)
   end
 
-  defp refine_scores_with_binding(scored, _torrent_info, _threshold), do: scored
+  defp refine_scores_with_binding(scored, _torrent_info, _threshold) do
+    Enum.map(scored, fn {item, base} -> {item, base, base} end)
+  end
 
   defp binding_shortlist(scored) do
     sorted = Enum.sort_by(scored, fn {_item, base} -> base end, :desc)
@@ -948,24 +999,27 @@ defmodule Mydia.Downloads.TorrentMatcher do
       Map.get(flags, :binding_suspect) || Map.get(flags, :parsed_title_unbound) ->
         # Wrong-show guard: the release's own title doesn't bind to this candidate.
         # Demote to suggestion-only so it never clears the match threshold.
-        min(base, @suggestion_floor)
+        demoted = min(base, @suggestion_floor)
+        {demoted, demoted}
 
       base >= threshold ->
-        # Tiebreak nudge — only among candidates that already clear the threshold,
-        # so binding can reorder real matches but never manufacture one from a
-        # sub-threshold base.
+        # Tiebreak nudge, applied to the sort key only. It must never reach the
+        # confidence that is stored, shown in the UI, and written to the
+        # activity feed: on the production rows behind issue #653 this bonus
+        # carried a wrong match from 0.851 to 0.886, making it look better
+        # evidenced than it was.
         binding = (bound.field_confidence || %{})[:binding] || 0.0
-        min(1.0, base + binding * @binding_tiebreak_weight)
+        {base, min(1.0, base + binding * @binding_tiebreak_weight)}
 
       true ->
-        base
+        {base, base}
     end
   rescue
     e ->
       # One bad candidate (e.g. an item whose episodes failed to preload) must not
       # fail the whole match — fall back to the unbound base score.
       Logger.warning("Binding re-parse failed for media item #{item.id}: #{inspect(e)}")
-      base
+      {base, base}
   end
 
   ## Private Functions - ParsedFileInfo accessors

@@ -73,6 +73,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
   describe "media_files_section/1" do
     test "renders a movie's own files" do
       media_item = %{
+        type: "movie",
         media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
         episodes: []
       }
@@ -85,6 +86,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
 
     test "labels a version with its basename, not its full path" do
       media_item = %{
+        type: "movie",
         media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
         episodes: []
       }
@@ -96,6 +98,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
 
     test "carries a version's full path on the label's title attribute" do
       media_item = %{
+        type: "movie",
         media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
         episodes: []
       }
@@ -108,6 +111,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
 
     test "does not render a version's directory as visible text" do
       media_item = %{
+        type: "movie",
         media_files: [file("mf-1", "The Matrix (1999)/The.Matrix.1999.1080p.mkv")],
         episodes: []
       }
@@ -147,6 +151,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
     # `all_media_files/1` for shows outright.
     test "renders a TV show's own file that belongs to no episode" do
       media_item = %{
+        type: "tv_show",
         media_files: [file("mf-show", "Breaking Bad/unmatched-release.mkv")],
         episodes: [
           %{media_files: [episode_file("mf-ep-1", "Breaking Bad/Season 01/S01E01.mkv")]}
@@ -179,7 +184,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
         size: nil
       }
 
-      html = section_html(%{media_files: [broken], episodes: []})
+      html = section_html(%{type: "movie", media_files: [broken], episodes: []})
 
       assert html =~ "Unknown file"
       assert html =~ ~s|phx-value-file-id="mf-broken"|
@@ -193,7 +198,10 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
       }
 
       meta =
-        element_text(section_html(%{media_files: [long_codec], episodes: []}), "file-meta-mf-1")
+        element_text(
+          section_html(%{type: "movie", media_files: [long_codec], episodes: []}),
+          "file-meta-mf-1"
+        )
 
       assert meta =~ "DD+"
       assert meta =~ "hevc"
@@ -205,7 +213,10 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
       no_codec = %{file("mf-1", "Movie (2020)/movie.mkv") | codec: nil, audio_codec: nil}
 
       meta =
-        element_text(section_html(%{media_files: [no_codec], episodes: []}), "file-meta-mf-1")
+        element_text(
+          section_html(%{type: "movie", media_files: [no_codec], episodes: []}),
+          "file-meta-mf-1"
+        )
 
       assert meta =~ "Unknown"
     end

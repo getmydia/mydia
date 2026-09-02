@@ -108,6 +108,12 @@ defmodule Mydia.Events.Presentation do
       title: "Duplicate pruned"
     },
     %{
+      type: "media_file.returned_to_review",
+      icon: "hero-arrow-uturn-left",
+      color: "text-warning",
+      title: "Returned to review"
+    },
+    %{
       type: "media_file.prune_undone",
       icon: "hero-arrow-uturn-left",
       color: "text-warning",
@@ -404,6 +410,13 @@ defmodule Mydia.Events.Presentation do
 
       _ ->
         base
+    end
+  end
+
+  def detail(%Event{type: "media_file.returned_to_review", metadata: metadata}) do
+    case metadata["file_path"] do
+      nil -> title_of(metadata)
+      path -> "#{title_of(metadata)}, #{Path.basename(path)} sent to review"
     end
   end
 

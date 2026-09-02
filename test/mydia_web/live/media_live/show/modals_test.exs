@@ -123,6 +123,66 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
     end
   end
 
+  describe "file_details_modal/1 origin" do
+    defp origin_file do
+      %MediaFile{
+        id: "mf-origin",
+        path: nil,
+        relative_path: "Movie (2020)/movie.mkv",
+        library_path: %LibraryPath{path: "/movies"},
+        resolution: "1080p",
+        codec: "hevc",
+        audio_codec: "eac3",
+        size: 1_000
+      }
+    end
+
+    test "renders nothing when the file has no known origin" do
+      html =
+        render_component(&Modals.file_details_modal/1,
+          file_details: origin_file(),
+          file_origin: nil
+        )
+
+      refute html =~ "Origin"
+    end
+
+    test "names the download when the file was imported from one" do
+      download = %Mydia.Downloads.Download{
+        id: "dl-1",
+        title: "The Wandering Comet 2020 1080p",
+        metadata: %{}
+      }
+
+      html =
+        render_component(&Modals.file_details_modal/1,
+          file_details: origin_file(),
+          file_origin: download
+        )
+
+      assert html =~ "Imported from the download"
+      assert html =~ "The Wandering Comet 2020 1080p"
+      refute html =~ "Added outside Mydia"
+    end
+
+    test "flags a file matched outside Mydia and shows the match reason" do
+      download = %Mydia.Downloads.Download{
+        id: "dl-2",
+        title: "The Wandering Comet 2020 1080p",
+        metadata: %{"matched_from_client" => true, "match_reason" => "unique title match"}
+      }
+
+      html =
+        render_component(&Modals.file_details_modal/1,
+          file_details: origin_file(),
+          file_origin: download
+        )
+
+      assert html =~ "Added outside Mydia"
+      assert html =~ "unique title match"
+    end
+  end
+
   describe "reidentify_modal/1" do
     test "renders candidates with selectable buttons wired to the select event" do
       html =

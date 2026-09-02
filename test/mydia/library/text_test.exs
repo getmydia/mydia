@@ -135,4 +135,68 @@ defmodule Mydia.Library.TextTest do
       end
     end
   end
+
+  describe "title_token_coverage/2" do
+    test "is 1.0 when the release contains every word of the library title" do
+      assert Text.title_token_coverage("Zephyr Station", "Zephyr Station") == 1.0
+    end
+
+    test "ignores extra words on the release side" do
+      # A subtitle appended to the library title is a legitimate match.
+      assert Text.title_token_coverage("Vale of Ash", "Vale of Ash and Ember") == 1.0
+    end
+
+    test "is low when the release is missing library words" do
+      assert Text.title_token_coverage("The Quiet Wards", "Quiet Water") == 0.5
+    end
+
+    test "is 0.0 when the titles share no words" do
+      assert Text.title_token_coverage("Starveil", "The Star Voyager Chronicle") == 0.0
+    end
+
+    test "treats punctuation as a word separator" do
+      # normalize_title/1 deletes punctuation, which would make these two
+      # "ironridge" and "iron ridge" and share nothing.
+      assert Text.title_token_coverage("Iron-Ridge", "Iron Ridge") == 1.0
+    end
+
+    test "expands German umlauts before folding accents" do
+      # NFKD folding alone would turn "ä" into a bare "a" ("Bäume" -> "Baume"),
+      # which would not share a token with "Baeume".
+      assert Text.title_token_coverage("Grüne Bäume", "Gruene Baeume") == 1.0
+    end
+
+    test "folds other accents" do
+      assert Text.title_token_coverage("Rivière Blanche", "Riviere Blanche") == 1.0
+    end
+
+    test "drops articles rather than rotating them" do
+      assert Text.title_token_coverage("The Hollow Crown", "Hollow Crown") == 1.0
+      assert Text.title_token_coverage("Hollow Crown", "The Hollow Crown") == 1.0
+    end
+
+    test "normalizes an ampersand to and" do
+      assert Text.title_token_coverage("Saltmarsh & Vine", "Saltmarsh and Vine") == 1.0
+    end
+
+    test "converts roman numerals so sequel forms agree" do
+      assert Text.title_token_coverage("Ashfall II", "Ashfall 2") == 1.0
+    end
+
+    test "ignores single-character tokens" do
+      # The lone "a" is an article and "I" is too short to carry a match.
+      assert Text.title_token_coverage("Ember", "A Ember I") == 1.0
+    end
+
+    test "is 0.0 when either side has no significant tokens" do
+      assert Text.title_token_coverage("", "Zephyr Station") == 0.0
+      assert Text.title_token_coverage("Zephyr Station", "") == 0.0
+      assert Text.title_token_coverage("The", "Zephyr Station") == 0.0
+    end
+
+    test "is 0.0 for non-binary input" do
+      assert Text.title_token_coverage(nil, "Zephyr Station") == 0.0
+      assert Text.title_token_coverage("Zephyr Station", nil) == 0.0
+    end
+  end
 end
