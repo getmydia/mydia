@@ -168,6 +168,13 @@ defmodule Mydia.MetadataStubProvider do
       provider_id == to_string(@missing_id) ->
         {:error, Error.not_found("Media not found: #{@missing_id}")}
 
+      # The catalog's series id is a TVDB id, and the relay answers 404 for a
+      # TVDB id on TMDB's route. Answering it anyway is what let the Discover
+      # add ship sending TVDB search ids to TMDB: production failed with
+      # "Media not found: <tvdb id>" while the stub happily returned the show.
+      provider_id == to_string(@series_tvdb_id) and Keyword.get(opts, :provider) == :tmdb ->
+        {:error, Error.not_found("Media not found: #{provider_id}")}
+
       Keyword.get(opts, :provider) == :tvdb or Keyword.get(opts, :media_type) == :tv_show ->
         {:ok, series_metadata()}
 

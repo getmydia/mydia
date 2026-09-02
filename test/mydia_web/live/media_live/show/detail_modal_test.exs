@@ -280,8 +280,10 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
 
     view
     |> element(
+      # The visible label is "Add"; "Add to Library" lives in title/aria-label
+      # since #673 stopped the card button wrapping to two lines.
       ~s(#media-detail-modal-rail button[phx-click="add_selected_item"][phx-value-tmdb_id="#{dialog_pick_tmdb_id}"]),
-      "Add to Library"
+      "Add"
     )
     |> render_click()
 
