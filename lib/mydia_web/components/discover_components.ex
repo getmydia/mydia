@@ -15,6 +15,51 @@ defmodule MydiaWeb.DiscoverComponents do
     router: MydiaWeb.Router,
     statics: MydiaWeb.static_paths()
 
+  # A TMDB page. Both Metadata.trending_movies/0 and Metadata.discover/2 return
+  # a provider page uncapped, so a skeleton grid of this size is replaced
+  # one-for-one by real cards and the grid does not resize when they land.
+  @skeleton_count 20
+
+  @doc """
+  Renders a grid of placeholder cards shaped like `trending_card/1`.
+
+  Sits beside `trending_card/1` rather than in a generic module because the two
+  have to keep the same shape, and co-location is the only thing that makes a
+  drift visible in review.
+
+  `columns` is a parameter because the consumers genuinely differ: Discover
+  drives columns from `GridDensityComponents.grid_columns_class/1` across three
+  density levels, while the Dashboard trending rows hardcode a 2/3/4/5 grid.
+  Each caller passes the same string its real grid uses, so the placeholder and
+  the results lay out identically.
+
+  Reduced motion needs no handling here. daisyUI gates the shimmer behind
+  `prefers-reduced-motion: no-preference` and leaves a flat base-300 fill
+  otherwise.
+  """
+  attr :id, :string, default: nil
+  attr :count, :integer, default: @skeleton_count
+  attr :columns, :string, required: true
+  attr :gap, :string, default: "gap-4 md:gap-5"
+
+  def poster_card_grid_skeleton(assigns) do
+    ~H"""
+    <div id={@id} class={["grid", @gap, @columns]} role="status" aria-label="Loading titles">
+      <div :for={_ <- 1..@count} class="card bg-base-100 shadow-sm">
+        <div class="skeleton aspect-[2/3] rounded-t-box rounded-b-none"></div>
+        <div class="card-body p-3">
+          <div class="skeleton h-4 w-full"></div>
+          <div class="skeleton h-4 w-2/3"></div>
+          <div class="mt-auto flex flex-col gap-2">
+            <div class="skeleton h-3 w-10"></div>
+            <div class="skeleton h-8 w-full"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
   @doc """
   Renders a trending media card with poster, status badge, title, year,
   and an action button (Add to Library / Request / Go to Movie/Show).
