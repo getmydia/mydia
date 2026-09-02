@@ -394,19 +394,37 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_event("toggle_hide_owned", _params, socket) do
     value = not socket.assigns.hide_owned
 
-    if user = socket.assigns[:current_user] do
-      preference = Accounts.get_user_preference!(user)
+    # A rejected write leaves the toggle where it was rather than flipping the
+    # grid for a preference that will be gone on the next mount. Mirrors
+    # `GridDensity.put/2`.
+    case persist_hide_owned(socket, value) do
+      :ok ->
+        {:noreply,
+         socket
+         |> assign(:hide_owned, value)
+         |> assign_visible_items()
+         |> maybe_auto_advance(0)}
 
-      Accounts.update_preference(preference, %{"preferences" => %{"discover_hide_owned" => value}})
+      :error ->
+        {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
     end
+  end
 
-    socket =
-      socket
-      |> assign(:hide_owned, value)
-      |> assign_visible_items()
-      |> maybe_auto_advance(0)
+  defp persist_hide_owned(socket, value) do
+    case socket.assigns[:current_user] do
+      nil ->
+        :ok
 
-    {:noreply, socket}
+      user ->
+        preference = Accounts.get_user_preference!(user)
+
+        case Accounts.update_preference(preference, %{
+               "preferences" => %{"discover_hide_owned" => value}
+             }) do
+          {:ok, _} -> :ok
+          {:error, _changeset} -> :error
+        end
+    end
   end
 
   # Info handlers

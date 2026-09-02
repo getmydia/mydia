@@ -167,6 +167,35 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
       assert media_item.quality_profile_id == nil
     end
 
+    # The other tests here drive the submit through render_submit/2 and
+    # render_hook/3 with explicit param maps, which bypass DOM serialization
+    # entirely. A checkbox with no `value` attribute submits "on", and
+    # `params["search_on_add"] == "true"` reads that as false, so a checked
+    # toggle queued nothing. Only a real form/2 submit catches that.
+    test "a checked search_on_add toggle survives DOM serialization",
+         %{conn: conn, provider_id: provider_id} do
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
+
+      view |> element("[data-test='library-picker-caret']") |> render_click()
+      view |> element("#discover-configure-add") |> render_click()
+
+      # media.auto_search_on_add defaults to true, so the toggle renders
+      # checked and the form carries it with no explicit override.
+      assert has_element?(
+               view,
+               "#add-config-form input[type=checkbox][name='config[search_on_add]'][value='true']"
+             )
+
+      view |> form("#add-config-form") |> render_submit()
+
+      media_item = wait_until_media_item(provider_id)
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MovieSearch,
+        args: %{mode: "specific", media_item_id: media_item.id}
+      )
+    end
+
     test "search_on_add omitted queues nothing",
          %{conn: conn, provider_id: provider_id, chosen_library: chosen_library} do
       {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")

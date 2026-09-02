@@ -45,7 +45,8 @@ defmodule Mydia.Config.LoaderTest do
         "OBAN_POLL_INTERVAL",
         "MAX_TRANSCODE_HEIGHT",
         "AUTO_SEARCH_MIN_SEEDERS",
-        "SUBTITLE_LANGUAGE"
+        "SUBTITLE_LANGUAGE",
+        "DEFAULT_SEASON_MONITORING"
       ] ++ download_client_vars ++ library_path_vars
 
     # Store original values
@@ -1142,8 +1143,9 @@ defmodule Mydia.Config.LoaderTest do
 
   describe "media default_season_monitoring (DEFAULT_SEASON_MONITORING)" do
     test "loads default_season_monitoring from DEFAULT_SEASON_MONITORING" do
+      # The shared setup clears and restores this var, so a deployment that
+      # sets it does not lose it to this test.
       System.put_env("DEFAULT_SEASON_MONITORING", "first")
-      on_exit(fn -> System.delete_env("DEFAULT_SEASON_MONITORING") end)
 
       {:ok, config} = Mydia.Config.Loader.load(sources: [:env])
 

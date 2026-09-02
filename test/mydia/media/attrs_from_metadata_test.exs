@@ -31,6 +31,29 @@ defmodule Mydia.Media.AttrsFromMetadataTest do
       assert attrs.library_path_id == library.id
     end
 
+    # Without `:user` the resolver saw nil, so every SearchLive add ignored
+    # the per-user library, quality profile and monitoring overrides and filed
+    # media into the instance default instead.
+    test "the acting user's library override beats the instance default" do
+      instance_library = library_path_fixture(%{type: :movies})
+      Mydia.Settings.set_default_library(instance_library, :movies)
+      user_library = library_path_fixture(%{type: :movies})
+
+      user = Mydia.AccountsFixtures.user_fixture()
+      preference = Mydia.Accounts.get_user_preference!(user)
+
+      {:ok, _} =
+        Mydia.Accounts.update_preference(preference, %{
+          "preferences" => %{"add_movie_library_path_id" => user_library.id}
+        })
+
+      assert AttrsFromMetadata.from_metadata(metadata(), :movie).library_path_id ==
+               instance_library.id
+
+      assert AttrsFromMetadata.from_metadata(metadata(), :movie, user: user).library_path_id ==
+               user_library.id
+    end
+
     test "carries the resolved monitored flag" do
       defaults = %AddDefaults{
         monitored: false,

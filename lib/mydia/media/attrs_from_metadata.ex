@@ -16,7 +16,8 @@ defmodule Mydia.Media.AttrsFromMetadata do
   @doc """
   Builds attrs from a parsed release name plus its resolved metadata.
 
-  `opts` accepts `:defaults` to inject an `%AddDefaults{}` in tests.
+  `opts` accepts `:user`, the acting user whose add preferences the resolver
+  should consult, and `:defaults` to inject an `%AddDefaults{}` in tests.
   """
   @spec from_parsed(map(), map(), keyword()) :: map()
   def from_parsed(parsed, metadata, opts \\ []) do
@@ -40,7 +41,8 @@ defmodule Mydia.Media.AttrsFromMetadata do
   @doc """
   Builds attrs from metadata alone, for a title with no parsed release.
 
-  `opts` accepts `:defaults` to inject an `%AddDefaults{}` in tests.
+  `opts` accepts `:user`, the acting user whose add preferences the resolver
+  should consult, and `:defaults` to inject an `%AddDefaults{}` in tests.
   """
   @spec from_metadata(map(), :movie | :tv_show, keyword()) :: map()
   def from_metadata(metadata, media_type, opts \\ []) do
@@ -61,7 +63,9 @@ defmodule Mydia.Media.AttrsFromMetadata do
   end
 
   defp defaults_for(media_type, opts) do
-    Keyword.get_lazy(opts, :defaults, fn -> AddDefaults.resolve(nil, media_type) end)
+    Keyword.get_lazy(opts, :defaults, fn ->
+      AddDefaults.resolve(opts[:user], media_type)
+    end)
   end
 
   defp parsed_media_type(%{type: :tv_show}), do: :tv_show

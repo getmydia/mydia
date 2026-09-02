@@ -141,9 +141,11 @@ defmodule MydiaWeb.AddMediaComponents do
           <%!-- Search on Add --%>
           <div class="form-control mb-6">
             <label class="label cursor-pointer justify-start gap-4">
+              <input type="hidden" name="config[search_on_add]" value="false" />
               <input
                 type="checkbox"
                 name="config[search_on_add]"
+                value="true"
                 class="toggle toggle-primary"
                 checked={@defaults.search_on_add}
               />

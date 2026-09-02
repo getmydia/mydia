@@ -163,6 +163,37 @@ defmodule Mydia.Media.AddDefaultsTest do
 
       assert defaults.library_path_id == instance_library.id
     end
+
+    test "a disabled library path falls back to the instance default" do
+      instance_library = library_path_fixture(%{type: :movies})
+      Mydia.Settings.set_default_library(instance_library, :movies)
+
+      # Disabled hides a library from the UI, so filing an add into one would
+      # put media somewhere the operator cannot see. Written directly for the
+      # same reason as the cases above: the library was enabled when saved.
+      disabled_library = library_path_fixture(%{type: :movies})
+
+      {:ok, _} =
+        disabled_library
+        |> Ecto.Changeset.change(disabled: true)
+        |> Mydia.Repo.update()
+
+      user = user_fixture()
+      pref = Accounts.get_user_preference!(user)
+
+      {:ok, _} =
+        pref
+        |> Ecto.Changeset.change(
+          preferences: %{"add_movie_library_path_id" => disabled_library.id}
+        )
+        |> Mydia.Repo.update()
+
+      user = Accounts.get_user!(user.id)
+
+      defaults = AddDefaults.resolve(user, :movie, config: config(%{}))
+
+      assert defaults.library_path_id == instance_library.id
+    end
   end
 
   describe "to_add_opts/1" do

@@ -76,17 +76,28 @@ defmodule Mydia.Settings.LibraryPaths do
   end
 
   @doc """
-  Whether a library path with `id` exists and has one of `allowed_types`.
+  Whether a library path with `id` exists, is enabled and has one of
+  `allowed_types`.
 
   `allowed_types` is typically `LibraryPath.movie_library_types/0` or
   `series_library_types/0`, the same lists `LibraryPath`'s own changeset uses
   to gate `default_for_movies`/`default_for_series`: a `:movies` library
   cannot back the series add-option, a `:series` library cannot back the
   movie one, and a `:mixed` library backs either.
+
+  A disabled library is excluded, matching `default_library_for/1`. Disabled
+  hides the library from the UI, so an add targeting one would file media
+  somewhere the operator cannot see. `monitored` is deliberately not required:
+  an explicit target may be unmonitored under `Mydia.Library.TargetResolver`.
   """
   @spec library_path_exists_as_type?(term(), [atom()]) :: boolean()
   def library_path_exists_as_type?(id, allowed_types) do
-    Repo.exists?(from l in LibraryPath, where: l.id == ^id and l.type in ^allowed_types)
+    Repo.exists?(
+      from l in LibraryPath,
+        where:
+          l.id == ^id and l.type in ^allowed_types and
+            (l.disabled == false or is_nil(l.disabled))
+    )
   rescue
     # A malformed id cannot be cast to the `:binary_id` column on PostgreSQL,
     # which raises `Ecto.Query.CastError` here instead of returning false.
