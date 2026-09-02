@@ -239,4 +239,66 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
              ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-tmdb_id="#{second_hop_tmdb_id}"])
            )
   end
+
+  test "adding a title from the dialog's own rail keeps its poster inside the dialog",
+       %{conn: conn} do
+    source_tmdb_id = unique_provider_id()
+    recommended_tmdb_id = unique_provider_id()
+    dialog_pick_tmdb_id = unique_provider_id()
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Harrow Lane",
+        year: 2021,
+        tmdb_id: source_tmdb_id
+      })
+
+    warm_recommendations_cache(source_tmdb_id, :movie, [
+      %{"id" => recommended_tmdb_id, "title" => "Salt Verge", "release_date" => "2019-04-11"}
+    ])
+
+    warm_recommendations_cache(recommended_tmdb_id, :movie, [
+      %{"id" => dialog_pick_tmdb_id, "title" => "Ninth Tide", "release_date" => "2015-08-03"}
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    view
+    |> element(
+      ~s(#recommendations-rail div[phx-click="show_details"][phx-value-id="#{recommended_tmdb_id}"])
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    assert has_element?(
+             view,
+             ~s(#media-detail-modal-rail div[phx-click="show_details"][phx-value-id="#{dialog_pick_tmdb_id}"])
+           )
+
+    view
+    |> element(
+      ~s(#media-detail-modal-rail button[phx-click="add_selected_item"][phx-value-tmdb_id="#{dialog_pick_tmdb_id}"]),
+      "Add to Library"
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    # The regression this guards: RecommendationEvents.mark_owned/3 used to
+    # stamp :navigate on every rail it touched, including the one inside the
+    # dialog. DiscoverComponents.trending_card/1 checks @navigate before
+    # @on_select, so the poster would have become a plain link to the new
+    # title's own page. Clicking it would leave the page and close the dialog
+    # out from under the user, instead of re-opening the dialog over that
+    # title.
+    assert has_element?(
+             view,
+             ~s(#media-detail-modal-rail div[phx-click="show_details"][phx-value-id="#{dialog_pick_tmdb_id}"])
+           )
+
+    refute has_element?(view, ~s(#media-detail-modal-rail a[href^="/media/"]))
+  end
 end

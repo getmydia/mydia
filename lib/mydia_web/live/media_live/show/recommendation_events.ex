@@ -225,7 +225,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
       |> assign(
         :selected_recommendations,
-        mark_owned(socket.assigns[:selected_recommendations] || [], added)
+        mark_owned(socket.assigns[:selected_recommendations] || [], added, navigate: false)
       )
 
     {:noreply,
@@ -243,7 +243,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
       |> assign(
         :selected_recommendations,
-        mark_owned(socket.assigns[:selected_recommendations] || [], added)
+        mark_owned(socket.assigns[:selected_recommendations] || [], added, navigate: false)
       )
 
     {:noreply,
@@ -338,14 +338,30 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     )
   end
 
-  defp mark_owned(recommendations, added) do
+  # `navigate: true` (the default) is correct for the page's own :recommendations
+  # rail: an owned recommendation should link to its own media page. It must stay
+  # `navigate: false` for the dialog's :selected_recommendations rail, because
+  # `DiscoverComponents.trending_card/1` checks `@navigate` before `@on_select`,
+  # so a navigate target would turn the poster into a link that leaves the page
+  # and closes the dialog out from under the user mid-browse, instead of
+  # re-opening the dialog over that title. See the module doc on
+  # `DetailModalEvents.decorate/2` for the read-path half of the same rule.
+  defp mark_owned(recommendations, added, opts \\ []) do
+    navigate? = Keyword.get(opts, :navigate, true)
+
     Enum.map(recommendations, fn item ->
       if safe_provider_id(item) == added.tmdb_id do
-        item
-        |> Map.put(:in_library, true)
-        |> Map.put(:id, added.id)
-        |> Map.put(:monitored, added.monitored)
-        |> Map.put(:navigate, ~p"/media/#{added.id}")
+        item =
+          item
+          |> Map.put(:in_library, true)
+          |> Map.put(:id, added.id)
+          |> Map.put(:monitored, added.monitored)
+
+        if navigate? do
+          Map.put(item, :navigate, ~p"/media/#{added.id}")
+        else
+          item
+        end
       else
         item
       end
