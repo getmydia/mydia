@@ -195,4 +195,27 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       refute html =~ "library-picker-caret"
     end
   end
+
+  describe "card add button" do
+    test "shows the short label while keeping the full accessible name" do
+      html = card(%{current_user: %{role: "admin", id: "admin-1"}})
+
+      button =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(button[phx-click="add_to_library"]))
+
+      # Guard the cardinality first: LazyHTML.attribute/2 on a zero-node match
+      # returns [], so a missing button would otherwise sail past the
+      # attribute assertion below.
+      assert Enum.count(button) == 1
+      assert LazyHTML.attribute(button, "aria-label") == ["Add to Library"]
+      assert LazyHTML.attribute(button, "title") == ["Add to Library"]
+
+      # The visible label is what wraps at 144px, so assert on rendered text
+      # rather than on the raw HTML, which still contains the long string in
+      # the aria-label.
+      assert button |> LazyHTML.text() |> String.trim() == "Add"
+    end
+  end
 end
