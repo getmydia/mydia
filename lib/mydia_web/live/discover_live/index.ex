@@ -504,9 +504,19 @@ defmodule MydiaWeb.DiscoverLive.Index do
     # Also resolves against the recommendations rail. A rail title is not in
     # `items`, so searching only that list made a guest's Request click from
     # inside the modal silently do nothing.
+    #
+    # `media_type` is passed through as the type filter (not just the ref's
+    # bare id): `handle_event("request_media", ...)` takes it straight from
+    # client params, and TMDB and TVDB number their catalogs independently, so
+    # a forged event pairing one tab's numeric id with the other type's
+    # `media_type` could otherwise resolve to a real item of the wrong kind.
+    # `MediaRequestHelpers.handle_request_media/3` derives its own ref from
+    # whatever item is found here, so a mismatch here is what would decide the
+    # provider a bogus request gets stored under.
     case DetailModal.find_selectable_item(
            [socket.assigns.items, socket.assigns.selected_recommendations],
-           Ref.id(ref)
+           Ref.id(ref),
+           media_type
          ) do
       nil ->
         {:noreply, assign(socket, :requesting_item_id, nil)}

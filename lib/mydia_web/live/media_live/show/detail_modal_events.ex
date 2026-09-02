@@ -58,7 +58,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   def add_selected_item(%{"ref" => raw_ref} = params, socket) do
     case Ref.parse(raw_ref) do
       {:ok, ref} ->
-        if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], Ref.id(ref)) do
+        if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], ref) do
           FranchiseEvents.add_franchise_movie(params, socket)
         else
           RecommendationEvents.add_recommendation(params, socket)
@@ -75,7 +75,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   def request_selected_item(%{"ref" => raw_ref} = params, socket) do
     case Ref.parse(raw_ref) do
       {:ok, ref} ->
-        if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], Ref.id(ref)) do
+        if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], ref) do
           FranchiseEvents.request_franchise_movie(params, socket)
         else
           RecommendationEvents.request_recommendation(params, socket)

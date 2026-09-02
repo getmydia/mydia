@@ -150,13 +150,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       {:ok, media_item} ->
         maybe_queue_search(media_item, search_on_add)
 
-        {:ok, media_item, update_library_status_map(library_status_map, media_item, Ref.id(ref))}
+        {:ok, media_item, update_library_status_map(library_status_map, media_item)}
 
       # Not an error from here up: the show the user asked for is in the
       # library. Callers flash it as info and flip the card.
       {:error, {:already_in_library, media_item}} ->
         {:already_in_library, media_item,
-         update_library_status_map(library_status_map, media_item, Ref.id(ref))}
+         update_library_status_map(library_status_map, media_item)}
 
       {:error, _} = error ->
         error
@@ -500,7 +500,15 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   defp presence(""), do: nil
   defp presence(value), do: value
 
-  defp update_library_status_map(library_status_map, media_item, tmdb_id_int) do
+  # The untagged key space is TMDB-only (see `enrich_with_library_status/2`
+  # above, which reads it before the tagged `{:tvdb, id}` key). Keying it off
+  # `Ref.id(ref)` used to put a TVDB add's own id there whenever the ref was
+  # `{:tvdb, id}`, since a ref's bare id carries no provider information once
+  # extracted -- a TMDB result with the same numeric id would then read the
+  # TVDB item's status. `media_item.tmdb_id` is the show's actual TMDB id (nil
+  # unless the add resolved a cross-reference), so a TVDB-only add no longer
+  # writes anything into this slot.
+  defp update_library_status_map(library_status_map, media_item) do
     entry = %{
       in_library: true,
       monitored: media_item.monitored,
@@ -508,7 +516,12 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       id: media_item.id
     }
 
-    map = Map.put(library_status_map, tmdb_id_int, entry)
+    map =
+      if media_item.tmdb_id do
+        Map.put(library_status_map, media_item.tmdb_id, entry)
+      else
+        library_status_map
+      end
 
     if media_item.tvdb_id do
       Map.put(map, {:tvdb, media_item.tvdb_id}, entry)

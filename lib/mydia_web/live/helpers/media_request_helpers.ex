@@ -110,14 +110,24 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
     # Mirrors the deleted RequestMediaLive.Index.build_request_attrs/3.
     #
     # `media_type` gates this, not the ref's tag alone: there is no TVDB movie
-    # catalog, so a movie card mistagged `provider: :tvdb` still stores under
-    # tmdb_id rather than an id space that does not exist for movies.
-    attrs =
-      case {media_type, Ref.from_search_result(item)} do
-        {:tv_show, {:tvdb, id}} -> Map.put(base, :tvdb_id, id)
-        {_media_type, ref} -> Map.put(base, :tmdb_id, Ref.id(ref))
-      end
+    # catalog, so a movie card mistagged `provider: :tvdb` must be rejected
+    # rather than stored under tmdb_id, which would name an unrelated TMDB
+    # title (or none at all) with the TVDB catalog's numeric id. Mirrors the
+    # `{:movie, {:tvdb, _}} -> {:error, {:metadata, :tvdb_ref_for_movie}}`
+    # guard in `Mydia.Media.Add.resolve_attrs/4`.
+    case {media_type, Ref.from_search_result(item)} do
+      {:movie, {:tvdb, _id}} ->
+        {:error, {:metadata, :tvdb_ref_for_movie}}
 
+      {:tv_show, {:tvdb, id}} ->
+        submit_request(Map.put(base, :tvdb_id, id))
+
+      {_media_type, ref} ->
+        submit_request(Map.put(base, :tmdb_id, Ref.id(ref)))
+    end
+  end
+
+  defp submit_request(attrs) do
     case MediaRequests.create_request(attrs) do
       {:ok, request} ->
         {:ok, request, %{status_map_key(request) => request.status}}

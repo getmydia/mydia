@@ -203,6 +203,31 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       assert item.metadata_source == nil
       assert item.tmdb_id == id
     end
+
+    # TMDB and TVDB number their catalogs independently, so a TVDB add's own
+    # numeric id can collide with an unrelated TMDB title's id.
+    # `update_library_status_map/2` used to write that bare id into the
+    # untagged (TMDB) key space, which `enrich_with_library_status/2` reads
+    # before the tagged `{:tvdb, id}` key -- a TMDB result sharing that
+    # integer would then render as already in the library.
+    test "TVDB add does not leak its id into the untagged (TMDB) key space",
+         %{bypass: bypass, config: config} do
+      tvdb_id = System.unique_integer([:positive])
+      stub_tvdb_extended(bypass, tvdb_id, "TVDB Only Show")
+
+      assert {:ok, item, updated_map} =
+               MediaAddHelpers.handle_add_media_to_library(
+                 {:tvdb, tvdb_id},
+                 :tv_show,
+                 %{},
+                 config
+               )
+
+      assert item.tvdb_id == tvdb_id
+      assert item.tmdb_id == nil
+      assert updated_map[{:tvdb, tvdb_id}][:in_library] == true
+      refute Map.has_key?(updated_map, tvdb_id)
+    end
   end
 
   describe "handle_add_media_to_library/4 already in library" do

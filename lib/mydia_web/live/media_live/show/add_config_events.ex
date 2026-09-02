@@ -69,7 +69,7 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigEvents do
   end
 
   defp dispatch(ref, opts, socket) do
-    if franchise_entry?(socket.assigns[:franchise], Ref.id(ref)) do
+    if franchise_entry?(socket.assigns[:franchise], ref) do
       FranchiseEvents.add_franchise_movie_with_opts(ref, opts, socket)
     else
       RecommendationEvents.add_recommendation_with_opts(ref, opts, socket)
@@ -77,7 +77,7 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigEvents do
   end
 
   @doc """
-  Whether `tmdb_id` belongs to the franchise strip rather than the
+  Whether `ref` belongs to the franchise strip rather than the
   recommendations rail.
 
   Public because the detail dialog routes its own add and request the same way.
@@ -85,16 +85,27 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigEvents do
   recommendations card stays stale; a later click there resolves to
   `:already_in_library`, which both perform_add functions map to an
   informational result rather than an error.
+
+  A franchise is always a TMDB collection (see `FranchiseEntry`, which only
+  ever carries `tmdb_id`), so a `{:tvdb, _}` ref can never be a franchise
+  member -- `Ref.parse/1` accepting `tvdb:<id>` does not change that. Checked
+  on the ref's tag before its bare id: matching a TVDB numeric id against
+  `entry.tmdb_id` alone would route a forged or genuinely TVDB-sourced (a TV
+  show's recommendation card) ref into the franchise/movie-only add and
+  request paths whenever the two catalogs' ids happen to collide.
   """
-  def franchise_entry?(franchise, tmdb_id)
+  def franchise_entry?(franchise, ref)
 
-  def franchise_entry?(nil, _tmdb_id), do: false
+  def franchise_entry?(_franchise, {:tvdb, _id}), do: false
+  def franchise_entry?(nil, _ref), do: false
 
-  def franchise_entry?(%{entries: entries}, tmdb_id) do
+  def franchise_entry?(%{entries: entries}, ref) do
+    id = Ref.id(ref)
+
     Enum.any?(entries, fn %FranchiseEntry{} = entry ->
-      to_string(entry.tmdb_id) == to_string(tmdb_id)
+      to_string(entry.tmdb_id) == to_string(id)
     end)
   end
 
-  def franchise_entry?(_franchise, _tmdb_id), do: false
+  def franchise_entry?(_franchise, _ref), do: false
 end

@@ -107,17 +107,24 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       assert map[{:tvdb, tvdb_id}] == "pending"
     end
 
-    test "still stores a movie under tmdb_id even when the card is tagged provider: :tvdb" do
+    # There is no TVDB movie catalog, so a movie card tagged provider: :tvdb
+    # is either a forged event (media_type and ref pulled from different
+    # cards) or a genuine TV show reached by a mismatched media_type. Either
+    # way, its numeric id is not a TMDB id: storing it under tmdb_id would
+    # name a real, unrelated TMDB movie if the two ever collide, or a movie
+    # that does not exist if they don't. Mirrors the
+    # `{:movie, {:tvdb, _}} -> {:error, {:metadata, :tvdb_ref_for_movie}}`
+    # guard in `Mydia.Media.Add.resolve_attrs/4`.
+    test "rejects a movie card tagged provider: :tvdb instead of storing it as tmdb_id" do
       user = guest()
-      tmdb_id = System.unique_integer([:positive])
-      mistagged_item = Map.put(item(tmdb_id), :provider, :tvdb)
+      tvdb_id = System.unique_integer([:positive])
+      mistagged_item = Map.put(item(tvdb_id), :provider, :tvdb)
 
-      assert {:ok, request, map} =
+      assert {:error, {:metadata, :tvdb_ref_for_movie}} =
                MediaRequestHelpers.handle_request_media(mistagged_item, :movie, user.id)
 
-      assert request.tmdb_id == tmdb_id
-      assert is_nil(request.tvdb_id)
-      assert map[tmdb_id] == "pending"
+      refute MediaRequests.list_requests(status: "pending")
+             |> Enum.any?(&(&1.tmdb_id == tvdb_id))
     end
   end
 
