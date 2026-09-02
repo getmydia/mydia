@@ -347,62 +347,6 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     end)
   end
 
-  describe "library picker assigns" do
-    defp socket do
-      %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, library_picker: nil}}
-    end
-
-    test "opening reads the candidate libraries at open time" do
-      library_path_fixture(%{path: "/media/picker-a", type: "movies"})
-      library_path_fixture(%{path: "/media/picker-b", type: "movies"})
-
-      updated =
-        MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "693134",
-          "media_type" => "movie",
-          "title" => "Dune: Part Two"
-        })
-
-      picker = updated.assigns.library_picker
-
-      assert picker.tmdb_id == "693134"
-      assert picker.media_type == :movie
-      assert picker.title == "Dune: Part Two"
-      assert length(picker.libraries) == 2
-    end
-
-    test "a missing title becomes an empty string rather than nil" do
-      library_path_fixture(%{path: "/media/picker-c", type: "movies"})
-      library_path_fixture(%{path: "/media/picker-d", type: "movies"})
-
-      updated =
-        MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "1",
-          "media_type" => "movie"
-        })
-
-      assert updated.assigns.library_picker.title == ""
-    end
-
-    test "an unrecognised media type opens nothing" do
-      updated =
-        MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "1",
-          "media_type" => "podcast"
-        })
-
-      assert updated.assigns.library_picker == nil
-    end
-
-    test "clearing closes the dialog" do
-      opened = %Phoenix.LiveView.Socket{
-        assigns: %{__changed__: %{}, library_picker: %{tmdb_id: "1"}}
-      }
-
-      assert MediaAddHelpers.clear_library_picker(opened).assigns.library_picker == nil
-    end
-  end
-
   describe "library_path_opts/2" do
     test "returns no options when no library was chosen" do
       assert {:ok, []} = MediaAddHelpers.library_path_opts(nil, :movie)

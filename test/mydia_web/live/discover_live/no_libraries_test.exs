@@ -29,8 +29,7 @@ defmodule MydiaWeb.DiscoverLive.NoLibrariesTest do
   test "the modal disables submit and says why when no library exists", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
 
-    view |> element("[data-test='library-picker-caret']") |> render_click()
-    view |> element("#discover-configure-add") |> render_click()
+    view |> element("[data-test='add-config-caret']") |> render_click()
 
     assert has_element?(view, "#add-config-form button[type=submit][disabled]")
     assert render(view) =~ "No library paths"

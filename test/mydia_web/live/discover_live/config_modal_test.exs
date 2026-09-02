@@ -43,18 +43,14 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     refute has_element?(view, "#add-config-modal[open]")
   end
 
-  # Reaching Configure requires opening the library-picker caret first: the
-  # entry lives inside library_picker_dialog/1 (a single page-level element,
-  # so its DOM id cannot repeat per card), and that dialog only renders once
-  # @picker is set. With only one candidate library the caret would normally
-  # stay hidden (library_picker_button/1's `> 1` gate), so DiscoverLive marks
-  # its caret always_show_caret: true. Configure must stay reachable
-  # regardless of how many libraries exist, including zero.
+  # The caret pushes open_add_config directly: there is no intermediate
+  # library-picker dialog to click through any more. It renders
+  # unconditionally regardless of how many libraries exist, including zero,
+  # so Configure stays reachable on a single-library (or no-library) install.
   test "the configure entry opens the modal seeded with resolved defaults", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
 
-    view |> element("[data-test='library-picker-caret']") |> render_click()
-    view |> element("#discover-configure-add") |> render_click()
+    view |> element("[data-test='add-config-caret']") |> render_click()
 
     assert has_element?(view, "#add-config-modal[open]")
     assert has_element?(view, "#add-config-form select[name='config[library_path_id]']")
@@ -73,8 +69,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
   test "closing the modal leaves nothing added", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
 
-    view |> element("[data-test='library-picker-caret']") |> render_click()
-    view |> element("#discover-configure-add") |> render_click()
+    view |> element("[data-test='add-config-caret']") |> render_click()
     view |> element("#add-config-modal button", "Cancel") |> render_click()
 
     refute has_element?(view, "#add-config-modal[open]")
@@ -124,8 +119,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
          %{conn: conn, provider_id: provider_id, chosen_library: chosen_library, profile: profile} do
       {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
 
-      view |> element("[data-test='library-picker-caret']") |> render_click()
-      view |> element("#discover-configure-add") |> render_click()
+      view |> element("[data-test='add-config-caret']") |> render_click()
 
       view
       |> element("#add-config-form")
@@ -162,8 +156,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
          %{conn: conn, provider_id: provider_id, chosen_library: chosen_library} do
       {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
 
-      view |> element("[data-test='library-picker-caret']") |> render_click()
-      view |> element("#discover-configure-add") |> render_click()
+      view |> element("[data-test='add-config-caret']") |> render_click()
 
       render_hook(view, "submit_add_config", %{
         "config" => %{
@@ -187,8 +180,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
          %{conn: conn, provider_id: provider_id} do
       {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
 
-      view |> element("[data-test='library-picker-caret']") |> render_click()
-      view |> element("#discover-configure-add") |> render_click()
+      view |> element("[data-test='add-config-caret']") |> render_click()
 
       # media.auto_search_on_add defaults to true, so the toggle renders
       # checked and the form carries it with no explicit override.
@@ -214,8 +206,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
          %{conn: conn, provider_id: provider_id, chosen_library: chosen_library} do
       {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
 
-      view |> element("[data-test='library-picker-caret']") |> render_click()
-      view |> element("#discover-configure-add") |> render_click()
+      view |> element("[data-test='add-config-caret']") |> render_click()
 
       render_hook(view, "submit_add_config", %{
         "config" => %{
@@ -239,17 +230,11 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
   # Configure is also reachable from a caret inside the recommendations rail
   # while the trending-detail modal is open (TrendingDetailModal's own
   # header caret needs the same fix, but the rail is where the reviewed
-  # regression was found). Opening it clears @library_picker, so
-  # picker_open alone reads false again the instant Configure opens; without
-  # TrendingDetailModal's config_open guard, one Escape press fires both
-  # close_add_config and close_details and silently closes the detail view.
+  # regression was found). Without TrendingDetailModal's config_open guard,
+  # one Escape press would fire both close_add_config and close_details and
+  # silently close the detail view the user never asked to leave.
   describe "Escape while the detail modal is also open" do
     setup %{provider_id: provider_id} do
-      # A second candidate library so the caret is visible on its ordinary
-      # `> 1` gate: the recommendations rail's cards do not carry Discover's
-      # main-grid always_show_caret override.
-      library_path_fixture(%{type: :movies})
-
       recommended_id = unique_provider_id()
 
       warm_recommendations_cache(provider_id, :movie, [
@@ -299,12 +284,11 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
       render_async(view, 5000)
 
       rail_caret =
-        "#discover-recommendations-rail-item-#{recommended_id} [data-test='library-picker-caret']"
+        "#discover-recommendations-rail-item-#{recommended_id} [data-test='add-config-caret']"
 
       assert has_element?(view, rail_caret)
 
       view |> element(rail_caret) |> render_click()
-      view |> element("#discover-configure-add") |> render_click()
 
       assert has_element?(view, "#add-config-modal[open]")
 

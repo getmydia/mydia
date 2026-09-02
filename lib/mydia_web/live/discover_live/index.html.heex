@@ -257,7 +257,7 @@
     current_user={@current_user}
     open={@selected_item != nil}
     libraries={@libraries}
-    picker_open={@library_picker != nil}
+    picker_open={false}
     config_open={@add_config != nil}
   >
     <:rail>
@@ -273,10 +273,6 @@
       />
     </:rail>
   </.live_component>
-
-  <%!-- Rendered once per page rather than once per card. See
-        library_picker_dialog/1 for why an anchored menu cannot work here. --%>
-  <.library_picker_dialog picker={@library_picker} configure_event="open_add_config" />
 
   <.add_config_modal config={@add_config} quality_profiles={@quality_profiles} />
 </Layouts.app>

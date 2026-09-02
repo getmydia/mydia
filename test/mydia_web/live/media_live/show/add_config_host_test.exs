@@ -84,6 +84,48 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
     {movie, recommended_tmdb_id}
   end
 
+  # The #460 case: `overlap_tmdb_id` is seeded as both a missing franchise
+  # entry and a recommendation, so the same tmdb_id draws a card in both
+  # rails at once. The routing decision in `AddConfigEvents.dispatch/3` is
+  # keyed on the tmdb_id alone, not on which rail's caret was clicked.
+  defp movie_with_overlapping_entry do
+    collection_id = unique_provider_id()
+    own_tmdb_id = unique_provider_id()
+    overlap_tmdb_id = unique_provider_id()
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Marrow Station",
+        year: 1979,
+        tmdb_id: own_tmdb_id,
+        metadata: %{
+          "provider_id" => to_string(own_tmdb_id),
+          "provider" => "metadata_relay",
+          "media_type" => "movie",
+          "title" => "Marrow Station",
+          "collection_id" => collection_id,
+          "collection_name" => "Marrow Collection"
+        }
+      })
+
+    warm_collection_cache(collection_id, [
+      %{"id" => own_tmdb_id, "title" => "Marrow Station", "release_date" => "1979-05-25"},
+      %{"id" => overlap_tmdb_id, "title" => "Marrow Station II", "release_date" => "1986-07-18"}
+    ])
+
+    warm_recommendations_cache(own_tmdb_id, :movie, [
+      %{
+        "id" => overlap_tmdb_id,
+        "title" => "Marrow Station II",
+        "release_date" => "1986-07-18",
+        "poster_path" => "/p.jpg"
+      }
+    ])
+
+    {movie, overlap_tmdb_id}
+  end
+
   defp open_config(view, tmdb_id, title) do
     render_hook(view, "open_add_config", %{
       "tmdb_id" => to_string(tmdb_id),
@@ -168,6 +210,62 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
     end)
 
     :ok
+  end
+
+  # Same shape as `stub_movie_details/2`, but blocks the response until
+  # `release_added_movie_details/1` is called. `Add.from_provider/4` runs
+  # inside a `start_async/3` task the submit kicks off, and the #460 routing
+  # test below asserts which rail's card is still showing "Adding..."
+  # immediately after that submit, before the response is released, as proof
+  # that the franchise rail (not the recommendations rail) registered the
+  # in-flight add. Ported from the deleted `rail_picker_host_test.exs`, whose
+  # `stub_added_movie_details/3` did the same for the old two-click picker
+  # flow.
+  defp stub_added_movie_details(tmdb_id, title) do
+    bypass = Bypass.open()
+    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    on_exit(fn ->
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
+    end)
+
+    {:ok, gate} = Agent.start_link(fn -> false end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+      await_release(gate)
+
+      body = %{
+        "id" => tmdb_id,
+        "title" => title,
+        "release_date" => "2024-01-01",
+        "overview" => "",
+        "credits" => %{"cast" => [], "crew" => []},
+        "genres" => []
+      }
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    gate
+  end
+
+  defp release_added_movie_details(gate), do: Agent.update(gate, fn _ -> true end)
+
+  # Runs in the Bypass connection process, not the test process, so this
+  # sleep only delays that one HTTP response.
+  defp await_release(gate) do
+    if Agent.get(gate, & &1) do
+      :ok
+    else
+      Process.sleep(5)
+      await_release(gate)
+    end
   end
 
   # The add completes in a `handle_async` the submit's `render_hook` round
@@ -278,6 +376,40 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
 
     added = wait_until_media_item(recommended_tmdb_id)
     assert added.title == "Glass Meridian II"
+  end
+
+  test "a title in both rails (#460) routes to the franchise rail even when the configure " <>
+         "dialog opens from the recommendations card",
+       %{conn: conn, library: library} do
+    {movie, overlap_tmdb_id} = movie_with_overlapping_entry()
+    gate = stub_added_movie_details(overlap_tmdb_id, "Marrow Station II")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    # Both rails render a card for overlap_tmdb_id. Opening the configure
+    # dialog from the recommendations card is the point: routing is decided
+    # by franchise membership of the tmdb_id, not by which rail's caret fired
+    # the event.
+    open_config(view, overlap_tmdb_id, "Marrow Station II")
+
+    render_hook(view, "submit_add_config", %{
+      "config" => %{
+        "library_path_id" => to_string(library.id),
+        "monitored" => "true",
+        "search_on_add" => "false"
+      }
+    })
+
+    # Proof of routing: the franchise rail registered the in-flight add and
+    # the recommendations rail did not. The added title's own details fetch
+    # is still blocked at this point (see stub_added_movie_details/2), so
+    # this in-flight window is guaranteed rather than raced.
+    assert has_element?(view, "#franchise-section-item-#{overlap_tmdb_id}", "Adding...")
+    refute has_element?(view, "#recommendations-rail-item-#{overlap_tmdb_id}", "Adding...")
+
+    release_added_movie_details(gate)
+    render_async(view, 5000)
   end
 
   test "a forged library flashes and adds nothing", %{conn: conn} do

@@ -5,31 +5,8 @@ defmodule MydiaWeb.LibraryComponentsTest do
 
   alias MydiaWeb.LibraryComponents
 
-  # Libraries have no name column, only a path, which is why the menu shows a
-  # basename with the full path underneath.
-  defp libraries(count) do
-    for i <- 1..count, do: %{id: "lib-#{i}", path: "/media/movies-#{i}"}
-  end
-
   defp render_button(assigns) do
     render_component(&LibraryComponents.library_picker_button/1, assigns)
-  end
-
-  defp picker_dialog(overrides \\ %{}) do
-    assigns =
-      Map.merge(
-        %{
-          picker: %{
-            tmdb_id: "693134",
-            media_type: :movie,
-            title: "Dune: Part Two",
-            libraries: libraries(2)
-          }
-        },
-        overrides
-      )
-
-    render_component(&LibraryComponents.library_picker_dialog/1, assigns)
   end
 
   describe "library_picker_button/1" do
@@ -55,79 +32,6 @@ defmodule MydiaWeb.LibraryComponentsTest do
       assert LazyHTML.attribute(caret, "phx-value-tmdb_id") == ["551"]
       assert LazyHTML.attribute(caret, "phx-value-media_type") == ["movie"]
       assert LazyHTML.attribute(caret, "phx-value-title") == ["The Kestrel Protocol"]
-    end
-  end
-
-  describe "library_picker_dialog/1" do
-    test "renders a closed dialog when no picker is open" do
-      html = render_component(&LibraryComponents.library_picker_dialog/1, %{picker: nil})
-      document = LazyHTML.from_fragment(html)
-
-      dialog = LazyHTML.filter(document, "dialog")
-
-      # Guard the cardinality first: `LazyHTML.attribute/2` on a zero-node
-      # match returns `[]` same as a genuinely closed dialog's missing `open`
-      # attribute, so without this the assertion below would pass even if the
-      # "dialog" selector matched nothing at all.
-      assert Enum.count(dialog) == 1
-      assert LazyHTML.attribute(dialog, "open") == []
-      refute html =~ "library-picker-option"
-    end
-
-    # The dialog is a page-level overlay rather than a card descendant, which
-    # is the whole point: the sidebar is z-40 and the mobile dock is z-50, so
-    # no value a card can claim keeps the old anchored menu visible. daisyUI's
-    # .modal is z-999 and the picker takes 1000 so it also wins against the
-    # trending detail modal without depending on DOM order.
-    test "the open dialog sits above every other layer" do
-      document = LazyHTML.from_fragment(picker_dialog())
-
-      dialog = LazyHTML.filter(document, "dialog")
-      [class] = LazyHTML.attribute(dialog, "class")
-
-      assert LazyHTML.attribute(dialog, "open") == [""]
-      assert class =~ "modal"
-      assert class =~ "z-[1000]"
-    end
-
-    test "lists every candidate library with the values the add handler needs" do
-      document = LazyHTML.from_fragment(picker_dialog())
-
-      options = LazyHTML.query(document, ~s(button[data-test="library-picker-option"]))
-
-      assert LazyHTML.attribute(options, "phx-click") == ["add_to_library", "add_to_library"]
-      assert LazyHTML.attribute(options, "phx-value-library_path_id") == ["lib-1", "lib-2"]
-      assert LazyHTML.attribute(options, "phx-value-tmdb_id") == ["693134", "693134"]
-      assert LazyHTML.attribute(options, "phx-value-media_type") == ["movie", "movie"]
-    end
-
-    test "shows the basename with the full path underneath" do
-      document = LazyHTML.from_fragment(picker_dialog())
-
-      # `LazyHTML.text/1` on a multi-node match concatenates every node's
-      # text, so map over the spans individually to keep the basename and
-      # the full path as separate assertions. A substring check here
-      # (`html =~ "movies-1"`) would pass even if the basename span vanished,
-      # since "/media/movies-1" itself contains "movies-1".
-      spans =
-        document
-        |> LazyHTML.query(~s(button[data-test="library-picker-option"] span))
-        |> Enum.map(&LazyHTML.text/1)
-
-      assert Enum.at(spans, 0) == "movies-1"
-      assert Enum.at(spans, 1) == "/media/movies-1"
-    end
-
-    test "names the title being added" do
-      assert picker_dialog() =~ "Dune: Part Two"
-    end
-
-    test "offers cancel and a backdrop that both close the dialog" do
-      document = LazyHTML.from_fragment(picker_dialog())
-
-      closers = LazyHTML.query(document, ~s([phx-click="close_library_picker"]))
-
-      assert Enum.count(closers) >= 2
     end
   end
 

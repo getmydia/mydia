@@ -392,13 +392,9 @@
         else: @movie_libraries
       )
     }
-    picker_open={@library_picker != nil}
+    picker_open={false}
     config_open={false}
   />
-
-  <%!-- Rendered once per page rather than once per card. See
-        library_picker_dialog/1 for why an anchored menu cannot work here. --%>
-  <.library_picker_dialog picker={@library_picker} />
 
   <MydiaWeb.AddMediaComponents.add_config_modal
     config={@add_config}
