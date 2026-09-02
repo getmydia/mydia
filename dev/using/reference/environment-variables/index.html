@@ -1542,6 +1542,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#import-lists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import Lists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#download-clients" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3197,6 +3208,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#import-lists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import Lists
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#download-clients" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3607,7 +3629,7 @@ regardless of what you set here. If you serve Mydia over plain http, set
 <tr>
 <td><code>ENABLE_IMPORT_LISTS</code></td>
 <td>Enable import lists for syncing external lists (TMDB watchlists, popular, etc.)</td>
-<td><code>false</code></td>
+<td><code>true</code></td>
 </tr>
 <tr>
 <td><code>ENABLE_REMOTE_ACCESS</code></td>
@@ -3616,6 +3638,33 @@ regardless of what you set here. If you serve Mydia over plain http, set
 </tr>
 </tbody>
 </table>
+<h2 id="import-lists">Import Lists</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IMPORT_LISTS_ALLOW_PRIVATE_DESTINATIONS</code></td>
+<td>Allow a Custom URL import list to fetch from private, loopback or link-local addresses</td>
+<td><code>false</code></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Only enable this for a list you host yourself</p>
+<p>A Custom URL list is fetched by the Mydia server, not by your browser, so the
+URL can reach anything the server can reach: other containers, your router,
+a cloud metadata endpoint. Mydia refuses those destinations by default and
+revalidates every redirect hop.</p>
+<p>Set this to <code>true</code> only if you serve the list from your own LAN or container
+network, for example a JSON file on a NAS. It never relaxes the scheme
+allowlist, which is always limited to <code>http</code> and <code>https</code>.</p>
+</div>
 <h2 id="download-clients">Download Clients</h2>
 <p>Configure multiple clients using numbered variables (<code>&lt;N&gt;</code> = 1, 2, 3, etc.):</p>
 <table>
