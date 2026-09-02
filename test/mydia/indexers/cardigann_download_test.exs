@@ -307,6 +307,126 @@ defmodule Mydia.Indexers.CardigannDownloadTest do
 
       assert magnet =~ "VIALIVE"
     end
+
+    test "a download url that redirects to a magnet resolves to that magnet" do
+      bypass = Bypass.open()
+      magnet = "magnet:?xt=urn:btih:#{@info_hash}&dn=Harbour.Lights.S01"
+
+      Bypass.expect_once(bypass, "GET", "/dl/1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", magnet)
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      definition = %Parsed{
+        id: "dl-magnet-redirect",
+        name: "DL Magnet Redirect",
+        description: "",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["http://localhost:#{bypass.port}"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+        login: nil,
+        download: %{selectors: [%{selector: "a.dl", attribute: "href"}]},
+        settings: [],
+        request_delay: nil,
+        follow_redirect: true
+      }
+
+      assert {:ok, {:magnet, ^magnet}} =
+               CardigannDownload.resolve(
+                 definition,
+                 "http://localhost:#{bypass.port}/dl/1",
+                 %{base_url: "http://localhost:#{bypass.port}", config: %{}}
+               )
+    end
+
+    test "a redirect to a landing page still runs the download selectors" do
+      bypass = Bypass.open()
+      magnet = "magnet:?xt=urn:btih:#{@info_hash}&dn=Harbour.Lights.S01"
+
+      Bypass.expect_once(bypass, "GET", "/dl/2", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "/page/2")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/page/2", fn conn ->
+        Plug.Conn.resp(
+          conn,
+          200,
+          ~s(<html><body><a class="dl" href="#{magnet}">get</a></body></html>)
+        )
+      end)
+
+      definition = %Parsed{
+        id: "dl-page-redirect",
+        name: "DL Page Redirect",
+        description: "",
+        language: "en-US",
+        type: "public",
+        encoding: "UTF-8",
+        links: ["http://localhost:#{bypass.port}"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+        login: nil,
+        download: %{selectors: [%{selector: "a.dl", attribute: "href"}]},
+        settings: [],
+        request_delay: nil,
+        follow_redirect: true
+      }
+
+      assert {:ok, {:magnet, ^magnet}} =
+               CardigannDownload.resolve(
+                 definition,
+                 "http://localhost:#{bypass.port}/dl/2",
+                 %{base_url: "http://localhost:#{bypass.port}", config: %{}}
+               )
+    end
+
+    test "a session is not carried onto a cross-host redirect" do
+      site = Bypass.open()
+      foreign = Bypass.open()
+      test_pid = self()
+
+      Bypass.expect_once(site, "GET", "/dl/3", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://localhost:#{foreign.port}/get.torrent")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      Bypass.expect_once(foreign, "GET", "/get.torrent", fn conn ->
+        send(test_pid, {:cookie_header, Plug.Conn.get_req_header(conn, "cookie")})
+        Plug.Conn.resp(conn, 200, ~s(<html><a class="dl" href="/x.torrent">get</a></html>))
+      end)
+
+      definition = %Parsed{
+        id: "dl-redirect-scope",
+        name: "DL Redirect Scope",
+        description: "",
+        language: "en-US",
+        type: "private",
+        encoding: "UTF-8",
+        links: ["http://localhost:#{site.port}"],
+        capabilities: %{modes: %{}},
+        search: %{paths: [%{path: "/search"}], inputs: %{}, rows: %{}, fields: %{}},
+        login: nil,
+        download: %{selectors: [%{selector: "a.dl", attribute: "href"}]},
+        settings: [],
+        request_delay: nil,
+        follow_redirect: true
+      }
+
+      CardigannDownload.resolve(definition, "http://localhost:#{site.port}/dl/3", %{
+        cookies: ["session=secret"],
+        base_url: "http://localhost:#{site.port}",
+        config: %{}
+      })
+
+      assert_receive {:cookie_header, []}
+    end
   end
 
   describe "credential scope on downloads" do

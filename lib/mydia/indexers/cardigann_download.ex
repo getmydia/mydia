@@ -144,9 +144,17 @@ defmodule Mydia.Indexers.CardigannDownload do
          variables,
          user_config
        ) do
-    with {:ok, response} <-
-           infohash_source(definition, infohash, download_url, before_response, user_config),
-         {:ok, hash} <- match_selector(response, Map.get(infohash, :hash), variables, "hash"),
+    with {:ok, source} <-
+           infohash_source(definition, infohash, download_url, before_response, user_config) do
+      case source do
+        {:magnet, magnet} -> {:ok, {:magnet, magnet}}
+        {:response, response} -> build_magnet_from_response(response, infohash, variables)
+      end
+    end
+  end
+
+  defp build_magnet_from_response(response, infohash, variables) do
+    with {:ok, hash} <- match_selector(response, Map.get(infohash, :hash), variables, "hash"),
          {:ok, title} <- match_title(response, Map.get(infohash, :title), variables) do
       case TorrentHash.build_magnet(hash, title) do
         nil ->
@@ -162,7 +170,7 @@ defmodule Mydia.Indexers.CardigannDownload do
   # instead of spending a second round trip on the landing page.
   defp infohash_source(_definition, %{usebeforeresponse: true}, _url, before_response, _config)
        when is_map(before_response) do
-    {:ok, before_response}
+    {:ok, {:response, before_response}}
   end
 
   defp infohash_source(definition, _infohash, download_url, _before_response, user_config) do
@@ -184,32 +192,49 @@ defmodule Mydia.Indexers.CardigannDownload do
   # -- selectors --------------------------------------------------------------
 
   defp resolve_selectors(definition, selectors, download_url, before_response, variables, config) do
-    with {:ok, response} <- selector_source(definition, download_url, before_response, config) do
-      selectors
-      |> Enum.find_value(fn selector ->
-        case match_selector(response, selector, variables, "download link") do
-          {:ok, link} when is_binary(link) and link != "" -> link
-          _ -> nil
-        end
-      end)
-      |> case do
-        nil ->
-          {:error, {:cardigann_download, "no download selector matched the response"}}
+    with {:ok, source} <- selector_source(definition, download_url, before_response, config) do
+      case source do
+        {:magnet, magnet} ->
+          {:ok, {:magnet, magnet}}
 
-        link ->
-          # Many definitions point their download selector straight at a magnet.
-          # Handing that back as a link would send the grab path off to fetch a
-          # `magnet:` URL over HTTP, which it cannot do.
-          case absolute_link(definition, download_url, link, config) do
-            "magnet:" <> _ = magnet -> {:ok, {:magnet, magnet}}
-            resolved -> {:ok, {:link, resolved}}
-          end
+        {:response, response} ->
+          match_download_selectors(
+            definition,
+            selectors,
+            download_url,
+            response,
+            variables,
+            config
+          )
       end
     end
   end
 
+  defp match_download_selectors(definition, selectors, download_url, response, variables, config) do
+    selectors
+    |> Enum.find_value(fn selector ->
+      case match_selector(response, selector, variables, "download link") do
+        {:ok, link} when is_binary(link) and link != "" -> link
+        _ -> nil
+      end
+    end)
+    |> case do
+      nil ->
+        {:error, {:cardigann_download, "no download selector matched the response"}}
+
+      link ->
+        # Many definitions point their download selector straight at a magnet.
+        # Handing that back as a link would send the grab path off to fetch a
+        # `magnet:` URL over HTTP, which it cannot do.
+        case absolute_link(definition, download_url, link, config) do
+          "magnet:" <> _ = magnet -> {:ok, {:magnet, magnet}}
+          resolved -> {:ok, {:link, resolved}}
+        end
+    end
+  end
+
   defp selector_source(_definition, _url, before_response, _config) when is_map(before_response),
-    do: {:ok, before_response}
+    do: {:ok, {:response, before_response}}
 
   defp selector_source(definition, download_url, _before_response, user_config),
     do: fetch(definition, download_url, user_config)
@@ -275,7 +300,7 @@ defmodule Mydia.Indexers.CardigannDownload do
   defp fetch(definition, url, user_config) do
     params = %{query_params: %{}, headers: [], method: :get, decode_body: false}
 
-    CardigannSearchEngine.execute_http_request(
+    CardigannSearchEngine.execute_download_request(
       definition,
       url,
       params,
