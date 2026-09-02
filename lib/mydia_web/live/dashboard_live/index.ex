@@ -48,6 +48,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:movie_libraries, MediaAddHelpers.candidate_libraries(:movie))
         |> assign(:show_libraries, MediaAddHelpers.candidate_libraries(:tv_show))
         |> assign(:library_picker, nil)
+        |> assign(:add_config, nil)
+        |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
         |> load_dashboard_data()
       else
         socket
@@ -74,6 +76,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:movie_libraries, [])
         |> assign(:show_libraries, [])
         |> assign(:library_picker, nil)
+        |> assign(:add_config, nil)
+        |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
       end
 
     {:ok, socket}
@@ -162,6 +166,55 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   def handle_event("close_library_picker", _params, socket) do
     {:noreply, MediaAddHelpers.clear_library_picker(socket)}
+  end
+
+  def handle_event("open_add_config", params, socket) do
+    {:noreply,
+     MediaAddHelpers.put_add_config(
+       socket,
+       params,
+       socket.assigns.current_user,
+       [socket.assigns.trending_movies, socket.assigns.trending_tv]
+     )}
+  end
+
+  def handle_event("close_add_config", _params, socket) do
+    {:noreply, MediaAddHelpers.clear_add_config(socket)}
+  end
+
+  def handle_event("submit_add_config", %{"config" => params}, socket) do
+    with :ok <- LiveAuthorization.authorize_create_media(socket),
+         %{provider_id: provider_id, media_type: media_type} <- socket.assigns.add_config,
+         {:ok, opts} <-
+           MediaAddHelpers.add_opts_from_config(params, media_type, socket.assigns.current_user) do
+      socket = MediaAddHelpers.clear_add_config(socket)
+
+      if MapSet.member?(socket.assigns.adding_item_ids, provider_id) do
+        {:noreply, socket}
+      else
+        socket =
+          assign(
+            socket,
+            :adding_item_ids,
+            MapSet.put(socket.assigns.adding_item_ids, provider_id)
+          )
+
+        send(self(), {:add_media_to_library_with_opts, provider_id, media_type, opts})
+        {:noreply, socket}
+      end
+    else
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      nil ->
+        {:noreply, socket}
+
+      {:error, :unknown_library} ->
+        {:noreply,
+         socket
+         |> MediaAddHelpers.clear_add_config()
+         |> put_flash(:error, "That library is no longer available. Nothing was added.")}
+    end
   end
 
   def handle_event(
@@ -317,6 +370,10 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:ok, opts} ->
         add_with_opts(provider_id, media_type, opts, socket)
     end
+  end
+
+  def handle_info({:add_media_to_library_with_opts, provider_id, media_type, opts}, socket) do
+    add_with_opts(provider_id, media_type, opts, socket)
   end
 
   def handle_info({:request_media, provider_id, media_type}, socket) do

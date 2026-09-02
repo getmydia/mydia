@@ -399,4 +399,9 @@
   <%!-- Rendered once per page rather than once per card. See
         library_picker_dialog/1 for why an anchored menu cannot work here. --%>
   <.library_picker_dialog picker={@library_picker} />
+
+  <MydiaWeb.AddMediaComponents.add_config_modal
+    config={@add_config}
+    quality_profiles={@quality_profiles}
+  />
 </Layouts.app>
