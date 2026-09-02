@@ -1,0 +1,46 @@
+<Layouts.app {assigns}>
+  <.admin_page active_tab={@active_tab}>
+    <MydiaWeb.AdminTrashLive.Components.summary_bar
+      summary={@summary}
+      retention_days={@retention_days}
+    />
+
+    <div :if={@scanning} class="alert mb-5">
+      <span class="loading loading-spinner loading-sm"></span> Reading the trash directory...
+    </div>
+
+    <div :if={@sweeping} class="alert mb-5">
+      <span class="loading loading-spinner loading-sm"></span> Sweeping the trash directory...
+    </div>
+
+    <MydiaWeb.AdminTrashLive.Components.audit_result :if={@audit} audit={@audit} />
+
+    <MydiaWeb.AdminTrashLive.Components.reason_filters counts={@counts} active={@reason} />
+
+    <MydiaWeb.AdminTrashLive.Components.bulk_bar
+      selection={@selection}
+      total_matching={@total_matching}
+      page_size={@page_size}
+    />
+
+    <MydiaWeb.AdminTrashLive.Components.trash_list
+      files={@files}
+      retention_days={@retention_days}
+      selection={@selection}
+    />
+
+    <MydiaWeb.AdminTrashLive.Components.pagination
+      :if={@total_matching > @page_size}
+      page={@page}
+      page_size={@page_size}
+      total_matching={@total_matching}
+    />
+
+    <%= if @show_empty_modal do %>
+      <MydiaWeb.AdminTrashLive.Components.empty_confirm_modal
+        count={@summary.count}
+        bytes={@summary.bytes}
+      />
+    <% end %>
+  </.admin_page>
+</Layouts.app>

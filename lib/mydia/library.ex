@@ -20,9 +20,9 @@ defmodule Mydia.Library do
   def total_storage_bytes do
     MediaFile
     |> where([f], is_nil(f.trashed_at))
-    |> select([f], type(sum(f.size), :integer))
+    |> select([f], sum(f.size))
     |> Repo.one()
-    |> Kernel.||(0)
+    |> to_integer()
   end
 
   @doc """
@@ -660,6 +660,11 @@ defmodule Mydia.Library do
   three re-scan functions in this module pass it: a file the diff called
   missing but that has since reappeared must never be moved out of the
   library.
+
+    * `:reason` - why this file is being trashed, one of `:missing`,
+      `:upgraded`, `:upgrade_rejected`, `:pruned` or `:manual`. Optional;
+      omitting it leaves `trashed_reason` nil, which the trash page renders as
+      "Unknown". Every caller in this codebase passes one.
   """
   @spec trash_media_file(MediaFile.t(), keyword()) ::
           {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
@@ -671,6 +676,7 @@ defmodule Mydia.Library do
         media_file
         |> Ecto.Changeset.change(
           trashed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          trashed_reason: Keyword.get(opts, :reason),
           metadata: put_trash_state(media_file.metadata, outcome)
         )
         |> Repo.update()
@@ -748,9 +754,18 @@ defmodule Mydia.Library do
   left where it is rather than clobbering what is there, and the row keeps
   pointing at it so those bytes stay reclaimable instead of becoming an
   untracked file under `.mydia-trash/`.
+
+  The retained case returns `{:ok, media_file, :trash_copy_retained}` rather
+  than a plain `{:ok, media_file}`, because a caller has to tell the operator
+  that two copies now exist and only one of them is the library's. This
+  mirrors `delete_media_file/2`, which already signals a partial success the
+  same way.
   """
   @spec restore_media_file(MediaFile.t()) ::
-          {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
+          {:ok, MediaFile.t()}
+          | {:ok, MediaFile.t(), :trash_copy_retained}
+          | {:error, Ecto.Changeset.t()}
+          | {:error, term()}
   def restore_media_file(%MediaFile{} = media_file) do
     media_file = Repo.preload(media_file, :library_path)
 
@@ -759,14 +774,19 @@ defmodule Mydia.Library do
         media_file
         |> Ecto.Changeset.change(
           trashed_at: nil,
+          trashed_reason: nil,
           metadata: drop_trash_state(media_file.metadata)
         )
         |> Repo.update()
 
       {:ok, :trash_copy_retained} ->
         media_file
-        |> Ecto.Changeset.change(trashed_at: nil)
+        |> Ecto.Changeset.change(trashed_at: nil, trashed_reason: nil)
         |> Repo.update()
+        |> case do
+          {:ok, restored} -> {:ok, restored, :trash_copy_retained}
+          {:error, changeset} -> {:error, changeset}
+        end
 
       {:error, reason} ->
         Logger.error("Could not restore a trashed media file",
@@ -804,7 +824,7 @@ defmodule Mydia.Library do
 
     expired =
       from(f in MediaFile,
-        where: not is_nil(f.trashed_at) and f.trashed_at < ^cutoff,
+        where: not is_nil(f.trashed_at) and f.trashed_at <= ^cutoff,
         preload: :library_path
       )
       |> Repo.all()
@@ -828,11 +848,152 @@ defmodule Mydia.Library do
       from(f in MediaFile,
         where:
           f.id in ^ids and not is_nil(f.trashed_at) and
-            f.trashed_at < ^cutoff
+            f.trashed_at <= ^cutoff
       )
       |> Repo.delete_all()
 
     {:ok, count}
+  end
+
+  @doc """
+  Lists trashed media files for the operator-facing trash page.
+
+  Newest first, because the thing an operator wants to undo is almost always
+  the thing that just happened.
+
+  ## Options
+
+    * `:reason` - restrict to one `trashed_reason`. `nil` (the default) returns
+      every trashed row regardless of reason. To select rows whose reason is
+      itself unknown, pass `:unknown`; a literal `nil` cannot mean both "no
+      filter" and "filter to no reason".
+    * `:limit`, `:offset` - pagination.
+    * `:preload` - passed to `Mydia.QueryHelpers.maybe_preload/2`.
+  """
+  @spec list_trashed_media_files(keyword()) :: [MediaFile.t()]
+  def list_trashed_media_files(opts \\ []) do
+    MediaFile
+    |> where([f], not is_nil(f.trashed_at))
+    |> filter_by_trashed_reason(Keyword.get(opts, :reason))
+    |> order_by([f], desc: f.trashed_at, desc: f.id)
+    |> maybe_limit(Keyword.get(opts, :limit))
+    |> maybe_offset(Keyword.get(opts, :offset))
+    |> maybe_preload(opts[:preload])
+    |> Repo.all()
+  end
+
+  defp filter_by_trashed_reason(query, nil), do: query
+
+  defp filter_by_trashed_reason(query, :unknown),
+    do: where(query, [f], is_nil(f.trashed_reason))
+
+  defp filter_by_trashed_reason(query, reason) when is_atom(reason),
+    do: where(query, [f], f.trashed_reason == ^reason)
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, n) when is_integer(n), do: limit(query, ^n)
+
+  defp maybe_offset(query, nil), do: query
+  defp maybe_offset(query, n) when is_integer(n), do: offset(query, ^n)
+
+  @doc """
+  Counts trashed media files grouped by reason, for the filter chips.
+
+  The map is keyed by the `trashed_reason` atom, with `nil` holding rows
+  trashed before the column existed. A reason with no rows is absent from the
+  map rather than present with a zero.
+  """
+  @spec count_trashed_media_files() :: %{optional(atom()) => non_neg_integer()}
+  def count_trashed_media_files do
+    MediaFile
+    |> where([f], not is_nil(f.trashed_at))
+    |> group_by([f], f.trashed_reason)
+    |> select([f], {f.trashed_reason, count(f.id)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc """
+  Count and total bytes of everything in the trash.
+
+  One aggregate over `media_files`, with no filesystem access at all: this
+  runs on every render of the trash page, and a disconnected NAS mount must
+  not be able to hang it. Bytes nothing accounts for are a separate,
+  operator-triggered concern; see `Mydia.Library.TrashStore.audit/0`.
+  """
+  @spec trashed_summary() :: %{count: non_neg_integer(), bytes: non_neg_integer()}
+  def trashed_summary do
+    {count, bytes} =
+      MediaFile
+      |> where([f], not is_nil(f.trashed_at))
+      |> select([f], {count(f.id), sum(f.size)})
+      |> Repo.one()
+
+    %{count: count || 0, bytes: to_integer(bytes)}
+  end
+
+  # `sum/1` returns an integer on SQLite and a `Decimal` on PostgreSQL, and
+  # every byte figure on the trash page goes through arithmetic that raises on
+  # a Decimal, so the page 500s on Postgres without this.
+  #
+  # Casting in SQL with `type(sum(f.size), :integer)` looks tidier and is
+  # wrong: Postgres `integer` is 4 bytes, so it raises "integer out of range"
+  # above 2.1 GB, which every real library passes. Elixir integers have no
+  # such ceiling.
+  defp to_integer(nil), do: 0
+  defp to_integer(%Decimal{} = decimal), do: Decimal.to_integer(decimal)
+  defp to_integer(bytes) when is_integer(bytes), do: bytes
+
+  @doc """
+  Permanently deletes one trashed media file: its bytes and then its row.
+
+  The same pair `purge_old_trashed_media_files/1` runs, for a single row the
+  operator picked by hand. `TrashStore.discard/2` decides what may be deleted
+  from the trash state recorded on the row, which is why this must never do
+  its own `File.rm/1`: a row trashed while its file was already missing may
+  have a live file at its library path today.
+
+  Returns `{:error, :not_trashed}` rather than deleting an active row.
+  """
+  @spec purge_media_file(MediaFile.t()) :: :ok | {:error, term()}
+  def purge_media_file(%MediaFile{trashed_at: nil}), do: {:error, :not_trashed}
+
+  def purge_media_file(%MediaFile{} = media_file) do
+    media_file = Repo.preload(media_file, :library_path)
+
+    with :ok <- TrashStore.discard(media_file, trash_state(media_file)) do
+      delete_if_still_trashed(media_file)
+    end
+  end
+
+  # The clause above only sees the `trashed_at` the struct was loaded with,
+  # and `Repo.delete/1` matches on the primary key alone, so a restore that
+  # landed in between - another tab, another operator - would have its now
+  # active row deleted out from under it. Deleting under the same
+  # `trashed_at IS NOT NULL` guard `purge_old_trashed_media_files/1` already
+  # uses makes losing that race a refusal instead.
+  defp delete_if_still_trashed(%MediaFile{id: id}) do
+    from(f in MediaFile, where: f.id == ^id and not is_nil(f.trashed_at))
+    |> Repo.delete_all()
+    |> case do
+      {1, _} -> :ok
+      {0, _} -> {:error, :not_trashed}
+    end
+  end
+
+  @doc """
+  Fetches one trashed media file by id, or nil.
+
+  Returns nil for an active row as well as a missing one: every caller is a
+  trash page action, and acting on a row somebody restored in another tab is
+  exactly the case this must refuse.
+  """
+  @spec get_trashed_media_file(binary(), keyword()) :: MediaFile.t() | nil
+  def get_trashed_media_file(id, opts \\ []) do
+    MediaFile
+    |> where([f], f.id == ^id and not is_nil(f.trashed_at))
+    |> maybe_preload(opts[:preload])
+    |> Repo.one()
   end
 
   # How a row came to be trashed, recorded on the row itself. Three states,
@@ -1269,7 +1430,7 @@ defmodule Mydia.Library do
                 missing_files
                 |> reject_files_still_on_disk()
                 |> Enum.count(fn file ->
-                  match?({:ok, _}, trash_media_file(file, move: false))
+                  match?({:ok, _}, trash_media_file(file, move: false, reason: :missing))
                 end)
 
               Logger.info("Found new files during re-scan",
@@ -1444,7 +1605,7 @@ defmodule Mydia.Library do
                 missing_files
                 |> reject_files_still_on_disk()
                 |> Enum.count(fn file ->
-                  match?({:ok, _}, trash_media_file(file, move: false))
+                  match?({:ok, _}, trash_media_file(file, move: false, reason: :missing))
                 end)
 
               Logger.info("Found new files for season during re-scan",
@@ -1602,7 +1763,7 @@ defmodule Mydia.Library do
                 missing_files
                 |> reject_files_still_on_disk()
                 |> Enum.count(fn file ->
-                  match?({:ok, _}, trash_media_file(file, move: false))
+                  match?({:ok, _}, trash_media_file(file, move: false, reason: :missing))
                 end)
 
               Logger.info("Found new files during movie re-scan",

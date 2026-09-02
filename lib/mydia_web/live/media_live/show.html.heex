@@ -361,7 +361,7 @@
   <%= if @show_file_delete_confirm && @file_to_delete do %>
     <Modals.file_delete_confirm_modal
       file_to_delete={@file_to_delete}
-      delete_file_from_disk={@delete_file_from_disk}
+      file_delete_mode={@file_delete_mode}
     />
   <% end %>
   <%= if @show_file_details_modal && @file_details do %>
