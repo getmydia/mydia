@@ -131,6 +131,63 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesTest do
              )
   end
 
+  @tag :tmp_dir
+  test "rejects a second active row at the same library path and relative path" do
+    build_pre_migration_schema()
+
+    seed_library_path("lib-plain", "/media/movies")
+    seed_media_item("item-1")
+    seed_media_file("first", "lib-plain", "Silver Harbour (2019)/Silver.Harbour.mkv", "item-1")
+
+    run_migration!(FoldDuplicateMediaFilesAndEnforcePathUniqueness, @version)
+
+    assert_raise Exqlite.Error, fn ->
+      seed_media_file("second", "lib-plain", "Silver Harbour (2019)/Silver.Harbour.mkv", "item-1")
+    end
+
+    # A trashed row at the same path is outside the partial index.
+    seed_media_file("third", "lib-plain", "Silver Harbour (2019)/Silver.Harbour.mkv", "item-1",
+      trashed_at: "2026-08-01 00:00:00"
+    )
+
+    assert %{rows: [[2]]} = sql!("SELECT count(*) FROM media_files")
+  end
+
+  @tag :tmp_dir
+  test "folds two active rows sharing a path under a non-absolute library root" do
+    build_pre_migration_schema()
+
+    seed_library_path("lib-relative", "media/movies")
+    seed_media_item("item-1")
+
+    seed_media_file(
+      "first",
+      "lib-relative",
+      "Quiet Ledger (2017)/Quiet.Ledger.mkv",
+      "item-1"
+    )
+
+    seed_media_file(
+      "second",
+      "lib-relative",
+      "Quiet Ledger (2017)/Quiet.Ledger.mkv",
+      "item-1"
+    )
+
+    run_migration!(FoldDuplicateMediaFilesAndEnforcePathUniqueness, @version)
+
+    assert %{rows: [[1]]} = sql!("SELECT count(*) FROM media_files")
+
+    assert_raise Exqlite.Error, fn ->
+      seed_media_file(
+        "third",
+        "lib-relative",
+        "Quiet Ledger (2017)/Quiet.Ledger.mkv",
+        "item-1"
+      )
+    end
+  end
+
   defp build_pre_migration_schema do
     sql!("CREATE TABLE library_paths (id TEXT PRIMARY KEY, path TEXT NOT NULL)")
     sql!("CREATE TABLE media_items (id TEXT PRIMARY KEY)")

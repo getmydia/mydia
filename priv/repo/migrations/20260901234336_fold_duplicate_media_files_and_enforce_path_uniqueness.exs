@@ -15,6 +15,10 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesAndEnforcePathUniqueness 
   # Rows are grouped by canonical absolute path rather than by the index
   # columns, so two library paths over the same tree (a bind mount, a symlink,
   # a trailing slash) fold together even though the index cannot express that.
+  # Rows whose library root is not absolute cannot be canonicalized this way,
+  # so they get a second, narrower pass keyed on the literal
+  # (library_path_id, relative_path) pair instead, exactly what the index
+  # enforces. See fold_duplicates/0.
   #
   # Losers are deleted outright rather than marked trashed.
   # Library.purge_old_trashed_media_files/1 treats a trashed row carrying
@@ -42,17 +46,26 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesAndEnforcePathUniqueness 
 
   def up do
     fold_duplicates()
+
+    create unique_index(:media_files, [:library_path_id, :relative_path],
+             where: "trashed_at IS NULL",
+             name: :media_files_active_library_path_relative_path_index
+           )
   end
 
   # The fold is not reversible: the losing rows are gone. Rolling back only
   # lifts the constraint.
-  def down, do: :ok
+  def down do
+    drop unique_index(:media_files, [:library_path_id, :relative_path],
+           name: :media_files_active_library_path_relative_path_index
+         )
+  end
 
   defp fold_duplicates do
     %{rows: rows} =
       repo().query!(
         """
-        SELECT mf.id, lp.path, mf.relative_path, mf.inserted_at
+        SELECT mf.id, mf.library_path_id, lp.path, mf.relative_path, mf.inserted_at
         FROM media_files mf
         JOIN library_paths lp ON lp.id = mf.library_path_id
         WHERE mf.trashed_at IS NULL AND mf.relative_path IS NOT NULL
@@ -63,37 +76,63 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesAndEnforcePathUniqueness 
     # A relative library root cannot be canonicalized without knowing the
     # working directory the migration happened to run in, and folding on a
     # guessed path would delete rows for files that are not actually the same
-    # file. Rows whose root is not absolute are excluded from folding
-    # entirely rather than trusted; nothing in
-    # lib/mydia/settings/library_path.ex enforces that library_paths.path is
-    # absolute, so this cannot be assumed away.
+    # file. Rows whose root is not absolute are excluded from this canonical
+    # pass rather than trusted; nothing in lib/mydia/settings/library_path.ex
+    # enforces that library_paths.path is absolute, so this cannot be assumed
+    # away. They still go through fold_skipped/1 below.
     {foldable, skipped} =
-      Enum.split_with(rows, fn [_id, library_root, _relative_path, _inserted_at] ->
-        Path.type(library_root) == :absolute
+      Enum.split_with(rows, fn
+        [_id, _library_path_id, library_root, _relative_path, _inserted_at] ->
+          Path.type(library_root) == :absolute
       end)
 
     if skipped != [] do
       Logger.warning(
-        "fold_duplicate_media_files_and_enforce_path_uniqueness: skipped #{length(skipped)} " <>
-          "media_files row(s) whose library_paths.path is not absolute; they were not " <>
-          "considered for duplicate folding"
+        "fold_duplicate_media_files_and_enforce_path_uniqueness: #{length(skipped)} " <>
+          "media_files row(s) have a library_paths.path that is not absolute; they were " <>
+          "folded on the literal (library_path_id, relative_path) pair only, not the " <>
+          "canonicalized path"
       )
     end
 
     foldable
-    |> Enum.group_by(fn [_id, library_root, relative_path, _inserted_at] ->
+    |> Enum.group_by(fn [_id, _library_path_id, library_root, relative_path, _inserted_at] ->
       Path.expand(Path.join(library_root, relative_path))
     end)
-    |> Enum.each(fn
-      {_canonical, [_only_one]} -> :ok
-      {_canonical, duplicates} -> fold_group(duplicates)
+    |> fold_groups()
+
+    fold_skipped(skipped)
+  end
+
+  # The unique index this migration creates is keyed on the literal
+  # (library_path_id, relative_path) pair, not a canonicalized path. Rows
+  # that fold_duplicates/0 could not canonicalize never went through that
+  # fold, so two of them can still share the literal pair and would make the
+  # index impossible to create. The pair is unambiguous no matter whether the
+  # library root is absolute, so it is safe to fold on directly here. The
+  # join and WHERE clause in fold_duplicates/0 already guarantee every row
+  # reaching this function has a non-nil library_path_id and relative_path.
+  defp fold_skipped(skipped) do
+    skipped
+    |> Enum.group_by(fn [_id, library_path_id, _library_root, relative_path, _inserted_at] ->
+      {library_path_id, relative_path}
+    end)
+    |> fold_groups()
+  end
+
+  defp fold_groups(groups) do
+    Enum.each(groups, fn
+      {_key, [_only_one]} -> :ok
+      {_key, duplicates} -> fold_group(duplicates)
     end)
   end
 
   defp fold_group(duplicates) do
     [{winner_id, _, _} | losers] =
       duplicates
-      |> Enum.map(fn [id, _library_root, _relative_path, inserted_at] ->
+      |> Enum.map(fn row ->
+        id = List.first(row)
+        inserted_at = List.last(row)
         {id, dependent_count(id), to_string(inserted_at)}
       end)
       |> Enum.sort_by(fn {id, count, inserted_at} -> {-count, inserted_at, id} end)
