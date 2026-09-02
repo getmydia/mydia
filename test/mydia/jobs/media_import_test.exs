@@ -1717,6 +1717,109 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
   end
 
+  describe "duplicate active path race" do
+    @tag :tmp_dir
+    test "adopts the row that already occupies the destination instead of failing the import",
+         %{tmp_dir: tmp_dir} do
+      # Migration 20260901234336 added a partial unique index on
+      # (library_path_id, relative_path) WHERE trashed_at IS NULL, so a
+      # concurrent insert that lands on a path this job also resolves to now
+      # surfaces as a changeset error instead of silently creating a second
+      # row. duplicate_active_path_error?/1 and adopt_duplicate_active_path/3
+      # catch that specific violation and adopt the row that won the race —
+      # nothing exercised that path before this test.
+      #
+      # auto_rename: false pins the destination filename to the source
+      # filename, so the exact (library_path_id, relative_path) pair this
+      # import will hit is known up front and can be pre-occupied by another
+      # row.
+      library_path = create_test_library_path(tmp_dir, :movies, auto_rename: false)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      source_name = "Umbra.Vale.2015.1080p.BluRay.x264-FICTION.mkv"
+      File.write!(Path.join(download_dir, source_name), "the freshly downloaded copy")
+
+      media_item = media_item_fixture(%{type: "movie", title: "Umbra Vale", year: 2015})
+
+      relative_path = "Umbra Vale (2015)/#{source_name}"
+      dest_path = Path.join(library_path.path, relative_path)
+
+      # Pre-existing active row at the exact (library_path_id, relative_path)
+      # pair the import will resolve to — standing in for the row a
+      # concurrent import already committed. Its physical file is
+      # deliberately never written, which is what forces the code past the
+      # `File.exists?(dest_path)` reuse branch in
+      # import_file_to_existing_dir/6 (media_import.ex:1478) — that earlier
+      # branch would short-circuit the whole test if the file existed,
+      # without ever reaching create_media_file_record/5's insert.
+      existing =
+        media_file_fixture(%{
+          library_path_id: library_path.id,
+          media_item_id: media_item.id,
+          relative_path: relative_path
+        })
+
+      refute File.exists?(dest_path),
+             "setup must leave the destination unwritten so the import reaches the insert " <>
+               "instead of the earlier File.exists? reuse branch"
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "RaceClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "RaceClient",
+          download_client_id: "race-1"
+        })
+
+      args = %{"download_id" => download.id, "save_path" => download_dir}
+
+      # The pre-existing row above is active (trashed_at nil), so the partial
+      # unique index unconditionally rejects any insert at this
+      # (library_path_id, relative_path) pair — this is not a race that
+      # might not fire, it fires every time. The only way perform_job/1 can
+      # return {:ok, :imported} here rather than crash the job (a raised
+      # Exqlite/Postgrex error, if the changeset's unique_constraint names
+      # did not match the driver's reported constraint) or return an
+      # {:error, ...} tuple (a mismatch caught by duplicate_active_path_error?/1
+      # that fell through to the generic :database_error branch) is for
+      # duplicate_active_path_error?/1 to recognize the violation and
+      # adopt_duplicate_active_path/3 to look up and return the row that was
+      # already there. There is no other branch in create_media_file_record/5
+      # that produces this outcome.
+      assert {:ok, :imported} = perform_job(MediaImport, args)
+
+      assert File.exists?(dest_path),
+             "the file placement that races the insert must still have happened"
+
+      rows =
+        Repo.all(
+          from(f in Library.MediaFile,
+            where: f.library_path_id == ^library_path.id and f.relative_path == ^relative_path
+          )
+        )
+
+      assert [%{id: id}] = rows,
+             "the unique index must prevent a second row from ever existing at this path"
+
+      assert id == existing.id,
+             "the surviving row must be the one that already existed, not a fresh insert"
+    end
+  end
+
   describe "download client removed from configuration" do
     # A download whose `download_client` no longer resolves to any configured
     # client cannot self-heal: every retry re-reads the same config and gets the
