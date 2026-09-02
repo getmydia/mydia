@@ -327,6 +327,9 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("auto_search_episode", params, socket),
     do: SearchEvents.auto_search_episode(params, socket)
 
+  def handle_event("not_this_item", params, socket),
+    do: FileEvents.not_this_item(params, socket)
+
   def handle_event("show_file_delete_confirm", params, socket),
     do: FileEvents.show_file_delete_confirm(params, socket)
 

@@ -375,6 +375,70 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   defp delete_file_success_message(false),
     do: "Media file removed from library, file kept on disk"
 
+  @doc """
+  Detaches a file the matcher filed against the wrong item and sends it back to
+  the review inbox.
+
+  The row goes, the bytes stay. An import candidate is created at the file's
+  current path so `/review` can match it against the right item with the search
+  and rematch controls it already has, rather than duplicating an item picker
+  here.
+  """
+  def not_this_item(%{"file-id" => file_id}, socket) do
+    with :ok <- Authorization.authorize_delete_media(socket) do
+      file = Library.get_media_file!(file_id) |> Mydia.Repo.preload(:library_path)
+
+      case detach_to_review(file) do
+        :ok ->
+          {:noreply,
+           socket
+           |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+           |> put_flash(
+             :info,
+             "File removed from this item and sent to Review. The file is untouched on disk."
+           )}
+
+        {:error, :no_library_path} ->
+          {:noreply,
+           put_flash(
+             socket,
+             :error,
+             "This file predates library paths, so it cannot be sent to Review. " <>
+               "Use Delete with \"keep file on disk\" instead."
+           )}
+
+        {:error, _reason} ->
+          {:noreply, put_flash(socket, :error, "Could not send this file to Review")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # A legacy row carrying only `path` has no `(library_path_id, relative_path)`
+  # pair, and import candidates are keyed by exactly that, so there is nowhere
+  # for it to go.
+  defp detach_to_review(%{library_path: %{} = library_path, relative_path: relative_path} = file)
+       when is_binary(relative_path) do
+    absolute_path = Path.join(library_path.path, relative_path)
+    anchor = Mydia.Library.PathAnchor.anchor_for(absolute_path, library_path.path)
+
+    attrs = %{
+      library_path_id: library_path.id,
+      relative_path: relative_path,
+      anchor_key: anchor.cluster_key,
+      size: file.size,
+      discovered_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    }
+
+    with {:ok, _candidate} <- Mydia.ImportCandidates.upsert(attrs),
+         {:ok, _} <- Library.delete_media_file(file, delete_files: false) do
+      :ok
+    end
+  end
+
+  defp detach_to_review(_file), do: {:error, :no_library_path}
+
   def show_file_details(%{"file-id" => file_id}, socket) do
     # Without the preload, MediaFile.absolute_path/1 hits its
     # Ecto.Association.NotLoaded clause, logs a warning and returns nil, and

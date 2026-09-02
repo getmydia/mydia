@@ -873,6 +873,29 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     >
                       <.icon name="hero-star" class="w-5 h-5" />
                     </button>
+                    <%!-- Recovery for a file the matcher attached to the wrong
+                          item. Delete is the only other control on this row,
+                          and it is the wrong answer: the file is fine, it is
+                          filed against the wrong thing. --%>
+                    <button
+                      id={"not-this-item-#{file.id}"}
+                      type="button"
+                      phx-click="not_this_item"
+                      phx-value-file-id={file.id}
+                      class="btn btn-ghost btn-square sm:btn-sm"
+                      aria-label={
+                        if @media_item.type == "movie",
+                          do: "This file is not this movie",
+                          else: "This file is not this show"
+                      }
+                      title={
+                        if @media_item.type == "movie",
+                          do: "Not this movie",
+                          else: "Not this show"
+                      }
+                    >
+                      <.icon name="hero-arrow-uturn-left" class="w-5 h-5" />
+                    </button>
                     <button
                       type="button"
                       phx-click="show_file_delete_confirm"
