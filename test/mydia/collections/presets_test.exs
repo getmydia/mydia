@@ -11,7 +11,7 @@ defmodule Mydia.Collections.PresetsTest do
   alias Mydia.Collections.SmartRules
 
   test "the catalog is not empty" do
-    assert length(Presets.list()) > 0
+    assert Presets.list() != []
   end
 
   test "every preset validates" do

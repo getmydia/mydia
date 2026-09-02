@@ -5,6 +5,7 @@ defmodule MydiaWeb.CollectionLive.IndexTest do
 
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
+  import Mydia.MediaFixtures
 
   alias Mydia.Collections
 
@@ -80,6 +81,59 @@ defmodule MydiaWeb.CollectionLive.IndexTest do
 
       view |> element("#close-preset-gallery") |> render_click()
       refute has_element?(view, "#preset-gallery-modal")
+    end
+  end
+
+  describe "preset counts" do
+    # Guards against the three count states being conflated. Design intent is
+    # explicit that a loaded zero must render as "0 items" and stay addable,
+    # never fall back to the not-yet-loaded spinner (a regression a naive
+    # `if @count do ... else spinner end` would introduce silently).
+    test "a preset with zero matches still shows \"0 items\" and stays addable",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/collections")
+      view |> element("#browse-presets-button") |> render_click()
+
+      # No media exists yet, so every preset's count is a genuine, loaded
+      # zero rather than "not loaded yet".
+      render_async(view, 2000)
+
+      assert has_element?(view, "#preset-card-decade_2000s", "0 items")
+      assert has_element?(view, "#preset-add-decade_2000s")
+      refute has_element?(view, "#preset-added-decade_2000s")
+
+      add_button_html = view |> element("#preset-add-decade_2000s") |> render()
+      refute add_button_html =~ "disabled"
+    end
+
+    test "a preset with matches shows the real count", %{conn: conn} do
+      media_item_fixture(%{type: "movie", title: "Static Horizon", year: 2005})
+      media_item_fixture(%{type: "movie", title: "Nebula Drift", year: 2005})
+      # Outside the 2000s range: proves the count is a real query result and
+      # not just "however many media items exist".
+      media_item_fixture(%{type: "movie", title: "Copper Skyline", year: 1975})
+
+      {:ok, view, _html} = live(conn, ~p"/collections")
+      view |> element("#browse-presets-button") |> render_click()
+
+      render_async(view, 2000)
+
+      assert has_element?(view, "#preset-card-decade_2000s", "2 items")
+    end
+
+    # render_click's return value is a snapshot taken synchronously while the
+    # LiveView handles the click and replies over the test channel, strictly
+    # before it can process the start_async task's completion message (a
+    # GenServer only picks up its next mailbox message once the current one
+    # is fully handled). So this does not race the async count query,
+    # regardless of how fast that query runs.
+    test "counts start as spinners before the async query resolves", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/collections")
+
+      html = view |> element("#browse-presets-button") |> render_click()
+
+      assert html =~ "loading loading-spinner loading-xs"
+      refute html =~ "0 items"
     end
   end
 end
