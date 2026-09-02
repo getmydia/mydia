@@ -12,9 +12,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata.Ref
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
+  alias MydiaWeb.MediaLive.Show.DetailModalEvents
 
   require Logger
 
@@ -144,7 +146,14 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
          {:ok, ref} <- Ref.parse(raw_ref) do
       id_string = to_string(Ref.id(ref))
 
-      case Enum.find(socket.assigns.recommendations, &(to_string(&1.provider_id) == id_string)) do
+      # Also resolves against the franchise strip and the dialog's own rail
+      # (:selected_recommendations). A title reached only by opening the dialog
+      # over a franchise entry, or by scrolling the rail inside the dialog
+      # itself, is in neither of this page's own lists, and searching just
+      # :recommendations dropped a guest's Request click there silently.
+      # Discover hit the same failure for its modal; see the explanatory
+      # comment on its `{:request_media, ...}` handle_info clause.
+      case DetailModal.find_selectable_item(DetailModalEvents.item_lists(socket), id_string) do
         nil -> {:noreply, socket}
         item -> submit_request(item, id_string, socket)
       end
@@ -165,16 +174,27 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
            socket.assigns.current_user.id
          ) do
       {:ok, request, status_updates} ->
+        socket =
+          socket
+          |> assign(:requesting_recommendation_id, nil)
+          |> assign(
+            :recommendations,
+            MediaRequestHelpers.enrich_with_request_status(
+              socket.assigns.recommendations,
+              status_updates
+            )
+          )
+          |> assign(
+            :selected_recommendations,
+            MediaRequestHelpers.enrich_with_request_status(
+              socket.assigns[:selected_recommendations] || [],
+              status_updates
+            )
+          )
+
         {:noreply,
          socket
-         |> assign(:requesting_recommendation_id, nil)
-         |> assign(
-           :recommendations,
-           MediaRequestHelpers.enrich_with_request_status(
-             socket.assigns.recommendations,
-             status_updates
-           )
-         )
+         |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
          |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
 
       {:error, reason} ->
@@ -215,20 +235,36 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   def handle_add_result(tmdb_id, {:ok, {:ok, added}}, socket) do
+    socket =
+      socket
+      |> clear_in_flight(tmdb_id)
+      |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+      |> assign(
+        :selected_recommendations,
+        mark_owned(socket.assigns[:selected_recommendations] || [], added, navigate: false)
+      )
+
     {:noreply,
      socket
-     |> clear_in_flight(tmdb_id)
-     |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
      |> put_flash(:info, "Added #{added.title} to your library")}
   end
 
   # Not an error from here up: the title the user clicked is already in the
   # library, just under a card this rail had not linked up yet.
   def handle_add_result(tmdb_id, {:ok, {:already_in_library, added}}, socket) do
+    socket =
+      socket
+      |> clear_in_flight(tmdb_id)
+      |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+      |> assign(
+        :selected_recommendations,
+        mark_owned(socket.assigns[:selected_recommendations] || [], added, navigate: false)
+      )
+
     {:noreply,
      socket
-     |> clear_in_flight(tmdb_id)
-     |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
      |> put_flash(:info, "#{added.title} is already in your library")}
   end
 
@@ -289,9 +325,14 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     end
   end
 
-  # Add.parse_provider_id/1 raises on a non-numeric binary. TMDB ids are always
-  # numeric, but one malformed entry must not take down the whole rail.
-  defp safe_provider_id(result) do
+  @doc """
+  Parses a provider id, or nil when it is not numeric.
+
+  `Add.parse_provider_id/1` raises on a non-numeric binary. TMDB ids are always
+  numeric, but one malformed entry must not take down a rail. Public because the
+  detail dialog's own rail needs the same guard.
+  """
+  def safe_provider_id(result) do
     Add.parse_provider_id(result.provider_id)
   rescue
     ArgumentError -> nil
@@ -313,14 +354,30 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     )
   end
 
-  defp mark_owned(recommendations, added) do
+  # `navigate: true` (the default) is correct for the page's own :recommendations
+  # rail: an owned recommendation should link to its own media page. It must stay
+  # `navigate: false` for the dialog's :selected_recommendations rail, because
+  # `DiscoverComponents.trending_card/1` checks `@navigate` before `@on_select`,
+  # so a navigate target would turn the poster into a link that leaves the page
+  # and closes the dialog out from under the user mid-browse, instead of
+  # re-opening the dialog over that title. See the module doc on
+  # `DetailModalEvents.decorate/2` for the read-path half of the same rule.
+  defp mark_owned(recommendations, added, opts \\ []) do
+    navigate? = Keyword.get(opts, :navigate, true)
+
     Enum.map(recommendations, fn item ->
       if safe_provider_id(item) == added.tmdb_id do
-        item
-        |> Map.put(:in_library, true)
-        |> Map.put(:id, added.id)
-        |> Map.put(:monitored, added.monitored)
-        |> Map.put(:navigate, ~p"/media/#{added.id}")
+        item =
+          item
+          |> Map.put(:in_library, true)
+          |> Map.put(:id, added.id)
+          |> Map.put(:monitored, added.monitored)
+
+        if navigate? do
+          Map.put(item, :navigate, ~p"/media/#{added.id}")
+        else
+          item
+        end
       else
         item
       end

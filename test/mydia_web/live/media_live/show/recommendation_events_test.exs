@@ -24,7 +24,13 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       recommendations: [],
       adding_recommendation_tmdb_ids: MapSet.new(),
       requesting_recommendation_id: nil,
-      current_user: user_fixture()
+      current_user: user_fixture(),
+      # DetailModal.refresh_selected/2 reads this directly (no default) since
+      # DetailModal.init/1 always sets it before any handler can fire in the
+      # real LiveView. A unit test socket has no mount to run that through, so
+      # it needs the same assign here or a successful request crashes with a
+      # KeyError.
+      selected_item: nil
     }
 
     %Phoenix.LiveView.Socket{
@@ -159,6 +165,43 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       assert updated.assigns.recommendations == recommendations
       assert updated.assigns.requesting_recommendation_id == nil
       assert MediaRequests.list_requests(status: "pending") == []
+    end
+
+    # Regression: this handler searched only :recommendations, but a title
+    # reached by hopping into the dialog's own rail lives solely in
+    # :selected_recommendations. A guest clicking Request on such a card fell
+    # into the `nil` branch and the click silently did nothing. Matches the
+    # fix Discover already shipped for its own modal (see the comment on its
+    # `{:request_media, ...}` handle_info clause).
+    test "a guest requesting a title that lives only in the dialog's own rail creates the request" do
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Current",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      tmdb_id = System.unique_integer([:positive])
+
+      dialog_only_item =
+        result(%{provider_id: to_string(tmdb_id), title: "Dialog Only Title", year: 2018})
+
+      socket =
+        stub_socket(%{
+          media_item: current,
+          recommendations: [],
+          selected_recommendations: [dialog_only_item],
+          current_user: user_fixture(%{role: "guest"})
+        })
+
+      {:noreply, updated} =
+        RecommendationEvents.request_recommendation(%{"ref" => "tmdb:#{tmdb_id}"}, socket)
+
+      assert [request] = MediaRequests.list_requests(status: "pending")
+      assert request.title == "Dialog Only Title"
+      assert request.tmdb_id == tmdb_id
+
+      refute updated.assigns.flash["error"]
     end
   end
 

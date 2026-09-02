@@ -361,7 +361,7 @@
   <%= if @show_file_delete_confirm && @file_to_delete do %>
     <Modals.file_delete_confirm_modal
       file_to_delete={@file_to_delete}
-      delete_file_from_disk={@delete_file_from_disk}
+      file_delete_mode={@file_delete_mode}
     />
   <% end %>
   <%= if @show_file_details_modal && @file_details do %>
@@ -456,6 +456,43 @@
       item_collections={@item_collections}
     />
   <% end %>
+
+  <%!-- Same dialog Discover and the Dashboard use. picker_open guards Escape:
+        library_picker_dialog/1 is z-[1000] above this z-999, both bind
+        phx-window-keydown, and phx-window-keydown is not scoped by visual
+        stacking, so without it one Escape press would close both layers.
+        config_open is false because this page has no configure-before-adding
+        modal; the attr has no default on purpose. --%>
+  <.live_component
+    module={MydiaWeb.Live.Components.TrendingDetailModal}
+    id="media-detail-modal"
+    item={@selected_item}
+    metadata={@selected_metadata}
+    loading={@detail_loading}
+    current_user={@current_user}
+    open={@selected_item != nil}
+    libraries={@target_library_candidates}
+    picker_open={@library_picker != nil}
+    config_open={false}
+    add_event="add_selected_item"
+    request_event="request_selected_item"
+  >
+    <:rail>
+      <DiscoverComponents.media_rail
+        :if={@selected_item}
+        id="media-detail-modal-rail"
+        items={@selected_recommendations}
+        media_type={@selected_item.media_type}
+        current_user={@current_user}
+        adding_ids={@adding_recommendation_tmdb_ids}
+        requesting_item_id={@requesting_recommendation_id}
+        libraries={@target_library_candidates}
+        can_add={@can_create_media}
+        add_event="add_selected_item"
+        request_event="request_selected_item"
+      />
+    </:rail>
+  </.live_component>
 
   <MydiaWeb.LibraryComponents.library_picker_dialog
     picker={@library_picker}

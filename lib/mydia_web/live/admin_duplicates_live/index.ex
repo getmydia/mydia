@@ -54,13 +54,9 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   alias Mydia.Library.Prune
   alias MydiaWeb.AdminDuplicatesLive.Components
 
-  # Mirrors Mydia.Jobs.TrashCleanup's default, so this page never quotes a
-  # retention period that disagrees with what actually purges trashed files.
-  @default_retention_days 30
-
   @impl true
   def mount(_params, _session, socket) do
-    retention_days = Application.get_env(:mydia, :trash_retention_days, @default_retention_days)
+    retention_days = Mydia.Config.get().media.trash_retention_days
 
     {:ok,
      socket

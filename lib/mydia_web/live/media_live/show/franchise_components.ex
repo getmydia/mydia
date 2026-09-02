@@ -26,7 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
   attr :libraries, :list, default: []
 
   def franchise_section(assigns) do
-    assigns = assign(assigns, :items, items(assigns.franchise))
+    assigns = assign(assigns, :items, rail_items(assigns.franchise))
 
     ~H"""
     <DiscoverComponents.media_rail
@@ -38,7 +38,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
       can_add={@can_add}
       adding_ids={@adding_tmdb_ids}
       libraries={@libraries}
-      on_select={nil}
+      on_select="show_details"
       add_event="add_franchise_movie"
       request_event="request_franchise_movie"
     >
@@ -57,11 +57,31 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
     """
   end
 
+  @doc """
+  Maps `FranchiseEntry` structs onto the shape `media_rail/1` and
+  `TrendingDetailModal` both read.
+
+  Public because `DetailModalEvents` resolves a poster click against the same
+  list, and rebuilding it there would be a second place to keep in step.
+  """
+  # A SearchResult rather than a plain map, because TrendingDetailModal reads
+  # media_type, overview and backdrop_path by direct field access and
+  # FranchiseEntry carries none of the three. A plain map raised KeyError and
+  # took the page down the moment a franchise poster opened the dialog.
+  #
+  # overview and backdrop_path stay nil until the dialog's own metadata fetch
+  # lands, so it opens without a synopsis or backdrop for one beat, exactly as
+  # Discover does for a thin search result.
+  #
+  # The Map.put decorations are the same shape the recommendations rail already
+  # carries; see RecommendationEvents.decorate/3.
+  #
   # A franchise entry is a TMDB collection member -- there is no TVDB
-  # equivalent -- so it is built as a real %SearchResult{} with `provider:
-  # :tmdb` rather than a bare map. `Ref.from_search_result/1`, which the shared
-  # card calls to build its `phx-value-ref`, pattern-matches on the struct.
-  defp items(franchise) do
+  # equivalent -- so `provider: :tmdb` rather than `:metadata_relay`, which
+  # named the config type that served the response rather than the provider
+  # owning the id. `Ref.from_search_result/1`, which the shared card calls to
+  # build its `phx-value-ref`, needs the real provider.
+  def rail_items(franchise) do
     Enum.map(franchise.entries, fn entry ->
       %SearchResult{
         provider_id: to_string(entry.tmdb_id),
@@ -70,16 +90,14 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
         title: entry.title,
         year: entry.year,
         poster_path: entry.poster_path,
-        vote_average: entry.vote_average
+        vote_average: entry.vote_average,
+        id: entry.media_item_id
       }
-      |> Map.merge(%{
-        in_library: entry.in_library?,
-        monitored: entry.monitored,
-        id: entry.media_item_id,
-        navigate: navigate_to(entry),
-        current: entry.current?,
-        request_status: entry.request_status
-      })
+      |> Map.put(:in_library, entry.in_library?)
+      |> Map.put(:monitored, entry.monitored)
+      |> Map.put(:navigate, navigate_to(entry))
+      |> Map.put(:current, entry.current?)
+      |> Map.put(:request_status, entry.request_status)
     end)
   end
 

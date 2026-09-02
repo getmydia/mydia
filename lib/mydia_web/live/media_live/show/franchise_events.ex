@@ -10,8 +10,10 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.MediaLive.Show.DetailModalEvents
 
   require Logger
 
@@ -152,20 +154,34 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   end
 
   def handle_add_result(tmdb_id, {:ok, {:ok, added}}, socket) do
+    # Bound before building the item lists: item_lists/1 reads
+    # socket.assigns.franchise, and passing the pre-assign socket straight into
+    # the pipeline below would refresh the dialog from the stale franchise, so
+    # its header would keep the old ownership after an add made from inside it.
+    socket =
+      socket
+      |> clear_in_flight(tmdb_id)
+      |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+
     {:noreply,
      socket
-     |> clear_in_flight(tmdb_id)
-     |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
      |> put_flash(:info, "Added #{added.title} to your library")}
   end
 
   # Not an error from here up: the movie the user clicked is already in the
   # library, just under an entry this panel had not linked up yet.
   def handle_add_result(tmdb_id, {:ok, {:already_in_library, added}}, socket) do
+    # See the comment in the {:ok, {:ok, added}} clause above: the socket must
+    # be bound before item_lists/1 reads :franchise off it.
+    socket =
+      socket
+      |> clear_in_flight(tmdb_id)
+      |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+
     {:noreply,
      socket
-     |> clear_in_flight(tmdb_id)
-     |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
      |> put_flash(:info, "#{added.title} is already in your library")}
   end
 
@@ -234,12 +250,19 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
 
     case MediaRequestHelpers.handle_request_media(item, :movie, socket.assigns.current_user.id) do
       {:ok, request, _status_updates} ->
+        # Bound before item_lists/1 reads :franchise off it, same reasoning as
+        # handle_add_result/3 above: an argument expression evaluates against
+        # this function's own `socket` parameter, not a later pipeline step.
+        socket =
+          assign(
+            socket,
+            :franchise,
+            mark_requested(socket.assigns.franchise, entry.tmdb_id, request.status)
+          )
+
         {:noreply,
          socket
-         |> assign(
-           :franchise,
-           mark_requested(socket.assigns.franchise, entry.tmdb_id, request.status)
-         )
+         |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
          |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
 
       {:error, reason} ->

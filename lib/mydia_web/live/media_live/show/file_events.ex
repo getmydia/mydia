@@ -321,7 +321,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      socket
      |> assign(:show_file_delete_confirm, true)
      |> assign(:file_to_delete, file)
-     |> assign(:delete_file_from_disk, true)}
+     |> assign(:file_delete_mode, :trash)}
   end
 
   def hide_file_delete_confirm(_params, socket) do
@@ -331,26 +331,40 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      |> assign(:file_to_delete, nil)}
   end
 
-  def toggle_file_delete_from_disk(%{"delete_file_from_disk" => value}, socket) do
-    {:noreply, assign(socket, :delete_file_from_disk, value == "true")}
-  end
+  # Fixed set of clauses, never String.to_atom/1 on request params. Any other
+  # value (including a missing one) falls back to the safe default: trash.
+  def toggle_file_delete_mode(%{"file_delete_mode" => "library_only"}, socket),
+    do: {:noreply, assign(socket, :file_delete_mode, :library_only)}
+
+  def toggle_file_delete_mode(%{"file_delete_mode" => "permanent"}, socket),
+    do: {:noreply, assign(socket, :file_delete_mode, :permanent)}
+
+  def toggle_file_delete_mode(_params, socket),
+    do: {:noreply, assign(socket, :file_delete_mode, :trash)}
 
   def delete_media_file(_params, socket) do
     with :ok <- Authorization.authorize_delete_media(socket) do
       file = socket.assigns.file_to_delete
-      delete_files = socket.assigns.delete_file_from_disk
+      mode = socket.assigns.file_delete_mode
 
       socket =
         socket
         |> assign(:show_file_delete_confirm, false)
         |> assign(:file_to_delete, nil)
 
-      case Library.delete_media_file(file, delete_files: delete_files) do
+      result =
+        case mode do
+          :trash -> Library.trash_media_file(file, reason: :manual)
+          :permanent -> Library.delete_media_file(file, delete_files: true)
+          :library_only -> Library.delete_media_file(file, delete_files: false)
+        end
+
+      case result do
         {:ok, _} ->
           {:noreply,
            socket
            |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
-           |> put_flash(:info, delete_file_success_message(delete_files))}
+           |> put_flash(:info, delete_file_success_message(mode))}
 
         {:ok, _, :file_delete_failed} ->
           {:noreply,
@@ -362,7 +376,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
                "Check the file permissions and remove it manually if needed."
            )}
 
-        {:error, _changeset} ->
+        {:error, _reason} ->
           {:noreply, put_flash(socket, :error, "Failed to delete media file")}
       end
     else
@@ -370,9 +384,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     end
   end
 
-  defp delete_file_success_message(true), do: "Media file deleted, including the file on disk"
+  defp delete_file_success_message(:trash),
+    do: "Moved to trash. Restore it from Configuration > Trash until it's purged."
 
-  defp delete_file_success_message(false),
+  defp delete_file_success_message(:permanent),
+    do: "Media file deleted, including the file on disk"
+
+  defp delete_file_success_message(:library_only),
     do: "Media file removed from library, file kept on disk"
 
   @doc """

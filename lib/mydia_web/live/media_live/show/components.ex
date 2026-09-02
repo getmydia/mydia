@@ -637,6 +637,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <.icon name="hero-star" class="w-4 h-4" />
         </button>
         <button
+          id={"file-delete-#{@file.id}"}
           type="button"
           phx-click="show_file_delete_confirm"
           phx-value-file-id={@file.id}
@@ -897,6 +898,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       <.icon name="hero-arrow-uturn-left" class="w-5 h-5" />
                     </button>
                     <button
+                      id={"file-delete-#{file.id}"}
                       type="button"
                       phx-click="show_file_delete_confirm"
                       phx-value-file-id={file.id}

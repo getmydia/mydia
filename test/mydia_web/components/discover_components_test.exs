@@ -109,7 +109,7 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       refute html =~ "Requesting..."
     end
 
-    test "keeps Add to Library for non-guest users" do
+    test "offers the add action instead of a request for non-guest users" do
       html = card(%{current_user: %{role: "admin", id: "admin-1"}})
 
       assert html =~ "Add to Library"
@@ -196,6 +196,50 @@ defmodule MydiaWeb.DiscoverComponentsTest do
 
       assert html =~ "Add to Library"
       refute html =~ "library-picker-caret"
+    end
+  end
+
+  describe "card add button" do
+    test "shows the short label while keeping the full accessible name" do
+      html = card(%{current_user: %{role: "admin", id: "admin-1"}})
+
+      button =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(button[phx-click="add_to_library"]))
+
+      # Guard the cardinality first: LazyHTML.attribute/2 silently drops any
+      # matched node that lacks the attribute, so a spurious second button
+      # missing aria-label would still produce a single-element list below
+      # and pass the assertion undetected.
+      assert Enum.count(button) == 1
+      assert LazyHTML.attribute(button, "aria-label") == ["Add to Library"]
+      assert LazyHTML.attribute(button, "title") == ["Add to Library"]
+
+      # The visible label is what wraps at 144px, so assert on rendered text
+      # rather than on the raw HTML, which still contains the long string in
+      # the aria-label.
+      assert button |> LazyHTML.text() |> String.trim() == "Add"
+    end
+
+    # Regression: the existing media_rail tests above only assert
+    # `html =~ "Add to Library"`, which now passes via the aria-label/title
+    # attributes rather than the visible label, so nothing actually verified
+    # what a rail card renders on screen. The rail's w-36 (144px) card is the
+    # worst-affected case for the wrap, so it gets the same rendered-text
+    # assertion as the grid card above.
+    test "a rail card shows the short label while keeping the full accessible name" do
+      html = rail(%{})
+
+      button =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(button[phx-click="add_to_library"]))
+
+      assert Enum.count(button) == 1
+      assert LazyHTML.attribute(button, "aria-label") == ["Add to Library"]
+      assert LazyHTML.attribute(button, "title") == ["Add to Library"]
+      assert button |> LazyHTML.text() |> String.trim() == "Add"
     end
   end
 end
