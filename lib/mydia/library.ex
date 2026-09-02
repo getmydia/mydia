@@ -7,7 +7,7 @@ defmodule Mydia.Library do
   import Mydia.DB
   import Mydia.QueryHelpers
   alias Mydia.Repo
-  alias Mydia.Library.{MediaFile, FileAnalyzer, Text, TrashStore}
+  alias Mydia.Library.{MediaFile, MediaFileEpisode, FileAnalyzer, Text, TrashStore}
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Library.Structs.FileMetadata
 
@@ -196,6 +196,7 @@ defmodule Mydia.Library do
     %MediaFile{}
     |> MediaFile.changeset(attrs)
     |> Repo.insert()
+    |> tap_episode_link()
   end
 
   @doc """
@@ -212,6 +213,7 @@ defmodule Mydia.Library do
     %MediaFile{}
     |> MediaFile.scan_changeset(attrs)
     |> Repo.insert()
+    |> tap_episode_link()
   end
 
   @doc """
@@ -223,6 +225,7 @@ defmodule Mydia.Library do
     media_file
     |> MediaFile.changeset(attrs)
     |> Repo.update()
+    |> tap_episode_link()
   end
 
   @doc """
@@ -237,7 +240,17 @@ defmodule Mydia.Library do
     media_file
     |> MediaFile.scan_changeset(attrs)
     |> Repo.update()
+    |> tap_episode_link()
   end
+
+  # Keeps media_file_episodes in step with whatever a write left in
+  # `episode_id`. See `ensure_episode_link/1`.
+  defp tap_episode_link({:ok, %MediaFile{} = media_file} = result) do
+    {:ok, _} = ensure_episode_link(media_file)
+    result
+  end
+
+  defp tap_episode_link(other), do: other
 
   @doc """
   Marks a media file as verified.
@@ -1306,32 +1319,40 @@ defmodule Mydia.Library do
   end
 
   defp match_parsed_episode(media_file, media_item_id, filename, season, episode_numbers) do
-    # For multi-episode files, we'll just match to the first episode
-    episode_number = List.first(episode_numbers)
+    # A multi-episode release (S01E09E10) holds every episode it names. Resolve
+    # all of them: the first becomes `episode_id` (the primary, which existing
+    # queries join on), and every one gets a media_file_episodes row so no
+    # episode of the file reads as missing.
+    episodes =
+      episode_numbers
+      |> Enum.map(&Mydia.Media.get_episode_by_number(media_item_id, season, &1))
+      |> Enum.reject(&is_nil/1)
 
-    # Find the matching episode
-    case Mydia.Media.get_episode_by_number(media_item_id, season, episode_number) do
-      nil ->
+    case episodes do
+      [] ->
         Logger.debug("No episode found for file",
           filename: filename,
           season: season,
-          episode: episode_number
+          episode: List.first(episode_numbers)
         )
 
         {:error, :episode_not_found}
 
-      episode ->
+      [primary | _] = matched ->
         # Update the media file with the episode_id
         case update_media_file(media_file, %{
                media_item_id: nil,
-               episode_id: episode.id
+               episode_id: primary.id
              }) do
           {:ok, updated_file} ->
+            {:ok, _} = link_file_to_episodes(updated_file, matched)
+
             Logger.debug("Matched file to episode",
               filename: filename,
               season: season,
-              episode: episode_number,
-              episode_id: episode.id
+              episode: primary.episode_number,
+              episode_id: primary.id,
+              covers: Enum.map(matched, & &1.episode_number)
             )
 
             {:ok, updated_file}
@@ -1345,6 +1366,89 @@ defmodule Mydia.Library do
             {:error, reason}
         end
     end
+  end
+
+  @doc """
+  Records the full set of episodes a media file covers.
+
+  Authoritative, and idempotent: re-running a scan over an already-linked file
+  inserts nothing new, and any episode the file no longer covers has its link
+  removed, so a corrected filename does not leave a stale episode still holding
+  the file. Use `add_episode_links/2` when the caller only knows part of the set.
+
+  Returns `{:ok, count}` where count is the number of episodes now linked.
+  """
+  def link_file_to_episodes(%MediaFile{} = media_file, episodes) when is_list(episodes) do
+    episode_ids = episodes |> Enum.map(& &1.id) |> Enum.uniq()
+
+    {:ok, _} = add_episode_links(media_file, episode_ids)
+
+    from(mfe in MediaFileEpisode,
+      where: mfe.media_file_id == ^media_file.id and mfe.episode_id not in ^episode_ids
+    )
+    |> Repo.delete_all()
+
+    {:ok, length(episode_ids)}
+  end
+
+  @doc """
+  Adds episode links without removing any, and without duplicating existing ones.
+
+  Use this when the caller knows some of the episodes a file covers but not
+  necessarily all of them. `link_file_to_episodes/2` is the authoritative
+  version and prunes links the file no longer covers.
+  """
+  def add_episode_links(%MediaFile{} = media_file, episode_ids) when is_list(episode_ids) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    rows =
+      episode_ids
+      |> Enum.uniq()
+      |> Enum.map(fn episode_id ->
+        %{
+          id: Ecto.UUID.generate(),
+          media_file_id: media_file.id,
+          episode_id: episode_id,
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    {count, _} = Repo.insert_all(MediaFileEpisode, rows, on_conflict: :nothing)
+
+    {:ok, count}
+  end
+
+  @doc """
+  Ensures the file's primary `episode_id` is represented in the join table.
+
+  `Episode.media_files` reads through `media_file_episodes`, so a writer that
+  sets `episode_id` without a join row would make the file invisible on the
+  episode page. Every generic media-file write funnels through here.
+
+  Purely additive: it never removes links, so it cannot clobber the richer set
+  a multi-episode match recorded via `link_file_to_episodes/2`.
+  """
+  def ensure_episode_link(%MediaFile{episode_id: nil} = media_file), do: {:ok, media_file}
+
+  def ensure_episode_link(%MediaFile{} = media_file) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    Repo.insert_all(
+      MediaFileEpisode,
+      [
+        %{
+          id: Ecto.UUID.generate(),
+          media_file_id: media_file.id,
+          episode_id: media_file.episode_id,
+          inserted_at: now,
+          updated_at: now
+        }
+      ],
+      on_conflict: :nothing
+    )
+
+    {:ok, media_file}
   end
 
   @doc """

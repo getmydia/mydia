@@ -39,7 +39,17 @@ defmodule Mydia.Media.Episode do
     field :last_upgrade_check_at, :utc_datetime
 
     belongs_to :media_item, Mydia.Media.MediaItem
-    has_many :media_files, Mydia.Library.MediaFile
+
+    # many_to_many, not has_many: a multi-episode release (S01E09E10) is one
+    # file that belongs to several episodes. Joining through
+    # media_file_episodes is what stops the trailing episode of such a file
+    # from reading as missing. `media_files.episode_id` still names the primary
+    # episode for callers that join on it directly.
+    many_to_many :media_files, Mydia.Library.MediaFile,
+      join_through: Mydia.Library.MediaFileEpisode,
+      on_replace: :delete,
+      preload_order: [asc: :id]
+
     has_many :downloads, Mydia.Downloads.Download
 
     timestamps(type: :utc_datetime)

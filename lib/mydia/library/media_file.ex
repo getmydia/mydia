@@ -128,7 +128,15 @@ defmodule Mydia.Library.MediaFile do
     belongs_to :library_path, Mydia.Settings.LibraryPath
 
     belongs_to :media_item, Mydia.Media.MediaItem
+
+    # The primary (first) episode of this file. A multi-episode release covers
+    # more than one; `episodes` below is the full set.
     belongs_to :episode, Mydia.Media.Episode
+
+    many_to_many :episodes, Mydia.Media.Episode,
+      join_through: Mydia.Library.MediaFileEpisode,
+      on_replace: :delete
+
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
     has_many :segments, Mydia.Library.MediaSegment
     belongs_to :supersedes_media_file, __MODULE__, foreign_key: :supersedes_media_file_id

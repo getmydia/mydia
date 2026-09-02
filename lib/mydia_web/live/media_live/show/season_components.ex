@@ -158,15 +158,15 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   threshold is 50, and TVDB puts 170 Black Clover episodes in one
                   season. --%>
             <div
-              class={[
-                "flex items-center gap-1 flex-shrink-0 sm:w-full",
-                has_files && "cursor-pointer hover:text-primary"
-              ]}
-              phx-click={has_files && "toggle_episode_expanded"}
+              class="flex items-center gap-1 flex-shrink-0 sm:w-full cursor-pointer hover:text-primary"
+              phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
             >
+              <%!-- Every row expands, files or not. An episode with no file is
+                    the one a viewer most needs to ask about, and gating the
+                    disclosure on has_files used to leave exactly that row inert
+                    with nothing to click. --%>
               <.icon
-                :if={has_files}
                 name={if is_expanded, do: "hero-chevron-down", else: "hero-chevron-right"}
                 class="w-3 h-3 text-base-content/40"
               />
@@ -176,14 +176,11 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             </div>
 
             <div
-              class={["flex-1 min-w-0", has_files && "cursor-pointer"]}
-              phx-click={has_files && "toggle_episode_expanded"}
+              class="flex-1 min-w-0 cursor-pointer"
+              phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
             >
-              <span class={[
-                "text-sm font-medium truncate block",
-                has_files && "hover:text-primary"
-              ]}>
+              <span class="text-sm font-medium truncate block hover:text-primary">
                 {episode.title || "TBA"}
               </span>
             </div>
@@ -319,23 +316,92 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           </div>
         </div>
 
-        <%= if is_expanded && has_files do %>
+        <%= if is_expanded do %>
           <div class="mt-2 ml-8 space-y-1">
-            <div :for={file <- episode.media_files} class="bg-base-200/50 rounded p-2">
-              <Components.episode_file_row
-                file={file}
-                episode={episode}
-                playback_enabled={@playback_enabled}
-                transcode_jobs={Map.get(@transcode_jobs, file.id, [])}
-                subtitle_tracks={Map.get(@media_file_subtitle_tracks, file.id, [])}
-              />
-            </div>
+            <%= if has_files do %>
+              <div :for={file <- episode.media_files} class="bg-base-200/50 rounded p-2">
+                <Components.episode_file_row
+                  file={file}
+                  episode={episode}
+                  playback_enabled={@playback_enabled}
+                  transcode_jobs={Map.get(@transcode_jobs, file.id, [])}
+                  subtitle_tracks={Map.get(@media_file_subtitle_tracks, file.id, [])}
+                />
+              </div>
+            <% else %>
+              <.episode_without_file episode={episode} />
+            <% end %>
           </div>
         <% end %>
       </div>
     <% end %>
     """
   end
+
+  @doc """
+  What an episode with no file has to say for itself.
+
+  Before this existed the row simply did not open, so the one episode a viewer
+  actually has a question about was the one the page refused to explain. It
+  answers the question in order: what the state is, whether a download is
+  already working on it, and what to do if nothing is.
+  """
+  attr :episode, :map, required: true
+
+  def episode_without_file(assigns) do
+    downloads =
+      case assigns.episode.downloads do
+        downloads when is_list(downloads) -> downloads
+        _ -> []
+      end
+
+    assigns = assign(assigns, :downloads, downloads)
+
+    ~H"""
+    <div id={"episode-#{@episode.id}-no-file"} class="bg-base-200/50 rounded p-3 space-y-2">
+      <div class="flex items-center gap-2">
+        <.icon name="hero-information-circle" class="w-4 h-4 text-base-content/50 shrink-0" />
+        <span class="text-sm">{episode_status_details(@episode)}</span>
+      </div>
+
+      <%= if @downloads != [] do %>
+        <div class="space-y-1">
+          <div class="text-xs font-medium text-base-content/60">Downloads for this episode</div>
+          <div
+            :for={download <- @downloads}
+            class="text-xs bg-base-100 rounded p-2 flex flex-col gap-1"
+          >
+            <span class="font-mono truncate">{download.title}</span>
+            <span :if={download_note(download)} class="text-base-content/60">
+              {download_note(download)}
+            </span>
+          </div>
+        </div>
+      <% else %>
+        <p class="text-xs text-base-content/60">
+          No download has been recorded for this episode. Use search to look for a release.
+        </p>
+      <% end %>
+    </div>
+    """
+  end
+
+  # The one line worth reading about a download that has not produced a file.
+  defp download_note(%{import_failure_reason: reason}) when is_binary(reason) and reason != "",
+    do: "Import failed: #{reason}"
+
+  defp download_note(%{import_last_error: error}) when is_binary(error) and error != "",
+    do: "Import error: #{error}"
+
+  defp download_note(%{error_message: message}) when is_binary(message) and message != "",
+    do: "Error: #{message}"
+
+  defp download_note(%{imported_at: %DateTime{} = at}),
+    do: "Imported #{format_relative_time_short(at)}"
+
+  defp download_note(%{completed_at: %DateTime{}}), do: "Completed, waiting to import"
+
+  defp download_note(_), do: "In progress"
 
   @doc """
   The disclosure row: a toggle button carrying the chevron, badge, counts,

@@ -1525,8 +1525,14 @@ defmodule Mydia.ImportCandidates do
     }
 
     case %MediaFile{} |> MediaFile.changeset(attrs) |> Repo.insert() do
-      {:ok, _media_file} -> Repo.delete(candidate)
-      {:error, _changeset} -> :ok
+      {:ok, media_file} ->
+        # Episode.media_files reads through media_file_episodes, so a bare
+        # episode_id would leave the file invisible on the episode page.
+        {:ok, _} = Mydia.Library.ensure_episode_link(media_file)
+        Repo.delete(candidate)
+
+      {:error, _changeset} ->
+        :ok
     end
   end
 
