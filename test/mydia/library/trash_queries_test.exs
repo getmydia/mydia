@@ -100,6 +100,40 @@ defmodule Mydia.Library.TrashQueriesTest do
     assert %{count: 2, bytes: 42} = Library.trashed_summary()
   end
 
+  # `sum/1` hands back a Decimal on PostgreSQL and an integer on SQLite, and
+  # the page runs the byte total through arithmetic that raises on a Decimal.
+  # Asserting the type states the requirement on both adapters; the equality
+  # above only catches it on the one CI job that runs Postgres.
+  @tag :tmp_dir
+  test "summary bytes are an integer on either adapter", ctx do
+    _a = trashed(ctx.root, ctx.library_path, "a.mkv", :missing, 10)
+
+    assert is_integer(Library.trashed_summary().bytes)
+  end
+
+  @tag :tmp_dir
+  test "summary bytes are zero, not nil, with nothing trashed", _ctx do
+    assert %{count: 0, bytes: 0} = Library.trashed_summary()
+  end
+
+  # Same defect in the sibling aggregate, which used a SQL cast to :integer
+  # instead. That raises "integer out of range" on PostgreSQL past 2.1 GB,
+  # so the size here is deliberately over the 4-byte ceiling.
+  @tag :tmp_dir
+  test "total_storage_bytes/0 survives a library larger than a 4-byte integer", ctx do
+    File.write!(Path.join(ctx.root, "huge.mkv"), "x")
+
+    {:ok, _} =
+      Library.create_scanned_media_file(%{
+        relative_path: "huge.mkv",
+        library_path_id: ctx.library_path.id,
+        media_item_id: media_item_fixture(%{type: "movie"}).id,
+        size: 3_000_000_000
+      })
+
+    assert Library.total_storage_bytes() == 3_000_000_000
+  end
+
   @tag :tmp_dir
   test "purge_media_file/1 removes the row and the bytes", ctx do
     file = trashed(ctx.root, ctx.library_path, "gone.mkv", :pruned, 10)

@@ -20,9 +20,9 @@ defmodule Mydia.Library do
   def total_storage_bytes do
     MediaFile
     |> where([f], is_nil(f.trashed_at))
-    |> select([f], type(sum(f.size), :integer))
+    |> select([f], sum(f.size))
     |> Repo.one()
-    |> Kernel.||(0)
+    |> to_integer()
   end
 
   @doc """
@@ -929,8 +929,20 @@ defmodule Mydia.Library do
       |> select([f], {count(f.id), sum(f.size)})
       |> Repo.one()
 
-    %{count: count || 0, bytes: bytes || 0}
+    %{count: count || 0, bytes: to_integer(bytes)}
   end
+
+  # `sum/1` returns an integer on SQLite and a `Decimal` on PostgreSQL, and
+  # every byte figure on the trash page goes through arithmetic that raises on
+  # a Decimal, so the page 500s on Postgres without this.
+  #
+  # Casting in SQL with `type(sum(f.size), :integer)` looks tidier and is
+  # wrong: Postgres `integer` is 4 bytes, so it raises "integer out of range"
+  # above 2.1 GB, which every real library passes. Elixir integers have no
+  # such ceiling.
+  defp to_integer(nil), do: 0
+  defp to_integer(%Decimal{} = decimal), do: Decimal.to_integer(decimal)
+  defp to_integer(bytes) when is_integer(bytes), do: bytes
 
   @doc """
   Permanently deletes one trashed media file: its bytes and then its row.
