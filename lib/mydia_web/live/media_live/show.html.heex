@@ -476,7 +476,23 @@
     config_open={false}
     add_event="add_selected_item"
     request_event="request_selected_item"
-  />
+  >
+    <:rail>
+      <DiscoverComponents.media_rail
+        :if={@selected_item}
+        id="media-detail-modal-rail"
+        items={@selected_recommendations}
+        media_type={@selected_item.media_type}
+        current_user={@current_user}
+        adding_ids={@adding_recommendation_tmdb_ids}
+        requesting_item_id={@requesting_recommendation_id}
+        libraries={@target_library_candidates}
+        can_add={@can_create_media}
+        add_event="add_selected_item"
+        request_event="request_selected_item"
+      />
+    </:rail>
+  </.live_component>
 
   <MydiaWeb.LibraryComponents.library_picker_dialog
     picker={@library_picker}

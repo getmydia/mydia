@@ -11,9 +11,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias Mydia.Media.Add
   alias Mydia.Media.Recommendations
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
+  alias MydiaWeb.MediaLive.Show.DetailModalEvents
 
   require Logger
 
@@ -156,16 +158,27 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
            socket.assigns.current_user.id
          ) do
       {:ok, request, status_updates} ->
+        socket =
+          socket
+          |> assign(:requesting_recommendation_id, nil)
+          |> assign(
+            :recommendations,
+            MediaRequestHelpers.enrich_with_request_status(
+              socket.assigns.recommendations,
+              status_updates
+            )
+          )
+          |> assign(
+            :selected_recommendations,
+            MediaRequestHelpers.enrich_with_request_status(
+              socket.assigns[:selected_recommendations] || [],
+              status_updates
+            )
+          )
+
         {:noreply,
          socket
-         |> assign(:requesting_recommendation_id, nil)
-         |> assign(
-           :recommendations,
-           MediaRequestHelpers.enrich_with_request_status(
-             socket.assigns.recommendations,
-             status_updates
-           )
-         )
+         |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
          |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
 
       {:error, reason} ->
@@ -206,20 +219,36 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   end
 
   def handle_add_result(tmdb_id, {:ok, {:ok, added}}, socket) do
+    socket =
+      socket
+      |> clear_in_flight(tmdb_id)
+      |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+      |> assign(
+        :selected_recommendations,
+        mark_owned(socket.assigns[:selected_recommendations] || [], added)
+      )
+
     {:noreply,
      socket
-     |> clear_in_flight(tmdb_id)
-     |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
      |> put_flash(:info, "Added #{added.title} to your library")}
   end
 
   # Not an error from here up: the title the user clicked is already in the
   # library, just under a card this rail had not linked up yet.
   def handle_add_result(tmdb_id, {:ok, {:already_in_library, added}}, socket) do
+    socket =
+      socket
+      |> clear_in_flight(tmdb_id)
+      |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+      |> assign(
+        :selected_recommendations,
+        mark_owned(socket.assigns[:selected_recommendations] || [], added)
+      )
+
     {:noreply,
      socket
-     |> clear_in_flight(tmdb_id)
-     |> assign(:recommendations, mark_owned(socket.assigns.recommendations, added))
+     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
      |> put_flash(:info, "#{added.title} is already in your library")}
   end
 
@@ -280,9 +309,14 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     end
   end
 
-  # Add.parse_provider_id/1 raises on a non-numeric binary. TMDB ids are always
-  # numeric, but one malformed entry must not take down the whole rail.
-  defp safe_provider_id(result) do
+  @doc """
+  Parses a provider id, or nil when it is not numeric.
+
+  `Add.parse_provider_id/1` raises on a non-numeric binary. TMDB ids are always
+  numeric, but one malformed entry must not take down a rail. Public because the
+  detail dialog's own rail needs the same guard.
+  """
+  def safe_provider_id(result) do
     Add.parse_provider_id(result.provider_id)
   rescue
     ArgumentError -> nil

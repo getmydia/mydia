@@ -24,6 +24,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
+  alias MydiaWeb.DiscoverComponents
 
   # Import helper modules
   import MydiaWeb.MediaLive.Show.Formatters
@@ -837,6 +838,10 @@ defmodule MydiaWeb.MediaLive.Show do
      DetailModal.put_metadata(socket, MediaAddHelpers.fetch_detail_metadata(tmdb_id, media_type))}
   end
 
+  def handle_info({:fetch_recommendations, tmdb_id, media_type}, socket) do
+    {:noreply, DetailModalEvents.fetch_recommendations(socket, tmdb_id, media_type)}
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # handle_async dispatches to event modules
@@ -889,6 +894,12 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async(:load_recommendations, result, socket),
     do: RecommendationEvents.handle_load_result(result, socket)
+
+  # The key is deliberately not :load_recommendations: that one is the page's
+  # own rail, and sharing a key would let the dialog's lookup overwrite it,
+  # since start_async/3 overwrites rather than cancels under an existing key.
+  def handle_async(:load_selected_recommendations, result, socket),
+    do: DetailModalEvents.handle_recommendations_result(result, socket)
 
   def handle_async(:load_season_order_info, result, socket),
     do: MediaItemEvents.handle_season_order_info_result(result, socket)

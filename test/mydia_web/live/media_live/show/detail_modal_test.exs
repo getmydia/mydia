@@ -50,6 +50,13 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
       }
     ])
 
+    # The dialog now fetches its own rail for whatever it opens over (this
+    # task), so the recommended title's own recommendations need warming too,
+    # even though these tests only assert on the dialog opening, not on its
+    # rail. Left unwarmed, that lookup reaches the real relay and the run
+    # fails on the network-escape check in test_helper.exs.
+    warm_recommendations_cache(recommended_tmdb_id, :movie, [])
+
     {movie, recommended_tmdb_id}
   end
 
@@ -136,6 +143,100 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
     refute has_element?(
              view,
              ~s(#recommendations-rail div[phx-click="show_details"][phx-value-id="#{owned_tmdb_id}"])
+           )
+  end
+
+  test "the dialog carries its own recommendations rail", %{conn: conn} do
+    source_tmdb_id = unique_provider_id()
+    recommended_tmdb_id = unique_provider_id()
+    second_hop_tmdb_id = unique_provider_id()
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Harrow Lane",
+        year: 2021,
+        tmdb_id: source_tmdb_id
+      })
+
+    warm_recommendations_cache(source_tmdb_id, :movie, [
+      %{"id" => recommended_tmdb_id, "title" => "Salt Verge", "release_date" => "2019-04-11"}
+    ])
+
+    warm_recommendations_cache(recommended_tmdb_id, :movie, [
+      %{"id" => second_hop_tmdb_id, "title" => "Ninth Tide", "release_date" => "2015-08-03"}
+    ])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    view
+    |> element(
+      ~s(#recommendations-rail div[phx-click="show_details"][phx-value-id="#{recommended_tmdb_id}"])
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    assert has_element?(view, "#media-detail-modal-rail")
+    assert render(view) =~ "Ninth Tide"
+  end
+
+  test "hopping to a title in the dialog's own rail swaps the dialog", %{conn: conn} do
+    source_tmdb_id = unique_provider_id()
+    recommended_tmdb_id = unique_provider_id()
+    second_hop_tmdb_id = unique_provider_id()
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Harrow Lane",
+        year: 2021,
+        tmdb_id: source_tmdb_id
+      })
+
+    warm_recommendations_cache(source_tmdb_id, :movie, [
+      %{"id" => recommended_tmdb_id, "title" => "Salt Verge", "release_date" => "2019-04-11"}
+    ])
+
+    warm_recommendations_cache(recommended_tmdb_id, :movie, [
+      %{"id" => second_hop_tmdb_id, "title" => "Ninth Tide", "release_date" => "2015-08-03"}
+    ])
+
+    warm_recommendations_cache(second_hop_tmdb_id, :movie, [])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    view
+    |> element(
+      ~s(#recommendations-rail div[phx-click="show_details"][phx-value-id="#{recommended_tmdb_id}"])
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    view
+    |> element(
+      ~s(#media-detail-modal-rail div[phx-click="show_details"][phx-value-id="#{second_hop_tmdb_id}"])
+    )
+    |> render_click()
+
+    render_async(view, 5000)
+
+    # Not a title assertion: MetadataStubProvider's fetch_by_id/3 returns the
+    # same canned "Stub Movie" for any provider_id, and TrendingDetailModal
+    # prefers loaded metadata's title over the SearchResult's own once that
+    # fetch lands (see title/2), so the header text is identical across every
+    # title this dialog ever opens over. The add button's phx-value-tmdb_id
+    # is read straight off @item rather than @metadata, so it is what proves
+    # the dialog actually swapped to the second-hop title rather than staying
+    # on the first.
+    assert has_element?(view, "#media-detail-modal[open]")
+
+    assert has_element?(
+             view,
+             ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-tmdb_id="#{second_hop_tmdb_id}"])
            )
   end
 end

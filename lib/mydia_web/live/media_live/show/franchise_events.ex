@@ -8,8 +8,10 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   alias Mydia.Media.FranchiseEntry
   alias Mydia.Media.Franchises
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias MydiaWeb.MediaLive.Show.DetailModalEvents
 
   require Logger
 
@@ -154,6 +156,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
      socket
      |> clear_in_flight(tmdb_id)
      |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
      |> put_flash(:info, "Added #{added.title} to your library")}
   end
 
@@ -164,6 +167,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
      socket
      |> clear_in_flight(tmdb_id)
      |> assign(:franchise, mark_owned(socket.assigns.franchise, added))
+     |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
      |> put_flash(:info, "#{added.title} is already in your library")}
   end
 
@@ -231,6 +235,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
            :franchise,
            mark_requested(socket.assigns.franchise, entry.tmdb_id, request.status)
          )
+         |> DetailModal.refresh_selected(DetailModalEvents.item_lists(socket))
          |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")}
 
       {:error, reason} ->

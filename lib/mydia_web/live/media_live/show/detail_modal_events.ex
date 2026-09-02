@@ -19,23 +19,24 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   and quality profile, the right default for anything reached from this page.
   """
 
+  import Phoenix.LiveView, only: [start_async: 3]
+
+  alias Mydia.Media.Recommendations
   alias MydiaWeb.Live.Helpers.DetailModal
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias MydiaWeb.MediaLive.Show.FranchiseComponents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.LibraryPickerEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
+
+  require Logger
 
   @doc """
   Opens the dialog over the clicked title.
 
   An unresolvable id is dropped rather than raising: the rails re-render on
   every add, and a click that races a re-render must not take the page down.
-
-  This task ships the dialog without an in-dialog rail, which is a complete,
-  shippable state: it is exactly what the Dashboard renders permanently. So
-  `recommendations: false` is passed for the same reason the Dashboard passes
-  it: with no `:rail` slot on this page yet, the lookup would pay for a relay
-  round trip nothing draws.
   """
   def show_details(%{"id" => id, "type" => type}, socket) do
     case find_item(socket, id) do
@@ -43,7 +44,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
         {:noreply, socket}
 
       item ->
-        {:noreply, DetailModal.select(socket, item, media_type(type), recommendations: false)}
+        {:noreply, DetailModal.select(socket, item, media_type(type))}
     end
   end
 
@@ -86,6 +87,50 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
     ]
   end
 
+  @doc """
+  Starts the lookup behind the dialog's own rail.
+
+  Through `start_async/3` rather than inline: on a cache miss this is a relay
+  call with the config's timeout, and the dialog is already on screen by then,
+  so doing it in the handle_info would queue Close, Add and Request behind the
+  fetch and the dialog would look frozen.
+  """
+  def fetch_recommendations(socket, tmdb_id, media_type) do
+    config = socket.assigns.metadata_config
+
+    start_async(socket, :load_selected_recommendations, fn ->
+      Recommendations.for_tmdb_id(tmdb_id, media_type, config)
+    end)
+  end
+
+  @doc """
+  Stores the dialog's rail, or leaves it empty on anything but a clean result.
+
+  An empty rail renders nothing at all, which is the designed behaviour for a
+  title TMDB has no recommendations for. A crash must not take the page down for
+  a section that is meant to be silently absent.
+  """
+  def handle_recommendations_result({:ok, {:ok, results}}, socket) do
+    {:noreply, DetailModal.put_recommendations(socket, results, &decorate(socket, &1))}
+  end
+
+  def handle_recommendations_result({:ok, :none}, socket) do
+    {:noreply, DetailModal.put_recommendations(socket, [], & &1)}
+  end
+
+  def handle_recommendations_result({:exit, reason}, socket) do
+    Logger.warning("Detail dialog recommendations lookup crashed: #{inspect(reason)}")
+    {:noreply, DetailModal.put_recommendations(socket, [], & &1)}
+  end
+
+  def handle_recommendations_result(other, socket) do
+    Logger.warning(
+      "Detail dialog recommendations returned an unexpected result: #{inspect(other)}"
+    )
+
+    {:noreply, DetailModal.put_recommendations(socket, [], & &1)}
+  end
+
   defp find_item(socket, id), do: DetailModal.find_selectable_item(item_lists(socket), id)
 
   defp franchise_items(nil), do: []
@@ -93,4 +138,19 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
 
   defp media_type("tv_show"), do: :tv_show
   defp media_type(_), do: :movie
+
+  # Mirrors RecommendationEvents.decorate/3 but without the navigate targets:
+  # the rail inside the dialog keeps every poster on the dialog, and a link out
+  # would close it from under the user mid-browse.
+  defp decorate(socket, results) do
+    media_item = socket.assigns.media_item
+    results = Enum.filter(results, &(RecommendationEvents.safe_provider_id(&1) != nil))
+    tmdb_ids = Enum.map(results, &RecommendationEvents.safe_provider_id/1)
+
+    status = Mydia.Media.library_status_for_tmdb_ids(tmdb_ids, media_item.type)
+
+    results
+    |> MediaAddHelpers.enrich_with_library_status(status)
+    |> MediaRequestHelpers.enrich_with_request_status(MediaRequestHelpers.request_status_map())
+  end
 end
