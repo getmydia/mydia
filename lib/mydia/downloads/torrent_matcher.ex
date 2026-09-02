@@ -99,8 +99,9 @@ defmodule Mydia.Downloads.TorrentMatcher do
   # Demoted (wrong-show) candidates are capped here: at/below the suggestion floor
   # and below the match threshold, so they surface as suggestions, never matches.
   @suggestion_floor 0.3
-  # binding_confidence contributes only a small tiebreak nudge among survivors
-  # that already clear the match threshold (never lifts a sub-threshold score).
+  # binding_confidence contributes only a small ordering nudge among survivors
+  # that already clear the match threshold. It never lifts a sub-threshold
+  # score and never reaches the stored confidence.
   @binding_tiebreak_weight 0.05
 
   # Minimum fraction of a candidate title's significant words that must appear
@@ -264,11 +265,11 @@ defmodule Mydia.Downloads.TorrentMatcher do
         {movie, confidence}
       end)
       |> refine_scores_with_binding(torrent_info, threshold)
-      |> Enum.filter(fn {_movie, confidence} -> confidence >= threshold end)
-      |> Enum.sort_by(fn {_movie, confidence} -> confidence end, :desc)
+      |> Enum.filter(fn {_movie, confidence, _sort} -> confidence >= threshold end)
+      |> Enum.sort_by(fn {_movie, _confidence, sort} -> sort end, :desc)
 
     case matches do
-      [{movie, confidence} | _] ->
+      [{movie, confidence, _sort} | _] ->
         {:ok,
          TorrentMatchResult.new(%{
            media_item: movie,
@@ -414,11 +415,11 @@ defmodule Mydia.Downloads.TorrentMatcher do
         {show, confidence}
       end)
       |> refine_scores_with_binding(torrent_info, threshold)
-      |> Enum.filter(fn {_show, confidence} -> confidence >= threshold end)
-      |> Enum.sort_by(fn {_show, confidence} -> confidence end, :desc)
+      |> Enum.filter(fn {_show, confidence, _sort} -> confidence >= threshold end)
+      |> Enum.sort_by(fn {_show, _confidence, sort} -> sort end, :desc)
 
     case show_matches do
-      [{show, confidence} | _] ->
+      [{show, confidence, _sort} | _] ->
         # Found a matching show, now find the specific episode
         case find_episode(show, torrent_info) do
           {:ok, episode} ->
@@ -502,11 +503,11 @@ defmodule Mydia.Downloads.TorrentMatcher do
         {show, confidence}
       end)
       |> refine_scores_with_binding(torrent_info, threshold)
-      |> Enum.filter(fn {_show, confidence} -> confidence >= threshold end)
-      |> Enum.sort_by(fn {_show, confidence} -> confidence end, :desc)
+      |> Enum.filter(fn {_show, confidence, _sort} -> confidence >= threshold end)
+      |> Enum.sort_by(fn {_show, _confidence, sort} -> sort end, :desc)
 
     case show_matches do
-      [{show, confidence} | _] ->
+      [{show, confidence, _sort} | _] ->
         # For season packs, match the show but don't require a specific episode
         {:ok,
          TorrentMatchResult.new(%{
@@ -955,13 +956,15 @@ defmodule Mydia.Downloads.TorrentMatcher do
 
     Enum.map(scored, fn {item, base} ->
       case Map.fetch(refined_by_id, item.id) do
-        {:ok, score} -> {item, score}
-        :error -> {item, base}
+        {:ok, {confidence, sort_score}} -> {item, confidence, sort_score}
+        :error -> {item, base, base}
       end
     end)
   end
 
-  defp refine_scores_with_binding(scored, _torrent_info, _threshold), do: scored
+  defp refine_scores_with_binding(scored, _torrent_info, _threshold) do
+    Enum.map(scored, fn {item, base} -> {item, base, base} end)
+  end
 
   defp binding_shortlist(scored) do
     sorted = Enum.sort_by(scored, fn {_item, base} -> base end, :desc)
@@ -996,24 +999,27 @@ defmodule Mydia.Downloads.TorrentMatcher do
       Map.get(flags, :binding_suspect) || Map.get(flags, :parsed_title_unbound) ->
         # Wrong-show guard: the release's own title doesn't bind to this candidate.
         # Demote to suggestion-only so it never clears the match threshold.
-        min(base, @suggestion_floor)
+        demoted = min(base, @suggestion_floor)
+        {demoted, demoted}
 
       base >= threshold ->
-        # Tiebreak nudge — only among candidates that already clear the threshold,
-        # so binding can reorder real matches but never manufacture one from a
-        # sub-threshold base.
+        # Tiebreak nudge, applied to the sort key only. It must never reach the
+        # confidence that is stored, shown in the UI, and written to the
+        # activity feed: on the production rows behind issue #653 this bonus
+        # carried a wrong match from 0.851 to 0.886, making it look better
+        # evidenced than it was.
         binding = (bound.field_confidence || %{})[:binding] || 0.0
-        min(1.0, base + binding * @binding_tiebreak_weight)
+        {base, min(1.0, base + binding * @binding_tiebreak_weight)}
 
       true ->
-        base
+        {base, base}
     end
   rescue
     e ->
       # One bad candidate (e.g. an item whose episodes failed to preload) must not
       # fail the whole match — fall back to the unbound base score.
       Logger.warning("Binding re-parse failed for media item #{item.id}: #{inspect(e)}")
-      base
+      {base, base}
   end
 
   ## Private Functions - ParsedFileInfo accessors

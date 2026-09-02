@@ -93,4 +93,28 @@ defmodule Mydia.Downloads.TorrentMatcherBindingTest do
       assert {:error, :episode_not_found} = TorrentMatcher.find_match(info)
     end
   end
+
+  describe "binding tiebreak" do
+    test "does not raise the confidence it reports" do
+      movie =
+        insert(:media_item, %{
+          type: "movie",
+          title: "Zephyr Station",
+          year: 2030,
+          monitored: true
+        })
+
+      {:ok, parsed} =
+        Mydia.Downloads.ReleaseIntake.parse_release("Zephyr.Station.2030.1080p.WEB-DL.x265")
+
+      assert {:ok, match} = TorrentMatcher.find_match(parsed)
+      assert match.media_item.id == movie.id
+
+      # An exact title plus an exact year is 0.7 + 0.3. Anything above 1.0 is
+      # impossible, and anything above the unbound score means the tiebreak
+      # leaked into the stored value.
+      assert match.confidence <= 1.0
+      assert_in_delta match.confidence, 1.0, 0.0001
+    end
+  end
 end
