@@ -148,9 +148,12 @@ defmodule Mydia.Media.RecommendationsTest do
   describe "for_ref/3" do
     # The defect this module exists to close: a TVDB ref (what every Discover
     # TV search result carries) must never reach TMDB's recommendations route.
-    # No bypass stub is registered for this test, so a request to the relay
-    # would fail the test on its own -- the assertion alone does not prove
-    # TMDB was never asked.
+    # This passes `config: nil`, which resolves to
+    # `Metadata.default_relay_config/0`, not a bypass -- so a `:none` result
+    # here is not "the relay was unreachable and errored," it is proof that
+    # `for_ref/3`'s only matching head is `{:tmdb, id}` and a `{:tvdb, _}` ref
+    # falls straight to the catch-all without `fetch/3` (and therefore the
+    # relay) ever being reached.
     test "returns :none for a tvdb ref rather than querying TMDB" do
       assert Recommendations.for_ref({:tvdb, 280_619}, :tv_show, nil) == :none
     end
