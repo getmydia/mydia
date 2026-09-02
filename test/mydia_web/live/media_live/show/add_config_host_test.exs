@@ -173,45 +173,6 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
     :ok
   end
 
-  # Same shape as `stub_movie_details/2`, but `Bypass.stub/4` rather than
-  # `Bypass.expect/4`: this is used only by the guest authorization test
-  # below, where a correctly-fixed handler never calls the endpoint at all.
-  # `expect/4` verifies the call happened at least once and would itself fail
-  # the passing case; `stub/4` makes no such demand either way, so a call
-  # arriving (the pre-fix, vulnerable behaviour) is served the same payload
-  # `stub_movie_details/2` would, and no call arriving (the fixed behaviour)
-  # is simply never observed.
-  defp stub_movie_details_if_called(tmdb_id, title) do
-    bypass = Bypass.open()
-    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
-    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
-
-    on_exit(fn ->
-      case previous_metadata_relay_url do
-        nil -> Application.delete_env(:mydia, :metadata_relay_url)
-        value -> Application.put_env(:mydia, :metadata_relay_url, value)
-      end
-    end)
-
-    Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
-      body = %{
-        "id" => tmdb_id,
-        "title" => title,
-        "release_date" => "2024-01-01",
-        "overview" => "",
-        "credits" => %{"cast" => [], "crew" => []},
-        "genres" => [],
-        "belongs_to_collection" => nil
-      }
-
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, Jason.encode!(body))
-    end)
-
-    :ok
-  end
-
   # Same shape as `stub_movie_details/2`, but blocks the response until
   # `release_added_movie_details/1` is called. `Add.from_provider/4` runs
   # inside a `start_async/3` task the submit kicks off, and the #460 routing
@@ -436,12 +397,21 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
   # `discover_live/authorization_test.exs`'s "guest users cannot trigger
   # add_to_library event".
   #
-  # The added title's metadata fetch is stubbed via `stub_movie_details_if_called/2`
-  # (a `Bypass.stub/4`, not `expect/4`: this test must pass whether or not the
-  # endpoint is ever hit). Without a stub, an unauthorized submit that slipped
+  # The added title's metadata fetch is stubbed via the gated
+  # `stub_added_movie_details/2`, not the immediate `stub_movie_details/2`:
+  # `Add.from_provider/4` runs inside a `start_async/3` task, and an ungated
+  # stub lets an incorrectly-gated add complete (fetch, decode, insert) and
+  # clear `adding_franchise_tmdb_ids` again before the very next line of test
+  # code runs. Verified by hand: an ungated version of the
+  # `adding_franchise_tmdb_ids` check below silently passed even with the
+  # authorization gate deleted, and only `media_item_created_within?/1`
+  # caught the bug - racing the same way `Process.sleep/1` would. Holding the
+  # response open until `release_added_movie_details/1` runs, after the
+  # deterministic check, is what makes that check race-free rather than
+  # merely fast. Without any stub at all, an unauthorized submit that slipped
   # through would still create no media item in this test environment
   # (Mydia.RelayGuard blocks the unstubbed relay call), so the absence of a
-  # media item would prove nothing about authorization. With the stub in
+  # media item would prove nothing about authorization; with the stub in
   # place, a created media item is attributable only to the authorization
   # gate having been skipped.
   test "a guest cannot submit an add even with a valid library", %{
@@ -452,7 +422,7 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
     conn = log_in_user(conn, guest)
 
     {movie, missing_tmdb_id} = movie_with_franchise_entry()
-    stub_movie_details_if_called(missing_tmdb_id, "Harbour Nights")
+    gate = stub_added_movie_details(missing_tmdb_id, "Harbour Nights")
 
     {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
     render_async(view, 5000)
@@ -467,6 +437,26 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
       }
     })
 
+    # `submit_add_config/2` populates `adding_franchise_tmdb_ids` (or
+    # `adding_recommendation_tmdb_ids`, depending on the rail) synchronously,
+    # before it ever dispatches the add - see `AddConfigEvents.dispatch/3` and
+    # `FranchiseEvents.add_franchise_movie_with_opts/3`. `missing_tmdb_id` is
+    # a franchise entry (`movie_with_franchise_entry/0`), so a
+    # correctly-gated guest never reaches the `MapSet.put/2` that would add
+    # it to `adding_franchise_tmdb_ids` at all. This is deterministic state
+    # available the instant `render_hook/3` returns, made race-free against
+    # the incorrectly-gated case by the response gate above rather than
+    # merely fast. `dispatch_add/3` runs `Integer.parse/1` before storing the
+    # key, so the set holds the raw integer, not the string form the dialog
+    # submits.
+    refute MapSet.member?(
+             :sys.get_state(view.pid).socket.assigns.adding_franchise_tmdb_ids,
+             missing_tmdb_id
+           )
+
+    release_added_movie_details(gate)
+
+    # Belt-and-braces: the add never dispatched, so it can never persist.
     refute media_item_created_within?(missing_tmdb_id)
   end
 

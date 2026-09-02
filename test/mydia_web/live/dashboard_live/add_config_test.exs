@@ -150,18 +150,28 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
       end
     end)
 
-    Bypass.stub(bypass, "GET", "/tmdb/movies/#{provider_id}", fn conn ->
-      body = %{
-        "id" => provider_id,
-        "title" => "The Kestrel Protocol",
-        "release_date" => "2024-05-01",
-        "belongs_to_collection" => nil
-      }
-
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, Jason.encode!(body))
-    end)
+    # Gated rather than answered immediately: `add_to_library`'s handler
+    # fetches this endpoint SYNCHRONOUSLY inside its own `handle_info/2` (see
+    # add_with_opts/4 in dashboard_live/index.ex) - unlike the detail page's
+    # start_async/3 task, this blocks the whole LiveView process, not just a
+    # helper task, until the HTTP call returns. An immediate response lets an
+    # incorrectly-gated add run to completion - fetch, decode, insert, and
+    # clear adding_item_ids again - before the very next line of test code
+    # executes. Verified by hand: an ungated version of the adding_item_ids
+    # check below silently passed even with the authorization gate deleted,
+    # and only a Process.sleep/1-raced database check caught the bug.
+    #
+    # Holding the response open changes what an incorrectly-gated add looks
+    # like to this test: the LiveView process is now wedged inside the fetch
+    # and cannot service *any* message, including :sys.get_state/1's system
+    # message, until release_gate/1 runs. A correctly-gated guest never
+    # dispatches the add at all, so the process stays idle and answers
+    # instantly either way. That is not a fixed race window against a
+    # variable completion time (the original Process.sleep/1's problem) - the
+    # fetch cannot complete while the gate is held, so :sys.get_state/1 below
+    # either returns immediately (fixed) or blocks until its own timeout
+    # (broken), never something in between.
+    gate = gated_movie_stub(bypass, provider_id)
 
     {:ok, view, _html} = live(conn, ~p"/")
 
@@ -170,12 +180,31 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
       "media_type" => "movie"
     })
 
-    # A correctly-gated event returns synchronously with no handle_info
-    # dispatched. Give an incorrectly-gated add (which does dispatch one, and
-    # would round-trip through the local Bypass server) time to land before
-    # asserting nothing was created.
-    Process.sleep(200)
+    # `adding_item_ids` is populated synchronously in the same
+    # `handle_event/3`, before the `handle_info` that performs the add is
+    # even sent (see `add_to_library` in dashboard_live/index.ex), so a
+    # correctly-gated guest never reaches the `MapSet.put/2` that would add
+    # provider_id here, and this call returns at once. A bounded timeout
+    # turns "the process never answers" into a readable failure instead of a
+    # bare `:sys` exit trace; 2s is generous headroom over the near-instant
+    # reply a genuinely idle process gives, even under load.
+    assigns =
+      try do
+        :sys.get_state(view.pid, 2_000).socket.assigns
+      catch
+        :exit, _ ->
+          flunk(
+            "add_to_library did not return synchronously; the LiveView process is still " <>
+              "blocked inside the gated metadata fetch, which only happens once an " <>
+              "incorrectly-gated add has reached handle_info/2 at all"
+          )
+      end
 
+    release_gate(gate)
+
+    refute MapSet.member?(assigns.adding_item_ids, provider_id)
+
+    # Belt-and-braces: the add never dispatched, so it can never persist.
     assert Mydia.Media.get_media_item_by_tmdb(provider_id) == nil
   end
 
@@ -286,6 +315,45 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
 
       media_item ->
         media_item
+    end
+  end
+
+  # Same movie details payload the two happy-path tests above stub, but the
+  # response blocks until release_gate/1 is called. Used only by the guest
+  # authorization test, to hold an incorrectly-gated add's synchronous
+  # handle_info open long enough to observe adding_item_ids before it clears
+  # again. Mirrors stub_added_movie_details/2 in add_config_host_test.exs.
+  defp gated_movie_stub(bypass, tmdb_id) do
+    {:ok, gate} = Agent.start_link(fn -> false end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+      await_gate(gate)
+
+      body = %{
+        "id" => tmdb_id,
+        "title" => "The Kestrel Protocol",
+        "release_date" => "2024-05-01",
+        "belongs_to_collection" => nil
+      }
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    gate
+  end
+
+  defp release_gate(gate), do: Agent.update(gate, fn _ -> true end)
+
+  # Runs in the Bypass connection process, not the test process, so this
+  # sleep only delays that one HTTP response.
+  defp await_gate(gate) do
+    if Agent.get(gate, & &1) do
+      :ok
+    else
+      Process.sleep(5)
+      await_gate(gate)
     end
   end
 end
