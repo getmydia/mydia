@@ -408,4 +408,55 @@ defmodule Mydia.CollectionsTest do
       assert Collections.item_count(collection) == 3
     end
   end
+
+  describe "add_preset/2" do
+    setup do
+      %{user: user_fixture()}
+    end
+
+    test "creates a private smart collection carrying the preset's rules", %{user: user} do
+      preset = Mydia.Collections.Presets.get("decade_2000s")
+
+      assert {:ok, collection} = Collections.add_preset(user, "decade_2000s")
+
+      assert collection.type == "smart"
+      assert collection.visibility == "private"
+      assert collection.name == preset.name
+      assert collection.description == preset.description
+      assert collection.sidebar_icon == preset.icon
+      assert collection.user_id == user.id
+      refute collection.is_system
+
+      assert Jason.decode!(collection.smart_rules) ==
+               Jason.decode!(Jason.encode!(preset.rules))
+    end
+
+    test "the created collection is a normal, editable collection", %{user: user} do
+      {:ok, collection} = Collections.add_preset(user, "decade_2000s")
+
+      assert {:ok, renamed} =
+               Collections.update_collection(user, collection, %{name: "My Own Name"})
+
+      assert renamed.name == "My Own Name"
+      assert {:ok, _} = Collections.delete_collection(user, renamed)
+    end
+
+    test "returns an error for an unknown key", %{user: user} do
+      assert {:error, :unknown_preset} = Collections.add_preset(user, "no_such_preset")
+      assert {:error, :unknown_preset} = Collections.add_preset(user, nil)
+    end
+
+    test "adding the same preset twice is allowed and makes two collections", %{user: user} do
+      assert {:ok, first} = Collections.add_preset(user, "decade_2000s")
+      assert {:ok, second} = Collections.add_preset(user, "decade_2000s")
+      refute first.id == second.id
+    end
+
+    test "every preset in the catalog can be added", %{user: user} do
+      for preset <- Mydia.Collections.Presets.list() do
+        assert {:ok, _collection} = Collections.add_preset(user, preset.key),
+               "preset #{preset.key} could not be added"
+      end
+    end
+  end
 end

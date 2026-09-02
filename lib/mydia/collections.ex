@@ -28,6 +28,7 @@ defmodule Mydia.Collections do
   import Mydia.QueryHelpers
   alias Mydia.Repo
   alias Mydia.Collections.{Collection, CollectionItem, SmartRules}
+  alias Mydia.Collections.Presets
   alias Mydia.Media.{MediaCategory, MediaItem}
   alias Mydia.Accounts.User
 
@@ -259,6 +260,46 @@ defmodule Mydia.Collections do
       %Collection{user_id: user.id}
       |> Collection.changeset(attrs)
       |> Repo.insert()
+    end
+  end
+
+  @doc """
+  Creates a collection from a catalog preset.
+
+  The preset's rules are stamped onto an ordinary private smart collection with
+  no back-reference to the preset, so the result is fully editable and deletable
+  like any hand-built collection. Adding the same preset twice is allowed and
+  produces two independent collections.
+
+  Delegates to `create_collection/2` rather than inserting directly, so changeset
+  validation and the admin-only shared-visibility rule both still apply.
+
+  Returns `{:error, :unknown_preset}` if the key is not in the catalog.
+
+  ## Examples
+
+      iex> add_preset(user, "decade_2000s")
+      {:ok, %Collection{name: "2000s", type: "smart"}}
+
+      iex> add_preset(user, "no_such_preset")
+      {:error, :unknown_preset}
+  """
+  @spec add_preset(User.t(), String.t()) ::
+          {:ok, Collection.t()} | {:error, Ecto.Changeset.t() | :unknown_preset}
+  def add_preset(%User{} = user, preset_key) do
+    case Presets.get(preset_key) do
+      nil ->
+        {:error, :unknown_preset}
+
+      preset ->
+        create_collection(user, %{
+          name: preset.name,
+          description: preset.description,
+          type: "smart",
+          visibility: "private",
+          sidebar_icon: preset.icon,
+          smart_rules: Jason.encode!(preset.rules)
+        })
     end
   end
 

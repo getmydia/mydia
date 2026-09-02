@@ -86,7 +86,7 @@ defmodule Mydia.Collections.SmartRulesFields do
         label: "Date Added",
         group: "Dates",
         type: :date,
-        operators: [:gt, :gte, :lt, :lte],
+        operators: [:gt, :gte, :lt, :lte, :within_last],
         values: nil
       }
     }
@@ -161,7 +161,8 @@ defmodule Mydia.Collections.SmartRulesFields do
       not_in: "is not one of",
       contains: "contains",
       contains_any: "contains any of",
-      between: "between"
+      between: "between",
+      within_last: "in the last (days)"
     }
   end
 

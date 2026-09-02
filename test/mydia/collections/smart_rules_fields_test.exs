@@ -82,4 +82,14 @@ defmodule Mydia.Collections.SmartRulesFieldsTest do
       refute Map.has_key?(options, "inserted_at")
     end
   end
+
+  describe "within_last exposure" do
+    test "inserted_at offers the within_last operator" do
+      assert :within_last in SmartRulesFields.get_operators("inserted_at")
+    end
+
+    test "within_last has a display label" do
+      assert SmartRulesFields.operator_label(:within_last) == "in the last (days)"
+    end
+  end
 end

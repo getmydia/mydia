@@ -10,11 +10,17 @@ defmodule MydiaWeb.CollectionLive.Index do
   """
   use MydiaWeb, :live_view
 
+  require Logger
+
   alias Mydia.Collections
   alias Mydia.Collections.Collection
+  alias Mydia.Collections.Presets
+  alias Mydia.Collections.SmartRules
 
   import MydiaWeb.CollectionLive.Components,
     only: [smart_rules_editor: 1, load_value_options: 1, value_list: 1, value_string: 1]
+
+  import MydiaWeb.CollectionLive.PresetComponents, only: [preset_gallery: 1]
 
   @default_condition %{"field" => "", "operator" => "eq", "value" => ""}
 
@@ -30,6 +36,10 @@ defmodule MydiaWeb.CollectionLive.Index do
      |> assign(:new_collection_type, "manual")
      |> assign(:new_form, to_form(%{}, as: :collection))
      |> assign(:collections_empty?, true)
+     |> assign(:show_preset_gallery, false)
+     |> assign(:preset_counts, %{})
+     |> assign(:added_presets, MapSet.new())
+     |> assign(:existing_collection_names, MapSet.new())
      |> assign_default_rules()
      |> stream(:collections, [])}
   end
@@ -64,6 +74,14 @@ defmodule MydiaWeb.CollectionLive.Index do
           </div>
           <div class="flex items-center gap-2">
             <.view_mode_toggle view_mode={@view_mode} />
+            <button
+              id="browse-presets-button"
+              type="button"
+              class="btn btn-outline gap-2"
+              phx-click="open_preset_gallery"
+            >
+              <.icon name="hero-squares-2x2" class="w-4 h-4" /> Browse presets
+            </button>
             <button
               type="button"
               class="btn btn-primary gap-2"
@@ -124,6 +142,14 @@ defmodule MydiaWeb.CollectionLive.Index do
                 phx-click="open_new_modal"
               >
                 <.icon name="hero-plus" class="w-5 h-5" /> Create your first collection
+              </button>
+              <button
+                id="browse-presets-button-empty"
+                type="button"
+                class="btn btn-outline gap-2"
+                phx-click="open_preset_gallery"
+              >
+                <.icon name="hero-squares-2x2" class="w-4 h-4" /> Browse presets
               </button>
             </:actions>
           </.collection_empty_state>
@@ -240,6 +266,47 @@ defmodule MydiaWeb.CollectionLive.Index do
             </button>
           </:actions>
         </.modal>
+
+        <%!-- Preset Gallery Modal --%>
+        <.modal
+          :if={@show_preset_gallery}
+          id="preset-gallery-modal"
+          show={@show_preset_gallery}
+          on_cancel={JS.push("close_preset_gallery")}
+        >
+          <:title>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/20">
+                <.icon name="hero-squares-2x2" class="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <div class="font-bold text-lg">Browse presets</div>
+                <div class="text-xs text-base-content/60 font-normal">
+                  Common collections, ready to add
+                </div>
+              </div>
+            </div>
+          </:title>
+
+          <.preset_gallery
+            presets={Presets.list()}
+            groups={Presets.groups()}
+            counts={@preset_counts}
+            added={@added_presets}
+            existing_names={@existing_collection_names}
+          />
+
+          <:actions>
+            <button
+              id="close-preset-gallery"
+              type="button"
+              class="btn btn-ghost"
+              phx-click="close_preset_gallery"
+            >
+              Done
+            </button>
+          </:actions>
+        </.modal>
       </div>
     </Layouts.app>
     """
@@ -291,6 +358,41 @@ defmodule MydiaWeb.CollectionLive.Index do
 
   def handle_event("close_new_modal", _params, socket) do
     {:noreply, assign(socket, :show_new_modal, false)}
+  end
+
+  def handle_event("open_preset_gallery", _params, socket) do
+    # `added_presets` is a per-visit confirmation that the click landed, not a
+    # record of what exists. Clearing it on open keeps duplicates addable, as
+    # `add_preset/2` allows, and stops the badge outliving the collection it
+    # describes when one is removed elsewhere. The soft name-match hint, which is
+    # recomputed from the live list, is what warns about an existing collection.
+    {:noreply,
+     socket
+     |> assign(:show_preset_gallery, true)
+     |> assign(:preset_counts, %{})
+     |> assign(:added_presets, MapSet.new())
+     |> start_async(:preset_counts, fn -> preset_counts() end)}
+  end
+
+  def handle_event("close_preset_gallery", _params, socket) do
+    {:noreply, assign(socket, :show_preset_gallery, false)}
+  end
+
+  def handle_event("add_preset", %{"key" => key}, socket) do
+    case Collections.add_preset(socket.assigns.current_user, key) do
+      {:ok, collection} ->
+        {:noreply,
+         socket
+         |> assign(:added_presets, MapSet.put(socket.assigns.added_presets, key))
+         |> put_flash(:info, "Added \"#{collection.name}\"")
+         |> load_collections()}
+
+      {:error, :unknown_preset} ->
+        {:noreply, put_flash(socket, :error, "That preset is no longer available.")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, put_flash(socket, :error, extract_changeset_error(changeset))}
+    end
   end
 
   alias MydiaWeb.MediaLive.Show.Helpers, as: PlayerHelpers
@@ -389,6 +491,25 @@ defmodule MydiaWeb.CollectionLive.Index do
          |> put_flash(:error, error_msg)
          |> assign(:new_form, to_form(changeset, as: :collection))}
     end
+  end
+
+  @impl true
+  def handle_async(:preset_counts, {:ok, counts}, socket) do
+    {:noreply, assign(socket, :preset_counts, counts)}
+  end
+
+  def handle_async(:preset_counts, {:exit, reason}, socket) do
+    Logger.warning("preset count query failed: #{inspect(reason)}")
+    # Badges stay blank. A failed count must not take down the gallery.
+    {:noreply, socket}
+  end
+
+  # SmartRules.execute_count/1 accepts the rules map directly and already
+  # rescues query errors to 0, so a single bad preset cannot break the batch.
+  defp preset_counts do
+    Map.new(Presets.list(), fn preset ->
+      {preset.key, SmartRules.execute_count(preset.rules)}
+    end)
   end
 
   defp update_rules_from_params(socket, params) do
@@ -556,6 +677,19 @@ defmodule MydiaWeb.CollectionLive.Index do
     socket
     |> assign(:collections_empty?, collections == [])
     |> stream(:collections, collections, reset: true)
+    |> assign_existing_collection_names()
+  end
+
+  # Names of every collection the user has, for the preset gallery's duplicate
+  # hint. Queried separately because :collections is a stream, which cannot be
+  # read back, and because the hint ignores the active search and filters.
+  defp assign_existing_collection_names(socket) do
+    names =
+      socket.assigns.current_user
+      |> Collections.list_collections()
+      |> MapSet.new(&String.downcase(&1.name))
+
+    assign(socket, :existing_collection_names, names)
   end
 
   defp maybe_add_filter(opts, _key, nil), do: opts

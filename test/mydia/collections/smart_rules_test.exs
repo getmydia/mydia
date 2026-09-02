@@ -3,6 +3,7 @@ defmodule Mydia.Collections.SmartRulesTest do
 
   alias Mydia.Collections.SmartRules
 
+  import Ecto.Query
   import Mydia.MediaFixtures
 
   describe "validate/1" do
@@ -399,6 +400,44 @@ defmodule Mydia.Collections.SmartRulesTest do
       assert length(items) == 1
       assert hd(items).id == japanese.id
     end
+
+    test "filters by metadata.original_language not_in, including items missing the field" do
+      japanese = media_item_fixture(%{type: "movie", metadata: %{"original_language" => "ja"}})
+      english = media_item_fixture(%{type: "movie", metadata: %{"original_language" => "en"}})
+      no_language = media_item_fixture(%{type: "movie", metadata: %{}})
+
+      rules = %{
+        "conditions" => [
+          %{"field" => "metadata.original_language", "operator" => "not_in", "value" => ["en"]}
+        ]
+      }
+
+      item_ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
+
+      assert japanese.id in item_ids
+      assert no_language.id in item_ids
+      refute english.id in item_ids
+    end
+
+    test "filters by metadata.status not_in, including items missing the field" do
+      returning =
+        media_item_fixture(%{type: "tv_show", metadata: %{"status" => "Returning Series"}})
+
+      ended = media_item_fixture(%{type: "tv_show", metadata: %{"status" => "Ended"}})
+      no_status = media_item_fixture(%{type: "tv_show", metadata: %{}})
+
+      rules = %{
+        "conditions" => [
+          %{"field" => "metadata.status", "operator" => "not_in", "value" => ["Ended"]}
+        ]
+      }
+
+      item_ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
+
+      assert returning.id in item_ids
+      assert no_status.id in item_ids
+      refute ended.id in item_ids
+    end
   end
 
   describe "helper functions" do
@@ -445,6 +484,81 @@ defmodule Mydia.Collections.SmartRulesTest do
       }
 
       assert {:ok, %Ecto.Query{}} = SmartRules.query(rules)
+    end
+  end
+
+  describe "within_last operator" do
+    test "matches an item inserted inside the window" do
+      item = media_item_fixture(%{title: "Harbor Lights"})
+
+      rules = %{
+        "match_type" => "all",
+        "conditions" => [
+          %{"field" => "inserted_at", "operator" => "within_last", "value" => 30}
+        ]
+      }
+
+      ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
+      assert item.id in ids
+    end
+
+    test "excludes an item inserted before the window" do
+      old_item = media_item_fixture(%{title: "Quiet Harvest"})
+      recent_item = media_item_fixture(%{title: "Copper Ridge"})
+
+      old = DateTime.add(DateTime.utc_now(), -90, :day) |> DateTime.truncate(:second)
+
+      {1, _} =
+        Mydia.Repo.update_all(
+          from(m in Mydia.Media.MediaItem, where: m.id == ^old_item.id),
+          set: [inserted_at: old]
+        )
+
+      rules = %{
+        "match_type" => "all",
+        "conditions" => [
+          %{"field" => "inserted_at", "operator" => "within_last", "value" => 30}
+        ]
+      }
+
+      ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
+      refute old_item.id in ids
+      assert recent_item.id in ids
+    end
+
+    test "validation rejects zero, negative, and non-integer values" do
+      for bad <- [0, -5, 1.5, "30", nil] do
+        rules = %{
+          "match_type" => "all",
+          "conditions" => [
+            %{"field" => "inserted_at", "operator" => "within_last", "value" => bad}
+          ]
+        }
+
+        assert {:error, _errors} = SmartRules.validate(rules),
+               "expected within_last to reject #{inspect(bad)}"
+      end
+
+      valid_rules = %{
+        "match_type" => "all",
+        "conditions" => [
+          %{"field" => "inserted_at", "operator" => "within_last", "value" => 30}
+        ]
+      }
+
+      assert {:ok, _} = SmartRules.validate(valid_rules)
+    end
+
+    test "validation rejects within_last on a non-date field" do
+      rules = %{
+        "match_type" => "all",
+        "conditions" => [
+          %{"field" => "year", "operator" => "within_last", "value" => 30}
+        ]
+      }
+
+      assert {:error, errors} = SmartRules.validate(rules)
+      assert Enum.any?(errors, &String.contains?(&1, "within_last"))
     end
   end
 end
