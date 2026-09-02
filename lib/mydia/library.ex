@@ -824,7 +824,7 @@ defmodule Mydia.Library do
 
     expired =
       from(f in MediaFile,
-        where: not is_nil(f.trashed_at) and f.trashed_at < ^cutoff,
+        where: not is_nil(f.trashed_at) and f.trashed_at <= ^cutoff,
         preload: :library_path
       )
       |> Repo.all()
@@ -848,7 +848,7 @@ defmodule Mydia.Library do
       from(f in MediaFile,
         where:
           f.id in ^ids and not is_nil(f.trashed_at) and
-            f.trashed_at < ^cutoff
+            f.trashed_at <= ^cutoff
       )
       |> Repo.delete_all()
 
@@ -955,6 +955,21 @@ defmodule Mydia.Library do
     else
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  @doc """
+  Fetches one trashed media file by id, or nil.
+
+  Returns nil for an active row as well as a missing one: every caller is a
+  trash page action, and acting on a row somebody restored in another tab is
+  exactly the case this must refuse.
+  """
+  @spec get_trashed_media_file(binary(), keyword()) :: MediaFile.t() | nil
+  def get_trashed_media_file(id, opts \\ []) do
+    MediaFile
+    |> where([f], f.id == ^id and not is_nil(f.trashed_at))
+    |> maybe_preload(opts[:preload])
+    |> Repo.one()
   end
 
   # How a row came to be trashed, recorded on the row itself. Three states,

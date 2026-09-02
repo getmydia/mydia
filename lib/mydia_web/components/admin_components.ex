@@ -82,6 +82,13 @@ defmodule MydiaWeb.AdminComponents do
         Duplicates
       </.tab_link>
       <.tab_link
+        active={@active_tab == :trash}
+        to="/admin/config/trash"
+        icon="hero-trash"
+      >
+        Trash
+      </.tab_link>
+      <.tab_link
         active={@active_tab == :media_servers}
         to="/admin/config/media-servers"
         icon="hero-server-stack"
