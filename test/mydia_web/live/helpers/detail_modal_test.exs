@@ -47,6 +47,16 @@ defmodule MydiaWeb.Live.Helpers.DetailModalTest do
     test "returns nil for no lists at all" do
       assert is_nil(DetailModal.find_selectable_item([], "1"))
     end
+
+    test "without a media type, matches on id alone even across differing media types" do
+      # Regression guard for click resolution: every list a click resolves
+      # against is homogeneous by media type already, so the 2-arity call
+      # must keep matching on id alone rather than start requiring a type.
+      movie = result("5", "A Fictional Heist")
+      show = %{provider_id: "5", title: "A Fictional Show"}
+
+      assert DetailModal.find_selectable_item([[show], [movie]], "5") == show
+    end
   end
 
   describe "refresh_selected/2" do
@@ -75,6 +85,28 @@ defmodule MydiaWeb.Live.Helpers.DetailModalTest do
       refreshed = DetailModal.refresh_selected(socket(nil), [[%{provider_id: "5"}]])
 
       assert is_nil(refreshed.assigns.selected_item)
+    end
+
+    test "does not swap the selection to a same-id item of a different media type" do
+      # Mirrors the Dashboard's `refresh_selected([trending_movies, trending_tv])`:
+      # TMDB namespaces ids per media type, so a movie and a show can share
+      # one. A refresh must not swap the dialog onto the wrong title just
+      # because the id matched.
+      stale = %{provider_id: "5", media_type: :movie, title: "A Fictional Heist"}
+      wrong_type = %{provider_id: "5", media_type: :tv_show, title: "A Fictional Show"}
+
+      refreshed = DetailModal.refresh_selected(socket(stale), [[wrong_type]])
+
+      assert refreshed.assigns.selected_item == stale
+    end
+
+    test "swaps in the refreshed item when the id and media type both match" do
+      stale = %{provider_id: "5", media_type: :movie, in_library: false}
+      fresh = %{provider_id: "5", media_type: :movie, in_library: true}
+
+      refreshed = DetailModal.refresh_selected(socket(stale), [[fresh]])
+
+      assert refreshed.assigns.selected_item == fresh
     end
   end
 end

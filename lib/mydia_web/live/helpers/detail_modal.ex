@@ -112,13 +112,27 @@ defmodule MydiaWeb.Live.Helpers.DetailModal do
 
   Ids are compared as strings on both sides: a `SearchResult`'s `provider_id`
   is a string while several hosts hold parsed integers.
+
+  `media_type` is optional and defaults to nil, which matches on id alone as
+  before. Click resolution leaves it out: every list a click resolves against
+  is homogeneous by media type already (Discover's grid and rail are both
+  movies or both TV shows for the active tab; the detail page's rails all
+  belong to the viewed title's type), so the id alone is unambiguous there.
+  `refresh_selected/2`, below, is the one caller that passes it, because TMDB
+  namespaces ids per media type and its lists are not homogeneous.
   """
-  def find_selectable_item(lists, id) do
+  def find_selectable_item(lists, id, media_type \\ nil) do
     id = to_string(id)
 
     Enum.find_value(lists, fn list ->
-      Enum.find(list, &(to_string(&1.provider_id) == id))
+      Enum.find(list, &matches_selectable?(&1, id, media_type))
     end)
+  end
+
+  defp matches_selectable?(item, id, nil), do: to_string(item.provider_id) == id
+
+  defp matches_selectable?(item, id, media_type) do
+    to_string(item.provider_id) == id and Map.get(item, :media_type) == media_type
   end
 
   @doc """
@@ -132,6 +146,14 @@ defmodule MydiaWeb.Live.Helpers.DetailModal do
   An id that is in none of the lists leaves the selection untouched rather than
   clearing it: the dialog is still open, and blanking it would close it out from
   under the user.
+
+  The stale item's `media_type` is passed to `find_selectable_item/3` alongside
+  its id. The Dashboard is the one caller whose lists mix media types
+  (`[trending_movies, trending_tv]`), and TMDB namespaces ids per type, so a
+  movie and a show can share one. Without the type check a refresh could swap
+  the dialog onto a same-id title of the other kind instead of just refreshing
+  the one already open. Every other caller's lists are homogeneous, so this is
+  a no-op there.
   """
   def refresh_selected(socket, lists) do
     case socket.assigns.selected_item do
@@ -139,7 +161,7 @@ defmodule MydiaWeb.Live.Helpers.DetailModal do
         socket
 
       item ->
-        case find_selectable_item(lists, item.provider_id) do
+        case find_selectable_item(lists, item.provider_id, Map.get(item, :media_type)) do
           nil -> socket
           fresh -> assign(socket, :selected_item, fresh)
         end
