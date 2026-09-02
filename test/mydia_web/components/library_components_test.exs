@@ -11,18 +11,7 @@ defmodule MydiaWeb.LibraryComponentsTest do
     for i <- 1..count, do: %{id: "lib-#{i}", path: "/media/movies-#{i}"}
   end
 
-  defp picker_button(overrides \\ %{}) do
-    assigns =
-      Map.merge(
-        %{
-          libraries: libraries(2),
-          tmdb_id: "693134",
-          media_type: :movie,
-          title: "Dune: Part Two"
-        },
-        overrides
-      )
-
+  defp render_button(assigns) do
     render_component(&LibraryComponents.library_picker_button/1, assigns)
   end
 
@@ -44,20 +33,28 @@ defmodule MydiaWeb.LibraryComponentsTest do
   end
 
   describe "library_picker_button/1" do
-    test "renders nothing when there is only one candidate library" do
-      refute picker_button(%{libraries: libraries(1)}) =~ "library-picker-caret"
+    # The caret no longer takes a `libraries` attr at all, so there is nothing
+    # left to gate on and one unconditional-render test covers every install
+    # size. The zero-and-one-library cases that used to be hidden are asserted
+    # end to end in the feature test instead, where a real library count exists.
+    test "always renders the caret" do
+      html = render_button(%{tmdb_id: "551", media_type: "movie", title: "The Kestrel Protocol"})
+
+      refute LazyHTML.from_fragment(html)
+             |> LazyHTML.query(~s([data-test="add-config-caret"]))
+             |> Enum.empty?()
     end
 
-    test "renders a real button that opens the dialog, carrying the card's identity" do
-      html = picker_button()
-      document = LazyHTML.from_fragment(html)
+    test "pushes open_add_config with the card's identifiers" do
+      html = render_button(%{tmdb_id: "551", media_type: "movie", title: "The Kestrel Protocol"})
 
-      caret = LazyHTML.query(document, ~s(button[data-test="library-picker-caret"]))
+      caret =
+        LazyHTML.from_fragment(html) |> LazyHTML.query(~s([data-test="add-config-caret"]))
 
-      assert LazyHTML.attribute(caret, "phx-click") == ["open_library_picker"]
-      assert LazyHTML.attribute(caret, "phx-value-tmdb_id") == ["693134"]
+      assert LazyHTML.attribute(caret, "phx-click") == ["open_add_config"]
+      assert LazyHTML.attribute(caret, "phx-value-tmdb_id") == ["551"]
       assert LazyHTML.attribute(caret, "phx-value-media_type") == ["movie"]
-      assert LazyHTML.attribute(caret, "phx-value-title") == ["Dune: Part Two"]
+      assert LazyHTML.attribute(caret, "phx-value-title") == ["The Kestrel Protocol"]
     end
   end
 

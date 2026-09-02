@@ -523,32 +523,28 @@ defmodule MydiaWeb.LibraryComponents do
   @doc """
   The caret half of the "Add to Library" split button.
 
-  Renders nothing when there are fewer than two candidates, so a
-  single-library install sees the plain add button exactly as before. Set
-  `always_show` to keep the caret reachable regardless of candidate count: on
-  Discover the caret also opens the Configure entry inside
-  `library_picker_dialog/1`, which must stay reachable even with zero or one
-  library.
+  Opens `MydiaWeb.AddMediaComponents.add_config_modal/1`, which every host
+  renders once per page. It renders unconditionally: the dialog behind it now
+  carries the quality profile, monitoring and search-on-add controls, so it is
+  worth reaching on a single-library install, which the old
+  `length(@libraries) > 1` gate hid it from.
 
-  This is a real `<button>` rather than a `div[role="button"]` because it no
-  longer drives a CSS `:focus` dropdown. It pushes an event and the host opens
-  `library_picker_dialog/1`.
+  This is a real `<button>` rather than a `div[role="button"]` because it does
+  not drive a CSS `:focus` dropdown. It pushes an event and the host opens the
+  dialog.
   """
-  attr :libraries, :list, required: true
   attr :tmdb_id, :any, default: nil
   attr :media_type, :any, default: nil
   attr :title, :string, default: ""
-  attr :always_show, :boolean, default: false
 
   def library_picker_button(assigns) do
     ~H"""
     <button
-      :if={length(@libraries) > 1 or @always_show}
       type="button"
-      data-test="library-picker-caret"
+      data-test="add-config-caret"
       class="btn btn-primary btn-sm join-item px-2"
-      title="Choose a library"
-      phx-click="open_library_picker"
+      title="Configure before adding"
+      phx-click="open_add_config"
       phx-value-tmdb_id={@tmdb_id}
       phx-value-media_type={@media_type}
       phx-value-title={@title}

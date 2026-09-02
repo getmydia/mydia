@@ -92,9 +92,6 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
     })
   end
 
-  # The caret still pushes open_library_picker at this point in the plan, so
-  # the click-through assertion lands in Task 5 once the caret is repointed.
-
   # A completed add reaches `Mydia.Media.Add.from_provider/4`, which fetches
   # the added title's own TMDB details directly. That lookup is uncached
   # (unlike the mount-time franchise/recommendations lookups
@@ -339,5 +336,14 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
     })
 
     refute media_item_created_within?(missing_tmdb_id)
+  end
+
+  test "the rail caret opens the configure dialog", %{conn: conn} do
+    {movie, _recommended} = movie_with_recommendation()
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    assert has_element?(view, "#recommendations-rail [data-test='add-config-caret']")
   end
 end

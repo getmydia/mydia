@@ -177,22 +177,25 @@ defmodule MydiaWeb.DiscoverComponentsTest do
   # container at any placement. The picker is now a page-level dialog, which
   # the container cannot clip, so rail cards can target a chosen library
   # again. See #465.
-  describe "media_rail library picker" do
-    test "a rail card offers the picker when the host supplies several libraries" do
+  describe "media_rail configure caret" do
+    # The caret no longer gates on `libraries` at all: it opens the merged
+    # configure dialog directly, so it is worth reaching regardless of how
+    # many libraries the install has.
+    test "a rail card offers the caret when the host supplies several libraries" do
       html =
         rail(%{
           libraries: [%{id: "a", path: "/m/a"}, %{id: "b", path: "/m/b"}]
         })
 
       assert html =~ "Add to Library"
-      assert html =~ "library-picker-caret"
+      assert html =~ "add-config-caret"
     end
 
-    test "a rail card offers no picker when the host supplies none" do
+    test "a rail card still offers the caret when the host supplies none" do
       html = rail(%{})
 
       assert html =~ "Add to Library"
-      refute html =~ "library-picker-caret"
+      assert html =~ "add-config-caret"
     end
   end
 end
