@@ -7,11 +7,19 @@ defmodule Mydia.MetadataStubProvider do
   `AdminRequestsLive.Index` calls `MediaRequests.approve_request/2` without a
   config, so injecting a Bypass config cannot cover the approval path.
 
-  The catalog is deliberately tiny and self-consistent: every id `search/3`
-  returns is resolvable by `fetch_by_id/3`, because approval re-fetches by that
-  id. A catalog that violates this reproduces the original defect, where the
-  test seeded an id the relay had never heard of and the approval silently
+  The catalog is deliberately tiny and self-consistent: every ref `search/3`
+  implies is resolvable by `fetch_by_ref/3`, because approval re-fetches by
+  that ref. A catalog that violates this reproduces the original defect, where
+  the test seeded an id the relay had never heard of and the approval silently
   failed.
+
+  The catalog is keyed by `Mydia.Metadata.Ref.t()`, not by a bare id: the
+  series lives only under `{:tvdb, series_tvdb_id()}` and the movie only under
+  `{:tmdb, movie_tmdb_id()}`. `{:tmdb, series_tvdb_id()}` is simply not in the
+  catalog, so a caller that sends the series' TVDB id to the TMDB route misses
+  naturally instead of getting an answer -- this is what let the Discover add
+  bug ship three times, because the old id-keyed stub answered that pairing
+  and made production's 404 invisible in tests.
   """
 
   @behaviour Mydia.Metadata.Provider
@@ -47,6 +55,12 @@ defmodule Mydia.MetadataStubProvider do
 
   @doc "Reserved id whose fetch always fails, for the approval-failure case."
   def missing_id, do: @missing_id
+
+  @doc "Ref of the catalog series."
+  def series_ref, do: {:tvdb, @series_tvdb_id}
+
+  @doc "Ref of the catalog movie."
+  def movie_ref, do: {:tmdb, @movie_tmdb_id}
 
   @doc "Title of the catalog movie."
   def movie_title, do: @movie_title
@@ -87,9 +101,9 @@ defmodule Mydia.MetadataStubProvider do
   end
 
   @doc """
-  Starts (or clears) the `fetch_by_id/3` call counter.
+  Starts (or clears) the `fetch_by_ref/3` call counter.
 
-  Opt-in and purely additive: `fetch_by_id/3` only counts a call when this
+  Opt-in and purely additive: `fetch_by_ref/3` only counts a call when this
   table exists, so tests that never call this function see no behavior
   change. Used by `request_pages_poster_test.exs` to assert a permanently-
   unresolvable row is attempted exactly once per backfill pass, not retried
@@ -106,7 +120,7 @@ defmodule Mydia.MetadataStubProvider do
   end
 
   @doc """
-  Makes the next `fetch_by_id/3` call for `provider_id` raise instead of
+  Makes the next `fetch_by_ref/3` call for `media_ref` raise instead of
   returning the catalog entry.
 
   Opt-in and self-clearing: the next matching call consumes it and reverts to
@@ -117,29 +131,29 @@ defmodule Mydia.MetadataStubProvider do
   `MediaRequestBackfillTest` to prove a raise inside one row of a concurrent
   backfill does not crash the caller or stop sibling rows.
   """
-  def raise_on_fetch_by_id(provider_id) do
-    ref = make_ref()
-    :persistent_term.put(@raise_on_fetch_by_id_key, {to_string(provider_id), ref})
-    ref
+  def raise_on_fetch_by_id(media_ref) do
+    token = make_ref()
+    :persistent_term.put(@raise_on_fetch_by_id_key, {media_ref, token})
+    token
   end
 
   @doc "Clears a pending `raise_on_fetch_by_id/1` installed by a test, if not already consumed."
-  def clear_raise_on_fetch_by_id(ref) do
+  def clear_raise_on_fetch_by_id(token) do
     case :persistent_term.get(@raise_on_fetch_by_id_key, nil) do
-      {_provider_id, ^ref} -> :persistent_term.erase(@raise_on_fetch_by_id_key)
+      {_media_ref, ^token} -> :persistent_term.erase(@raise_on_fetch_by_id_key)
       _other -> :ok
     end
   end
 
-  @doc "Number of `fetch_by_id/3` calls observed for `provider_id` since the last reset."
-  def fetch_by_id_count(provider_id) do
+  @doc "Number of `fetch_by_ref/3` calls observed for `media_ref` since the last reset."
+  def fetch_by_id_count(media_ref) do
     case :ets.whereis(@fetch_by_id_counts_table) do
       :undefined ->
         0
 
       _tid ->
-        case :ets.lookup(@fetch_by_id_counts_table, provider_id) do
-          [{^provider_id, count}] -> count
+        case :ets.lookup(@fetch_by_id_counts_table, media_ref) do
+          [{^media_ref, count}] -> count
           [] -> 0
         end
     end
@@ -160,70 +174,47 @@ defmodule Mydia.MetadataStubProvider do
     end
   end
 
+  # The ref catalog is the source of truth: only `{:tvdb, @series_tvdb_id}`
+  # and `{:tmdb, @movie_tmdb_id}` resolve. `{:tmdb, @series_tvdb_id}` -- the
+  # exact pairing the deleted hotfix guard singled out -- is simply not a key
+  # in this `case`, so it falls to the catch-all and answers not_found on its
+  # own, the same way the relay answers 404 for a TVDB id sent to TMDB's
+  # route.
   @impl true
-  def fetch_by_id(_config, provider_id, opts) do
-    count_fetch_by_id_call(provider_id)
-    maybe_raise_on_fetch_by_id(provider_id)
+  def fetch_by_ref(_config, ref, _opts) do
+    count_fetch_by_id_call(ref)
+    maybe_raise_on_fetch_by_id(ref)
 
-    cond do
-      provider_id == to_string(@missing_id) ->
-        {:error, Error.not_found("Media not found: #{@missing_id}")}
-
-      # The catalog's series id is a TVDB id, and the relay answers 404 for a
-      # TVDB id on TMDB's route. Answering it anyway is what let the Discover
-      # add ship sending TVDB search ids to TMDB: production failed with
-      # "Media not found: <tvdb id>" while the stub happily returned the show.
-      provider_id == to_string(@series_tvdb_id) and Keyword.get(opts, :provider) == :tmdb ->
-        {:error, Error.not_found("Media not found: #{provider_id}")}
-
-      Keyword.get(opts, :provider) == :tvdb or Keyword.get(opts, :media_type) == :tv_show ->
-        {:ok, series_metadata()}
-
-      true ->
-        {:ok, movie_metadata()}
+    case ref do
+      {:tvdb, @series_tvdb_id} -> {:ok, series_metadata()}
+      {:tmdb, @movie_tmdb_id} -> {:ok, movie_metadata()}
+      {_provider, id} -> {:error, Error.not_found("Media not found: #{id}")}
     end
   end
 
-  # This stub predates refs. Rather than duplicate `fetch_by_id/3`'s routing
-  # (which several tests exercise directly), the ref variants just forward to
-  # the old ones with the ref's provider folded into `opts`, so both entry
-  # points hit the same catalog logic. `Keyword.put/3`, not `put_new/3`: the
-  # ref is the source of truth and must win over a stale `opts[:provider]`,
-  # otherwise a caller passing a `{:tvdb, id}` ref alongside leftover
-  # `provider: :tmdb` opts gets routed by the stale opt instead of the ref --
-  # exactly the bug this refactor exists to prevent, reachable through the
-  # entry point meant to prevent it.
+  # Shim. Deleted in the final task of this plan, along with every caller.
+  # Forwards into `fetch_by_ref/3` via `Ref.legacy_from_opts/2`, mirroring
+  # every real provider (see `Provider.Relay.fetch_by_id/3`) so a caller that
+  # still goes through the id-based entry point is routed by exactly the same
+  # ref the `fetch_by_ref/3` entry point would compute.
   @impl true
-  def fetch_by_ref(config, ref, opts) do
-    fetch_by_id(config, to_string(Ref.id(ref)), Keyword.put(opts, :provider, Ref.provider(ref)))
+  def fetch_by_id(config, provider_id, opts) do
+    fetch_by_ref(config, Ref.legacy_from_opts(provider_id, opts), opts)
   end
 
   @impl true
-  def fetch_images_by_ref(config, ref, opts) do
-    fetch_images(
-      config,
-      to_string(Ref.id(ref)),
-      Keyword.put(opts, :provider, Ref.provider(ref))
-    )
-  end
-
-  @impl true
-  def fetch_season_by_ref(config, ref, season_number, opts) do
-    fetch_season(
-      config,
-      to_string(Ref.id(ref)),
-      season_number,
-      Keyword.put(opts, :provider, Ref.provider(ref))
-    )
-  end
-
-  @impl true
-  def fetch_images(_config, _provider_id, _opts) do
+  def fetch_images_by_ref(_config, _ref, _opts) do
     {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
   end
 
+  # Shim. Deleted in the final task of this plan, along with every caller.
   @impl true
-  def fetch_season(_config, _provider_id, season_number, _opts) do
+  def fetch_images(config, provider_id, opts) do
+    fetch_images_by_ref(config, Ref.legacy_from_opts(provider_id, opts), opts)
+  end
+
+  @impl true
+  def fetch_season_by_ref(_config, _ref, season_number, _opts) do
     maybe_block_season_fetch()
 
     {:ok,
@@ -251,28 +242,34 @@ defmodule Mydia.MetadataStubProvider do
      }}
   end
 
+  # Shim. Deleted in the final task of this plan, along with every caller.
+  @impl true
+  def fetch_season(config, provider_id, season_number, opts) do
+    fetch_season_by_ref(config, Ref.legacy_from_opts(provider_id, opts), season_number, opts)
+  end
+
   @impl true
   def fetch_trending(_config, _opts), do: {:ok, []}
 
   ## Catalog
 
-  defp count_fetch_by_id_call(provider_id) do
+  defp count_fetch_by_id_call(media_ref) do
     case :ets.whereis(@fetch_by_id_counts_table) do
       :undefined ->
         :ok
 
       _tid ->
-        :ets.update_counter(@fetch_by_id_counts_table, provider_id, {2, 1}, {provider_id, 0})
+        :ets.update_counter(@fetch_by_id_counts_table, media_ref, {2, 1}, {media_ref, 0})
     end
 
     :ok
   end
 
-  defp maybe_raise_on_fetch_by_id(provider_id) do
+  defp maybe_raise_on_fetch_by_id(media_ref) do
     case :persistent_term.get(@raise_on_fetch_by_id_key, nil) do
-      {^provider_id, _ref} ->
+      {^media_ref, _token} ->
         :persistent_term.erase(@raise_on_fetch_by_id_key)
-        raise "MetadataStubProvider: forced fetch_by_id failure for #{provider_id}"
+        raise "MetadataStubProvider: forced fetch_by_id failure for #{inspect(media_ref)}"
 
       _other ->
         :ok

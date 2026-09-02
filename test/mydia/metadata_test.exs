@@ -19,14 +19,14 @@ defmodule Mydia.MetadataTest do
     def search(_config, _query, _opts), do: {:ok, []}
 
     @impl true
-    def fetch_by_id(_config, _id, _opts), do: {:ok, %{}}
+    def fetch_by_ref(_config, _ref, _opts), do: {:ok, %{}}
 
     @impl true
-    def fetch_images(_config, _id, _opts),
+    def fetch_images_by_ref(_config, _ref, _opts),
       do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
 
     @impl true
-    def fetch_season(_config, _id, _season, _opts), do: {:ok, %{}}
+    def fetch_season_by_ref(_config, _ref, _season, _opts), do: {:ok, %{}}
 
     @impl true
     def fetch_trending(_config, opts) do
@@ -316,13 +316,13 @@ defmodule Mydia.MetadataTest do
       def search(_config, _query, _opts), do: {:error, :api_error}
 
       @impl true
-      def fetch_by_id(_config, _id, _opts), do: {:error, :not_found}
+      def fetch_by_ref(_config, _ref, _opts), do: {:error, :not_found}
 
       @impl true
-      def fetch_images(_config, _id, _opts), do: {:error, :api_error}
+      def fetch_images_by_ref(_config, _ref, _opts), do: {:error, :api_error}
 
       @impl true
-      def fetch_season(_config, _id, _season, _opts), do: {:error, :api_error}
+      def fetch_season_by_ref(_config, _ref, _season, _opts), do: {:error, :api_error}
 
       @impl true
       def fetch_trending(_config, _opts), do: {:error, :api_unavailable}

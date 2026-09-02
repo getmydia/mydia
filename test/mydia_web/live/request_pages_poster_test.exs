@@ -122,7 +122,7 @@ defmodule MydiaWeb.RequestPagesPosterTest do
 
     assert Repo.get!(MediaRequest, request.id).poster_path == nil
 
-    assert MetadataStubProvider.fetch_by_id_count(to_string(MetadataStubProvider.missing_id())) ==
+    assert MetadataStubProvider.fetch_by_id_count({:tmdb, MetadataStubProvider.missing_id()}) ==
              1
 
     # The LiveView process must still be responsive to ordinary events: a
@@ -136,7 +136,7 @@ defmodule MydiaWeb.RequestPagesPosterTest do
 
     assert has_element?(view, ~s(#request-#{request.id}))
 
-    assert MetadataStubProvider.fetch_by_id_count(to_string(MetadataStubProvider.missing_id())) ==
+    assert MetadataStubProvider.fetch_by_id_count({:tmdb, MetadataStubProvider.missing_id()}) ==
              1
   end
 end

@@ -28,12 +28,15 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
     test "promotes a queued group and removes its candidates" do
       lp = library_path_fixture(%{type: "series"})
 
+      # The provider_id must be the stub's actual catalog series: the ref-keyed
+      # catalog only resolves {:tvdb, series_tvdb_id()}, not an arbitrary
+      # made-up id (see MetadataStubProvider's moduledoc).
       candidate =
         import_candidate_fixture(%{
           library_path_id: lp.id,
           relative_path: "Wandering Aurora/s01e01.mkv",
           provider_type: "tvdb",
-          provider_id: "9001",
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
           title: "Wandering Aurora",
           media_type: "tv_show",
           confidence: 0.95,
@@ -131,12 +134,14 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
     test "promotes only the queued rows of a mixed anchor" do
       lp = library_path_fixture(%{type: "series"})
 
+      # provider_id must be the stub's actual catalog series id -- see the
+      # comment on the first test in this describe block.
       queued =
         import_candidate_fixture(%{
           library_path_id: lp.id,
           relative_path: "Wandering Aurora/s01e01.mkv",
           provider_type: "tvdb",
-          provider_id: "9001",
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
           title: "Wandering Aurora",
           media_type: "tv_show",
           confidence: 0.95,
@@ -167,12 +172,16 @@ defmodule Mydia.Jobs.ApplyImportCandidatesTest do
     test "an anchor queued for both accept and rematch promotes only the accept-queued row" do
       lp = library_path_fixture(%{type: "series"})
 
+      # provider_id must be the stub's actual catalog series id -- see the
+      # comment on the first test in this describe block. `rematching` below
+      # deliberately keeps an arbitrary id: it is never promoted, so it never
+      # reaches the stub's fetch.
       accepted =
         import_candidate_fixture(%{
           library_path_id: lp.id,
           relative_path: "Wandering Aurora/s01e01.mkv",
           provider_type: "tvdb",
-          provider_id: "9001",
+          provider_id: to_string(Mydia.MetadataStubProvider.series_tvdb_id()),
           title: "Wandering Aurora",
           media_type: "tv_show",
           confidence: 0.95,

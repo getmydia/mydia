@@ -90,9 +90,8 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestBackfillTest do
           tvdb_id: MetadataStubProvider.series_tvdb_id()
         })
 
-      provider_id = to_string(MetadataStubProvider.movie_tmdb_id())
-      ref = MetadataStubProvider.raise_on_fetch_by_id(provider_id)
-      on_exit(fn -> MetadataStubProvider.clear_raise_on_fetch_by_id(ref) end)
+      raise_token = MetadataStubProvider.raise_on_fetch_by_id(MetadataStubProvider.movie_ref())
+      on_exit(fn -> MetadataStubProvider.clear_raise_on_fetch_by_id(raise_token) end)
 
       assert :ok = MediaRequestHelpers.backfill_poster_paths([crashing, sibling])
 
