@@ -218,6 +218,48 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       assert error.message =~ "delta 12px"
     end
 
+    # A delta a hair over the tolerance must not be displayed as though it sat
+    # exactly on it. Rounding the reported delta to 1 decimal place printed a
+    # failing 1.04px as "delta 1px, tolerance 1px", which reads like a message
+    # that should have passed and sends the reader hunting for a bug in the
+    # assertion rather than in their layout.
+    @tag :feature
+    test "reports a just-over-tolerance delta without rounding it onto the boundary",
+         %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> visit("/")
+      |> wait_for_liveview()
+
+      inject(session, """
+        var a = document.createElement('div');
+        a.id = 'geo-height-edge-a';
+        a.style.cssText =
+          'position:fixed;top:10px;left:10px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(a);
+
+        var b = document.createElement('div');
+        b.id = 'geo-height-edge-b';
+        b.style.cssText =
+          'position:fixed;top:10px;left:200px;width:50px;height:201.04px;z-index:9999';
+        document.body.appendChild(b);
+      """)
+
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          assert_same_height(session, "#geo-height-edge-a", "#geo-height-edge-b")
+        end
+
+      # Matched as a pattern rather than an exact string: the browser snaps the
+      # requested 201.04px to its own device-pixel grid (observed 201.03px), so
+      # pinning the literal would make this test about Chrome's rounding rather
+      # than about ours. What matters is that a sub-pixel delta survives into
+      # the message instead of collapsing onto the tolerance.
+      refute error.message =~ "delta 1px"
+      assert error.message =~ ~r/delta 1\.\d+px/
+    end
+
     @tag :feature
     test "fails with a distinct sentinel when the first selector matches nothing",
          %{session: session} do

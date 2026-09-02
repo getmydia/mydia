@@ -121,7 +121,16 @@ defmodule MydiaWeb.Features.DiscoverSkeletonHeightParityTest do
 
     assert error.message =~ "injected-skeleton-grid"
     assert error.message =~ "discover-grid .card"
-    assert error.message =~ "delta #{shrink_by_px}px"
+
+    # Asserted as a range rather than the exact shrink amount. The card's real
+    # height is sub-pixel (343.48px here), so shrinking it by a whole number of
+    # pixels leaves a delta near, but not exactly on, that number. Pinning the
+    # literal only worked while the message rounded the delta to one decimal
+    # place, and it broke the moment that rounding was made finer. What this
+    # test exists to prove is that the guard fails and names a delta of roughly
+    # the size it was given, not that a browser reports whole pixels.
+    delta = extract_delta_px(error.message)
+    assert_in_delta delta, shrink_by_px, 0.5
 
     eval_js(session, """
       var el = document.querySelector('#injected-skeleton-grid .card');
@@ -175,5 +184,22 @@ defmodule MydiaWeb.Features.DiscoverSkeletonHeightParityTest do
 
       return 'ok';
     """)
+  end
+
+  # Pulls the numeric delta out of assert_same_height/4's failure message so the
+  # test can assert its magnitude rather than its exact rendering. Flunks rather
+  # than returning a default when the message has no delta at all, so a change
+  # to the message format shows up as a named failure instead of a silent pass.
+  defp extract_delta_px(message) do
+    case Regex.run(~r/delta ([0-9.]+)px/, message) do
+      [_, captured] -> String.to_float(ensure_decimal(captured))
+      nil -> flunk("no \"delta <n>px\" found in assertion message:\n\n#{message}")
+    end
+  end
+
+  # String.to_float/1 rejects an integer-shaped string ("12"), which is exactly
+  # what the message carries when the delta lands on a whole pixel.
+  defp ensure_decimal(value) do
+    if String.contains?(value, "."), do: value, else: value <> ".0"
   end
 end

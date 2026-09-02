@@ -203,10 +203,17 @@ defmodule MydiaWeb.FeatureCase.Geometry do
 
   # Renders a pixel measurement without a spurious ".0" (200, not 200.0) while
   # keeping real sub-pixel deltas visible (341.5).
+  #
+  # Rounded to 2 places rather than 1 so a delta just past the tolerance cannot
+  # be displayed as though it sat exactly on it. At 1 place a failing 1.04px
+  # delta against the default 1px tolerance printed "delta 1px, tolerance 1px",
+  # which reads like a message that should have passed and sends the reader
+  # looking for a bug in the assertion rather than in their layout. Keep this
+  # finer than any tolerance a caller passes.
   defp format_px(value) when is_integer(value), do: Integer.to_string(value)
 
   defp format_px(value) when is_float(value) do
-    rounded = Float.round(value, 1)
+    rounded = Float.round(value, 2)
 
     if rounded == trunc(rounded) do
       rounded |> trunc() |> Integer.to_string()
