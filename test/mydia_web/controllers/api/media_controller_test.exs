@@ -30,6 +30,30 @@ defmodule MydiaWeb.Api.MediaControllerTest do
       assert json_response(conn, 400)["error"] =~ "provider_id"
     end
 
+    # A JSON body can send provider_id as a bare number rather than a string
+    # (`"provider_id": 0`). ConnTest's params map models that the same way a
+    # real JSON parser would: an integer, not a binary. Integer.parse/1 only
+    # accepts a binary and raises FunctionClauseError on ANY integer, which
+    # would take the request down with a 500 instead of the documented 400.
+    # 0 (rather than a real-looking id like 603) keeps this test from hitting
+    # the network: it is rejected before any provider fetch is attempted, the
+    # same way the non-numeric-string case above never reaches the relay.
+    test "returns 400 instead of crashing when provider_id is a JSON number", %{
+      conn: conn,
+      token: token,
+      movie: movie
+    } do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/api/v1/media/#{movie.id}/match", %{
+          "provider_id" => 0,
+          "provider_type" => "tmdb"
+        })
+
+      assert json_response(conn, 400)["error"] =~ "provider_id"
+    end
+
     # A numeric provider_id reaches the relay and the DB update commits --
     # proving the fix (Integer.parse feeding a real integer ref, rather than
     # the crash this finding is about). The endpoint cannot be asserted all

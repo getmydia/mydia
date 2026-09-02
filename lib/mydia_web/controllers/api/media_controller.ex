@@ -119,23 +119,39 @@ defmodule MydiaWeb.Api.MediaController do
   defp parse_media_type(_), do: :movie
 
   defp perform_manual_match(conn, media_item, provider_id, provider_type, fetch_episodes) do
-    case Integer.parse(provider_id) do
-      {provider_id_int, ""} ->
+    case parse_provider_id(provider_id) do
+      {:ok, provider_id_int} ->
         do_perform_manual_match(
           conn,
           media_item,
-          provider_id,
+          to_string(provider_id_int),
           provider_id_int,
           provider_type,
           fetch_episodes
         )
 
-      _ ->
+      :error ->
         conn
         |> put_status(:bad_request)
         |> json(%{error: "provider_id must be numeric"})
     end
   end
+
+  # A JSON body can send `provider_id` as either a string or a bare number.
+  # `Integer.parse/1` only accepts a binary and raises `FunctionClauseError` on
+  # an integer, which would take the request down with a 500 instead of the
+  # documented 400 for a numeric-looking payload like `"provider_id": 603`.
+  defp parse_provider_id(id) when is_integer(id) and id > 0, do: {:ok, id}
+  defp parse_provider_id(id) when is_integer(id), do: :error
+
+  defp parse_provider_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int, ""} when int > 0 -> {:ok, int}
+      _ -> :error
+    end
+  end
+
+  defp parse_provider_id(_id), do: :error
 
   defp do_perform_manual_match(
          conn,
