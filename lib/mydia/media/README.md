@@ -65,21 +65,34 @@ Fixtures for component tests should be real structs in production shape.
 
 `media_files_path_index` does not exist on master, on either adapter.
 `20251115185757_make_media_files_path_nullable.exs` dropped it deliberately when
-`path` became nullable. It was not lost in a SQLite table rebuild.
-
-Adding it back turns `test/mydia/jobs/media_import_test.exs` from 57 tests / 0
-failures into 57 / 2 on both adapters. `duplicate_media_file_scenario/1` (around
-line 1580) creates two `media_files` rows with the same `relative_path` in a
-`for _ <- 1..2` loop on purpose, and `media_file_fixture/1` derives `path` from
-`relative_path`, so both rows collide. Constructing that duplicate is the point
-of the test. The index also guards nothing in production, since `path` is nil
-everywhere.
+`path` became nullable. It was not lost in a SQLite table rebuild. The index
+would also guard nothing in production, since `path` is nil everywhere.
 
 If a `media_files` migration ever rebuilds the table on SQLite, recreate the
 other indexes and leave this one out. And when a test failure implicates a schema
 constraint, verify against an actual `origin/master` worktree. `git stash` cannot
 detect this, because stashing application code leaves the migration already
 applied to the test database.
+
+`20260901234336_fold_duplicate_media_files_and_enforce_path_uniqueness.exs`
+added a real, narrower guarantee: a partial `unique_index(:media_files,
+[:library_path_id, :relative_path], where: "trashed_at IS NULL")`. Two active
+rows at one path are no longer constructible at all, through any changeset path
+(`MediaFile.changeset/2` and `scan_changeset/2` both call the shared
+`guard_unique_active_path/1`) -- not the `for _ <- 1..2` loop this section used
+to describe in `test/mydia/jobs/media_import_test.exs`, which built the same
+duplicate for `path`'s benefit and collided on the new index first once it
+landed. That helper is now `partial_import_error_scenario/1`, and it reaches a
+still-real partial-import failure (a squatted destination directory) instead.
+The new index is still partial, though: it does not compare two `NULL`
+`library_path_id` values equal, so a legacy orphaned row (see "media_files.path
+is nil on every row" above) can still collide with another one, and a trashed
+row can still share a path with a live one. `Mydia.Library.Prune.Eligibility`'s
+`:duplicate_registration` check and `Mydia.Jobs.ImportRun`'s
+`owned_path?/2` (via `list_media_files_by_relative_path/3`) exist for exactly
+those two residual cases -- see `eligibility_test.exs`'s
+`orphaned_duplicate_group/0` and `import_run_job_test.exs`'s "tolerates an
+active and a trashed row" test for how to construct them now.
 
 ## Every "does this item have files" query counts every media_file
 
