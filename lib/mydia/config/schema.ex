@@ -92,6 +92,9 @@ defmodule Mydia.Config.Schema do
       field :monitor_by_default, :boolean, default: true
       field :season_refresh_threshold_hours, :integer, default: 24
       field :completed_show_refresh_threshold_hours, :integer, default: 168
+      # How long a trashed media file is held before Mydia.Jobs.TrashCleanup
+      # deletes the row and the bytes. 0 purges on the next daily run.
+      field :trash_retention_days, :integer, default: 30
     end
 
     embeds_one :metadata, Metadata, on_replace: :update, primary_key: false do
@@ -423,11 +426,13 @@ defmodule Mydia.Config.Schema do
       :auto_search_on_add,
       :monitor_by_default,
       :season_refresh_threshold_hours,
-      :completed_show_refresh_threshold_hours
+      :completed_show_refresh_threshold_hours,
+      :trash_retention_days
     ])
     # movies_path and tv_path are optional legacy fields
     |> validate_number(:season_refresh_threshold_hours, greater_than: 0)
     |> validate_number(:completed_show_refresh_threshold_hours, greater_than: 0)
+    |> validate_number(:trash_retention_days, greater_than_or_equal_to: 0)
   end
 
   defp metadata_changeset(schema, attrs) do

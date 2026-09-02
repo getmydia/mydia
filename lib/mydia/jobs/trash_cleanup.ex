@@ -15,12 +15,14 @@ defmodule Mydia.Jobs.TrashCleanup do
 
   ## Configuration
 
-  Set the retention period in your config:
-
-      config :mydia, :trash_retention_days, 30
+  Retention is `media.trash_retention_days` in the layered config, settable in
+  the admin UI, in YAML, or with `TRASH_RETENTION_DAYS`. It defaults to 30
+  days; 0 purges on the next daily run.
 
   The trash directory itself defaults to a `.mydia-trash` directory beside
-  each library path and can be overridden with `MYDIA_TRASH_DIR`.
+  each library path and can be overridden with `MYDIA_TRASH_DIR`. That is a
+  deployment fact resolved before the Repo is up, so it stays out of the
+  overlay.
   """
 
   use Oban.Worker,
@@ -30,12 +32,10 @@ defmodule Mydia.Jobs.TrashCleanup do
   require Logger
   alias Mydia.Library
 
-  @default_retention_days 30
-
   @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    retention_days = Application.get_env(:mydia, :trash_retention_days, @default_retention_days)
+    retention_days = Mydia.Config.get().media.trash_retention_days
 
     Logger.info("Starting trash cleanup job",
       retention_days: retention_days

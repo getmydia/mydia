@@ -341,9 +341,9 @@ config :mydia, Oban,
 # Events older than this will be automatically deleted
 config :mydia, :event_retention_days, 90
 
-# Trash retention configuration
-# Trashed media files older than this will be permanently deleted
-config :mydia, :trash_retention_days, 30
+# Trash retention (media.trash_retention_days) lives in the layered config
+# now (see Mydia.Config.Schema); it is settable in the admin UI, in YAML, or
+# with TRASH_RETENTION_DAYS.
 
 # Trash directory. Trashed media files are moved off the library path so a
 # library scan cannot resurrect them (see Mydia.Library.TrashStore). nil means
