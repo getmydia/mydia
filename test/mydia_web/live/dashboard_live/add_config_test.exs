@@ -124,6 +124,61 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     wait_until_media_item(provider_id)
   end
 
+  # The plain (non-Configure) "Add to Library" button on Dashboard sends this
+  # event directly, bypassing submit_add_config entirely. Mirrors
+  # add_config_host_test.exs's identical regression test: Mydia.RelayGuard
+  # blocks the unstubbed relay call in this test environment, so an
+  # unauthorized add would create no media item even with the gate deleted,
+  # and the absence of a media item would prove nothing about authorization.
+  # Bypass.stub (not expect) keeps the assertion honest either way: a
+  # correctly-gated add must never reach this endpoint, but the test must
+  # still pass if it somehow did.
+  test "a guest cannot add_to_library even with a stubbed metadata endpoint", %{conn: conn} do
+    guest = user_fixture(%{role: "guest"})
+    conn = log_in_user(conn, guest)
+
+    provider_id = to_string(unique_provider_id())
+
+    bypass = Bypass.open()
+    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    on_exit(fn ->
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
+    end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/#{provider_id}", fn conn ->
+      body = %{
+        "id" => provider_id,
+        "title" => "The Kestrel Protocol",
+        "release_date" => "2024-05-01",
+        "belongs_to_collection" => nil
+      }
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    render_hook(view, "add_to_library", %{
+      "tmdb_id" => provider_id,
+      "media_type" => "movie"
+    })
+
+    # A correctly-gated event returns synchronously with no handle_info
+    # dispatched. Give an incorrectly-gated add (which does dispatch one, and
+    # would round-trip through the local Bypass server) time to land before
+    # asserting nothing was created.
+    Process.sleep(200)
+
+    assert Mydia.Media.get_media_item_by_tmdb(provider_id) == nil
+  end
+
   # Configure is also reachable from a caret inside the detail modal's own
   # header actions (TrendingDetailModal renders its default action set on
   # Dashboard; there is no :actions slot override and no :rail slot here).
