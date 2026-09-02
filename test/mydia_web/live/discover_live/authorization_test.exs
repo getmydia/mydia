@@ -75,7 +75,7 @@ defmodule MydiaWeb.DiscoverLive.AuthorizationTest do
       {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
 
       assert has_element?(view, "button", "Request")
-      refute has_element?(view, "button", "Add to Library")
+      refute has_element?(view, ~s(button[phx-click="add_to_library"]))
     end
   end
 end
