@@ -68,6 +68,10 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
         audio_codec: "AAC"
       })
 
+    # Episode.media_files is a many_to_many through media_file_episodes, so a
+    # raw insert carrying only episode_id is invisible on the episode.
+    {:ok, _} = Mydia.Library.ensure_episode_link(episode_file)
+
     # Create external subtitle for testing
     {:ok, external_subtitle} =
       Repo.insert(%Mydia.Subtitles.Subtitle{

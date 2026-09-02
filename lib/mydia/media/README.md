@@ -25,6 +25,38 @@ fixture passes either way, which is why both bugs shipped green. The same split
 applies to `Mydia.Playback.Progress` rows (`validate_one_parent/1`) and to
 `Streaming.progress_content_id/1`.
 
+## One file can cover several episodes, and episode.media_files is many_to_many
+
+A release such as `S01E09E10` is a single file holding two episodes. Because
+`media_files.episode_id` is one FK, the matcher used to keep only the first
+episode it parsed (`List.first(episode_numbers)`) and drop the rest, so every
+trailing episode of such a file read as un-downloaded while its content was
+already on disk, inside the file the previous episode was playing. On galactica
+that was 49 files across two shows, and it presented as "the season downloaded
+everything but the last episode" with no download row to explain it, since the
+grab was a season pack attached to the show rather than the episode.
+
+`Mydia.Library.MediaFileEpisode` (`media_file_episodes`) now records the full
+set, and `Episode.media_files` is a `many_to_many` through it. That association
+is the reason the fix reaches the whole UI at once, and it is also the trap:
+
+**A media file whose `episode_id` has no `media_file_episodes` row is invisible
+on the episode page.** It will still be found by every query that joins
+`media_files.episode_id` directly, so the row looks fine in the database and
+fine in half the app.
+
+`episode_id` is still written, and still means the primary (first) episode, so
+the ~268 call sites that join on it keep working untouched. Anything that
+*creates* a media file must also record the link: the funnels in `Mydia.Library`
+do it via `ensure_episode_link/1`, and the two modules that build a
+`MediaFile.changeset` directly (`Library.CandidatePromotion`, `ImportCandidates`)
+call it themselves. `test/mydia/library/episode_link_invariant_test.exs` fails if
+a new direct writer forgets.
+
+Re-scanning does not repair old rows: `Library.match_files_to_episodes/1` only
+considers files where `episode_id IS NULL`, and a half-linked file already has
+one. `Mydia.Library.MultiEpisodeRelink` is the repair, run once from a migration.
+
 ## media_files.path is nil on every row
 
 The legacy `media_files.path` column is nil on every production row (verified

@@ -11,6 +11,29 @@ defmodule Mydia.Factory do
   alias Mydia.Settings.LibraryPath
   alias Mydia.Accounts.User
 
+  defoverridable insert: 1, insert: 2, insert: 3
+
+  # Inserts, then records the episode link a media file needs to be visible.
+  #
+  # `Episode.media_files` is a `many_to_many` through `media_file_episodes`, so
+  # a row carrying only `episode_id` is invisible on the episode page.
+  # Production writers go through `Mydia.Library`, which maintains the link;
+  # ExMachina inserts the struct straight into the repo, so it has to do the
+  # same, or every factory-built file would be a fixture that cannot occur in
+  # production. All three arities are wrapped: `insert(:media_file, attrs)` is
+  # the common call.
+  def insert(record), do: link_episode(super(record))
+  def insert(record, attrs), do: link_episode(super(record, attrs))
+  def insert(record, attrs, opts), do: link_episode(super(record, attrs, opts))
+
+  defp link_episode(%MediaFile{episode_id: episode_id} = media_file)
+       when not is_nil(episode_id) do
+    {:ok, _} = Mydia.Library.ensure_episode_link(media_file)
+    media_file
+  end
+
+  defp link_episode(other), do: other
+
   def user_factory do
     %User{
       email: sequence(:email, &"user#{&1}@example.com"),

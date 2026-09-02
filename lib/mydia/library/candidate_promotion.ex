@@ -241,8 +241,14 @@ defmodule Mydia.Library.CandidatePromotion do
       })
 
     case %MediaFile{} |> MediaFile.changeset(attrs) |> Repo.insert() do
-      {:ok, media_file} -> {:ok, media_file}
-      {:error, changeset} -> {:error, changeset}
+      {:ok, media_file} ->
+        # Episode.media_files reads through media_file_episodes, so a bare
+        # episode_id would leave the file invisible on the episode page.
+        {:ok, _} = Mydia.Library.ensure_episode_link(media_file)
+        {:ok, media_file}
+
+      {:error, changeset} ->
+        {:error, changeset}
     end
   end
 
