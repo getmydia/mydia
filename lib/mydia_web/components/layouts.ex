@@ -415,7 +415,7 @@ defmodule MydiaWeb.Layouts do
             </button>
 
             <div class="dropdown dropdown-top dropdown-end w-full">
-              <label tabindex="0" class="btn btn-ghost w-full justify-start">
+              <label id="sidebar-user-menu" tabindex="0" class="btn btn-ghost w-full justify-start">
                 <div class="avatar placeholder">
                   <div class="bg-neutral text-neutral-content rounded-full w-8">
                     <span class="text-xs">
@@ -595,6 +595,7 @@ defmodule MydiaWeb.Layouts do
         "bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))]",
         "flex items-center justify-around",
         "rounded-2xl px-2 py-2",
+        "transition-[opacity,visibility] duration-200 ease-out",
         "bg-base-100/60 backdrop-blur-3xl backdrop-saturate-150",
         "border border-white/20",
         "shadow-[0_8px_32px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.2)]"
