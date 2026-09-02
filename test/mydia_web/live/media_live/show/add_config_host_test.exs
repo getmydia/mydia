@@ -134,6 +134,45 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
     :ok
   end
 
+  # Same shape as `stub_movie_details/2`, but `Bypass.stub/4` rather than
+  # `Bypass.expect/4`: this is used only by the guest authorization test
+  # below, where a correctly-fixed handler never calls the endpoint at all.
+  # `expect/4` verifies the call happened at least once and would itself fail
+  # the passing case; `stub/4` makes no such demand either way, so a call
+  # arriving (the pre-fix, vulnerable behaviour) is served the same payload
+  # `stub_movie_details/2` would, and no call arriving (the fixed behaviour)
+  # is simply never observed.
+  defp stub_movie_details_if_called(tmdb_id, title) do
+    bypass = Bypass.open()
+    previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    on_exit(fn ->
+      case previous_metadata_relay_url do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
+    end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+      body = %{
+        "id" => tmdb_id,
+        "title" => title,
+        "release_date" => "2024-01-01",
+        "overview" => "",
+        "credits" => %{"cast" => [], "crew" => []},
+        "genres" => [],
+        "belongs_to_collection" => nil
+      }
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    :ok
+  end
+
   # The add completes in a `handle_async` the submit's `render_hook` round
   # trip does not wait on. Polling for the row also keeps Bypass and the
   # `metadata_relay_url` swap alive (their `on_exit` teardown runs after this
@@ -154,6 +193,26 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
 
       media_item ->
         media_item
+    end
+  end
+
+  # Bounded, non-flunking counterpart to `wait_until_media_item/2`, for
+  # proving a negative. The async add this polls for either lands quickly
+  # (Bypass is loopback, no real network latency) or never lands at all, so a
+  # short bound is enough: `false` after it elapses means "never showed up",
+  # not "check again later".
+  defp media_item_created_within?(tmdb_id, retries \\ 50)
+
+  defp media_item_created_within?(_tmdb_id, 0), do: false
+
+  defp media_item_created_within?(tmdb_id, retries) do
+    case Mydia.Media.get_media_item_by_tmdb(tmdb_id) do
+      nil ->
+        Process.sleep(10)
+        media_item_created_within?(tmdb_id, retries - 1)
+
+      _media_item ->
+        true
     end
   end
 
@@ -239,5 +298,46 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
 
     assert html =~ "That library is no longer available"
     assert Mydia.Media.get_media_item_by_tmdb(missing_tmdb_id) == nil
+  end
+
+  # Server-side authorization must never depend on a hidden UI element. The
+  # caret that opens this dialog is hidden for a guest, but nothing stops a
+  # guest client from pushing "submit_add_config" over the socket directly
+  # with a valid library id, so the handler itself must reject it too. Mirrors
+  # `discover_live/authorization_test.exs`'s "guest users cannot trigger
+  # add_to_library event".
+  #
+  # The added title's metadata fetch is stubbed via `stub_movie_details_if_called/2`
+  # (a `Bypass.stub/4`, not `expect/4`: this test must pass whether or not the
+  # endpoint is ever hit). Without a stub, an unauthorized submit that slipped
+  # through would still create no media item in this test environment
+  # (Mydia.RelayGuard blocks the unstubbed relay call), so the absence of a
+  # media item would prove nothing about authorization. With the stub in
+  # place, a created media item is attributable only to the authorization
+  # gate having been skipped.
+  test "a guest cannot submit an add even with a valid library", %{
+    conn: conn,
+    library: library
+  } do
+    guest = user_fixture(%{role: "guest"})
+    conn = log_in_user(conn, guest)
+
+    {movie, missing_tmdb_id} = movie_with_franchise_entry()
+    stub_movie_details_if_called(missing_tmdb_id, "Harbour Nights")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    open_config(view, missing_tmdb_id, "Harbour Nights")
+
+    render_hook(view, "submit_add_config", %{
+      "config" => %{
+        "library_path_id" => to_string(library.id),
+        "monitored" => "true",
+        "search_on_add" => "false"
+      }
+    })
+
+    refute media_item_created_within?(missing_tmdb_id)
   end
 end

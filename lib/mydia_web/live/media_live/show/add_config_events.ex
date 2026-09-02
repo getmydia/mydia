@@ -18,6 +18,7 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigEvents do
   import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Mydia.Media.FranchiseEntry
+  alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
@@ -54,25 +55,37 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigEvents do
   @doc """
   Dispatches a configured add to the rail the card belongs to.
 
-  The dialog is closed first, unconditionally: leaving it open while an async
-  add runs would let a second submit queue behind the first.
+  The dialog is closed first, unconditionally on the way to a dispatched add:
+  leaving it open while an async add runs would let a second submit queue
+  behind the first.
+
+  Gated on `Authorization.authorize_create_media/1`, the same check every
+  sibling add path uses (`FranchiseEvents.add_franchise_movie/2`,
+  `RecommendationEvents.add_recommendation/2`, and both Discover's and
+  Dashboard's own `submit_add_config` handlers). The caret that opens this
+  dialog is hidden from a guest, but the `handle_event` clause it fires is
+  live on the socket regardless of what the template renders, so the guard
+  has to live here rather than only in the UI.
   """
   def submit_add_config(%{"config" => params}, socket) do
-    case socket.assigns[:add_config] do
+    with :ok <- Authorization.authorize_create_media(socket),
+         %{provider_id: tmdb_id, media_type: media_type} <- socket.assigns[:add_config],
+         {:ok, opts} <-
+           MediaAddHelpers.add_opts_from_config(params, media_type, socket.assigns.current_user) do
+      socket = MediaAddHelpers.clear_add_config(socket)
+      dispatch(tmdb_id, opts, socket)
+    else
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
       nil ->
         {:noreply, socket}
 
-      %{provider_id: tmdb_id, media_type: media_type} ->
-        socket = MediaAddHelpers.clear_add_config(socket)
-
-        case MediaAddHelpers.add_opts_from_config(params, media_type, socket.assigns.current_user) do
-          {:ok, opts} ->
-            dispatch(tmdb_id, opts, socket)
-
-          {:error, :unknown_library} ->
-            {:noreply,
-             put_flash(socket, :error, "That library is no longer available. Nothing was added.")}
-        end
+      {:error, :unknown_library} ->
+        {:noreply,
+         socket
+         |> MediaAddHelpers.clear_add_config()
+         |> put_flash(:error, "That library is no longer available. Nothing was added.")}
     end
   end
 
