@@ -288,6 +288,25 @@ defmodule MydiaWeb.AdminTrashLiveTest do
       assert MapSet.size(second_page_ids) == 10
       assert MapSet.disjoint?(first_page_ids, second_page_ids)
     end
+
+    # Every action on this page removes rows, so the offset in assigns can
+    # outrun the result set it was computed against. Restoring the only row on
+    # page 2 of 51 used to reload at offset 50 with 50 rows left, rendering an
+    # empty page and "Showing 51-50 of 50".
+    @tag :tmp_dir
+    test "emptying the last page falls back to the page before it", %{conn: conn} = ctx do
+      for n <- 1..51, do: trashed(ctx, "f#{n}.mkv", :missing, 10)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/trash")
+
+      html = view |> element("#trash-page-next") |> render_click()
+      [only] = html |> row_ids() |> MapSet.to_list()
+
+      html = view |> element("#trash-restore-#{only}") |> render_click()
+
+      assert MapSet.size(row_ids(html)) == 50
+      refute has_element?(view, "#trash-row-#{only}")
+    end
   end
 
   defp row_ids(html) do

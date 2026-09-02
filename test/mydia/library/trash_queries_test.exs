@@ -136,4 +136,19 @@ defmodule Mydia.Library.TrashQueriesTest do
     assert :ok = Library.purge_media_file(trashed)
     assert File.exists?(Path.join(ctx.root, name))
   end
+
+  # Two tabs on the trash page. One restores a row while the other still holds
+  # the struct it loaded before that, with trashed_at set. Repo.delete/1 would
+  # match on the primary key alone and drop the row of a file now sitting live
+  # in the library.
+  @tag :tmp_dir
+  test "purge_media_file/1 refuses a row restored since it was loaded", ctx do
+    stale = trashed(ctx.root, ctx.library_path, "raced.mkv", :manual, 10)
+
+    {:ok, restored} = Library.restore_media_file(stale)
+    assert is_nil(restored.trashed_at)
+
+    assert {:error, :not_trashed} = Library.purge_media_file(stale)
+    assert Repo.get(Mydia.Library.MediaFile, stale.id)
+  end
 end

@@ -49,28 +49,41 @@ defmodule MydiaWeb.AdminTrashLive.Index do
      |> assign(:show_empty_modal, false)
      |> assign(:audit, nil)
      |> assign(:scanning, false)
+     |> assign(:sweeping, false)
      |> assign(:selection, MapSet.new())
      |> assign(:retention_days, Mydia.Config.get().media.trash_retention_days)
      |> load()}
   end
 
   defp load(socket) do
+    counts = Library.count_trashed_media_files()
+    total_matching = matching_count(counts, socket.assigns.reason)
+
+    # Count first, then clamp, then query. Every action on this page removes
+    # rows, so the offset held in assigns can outrun the result set it was
+    # computed against: restoring the only row on page 2 of 51 leaves 50 rows
+    # and an offset of 50, which returns nothing and renders "Showing 51-50
+    # of 50". The last page is the highest offset that still holds a row.
+    page = clamp_page(socket.assigns.page, total_matching)
+
     socket
     |> assign(:summary, Library.trashed_summary())
-    |> assign(:counts, Library.count_trashed_media_files())
+    |> assign(:counts, counts)
+    |> assign(:total_matching, total_matching)
+    |> assign(:page, page)
     |> assign(
       :files,
       Library.list_trashed_media_files(
         reason: socket.assigns.reason,
         limit: @per_page,
-        offset: socket.assigns.page * @per_page,
+        offset: page * @per_page,
         preload: [:media_item, :library_path, episode: :media_item]
       )
     )
-    |> then(fn s ->
-      assign(s, :total_matching, matching_count(s.assigns.counts, s.assigns.reason))
-    end)
   end
+
+  defp clamp_page(_page, total) when total <= 0, do: 0
+  defp clamp_page(page, total), do: page |> max(0) |> min(div(total - 1, @per_page))
 
   defp matching_count(counts, nil), do: counts |> Map.values() |> Enum.sum()
   defp matching_count(counts, :unknown), do: Map.get(counts, nil, 0)
@@ -204,17 +217,22 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   # client". Params here carry no path, id, or other filesystem reference,
   # and must never be made to.
   def handle_event("sweep", _params, socket) do
+    # `sweep/1` calls `File.rm_rf/1` per entry, so it inherits the same
+    # disconnected-mount hazard as the audit walk and runs off the LiveView
+    # process for the same reason. Dropping the audit as the task starts
+    # leaves nothing for a second click to re-sweep.
     case socket.assigns.audit do
       nil ->
         {:noreply, socket}
 
       audit ->
-        result = TrashStore.sweep(audit.retained ++ audit.orphaned)
+        entries = audit.retained ++ audit.orphaned
 
         {:noreply,
          socket
          |> assign(:audit, nil)
-         |> put_flash(:info, sweep_message(result))}
+         |> assign(:sweeping, true)
+         |> start_async(:sweep, fn -> TrashStore.sweep(entries) end)}
     end
   end
 
@@ -228,6 +246,17 @@ defmodule MydiaWeb.AdminTrashLive.Index do
      socket
      |> assign(:scanning, false)
      |> put_flash(:error, "Could not read the trash directory: #{inspect(reason)}")}
+  end
+
+  def handle_async(:sweep, {:ok, result}, socket) do
+    {:noreply, socket |> assign(:sweeping, false) |> put_flash(:info, sweep_message(result))}
+  end
+
+  def handle_async(:sweep, {:exit, reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:sweeping, false)
+     |> put_flash(:error, "Could not sweep the trash directory: #{inspect(reason)}")}
   end
 
   @impl true

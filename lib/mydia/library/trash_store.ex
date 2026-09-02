@@ -510,8 +510,14 @@ defmodule Mydia.Library.TrashStore do
 
   Every `<root>/<id>` directory falls into one of three states:
 
-    * **tracked** - a row with that id has `trashed_at` set, so
-      `Mydia.Jobs.TrashCleanup` will purge it on schedule. Not reported.
+    * **tracked** - a row with that id has `trashed_at` set and its recorded
+      trashed path lies in this container, so `Mydia.Jobs.TrashCleanup` will
+      purge it on schedule. Not reported. A trashed row whose recorded path
+      lies in a *different* container is orphaned instead: the purge deletes
+      the recorded path, never `<root>/<id>`, so this container would survive
+      it. A trashed row with no recorded path at all stays tracked, because
+      the bytes move before `trashed_at` is stamped and sweeping a trash still
+      in flight would delete a file inside its retention window.
     * **retained** - the row exists and is *not* trashed, but still carries
       `metadata.extra["trashed_path"]` pointing into this container. This is
       `restore/2` refusing to clobber an occupied library path: it keeps the
@@ -553,10 +559,28 @@ defmodule Mydia.Library.TrashStore do
     |> Map.new(fn {k, v} -> {k, Enum.reverse(v)} end)
   end
 
-  # No row: debris. Row with trashed_at: TrashCleanup owns it. Row without,
-  # but still pointing here: restore/2 kept the copy deliberately.
+  # No row: debris. Row with trashed_at: TrashCleanup owns it, but only the
+  # container its recorded path points into - purging deletes that path, not
+  # `<root>/<id>`, so a trashed row pointing at a different container leaves
+  # this one behind forever. Row without trashed_at, but still pointing here:
+  # restore/2 kept the copy deliberately.
   defp classify(_container, nil), do: :orphaned
-  defp classify(_container, {%DateTime{}, _metadata}), do: :tracked
+
+  defp classify(container, {%DateTime{}, metadata}) do
+    case trashed_path_in(metadata) do
+      # Deliberately asymmetric with the untrashed clause below. A trashed row
+      # with no recorded path is a row mid-trash (the bytes move before
+      # `trashed_at` is stamped) or one trashed before the path was recorded,
+      # and calling either orphaned would offer the operator a Sweep button
+      # that permanently deletes files still inside their retention window.
+      # Leaving unpurgeable bytes on disk is the cheaper mistake.
+      path when is_binary(path) ->
+        if Path.dirname(path) == container.path, do: :tracked, else: :orphaned
+
+      _ ->
+        :tracked
+    end
+  end
 
   defp classify(container, {nil, metadata}) do
     case trashed_path_in(metadata) do

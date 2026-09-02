@@ -30,4 +30,13 @@ defmodule Mydia.Config.TrashRetentionTest do
 
     assert changeset.valid?
   end
+
+  # validate_number/3 skips nil, so an explicit null would load cleanly and
+  # only fail a day later inside TrashCleanup, where the retention reaches
+  # DateTime.add/3 as `-nil`.
+  test "rejects an explicit null rather than letting the cleanup job crash on it" do
+    changeset = Schema.changeset(%Schema{}, %{media: %{trash_retention_days: nil}})
+
+    refute changeset.valid?
+  end
 end

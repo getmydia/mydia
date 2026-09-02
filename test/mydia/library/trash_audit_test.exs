@@ -90,6 +90,51 @@ defmodule Mydia.Library.TrashAuditTest do
     assert entry.bytes == 25
   end
 
+  # A purge deletes the path recorded on the row, never `<root>/<id>`. So a
+  # trashed row whose recorded path sits in some other container leaves this
+  # one behind for good, even though its id matches a trashed row.
+  @tag :tmp_dir
+  test "a container a trashed row no longer points at is orphaned", ctx do
+    file = scanned(ctx, "moved-on.mkv", 12)
+    {:ok, trashed} = Library.trash_media_file(file, reason: :manual)
+    container = Path.dirname(trashed.metadata.extra["trashed_path"])
+    backdate(container)
+
+    elsewhere = Path.join([ctx.root, "..", "other-trash", file.id, "moved-on.mkv"])
+    repoint(trashed, elsewhere)
+
+    assert %{retained: [], orphaned: [entry]} = TrashStore.audit()
+    assert entry.path == container
+    assert entry.bytes == 12
+  end
+
+  # The other half of that rule, deliberately not symmetric: trashing moves
+  # the bytes before it stamps the row, so a trashed row with no recorded path
+  # can be a trash still in flight. Reporting it would put a file inside its
+  # retention window behind a Sweep button.
+  @tag :tmp_dir
+  test "a trashed row with no recorded path stays tracked", ctx do
+    file = scanned(ctx, "no-path.mkv", 12)
+    {:ok, trashed} = Library.trash_media_file(file, reason: :manual)
+    backdate(Path.dirname(trashed.metadata.extra["trashed_path"]))
+
+    repoint(trashed, nil)
+
+    assert %{retained: [], orphaned: []} = TrashStore.audit()
+  end
+
+  defp repoint(media_file, path) do
+    extra =
+      case path do
+        nil -> Map.delete(media_file.metadata.extra, "trashed_path")
+        path -> Map.put(media_file.metadata.extra, "trashed_path", path)
+      end
+
+    media_file
+    |> Ecto.Changeset.change(metadata: %{media_file.metadata | extra: extra})
+    |> Repo.update!()
+  end
+
   @tag :tmp_dir
   test "a trash root that does not exist yet returns empty", ctx do
     File.rm_rf!(ctx.trash_root)

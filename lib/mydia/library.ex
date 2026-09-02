@@ -950,10 +950,23 @@ defmodule Mydia.Library do
     media_file = Repo.preload(media_file, :library_path)
 
     with :ok <- TrashStore.discard(media_file, trash_state(media_file)),
-         {:ok, _} <- Repo.delete(media_file) do
+         :ok <- delete_if_still_trashed(media_file) do
       :ok
-    else
-      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # The clause above only sees the `trashed_at` the struct was loaded with,
+  # and `Repo.delete/1` matches on the primary key alone, so a restore that
+  # landed in between - another tab, another operator - would have its now
+  # active row deleted out from under it. Deleting under the same
+  # `trashed_at IS NOT NULL` guard `purge_old_trashed_media_files/1` already
+  # uses makes losing that race a refusal instead.
+  defp delete_if_still_trashed(%MediaFile{id: id}) do
+    from(f in MediaFile, where: f.id == ^id and not is_nil(f.trashed_at))
+    |> Repo.delete_all()
+    |> case do
+      {1, _} -> :ok
+      {0, _} -> {:error, :not_trashed}
     end
   end
 

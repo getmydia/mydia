@@ -445,6 +445,11 @@ defmodule Mydia.Config.Schema do
     |> validate_number(:season_refresh_threshold_hours, greater_than: 0)
     |> validate_number(:completed_show_refresh_threshold_hours, greater_than: 0)
     |> validate_inclusion(:default_season_monitoring, @season_monitoring_values)
+    # Required as well as non-negative: `validate_number/3` skips nil, and an
+    # explicit null in the YAML or the overlay would reach
+    # `Library.purge_old_trashed_media_files/1`, where `-nil` crashes the
+    # daily `TrashCleanup` run rather than failing at config load.
+    |> validate_required([:trash_retention_days])
     |> validate_number(:trash_retention_days, greater_than_or_equal_to: 0)
   end
 

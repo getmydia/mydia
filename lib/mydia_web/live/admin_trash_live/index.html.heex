@@ -9,6 +9,10 @@
       <span class="loading loading-spinner loading-sm"></span> Reading the trash directory...
     </div>
 
+    <div :if={@sweeping} class="alert mb-5">
+      <span class="loading loading-spinner loading-sm"></span> Sweeping the trash directory...
+    </div>
+
     <MydiaWeb.AdminTrashLive.Components.audit_result :if={@audit} audit={@audit} />
 
     <MydiaWeb.AdminTrashLive.Components.reason_filters counts={@counts} active={@reason} />
