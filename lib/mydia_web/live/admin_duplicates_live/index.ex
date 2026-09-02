@@ -19,6 +19,21 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   stand in its place. That keeps the invariant every group needs: at least one
   file always survives, so the Trash button can never empty an item.
 
+  ## Two scopes, two confirmations
+
+  A group can be trashed on its own, and the whole library can be trashed at
+  once. Only the second gets a confirmation modal: two files in one item and
+  forty-seven across twenty-three are different blast radii, and the modal is
+  worth its click only for the second.
+
+  What the group run gets instead is `:last_run` and the undo toast. It holds
+  the ids the run trashed until another run replaces it, the operator dismisses
+  it, or they leave the page. `Mydia.Library.Prune.undo/2` puts those files
+  back, and the restored ids join `:kept` on the way through for the same
+  reason `:kept` survives a run at all: they are losers of an eligible group
+  again, and a loser defaults to Trash, so without that the page would offer to
+  trash the copies just rescued.
+
   ## Why the selection is stored as an exclusion set
 
   Every loser of every eligible group starts on Trash, so the ordinary path
@@ -189,7 +204,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     # `:kept` survives the run. A group can still hold two files afterwards (a
     # keeper plus a copy the operator set to Keep), and it stays eligible, so
     # clearing the set would list that survivor as a loser and put it straight
-    # back on Trash — offering to trash the very file the operator just spared.
+    # back on Trash, offering to trash the very file the operator just spared.
     # Nothing needs pruning out of the set either: `:selected` is built from
     # the losers *not* in `:kept`, so the ids just trashed were never in it.
     {:noreply,

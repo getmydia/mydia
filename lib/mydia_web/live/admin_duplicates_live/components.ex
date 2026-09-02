@@ -9,6 +9,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   left with an unlabelled red checkbox on the right, which left an operator
   with two controls, no labels, and no way to tell which one decided the
   file's fate.
+
+  Each group carries two buttons rather than one that swaps meaning: a marking
+  toggle, and a button that actually trashes. The marking half still swaps its
+  label so the row never goes dead once everything in it is kept.
   """
 
   use MydiaWeb, :html
@@ -64,9 +68,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         Items holding more than one file, where every copy is proven to be the same content.
         Each file is set to either <span class="font-medium text-base-content">Keep</span>
         or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
-        kept, the rest are already marked for trash, so one click on the Trash button clears them.
-        Every item always keeps at least one file. Trashed files are held for {@retention_days} days
-        before permanent deletion.
+        kept, the rest are already marked for trash. Trash one item with its own button, or
+        every item with the button above. Every item always keeps at least one file. Trashed
+        files are held for {@retention_days} days before permanent deletion, and a run can be
+        undone until you leave this page.
       </p>
 
       <%= if @decisions == [] do %>
