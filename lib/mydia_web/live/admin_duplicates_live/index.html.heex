@@ -17,5 +17,7 @@
         retention_days={@retention_days}
       />
     <% end %>
+
+    <MydiaWeb.AdminDuplicatesLive.Components.undo_toast :if={@last_run} run={@last_run} />
   </.admin_page>
 </Layouts.app>

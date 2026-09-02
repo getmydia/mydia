@@ -493,5 +493,91 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
 
       assert Enum.count(files, &trashed?/1) == length(files) - 1
     end
+
+    test "a group run raises an undo toast naming the item", %{conn: conn} do
+      {_show, episode, _files} = duplicated_episode()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      refute has_element?(view, "#duplicates-undo-toast")
+
+      view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
+
+      assert has_element?(view, "#duplicates-undo-toast")
+      assert render(view) =~ "Harbor Lights S02E03"
+    end
+
+    test "Undo restores the files and puts them back on Keep, not Trash", %{conn: conn} do
+      # A restored file is a loser of an eligible group again, and losers
+      # default to Trash. Without putting them on Keep the page would offer to
+      # trash the very copies the operator just rescued.
+      {_show, episode, files} = duplicated_episode()
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      loser = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
+      assert trashed?(loser)
+
+      view |> element("#duplicates-undo") |> render_click()
+
+      refute trashed?(loser)
+      refute trashed?(keeper)
+      assert has_element?(view, "#duplicates-group-#{episode.id}")
+      assert has_element?(view, "#duplicates-keep-#{loser.id}[checked]")
+      refute has_element?(view, "#duplicates-trash-#{loser.id}[checked]")
+      refute has_element?(view, "#duplicates-undo-toast")
+    end
+
+    test "dismissing the toast leaves the files trashed", %{conn: conn} do
+      {_show, episode, files} = duplicated_episode()
+      loser = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
+      view |> element("#duplicates-undo-dismiss") |> render_click()
+
+      refute has_element?(view, "#duplicates-undo-toast")
+      assert trashed?(loser)
+    end
+
+    test "a second run replaces the first toast rather than stacking", %{conn: conn} do
+      # Both fixtures carry the same title, so the toast label cannot tell the
+      # groups apart. The counts can: group A trashes one file, group B two.
+      # The sharp assertion is what Undo reaches afterwards. If :last_run
+      # accumulated instead of being replaced, A's file would come back too.
+      {_show_a, episode_a, files_a} = duplicated_episode()
+      {_show_b, episode_b, files_b} = duplicated_episode(@three_files)
+      loser_a = Enum.find(files_a, &(&1.relative_path =~ "360p"))
+      keeper_b = Enum.find(files_b, &(&1.relative_path =~ "1080p"))
+      losers_b = Enum.reject(files_b, &(&1.id == keeper_b.id))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-group-trash-#{episode_a.id}") |> render_click()
+      view |> element("#duplicates-group-trash-#{episode_b.id}") |> render_click()
+
+      # The toast now describes the second run, not the first.
+      assert render(view) =~ "Trashed 2 files"
+
+      view |> element("#duplicates-undo") |> render_click()
+
+      for loser <- losers_b, do: refute(trashed?(loser))
+      assert trashed?(loser_a), "undo reached the first run's files, so :last_run accumulated"
+    end
+
+    test "the page-header run raises the across-items toast", %{conn: conn} do
+      duplicated_episode()
+      duplicated_episode()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-trash-selected") |> render_click()
+      view |> element("#duplicates-confirm") |> render_click()
+
+      assert has_element?(view, "#duplicates-undo-toast")
+      assert render(view) =~ "2 items"
+    end
   end
 end

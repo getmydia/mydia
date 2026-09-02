@@ -37,6 +37,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.Library.Prune
+  alias MydiaWeb.AdminDuplicatesLive.Components
 
   # Mirrors Mydia.Jobs.TrashCleanup's default, so this page never quotes a
   # retention period that disagrees with what actually purges trashed files.
@@ -53,6 +54,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
      |> assign(:kept, MapSet.new())
      |> assign(:keepers, %{})
      |> assign(:show_trash_modal, false)
+     |> assign(:last_run, nil)
      |> assign(:retention_days, retention_days)
      |> load_plan()}
   end
@@ -112,14 +114,50 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
          false <- ids == [] do
       actor_id = to_string(socket.assigns.current_scope.user.id)
       result = Prune.execute(ids, actor_id, socket.assigns.keepers)
+      label = "from #{Components.subject_label(decision.group)}"
 
       {:noreply,
        socket
-       |> put_flash(:info, flash_for(result))
+       |> report_run(result, label)
        |> load_plan()}
     else
       _ -> {:noreply, socket}
     end
+  end
+
+  def handle_event("undo_trash", _params, %{assigns: %{last_run: nil}} = socket) do
+    {:noreply, socket}
+  end
+
+  def handle_event("undo_trash", _params, socket) do
+    actor_id = to_string(socket.assigns.current_scope.user.id)
+    result = Prune.undo(socket.assigns.last_run.file_ids, actor_id)
+
+    # A restored file is a loser of an eligible group again, and every loser of
+    # an eligible group defaults to Trash. Without this the page would put the
+    # rescued copies straight back on Trash and offer to trash them again,
+    # which reads as the page ignoring the operator.
+    kept =
+      Enum.reduce(result.restored, socket.assigns.kept, &MapSet.put(&2, &1.id))
+
+    socket =
+      if result.failed == [] do
+        socket
+      else
+        put_flash(socket, :error, "#{length(result.failed)} file(s) could not be restored.")
+      end
+
+    # The toast clears either way. The run is over, and a second Undo on the
+    # same ids would find them untrashed and do nothing.
+    {:noreply,
+     socket
+     |> assign(:kept, kept)
+     |> assign(:last_run, nil)
+     |> load_plan()}
+  end
+
+  def handle_event("dismiss_undo", _params, socket) do
+    {:noreply, assign(socket, :last_run, nil)}
   end
 
   def handle_event("trash_all_duplicates", _params, socket) do
@@ -144,6 +182,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     result =
       Prune.execute(MapSet.to_list(socket.assigns.selected), actor_id, socket.assigns.keepers)
 
+    # `label` is computed before `load_plan/1` runs, because `load_plan/1`
+    # recomputes `:affected_items` against the post-run plan.
+    label = "across #{Components.item_count(socket.assigns.affected_items)}"
+
     # `:kept` survives the run. A group can still hold two files afterwards (a
     # keeper plus a copy the operator set to Keep), and it stays eligible, so
     # clearing the set would list that survivor as a loser and put it straight
@@ -152,7 +194,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     # the losers *not* in `:kept`, so the ids just trashed were never in it.
     {:noreply,
      socket
-     |> put_flash(:info, flash_for(result))
+     |> report_run(result, label)
      |> assign(:show_trash_modal, false)
      |> load_plan()}
   end
@@ -263,12 +305,40 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     |> assign(:affected_items, affected)
   end
 
-  defp flash_for(%{trashed: trashed, failed: failed, aborted: aborted}) do
-    base = "Trashed #{length(trashed)} file(s)."
-    base = if failed == [], do: base, else: base <> " #{length(failed)} could not be moved."
+  # A clean run says everything it needs to in the undo toast, so no info flash
+  # is raised: two success messages saying the same thing is noise. Failures
+  # and aborts still go through the flash, so a partial run shows the error at
+  # the top and the undo at the bottom, which is the truth: some files moved
+  # and can be put back, and some did not.
+  defp report_run(socket, result, scope_label) do
+    socket
+    |> maybe_flash_problems(result)
+    |> maybe_set_last_run(result, scope_label)
+  end
 
-    if aborted == [],
-      do: base,
-      else: base <> " #{length(aborted)} were skipped by re-verification."
+  defp maybe_flash_problems(socket, %{failed: [], aborted: []}), do: socket
+
+  defp maybe_flash_problems(socket, %{failed: failed, aborted: aborted}) do
+    parts =
+      [
+        failed != [] && "#{length(failed)} could not be moved",
+        aborted != [] && "#{length(aborted)} were skipped by re-verification"
+      ]
+      |> Enum.filter(& &1)
+
+    put_flash(socket, :error, Enum.join(parts, ". ") <> ".")
+  end
+
+  defp maybe_set_last_run(socket, %{trashed: []}, _scope_label), do: socket
+
+  defp maybe_set_last_run(socket, %{trashed: trashed}, scope_label) do
+    bytes = trashed |> Enum.map(&(&1.size || 0)) |> Enum.sum()
+
+    assign(socket, :last_run, %{
+      file_ids: Enum.map(trashed, & &1.id),
+      label:
+        "Trashed #{Components.file_count(length(trashed))} #{scope_label} " <>
+          "(#{Components.humanize_bytes(bytes)})"
+    })
   end
 end

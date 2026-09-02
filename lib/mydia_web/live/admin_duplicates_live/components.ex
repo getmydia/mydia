@@ -355,6 +355,52 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   end
 
   @doc """
+  The undo affordance for a completed trash run.
+
+  This cannot be a flash. `core_components.ex` puts
+  `phx-click="lv:clear-flash"` on the whole flash container, which would
+  swallow a nested Undo button, and flash values are strings, so the file ids
+  would need an assign regardless.
+
+  It sits bottom-end because the flash group sits top-end, and a partial run
+  shows both: an error flash for what could not move, and this for what did.
+
+  There is no auto-dismiss timer. Any interval is a guess, and an operator
+  reading filenames to check they trashed the right copy will lose that race.
+  """
+  attr :run, :map, required: true
+
+  def undo_toast(assigns) do
+    ~H"""
+    <div id="duplicates-undo-toast" class="toast toast-bottom toast-end z-50" role="status">
+      <div class="alert alert-success w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap">
+        <.icon name="hero-check-circle" class="size-5 shrink-0" />
+        <span class="text-sm">{@run.label}</span>
+        <div class="flex-1" />
+        <button
+          id="duplicates-undo"
+          type="button"
+          class="btn btn-sm btn-ghost"
+          phx-click="undo_trash"
+          phx-disable-with="Undoing..."
+        >
+          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Undo
+        </button>
+        <button
+          id="duplicates-undo-dismiss"
+          type="button"
+          class="group self-start cursor-pointer"
+          aria-label="Dismiss"
+          phx-click="dismiss_undo"
+        >
+          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
+        </button>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
   The operator-facing name of a group's subject. Public because the LiveView
   builds the undo toast's label from it, and a movie title or a
   "Show S01E02" string is a display concern that belongs here rather than
@@ -373,11 +419,16 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
     [file.resolution, file.codec] |> Enum.reject(&is_nil/1) |> Enum.join(" ")
   end
 
-  defp file_count(1), do: "1 file"
-  defp file_count(n), do: "#{n} files"
+  @doc """
+  Pluralized counts. Public for the same reason `humanize_bytes/1` is: the page
+  module builds the undo toast's label and must count files and items the same
+  way the rows above it do.
+  """
+  def file_count(1), do: "1 file"
+  def file_count(n), do: "#{n} files"
 
-  defp item_count(1), do: "1 item"
-  defp item_count(n), do: "#{n} items"
+  def item_count(1), do: "1 item"
+  def item_count(n), do: "#{n} items"
 
   defp refusal_label(:duplicate_registration), do: "Registered twice"
   defp refusal_label(:unanalyzed), do: "Not analyzed"
