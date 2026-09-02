@@ -42,6 +42,7 @@ defmodule Mydia.Collections.SmartRules do
   - `contains` - String/array contains value
   - `contains_any` - Array contains any of the values
   - `between` - Value is between two numbers [min, max]
+  - `within_last` - Date field is within the last N days (positive integer)
   """
 
   import Ecto.Query, warn: false
@@ -56,7 +57,7 @@ defmodule Mydia.Collections.SmartRules do
     inserted_at
   )
 
-  @valid_operators ~w(eq gt gte lt lte in not_in contains contains_any between)
+  @valid_operators ~w(eq gt gte lt lte in not_in contains contains_any between within_last)
 
   @valid_sort_fields ~w(title year rating added_date position)
   @valid_sort_directions ~w(asc desc)
@@ -69,6 +70,9 @@ defmodule Mydia.Collections.SmartRules do
 
   # Fields that require boolean values
   @boolean_fields ~w(monitored)
+
+  # Fields that hold timestamps and accept relative-date operators
+  @date_fields ~w(inserted_at)
 
   # Valid type values
   @valid_type_values ~w(movie tv_show)
@@ -334,6 +338,23 @@ defmodule Mydia.Collections.SmartRules do
   defp validate_field_value_type(field, value, _operator, _prefix, errors)
        when is_nil(field) or is_nil(value) do
     errors
+  end
+
+  defp validate_field_value_type(field, _value, "within_last", prefix, errors)
+       when not is_nil(field) and field not in @date_fields do
+    ["#{prefix}: within_last is only valid on date fields" | errors]
+  end
+
+  defp validate_field_value_type(field, value, "within_last", prefix, errors)
+       when field in @date_fields do
+    if is_integer(value) and value > 0 do
+      errors
+    else
+      [
+        "#{prefix}: #{field} within_last requires a positive whole number of days, got: #{inspect(value)}"
+        | errors
+      ]
+    end
   end
 
   defp validate_field_value_type("type", value, operator, prefix, errors)
@@ -603,6 +624,12 @@ defmodule Mydia.Collections.SmartRules do
       {:ok, datetime} -> dynamic([m], m.inserted_at < ^datetime)
       _ -> dynamic([m], true)
     end
+  end
+
+  defp build_dynamic("inserted_at", "within_last", days)
+       when is_integer(days) and days > 0 do
+    cutoff = DateTime.add(DateTime.utc_now(), -days, :day)
+    dynamic([m], m.inserted_at >= ^cutoff)
   end
 
   # Fallback for unknown conditions

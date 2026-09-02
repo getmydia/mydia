@@ -3,6 +3,7 @@ defmodule Mydia.Collections.SmartRulesTest do
 
   alias Mydia.Collections.SmartRules
 
+  import Ecto.Query
   import Mydia.MediaFixtures
 
   describe "validate/1" do
@@ -445,6 +446,70 @@ defmodule Mydia.Collections.SmartRulesTest do
       }
 
       assert {:ok, %Ecto.Query{}} = SmartRules.query(rules)
+    end
+  end
+
+  describe "within_last operator" do
+    test "matches an item inserted inside the window" do
+      item = media_item_fixture(%{title: "Harbor Lights"})
+
+      rules = %{
+        "match_type" => "all",
+        "conditions" => [
+          %{"field" => "inserted_at", "operator" => "within_last", "value" => 30}
+        ]
+      }
+
+      ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
+      assert item.id in ids
+    end
+
+    test "excludes an item inserted before the window" do
+      item = media_item_fixture(%{title: "Quiet Harvest"})
+
+      old = DateTime.add(DateTime.utc_now(), -90, :day) |> DateTime.truncate(:second)
+
+      {1, _} =
+        Mydia.Repo.update_all(
+          from(m in Mydia.Media.MediaItem, where: m.id == ^item.id),
+          set: [inserted_at: old]
+        )
+
+      rules = %{
+        "match_type" => "all",
+        "conditions" => [
+          %{"field" => "inserted_at", "operator" => "within_last", "value" => 30}
+        ]
+      }
+
+      ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
+      refute item.id in ids
+    end
+
+    test "validation rejects zero, negative, and non-integer values" do
+      for bad <- [0, -5, 1.5, "30", nil] do
+        rules = %{
+          "match_type" => "all",
+          "conditions" => [
+            %{"field" => "inserted_at", "operator" => "within_last", "value" => bad}
+          ]
+        }
+
+        assert {:error, _errors} = SmartRules.validate(rules),
+               "expected within_last to reject #{inspect(bad)}"
+      end
+    end
+
+    test "validation rejects within_last on a non-date field" do
+      rules = %{
+        "match_type" => "all",
+        "conditions" => [
+          %{"field" => "year", "operator" => "within_last", "value" => 30}
+        ]
+      }
+
+      assert {:error, errors} = SmartRules.validate(rules)
+      assert Enum.any?(errors, &String.contains?(&1, "within_last"))
     end
   end
 end
