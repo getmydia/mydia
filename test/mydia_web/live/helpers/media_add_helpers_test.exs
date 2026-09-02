@@ -459,4 +459,122 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       assert {:error, :unknown_library} = MediaAddHelpers.library_path_opts(1, :movie)
     end
   end
+
+  describe "preview_for/3" do
+    test "reads title, year, poster and overview off a SearchResult" do
+      item = %Mydia.Metadata.Structs.SearchResult{
+        provider_id: "551",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "The Kestrel Protocol",
+        year: 2021,
+        poster_path: "/kestrel.jpg",
+        overview: "A courier loses the package."
+      }
+
+      assert MediaAddHelpers.preview_for([[item]], "551", nil) == %{
+               title: "The Kestrel Protocol",
+               year: 2021,
+               poster_path: "/kestrel.jpg",
+               overview: "A courier loses the package."
+             }
+    end
+
+    test "matches a FranchiseEntry on tmdb_id and leaves overview nil" do
+      entry = %Mydia.Media.FranchiseEntry{
+        tmdb_id: 902,
+        title: "Harbour Lights",
+        year: 1998,
+        poster_path: "/harbour.jpg"
+      }
+
+      assert MediaAddHelpers.preview_for([[entry]], 902, nil) == %{
+               title: "Harbour Lights",
+               year: 1998,
+               poster_path: "/harbour.jpg",
+               overview: nil
+             }
+    end
+
+    test "falls back to the name key on a plain enriched map" do
+      item = %{provider_id: 77, name: "Glass Meridian", year: 2015, poster_path: nil}
+
+      assert MediaAddHelpers.preview_for([[item]], "77", nil).title == "Glass Meridian"
+    end
+
+    test "searches every list in order" do
+      grid = [%{provider_id: 1, title: "First"}]
+      rail = [%{provider_id: 2, title: "Second"}]
+
+      assert MediaAddHelpers.preview_for([grid, rail], 2, nil).title == "Second"
+    end
+
+    test "falls back to the caret's title when nothing matches" do
+      assert MediaAddHelpers.preview_for([[], []], "404", "Only The Title") == %{
+               title: "Only The Title",
+               year: nil,
+               poster_path: nil,
+               overview: nil
+             }
+    end
+
+    test "falls back to an empty title when nothing matches and no title was sent" do
+      assert MediaAddHelpers.preview_for([[]], "404", nil).title == ""
+    end
+  end
+
+  describe "add_opts_from_config/3" do
+    setup do
+      library = library_path_fixture(%{type: :movies, monitored: true})
+      %{library: library}
+    end
+
+    test "returns add opts for a valid library", %{library: library} do
+      params = %{
+        "library_path_id" => to_string(library.id),
+        "quality_profile_id" => "",
+        "monitored" => "true",
+        "search_on_add" => "false"
+      }
+
+      assert {:ok, opts} = MediaAddHelpers.add_opts_from_config(params, :movie, nil)
+      assert opts[:library_path_id] == to_string(library.id)
+      assert opts[:monitored] == true
+      assert opts[:search_on_add] == false
+    end
+
+    test "rejects a library that is not a candidate for the media type", %{library: library} do
+      params = %{"library_path_id" => to_string(library.id), "monitored" => "true"}
+
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.add_opts_from_config(params, :tv_show, nil)
+    end
+
+    test "rejects a forged library id" do
+      params = %{"library_path_id" => "not-a-real-id", "monitored" => "true"}
+
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.add_opts_from_config(params, :movie, nil)
+    end
+
+    test "treats a blank library id as no choice and still resolves defaults" do
+      params = %{"library_path_id" => "", "monitored" => "false", "search_on_add" => "false"}
+
+      assert {:ok, opts} = MediaAddHelpers.add_opts_from_config(params, :movie, nil)
+      assert opts[:monitored] == false
+    end
+
+    test "carries season_monitoring through for TV" do
+      params = %{
+        "library_path_id" => "",
+        "monitored" => "true",
+        "season_monitoring" => "first",
+        "search_on_add" => "true"
+      }
+
+      assert {:ok, opts} = MediaAddHelpers.add_opts_from_config(params, :tv_show, nil)
+      assert opts[:season_monitoring] == "first"
+      assert opts[:search_on_add] == true
+    end
+  end
 end
