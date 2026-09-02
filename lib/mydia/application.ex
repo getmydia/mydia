@@ -67,8 +67,12 @@ defmodule Mydia.Application do
         Mydia.Jobs.HdrBackfill.enqueue_once()
         # One-shot repair for items the metadata enricher silently re-monitored
         # before #653 was fixed. Idempotent by item state plus its own decision
-        # event, so enqueuing on every boot is harmless once the set has
-        # drained. enqueue_once/0 protects its own Oban.insert/1 call.
+        # event, but unlike HdrBackfill there is no stamp column: every boot
+        # re-queries every currently-monitored item id and its recent event
+        # history to find the (usually empty) remainder, so the cost scales
+        # with library size for the life of the deployment rather than
+        # shrinking to a cheap no-match. enqueue_once/0 protects its own
+        # Oban.insert/1 call.
         Mydia.Jobs.MonitoringRepair.enqueue_once()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()

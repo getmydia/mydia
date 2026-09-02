@@ -165,6 +165,10 @@ defmodule Mydia.Jobs.MonitoringRepairTest do
 
       assert event.metadata["monitored"] == false
       assert event.actor_id == "monitoring_repair"
+      # :job routes through format_job_name/1 in the Activity Feed ("Monitoring
+      # Repair"); :system would collapse to a generic "System" label and
+      # discard the actor id entirely.
+      assert event.actor_type == :job
     end
 
     test "leaves an item whose last decision was an enable alone" do
@@ -181,22 +185,30 @@ defmodule Mydia.Jobs.MonitoringRepairTest do
       item = media_item_fixture(%{title: "Fallow Green", monitored: true})
       record_update(item, "Monitoring disabled", 300)
 
+      events_before_repair =
+        Events.list_events(resource_type: "media_item", resource_id: item.id)
+
       assert :ok = MonitoringRepair.perform(%Oban.Job{args: %{}})
       refute monitored?(item.id)
+
+      # The repair must write exactly ONE event (the explicit
+      # monitoring_changed decision), not that event plus a second
+      # media_item.updated from going through Media.update_media_item/3. A
+      # count scoped to `type: "media_item.monitoring_changed"` would not
+      # catch the second event, since it is a different type.
+      events_after_first_run =
+        Events.list_events(resource_type: "media_item", resource_id: item.id)
+
+      assert length(events_after_first_run) == length(events_before_repair) + 1
 
       assert MonitoringRepair.pending_ids(10) == []
       assert :ok = MonitoringRepair.perform(%Oban.Job{args: %{}})
 
       refute monitored?(item.id)
 
-      # One restoration, not two.
-      assert length(
-               Events.list_events(
-                 type: "media_item.monitoring_changed",
-                 resource_type: "media_item",
-                 resource_id: item.id
-               )
-             ) == 1
+      # One restoration, not two: the second run adds nothing at all.
+      assert length(Events.list_events(resource_type: "media_item", resource_id: item.id)) ==
+               length(events_after_first_run)
     end
 
     test "a manual re-enable after the repair is not undone" do

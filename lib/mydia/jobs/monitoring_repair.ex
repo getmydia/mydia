@@ -13,9 +13,9 @@ defmodule Mydia.Jobs.MonitoringRepair do
   recent monitoring decision on record was a disable. Nothing else is checked,
   because the enricher was the only writer that could produce that combination.
   Every other path that sets `monitored` on an existing item records a decision
-  (`Media.update_media_items_monitored/3` and the LiveView toggles), and
-  approving a media request for an item already in the library links the row
-  without writing to it.
+  (`Media.update_media_items_monitored/3`, `Media.update_media_items_batch/3`,
+  and the LiveView toggles), and approving a media request for an item already
+  in the library links the row without writing to it.
 
   Idempotent with no stamp column. The restoration emits its own
   `monitoring_changed` event, which becomes the item's latest decision, and the
@@ -50,7 +50,6 @@ defmodule Mydia.Jobs.MonitoringRepair do
 
   alias Mydia.Events
   alias Mydia.Events.Event
-  alias Mydia.Media
   alias Mydia.Media.MediaItem
   alias Mydia.Repo
 
@@ -92,7 +91,12 @@ defmodule Mydia.Jobs.MonitoringRepair do
   end
 
   @doc """
-  Ids of media items whose monitoring should be restored, oldest first.
+  Ids of media items whose monitoring should be restored.
+
+  Ordered by `m.id asc`, which is deterministic but arbitrary: `id` is a
+  random UUIDv4, not a timestamp, so this is not "oldest first" or any other
+  meaningful order. Nothing depends on the order beyond it being stable across
+  the paged `disabled_in_chunk/1` calls within a single run.
 
   The reason lives inside `Event.metadata`, which is a
   `Mydia.Settings.JsonMapType`: a map serialized into a **text** column on both
@@ -169,16 +173,20 @@ defmodule Mydia.Jobs.MonitoringRepair do
         :ok
 
       item ->
-        case Media.update_media_item(item, %{monitored: false},
-               actor_type: :system,
-               actor_id: "monitoring_repair",
-               reason: "Monitoring restored after #653"
-             ) do
+        # Deliberately not Media.update_media_item/3: it always emits its own
+        # media_item.updated event, which would land right next to the
+        # explicit monitoring_changed event below and show the operator two
+        # near-duplicate entries in the Activity Feed and item history for
+        # every repaired item. Building and applying the changeset directly
+        # keeps this write to exactly the one event that makes it idempotent.
+        changeset = MediaItem.changeset(item, %{monitored: false})
+
+        case Repo.update(changeset) do
           {:ok, updated} ->
             # The explicit decision event is what makes this idempotent: it
             # becomes the item's latest monitoring decision, so a later pass
             # cannot select the row again.
-            Events.media_item_monitoring_changed(updated, false, :system, "monitoring_repair")
+            Events.media_item_monitoring_changed(updated, false, :job, "monitoring_repair")
             :ok
 
           {:error, changeset} ->

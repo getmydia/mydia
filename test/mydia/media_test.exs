@@ -306,6 +306,48 @@ defmodule Mydia.MediaTest do
 
       assert Media.get_media_item!(media_item.id).quality_profile_id == profile.id
     end
+
+    test "update_media_items_batch/2 records a monitoring decision per item when it sets monitored" do
+      item_a = media_item_fixture(%{type: "movie", monitored: false})
+      item_b = media_item_fixture(%{type: "movie", monitored: false})
+
+      assert {:ok, 2} =
+               Media.update_media_items_batch([item_a.id, item_b.id], %{monitored: true})
+
+      assert Media.get_media_item!(item_a.id).monitored
+      assert Media.get_media_item!(item_b.id).monitored
+
+      for item <- [item_a, item_b] do
+        assert [event] =
+                 Events.list_events(
+                   type: "media_item.monitoring_changed",
+                   resource_type: "media_item",
+                   resource_id: item.id
+                 )
+
+        assert event.metadata["monitored"] == true
+      end
+    end
+
+    # This is the regression: a batch re-enable through this path used to set
+    # `monitored` with a bare Repo.update_all and no event, which is
+    # indistinguishable from Mydia.Library.MetadataEnricher's silent flip
+    # (getmydia/mydia#653) to Mydia.Jobs.MonitoringRepair.
+    test "update_media_items_batch/2 emits no monitoring event for a quality-profile-only batch" do
+      media_item = media_item_fixture(%{type: "movie"})
+      profile = quality_profile_fixture()
+
+      assert {:ok, 1} =
+               Media.update_media_items_batch([media_item.id], %{
+                 quality_profile_id: profile.id
+               })
+
+      assert Events.list_events(
+               type: "media_item.monitoring_changed",
+               resource_type: "media_item",
+               resource_id: media_item.id
+             ) == []
+    end
   end
 
   # Nested describe is invalid in ExUnit. These live as siblings of "media_items"
