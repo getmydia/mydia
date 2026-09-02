@@ -392,6 +392,12 @@ defmodule Mydia.Accounts do
 
   ## User Preferences
 
+  @preference_update_retries 3
+  @preference_stale_opts [
+    stale_error_field: :lock_version,
+    stale_error_message: "is stale"
+  ]
+
   @doc """
   Gets a user's preferences, creating default preferences if they don't exist.
   """
@@ -438,10 +444,42 @@ defmodule Mydia.Accounts do
   def update_preference(%UserPreference{} = preference, attrs) do
     delta = Map.get(attrs, "preferences", attrs)
 
-    preference
-    |> UserPreference.update_preferences_changeset(delta)
-    |> validate_add_references(delta)
-    |> Repo.update()
+    update_preference_with_retry(preference, delta, @preference_update_retries)
+  end
+
+  defp update_preference_with_retry(preference, delta, retries_left) do
+    result =
+      preference
+      |> UserPreference.update_preferences_changeset(delta)
+      |> validate_add_references(delta)
+      |> Repo.update(@preference_stale_opts)
+
+    case result do
+      {:error, changeset} when retries_left > 0 ->
+        if stale_preference?(changeset) do
+          retry_preference_update(preference, delta, retries_left, changeset)
+        else
+          result
+        end
+
+      _ ->
+        result
+    end
+  end
+
+  defp retry_preference_update(preference, delta, retries_left, stale_changeset) do
+    case Repo.get(UserPreference, preference.id) do
+      nil -> {:error, stale_changeset}
+
+      fresh_preference ->
+        update_preference_with_retry(fresh_preference, delta, retries_left - 1)
+    end
+  end
+
+  defp stale_preference?(changeset) do
+    Enum.any?(Keyword.get_values(changeset.errors, :lock_version), fn {_message, metadata} ->
+      metadata[:stale] == true
+    end)
   end
 
   # The two ID-valued add preferences point at rows, which the schema module

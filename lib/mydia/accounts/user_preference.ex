@@ -33,6 +33,7 @@ defmodule Mydia.Accounts.UserPreference do
   @type t :: %__MODULE__{
           id: binary(),
           preferences: map(),
+          lock_version: integer(),
           user: Mydia.Accounts.User.t() | Ecto.Association.NotLoaded.t(),
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
@@ -40,6 +41,7 @@ defmodule Mydia.Accounts.UserPreference do
 
   schema "user_preferences" do
     field :preferences, :map, default: %{}
+    field :lock_version, :integer, default: 1
 
     belongs_to :user, Mydia.Accounts.User
 
@@ -192,6 +194,7 @@ defmodule Mydia.Accounts.UserPreference do
     user_preference
     |> cast(%{preferences: merged_prefs}, [:preferences])
     |> validate_preferences()
+    |> optimistic_lock(:lock_version)
   end
 
   # Validate individual preference values

@@ -63,6 +63,123 @@ defmodule Mydia.Accounts.UserPreferenceTest do
     end
   end
 
+  describe "update_preference/2 optimistic locking" do
+    test "retries a stale update against fresh preferences" do
+      user = user_fixture()
+      first_session = Accounts.get_user_preference!(user)
+      second_session = Accounts.get_user_preference!(user)
+
+      assert {:ok, first_update} =
+               Accounts.update_preference(first_session, %{"grid_density" => "dense"})
+
+      assert {:ok, retried_update} =
+               Accounts.update_preference(second_session, %{"recommendations_expanded" => true})
+
+      assert UserPreference.grid_density(retried_update) == "dense"
+      assert UserPreference.recommendations_expanded(retried_update)
+      assert retried_update.lock_version == first_update.lock_version + 1
+
+      assert {:ok, retained_update} =
+               Accounts.update_preference(retried_update, %{"theme" => "dark"})
+
+      assert UserPreference.grid_density(retained_update) == "dense"
+      assert UserPreference.recommendations_expanded(retained_update)
+      assert UserPreference.theme(retained_update) == "dark"
+      assert retained_update.lock_version == retried_update.lock_version + 1
+
+      persisted = Repo.get!(UserPreference, retained_update.id)
+      assert persisted.preferences == retained_update.preferences
+      assert persisted.lock_version == retained_update.lock_version
+    end
+
+    test "flat and nested deltas preserve unrelated preferences" do
+      user = user_fixture()
+      preference = Accounts.get_user_preference!(user)
+
+      assert {:ok, preference} =
+               Accounts.update_preference(preference, %{"theme" => "dark"})
+
+      assert {:ok, preference} =
+               Accounts.update_preference(preference, %{
+                 "preferences" => %{"grid_density" => "compact"}
+               })
+
+      assert UserPreference.theme(preference) == "dark"
+      assert UserPreference.grid_density(preference) == "compact"
+      assert UserPreference.metadata_language(preference) == "en"
+    end
+
+    test "invalid preference values are not treated as lock conflicts" do
+      user = user_fixture()
+      preference = Accounts.get_user_preference!(user)
+
+      assert {:error, changeset} =
+               Accounts.update_preference(preference, %{"grid_density" => "tiny"})
+
+      refute changeset.valid?
+      refute Keyword.has_key?(changeset.errors, :lock_version)
+      assert Repo.reload!(preference).lock_version == preference.lock_version
+    end
+
+    test "invalid reference ids are not treated as lock conflicts" do
+      user = user_fixture()
+      preference = Accounts.get_user_preference!(user)
+
+      assert {:error, changeset} =
+               Accounts.update_preference(preference, %{
+                 "add_quality_profile_id" => Ecto.UUID.generate()
+               })
+
+      refute changeset.valid?
+      refute Keyword.has_key?(changeset.errors, :lock_version)
+      assert Repo.reload!(preference).lock_version == preference.lock_version
+    end
+
+    test "returns a stale changeset after exhausting retries" do
+      user = user_fixture()
+      stale_preference = Accounts.get_user_preference!(user)
+
+      assert {:ok, _updated} =
+               Accounts.update_preference(stale_preference, %{"theme" => "dark"})
+
+      test_pid = self()
+      {:ok, conflict_count} = Agent.start_link(fn -> 0 end)
+      handler_id = {__MODULE__, :preference_retry_conflicts, test_pid}
+
+      :telemetry.attach(
+        handler_id,
+        [:mydia, :repo, :query],
+        fn _event, _measurements, metadata, _config ->
+          query = String.trim_leading(metadata.query)
+
+          if Process.get(:force_preference_retry_conflicts, false) and
+               metadata.source == "user_preferences" and String.starts_with?(query, "SELECT") do
+            Repo.update_all(
+              from(p in UserPreference, where: p.id == ^stale_preference.id),
+              inc: [lock_version: 1]
+            )
+
+            Agent.update(conflict_count, &(&1 + 1))
+          end
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      task =
+        Task.async(fn ->
+          Ecto.Adapters.SQL.Sandbox.allow(Repo, test_pid, self())
+          Process.put(:force_preference_retry_conflicts, true)
+          Accounts.update_preference(stale_preference, %{"grid_density" => "dense"})
+        end)
+
+      assert {:error, changeset} = Task.await(task, 5_000)
+      assert Keyword.has_key?(changeset.errors, :lock_version)
+      assert Agent.get(conflict_count, & &1) > 1
+    end
+  end
+
   describe "update_preference/2 reference validation" do
     test "rejects a quality profile id that does not exist" do
       user = user_fixture()
