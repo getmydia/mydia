@@ -95,6 +95,8 @@ defmodule MydiaWeb do
       import MydiaWeb.AdminComponents
       # Poster card body: shared title box and bottom-pinned metadata
       import MydiaWeb.PosterCardComponents
+      # One-of-N button groups (view mode, grid density, filters)
+      import MydiaWeb.SegmentedControl
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS
