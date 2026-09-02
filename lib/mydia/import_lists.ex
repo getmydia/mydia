@@ -742,13 +742,20 @@ defmodule Mydia.ImportLists do
   defp check_duplicate_by_title_year(type, title, year) do
     normalized_title = title |> String.trim() |> String.downcase()
 
+    # Nothing stops the library holding two rows with the same type, year and
+    # title and no tmdb_id: uniqueness is enforced on tmdb_id and tvdb_id, and
+    # NULLs do not collide, so two scanned copies of one title land here.
+    # Without the limit Repo.one/1 would raise Ecto.MultipleResultsError and
+    # take down the sync job rather than linking either row.
     query =
       from(m in MediaItem,
         where:
           m.type == ^type and
             is_nil(m.tmdb_id) and
             m.year == ^year and
-            fragment("lower(trim(?))", m.title) == ^normalized_title
+            fragment("lower(trim(?))", m.title) == ^normalized_title,
+        order_by: [asc: m.id],
+        limit: 1
       )
 
     case Repo.one(query) do

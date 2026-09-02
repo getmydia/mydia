@@ -1,5 +1,9 @@
 defmodule Mydia.ImportListsTest do
-  use Mydia.DataCase, async: true
+  # async: false because the metadata-relay tests below point
+  # :mydia, :metadata_relay_url at a Bypass port, which is global application
+  # env. DataCase forces async: false on SQLite anyway, so running async here
+  # only ever leaked on PostgreSQL. See test/README.md.
+  use Mydia.DataCase, async: false
 
   alias Mydia.ImportLists
   alias Mydia.ImportLists.{ImportList, ImportListItem}
@@ -850,6 +854,27 @@ defmodule Mydia.ImportListsTest do
 
       assert {:duplicate, ^media_item} =
                ImportLists.check_duplicate(12_345, "movie", "  SILVERBACK STATION  ", 2019)
+    end
+
+    test "the title+year fallback picks one row when the library holds duplicates" do
+      # Uniqueness is enforced on tmdb_id and tvdb_id, and NULLs do not
+      # collide, so two scanned copies of one title can both sit here. This
+      # used to raise Ecto.MultipleResultsError and take the sync job down.
+      {:ok, first} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+
+      {:ok, second} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+
+      assert {:duplicate, matched} =
+               ImportLists.check_duplicate(12_345, "movie", "Silverback Station", 2019)
+
+      assert matched.id in [first.id, second.id]
+
+      # The id is a UUID, so ordering by it is not insertion order, but it is
+      # stable: the same call must keep returning the same row.
+      assert {:duplicate, ^matched} =
+               ImportLists.check_duplicate(12_345, "movie", "Silverback Station", 2019)
     end
 
     test "does not fall back when year is nil, even with a matching title" do

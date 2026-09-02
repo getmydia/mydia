@@ -304,6 +304,8 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
   # 100.64.0.0/10 - carrier-grade NAT. Plenty of home ISPs hand these out, so
   # for a self-hosted install this is neighbouring equipment, not the internet.
   defp public_ipv4?({100, b, _, _}) when b in 64..127, do: false
+  # 198.18.0.0/15 - benchmarking range, routed internally on some networks.
+  defp public_ipv4?({198, b, _, _}) when b in 18..19, do: false
   # 224.0.0.0/4 multicast and 240.0.0.0/4 reserved. Never a valid list host.
   defp public_ipv4?({a, _, _, _}) when a in 224..255, do: false
   defp public_ipv4?(_), do: true
@@ -320,6 +322,10 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
   defp public_ipv6?({h1, _, _, _, _, _, _, _}) when (h1 &&& 0xFE00) == 0xFC00, do: false
   # fe80::/10 - link-local addresses.
   defp public_ipv6?({h1, _, _, _, _, _, _, _}) when (h1 &&& 0xFFC0) == 0xFE80, do: false
+  # fec0::/10 - deprecated site-local, still routed on some internal networks.
+  defp public_ipv6?({h1, _, _, _, _, _, _, _}) when (h1 &&& 0xFFC0) == 0xFEC0, do: false
+  # ff00::/8 - multicast. Never a valid list host.
+  defp public_ipv6?({h1, _, _, _, _, _, _, _}) when (h1 &&& 0xFF00) == 0xFF00, do: false
   defp public_ipv6?(_), do: true
 
   defp embedded_ipv4(hi, lo), do: {hi >>> 8, hi &&& 0xFF, lo >>> 8, lo &&& 0xFF}

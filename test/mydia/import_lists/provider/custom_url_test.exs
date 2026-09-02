@@ -170,6 +170,17 @@ defmodule Mydia.ImportLists.Provider.CustomURLTest do
       assert {:error, _reason} = CustomURL.validate_url("http://255.255.255.255/list.json")
     end
 
+    test "rejects benchmarking, site-local and multicast ranges" do
+      # 198.18.0.0/15 is the benchmarking range and is routed internally on
+      # some networks; fec0::/10 is deprecated site-local; ff00::/8 is IPv6
+      # multicast. None is ever a legitimate list host.
+      assert {:error, _reason} = CustomURL.validate_url("http://198.18.0.1/list.json")
+      assert {:error, _reason} = CustomURL.validate_url("http://198.19.255.254/list.json")
+      assert {:error, _reason} = CustomURL.validate_url("http://[fec0::1]/list.json")
+      assert {:error, _reason} = CustomURL.validate_url("http://[ff02::1]/list.json")
+      assert {:error, _reason} = CustomURL.validate_url("http://224.0.0.1/list.json")
+    end
+
     test "rejects an IPv4-mapped IPv6 loopback address" do
       assert {:error, reason} = CustomURL.validate_url("http://[::ffff:127.0.0.1]/list.json")
       assert reason =~ "127.0.0.1"
