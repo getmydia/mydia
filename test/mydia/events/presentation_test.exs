@@ -331,6 +331,35 @@ defmodule Mydia.Events.PresentationTest do
                )
              ) == "Unknown, 1 file trashed"
     end
+
+    test "prune_undone reports how many files came back and the bytes restored" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.prune_undone",
+                 metadata: %{
+                   "title" => "Harbor Lights",
+                   "restored" => ["Harbor Lights/Harbor.Lights.S02E03.360p.mp4"],
+                   "bytes_restored" => 2_147_483_648
+                 }
+               )
+             ) == "Harbor Lights, 1 file restored, 2.0 GB returned"
+    end
+
+    test "prune_undone pluralizes for more than one restored file" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.prune_undone",
+                 metadata: %{
+                   "title" => "Harbor Lights",
+                   "restored" => [
+                     "Harbor Lights/Harbor.Lights.S02E03.360p.mp4",
+                     "Harbor Lights/Harbor.Lights.S02E03.480p.mp4"
+                   ],
+                   "bytes_restored" => 500_000
+                 }
+               )
+             ) == "Harbor Lights, 2 files restored, 500000 B returned"
+    end
   end
 
   describe "detail/1 download.*" do

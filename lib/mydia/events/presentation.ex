@@ -107,6 +107,12 @@ defmodule Mydia.Events.Presentation do
       color: "text-info",
       title: "Duplicate pruned"
     },
+    %{
+      type: "media_file.prune_undone",
+      icon: "hero-arrow-uturn-left",
+      color: "text-warning",
+      title: "Duplicate prune undone"
+    },
 
     # download.*
     %{
@@ -395,6 +401,21 @@ defmodule Mydia.Events.Presentation do
     case metadata["bytes_reclaimed"] do
       bytes when is_integer(bytes) and bytes > 0 ->
         "#{base}, #{humanize_bytes(bytes)} reclaimed"
+
+      _ ->
+        base
+    end
+  end
+
+  def detail(%Event{type: "media_file.prune_undone", metadata: metadata}) do
+    restored = metadata["restored"] || []
+    count = length(restored)
+    suffix = if count == 1, do: "file", else: "files"
+    base = "#{title_of(metadata)}, #{count} #{suffix} restored"
+
+    case metadata["bytes_restored"] do
+      bytes when is_integer(bytes) and bytes > 0 ->
+        "#{base}, #{humanize_bytes(bytes)} returned"
 
       _ ->
         base
