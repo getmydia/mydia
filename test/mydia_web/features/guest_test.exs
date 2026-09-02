@@ -15,6 +15,7 @@ defmodule MydiaWeb.Features.GuestTest do
   use MydiaWeb.FeatureCase, async: false
 
   import Mydia.MetadataStub
+  import Mydia.MetadataCacheHelpers
 
   alias Mydia.Media.MediaRequest
   alias Mydia.MetadataStubProvider
@@ -23,6 +24,18 @@ defmodule MydiaWeb.Features.GuestTest do
   @moduletag :feature
 
   setup :setup_metadata_stub
+
+  # `Mydia.Metadata.genres/1` calls `Provider.Relay.fetch_genres/2` directly
+  # and never consults `Provider.Registry`, so `setup_metadata_stub` cannot
+  # intercept it. DiscoverLive fires `:load_genres` on connected mount, and
+  # sending guests to Discover is what first put this test on that page, so
+  # without a warm cache the run reaches the live relay and the network guard
+  # fails the job even though every test passed. Warmed after the stub setup,
+  # which clears the cache on its way in.
+  setup do
+    warm_genre_cache(:movie, [])
+    :ok
+  end
 
   describe "End-to-end request and approval in a real browser" do
     @tag :feature
