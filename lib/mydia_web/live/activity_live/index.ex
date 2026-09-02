@@ -435,21 +435,10 @@ defmodule MydiaWeb.ActivityLive.Index do
     simple_changes ++ metadata_changes
   end
 
-  defp humanize_field_name("overview"), do: "Description"
-  defp humanize_field_name("poster"), do: "Poster"
-  defp humanize_field_name("backdrop"), do: "Backdrop"
-  defp humanize_field_name("tagline"), do: "Tagline"
-  defp humanize_field_name("rating"), do: "Rating"
-  defp humanize_field_name("runtime"), do: "Runtime"
-  defp humanize_field_name("genres"), do: "Genres"
-  defp humanize_field_name("cast"), do: "Cast"
-  defp humanize_field_name("crew"), do: "Crew"
-  defp humanize_field_name("title"), do: "Title"
-  defp humanize_field_name("original_title"), do: "Original Title"
-  defp humanize_field_name("year"), do: "Year"
-  defp humanize_field_name("monitored"), do: "Monitoring"
-  defp humanize_field_name("monitor_new_seasons"), do: "New season monitoring"
-  defp humanize_field_name(field), do: Phoenix.Naming.humanize(field)
+  # Delegates to Presentation.field_label/1, the single source of truth for
+  # these labels, so this expanded breakdown cannot drift from the one-line
+  # summary rendered by Presentation.detail/1 for the same event.
+  defp humanize_field_name(field), do: Presentation.field_label(field)
 
   defp format_change_value("monitored", true), do: "monitored"
   defp format_change_value("monitored", false), do: "not monitored"

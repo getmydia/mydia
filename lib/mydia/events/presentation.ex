@@ -571,6 +571,7 @@ defmodule Mydia.Events.Presentation do
       changes
       |> Map.take(["title", "original_title", "year", "monitored", "monitor_new_seasons"])
       |> Map.keys()
+      |> Enum.map(&field_label/1)
 
     case metadata_fields ++ simple_fields do
       [] -> nil
@@ -579,7 +580,7 @@ defmodule Mydia.Events.Presentation do
   end
 
   defp summarize_fields(fields) do
-    names = fields |> Enum.take(3) |> Enum.map(&field_name/1)
+    names = fields |> Enum.take(3) |> Enum.map(&(&1 |> field_name() |> field_label()))
     remaining = length(fields) - 3
 
     if remaining > 0 do
@@ -592,6 +593,40 @@ defmodule Mydia.Events.Presentation do
   defp field_name(%{"field" => field}), do: field
   defp field_name(field) when is_binary(field), do: field
   defp field_name(_), do: "field"
+
+  # Field labels used by both renderers of a media_item.updated changeset:
+  # this module's own one-line `changes_summary/1` and the expanded
+  # breakdown in `MydiaWeb.ActivityLive.Index.format_change_details/1`. One
+  # map here keeps them from drifting apart on the same field, which is how
+  # the summary ended up rendering the raw `monitor_new_seasons` next to the
+  # expanded view's "New season monitoring" for the same event.
+  @field_labels %{
+    "title" => "Title",
+    "original_title" => "Original Title",
+    "year" => "Year",
+    "monitored" => "Monitoring",
+    "monitor_new_seasons" => "New season monitoring",
+    "overview" => "Description",
+    "poster" => "Poster",
+    "backdrop" => "Backdrop",
+    "tagline" => "Tagline",
+    "rating" => "Rating",
+    "runtime" => "Runtime",
+    "genres" => "Genres",
+    "cast" => "Cast",
+    "crew" => "Crew"
+  }
+
+  @doc """
+  Human-readable label for a `media_item.updated` changed-field name.
+
+  Shared by `changes_summary/1` here and
+  `MydiaWeb.ActivityLive.Index.format_change_details/1`, so the short
+  summary and the expanded Activity Feed breakdown always agree on how a
+  field is labeled.
+  """
+  @spec field_label(String.t()) :: String.t()
+  def field_label(field), do: Map.get(@field_labels, field, Phoenix.Naming.humanize(field))
 
   # Renders " S01E02" or " S01" when the metadata carries season and episode.
   defp episode_part(metadata) do

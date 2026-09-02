@@ -17,6 +17,15 @@ defmodule Mydia.Jobs.MonitoringRepair do
   and the LiveView toggles), and approving a media request for an item already
   in the library links the row without writing to it.
 
+  `pending_ids/1` selects a batch once per run, but the operator can act on
+  any of those items before `repair_one/1` gets to them. So the decision is
+  re-checked, via `latest_decision/1`, immediately before the write, inside
+  the same `Repo.transaction/1` as the write itself. If a newer decision
+  appeared (an operator re-enabling monitoring, most importantly) the item is
+  skipped rather than flipped, and no event is emitted for it: writing an
+  event for a skipped item would fabricate a decision that was never made and
+  corrupt the very history this worker reads.
+
   Idempotent with no stamp column. The restoration emits its own
   `monitoring_changed` event, which becomes the item's latest decision, and the
   item is no longer monitored, so a second pass cannot select it. A manual
@@ -123,15 +132,24 @@ defmodule Mydia.Jobs.MonitoringRepair do
     |> Enum.take(limit)
   end
 
-  # One query per chunk of ids, not one per item. Chunking keeps the `in` list
-  # clear of SQLite's bound-parameter ceiling on a large library.
-  defp disabled_in_chunk(ids) do
+  # Shared by the batch selection query below and by `latest_decision/1`, the
+  # single-item recheck `repair_one/1` runs immediately before it writes, so
+  # the two paths cannot drift apart on what counts as "a decision event for
+  # this item".
+  defp decision_events_query(ids) do
     Event
     |> where([e], e.resource_type == "media_item")
     |> where([e], e.resource_id in ^ids)
     |> where([e], e.type in ["media_item.updated", "media_item.monitoring_changed"])
     |> order_by([e], desc: e.inserted_at, desc: e.id)
     |> select([e], {e.resource_id, e.type, e.metadata})
+  end
+
+  # One query per chunk of ids, not one per item. Chunking keeps the `in` list
+  # clear of SQLite's bound-parameter ceiling on a large library.
+  defp disabled_in_chunk(ids) do
+    ids
+    |> decision_events_query()
     |> Repo.all()
     |> Enum.group_by(fn {resource_id, _type, _metadata} -> resource_id end)
     |> Enum.filter(fn {_resource_id, events} ->
@@ -143,6 +161,22 @@ defmodule Mydia.Jobs.MonitoringRepair do
     # Repo.all returned rows grouped arbitrarily; restore the id order the
     # caller asked for so the batch is deterministic.
     |> then(fn matched -> Enum.filter(ids, &(&1 in matched)) end)
+  end
+
+  @doc """
+  The latest monitoring decision recorded for one media item: `:enable`,
+  `:disable`, or `nil` when no decision is on record.
+
+  Used to re-check a single item immediately before `repair_one/1` writes to
+  it, so a decision recorded after `pending_ids/1` selected the batch is not
+  missed.
+  """
+  @spec latest_decision(binary()) :: :enable | :disable | nil
+  def latest_decision(id) do
+    [id]
+    |> decision_events_query()
+    |> Repo.all()
+    |> Enum.find_value(&decision/1)
   end
 
   @impl Oban.Worker
@@ -167,36 +201,71 @@ defmodule Mydia.Jobs.MonitoringRepair do
     end
   end
 
-  defp repair_one(id) do
-    case Repo.get(MediaItem, id) do
-      nil ->
+  @doc """
+  Restores monitoring on one media item, if its decision still says so.
+
+  Public (rather than the batch-only `defp` it started as) so a test can
+  drive the exact race this guards against: write a newer decision for an
+  item, then call this directly with its id, without needing real
+  concurrency to land the write in between `pending_ids/1`'s selection and
+  this function's own write.
+
+  `pending_ids/1` selects the batch from a query taken before this job
+  started running. An operator can act on any of those items before this
+  function reaches them, most importantly by re-enabling monitoring, which
+  records a fresh "enable" decision. Writing `monitored: false` without
+  looking again would silently undo that operator action, which is exactly
+  the class of bug getmydia/mydia#653 is about, so the recheck below runs
+  immediately before the write, inside the same transaction as the write.
+  """
+  @spec repair_one(binary()) :: :ok
+  def repair_one(id) do
+    case Repo.transaction(fn -> repair_one_tx(id) end) do
+      {:ok, {:updated, updated}} ->
+        # The explicit decision event is what makes this idempotent: it
+        # becomes the item's latest monitoring decision, so a later pass
+        # cannot select the row again. Only emitted when the guarded update
+        # above actually ran, so a skipped item leaves no event behind.
+        Events.media_item_monitoring_changed(updated, false, :job, "monitoring_repair")
         :ok
 
-      item ->
-        # Deliberately not Media.update_media_item/3: it always emits its own
-        # media_item.updated event, which would land right next to the
-        # explicit monitoring_changed event below and show the operator two
-        # near-duplicate entries in the Activity Feed and item history for
-        # every repaired item. Building and applying the changeset directly
-        # keeps this write to exactly the one event that makes it idempotent.
-        changeset = MediaItem.changeset(item, %{monitored: false})
+      {:ok, {:error, changeset}} ->
+        Logger.warning("Monitoring repair failed for item",
+          media_item_id: id,
+          errors: inspect(changeset.errors)
+        )
 
-        case Repo.update(changeset) do
-          {:ok, updated} ->
-            # The explicit decision event is what makes this idempotent: it
-            # becomes the item's latest monitoring decision, so a later pass
-            # cannot select the row again.
-            Events.media_item_monitoring_changed(updated, false, :job, "monitoring_repair")
-            :ok
+        :ok
 
-          {:error, changeset} ->
-            Logger.warning("Monitoring repair failed for item",
-              media_item_id: id,
-              errors: inspect(changeset.errors)
-            )
+      {:ok, :skipped} ->
+        :ok
+    end
+  end
 
-            :ok
-        end
+  defp repair_one_tx(id) do
+    with %MediaItem{} = item <- Repo.get(MediaItem, id) || :not_found,
+         :disable <- latest_decision(id) do
+      # Deliberately not Media.update_media_item/3: it always emits its own
+      # media_item.updated event, which would land right next to the
+      # explicit monitoring_changed event above and show the operator two
+      # near-duplicate entries in the Activity Feed and item history for
+      # every repaired item. Building and applying the changeset directly
+      # keeps this write to exactly the one event that makes it idempotent.
+      case Repo.update(MediaItem.changeset(item, %{monitored: false})) do
+        {:ok, updated} -> {:updated, updated}
+        {:error, changeset} -> {:error, changeset}
+      end
+    else
+      :not_found ->
+        :skipped
+
+      _newer_decision ->
+        Logger.info(
+          "Monitoring repair skipped item: a newer decision was recorded after selection",
+          media_item_id: id
+        )
+
+        :skipped
     end
   end
 

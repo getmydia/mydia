@@ -147,6 +147,56 @@ defmodule Mydia.Jobs.MonitoringRepairTest do
     end
   end
 
+  describe "repair_one/1" do
+    test "does not flip an item whose decision became an enable after selection" do
+      item = media_item_fixture(%{title: "Quietwood Fen", monitored: true})
+      record_update(item, "Monitoring disabled", 300)
+
+      # This is exactly what pending_ids/1 selects on.
+      assert MonitoringRepair.pending_ids(10) == [item.id]
+
+      # Simulates the race directly: an operator re-enables monitoring,
+      # recording a newer decision, between selection and repair_one/1's
+      # write. No sleeps or concurrent processes needed, since repair_one/1
+      # re-reads the decision itself immediately before writing.
+      record_update(item, "Monitoring enabled", 120)
+
+      assert :ok = MonitoringRepair.repair_one(item.id)
+
+      assert monitored?(item.id)
+
+      # No monitoring_changed event was fabricated for a write that never
+      # happened; that would corrupt the decision history this worker reads.
+      assert Events.list_events(
+               type: "media_item.monitoring_changed",
+               resource_type: "media_item",
+               resource_id: item.id
+             ) == []
+    end
+
+    test "flips an item whose latest decision is still a disable" do
+      item = media_item_fixture(%{title: "Amberfield Row", monitored: true})
+      record_update(item, "Monitoring disabled", 300)
+
+      assert :ok = MonitoringRepair.repair_one(item.id)
+
+      refute monitored?(item.id)
+
+      assert [event] =
+               Events.list_events(
+                 type: "media_item.monitoring_changed",
+                 resource_type: "media_item",
+                 resource_id: item.id
+               )
+
+      assert event.metadata["monitored"] == false
+    end
+
+    test "returns :ok for an id that no longer exists" do
+      assert :ok = MonitoringRepair.repair_one(Ecto.UUID.generate())
+    end
+  end
+
   describe "perform/1" do
     test "restores the item and records the restoration" do
       item = media_item_fixture(%{title: "Merrow Quay", monitored: true})

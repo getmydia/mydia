@@ -143,7 +143,7 @@ defmodule Mydia.Events.PresentationTest do
           )
         )
 
-      assert detail == "Arrival, metadata refresh (title)"
+      assert detail == "Arrival, metadata refresh (Title)"
     end
 
     test "updated includes a monitored change in the summary" do
@@ -159,7 +159,10 @@ defmodule Mydia.Events.PresentationTest do
           )
         )
 
-      assert detail == "Arrival, monitoring disabled (monitored)"
+      # Matches the label the expanded Activity Feed breakdown uses for the
+      # same field (MydiaWeb.ActivityLive.Index.humanize_field_name/1), both
+      # sourced from Presentation.field_label/1.
+      assert detail == "Arrival, monitoring disabled (Monitoring)"
     end
 
     test "updated includes a monitor_new_seasons change in the summary" do
@@ -177,7 +180,7 @@ defmodule Mydia.Events.PresentationTest do
           )
         )
 
-      assert detail == "Severance, updated (monitor_new_seasons)"
+      assert detail == "Severance, updated (New season monitoring)"
     end
 
     test "updated degrades to the title alone" do
