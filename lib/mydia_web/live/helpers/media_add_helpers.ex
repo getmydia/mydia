@@ -15,6 +15,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   alias Mydia.Metadata
   alias Mydia.Metadata.Structs.SearchResult
   alias Mydia.Settings
+  alias MydiaWeb.Live.Authorization
+
+  @unknown_library_flash "That library is no longer available. Nothing was added."
 
   @doc """
   Libraries a caller may pick as the add-time target for `media_type`.
@@ -357,6 +360,92 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
        defaults
        |> AddDefaults.to_add_opts()
        |> Keyword.put(:search_on_add, defaults.search_on_add)}
+    end
+  end
+
+  @doc """
+  Resolves a submitted Configure dialog into add opts, or halts the event.
+
+  Every host of the dialog runs the same preamble: authorize, read the open
+  `:add_config`, turn the submitted `config[...]` params into
+  `Mydia.Media.Add` opts, and close the dialog. Only what happens after that
+  differs, so the completion stays with the host.
+
+  Returns `{:ok, provider_id, media_type, opts, socket}` with the dialog
+  already closed, or `{:halt, socket}` when the event must end without adding
+  anything. Three cases halt:
+
+    * The user may not create media. `authorize_create_media/1` has already
+      flashed the reason, and the dialog is deliberately left open so a
+      correction is one click away rather than a re-open. The caret that opens
+      the dialog is hidden from a guest, but the `handle_event` clause it fires
+      is live on the socket regardless of what the template renders, so this
+      guard has to run here rather than only in the UI.
+
+    * No dialog is open. A submit with no `:add_config` is a stale or forged
+      event and there is nothing to tell the user about.
+
+    * The submitted library is not a candidate for this media type, which
+      `add_opts_from_config/3` rejects as authorization rather than
+      convenience. Here the dialog closes and the rejection is flashed: the
+      user made a choice this server will not honour, and #458 was filed
+      because silently ignoring one is worse than having no picker at all.
+
+  Reads `socket.assigns[:add_config]` rather than the dotted form so a host
+  that never assigned the key halts instead of raising.
+  """
+  @spec resolve_add_config_submit(Phoenix.LiveView.Socket.t(), map()) ::
+          {:ok, term(), :movie | :tv_show, keyword(), Phoenix.LiveView.Socket.t()}
+          | {:halt, Phoenix.LiveView.Socket.t()}
+  def resolve_add_config_submit(socket, params) do
+    with :ok <- Authorization.authorize_create_media(socket),
+         %{provider_id: provider_id, media_type: media_type} <- socket.assigns[:add_config],
+         {:ok, opts} <- add_opts_from_config(params, media_type, socket.assigns.current_user) do
+      {:ok, provider_id, media_type, opts, clear_add_config(socket)}
+    else
+      {:unauthorized, socket} ->
+        {:halt, socket}
+
+      nil ->
+        {:halt, socket}
+
+      {:error, :unknown_library} ->
+        {:halt,
+         socket
+         |> clear_add_config()
+         |> Phoenix.LiveView.put_flash(:error, @unknown_library_flash)}
+    end
+  end
+
+  @doc """
+  Marks `provider_id` as in flight and sends `message` to the LiveView.
+
+  An impatient double-click sends the event twice before the first
+  `handle_info` runs. Without this guard the second add lands on a title the
+  first just created, resolves to `:already_in_library`, and flashes a false
+  failure for a title the user only meant to add once. A repeat for an id
+  already in flight is dropped and nothing is sent.
+
+  `message` is opaque so the two add paths can share the guard: a plain click
+  sends `{:add_media_to_library, ...}` and a configured submit sends
+  `{:add_media_to_library_with_opts, ...}`.
+
+  Only hosts that keep the shared `:adding_item_ids` set use this. The detail
+  page keys its franchise adds on an integer tmdb_id in its own set and guards
+  them itself.
+  """
+  @spec queue_add(Phoenix.LiveView.Socket.t(), term(), term()) :: Phoenix.LiveView.Socket.t()
+  def queue_add(socket, provider_id, message) do
+    if MapSet.member?(socket.assigns.adding_item_ids, provider_id) do
+      socket
+    else
+      send(self(), message)
+
+      Phoenix.Component.assign(
+        socket,
+        :adding_item_ids,
+        MapSet.put(socket.assigns.adding_item_ids, provider_id)
+      )
     end
   end
 
