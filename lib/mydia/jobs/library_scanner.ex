@@ -504,7 +504,7 @@ defmodule Mydia.Jobs.LibraryScanner do
       # Library.trash_media_file/1 has nothing to move, so a failure here is
       # a database problem. Log it and keep going rather than crashing the
       # whole scan over one row.
-      case Library.trash_media_file(media_file) do
+      case Library.trash_media_file(media_file, reason: :missing) do
         {:ok, _} ->
           Logger.debug("Trashed media file record", path: absolute_path)
 
@@ -542,6 +542,17 @@ defmodule Mydia.Jobs.LibraryScanner do
             case Library.restore_media_file(trashed_file) do
               {:ok, _restored} ->
                 Logger.info("Restored trashed media file",
+                  path: file_info.path,
+                  relative_path: relative_path
+                )
+
+                {restored_count + 1, unknown_acc}
+
+              {:ok, _restored, :trash_copy_retained} ->
+                Logger.warning(
+                  "Restored a trashed media file whose library path was already occupied; " <>
+                    "the trashed copy was left in place and nothing will purge it " <>
+                    "automatically. See the trash directory audit on /admin/config/trash.",
                   path: file_info.path,
                   relative_path: relative_path
                 )

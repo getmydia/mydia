@@ -50,7 +50,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationComponents do
       adding_ids={@adding_ids}
       requesting_item_id={@requesting_item_id}
       can_add={@can_add}
-      on_select={nil}
+      on_select="show_details"
       add_event="add_recommendation"
       request_event="request_recommendation"
     />

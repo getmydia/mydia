@@ -266,6 +266,11 @@ defmodule Mydia.Config.Loader do
       System.get_env("DEFAULT_SEASON_MONITORING"),
       &{:ok, String.downcase(&1)}
     )
+    |> put_if_present(
+      :trash_retention_days,
+      System.get_env("TRASH_RETENTION_DAYS"),
+      &parse_integer/1
+    )
   end
 
   defp load_metadata_env do

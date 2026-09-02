@@ -31,7 +31,13 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       franchise: nil,
       adding_franchise_tmdb_ids: MapSet.new(),
       can_create_media: true,
-      current_user: user_fixture()
+      current_user: user_fixture(),
+      # DetailModal.refresh_selected/2 reads this directly (no default) since
+      # DetailModal.init/1 always sets it before any handler can fire in the
+      # real LiveView. A unit test socket has no mount to run that through, so
+      # it needs the same assign here or a success add/request crashes with a
+      # KeyError.
+      selected_item: nil
     }
 
     %Phoenix.LiveView.Socket{
@@ -104,7 +110,9 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
         __changed__: %{},
         franchise: franchise,
         current_user: user,
-        flash: %{}
+        flash: %{},
+        # Same reason as stub_socket/2's selected_item default above.
+        selected_item: nil
       }
     }
   end

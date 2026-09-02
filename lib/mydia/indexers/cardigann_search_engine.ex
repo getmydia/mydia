@@ -593,14 +593,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     Logger.debug("Request params: #{inspect(request_params.query_params)}")
 
     # Execute request based on method
-    result =
-      case request_params.method do
-        :get ->
-          Req.get(url, req_opts)
-
-        :post ->
-          Req.post(url, req_opts)
-      end
+    result = safe_request(request_params.method, url, req_opts)
 
     case result do
       {:ok, %Req.Response{status: status, body: body, headers: headers}} ->
@@ -621,6 +614,135 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
       {:error, reason} ->
         {:error, Error.search_failed("Request failed: #{inspect(reason)}")}
     end
+  end
+
+  @doc """
+  Runs a download-block HTTP request, resolving redirects by hand.
+
+  The download path cannot reuse `execute_http_request/5`'s redirect handling.
+  A tracker answering a download URL with `302 Location: magnet:?xt=...` is
+  handing over the payload, but Req follows that redirect into
+  `Finch.Request.parse_url/1`, which raises `ArgumentError` on any scheme that
+  is not http(s). That exception escaped the whole Indexers boundary and
+  discarded the calling Oban job, so a monitored show searched, ranked, picked
+  a release, and then never grabbed it, with nothing in the log.
+
+  Redirects are therefore followed one hop at a time with `redirect: false`.
+  Each hop rebuilds its options through `build_request_options/5`, so
+  `attach_cookies/4` re-runs `cookie_disposition/2` against the new URL. That
+  is the per-hop origin check left out of the branch that first enabled
+  redirect following: a session cookie is re-authorised for every hop instead
+  of being carried across one blindly.
+
+  A `magnet:` Location resolves without issuing a second request at all, so no
+  credential is transmitted to the host that named it, regardless of
+  `definition.follow_redirect`. An http(s) Location instead honours
+  `follow_redirect`: when it is `false` the hop is not taken and this returns
+  an error naming the status and Location, the same wording
+  `validate_response/1` uses for an unfollowed redirect in the search path.
+  """
+  @spec execute_download_request(
+          Parsed.t(),
+          String.t(),
+          map(),
+          map(),
+          map(),
+          non_neg_integer()
+        ) ::
+          {:ok, {:magnet, String.t()}}
+          | {:ok, {:response, http_response()}}
+          | {:error, Error.t()}
+  def execute_download_request(definition, url, request_params, user_config, config, hops \\ 5)
+
+  def execute_download_request(_definition, url, _request_params, _user_config, _config, 0) do
+    {:error, Error.search_failed("Too many redirects resolving download URL #{url}")}
+  end
+
+  def execute_download_request(definition, url, request_params, user_config, config, hops) do
+    apply_rate_limit(definition)
+
+    req_opts =
+      definition
+      |> build_request_options(url, request_params, user_config, config)
+      |> Keyword.put(:redirect, false)
+
+    Logger.debug("Cardigann download request: #{request_params.method} #{url}")
+
+    case safe_request(request_params.method, url, req_opts) do
+      {:ok, %Req.Response{status: status, headers: headers}} when status in 300..399 ->
+        follow_download_redirect(
+          definition,
+          url,
+          status,
+          headers,
+          request_params,
+          user_config,
+          config,
+          hops
+        )
+
+      {:ok, %Req.Response{status: status, body: body, headers: headers}} ->
+        {:ok, {:response, %{status: status, body: body, headers: headers}}}
+
+      {:error, %Req.TransportError{reason: :timeout}} ->
+        {:error, Error.connection_failed("Request timeout")}
+
+      {:error, %Req.TransportError{reason: reason}} ->
+        {:error, Error.connection_failed("Connection failed: #{inspect(reason)}")}
+
+      {:error, reason} ->
+        {:error, Error.search_failed("Request failed: #{inspect(reason)}")}
+    end
+  end
+
+  defp follow_download_redirect(
+         definition,
+         url,
+         status,
+         headers,
+         request_params,
+         user_config,
+         config,
+         hops
+       ) do
+    case location_header(headers) do
+      nil ->
+        {:error, Error.search_failed("Redirect with no Location header for #{url}")}
+
+      "magnet:" <> _ = magnet ->
+        # A magnet Location is the payload itself, handed over via a header
+        # rather than a second request. Reading it issues no request and
+        # leaks no credential, so this resolves regardless of
+        # `follow_redirect: false`.
+        Logger.info("Cardigann download URL redirected to a magnet")
+        {:ok, {:magnet, magnet}}
+
+      location when definition.follow_redirect ->
+        next =
+          url
+          |> URI.parse()
+          |> URI.merge(location)
+          |> URI.to_string()
+
+        execute_download_request(definition, next, request_params, user_config, config, hops - 1)
+
+      location ->
+        {:error,
+         Error.search_failed(
+           "Redirected (HTTP #{status}) to #{location} and the redirect was not followed"
+         )}
+    end
+  end
+
+  defp safe_request(:get, url, req_opts), do: run_req(&Req.get/2, url, req_opts)
+  defp safe_request(:post, url, req_opts), do: run_req(&Req.post/2, url, req_opts)
+
+  defp run_req(fun, url, req_opts) do
+    fun.(url, req_opts)
+  rescue
+    exception ->
+      Logger.error("Cardigann HTTP request raised for #{url}: #{Exception.message(exception)}")
+      {:error, exception}
   end
 
   @doc """

@@ -97,13 +97,25 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigEvents do
     end
   end
 
-  defp franchise_entry?(nil, _tmdb_id), do: false
+  @doc """
+  Whether `tmdb_id` belongs to the franchise strip rather than the
+  recommendations rail.
 
-  defp franchise_entry?(%{entries: entries}, tmdb_id) do
+  Public because the detail dialog routes its own add and request the same way.
+  When the same movie sits in both rails (#460) the franchise strip wins and the
+  recommendations card stays stale; a later click there resolves to
+  `:already_in_library`, which both perform_add functions map to an
+  informational result rather than an error.
+  """
+  def franchise_entry?(franchise, tmdb_id)
+
+  def franchise_entry?(nil, _tmdb_id), do: false
+
+  def franchise_entry?(%{entries: entries}, tmdb_id) do
     Enum.any?(entries, fn %FranchiseEntry{} = entry ->
       to_string(entry.tmdb_id) == to_string(tmdb_id)
     end)
   end
 
-  defp franchise_entry?(_franchise, _tmdb_id), do: false
+  def franchise_entry?(_franchise, _tmdb_id), do: false
 end

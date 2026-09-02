@@ -29,7 +29,10 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   The component emits these events to the parent LiveView:
 
   - `close_details` - When user closes the modal
-  - `add_to_library` - When user clicks "Add to Library" (with tmdb_id and media_type params)
+  - `add_to_library` - When user clicks "Add to Library" (with tmdb_id and
+    media_type params). Overridable per host with `add_event`; `request_event`
+    does the same for the guest Request button. A host whose add handler is
+    named differently must pass them or the first click raises.
 
   ## `actions` slot
 
@@ -147,7 +150,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <%= if not in_library?(@item) do %>
                       <%= if @current_user && @current_user.role == "guest" do %>
                         <button
-                          phx-click="request_media"
+                          phx-click={@request_event}
                           phx-value-tmdb_id={@item.provider_id}
                           phx-value-media_type={media_type_string(@item)}
                           disabled={Map.get(@item, :request_status) != nil}
@@ -162,7 +165,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                       <% else %>
                         <div class="join">
                           <button
-                            phx-click="add_to_library"
+                            phx-click={@add_event}
                             phx-value-tmdb_id={@item.provider_id}
                             phx-value-media_type={media_type_string(@item)}
                             class="btn btn-primary join-item"
@@ -289,7 +292,13 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      # Optional slot: the dashboard renders this modal without one.
      |> assign_new(:rail, fn -> [] end)
      # Optional slot: Dashboard and Discovery render the default header actions.
-     |> assign_new(:actions, fn -> [] end)}
+     |> assign_new(:actions, fn -> [] end)
+     # The primary action is the dialog's event contract with its host, exactly
+     # as it is for trending_card/1: emitting an event the host does not handle
+     # raises FunctionClauseError and kills the LiveView on the first click.
+     # Discover, the Dashboard and the request pages all keep the defaults.
+     |> assign_new(:add_event, fn -> "add_to_library" end)
+     |> assign_new(:request_event, fn -> "request_media" end)}
   end
 
   # Helper functions for accessing data from either SearchResult (item) or MediaMetadata

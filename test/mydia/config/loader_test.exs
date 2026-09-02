@@ -45,6 +45,7 @@ defmodule Mydia.Config.LoaderTest do
         "OBAN_POLL_INTERVAL",
         "MAX_TRANSCODE_HEIGHT",
         "AUTO_SEARCH_MIN_SEEDERS",
+        "TRASH_RETENTION_DAYS",
         "SUBTITLE_LANGUAGE",
         "DEFAULT_SEASON_MONITORING"
       ] ++ download_client_vars ++ library_path_vars
@@ -837,6 +838,33 @@ defmodule Mydia.Config.LoaderTest do
                Loader.load(config_file: "nonexistent.yml")
 
       refute changeset.valid?
+    end
+
+    test "TRASH_RETENTION_DAYS overrides the default retention" do
+      System.put_env("TRASH_RETENTION_DAYS", "7")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.media.trash_retention_days == 7
+    end
+
+    test "TRASH_RETENTION_DAYS=0 is honoured rather than treated as unset" do
+      # 0 means "purge on the next daily run", not "no override given".
+      System.put_env("TRASH_RETENTION_DAYS", "0")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.media.trash_retention_days == 0
+    end
+
+    test "an unparseable TRASH_RETENTION_DAYS is ignored, not applied" do
+      System.put_env("TRASH_RETENTION_DAYS", "lots")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      # The schema default stands rather than the whole config failing to
+      # load, which would take the app down over one bad variable.
+      assert config.media.trash_retention_days == 30
     end
 
     test "environment variables override database settings" do

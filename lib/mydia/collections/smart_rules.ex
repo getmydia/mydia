@@ -42,6 +42,7 @@ defmodule Mydia.Collections.SmartRules do
   - `contains` - String/array contains value
   - `contains_any` - Array contains any of the values
   - `between` - Value is between two numbers [min, max]
+  - `within_last` - Date field is within the last N days (positive integer)
   """
 
   import Ecto.Query, warn: false
@@ -56,7 +57,7 @@ defmodule Mydia.Collections.SmartRules do
     inserted_at
   )
 
-  @valid_operators ~w(eq gt gte lt lte in not_in contains contains_any between)
+  @valid_operators ~w(eq gt gte lt lte in not_in contains contains_any between within_last)
 
   @valid_sort_fields ~w(title year rating added_date position)
   @valid_sort_directions ~w(asc desc)
@@ -69,6 +70,9 @@ defmodule Mydia.Collections.SmartRules do
 
   # Fields that require boolean values
   @boolean_fields ~w(monitored)
+
+  # Fields that hold timestamps and accept relative-date operators
+  @date_fields ~w(inserted_at)
 
   # Valid type values
   @valid_type_values ~w(movie tv_show)
@@ -336,6 +340,23 @@ defmodule Mydia.Collections.SmartRules do
     errors
   end
 
+  defp validate_field_value_type(field, _value, "within_last", prefix, errors)
+       when field not in @date_fields do
+    ["#{prefix}: within_last is only valid on date fields" | errors]
+  end
+
+  defp validate_field_value_type(field, value, "within_last", prefix, errors)
+       when field in @date_fields do
+    if is_integer(value) and value > 0 do
+      errors
+    else
+      [
+        "#{prefix}: #{field} within_last requires a positive whole number of days, got: #{inspect(value)}"
+        | errors
+      ]
+    end
+  end
+
   defp validate_field_value_type("type", value, operator, prefix, errors)
        when operator in ["in", "not_in"] do
     invalid_values =
@@ -565,6 +586,21 @@ defmodule Mydia.Collections.SmartRules do
     end)
   end
 
+  defp build_dynamic("metadata.original_language", "not_in", values) when is_list(values) do
+    json_val = json_extract_dynamic(:metadata, "$.original_language")
+
+    matches_any =
+      Enum.reduce(values, dynamic([m], false), fn value, acc ->
+        dynamic([m], ^acc or ^json_val == ^value)
+      end)
+
+    # A row with no recorded original_language does not match any of the
+    # excluded values either, so it belongs in the result. Without the
+    # explicit is_nil check, a bare SQL NOT IN against NULL is NULL, not
+    # true, and the row is silently dropped instead of included.
+    dynamic([m], is_nil(^json_val) or not (^matches_any))
+  end
+
   defp build_dynamic("metadata.status", "eq", value) do
     dynamic([m], ^DB.json_equals(:metadata, "$.status", value))
   end
@@ -575,6 +611,19 @@ defmodule Mydia.Collections.SmartRules do
     Enum.reduce(values, dynamic([m], false), fn value, acc ->
       dynamic([m], ^acc or ^json_val == ^value)
     end)
+  end
+
+  defp build_dynamic("metadata.status", "not_in", values) when is_list(values) do
+    json_val = json_extract_dynamic(:metadata, "$.status")
+
+    matches_any =
+      Enum.reduce(values, dynamic([m], false), fn value, acc ->
+        dynamic([m], ^acc or ^json_val == ^value)
+      end)
+
+    # Same NULL handling as metadata.original_language above: a row with no
+    # recorded status is not one of the excluded statuses, so it stays in.
+    dynamic([m], is_nil(^json_val) or not (^matches_any))
   end
 
   defp build_dynamic("inserted_at", "gte", value) do
@@ -603,6 +652,12 @@ defmodule Mydia.Collections.SmartRules do
       {:ok, datetime} -> dynamic([m], m.inserted_at < ^datetime)
       _ -> dynamic([m], true)
     end
+  end
+
+  defp build_dynamic("inserted_at", "within_last", days)
+       when is_integer(days) and days > 0 do
+    cutoff = DateTime.add(DateTime.utc_now(), -days, :day)
+    dynamic([m], m.inserted_at >= ^cutoff)
   end
 
   # Fallback for unknown conditions

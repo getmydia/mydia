@@ -267,6 +267,34 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert metadata.title == "Preview Show"
     end
+
+    # A Discover TV search result is TVDB-sourced: `Relay.search/3` routes
+    # `:tv_show` to `/tvdb/search`, so the id the preview is opened with is a
+    # TVDB series id. Asking TMDB for it is a 404, which left every TV search
+    # result's preview panel blank. Same root cause as the add failing with
+    # "Media not found: <tvdb id>".
+    test "fetches a TVDB-sourced id from TVDB rather than TMDB",
+         %{bypass: bypass, config: config} do
+      library_path_fixture(%{type: "series", tv_metadata_source: :tvdb})
+
+      id = System.unique_integer([:positive])
+      stub_tvdb_extended(bypass, id, "Harbour Lights")
+
+      # What the real relay does with a TVDB id on a TMDB route, and what the
+      # preview used to ask for.
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{id}", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(404, Jason.encode!(%{"error" => "not found"}))
+      end)
+
+      assert {:ok, metadata} =
+               MediaAddHelpers.fetch_detail_metadata(to_string(id), :tv_show, config,
+                 provider: :tvdb
+               )
+
+      assert metadata.title == "Harbour Lights"
+    end
   end
 
   # Stub helpers (relay endpoints)

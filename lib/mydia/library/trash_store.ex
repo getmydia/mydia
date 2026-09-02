@@ -65,9 +65,20 @@ defmodule Mydia.Library.TrashStore do
 
   require Logger
 
+  import Ecto.Query
+
   alias Mydia.Library.MediaFile
+  alias Mydia.Library.Structs.FileMetadata
+  alias Mydia.Repo
 
   @dir_name ".mydia-trash"
+
+  # A container younger than this might be a trash still in flight:
+  # `trash_media_file/2` moves the bytes before it stamps `trashed_at`, so
+  # there is a window where a perfectly healthy trash looks exactly like an
+  # orphan. An hour is far longer than any single rename(2), and a genuinely
+  # orphaned container is not going anywhere.
+  @sweep_min_age_seconds 3600
 
   @doc """
   The directory name used for the default, per-library trash root.
@@ -492,5 +503,199 @@ defmodule Mydia.Library.TrashStore do
   defp prune_container(trash_path) do
     _ = File.rmdir(Path.dirname(trash_path))
     :ok
+  end
+
+  @doc """
+  Reports trash containers that nothing will ever purge on its own.
+
+  Every `<root>/<id>` directory falls into one of three states:
+
+    * **tracked** - a row with that id has `trashed_at` set and its recorded
+      trashed path lies in this container, so `Mydia.Jobs.TrashCleanup` will
+      purge it on schedule. Not reported. A trashed row whose recorded path
+      lies in a *different* container is orphaned instead: the purge deletes
+      the recorded path, never `<root>/<id>`, so this container would survive
+      it. A trashed row with no recorded path at all stays tracked, because
+      the bytes move before `trashed_at` is stamped and sweeping a trash still
+      in flight would delete a file inside its retention window.
+    * **retained** - the row exists and is *not* trashed, but still carries
+      `metadata.extra["trashed_path"]` pointing into this container. This is
+      `restore/2` refusing to clobber an occupied library path: it keeps the
+      trashed copy and logs "remove it by hand". Nothing else ever will.
+    * **orphaned** - no row with that id at all, or a row that neither is
+      trashed nor points here. Debris from a failed purge, a deleted row, or
+      an operator moving things around.
+
+  Walks the filesystem, so it is called from a `Task` on operator demand
+  rather than on a render path: a disconnected NAS mount would otherwise hang
+  the page.
+  """
+  @spec audit() :: %{retained: [map()], orphaned: [map()]}
+  def audit do
+    containers = Enum.flat_map(roots(), &containers_in/1)
+    ids = Enum.map(containers, & &1.id)
+
+    rows =
+      from(f in MediaFile, where: f.id in ^ids, select: {f.id, f.trashed_at, f.metadata})
+      |> Repo.all()
+      |> Map.new(fn {id, trashed_at, metadata} -> {id, {trashed_at, metadata}} end)
+
+    containers
+    |> Enum.reduce(%{retained: [], orphaned: []}, fn container, acc ->
+      case classify(container, Map.get(rows, container.id)) do
+        :tracked ->
+          acc
+
+        state when state in [:retained, :orphaned] ->
+          entry = %{
+            path: container.path,
+            media_file_id: if(state == :retained, do: container.id, else: nil),
+            bytes: container.bytes
+          }
+
+          Map.update!(acc, state, &[entry | &1])
+      end
+    end)
+    |> Map.new(fn {k, v} -> {k, Enum.reverse(v)} end)
+  end
+
+  # No row: debris. Row with trashed_at: TrashCleanup owns it, but only the
+  # container its recorded path points into - purging deletes that path, not
+  # `<root>/<id>`, so a trashed row pointing at a different container leaves
+  # this one behind forever. Row without trashed_at, but still pointing here:
+  # restore/2 kept the copy deliberately.
+  defp classify(_container, nil), do: :orphaned
+
+  defp classify(container, {%DateTime{}, metadata}) do
+    case trashed_path_in(metadata) do
+      # Deliberately asymmetric with the untrashed clause below. A trashed row
+      # with no recorded path is a row mid-trash (the bytes move before
+      # `trashed_at` is stamped) or one trashed before the path was recorded,
+      # and calling either orphaned would offer the operator a Sweep button
+      # that permanently deletes files still inside their retention window.
+      # Leaving unpurgeable bytes on disk is the cheaper mistake.
+      path when is_binary(path) ->
+        if Path.dirname(path) == container.path, do: :tracked, else: :orphaned
+
+      _ ->
+        :tracked
+    end
+  end
+
+  defp classify(container, {nil, metadata}) do
+    case trashed_path_in(metadata) do
+      path when is_binary(path) ->
+        if Path.dirname(path) == container.path, do: :retained, else: :orphaned
+
+      _ ->
+        :orphaned
+    end
+  end
+
+  defp trashed_path_in(%FileMetadata{extra: extra}) when is_map(extra),
+    do: extra["trashed_path"]
+
+  defp trashed_path_in(_), do: nil
+
+  # Every distinct trash root across all library paths. A single configured
+  # MYDIA_TRASH_DIR collapses to one; the default puts one beside each
+  # library path, and two libraries on the same mount share theirs.
+  defp roots do
+    case Application.get_env(:mydia, :trash_dir) do
+      configured when is_binary(configured) and configured != "" ->
+        [configured]
+
+      _ ->
+        from(lp in Mydia.Settings.LibraryPath, select: lp.path)
+        |> Repo.all()
+        |> Enum.map(&default_root/1)
+        |> Enum.uniq()
+    end
+  end
+
+  defp containers_in(root) do
+    case File.ls(root) do
+      {:ok, entries} ->
+        entries
+        |> Enum.map(&Path.join(root, &1))
+        |> Enum.filter(&File.dir?/1)
+        |> Enum.map(fn path ->
+          %{id: Path.basename(path), path: path, bytes: bytes_in(path)}
+        end)
+
+      # A root that does not exist yet is the normal state of a fresh install,
+      # not an error. An unreadable one is logged and skipped rather than
+      # crashing an operator-triggered audit.
+      {:error, :enoent} ->
+        []
+
+      {:error, reason} ->
+        Logger.warning("Could not list a trash root during audit",
+          root: root,
+          reason: inspect(reason)
+        )
+
+        []
+    end
+  end
+
+  defp bytes_in(path) do
+    case File.ls(path) do
+      {:ok, entries} ->
+        entries
+        |> Enum.map(&Path.join(path, &1))
+        |> Enum.map(fn entry ->
+          case File.stat(entry) do
+            {:ok, %{size: size, type: :regular}} -> size
+            _ -> 0
+          end
+        end)
+        |> Enum.sum()
+
+      _ ->
+        0
+    end
+  end
+
+  @doc """
+  Permanently deletes the containers `audit/0` returned.
+
+  Takes entries rather than re-deriving them, so the operator deletes exactly
+  what they were shown. Containers younger than an hour are skipped: see
+  `@sweep_min_age_seconds`.
+  """
+  @spec sweep([map()]) :: %{
+          swept: non_neg_integer(),
+          bytes: non_neg_integer(),
+          skipped: non_neg_integer()
+        }
+  def sweep(entries) when is_list(entries) do
+    cutoff = System.os_time(:second) - @sweep_min_age_seconds
+
+    Enum.reduce(entries, %{swept: 0, bytes: 0, skipped: 0}, fn entry, acc ->
+      if old_enough?(entry.path, cutoff) do
+        case File.rm_rf(entry.path) do
+          {:ok, _} ->
+            %{acc | swept: acc.swept + 1, bytes: acc.bytes + entry.bytes}
+
+          {:error, reason, _} ->
+            Logger.error("Could not sweep a trash container",
+              path: entry.path,
+              reason: inspect(reason)
+            )
+
+            %{acc | skipped: acc.skipped + 1}
+        end
+      else
+        %{acc | skipped: acc.skipped + 1}
+      end
+    end)
+  end
+
+  defp old_enough?(path, cutoff) do
+    case File.stat(path, time: :posix) do
+      {:ok, %{mtime: mtime}} -> mtime <= cutoff
+      _ -> false
+    end
   end
 end

@@ -39,6 +39,7 @@ defmodule Mydia.Library.MediaFile do
           fingerprint_blob: String.t() | nil,
           generated_at: DateTime.t() | nil,
           trashed_at: DateTime.t() | nil,
+          trashed_reason: :missing | :upgraded | :upgrade_rejected | :pruned | :manual | nil,
           extra_kind: atom() | nil,
           extra_source: :folder | :filename | :duration | :operator | nil,
           extra_checked_at: DateTime.t() | nil,
@@ -111,6 +112,11 @@ defmodule Mydia.Library.MediaFile do
 
     # Soft-delete: files missing from disk are trashed for 30 days before permanent deletion
     field :trashed_at, :utc_datetime
+
+    # Why this row was trashed. Nil for rows trashed before the column
+    # existed, rendered as "Unknown" on the trash page.
+    field :trashed_reason, Ecto.Enum,
+      values: [:missing, :upgraded, :upgrade_rejected, :pruned, :manual]
 
     # Extras classification. See @extra_kinds above.
     field :extra_kind, Ecto.Enum, values: @extra_kinds
@@ -292,6 +298,7 @@ defmodule Mydia.Library.MediaFile do
       :fingerprint_blob,
       :generated_at,
       :trashed_at,
+      :trashed_reason,
       :extra_kind,
       :extra_source,
       :extra_checked_at,
@@ -351,6 +358,7 @@ defmodule Mydia.Library.MediaFile do
       :fingerprint_blob,
       :generated_at,
       :trashed_at,
+      :trashed_reason,
       :extra_kind,
       :extra_source,
       :extra_checked_at

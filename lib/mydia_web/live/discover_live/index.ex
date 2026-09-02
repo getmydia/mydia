@@ -14,6 +14,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Metadata
   alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
@@ -67,11 +68,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:adding_item_ids, MapSet.new())
       |> assign(:requesting_item_id, nil)
       |> assign(:request_status_map, %{})
-      |> assign(:selected_item, nil)
-      |> assign(:selected_metadata, nil)
-      |> assign(:selected_recommendations, [])
+      |> DetailModal.init()
       |> assign(:load_error, nil)
-      |> assign(:detail_loading, false)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current()
@@ -335,31 +333,18 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_event("show_details", %{"id" => id, "type" => type}, socket) do
     with {:ok, media_type} <- parse_event_media_type(type),
          item when not is_nil(item) <-
-           find_selectable_item(
-             socket.assigns.items,
-             socket.assigns.selected_recommendations,
+           DetailModal.find_selectable_item(
+             [socket.assigns.items, socket.assigns.selected_recommendations],
              id
            ) do
-      send(self(), {:fetch_detail_metadata, id, media_type})
-      send(self(), {:fetch_recommendations, id, media_type})
-
-      {:noreply,
-       socket
-       |> assign(:selected_item, item)
-       |> assign(:selected_metadata, nil)
-       |> assign(:selected_recommendations, [])
-       |> assign(:detail_loading, true)}
+      {:noreply, DetailModal.select(socket, item, media_type)}
     else
       _ -> {:noreply, socket}
     end
   end
 
   def handle_event("close_details", _, socket) do
-    {:noreply,
-     socket
-     |> assign(:selected_item, nil)
-     |> assign(:selected_metadata, nil)
-     |> assign(:detail_loading, false)}
+    {:noreply, DetailModal.close(socket)}
   end
 
   def handle_event("set_grid_density", %{"density" => density}, socket) do
@@ -478,17 +463,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, socket}
   end
 
-  def handle_info({:fetch_detail_metadata, tmdb_id, media_type}, socket) do
-    case MediaAddHelpers.fetch_detail_metadata(tmdb_id, media_type) do
-      {:ok, metadata} ->
-        {:noreply,
-         socket
-         |> assign(:selected_metadata, metadata)
-         |> assign(:detail_loading, false)}
+  def handle_info({:fetch_detail_metadata, provider_id, media_type}, socket) do
+    opts = put_source_provider([], provider_id, socket)
 
-      {:error, _reason} ->
-        {:noreply, assign(socket, :detail_loading, false)}
-    end
+    {:noreply,
+     DetailModal.put_metadata(
+       socket,
+       MediaAddHelpers.fetch_detail_metadata(provider_id, media_type, nil, opts)
+     )}
   end
 
   # Runs through start_async rather than inline: on a cache miss this makes a
@@ -525,9 +507,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
     # Also resolves against the recommendations rail. A rail title is not in
     # `items`, so searching only that list made a guest's Request click from
     # inside the modal silently do nothing.
-    case find_selectable_item(
-           socket.assigns.items,
-           socket.assigns.selected_recommendations,
+    case DetailModal.find_selectable_item(
+           [socket.assigns.items, socket.assigns.selected_recommendations],
            provider_id
          ) do
       nil ->
@@ -535,6 +516,34 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
       item ->
         {:noreply, submit_request(socket, item, media_type)}
+    end
+  end
+
+  # Tells the add flow which provider the clicked id came from.
+  #
+  # `Relay.search/3` routes every TV search to TVDB, so a TV search result's
+  # `provider_id` is a TVDB series id even though the card ships it in a param
+  # named `tmdb_id`. `Mydia.Media.Add` defaults to TMDB, so without this the
+  # add fetches a TVDB id from `/tmdb/tv/shows/:id`: usually a 404 surfaced as
+  # "Failed to fetch metadata: ... Media not found", and worse when the id
+  # happens to name a real TMDB show, since the row is then built from the
+  # wrong title.
+  #
+  # Resolved from the item server-side rather than trusted from the click,
+  # mirroring `MediaRequestHelpers.build_request_attrs/3`, which has branched on
+  # `item.provider` for the Request button all along. An id that no longer
+  # resolves against the current page falls through to the TMDB default, which
+  # is what trending, discover and the recommendations rail all return.
+  defp put_source_provider(opts, provider_id, socket) do
+    item =
+      DetailModal.find_selectable_item(
+        [socket.assigns.items, socket.assigns.selected_recommendations],
+        provider_id
+      )
+
+    case item && Map.get(item, :provider) do
+      :tvdb -> Keyword.put(opts, :provider, :tvdb)
+      _ -> opts
     end
   end
 
@@ -551,7 +560,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
            media_type,
            socket.assigns.library_status_map,
            nil,
-           opts
+           put_source_provider(opts, provider_id, socket)
          ) do
       {:ok, media_item, updated_map} ->
         items =
@@ -575,6 +584,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
+         |> DetailModal.refresh_selected([items, recommendations])
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
       {:already_in_library, media_item, updated_map} ->
@@ -583,12 +593,20 @@ defmodule MydiaWeb.DiscoverLive.Index do
           |> MediaAddHelpers.enrich_with_library_status(updated_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
+        recommendations =
+          MediaAddHelpers.enrich_with_library_status(
+            socket.assigns.selected_recommendations,
+            updated_map
+          )
+
         {:noreply,
          socket
          |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
          |> assign_visible_items()
+         |> assign(:selected_recommendations, recommendations)
+         |> DetailModal.refresh_selected([items, recommendations])
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
       {:error, {:changeset, changeset}} ->
@@ -632,6 +650,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:items, items)
         |> assign_visible_items()
         |> assign(:selected_recommendations, recommendations)
+        |> DetailModal.refresh_selected([items, recommendations])
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
       {:error, reason} ->
@@ -643,16 +662,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   @impl true
   def handle_async(:load_recommendations, {:ok, {:ok, results}}, socket) do
-    {:noreply, assign(socket, :selected_recommendations, enrich_recommendations(socket, results))}
+    {:noreply,
+     DetailModal.put_recommendations(socket, results, &enrich_recommendations(socket, &1))}
   end
 
   def handle_async(:load_recommendations, {:ok, :none}, socket) do
-    {:noreply, assign(socket, :selected_recommendations, [])}
+    {:noreply, DetailModal.put_recommendations(socket, [], & &1)}
   end
 
   def handle_async(:load_recommendations, {:exit, reason}, socket) do
     Logger.warning("Discover recommendations lookup crashed: #{inspect(reason)}")
-    {:noreply, assign(socket, :selected_recommendations, [])}
+    {:noreply, DetailModal.put_recommendations(socket, [], & &1)}
   end
 
   # Request status matters as much as library status here: without it
@@ -677,21 +697,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
     do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"
 
   defp request_error_message(_), do: "Could not submit the request. Please try again."
-
-  @doc """
-  Resolves a clicked provider id against the current grid page, then the
-  recommendations rail.
-
-  A recommendation is not part of the grid page, so resolving against `items`
-  alone drops the click and the modal never swaps — a failure that looks like
-  nothing happening. Public so it can be exercised without a live process.
-  """
-  def find_selectable_item(items, recommendations, id) do
-    id = to_string(id)
-
-    Enum.find(items, &(to_string(&1.provider_id) == id)) ||
-      Enum.find(recommendations, &(to_string(&1.provider_id) == id))
-  end
 
   # Private helpers
 

@@ -15,6 +15,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias Mydia.Accounts.Authorization
   alias MydiaWeb.DashboardLive.Components
   alias MydiaWeb.Live.Authorization, as: LiveAuthorization
+  alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
@@ -42,9 +43,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:adding_item_ids, MapSet.new())
         |> assign(:requesting_item_id, nil)
         |> assign(:request_status_map, %{})
-        |> assign(:selected_item, nil)
-        |> assign(:selected_metadata, nil)
-        |> assign(:detail_loading, false)
+        |> DetailModal.init()
         |> assign(:add_config, nil)
         |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
         |> load_dashboard_data()
@@ -67,9 +66,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:requesting_item_id, nil)
         |> assign(:request_status_map, %{})
         |> assign(:pending_requests_count, 0)
-        |> assign(:selected_item, nil)
-        |> assign(:selected_metadata, nil)
-        |> assign(:detail_loading, false)
+        |> DetailModal.init()
         |> assign(:add_config, nil)
         |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
       end
@@ -261,25 +258,17 @@ defmodule MydiaWeb.DashboardLive.Index do
   def handle_event("show_details", %{"id" => id, "type" => type}, socket) do
     with {:ok, media_type} <- parse_event_media_type(type),
          item when not is_nil(item) <- find_trending_item(socket, id, media_type) do
-      # Show modal with loading state and trigger metadata fetch
-      send(self(), {:fetch_detail_metadata, id, media_type})
-
-      {:noreply,
-       socket
-       |> assign(:selected_item, item)
-       |> assign(:selected_metadata, nil)
-       |> assign(:detail_loading, true)}
+      # recommendations: false because this page renders the dialog without a
+      # :rail slot. Fetching them would pay for a relay round trip whose result
+      # nothing draws.
+      {:noreply, DetailModal.select(socket, item, media_type, recommendations: false)}
     else
       _ -> {:noreply, socket}
     end
   end
 
   def handle_event("close_details", _, socket) do
-    {:noreply,
-     socket
-     |> assign(:selected_item, nil)
-     |> assign(:selected_metadata, nil)
-     |> assign(:detail_loading, false)}
+    {:noreply, DetailModal.close(socket)}
   end
 
   @impl true
@@ -334,17 +323,11 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   def handle_info({:fetch_detail_metadata, tmdb_id, media_type}, socket) do
-    case MediaAddHelpers.fetch_detail_metadata(tmdb_id, media_type) do
-      {:ok, metadata} ->
-        {:noreply,
-         socket
-         |> assign(:selected_metadata, metadata)
-         |> assign(:detail_loading, false)}
-
-      {:error, _reason} ->
-        # Even on error, stop loading and show what we have from SearchResult
-        {:noreply, assign(socket, :detail_loading, false)}
-    end
+    {:noreply,
+     DetailModal.put_metadata(
+       socket,
+       MediaAddHelpers.fetch_detail_metadata(tmdb_id, media_type)
+     )}
   end
 
   def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
@@ -423,6 +406,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:library_status_map, updated_map)
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
+         |> DetailModal.refresh_selected([trending_movies, trending_tv])
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
       {:already_in_library, media_item, updated_map} ->
@@ -442,6 +426,7 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:library_status_map, updated_map)
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
+         |> DetailModal.refresh_selected([trending_movies, trending_tv])
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
       {:error, {:changeset, changeset}} ->
@@ -498,23 +483,24 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:ok, request, status_updates} ->
         request_status_map = Map.merge(socket.assigns.request_status_map, status_updates)
 
-        socket
-        |> assign(:requesting_item_id, nil)
-        |> assign(:request_status_map, request_status_map)
-        |> assign(
-          :trending_movies,
+        trending_movies =
           MediaRequestHelpers.enrich_with_request_status(
             socket.assigns.trending_movies,
             request_status_map
           )
-        )
-        |> assign(
-          :trending_tv,
+
+        trending_tv =
           MediaRequestHelpers.enrich_with_request_status(
             socket.assigns.trending_tv,
             request_status_map
           )
-        )
+
+        socket
+        |> assign(:requesting_item_id, nil)
+        |> assign(:request_status_map, request_status_map)
+        |> assign(:trending_movies, trending_movies)
+        |> assign(:trending_tv, trending_tv)
+        |> DetailModal.refresh_selected([trending_movies, trending_tv])
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
       {:error, reason} ->

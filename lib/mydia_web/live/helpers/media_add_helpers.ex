@@ -197,29 +197,45 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   For movies, fetches TMDB metadata directly.
 
+  Pass `provider: :tvdb` when `provider_id` is already a TVDB series id, which
+  is what every Discover TV search result carries. The TMDB-first path above
+  only makes sense for a TMDB id, and the relay 404s a TVDB id on TMDB's route.
+
   An optional `config` can be injected for testing; defaults to
   `Metadata.default_relay_config()`.
   """
-  def fetch_detail_metadata(tmdb_id, media_type, config \\ nil) do
+  def fetch_detail_metadata(provider_id, media_type, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
 
-    if media_type == :tv_show do
-      case Metadata.fetch_by_id(config, tmdb_id, media_type: :tv_show, provider: :tmdb) do
-        {:ok, tmdb_metadata} ->
-          if Settings.derive_tv_metadata_source() == :tmdb do
-            {:ok, tmdb_metadata}
-          else
-            case Add.resolve_tvdb_metadata(tmdb_metadata, config) do
-              {:ok, tvdb_metadata, _tvdb_id} -> {:ok, tvdb_metadata}
-              {:error, _} -> {:ok, tmdb_metadata}
-            end
-          end
+    cond do
+      media_type != :tv_show ->
+        Metadata.fetch_by_id(config, provider_id, media_type: :movie)
 
-        error ->
-          error
-      end
-    else
-      Metadata.fetch_by_id(config, tmdb_id, media_type: :movie)
+      # The id is already a TVDB series id, so there is no TMDB lookup to start
+      # from: a Discover TV search result carries one, since `Relay.search/3`
+      # routes `:tv_show` to `/tvdb/search`. Asking TMDB for it 404s.
+      Keyword.get(opts, :provider) == :tvdb ->
+        Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tvdb)
+
+      true ->
+        fetch_tv_detail_from_tmdb(provider_id, config)
+    end
+  end
+
+  defp fetch_tv_detail_from_tmdb(provider_id, config) do
+    case Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tmdb) do
+      {:ok, tmdb_metadata} ->
+        if Settings.derive_tv_metadata_source() == :tmdb do
+          {:ok, tmdb_metadata}
+        else
+          case Add.resolve_tvdb_metadata(tmdb_metadata, config) do
+            {:ok, tvdb_metadata, _tvdb_id} -> {:ok, tvdb_metadata}
+            {:error, _} -> {:ok, tmdb_metadata}
+          end
+        end
+
+      error ->
+        error
     end
   end
 
