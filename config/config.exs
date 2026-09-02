@@ -452,9 +452,12 @@ config :mydia, :features,
   # Can be overridden via ENABLE_CARDIGANN environment variable
   cardigann_enabled: true,
   # Enable/disable Import Lists feature
-  # When enabled, shows the Import Lists UI for syncing external lists (TMDB watchlists, etc.)
+  # When enabled, runs the Import Lists UI and scheduled sync for external
+  # lists (TMDB watchlists, etc.); when disabled, the admin route redirects
+  # away and the scheduler job is a no-op
+  # On by default: syncing an external list is a normal admin action
   # Can be overridden via ENABLE_IMPORT_LISTS environment variable
-  import_lists_enabled: false,
+  import_lists_enabled: true,
   # Enable/disable Remote Access feature (iroh-based peer-to-peer connectivity)
   # When enabled, starts the p2p server for remote device pairing and media streaming
   # On by default: connecting a player is a normal user action, and requiring an

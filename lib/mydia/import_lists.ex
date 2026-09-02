@@ -12,6 +12,7 @@ defmodule Mydia.ImportLists do
   alias Mydia.Repo
 
   alias Mydia.ImportLists.{ImportList, ImportListItem}
+  alias Mydia.Media.MediaItem
 
   ## Preset Definitions
 
@@ -244,35 +245,57 @@ defmodule Mydia.ImportLists do
   end
 
   @doc """
-  Creates an import list item, or updates it if it already exists.
+  Creates an import list item, or atomically updates it if it already exists.
 
-  Uses the unique constraint on (import_list_id, tmdb_id) to detect conflicts.
-  Returns {:ok, item} where item is either newly created or the updated existing item.
+  Uses a real `INSERT ... ON CONFLICT` on the `(import_list_id, tmdb_id)` unique
+  index rather than a select-then-write, so two syncs racing the same item can
+  never have the loser silently drop it (the old select-then-insert/update
+  raced the unique constraint and swallowed the resulting changeset error).
+
+  Only the cached display fields (`title`, `year`, `poster_path`) are
+  overwritten when an existing row is matched; `discovered_at`, `status`,
+  `skip_reason` and `media_item_id` are left exactly as they were.
+
+  Because the same changeset both inserts and (via conflict) updates, every
+  call must supply the full set of required fields (`tmdb_id`, `title`,
+  `discovered_at`, `import_list_id`), not just the fields that would change.
+
+  Returns `{:ok, item, :created}` when a new row was inserted, `{:ok, item,
+  :updated}` when an existing row was matched, or `{:error, changeset}`.
   """
   def upsert_import_list_item(attrs) do
-    import_list_id = attrs[:import_list_id] || attrs["import_list_id"]
-    tmdb_id = attrs[:tmdb_id] || attrs["tmdb_id"]
+    title = attrs[:title] || attrs["title"]
+    year = attrs[:year] || attrs["year"]
+    poster_path = attrs[:poster_path] || attrs["poster_path"]
 
-    # Try to find existing item first
-    existing =
-      ImportListItem
-      |> where([i], i.import_list_id == ^import_list_id and i.tmdb_id == ^tmdb_id)
-      |> Repo.one()
+    # Pre-generate the id so created-vs-updated can be told apart afterwards
+    # without a race: on conflict, Postgres and SQLite both leave the
+    # existing row's id untouched, so the returned id only matches this one
+    # when the insert actually happened.
+    candidate_id = Ecto.UUID.generate()
 
-    case existing do
-      nil ->
-        # Create new item
-        create_import_list_item(attrs)
+    changeset =
+      %ImportListItem{}
+      |> ImportListItem.changeset(%{
+        import_list_id: attrs[:import_list_id] || attrs["import_list_id"],
+        tmdb_id: attrs[:tmdb_id] || attrs["tmdb_id"],
+        title: title,
+        year: year,
+        poster_path: poster_path,
+        discovered_at: attrs[:discovered_at] || attrs["discovered_at"]
+      })
+      |> Ecto.Changeset.put_change(:id, candidate_id)
 
-      item ->
-        # Update existing item (only update cached display fields)
-        item
-        |> ImportListItem.changeset(%{
-          title: attrs[:title] || attrs["title"],
-          year: attrs[:year] || attrs["year"],
-          poster_path: attrs[:poster_path] || attrs["poster_path"]
-        })
-        |> Repo.update()
+    changeset
+    |> Repo.insert(
+      on_conflict: [set: [title: title, year: year, poster_path: poster_path]],
+      conflict_target: [:import_list_id, :tmdb_id],
+      returning: true
+    )
+    |> case do
+      {:ok, %ImportListItem{id: ^candidate_id} = item} -> {:ok, item, :created}
+      {:ok, item} -> {:ok, item, :updated}
+      {:error, _} = error -> error
     end
   end
 
@@ -399,18 +422,42 @@ defmodule Mydia.ImportLists do
 
   ## Sync Operations
 
+  # Backoff state (consecutive failure count and the time of the last
+  # failure) lives in the existing `config` map rather than as dedicated
+  # columns. `config` is already a schema field with no migration needed, and
+  # every write below merges into it rather than replacing it wholesale, so
+  # it never clobbers the `list_url` some list types also keep there.
+  @max_backoff_seconds 24 * 60 * 60
+
+  # 2 ** 32 minutes already dwarfs @max_backoff_seconds, so clamping here costs
+  # nothing and keeps :math.pow/2 well clear of the float range it raises on.
+  @max_backoff_exponent 32
+
   @doc """
-  Updates the last synced timestamp for an import list.
+  Marks an import list sync as successful.
+
+  Updates `last_synced_at`, clears `sync_error`, and resets the consecutive
+  failure count so the next sync is scheduled at the normal interval again
+  instead of continuing any backoff from prior failures.
   """
   def mark_sync_success(%ImportList{} = import_list) do
     update_import_list(import_list, %{
       last_synced_at: DateTime.utc_now(),
-      sync_error: nil
+      sync_error: nil,
+      config: clear_backoff_state(import_list.config)
     })
   end
 
   @doc """
-  Records a sync error for an import list.
+  Records a sync error for an import list and applies exponential backoff.
+
+  A failed list used to stay permanently "due": `sync_due?/1` only looked at
+  `last_synced_at`, which this function never touched, so a cron tick every
+  15 minutes re-enqueued the same failing list forever regardless of its
+  configured interval. This now records the failure time and increments a
+  consecutive-failure count (both in `config`), and `sync_due?/1` uses them to
+  delay the next attempt by `sync_interval * 2^(failures - 1)`, capped at 24
+  hours, instead of retrying at the full interval (or immediately) every time.
   """
   def mark_sync_error(%ImportList{} = import_list, error) do
     error_message =
@@ -420,17 +467,89 @@ defmodule Mydia.ImportLists do
         _ -> inspect(error)
       end
 
-    update_import_list(import_list, %{sync_error: error_message})
+    failures = consecutive_failures(import_list) + 1
+
+    updated_config =
+      (import_list.config || %{})
+      |> Map.put("consecutive_failures", failures)
+      |> Map.put("last_failed_at", DateTime.to_iso8601(DateTime.utc_now()))
+
+    update_import_list(import_list, %{sync_error: error_message, config: updated_config})
+  end
+
+  defp clear_backoff_state(config) do
+    (config || %{})
+    |> Map.delete("consecutive_failures")
+    |> Map.delete("last_failed_at")
+  end
+
+  defp consecutive_failures(%ImportList{config: %{"consecutive_failures" => n}})
+       when is_integer(n) and n > 0,
+       do: n
+
+  defp consecutive_failures(%ImportList{}), do: 0
+
+  defp last_failed_at(%ImportList{config: %{"last_failed_at" => value}}) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, dt, _offset} -> dt
+      {:error, _} -> nil
+    end
+  end
+
+  defp last_failed_at(%ImportList{}), do: nil
+
+  # interval * 2^(n-1), capped at 24h. The first failure (n = 1) delays by
+  # exactly one interval, which alone fixes "hammered every 15 minutes
+  # forever" since sync_due?/1 previously ignored failures entirely; each
+  # additional consecutive failure doubles the delay from there.
+  defp backoff_delay_seconds(interval_minutes, failures) do
+    # Clamp the exponent before it reaches :math.pow/2. The delay is capped at
+    # 24 hours anyway, so any exponent past this point is already saturated, and
+    # 2 ** 1024 overflows a float and raises ArithmeticError. A list that fails
+    # forever accrues roughly one failure per day once the cap is reached, and
+    # list_sync_due_lists/0 filters every list through sync_due?/1, so an
+    # unclamped raise would eventually stop syncing for all lists, not just the
+    # broken one.
+    exponent = min(failures - 1, @max_backoff_exponent)
+    delay = trunc(interval_minutes * 60 * :math.pow(2, exponent))
+    min(delay, @max_backoff_seconds)
+  end
+
+  defp backoff_elapsed?(%ImportList{sync_interval: interval} = import_list) do
+    case last_failed_at(import_list) do
+      # A failure count with no recorded failure time (shouldn't happen in
+      # practice, but config is a free-form map) can't compute a delay, so
+      # default to due rather than stuck.
+      nil ->
+        true
+
+      failed_at ->
+        delay_seconds = backoff_delay_seconds(interval, consecutive_failures(import_list))
+        due_at = DateTime.add(failed_at, delay_seconds, :second)
+        DateTime.compare(DateTime.utc_now(), due_at) in [:gt, :eq]
+    end
   end
 
   @doc """
   Checks if an import list is due for sync based on its interval.
+
+  A list with consecutive failures uses the exponential backoff delay from
+  its last failure instead of the plain interval from `last_synced_at`; see
+  `mark_sync_error/2`.
   """
   def sync_due?(%ImportList{enabled: false}), do: false
 
-  def sync_due?(%ImportList{last_synced_at: nil}), do: true
+  def sync_due?(%ImportList{} = import_list) do
+    if consecutive_failures(import_list) > 0 do
+      backoff_elapsed?(import_list)
+    else
+      due_by_interval?(import_list)
+    end
+  end
 
-  def sync_due?(%ImportList{last_synced_at: last_synced, sync_interval: interval}) do
+  defp due_by_interval?(%ImportList{last_synced_at: nil}), do: true
+
+  defp due_by_interval?(%ImportList{last_synced_at: last_synced, sync_interval: interval}) do
     now = DateTime.utc_now()
     due_at = DateTime.add(last_synced, interval * 60, :second)
     DateTime.compare(now, due_at) in [:gt, :eq]
@@ -453,7 +572,7 @@ defmodule Mydia.ImportLists do
   Returns `{:ok, media_item}` on success, or `{:error, reason}` on failure.
   """
   def add_item_to_library(%ImportListItem{} = item, %ImportList{} = import_list) do
-    case check_duplicate(item.tmdb_id, import_list.media_type) do
+    case check_duplicate(item.tmdb_id, import_list.media_type, item.title, item.year) do
       {:duplicate, media_item} ->
         handle_duplicate_item(item, media_item)
 
@@ -462,8 +581,13 @@ defmodule Mydia.ImportLists do
     end
   end
 
+  # Links the item to the media already in the library. A single write: an
+  # earlier version wrote mark_item_skipped/2 first and mark_item_added/2
+  # right after, which immediately overwrote the skip (mark_item_added/2
+  # clears skip_reason), so the row always ended up "added" anyway. That made
+  # the write pointless and, worse, made the job's own stats (which reported
+  # it as skipped) disagree with what the database actually stored.
   defp handle_duplicate_item(item, media_item) do
-    mark_item_skipped(item, "Already in library")
     {:ok, _} = mark_item_added(item, media_item.id)
     {:ok, media_item}
   end
@@ -578,29 +702,58 @@ defmodule Mydia.ImportLists do
   ## Duplicate Detection
 
   @doc """
-  Checks if media with the given TMDB ID exists in the library.
+  Checks if media matching an import list item already exists in the library.
+
+  Looks up by TMDB ID first. Media that entered the library from a filesystem
+  scan often has no TMDB ID at all, so a miss falls back to a conservative
+  title+year match: normalised (trimmed, case-insensitive) title, an exact
+  year match, and only against rows where `tmdb_id` is still `NULL` (a row
+  that already carries a *different* TMDB ID is a genuinely different title,
+  not a fuzzy match). The fallback only runs when both `title` and `year` are
+  given; a `nil` year is treated as too little information to match on safely.
 
   Returns `{:duplicate, media_item}` if found, `:not_found` otherwise.
   """
-  def check_duplicate(tmdb_id, media_type) when is_integer(tmdb_id) do
-    alias Mydia.Media.MediaItem
+  def check_duplicate(tmdb_id, media_type, title \\ nil, year \\ nil)
+      when is_integer(tmdb_id) do
+    type = normalize_media_check_type(media_type)
 
-    type =
-      case media_type do
-        "movie" -> "movie"
-        "tv_show" -> "tv_show"
-        :movie -> "movie"
-        :tv_show -> "tv_show"
-        _ -> media_type
-      end
-
-    # Check by tmdb_id first
     case Repo.get_by(MediaItem, tmdb_id: tmdb_id, type: type) do
-      nil ->
-        :not_found
+      nil -> check_duplicate_by_title_year(type, title, year)
+      media_item -> {:duplicate, media_item}
+    end
+  end
 
-      media_item ->
-        {:duplicate, media_item}
+  defp normalize_media_check_type(media_type) do
+    case media_type do
+      "movie" -> "movie"
+      "tv_show" -> "tv_show"
+      :movie -> "movie"
+      :tv_show -> "tv_show"
+      _ -> media_type
+    end
+  end
+
+  defp check_duplicate_by_title_year(_type, title, year)
+       when is_nil(title) or title == "" or is_nil(year) do
+    :not_found
+  end
+
+  defp check_duplicate_by_title_year(type, title, year) do
+    normalized_title = title |> String.trim() |> String.downcase()
+
+    query =
+      from(m in MediaItem,
+        where:
+          m.type == ^type and
+            is_nil(m.tmdb_id) and
+            m.year == ^year and
+            fragment("lower(trim(?))", m.title) == ^normalized_title
+      )
+
+    case Repo.one(query) do
+      nil -> :not_found
+      media_item -> {:duplicate, media_item}
     end
   end
 
@@ -615,7 +768,7 @@ defmodule Mydia.ImportLists do
 
     updated_count =
       Enum.reduce(pending_items, 0, fn item, count ->
-        case check_duplicate(item.tmdb_id, import_list.media_type) do
+        case check_duplicate(item.tmdb_id, import_list.media_type, item.title, item.year) do
           {:duplicate, media_item} ->
             {:ok, _} = mark_item_skipped(item, "Already in library")
             # Also link to the existing media item

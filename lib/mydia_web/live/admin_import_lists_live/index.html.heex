@@ -250,7 +250,7 @@
                 field={@form[:media_type]}
                 type="select"
                 label="Media Type"
-                options={[{"Movies", "movie"}, {"TV Shows", "tv_show"}]}
+                options={media_type_options(selected_type)}
                 required
               />
             <% else %>
@@ -343,6 +343,10 @@
                   <span class="font-medium">Auto-add to library</span>
                   <p class="text-xs text-base-content/60">
                     Automatically add new items without manual approval
+                  </p>
+                  <p class="text-xs text-warning">
+                    Added items appear in your library immediately. When the list is also
+                    monitored, they are searched for on indexers and downloaded automatically.
                   </p>
                 </div>
               </label>

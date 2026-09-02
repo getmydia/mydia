@@ -17,24 +17,31 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket) do
-      Phoenix.PubSub.subscribe(Mydia.PubSub, "import_lists")
-    end
+    if Mydia.ImportLists.FeatureFlags.enabled?() do
+      if connected?(socket) do
+        Phoenix.PubSub.subscribe(Mydia.PubSub, "import_lists")
+      end
 
-    {:ok,
-     socket
-     |> assign(:page_title, "Import Lists")
-     |> assign(:show_list_modal, false)
-     |> assign(:show_items_modal, false)
-     |> assign(:show_preset_confirm_modal, false)
-     |> assign(:pending_preset_id, nil)
-     |> assign(:list_mode, nil)
-     |> assign(:selected_list, nil)
-     |> assign(:form, nil)
-     |> assign(:items, [])
-     |> assign(:items_filter, "all")
-     |> assign(:syncing_list_id, nil)
-     |> load_data()}
+      {:ok,
+       socket
+       |> assign(:page_title, "Import Lists")
+       |> assign(:show_list_modal, false)
+       |> assign(:show_items_modal, false)
+       |> assign(:show_preset_confirm_modal, false)
+       |> assign(:pending_preset_id, nil)
+       |> assign(:list_mode, nil)
+       |> assign(:selected_list, nil)
+       |> assign(:form, nil)
+       |> assign(:items, [])
+       |> assign(:items_filter, "all")
+       |> assign(:syncing_list_id, nil)
+       |> load_data()}
+    else
+      {:ok,
+       socket
+       |> put_flash(:error, "Import Lists is currently disabled")
+       |> redirect(to: ~p"/admin/dashboard")}
+    end
   end
 
   @impl true
@@ -219,7 +226,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
 
     changeset =
       import_list
-      |> ImportLists.change_import_list(params)
+      |> ImportLists.change_import_list(coerce_media_type(params))
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, :form, to_form(changeset))}
@@ -549,6 +556,41 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
       preset_id
     end
   end
+
+  # Keeps the media type in step with the chosen list source. Several TMDB
+  # sources only ever publish one media type, so once the operator picks one
+  # of those the incompatible option is no longer offered by the select. Without
+  # this the form would keep submitting a value the operator can no longer see.
+  defp coerce_media_type(%{"type" => type, "media_type" => media_type} = params)
+       when is_binary(type) and is_binary(media_type) do
+    case ImportList.compatible_media_types(type) do
+      [only] when only != media_type -> Map.put(params, "media_type", only)
+      _ -> params
+    end
+  end
+
+  defp coerce_media_type(params), do: params
+
+  @doc """
+  Returns the media type select options a list source actually supports.
+
+  Movie-only and TV-only TMDB sources offer a single option so an operator
+  cannot build a list whose source and media type disagree.
+  """
+  def media_type_options(type) when is_binary(type) and type != "" do
+    type
+    |> ImportList.compatible_media_types()
+    |> Enum.map(&{media_type_label(&1), &1})
+  end
+
+  # No source picked yet, so nothing narrows the choice.
+  def media_type_options(_type) do
+    Enum.map(ImportList.valid_media_types(), &{media_type_label(&1), &1})
+  end
+
+  defp media_type_label("movie"), do: "Movies"
+  defp media_type_label("tv_show"), do: "TV Shows"
+  defp media_type_label(other), do: other
 
   def media_type_icon("movie"), do: "hero-film"
   def media_type_icon("tv_show"), do: "hero-tv"

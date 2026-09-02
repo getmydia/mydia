@@ -272,16 +272,89 @@ defmodule Mydia.ImportListsTest do
       assert item.status == "pending"
     end
 
-    test "upsert_import_list_item/1 updates existing item", %{import_list: import_list} do
+    test "upsert_import_list_item/1 reports :created for a brand new item", %{
+      import_list: import_list
+    } do
+      attrs = Map.put(@valid_item_attrs, :import_list_id, import_list.id)
+
+      assert {:ok, %ImportListItem{} = item, :created} =
+               ImportLists.upsert_import_list_item(attrs)
+
+      assert item.tmdb_id == 123
+      assert item.title == "Test Movie"
+    end
+
+    test "upsert_import_list_item/1 updates existing item and reports :updated", %{
+      import_list: import_list
+    } do
       attrs = Map.put(@valid_item_attrs, :import_list_id, import_list.id)
       {:ok, original} = ImportLists.create_import_list_item(attrs)
 
       updated_attrs = Map.merge(attrs, %{title: "Updated Title", year: 2025})
-      {:ok, updated} = ImportLists.upsert_import_list_item(updated_attrs)
+
+      assert {:ok, updated, :updated} = ImportLists.upsert_import_list_item(updated_attrs)
 
       assert updated.id == original.id
       assert updated.title == "Updated Title"
       assert updated.year == 2025
+    end
+
+    test "upsert_import_list_item/1 only refreshes cached display fields on conflict, not status, skip_reason, media_item_id or discovered_at",
+         %{import_list: import_list} do
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Already Added Movie", year: 2024})
+
+      original_discovered_at = ~U[2024-01-01 00:00:00Z]
+
+      attrs =
+        Map.merge(@valid_item_attrs, %{
+          import_list_id: import_list.id,
+          discovered_at: original_discovered_at
+        })
+
+      {:ok, item} = ImportLists.create_import_list_item(attrs)
+      {:ok, item} = ImportLists.mark_item_added(item, media_item.id)
+
+      # A later sync re-discovering the same item must not clobber the
+      # status, the link, or the original discovery time, only the cached
+      # display fields.
+      resync_attrs =
+        Map.merge(attrs, %{
+          title: "Refreshed Title",
+          year: 2030,
+          poster_path: "/refreshed.jpg",
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, updated, :updated} = ImportLists.upsert_import_list_item(resync_attrs)
+
+      assert updated.id == item.id
+      assert updated.title == "Refreshed Title"
+      assert updated.year == 2030
+      assert updated.poster_path == "/refreshed.jpg"
+      assert updated.status == "added"
+      assert updated.skip_reason == nil
+      assert updated.media_item_id == media_item.id
+      assert updated.discovered_at == original_discovered_at
+    end
+
+    test "upsert_import_list_item/1 never returns a unique-constraint error for the same key twice",
+         %{import_list: import_list} do
+      # The old implementation did a plain Repo.one lookup followed by a
+      # separate insert or update; two callers racing the same
+      # (import_list_id, tmdb_id) pair with no existing row yet could both
+      # see `nil` and both attempt to insert, and the loser got back
+      # {:error, changeset} from the unique constraint, which
+      # process_items/2 silently dropped. The atomic on_conflict upsert has
+      # no such window: every call for the same key succeeds and only one
+      # row ever exists, insert or not.
+      attrs = Map.put(@valid_item_attrs, :import_list_id, import_list.id)
+
+      assert {:ok, _item, :created} = ImportLists.upsert_import_list_item(attrs)
+      assert {:ok, _item, :updated} = ImportLists.upsert_import_list_item(attrs)
+      assert {:ok, _item, :updated} = ImportLists.upsert_import_list_item(attrs)
+
+      assert ImportLists.count_import_list_items(import_list) == 1
     end
 
     test "mark_item_added/2 updates status to added", %{import_list: import_list} do
@@ -530,6 +603,195 @@ defmodule Mydia.ImportListsTest do
       assert updated.sync_error == "Connection failed"
     end
 
+    test "mark_sync_error/2 records the failure time and increments the consecutive failure count" do
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, once} = ImportLists.mark_sync_error(list, "Connection failed")
+      assert once.config["consecutive_failures"] == 1
+      assert is_binary(once.config["last_failed_at"])
+
+      {:ok, twice} = ImportLists.mark_sync_error(once, "Connection failed again")
+      assert twice.config["consecutive_failures"] == 2
+    end
+
+    test "mark_sync_success/1 resets the consecutive failure count" do
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, failed} = ImportLists.mark_sync_error(list, "Connection failed")
+      assert failed.config["consecutive_failures"] == 1
+
+      {:ok, recovered} = ImportLists.mark_sync_success(failed)
+
+      refute Map.has_key?(recovered.config, "consecutive_failures")
+      refute Map.has_key?(recovered.config, "last_failed_at")
+    end
+
+    test "mark_sync_error/2 preserves other config keys such as list_url" do
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "custom_url",
+          media_type: "movie",
+          list_url: "https://example.com/feed.json"
+        })
+
+      assert list.config["list_url"] == "https://example.com/feed.json"
+
+      {:ok, failed} = ImportLists.mark_sync_error(list, "Connection failed")
+
+      assert failed.config["list_url"] == "https://example.com/feed.json"
+      assert failed.config["consecutive_failures"] == 1
+    end
+
+    test "sync_due?/1 is not immediately due again right after a failure, even for a list that has never synced" do
+      # This is the exact scenario from the bug report: a misconfigured
+      # list's very first sync fails. last_synced_at is only ever set by
+      # mark_sync_success/1, so it stays nil forever, and before this fix
+      # sync_due?/1's `last_synced_at: nil -> true` clause fired
+      # unconditionally, ignoring the failure and every future one. A cron
+      # tick every 15 minutes would re-enqueue this list forever.
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "tmdb_trending",
+          media_type: "movie",
+          enabled: true,
+          sync_interval: 60
+        })
+
+      {:ok, failed} = ImportLists.mark_sync_error(list, "boom")
+
+      refute failed.last_synced_at
+      refute ImportLists.sync_due?(failed)
+    end
+
+    test "sync_due?/1 is due again once the backoff delay from the first failure elapses" do
+      old_failure = DateTime.add(DateTime.utc_now(), -70, :minute)
+
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "tmdb_trending",
+          media_type: "movie",
+          enabled: true,
+          sync_interval: 60,
+          config: %{
+            "consecutive_failures" => 1,
+            "last_failed_at" => DateTime.to_iso8601(old_failure)
+          }
+        })
+
+      # One failure delays by exactly one interval (60 min); 70 min have passed.
+      assert ImportLists.sync_due?(list)
+    end
+
+    test "sync_due?/1 is not yet due before the backoff delay from the first failure elapses" do
+      recent_failure = DateTime.add(DateTime.utc_now(), -10, :minute)
+
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "tmdb_trending",
+          media_type: "movie",
+          enabled: true,
+          sync_interval: 60,
+          config: %{
+            "consecutive_failures" => 1,
+            "last_failed_at" => DateTime.to_iso8601(recent_failure)
+          }
+        })
+
+      refute ImportLists.sync_due?(list)
+    end
+
+    test "sync_due?/1 doubles the delay for each additional consecutive failure" do
+      # Two failures => 2x the interval (120 min). 90 minutes ago is past the
+      # plain interval but still within the doubled delay.
+      ninety_minutes_ago = DateTime.add(DateTime.utc_now(), -90, :minute)
+
+      {:ok, list} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "tmdb_trending",
+          media_type: "movie",
+          enabled: true,
+          sync_interval: 60,
+          config: %{
+            "consecutive_failures" => 2,
+            "last_failed_at" => DateTime.to_iso8601(ninety_minutes_ago)
+          }
+        })
+
+      refute ImportLists.sync_due?(list)
+    end
+
+    test "sync_due?/1 caps the backoff delay at 24 hours no matter how many failures" do
+      within_cap = DateTime.add(DateTime.utc_now(), -23, :hour)
+      beyond_cap = DateTime.add(DateTime.utc_now(), -25, :hour)
+
+      {:ok, still_backing_off} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "tmdb_trending",
+          media_type: "movie",
+          enabled: true,
+          sync_interval: 60,
+          config: %{
+            "consecutive_failures" => 10,
+            "last_failed_at" => DateTime.to_iso8601(within_cap)
+          }
+        })
+
+      refute ImportLists.sync_due?(still_backing_off)
+
+      {:ok, past_cap} =
+        ImportLists.create_import_list(%{
+          name: "Test 2",
+          type: "tmdb_popular",
+          media_type: "movie",
+          enabled: true,
+          sync_interval: 60,
+          config: %{
+            "consecutive_failures" => 10,
+            "last_failed_at" => DateTime.to_iso8601(beyond_cap)
+          }
+        })
+
+      assert ImportLists.sync_due?(past_cap)
+    end
+
+    test "sync_due?/1 survives a failure count large enough to overflow the backoff exponent" do
+      # 2 ** 1024 overflows a float and raises ArithmeticError. A list that
+      # keeps failing accrues about one failure a day once the 24h cap is
+      # reached, and list_sync_due_lists/0 runs every list through sync_due?/1,
+      # so an unclamped exponent would eventually stop syncing for every list.
+      {:ok, absurdly_failed} =
+        ImportLists.create_import_list(%{
+          name: "Test",
+          type: "tmdb_trending",
+          media_type: "movie",
+          enabled: true,
+          sync_interval: 360,
+          config: %{
+            "consecutive_failures" => 5000,
+            "last_failed_at" => DateTime.to_iso8601(DateTime.add(DateTime.utc_now(), -25, :hour))
+          }
+        })
+
+      assert ImportLists.sync_due?(absurdly_failed)
+      assert ImportLists.list_sync_due_lists() != []
+    end
+
     test "list_sync_due_lists/0 returns only enabled lists due for sync" do
       # Create enabled list that needs sync (never synced)
       {:ok, due_list} =
@@ -562,6 +824,392 @@ defmodule Mydia.ImportListsTest do
       due_lists = ImportLists.list_sync_due_lists()
       assert length(due_lists) == 1
       assert hd(due_lists).id == due_list.id
+    end
+  end
+
+  describe "check_duplicate/2" do
+    test "matches an existing media item by tmdb_id" do
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{
+          type: "movie",
+          title: "Nebula Drift",
+          year: 2022,
+          tmdb_id: 555
+        })
+
+      assert {:duplicate, ^media_item} = ImportLists.check_duplicate(555, "movie")
+    end
+
+    test "returns :not_found when nothing matches and no title/year fallback is given" do
+      assert :not_found = ImportLists.check_duplicate(9999, "movie")
+    end
+
+    test "falls back to a normalised title+year match when the tmdb_id lookup misses" do
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+
+      assert {:duplicate, ^media_item} =
+               ImportLists.check_duplicate(12_345, "movie", "  SILVERBACK STATION  ", 2019)
+    end
+
+    test "does not fall back when year is nil, even with a matching title" do
+      Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+
+      assert :not_found = ImportLists.check_duplicate(12_345, "movie", "Silverback Station", nil)
+    end
+
+    test "does not fall back when title is nil, even with a matching year" do
+      Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+
+      assert :not_found = ImportLists.check_duplicate(12_345, "movie", nil, 2019)
+    end
+
+    test "the title+year fallback ignores a row that already has a different tmdb_id" do
+      # A row with its own tmdb_id is a genuinely different item, not a
+      # scan-time match waiting to be linked, even if the title and year
+      # happen to coincide.
+      Mydia.Media.create_media_item(%{
+        type: "movie",
+        title: "Silverback Station",
+        year: 2019,
+        tmdb_id: 111
+      })
+
+      assert :not_found =
+               ImportLists.check_duplicate(12_345, "movie", "Silverback Station", 2019)
+    end
+
+    test "the title+year fallback requires an exact year match" do
+      Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+
+      assert :not_found =
+               ImportLists.check_duplicate(12_345, "movie", "Silverback Station", 2020)
+    end
+
+    test "the title+year fallback respects media type" do
+      # skip_episode_refresh: true avoids Mydia.Media's post-insert TVDB
+      # lookup for a tv_show with no provider id, which would otherwise
+      # reach the network in this test.
+      Mydia.Media.create_media_item(
+        %{type: "tv_show", title: "Silverback Station", year: 2019},
+        skip_episode_refresh: true
+      )
+
+      assert :not_found =
+               ImportLists.check_duplicate(12_345, "movie", "Silverback Station", 2019)
+    end
+  end
+
+  describe "add_item_to_library/2" do
+    setup do
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Test List",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      %{import_list: import_list}
+    end
+
+    test "links a duplicate to the existing media item in a single write", %{
+      import_list: import_list
+    } do
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{
+          type: "movie",
+          title: "Nebula Drift",
+          year: 2022,
+          tmdb_id: 777
+        })
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 777,
+          title: "Nebula Drift",
+          year: 2022,
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, ^media_item} = ImportLists.add_item_to_library(item, import_list)
+
+      reloaded = ImportLists.get_import_list_item!(item.id)
+      assert reloaded.status == "added"
+      assert reloaded.media_item_id == media_item.id
+      # The wasted intermediate skip write (and its stale reason) must not
+      # survive: the final row is honestly "added", not "skipped".
+      assert reloaded.skip_reason == nil
+    end
+
+    test "links a duplicate found only via the title+year fallback", %{import_list: import_list} do
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 9001,
+          title: "Silverback Station",
+          year: 2019,
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, ^media_item} = ImportLists.add_item_to_library(item, import_list)
+    end
+
+    test "creates a new media item from relay metadata when nothing matches", %{
+      import_list: import_list
+    } do
+      bypass = Bypass.open()
+      previous_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      tmdb_id = 424_242
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+        body = %{
+          "id" => tmdb_id,
+          "title" => "Halcyon Fields",
+          "release_date" => "2024-03-15",
+          "credits" => %{"cast" => [], "crew" => []},
+          "external_ids" => %{"imdb_id" => "tt9999999"}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: tmdb_id,
+          title: "Halcyon Fields",
+          year: 2024,
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
+      assert media_item.title == "Halcyon Fields"
+
+      reloaded = ImportLists.get_import_list_item!(item.id)
+      assert reloaded.status == "added"
+      assert reloaded.media_item_id == media_item.id
+    end
+
+    test "marks the item failed when the metadata fetch fails", %{import_list: import_list} do
+      bypass = Bypass.open()
+      previous_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      tmdb_id = 424_243
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+        Plug.Conn.resp(conn, 404, Jason.encode!(%{"error" => "not found"}))
+      end)
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: tmdb_id,
+          title: "Missing Movie",
+          year: 2024,
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:error, _reason} = ImportLists.add_item_to_library(item, import_list)
+
+      reloaded = ImportLists.get_import_list_item!(item.id)
+      assert reloaded.status == "failed"
+    end
+  end
+
+  describe "add_all_pending_to_library/1" do
+    test "reports duplicates as added and totals stats across pending items" do
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Test List",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, _media_item} =
+        Mydia.Media.create_media_item(%{
+          type: "movie",
+          title: "Nebula Drift",
+          year: 2022,
+          tmdb_id: 777
+        })
+
+      {:ok, _duplicate_item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 777,
+          title: "Nebula Drift",
+          year: 2022,
+          discovered_at: DateTime.utc_now()
+        })
+
+      bypass = Bypass.open()
+      previous_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/424244", fn conn ->
+        body = %{
+          "id" => 424_244,
+          "title" => "Halcyon Fields",
+          "release_date" => "2024-03-15",
+          "credits" => %{"cast" => [], "crew" => []}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      {:ok, _new_item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 424_244,
+          title: "Halcyon Fields",
+          year: 2024,
+          discovered_at: DateTime.utc_now()
+        })
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/424245", fn conn ->
+        Plug.Conn.resp(conn, 404, Jason.encode!(%{"error" => "not found"}))
+      end)
+
+      {:ok, _failed_item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 424_245,
+          title: "Missing Movie",
+          year: 2024,
+          discovered_at: DateTime.utc_now()
+        })
+
+      stats = ImportLists.add_all_pending_to_library(import_list)
+
+      assert stats.added == 2
+      assert stats.skipped == 0
+      assert stats.failed == 1
+    end
+  end
+
+  describe "mark_existing_items_in_library/1" do
+    test "marks pending items already in the library as skipped and links them" do
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Test List",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{
+          type: "movie",
+          title: "Nebula Drift",
+          year: 2022,
+          tmdb_id: 777
+        })
+
+      {:ok, matching_item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 777,
+          title: "Nebula Drift",
+          year: 2022,
+          discovered_at: DateTime.utc_now()
+        })
+
+      {:ok, unmatched_item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 778,
+          title: "Something Else",
+          year: 2023,
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, 1} = ImportLists.mark_existing_items_in_library(import_list)
+
+      reloaded_matching = ImportLists.get_import_list_item!(matching_item.id)
+      assert reloaded_matching.status == "skipped"
+      assert reloaded_matching.skip_reason == "Already in library"
+      assert reloaded_matching.media_item_id == media_item.id
+
+      reloaded_unmatched = ImportLists.get_import_list_item!(unmatched_item.id)
+      assert reloaded_unmatched.status == "pending"
+    end
+
+    test "matches via the title+year fallback for library items with no tmdb_id" do
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Test List",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, media_item} =
+        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 9001,
+          title: "Silverback Station",
+          year: 2019,
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, 1} = ImportLists.mark_existing_items_in_library(import_list)
+
+      reloaded = ImportLists.get_import_list_item!(item.id)
+      assert reloaded.status == "skipped"
+      assert reloaded.media_item_id == media_item.id
+    end
+
+    test "returns 0 when no pending items match the library" do
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Test List",
+          type: "tmdb_trending",
+          media_type: "movie"
+        })
+
+      {:ok, _item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: 42,
+          title: "Nothing Matches",
+          year: 2025,
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, 0} = ImportLists.mark_existing_items_in_library(import_list)
     end
   end
 end

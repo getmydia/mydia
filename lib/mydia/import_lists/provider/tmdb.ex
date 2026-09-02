@@ -28,6 +28,27 @@ defmodule Mydia.ImportLists.Provider.TMDB do
     tmdb_list
   )
 
+  # Maximum number of pages to fetch from a single TMDB relay endpoint. TMDB
+  # curated endpoints return roughly 20 items per page, so 5 pages caps a
+  # single sync at ~100 items instead of the 20 a single-page fetch used to
+  # cap it at.
+  @max_pages 5
+
+  defmodule Source do
+    @moduledoc false
+    # The parts of a paginated fetch that stay put across the recursion, so
+    # only the page cursor and accumulator get threaded through it.
+    defstruct [:req, :endpoint, :results_key, :status_error_fn, :require_metadata?]
+
+    @type t :: %__MODULE__{
+            req: Req.Request.t(),
+            endpoint: String.t(),
+            results_key: String.t(),
+            status_error_fn: (integer(), term() -> String.t()),
+            require_metadata?: boolean()
+          }
+  end
+
   @impl true
   def supports?(type), do: type in @supported_types
 
@@ -98,13 +119,22 @@ defmodule Mydia.ImportLists.Provider.TMDB do
 
   defp fetch_user_list(config, list_id, media_type) do
     endpoint = "/tmdb/list/#{list_id}"
-    params = [language: "en-US"]
-
     req = HTTP.new_request(config)
 
-    case HTTP.get(req, endpoint, params: params) do
-      {:ok, %{status: 200, body: %{"items" => items}}} when is_list(items) ->
-        # Filter items by media type and parse them
+    status_error_fn = fn
+      404, _body -> "TMDB list not found (ID: #{list_id})"
+      status, body -> "API returned status #{status}: #{inspect(body)}"
+    end
+
+    # The user-list endpoint may or may not paginate like the curated
+    # endpoints do. `require_pagination_metadata?: true` means we only
+    # follow to a second page when the first page's response actually
+    # reports `total_pages`; otherwise we treat it as a single, unpaginated
+    # response, matching the previous single-request behavior.
+    case fetch_paginated(req, endpoint, "items", status_error_fn,
+           require_pagination_metadata?: true
+         ) do
+      {:ok, items} ->
         filtered_items =
           items
           |> Enum.filter(&matches_media_type?(&1, media_type))
@@ -112,18 +142,8 @@ defmodule Mydia.ImportLists.Provider.TMDB do
 
         {:ok, filtered_items}
 
-      {:ok, %{status: 200, body: body}} ->
-        Logger.warning("Unexpected TMDB list response format", body: inspect(body))
-        {:ok, []}
-
-      {:ok, %{status: 404, body: _}} ->
-        {:error, "TMDB list not found (ID: #{list_id})"}
-
-      {:ok, %{status: status, body: body}} ->
-        {:error, "API returned status #{status}: #{inspect(body)}"}
-
-      {:error, error} ->
-        {:error, error}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -136,43 +156,116 @@ defmodule Mydia.ImportLists.Provider.TMDB do
   defp matches_media_type?(_, _), do: false
 
   defp fetch_from_endpoint(config, type, media_type) do
-    endpoint = build_endpoint(type, media_type)
-    params = [language: "en-US", page: 1]
+    with {:ok, endpoint} <- build_endpoint(type, media_type) do
+      req = HTTP.new_request(config)
+      status_error_fn = fn status, body -> "API returned status #{status}: #{inspect(body)}" end
 
-    req = HTTP.new_request(config)
-
-    case HTTP.get(req, endpoint, params: params) do
-      {:ok, %{status: 200, body: %{"results" => results}}} when is_list(results) ->
-        {:ok, results}
-
-      {:ok, %{status: 200, body: body}} ->
-        # Some endpoints might return results directly
-        if is_list(body), do: {:ok, body}, else: {:ok, []}
-
-      {:ok, %{status: status, body: body}} ->
-        {:error, "API returned status #{status}: #{inspect(body)}"}
-
-      {:error, error} ->
-        {:error, error}
+      fetch_paginated(req, endpoint, "results", status_error_fn,
+        require_pagination_metadata?: false
+      )
     end
   end
 
-  defp build_endpoint("tmdb_trending", "movie"), do: "/tmdb/movies/trending"
-  defp build_endpoint("tmdb_trending", "tv_show"), do: "/tmdb/tv/trending"
-  defp build_endpoint("tmdb_popular", "movie"), do: "/tmdb/movies/popular"
-  defp build_endpoint("tmdb_popular", "tv_show"), do: "/tmdb/tv/popular"
-  defp build_endpoint("tmdb_upcoming", "movie"), do: "/tmdb/movies/upcoming"
-  defp build_endpoint("tmdb_now_playing", "movie"), do: "/tmdb/movies/now_playing"
-  defp build_endpoint("tmdb_on_the_air", "tv_show"), do: "/tmdb/tv/on_the_air"
-  defp build_endpoint("tmdb_airing_today", "tv_show"), do: "/tmdb/tv/airing_today"
-  # Fallback for invalid combinations
-  defp build_endpoint(type, media_type) do
-    Logger.warning("Invalid TMDB list type/media_type combination",
-      type: type,
-      media_type: media_type
+  # Fetches up to @max_pages pages from `endpoint`, concatenating the list
+  # found under `results_key` in each page's body. Stops early when a page
+  # comes back empty, when a page has fewer items than the previous page
+  # (the previous page was the last full one), or when the response's own
+  # `total_pages` says the last page has been reached.
+  #
+  # When `require_pagination_metadata?: true`, a first page with no
+  # `total_pages` in its body is treated as the only page: the endpoint is
+  # assumed not to paginate, and no further pages are requested.
+  #
+  # If the first page fails, the whole fetch fails. If a later page fails,
+  # the items already gathered are returned and a warning is logged, so a
+  # transient failure partway through does not fail the entire sync.
+  defp fetch_paginated(req, endpoint, results_key, status_error_fn, opts) do
+    source = %Source{
+      req: req,
+      endpoint: endpoint,
+      results_key: results_key,
+      status_error_fn: status_error_fn,
+      require_metadata?: Keyword.fetch!(opts, :require_pagination_metadata?)
+    }
+
+    do_fetch_paginated(source, 1, [], nil)
+  end
+
+  defp do_fetch_paginated(%Source{}, page, acc, _prev_count) when page > @max_pages do
+    {:ok, acc}
+  end
+
+  defp do_fetch_paginated(%Source{} = source, page, acc, prev_count) do
+    %Source{req: req, endpoint: endpoint, results_key: results_key} = source
+    params = [language: "en-US", page: page]
+
+    case HTTP.get(req, endpoint, params: params) do
+      {:ok, %{status: 200, body: %{^results_key => items} = body}} when is_list(items) ->
+        continue_pagination(source, page, acc, prev_count, items, body["total_pages"])
+
+      {:ok, %{status: 200, body: body}} ->
+        Logger.warning("Unexpected TMDB response format", endpoint: endpoint, body: inspect(body))
+        {:ok, acc}
+
+      {:ok, %{status: status, body: body}} ->
+        handle_page_error(page, acc, source.status_error_fn.(status, body))
+
+      {:error, error} ->
+        handle_page_error(page, acc, error)
+    end
+  end
+
+  defp continue_pagination(%Source{} = source, page, acc, prev_count, items, total_pages) do
+    new_acc = acc ++ items
+
+    cond do
+      items == [] ->
+        {:ok, acc}
+
+      is_integer(prev_count) and length(items) < prev_count ->
+        {:ok, new_acc}
+
+      is_integer(total_pages) and page >= total_pages ->
+        {:ok, new_acc}
+
+      is_nil(total_pages) and source.require_metadata? ->
+        {:ok, new_acc}
+
+      page >= @max_pages ->
+        {:ok, new_acc}
+
+      true ->
+        do_fetch_paginated(source, page + 1, new_acc, length(items))
+    end
+  end
+
+  defp handle_page_error(1, _acc, reason), do: {:error, reason}
+
+  defp handle_page_error(page, acc, reason) do
+    Logger.warning("TMDB pagination request failed; returning items gathered so far",
+      page: page,
+      error: inspect(reason)
     )
 
-    "/tmdb/movies/trending"
+    {:ok, acc}
+  end
+
+  defp build_endpoint("tmdb_trending", "movie"), do: {:ok, "/tmdb/movies/trending"}
+  defp build_endpoint("tmdb_trending", "tv_show"), do: {:ok, "/tmdb/tv/trending"}
+  defp build_endpoint("tmdb_popular", "movie"), do: {:ok, "/tmdb/movies/popular"}
+  defp build_endpoint("tmdb_popular", "tv_show"), do: {:ok, "/tmdb/tv/popular"}
+  defp build_endpoint("tmdb_upcoming", "movie"), do: {:ok, "/tmdb/movies/upcoming"}
+  defp build_endpoint("tmdb_now_playing", "movie"), do: {:ok, "/tmdb/movies/now_playing"}
+  defp build_endpoint("tmdb_on_the_air", "tv_show"), do: {:ok, "/tmdb/tv/on_the_air"}
+  defp build_endpoint("tmdb_airing_today", "tv_show"), do: {:ok, "/tmdb/tv/airing_today"}
+
+  # Invalid combination (e.g. a movie-only type with media_type "tv_show").
+  # Fail loudly instead of silently falling back to trending movies: a caller
+  # storing this reason should recognize it as configuration error, not a
+  # transient failure.
+  defp build_endpoint(type, media_type) do
+    {:error,
+     "Invalid TMDB list type/media_type combination: #{inspect(type)} does not support media_type #{inspect(media_type)}"}
   end
 
   defp parse_result(result, media_type) do
