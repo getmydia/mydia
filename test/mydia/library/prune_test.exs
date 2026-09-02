@@ -4,7 +4,10 @@ defmodule Mydia.Library.PruneTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Library.MediaFile
   alias Mydia.Library.Prune
+
+  defp trashed_at(id), do: Mydia.Repo.get!(MediaFile, id).trashed_at
 
   defp episode_with(file_names, duration) do
     show = media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013})
@@ -191,6 +194,88 @@ defmodule Mydia.Library.PruneTest do
 
       assert Mydia.Repo.get!(Mydia.Library.MediaFile, ranked_keeper.id).trashed_at
       refute Mydia.Repo.get!(Mydia.Library.MediaFile, overridden_keeper.id).trashed_at
+    end
+  end
+
+  describe "undo/2" do
+    setup do
+      {episode, files} =
+        episode_with(
+          [
+            {"Harbor Lights/Season 02/Harbor.Lights.S02E03.1080p.BluRay.x265.mp4",
+             %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656, size: 3_000_000_000}},
+            {"Harbor Lights/Season 02/Harbor.Lights.S02E03.360p.WEBRip.x264.mp4",
+             %{resolution: "360p", codec: "h264", bitrate: 1_000_000, size: 1_000_000_000}}
+          ],
+          1320.0
+        )
+
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      loser = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      %{episode: episode, keeper: keeper, loser: loser}
+    end
+
+    test "restores a trashed file and clears trashed_at", %{loser: loser} do
+      %{trashed: [trashed]} = Prune.execute([loser.id], "admin")
+      assert trashed_at(trashed.id)
+
+      result = Prune.undo([trashed.id], "admin")
+
+      assert [restored] = result.restored
+      assert restored.id == loser.id
+      assert result.failed == []
+      refute trashed_at(loser.id)
+    end
+
+    test "skips an id that is not trashed, without reporting it as a failure",
+         %{keeper: keeper} do
+      # The toast can outlive the state it describes: TrashCleanup can purge a
+      # row, a scan can restore it, or another admin session can act on it.
+      # Restoring something that is not in the trash is not a no-op below this
+      # layer, so it must be filtered out before the call.
+      refute trashed_at(keeper.id)
+
+      result = Prune.undo([keeper.id], "admin")
+
+      assert result.restored == []
+      assert result.failed == []
+    end
+
+    test "restores the trashed ids and ignores the untrashed ones in one call",
+         %{keeper: keeper, loser: loser} do
+      %{trashed: [_]} = Prune.execute([loser.id], "admin")
+
+      result = Prune.undo([loser.id, keeper.id], "admin")
+
+      assert [restored] = result.restored
+      assert restored.id == loser.id
+      refute trashed_at(loser.id)
+    end
+
+    test "ignores an id that matches no media file" do
+      result = Prune.undo([Ecto.UUID.generate()], "admin")
+
+      assert result.restored == []
+      assert result.failed == []
+    end
+
+    test "emits one prune_undone event for the group, not one per file",
+         %{loser: loser, episode: episode} do
+      %{trashed: [_]} = Prune.execute([loser.id], "admin")
+
+      Prune.undo([loser.id], "admin")
+
+      events =
+        Mydia.Events.Event
+        |> Ecto.Query.where(type: "media_file.prune_undone")
+        |> Mydia.Repo.all()
+
+      assert [event] = events
+      assert event.resource_type == "episode"
+      assert event.resource_id == episode.id
+      assert event.metadata["restored"] == [loser.relative_path]
+      assert event.metadata["bytes_restored"] == 1_000_000_000
     end
   end
 end

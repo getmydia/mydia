@@ -19,10 +19,14 @@ defmodule Mydia.Library.Prune do
   all. The UI is not the security boundary; this function is.
   """
 
+  import Ecto.Query, only: [where: 3]
+
   alias Mydia.Events
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Prune.{Decision, Eligibility, Group, Grouping, Ranker}
+  alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Repo
 
   require Logger
 
@@ -120,6 +124,85 @@ defmodule Mydia.Library.Prune do
 
     %{trashed: trashed, failed: failed, aborted: refused_ids ++ aborted_keepers ++ unknown}
   end
+
+  @doc """
+  Restores files a previous `execute/3` trashed.
+
+  Only rows that are currently trashed are touched. A row can stop being
+  trashed between an undo being offered and the operator taking it:
+  `Mydia.Jobs.TrashCleanup` can purge it, a library scan can restore it, or
+  another admin session can act on it. Restoring a row that is not in the trash
+  is not a no-op further down, so the filter belongs here rather than in
+  `Mydia.Library.restore_media_file/1`.
+
+  An id matching no row is ignored for the same reason `execute/3` does not
+  trust its input: this function is reachable without going through the UI.
+
+  Partial failure is reported rather than rolled back, matching `execute/3`.
+  Bytes have already moved by the time a row update can fail, so a global
+  rollback would be a lie.
+  """
+  @spec undo([String.t()], String.t()) :: %{
+          restored: [MediaFile.t()],
+          failed: [{String.t(), term()}]
+        }
+  def undo(file_ids, actor_id) when is_list(file_ids) and is_binary(actor_id) do
+    files =
+      MediaFile
+      |> where([mf], mf.id in ^file_ids and not is_nil(mf.trashed_at))
+      |> Repo.all()
+      |> Repo.preload([:library_path, :media_item, episode: :media_item])
+
+    {restored, failed} =
+      Enum.reduce(files, {[], []}, fn file, {ok, bad} ->
+        case Library.restore_media_file(file) do
+          {:ok, file} ->
+            {ok ++ [file], bad}
+
+          {:error, reason} ->
+            Logger.error("Prune could not restore a trashed media file",
+              media_file_id: file.id,
+              reason: inspect(reason)
+            )
+
+            {ok, bad ++ [{file.id, reason}]}
+        end
+      end)
+
+    announce_restored(restored, files, actor_id)
+
+    %{restored: restored, failed: failed}
+  end
+
+  # One event per media item, mirroring the per-group shape of the
+  # `media_file.pruned` events `execute/3` writes.
+  #
+  # The grouping key is the media item's id, not the struct: two rows reached
+  # through different association paths (a movie's own `media_item`, an
+  # episode's parent) carry different preload states and would not compare
+  # equal as structs, splitting one item across two events.
+  #
+  # `restored` holds rows returned by `Repo.update/1`, which do not carry the
+  # preloads, so the media item is read from the matching row loaded before the
+  # restore.
+  defp announce_restored(restored, loaded, actor_id) do
+    by_id = Map.new(loaded, &{&1.id, &1})
+
+    restored
+    |> Enum.map(fn file -> {media_item_of(Map.fetch!(by_id, file.id)), file} end)
+    |> Enum.reject(fn {media_item, _file} -> is_nil(media_item) end)
+    |> Enum.group_by(fn {media_item, _file} -> media_item.id end)
+    |> Enum.each(fn {_id, pairs} ->
+      [{media_item, _} | _] = pairs
+      Events.prune_undone(media_item, Enum.map(pairs, &elem(&1, 1)), actor_id)
+    end)
+  end
+
+  # Preloaded by undo/2 as `[:media_item, episode: :media_item]`, so neither
+  # clause queries.
+  defp media_item_of(%MediaFile{episode: %Episode{media_item: %MediaItem{} = item}}), do: item
+  defp media_item_of(%MediaFile{media_item: %MediaItem{} = item}), do: item
+  defp media_item_of(%MediaFile{}), do: nil
 
   defp trash_all(files) do
     Enum.reduce(files, {[], []}, fn file, {ok, bad} ->
