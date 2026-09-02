@@ -77,7 +77,8 @@ defmodule MydiaWeb.FeatureCase do
   - `js_click(session, selector)` - Escape hatch: click via JS. Prefer `click/2`.
 
   `MydiaWeb.FeatureCase.Geometry`'s `refute_covered/2`, `assert_in_viewport/2`,
-  and `refute_clipped/2` are also auto-imported, via the `using` block below.
+  `refute_clipped/2`, and `assert_same_height/4` are also auto-imported, via
+  the `using` block below.
 
   ## Wallaby DSL Reference
 

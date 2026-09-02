@@ -214,9 +214,15 @@
 
     <%= cond do %>
       <% @trending_movies_loading -> %>
-        <div class="flex items-center justify-center py-12">
-          <span class="loading loading-spinner loading-lg"></span>
-        </div>
+        <%!-- count is @trending_rail_limit, the same limit index.ex's
+              :load_trending_movies handler passes to Enum.take/2, so the
+              placeholder always matches the settled row count --%>
+        <.poster_card_grid_skeleton
+          id="trending-movies-skeleton"
+          count={@trending_rail_limit}
+          columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
+          gap="gap-3 md:gap-4"
+        />
       <% @trending_movies == [] -> %>
         <div class="alert alert-info">
           <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -250,9 +256,15 @@
 
     <%= cond do %>
       <% @trending_tv_loading -> %>
-        <div class="flex items-center justify-center py-12">
-          <span class="loading loading-spinner loading-lg"></span>
-        </div>
+        <%!-- count is @trending_rail_limit, the same limit index.ex's
+              :load_trending_tv handler passes to Enum.take/2, so the
+              placeholder always matches the settled row count --%>
+        <.poster_card_grid_skeleton
+          id="trending-tv-skeleton"
+          count={@trending_rail_limit}
+          columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
+          gap="gap-3 md:gap-4"
+        />
       <% @trending_tv == [] -> %>
         <div class="alert alert-info">
           <.icon name="hero-information-circle" class="w-5 h-5" />
