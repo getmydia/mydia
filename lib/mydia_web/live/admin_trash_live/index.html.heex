@@ -13,9 +13,23 @@
 
     <MydiaWeb.AdminTrashLive.Components.reason_filters counts={@counts} active={@reason} />
 
+    <MydiaWeb.AdminTrashLive.Components.bulk_bar
+      selection={@selection}
+      total_matching={@total_matching}
+      page_size={@page_size}
+    />
+
     <MydiaWeb.AdminTrashLive.Components.trash_list
       files={@files}
       retention_days={@retention_days}
+      selection={@selection}
+    />
+
+    <MydiaWeb.AdminTrashLive.Components.pagination
+      :if={@total_matching > @page_size}
+      page={@page}
+      page_size={@page_size}
+      total_matching={@total_matching}
     />
 
     <%= if @show_empty_modal do %>

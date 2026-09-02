@@ -1,5 +1,6 @@
 defmodule MydiaWeb.AdminTrashLiveTest do
   use MydiaWeb.ConnCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
@@ -12,6 +13,9 @@ defmodule MydiaWeb.AdminTrashLiveTest do
   # Mirrors test/mydia_web/live/admin_duplicates_live_test.exs, the canonical
   # admin LiveView setup in this project.
   setup %{conn: conn, tmp_dir: tmp_dir} do
+    engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+    start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
+
     unique_id = System.unique_integer([:positive])
 
     {:ok, user} =
@@ -200,5 +204,68 @@ defmodule MydiaWeb.AdminTrashLiveTest do
     view |> element("#trash-empty-confirm") |> render_click()
 
     assert is_nil(Repo.get(Mydia.Library.MediaFile, file.id))
+  end
+
+  describe "bulk actions" do
+    @tag :tmp_dir
+    test "selecting a row shows the bulk bar", %{conn: conn} = ctx do
+      file = trashed(ctx, "a.mkv", :missing, 10)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/trash")
+
+      refute has_element?(view, "#trash-bulk-bar")
+      view |> element("#trash-select-#{file.id}") |> render_click()
+      assert has_element?(view, "#trash-bulk-bar")
+    end
+
+    @tag :tmp_dir
+    test "select-all-matching only appears past one page", %{conn: conn} = ctx do
+      file = trashed(ctx, "a.mkv", :missing, 10)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/trash")
+      view |> element("#trash-select-#{file.id}") |> render_click()
+
+      # One row fits on a page, so there is nothing off-screen to select.
+      refute has_element?(view, "#trash-select-all-matching")
+    end
+
+    @tag :tmp_dir
+    test "bulk restore enqueues a job", %{conn: conn} = ctx do
+      file = trashed(ctx, "a.mkv", :missing, 10)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/trash")
+      view |> element("#trash-select-#{file.id}") |> render_click()
+      view |> element("#trash-bulk-restore") |> render_click()
+
+      assert_enqueued(worker: Mydia.Jobs.TrashAction)
+    end
+  end
+
+  describe "pagination" do
+    @tag :tmp_dir
+    test "a second page is reachable and shows different rows", %{conn: conn} = ctx do
+      for n <- 1..60, do: trashed(ctx, "f#{n}.mkv", :missing, 10)
+
+      {:ok, view, html} = live(conn, ~p"/admin/config/trash")
+
+      assert has_element?(view, "#trash-pagination")
+      assert has_element?(view, "#trash-page-next")
+
+      first_page_ids = row_ids(html)
+      assert MapSet.size(first_page_ids) == 50
+
+      html = view |> element("#trash-page-next") |> render_click()
+      second_page_ids = row_ids(html)
+
+      assert MapSet.size(second_page_ids) == 10
+      assert MapSet.disjoint?(first_page_ids, second_page_ids)
+    end
+  end
+
+  defp row_ids(html) do
+    ~r/id="trash-row-([^"]+)"/
+    |> Regex.scan(html)
+    |> Enum.map(fn [_, id] -> id end)
+    |> MapSet.new()
   end
 end

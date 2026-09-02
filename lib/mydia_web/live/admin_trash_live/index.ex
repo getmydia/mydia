@@ -36,15 +36,20 @@ defmodule MydiaWeb.AdminTrashLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
+    if connected?(socket),
+      do: Phoenix.PubSub.subscribe(Mydia.PubSub, Mydia.Jobs.TrashAction.topic())
+
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Trash")
      |> assign(:active_tab, :trash)
      |> assign(:reason, nil)
      |> assign(:page, 0)
+     |> assign(:page_size, @per_page)
      |> assign(:show_empty_modal, false)
      |> assign(:audit, nil)
      |> assign(:scanning, false)
+     |> assign(:selection, MapSet.new())
      |> assign(:retention_days, Mydia.Config.get().media.trash_retention_days)
      |> load()}
   end
@@ -62,7 +67,14 @@ defmodule MydiaWeb.AdminTrashLive.Index do
         preload: [:media_item, :library_path, episode: :media_item]
       )
     )
+    |> then(fn s ->
+      assign(s, :total_matching, matching_count(s.assigns.counts, s.assigns.reason))
+    end)
   end
+
+  defp matching_count(counts, nil), do: counts |> Map.values() |> Enum.sum()
+  defp matching_count(counts, :unknown), do: Map.get(counts, nil, 0)
+  defp matching_count(counts, reason), do: Map.get(counts, reason, 0)
 
   @impl true
   def handle_event("filter_reason", %{"reason" => ""}, socket) do
@@ -84,6 +96,29 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   def handle_event("paginate", %{"page" => page}, socket) do
     {:noreply, socket |> assign(:page, String.to_integer(page)) |> load()}
   end
+
+  def handle_event("toggle_select", %{"id" => id}, socket) do
+    selection =
+      case socket.assigns.selection do
+        # Ticking a box after "select all matching" drops back to an explicit
+        # set, otherwise the click would appear to do nothing.
+        {:all_matching, _reason} -> MapSet.new([id])
+        ids -> toggle(ids, id)
+      end
+
+    {:noreply, assign(socket, :selection, selection)}
+  end
+
+  def handle_event("select_all_matching", _params, socket) do
+    {:noreply, assign(socket, :selection, {:all_matching, socket.assigns.reason})}
+  end
+
+  def handle_event("clear_selection", _params, socket) do
+    {:noreply, assign(socket, :selection, MapSet.new())}
+  end
+
+  def handle_event("bulk_restore", _params, socket), do: enqueue(socket, "restore")
+  def handle_event("bulk_purge", _params, socket), do: enqueue(socket, "purge")
 
   def handle_event("restore_file", %{"id" => id}, socket) do
     case fetch_trashed(id) do
@@ -190,6 +225,13 @@ defmodule MydiaWeb.AdminTrashLive.Index do
      |> put_flash(:error, "Could not read the trash directory: #{inspect(reason)}")}
   end
 
+  @impl true
+  def handle_info({:trash_action_progress, _progress}, socket), do: {:noreply, socket}
+
+  def handle_info({:trash_action_done, result}, socket) do
+    {:noreply, socket |> put_flash(:info, done_message(result)) |> load()}
+  end
+
   defp sweep_message(%{swept: swept, bytes: bytes, skipped: 0}) do
     "Swept #{swept} item(s), reclaiming " <>
       MydiaWeb.AdminTrashLive.Components.humanize_bytes(bytes) <> "."
@@ -200,6 +242,49 @@ defmodule MydiaWeb.AdminTrashLive.Index do
       MydiaWeb.AdminTrashLive.Components.humanize_bytes(bytes) <>
       ". Skipped #{skipped}, either too recently written to be safe or not removable."
   end
+
+  defp enqueue(socket, action) do
+    args = %{"action" => action, "selection" => encode(socket.assigns.selection)}
+
+    case %{} |> Map.merge(args) |> Mydia.Jobs.TrashAction.new() |> Oban.insert() do
+      {:ok, _job} ->
+        {:noreply,
+         socket
+         |> assign(:selection, MapSet.new())
+         |> put_flash(:info, "Working through the selected files in the background.")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Could not start that: #{inspect(reason)}")}
+    end
+  end
+
+  defp encode({:all_matching, reason}),
+    do: %{"type" => "all_matching", "reason" => reason && to_string(reason)}
+
+  defp encode(%MapSet{} = ids), do: %{"type" => "ids", "ids" => MapSet.to_list(ids)}
+
+  defp toggle(ids, id) do
+    if MapSet.member?(ids, id), do: MapSet.delete(ids, id), else: MapSet.put(ids, id)
+  end
+
+  defp done_message(%{action: "restore", ok: ok, retained: retained, failed: failed}) do
+    base = "Restored #{ok} file(s)."
+
+    base
+    |> maybe_append(
+      retained > 0,
+      " #{retained} had an occupied library path, so the trashed copy was kept."
+    )
+    |> maybe_append(failed > 0, " #{failed} could not be restored.")
+  end
+
+  defp done_message(%{action: "purge", ok: ok, failed: failed}) do
+    "Deleted #{ok} file(s) permanently."
+    |> maybe_append(failed > 0, " #{failed} could not be deleted.")
+  end
+
+  defp maybe_append(message, false, _suffix), do: message
+  defp maybe_append(message, true, suffix), do: message <> suffix
 
   defp fetch_trashed(id) do
     Library.get_trashed_media_file(id,

@@ -88,6 +88,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   attr :files, :list, required: true
   attr :retention_days, :integer, required: true
+  attr :selection, :any, required: true
 
   def trash_list(assigns) do
     ~H"""
@@ -101,6 +102,15 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         id={"trash-row-#{file.id}"}
         class="flex items-center gap-4 p-4 rounded-lg border border-base-300 hover:border-base-content/20 transition-colors"
       >
+        <input
+          id={"trash-select-#{file.id}"}
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          checked={selected?(@selection, file.id)}
+          phx-click="toggle_select"
+          phx-value-id={file.id}
+        />
+
         <div class="min-w-0 flex-1">
           <div class="font-medium truncate">{label_for(file)}</div>
           <div class="text-sm text-base-content/60 flex items-center gap-2 mt-0.5">
@@ -137,6 +147,110 @@ defmodule MydiaWeb.AdminTrashLive.Components do
             <.icon name="hero-x-mark" class="w-4 h-4" /> Delete
           </button>
         </div>
+      </div>
+    </div>
+    """
+  end
+
+  def selected?({:all_matching, _reason}, _id), do: true
+  def selected?(%MapSet{} = ids, id), do: MapSet.member?(ids, id)
+
+  def selection_count({:all_matching, _reason}, total_matching), do: total_matching
+  def selection_count(%MapSet{} = ids, _total), do: MapSet.size(ids)
+
+  attr :selection, :any, required: true
+  attr :total_matching, :integer, required: true
+  attr :page_size, :integer, required: true
+
+  def bulk_bar(assigns) do
+    ~H"""
+    <div
+      :if={selection_count(@selection, @total_matching) > 0}
+      id="trash-bulk-bar"
+      class="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-lg bg-base-200"
+    >
+      <span class="font-medium">
+        {selection_count(@selection, @total_matching)} selected
+      </span>
+
+      <button id="trash-bulk-restore" type="button" class="btn btn-sm" phx-click="bulk_restore">
+        <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Restore
+      </button>
+      <button
+        id="trash-bulk-purge"
+        type="button"
+        class="btn btn-sm btn-error"
+        phx-click="bulk_purge"
+        data-confirm="Permanently delete every selected file? This cannot be undone."
+      >
+        <.icon name="hero-x-mark" class="w-4 h-4" /> Delete permanently
+      </button>
+
+      <button
+        id="trash-clear-selection"
+        type="button"
+        class="btn btn-sm btn-ghost"
+        phx-click="clear_selection"
+      >
+        Clear
+      </button>
+
+      <%!--
+        Only offered when the page cannot already hold the whole match: the
+        escape hatch exists because pagination means ticking every visible box
+        still misses everything on later pages.
+      --%>
+      <button
+        :if={not match?({:all_matching, _}, @selection) and @total_matching > @page_size}
+        id="trash-select-all-matching"
+        type="button"
+        class="btn btn-sm btn-ghost"
+        phx-click="select_all_matching"
+      >
+        Select all {@total_matching} matching
+      </button>
+    </div>
+    """
+  end
+
+  attr :page, :integer, required: true
+  attr :page_size, :integer, required: true
+  attr :total_matching, :integer, required: true
+
+  def pagination(assigns) do
+    assigns =
+      assigns
+      |> assign(:last_page, div(assigns.total_matching - 1, assigns.page_size))
+      |> assign(:from, assigns.page * assigns.page_size + 1)
+      |> assign(:to, min((assigns.page + 1) * assigns.page_size, assigns.total_matching))
+
+    ~H"""
+    <div id="trash-pagination" class="flex items-center justify-between gap-3 mt-4">
+      <span class="text-sm text-base-content/60">
+        Showing {@from}-{@to} of {@total_matching}
+      </span>
+
+      <div class="join">
+        <button
+          id="trash-page-prev"
+          type="button"
+          class="btn btn-sm join-item"
+          disabled={@page == 0}
+          phx-click="paginate"
+          phx-value-page={@page - 1}
+        >
+          <.icon name="hero-chevron-left" class="w-4 h-4" /> Prev
+        </button>
+        <button
+          id="trash-page-next"
+          type="button"
+          class="btn btn-sm join-item"
+          disabled={@page >= @last_page}
+          phx-click="paginate"
+          phx-value-page={@page + 1}
+        >
+          Next <.icon name="hero-chevron-right" class="w-4 h-4" />
+        </button>
       </div>
     </div>
     """
