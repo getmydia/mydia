@@ -124,6 +124,96 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     wait_until_media_item(provider_id)
   end
 
+  # Configure is also reachable from a caret inside the detail modal's own
+  # header actions (TrendingDetailModal renders its default action set on
+  # Dashboard; there is no :actions slot override and no :rail slot here).
+  # DashboardLive's own open_add_config handler, unlike close_details, never
+  # clears @selected_item, so the detail modal stays open underneath. Without
+  # TrendingDetailModal's config_open guard, one Escape press would fire both
+  # close_add_config and close_details and silently close the detail view the
+  # user never asked to leave. Mirrors
+  # discover_live/config_modal_test.exs's identical regression test for
+  # Discover, which already guards this correctly.
+  describe "Escape while the detail modal is also open" do
+    setup do
+      provider_id = unique_provider_id()
+
+      # The module setup above already warmed "trending_movies" to []
+      # through the real fetch-through-cache path (Mydia.Metadata.Cache is
+      # ETS-backed and process-independent). A second warm_trending_cache/2
+      # call for the same media_type would just read that cached empty list
+      # back instead of hitting this describe's own Bypass stub, so the
+      # stale entry has to be cleared first.
+      Mydia.Metadata.Cache.delete("trending_movies")
+      Mydia.Metadata.Cache.delete("curated:trending:movie:1")
+
+      warm_trending_cache(:movie, [
+        %{"id" => provider_id, "title" => "The Kestrel Protocol", "release_date" => "2024-05-01"}
+      ])
+
+      bypass = Bypass.open()
+      previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_metadata_relay_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      # The detail modal's own metadata fetch (fetch_detail_metadata ->
+      # Metadata.fetch_by_id) is uncached, matching config_modal_test.exs's
+      # identical setup for Discover.
+      Bypass.expect(bypass, "GET", "/tmdb/movies/#{provider_id}", fn conn ->
+        body = %{
+          "id" => provider_id,
+          "title" => "The Kestrel Protocol",
+          "release_date" => "2024-05-01",
+          "belongs_to_collection" => nil
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      %{provider_id: provider_id}
+    end
+
+    test "pressing Escape while Configure is open over the detail modal closes only Configure",
+         %{conn: conn, provider_id: provider_id} do
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      view
+      |> element("div[phx-click='show_details'][phx-value-id='#{provider_id}']")
+      |> render_click()
+
+      assert has_element?(view, "#trending-detail-modal[open]")
+
+      render_async(view, 5000)
+
+      # Scoped to the modal: the trending card underneath also renders its
+      # own "Add to Library" split button with the same data-test caret.
+      caret = "#trending-detail-modal [data-test='add-config-caret']"
+
+      assert has_element?(view, caret)
+
+      view |> element(caret) |> render_click()
+
+      assert has_element?(view, "#add-config-modal[open]")
+
+      # The detail modal's own Escape binding must be suppressed while
+      # Configure is open, or a real Escape press would fire both handlers.
+      refute has_element?(view, "#trending-detail-modal[phx-window-keydown]")
+
+      view |> element("#add-config-modal") |> render_keydown(%{"key" => "Escape"})
+
+      refute has_element?(view, "#add-config-modal[open]")
+      assert has_element?(view, "#trending-detail-modal[open]")
+    end
+  end
+
   # Guards the test above: the add finishes in a handle_info this test's
   # render_hook does not wait on. Without polling, on_exit could tear down
   # Bypass and revert metadata_relay_url while the fetch is still in flight.
