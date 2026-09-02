@@ -80,6 +80,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:delete_file_from_disk, true)
      |> assign(:show_file_details_modal, false)
      |> assign(:file_details, nil)
+     |> assign(:file_origin, nil)
      |> assign(:show_download_cancel_confirm, false)
      |> assign(:download_to_cancel, nil)
      |> assign(:show_download_delete_confirm, false)

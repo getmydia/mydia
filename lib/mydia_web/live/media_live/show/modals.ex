@@ -239,6 +239,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   File details modal showing comprehensive information about a media file.
   """
   attr :file_details, :map, required: true
+  attr :file_origin, :map, default: nil
 
   def file_details_modal(assigns) do
     ~H"""
@@ -339,6 +340,26 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               <% end %>
             </p>
           </div>
+          <%!-- Where this file came from. A file the matcher attached to the
+                wrong item has no other way to explain itself. --%>
+          <%= if @file_origin do %>
+            <div>
+              <h4 class="text-sm font-semibold text-base-content/70 mb-2">Origin</h4>
+              <p class="text-sm">
+                Imported from the download <span class="font-mono text-xs">{@file_origin.title}</span>
+              </p>
+              <%= if @file_origin.metadata["matched_from_client"] do %>
+                <p class="text-sm mt-1">
+                  <span class="badge badge-warning badge-sm">Added outside Mydia</span>
+                </p>
+              <% end %>
+              <%= if @file_origin.metadata["match_reason"] do %>
+                <p class="text-xs text-base-content/70 mt-1">
+                  {@file_origin.metadata["match_reason"]}
+                </p>
+              <% end %>
+            </div>
+          <% end %>
           <%!-- Metadata (if present) --%>
           <%= if @file_details.metadata && map_size(@file_details.metadata) > 0 do %>
             <div>

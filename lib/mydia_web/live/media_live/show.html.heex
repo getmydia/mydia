@@ -365,7 +365,7 @@
     />
   <% end %>
   <%= if @show_file_details_modal && @file_details do %>
-    <Modals.file_details_modal file_details={@file_details} />
+    <Modals.file_details_modal file_details={@file_details} file_origin={@file_origin} />
   <% end %>
   <%= if @show_download_cancel_confirm && @download_to_cancel do %>
     <Modals.download_cancel_confirm_modal download_to_cancel={@download_to_cancel} />

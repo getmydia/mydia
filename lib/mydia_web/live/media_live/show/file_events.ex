@@ -385,14 +385,16 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     {:noreply,
      socket
      |> assign(:show_file_details_modal, true)
-     |> assign(:file_details, file)}
+     |> assign(:file_details, file)
+     |> assign(:file_origin, Library.origin_download(file))}
   end
 
   def hide_file_details(_params, socket) do
     {:noreply,
      socket
      |> assign(:show_file_details_modal, false)
-     |> assign(:file_details, nil)}
+     |> assign(:file_details, nil)
+     |> assign(:file_origin, nil)}
   end
 
   def pre_transcode(
