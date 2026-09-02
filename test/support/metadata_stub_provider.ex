@@ -187,24 +187,34 @@ defmodule Mydia.MetadataStubProvider do
   # This stub predates refs. Rather than duplicate `fetch_by_id/3`'s routing
   # (which several tests exercise directly), the ref variants just forward to
   # the old ones with the ref's provider folded into `opts`, so both entry
-  # points hit the same catalog logic.
+  # points hit the same catalog logic. `Keyword.put/3`, not `put_new/3`: the
+  # ref is the source of truth and must win over a stale `opts[:provider]`,
+  # otherwise a caller passing a `{:tvdb, id}` ref alongside leftover
+  # `provider: :tmdb` opts gets routed by the stale opt instead of the ref --
+  # exactly the bug this refactor exists to prevent, reachable through the
+  # entry point meant to prevent it.
   @impl true
   def fetch_by_ref(config, ref, opts) do
-    fetch_by_id(
-      config,
-      to_string(Ref.id(ref)),
-      Keyword.put_new(opts, :provider, Ref.provider(ref))
-    )
+    fetch_by_id(config, to_string(Ref.id(ref)), Keyword.put(opts, :provider, Ref.provider(ref)))
   end
 
   @impl true
   def fetch_images_by_ref(config, ref, opts) do
-    fetch_images(config, to_string(Ref.id(ref)), opts)
+    fetch_images(
+      config,
+      to_string(Ref.id(ref)),
+      Keyword.put(opts, :provider, Ref.provider(ref))
+    )
   end
 
   @impl true
   def fetch_season_by_ref(config, ref, season_number, opts) do
-    fetch_season(config, to_string(Ref.id(ref)), season_number, opts)
+    fetch_season(
+      config,
+      to_string(Ref.id(ref)),
+      season_number,
+      Keyword.put(opts, :provider, Ref.provider(ref))
+    )
   end
 
   @impl true
