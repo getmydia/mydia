@@ -16,6 +16,34 @@ defmodule MydiaWeb.MediaLive.NotThisItemTest do
     %{conn: conn, user: user}
   end
 
+  test "refuses a file id belonging to a different media item", %{conn: conn} do
+    library_path = insert(:library_path)
+    on_screen = insert(:media_item, %{type: "movie", title: "Zephyr Station", year: 2030})
+    other_item = insert(:media_item, %{type: "movie", title: "Emberline", year: 2029})
+
+    # The victim: a file attached to an item the operator is not looking at.
+    foreign_file =
+      insert(:media_file, %{
+        media_item_id: other_item.id,
+        episode: nil,
+        library_path_id: library_path.id,
+        relative_path: "Emberline (2029)/Emberline.2029.1080p.mkv"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{on_screen.id}")
+
+    # The id comes off the event payload, so a modified event can name any file.
+    render_click(view, "not_this_item", %{"file-id" => foreign_file.id})
+
+    # The foreign row is untouched and never reached the review inbox.
+    assert Mydia.Repo.get(Mydia.Library.MediaFile, foreign_file.id)
+
+    assert ImportCandidates.get_by_path(
+             library_path.id,
+             "Emberline (2029)/Emberline.2029.1080p.mkv"
+           ) == nil
+  end
+
   test "returns a wrongly attached file to the review inbox", %{conn: conn, user: user} do
     library_path = insert(:library_path)
     item = insert(:media_item, %{type: "movie", title: "Zephyr Station", year: 2030})

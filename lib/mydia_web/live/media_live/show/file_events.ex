@@ -385,7 +385,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   here.
   """
   def not_this_item(%{"file-id" => file_id}, socket) do
-    with :ok <- Authorization.authorize_delete_media(socket) do
+    # The id arrives on the event payload, so ownership is checked against the
+    # files already on screen before anything is fetched or written. Without
+    # this, any authenticated user allowed to delete media could detach a file
+    # belonging to a different item, and `detach_to_review/3` would then stamp
+    # this item's type onto that file's review candidate and event metadata.
+    with :ok <- Authorization.authorize_delete_media(socket),
+         true <- owns_media_file?(socket.assigns.media_item, file_id) do
       file = Library.get_media_file!(file_id) |> Mydia.Repo.preload(:library_path)
       media_item = socket.assigns.media_item
       actor_id = to_string(socket.assigns.current_user.id)
@@ -413,7 +419,11 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
           {:noreply, put_flash(socket, :error, "Could not send this file to Review")}
       end
     else
-      {:unauthorized, socket} -> {:noreply, socket}
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      false ->
+        {:noreply, put_flash(socket, :error, "Could not send this file to Review")}
     end
   end
 
