@@ -57,7 +57,12 @@ defmodule Mydia.MetadataStubProviderTest do
       config = Metadata.default_relay_config()
 
       {:ok, season} =
-        Metadata.fetch_season_by_ref(config, MetadataStubProvider.series_ref(), 1, [])
+        Metadata.fetch_season_by_ref(
+          config,
+          MetadataStubProvider.series_ref(),
+          1,
+          tvdb_season_id: MetadataStubProvider.series_season1_tvdb_id()
+        )
 
       assert season.season_number == 1
       assert length(season.episodes) == 2

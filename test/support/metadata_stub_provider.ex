@@ -45,6 +45,15 @@ defmodule Mydia.MetadataStubProvider do
   @series_tvdb_id 81_189
   @series_tmdb_id 94_997
   @missing_id 999_999
+  # TVDB addresses a season by its own id, not the series ref (see
+  # `Mydia.Metadata.validate_tvdb_season_opts/2`). A real TVDB series payload
+  # carries one of these per season (`Relay.transform_tvdb_seasons/2` writes
+  # it as `tvdb_season_id`), so the catalog's TVDB-sourced series must too, or
+  # every caller that correctly threads `season.tvdb_season_id` through would
+  # find the stub's seasons unfetchable and only production would ever
+  # exercise that path.
+  @series_season1_tvdb_id 831_889
+  @series_season2_tvdb_id 831_890
 
   @movie_title "Stub Movie"
   @series_title "Stub Series"
@@ -68,6 +77,12 @@ defmodule Mydia.MetadataStubProvider do
 
   @doc "Ref of the catalog series."
   def series_ref, do: {:tvdb, @series_tvdb_id}
+
+  @doc "TVDB season id of the catalog series' season 1."
+  def series_season1_tvdb_id, do: @series_season1_tvdb_id
+
+  @doc "TVDB season id of the catalog series' season 2."
+  def series_season2_tvdb_id, do: @series_season2_tvdb_id
 
   @doc "Ref of the catalog's TMDB-sourced series."
   def tmdb_series_ref, do: {:tmdb, @series_tmdb_id}
@@ -411,13 +426,15 @@ defmodule Mydia.MetadataStubProvider do
           season_number: 1,
           name: "Season 1",
           overview: "Stub season.",
-          episode_count: 2
+          episode_count: 2,
+          tvdb_season_id: @series_season1_tvdb_id
         },
         %SeasonInfo{
           season_number: 2,
           name: "Season 2",
           overview: "Stub season 2.",
-          episode_count: 2
+          episode_count: 2,
+          tvdb_season_id: @series_season2_tvdb_id
         }
       ]
     }
