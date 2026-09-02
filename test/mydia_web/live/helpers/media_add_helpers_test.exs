@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
   use Mydia.DataCase, async: false
 
+  import Mydia.AccountsFixtures
   import Mydia.SettingsFixtures
 
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
@@ -571,6 +572,110 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       library_ids = Enum.map(updated.assigns.add_config.libraries, & &1.id)
 
       refute library.id in library_ids
+    end
+  end
+
+  describe "resolve_add_config_submit/2" do
+    setup do
+      library = library_path_fixture(%{type: :movies, monitored: true})
+      %{library: library, user: user_fixture()}
+    end
+
+    defp submit_socket(user, add_config) do
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          current_user: user,
+          add_config: add_config
+        }
+      }
+    end
+
+    defp movie_config, do: %{provider_id: "551", media_type: :movie}
+
+    test "returns opts and closes the dialog on the happy path", %{
+      library: library,
+      user: user
+    } do
+      params = %{
+        "library_path_id" => to_string(library.id),
+        "monitored" => "true",
+        "search_on_add" => "false"
+      }
+
+      assert {:ok, "551", :movie, opts, socket} =
+               MediaAddHelpers.resolve_add_config_submit(
+                 submit_socket(user, movie_config()),
+                 params
+               )
+
+      assert opts[:library_path_id] == to_string(library.id)
+      assert socket.assigns.add_config == nil
+    end
+
+    test "halts and leaves the dialog open when the user may not create media" do
+      readonly = user_fixture(%{role: "readonly"})
+
+      assert {:halt, socket} =
+               MediaAddHelpers.resolve_add_config_submit(
+                 submit_socket(readonly, movie_config()),
+                 %{"library_path_id" => "", "monitored" => "true"}
+               )
+
+      # Left open on purpose: authorize_create_media/1 has already flashed the
+      # reason and a correction should be one click away, not a re-open.
+      assert socket.assigns.add_config == movie_config()
+      assert socket.assigns.flash["error"] =~ "permission"
+    end
+
+    test "halts when no dialog is open", %{user: user} do
+      assert {:halt, socket} =
+               MediaAddHelpers.resolve_add_config_submit(
+                 submit_socket(user, nil),
+                 %{"library_path_id" => "", "monitored" => "true"}
+               )
+
+      assert socket.assigns.add_config == nil
+      assert socket.assigns.flash == %{}
+    end
+
+    test "halts, closes the dialog and flashes on a library the type does not allow", %{
+      library: library,
+      user: user
+    } do
+      params = %{"library_path_id" => to_string(library.id), "monitored" => "true"}
+
+      assert {:halt, socket} =
+               MediaAddHelpers.resolve_add_config_submit(
+                 submit_socket(user, %{provider_id: "551", media_type: :tv_show}),
+                 params
+               )
+
+      assert socket.assigns.add_config == nil
+      assert socket.assigns.flash["error"] =~ "no longer available"
+    end
+  end
+
+  describe "queue_add/3" do
+    defp queue_socket(in_flight) do
+      %Phoenix.LiveView.Socket{
+        assigns: %{__changed__: %{}, adding_item_ids: MapSet.new(in_flight)}
+      }
+    end
+
+    test "sends the message and marks the id in flight" do
+      socket = MediaAddHelpers.queue_add(queue_socket([]), "551", {:add, "551"})
+
+      assert_received {:add, "551"}
+      assert MapSet.member?(socket.assigns.adding_item_ids, "551")
+    end
+
+    test "sends nothing for an id already in flight" do
+      socket = MediaAddHelpers.queue_add(queue_socket(["551"]), "551", {:add, "551"})
+
+      refute_received {:add, "551"}
+      assert MapSet.to_list(socket.assigns.adding_item_ids) == ["551"]
     end
   end
 end
