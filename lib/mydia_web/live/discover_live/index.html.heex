@@ -279,12 +279,5 @@
         library_picker_dialog/1 for why an anchored menu cannot work here. --%>
   <.library_picker_dialog picker={@library_picker} configure_event="open_add_config" />
 
-  <.add_config_modal
-    open={@add_config != nil}
-    item={@add_config && @add_config.item}
-    media_type={@media_type}
-    libraries={@libraries}
-    quality_profiles={@quality_profiles}
-    defaults={@add_config && @add_config.defaults}
-  />
+  <.add_config_modal config={@add_config} quality_profiles={@quality_profiles} />
 </Layouts.app>
