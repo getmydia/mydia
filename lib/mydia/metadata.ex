@@ -385,7 +385,8 @@ defmodule Mydia.Metadata do
   """
   def fetch_season_by_ref(%{type: type} = config, ref, season_number, opts \\ [])
       when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
+    with :ok <- validate_tvdb_season_opts(ref, opts),
+         {:ok, provider} <- Provider.Registry.get_provider(type) do
       provider.fetch_season_by_ref(config, ref, season_number, opts)
     end
   end
@@ -411,25 +412,48 @@ defmodule Mydia.Metadata do
       when is_atom(type) do
     alias Mydia.Metadata.Cache
 
-    # Default to the configured language so a non-English library does not read
-    # the English library's cached season (see fetch_by_ref_cache_key/3).
-    language = Keyword.get(opts, :language, config_language(config))
-    tvdb_season_id = Keyword.get(opts, :tvdb_season_id)
-    # The season key stays keyed by the raw numeric id (not the ref's provider
-    # tag): a TVDB season is already disambiguated by tvdb_season_id, and a
-    # TMDB season shares its series' numeric id space with nothing else this
-    # key is built from.
-    cache_key = build_season_cache_key(Ref.id(ref), season_number, language, tvdb_season_id)
+    with :ok <- validate_tvdb_season_opts(ref, opts) do
+      # Default to the configured language so a non-English library does not read
+      # the English library's cached season (see fetch_by_ref_cache_key/3).
+      language = Keyword.get(opts, :language, config_language(config))
+      tvdb_season_id = Keyword.get(opts, :tvdb_season_id)
+      # The season key stays keyed by the raw numeric id (not the ref's provider
+      # tag): a TVDB season is already disambiguated by tvdb_season_id, and a
+      # TMDB season shares its series' numeric id space with nothing else this
+      # key is built from. Validated above, so tvdb_season_id is never nil here
+      # for a {:tvdb, _} ref -- without that guard a missing id would collapse
+      # this key onto whatever TMDB series shares the same numeric id.
+      cache_key = build_season_cache_key(Ref.id(ref), season_number, language, tvdb_season_id)
 
-    # Cache for 24 hours
-    Cache.fetch(
-      cache_key,
-      fn ->
-        fetch_season_by_ref(config, ref, season_number, opts)
-      end,
-      ttl: :timer.hours(24)
-    )
+      # Cache for 24 hours
+      Cache.fetch(
+        cache_key,
+        fn ->
+          fetch_season_by_ref(config, ref, season_number, opts)
+        end,
+        ttl: :timer.hours(24)
+      )
+    end
   end
+
+  # A TVDB series ref does not identify a season on its own -- TVDB addresses
+  # seasons by their own id (`opts[:tvdb_season_id]`), not the series ref.
+  # Without it, `Provider.Relay.fetch_season_by_ref/4` falls back to treating
+  # the series' numeric TVDB id as if it were a TMDB series id, fetching (or
+  # 404ing on) an unrelated title. Reject before dispatch and before the cache
+  # key is built, rather than let that leak through.
+  defp validate_tvdb_season_opts({:tvdb, _id}, opts) do
+    if Keyword.get(opts, :tvdb_season_id) do
+      :ok
+    else
+      {:error,
+       Provider.Error.invalid_config(
+         "A TVDB season fetch requires :tvdb_season_id; the series ref alone does not identify a season"
+       )}
+    end
+  end
+
+  defp validate_tvdb_season_opts(_ref, _opts), do: :ok
 
   @doc """
   Builds a deterministic cache key for season data.

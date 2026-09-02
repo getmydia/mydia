@@ -203,33 +203,90 @@ defmodule Mydia.Library.MetadataEnricher do
       true ->
         provider_type = existing_item.metadata_source || match_provider_type
 
-        case fetch_full_metadata(
+        case resolve_fetch_provider_id(
+               existing_item,
                provider_id,
-               media_type,
-               config,
-               provider_type,
-               existing_item.season_order
+               match_provider_type,
+               provider_type
              ) do
-          {:ok, metadata} ->
-            attrs =
-              build_metadata_attrs(metadata, media_type, %{
-                provider_type: provider_type,
-                exclude_id: existing_item.id
-              })
+          {:ok, fetch_provider_id} ->
+            fetch_and_update(
+              existing_item,
+              fetch_provider_id,
+              provider_type,
+              media_type,
+              config
+            )
 
-            {:ok,
-             preparation(existing_item, provider_id, provider_type, media_type, :update, attrs),
-             metadata}
-
-          {:error, reason} ->
-            Logger.warning("Failed to fetch updated metadata, returning existing item",
+          {:error, :missing_stored_id} ->
+            Logger.warning(
+              "Stored provenance overrides the matched provider but the item has no id " <>
+                "for it; reusing existing metadata rather than fetching the matched id " <>
+                "under the wrong provider",
               id: existing_item.id,
-              reason: reason
+              stored_provider: provider_type,
+              matched_provider: match_provider_type
             )
 
             {:ok, preparation(existing_item, provider_id, provider_type, media_type, :reuse, nil),
              existing_item.metadata}
         end
+    end
+  end
+
+  # The matched numeric id (`provider_id`) is only guaranteed to belong to
+  # `match_provider_type`'s catalog -- that is the provider whose lookup found
+  # `existing_item` in the first place. When the item's own recorded
+  # provenance (`provider_type`, resolved as `existing_item.metadata_source ||
+  # match_provider_type`) differs from that, fetching `provider_id` from
+  # `provider_type` would send one provider's id to the other provider's
+  # endpoint and can silently overwrite the row with an unrelated title.
+  # Reuse the item's own stored id for the resolved provider instead, and
+  # refuse to fetch when it is missing rather than guess.
+  defp resolve_fetch_provider_id(_existing_item, provider_id, match_provider_type, provider_type)
+       when match_provider_type == provider_type,
+       do: {:ok, provider_id}
+
+  defp resolve_fetch_provider_id(existing_item, _provider_id, _match_provider_type, :tmdb) do
+    case existing_item.tmdb_id do
+      nil -> {:error, :missing_stored_id}
+      id -> {:ok, to_string(id)}
+    end
+  end
+
+  defp resolve_fetch_provider_id(existing_item, _provider_id, _match_provider_type, :tvdb) do
+    case existing_item.tvdb_id do
+      nil -> {:error, :missing_stored_id}
+      id -> {:ok, to_string(id)}
+    end
+  end
+
+  defp fetch_and_update(existing_item, provider_id, provider_type, media_type, config) do
+    case fetch_full_metadata(
+           provider_id,
+           media_type,
+           config,
+           provider_type,
+           existing_item.season_order
+         ) do
+      {:ok, metadata} ->
+        attrs =
+          build_metadata_attrs(metadata, media_type, %{
+            provider_type: provider_type,
+            exclude_id: existing_item.id
+          })
+
+        {:ok, preparation(existing_item, provider_id, provider_type, media_type, :update, attrs),
+         metadata}
+
+      {:error, reason} ->
+        Logger.warning("Failed to fetch updated metadata, returning existing item",
+          id: existing_item.id,
+          reason: reason
+        )
+
+        {:ok, preparation(existing_item, provider_id, provider_type, media_type, :reuse, nil),
+         existing_item.metadata}
     end
   end
 

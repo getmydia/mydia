@@ -455,6 +455,48 @@ defmodule Mydia.MetadataTest do
     end
   end
 
+  describe "fetch_season_by_ref/4 and fetch_season_by_ref_cached/4 reject a TVDB series ref with no season id" do
+    # A TVDB series ref does not identify a season on its own. Without this
+    # guard, Provider.Relay.fetch_season_by_ref/4 falls back to treating the
+    # series' own numeric TVDB id as a TMDB series id (fetching or 404ing on
+    # an unrelated title), and fetch_season_by_ref_cached/4's cache key
+    # collapses onto whatever TMDB series shares that same integer.
+    setup do
+      Cache.clear()
+      on_exit(&Cache.clear/0)
+      config = %{type: :metadata_relay, base_url: "http://example.invalid", options: %{}}
+      %{config: config}
+    end
+
+    test "fetch_season_by_ref/4 rejects a TVDB ref missing :tvdb_season_id", %{config: config} do
+      assert {:error, %Provider.Error{type: :invalid_config}} =
+               Metadata.fetch_season_by_ref(config, {:tvdb, 280_619}, 1, [])
+    end
+
+    test "fetch_season_by_ref/4 still dispatches a TVDB ref that carries :tvdb_season_id", %{
+      config: config
+    } do
+      assert {:ok, %{}} =
+               Metadata.fetch_season_by_ref(config, {:tvdb, 280_619}, 1, tvdb_season_id: 999)
+    end
+
+    test "fetch_season_by_ref/4 never validates a TMDB ref (no season id concept there)", %{
+      config: config
+    } do
+      assert {:ok, %{}} = Metadata.fetch_season_by_ref(config, {:tmdb, 1396}, 1, [])
+    end
+
+    test "fetch_season_by_ref_cached/4 rejects a TVDB ref missing :tvdb_season_id and writes no cache entry",
+         %{config: config} do
+      cache_key = Metadata.build_season_cache_key(280_619, 1, "en-US", nil)
+
+      assert {:error, %Provider.Error{type: :invalid_config}} =
+               Metadata.fetch_season_by_ref_cached(config, {:tvdb, 280_619}, 1, [])
+
+      assert {:error, :not_found} = Cache.get(cache_key)
+    end
+  end
+
   describe "default_append_to_response/1" do
     test "movie fetches ask for release_dates, not content_ratings" do
       resources = Mydia.Metadata.default_append_to_response(:movie)

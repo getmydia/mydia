@@ -23,9 +23,18 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
   end
 
   describe "fetch_season_by_ref_cached/4 cache key" do
+    # A TVDB series ref does not identify a season on its own, so
+    # fetch_season_by_ref_cached/4 requires :tvdb_season_id before it will
+    # even build the cache key (see Mydia.MetadataTest for that guard's own
+    # coverage). These tests are about language keying, not season-id
+    # validity, so every ref here carries a season id -- 999, threaded
+    # through both the pre-populated key and the opts -- purely to satisfy
+    # that precondition.
+    @tvdb_season_id 999
+
     test "varies by the config's language so two languages don't collide" do
-      es_key = Metadata.build_season_cache_key(100, 1, "es-ES", nil)
-      en_key = Metadata.build_season_cache_key(100, 1, "en-US", nil)
+      es_key = Metadata.build_season_cache_key(100, 1, "es-ES", @tvdb_season_id)
+      en_key = Metadata.build_season_cache_key(100, 1, "en-US", @tvdb_season_id)
 
       assert es_key != en_key
 
@@ -34,31 +43,38 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
 
       # Each config reads its own language's entry (cache hit, no fetch).
       assert {:ok, :spanish_season} =
-               Metadata.fetch_season_by_ref_cached(config("es-ES"), {:tvdb, 100}, 1, [])
+               Metadata.fetch_season_by_ref_cached(config("es-ES"), {:tvdb, 100}, 1,
+                 tvdb_season_id: @tvdb_season_id
+               )
 
       assert {:ok, :english_season} =
-               Metadata.fetch_season_by_ref_cached(config("en-US"), {:tvdb, 100}, 1, [])
+               Metadata.fetch_season_by_ref_cached(config("en-US"), {:tvdb, 100}, 1,
+                 tvdb_season_id: @tvdb_season_id
+               )
     end
 
     test "an explicit :language opt still overrides the config default" do
-      es_key = Metadata.build_season_cache_key(100, 1, "es-ES", nil)
+      es_key = Metadata.build_season_cache_key(100, 1, "es-ES", @tvdb_season_id)
       Cache.put(es_key, :spanish_season)
 
       # Config says en-US, but the explicit opt wins and hits the es entry.
       assert {:ok, :spanish_season} =
                Metadata.fetch_season_by_ref_cached(config("en-US"), {:tvdb, 100}, 1,
-                 language: "es-ES"
+                 language: "es-ES",
+                 tvdb_season_id: @tvdb_season_id
                )
     end
 
     test "a bare config (no options.language) falls back to en-US" do
-      en_key = Metadata.build_season_cache_key(100, 1, "en-US", nil)
+      en_key = Metadata.build_season_cache_key(100, 1, "en-US", @tvdb_season_id)
       Cache.put(en_key, :english_season)
 
       bare_config = %{type: :metadata_relay, base_url: "https://example.test"}
 
       assert {:ok, :english_season} =
-               Metadata.fetch_season_by_ref_cached(bare_config, {:tvdb, 100}, 1, [])
+               Metadata.fetch_season_by_ref_cached(bare_config, {:tvdb, 100}, 1,
+                 tvdb_season_id: @tvdb_season_id
+               )
     end
   end
 
