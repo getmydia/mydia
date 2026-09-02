@@ -416,6 +416,46 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert html =~ "no seasons"
     end
 
+    test "the date filter defaults to All with the other presets unselected", %{conn: conn} do
+      {:ok, view, html} = live(conn, ~p"/activity")
+
+      assert html =~ ~s(id="activity-date-filter")
+
+      assert has_element?(
+               view,
+               "#activity-date-filter button[phx-value-date='all'][aria-pressed='true']"
+             )
+
+      for preset <- ~w(today yesterday week month) do
+        assert has_element?(
+                 view,
+                 "#activity-date-filter button[phx-value-date='#{preset}'][aria-pressed='false']"
+               ),
+               "#{preset} should not be selected on mount"
+      end
+    end
+
+    test "choosing a date preset dispatches filter_date and moves the selection", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      view
+      |> element("#activity-date-filter button[phx-value-date='week']")
+      |> render_click()
+
+      # The selection is server-rendered from @date_filter, so a wrong param
+      # name or a handle_event clause that stopped matching would leave All
+      # selected instead of moving to 7 Days.
+      assert has_element?(
+               view,
+               "#activity-date-filter button[phx-value-date='week'][aria-pressed='true']"
+             )
+
+      assert has_element?(
+               view,
+               "#activity-date-filter button[phx-value-date='all'][aria-pressed='false']"
+             )
+    end
+
     test "renders a metadata_fields change whose field name is malformed", %{conn: conn} do
       # format_change_details/1 passes field_change["field"] straight to
       # Presentation.field_label/1. A hand-edited or legacy row can carry
