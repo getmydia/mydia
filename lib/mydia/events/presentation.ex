@@ -590,7 +590,7 @@ defmodule Mydia.Events.Presentation do
     end
   end
 
-  defp field_name(%{"field" => field}), do: field
+  defp field_name(%{"field" => field}) when is_binary(field), do: field
   defp field_name(field) when is_binary(field), do: field
   defp field_name(_), do: "field"
 
@@ -624,9 +624,27 @@ defmodule Mydia.Events.Presentation do
   `MydiaWeb.ActivityLive.Index.format_change_details/1`, so the short
   summary and the expanded Activity Feed breakdown always agree on how a
   field is labeled.
+
+  `MydiaWeb.ActivityLive.Index.format_change_details/1` calls this directly
+  with a raw `"field"` value pulled out of persisted event metadata, without
+  going through `field_name/1` first. A malformed or legacy event (hand-edited,
+  or written by a version of this code with a different metadata shape) can
+  carry `nil` or a number there instead of a string. `Phoenix.Naming.humanize/1`
+  only has clauses for an atom or a binary and raises `FunctionClauseError` on
+  anything else, which would take down the whole Activity Feed and item
+  history timeline over one bad row. Guarded here so a non-binary, non-atom
+  value renders a fixed fallback label instead.
   """
-  @spec field_label(String.t()) :: String.t()
-  def field_label(field), do: Map.get(@field_labels, field, Phoenix.Naming.humanize(field))
+  @spec field_label(term()) :: String.t()
+  def field_label(field) when is_binary(field) do
+    Map.get(@field_labels, field, Phoenix.Naming.humanize(field))
+  end
+
+  def field_label(field) when is_atom(field) and not is_nil(field) do
+    Map.get(@field_labels, field, Phoenix.Naming.humanize(field))
+  end
+
+  def field_label(_field), do: "Unknown field"
 
   # Renders " S01E02" or " S01" when the metadata carries season and episode.
   defp episode_part(metadata) do

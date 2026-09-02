@@ -415,6 +415,35 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert html =~ "all seasons"
       assert html =~ "no seasons"
     end
+
+    test "renders a metadata_fields change whose field name is malformed", %{conn: conn} do
+      # format_change_details/1 passes field_change["field"] straight to
+      # Presentation.field_label/1. A hand-edited or legacy row can carry
+      # nil (or any other non-string) there, and that used to raise
+      # FunctionClauseError out of Phoenix.Naming.humanize/1, crashing the
+      # whole Activity Feed render over one bad event.
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.updated",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{
+            "title" => "Nightfall Station",
+            "reason" => "Metadata refreshed",
+            "changes" => %{
+              "metadata_fields" => [
+                %{"field" => nil, "old" => "a", "new" => "b"}
+              ]
+            }
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "Nightfall Station"
+      assert html =~ "Unknown field"
+    end
   end
 
   describe "Activity feed as a guest" do

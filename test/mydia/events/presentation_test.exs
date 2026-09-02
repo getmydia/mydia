@@ -228,6 +228,50 @@ defmodule Mydia.Events.PresentationTest do
                )
              ) == "Severance, 9 episodes"
     end
+
+    test "updated does not raise on a metadata_fields entry with a malformed field name" do
+      # A hand-edited or legacy row could carry anything under "field". This
+      # must render, not crash the whole Activity Feed over one bad event.
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Arrival",
+              "reason" => "Metadata refreshed",
+              "changes" => %{
+                "metadata_fields" => [
+                  %{"field" => nil, "old" => "a", "new" => "b"},
+                  %{"field" => 42, "old" => "c", "new" => "d"}
+                ]
+              }
+            }
+          )
+        )
+
+      assert is_binary(detail)
+      assert detail =~ "Arrival"
+    end
+  end
+
+  describe "field_label/1" do
+    test "maps a known field to its curated label" do
+      assert Presentation.field_label("monitored") == "Monitoring"
+    end
+
+    test "humanizes an unknown but well-formed string field" do
+      assert Presentation.field_label("release_year") == "Release year"
+    end
+
+    test "falls back to a fixed label for nil, instead of raising" do
+      assert Presentation.field_label(nil) == "Unknown field"
+    end
+
+    test "falls back to a fixed label for a non-string, non-atom value" do
+      assert Presentation.field_label(42) == "Unknown field"
+      assert Presentation.field_label(%{"not" => "a field name"}) == "Unknown field"
+      assert Presentation.field_label(["nope"]) == "Unknown field"
+    end
   end
 
   describe "detail/1 media_file.*" do

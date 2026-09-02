@@ -195,6 +195,40 @@ defmodule Mydia.Jobs.MonitoringRepairTest do
     test "returns :ok for an id that no longer exists" do
       assert :ok = MonitoringRepair.repair_one(Ecto.UUID.generate())
     end
+
+    test "the update and its decision event commit or roll back together" do
+      item = media_item_fixture(%{title: "Wrenfield Close", monitored: true})
+      record_update(item, "Monitoring disabled", 300)
+
+      # repair_one/1 is just `Repo.transaction(fn -> repair_one_tx(id) end)`.
+      # Driving repair_one_tx/1 through our own transaction here is
+      # equivalent, and lets the test force a rollback right after the
+      # write instead of relying on real concurrency or a sleep to land one
+      # mid-transaction.
+      result =
+        Repo.transaction(fn ->
+          case MonitoringRepair.repair_one_tx(item.id) do
+            :updated -> Repo.rollback(:forced_for_test)
+            other -> other
+          end
+        end)
+
+      assert result == {:error, :forced_for_test}
+
+      # The update did not survive the rollback.
+      assert monitored?(item.id)
+
+      # Nor did the decision event. If the two writes were not part of the
+      # same transaction, this event would still be here even though the
+      # update it describes never happened, and it would become the item's
+      # newest "decision" on the very next pending_ids/1 run: the same
+      # class of self-inflicted bug getmydia/mydia#653 is about.
+      assert Events.list_events(
+               type: "media_item.monitoring_changed",
+               resource_type: "media_item",
+               resource_id: item.id
+             ) == []
+    end
   end
 
   describe "perform/1" do
