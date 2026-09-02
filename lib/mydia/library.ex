@@ -1301,7 +1301,7 @@ defmodule Mydia.Library do
               # file for the item, which physically moved the bytes of any
               # file that was still there: an unmounted share or a renamed
               # folder emptied the item (#653).
-              Logger.error("Re-scan base directory could not be read",
+              Logger.error("Series re-scan base directory could not be read",
                 media_item_id: media_item_id,
                 directory: base_directory
               )
