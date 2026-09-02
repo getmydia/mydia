@@ -35,13 +35,19 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesAndEnforcePathUniqueness 
   # transcode_jobs is unique on (media_file_id, resolution) only WHERE
   # type = 'download'. Guarding on (resolution, type) is stricter than the
   # index, which at worst drops a non-download job that could have moved.
+  #
+  # media_file_match_candidates is NOT in this list. It used to hang off
+  # media_files, but 20260830143721_split_import_candidates_from_media_files
+  # drops the table outright, and that migration always runs first. Its
+  # replacement, import_candidates, is keyed on (library_path_id,
+  # relative_path) and carries no media_file_id at all, so a fold of duplicate
+  # media_files has nothing to repoint there.
   @dependents [
     {"subtitles", ["subtitle_hash"]},
     {"media_hashes", []},
     {"subtitle_track_settings", ["track_ref"]},
     {"transcode_jobs", ["resolution", "type"]},
-    {"media_segments", ["type"]},
-    {"media_file_match_candidates", ["rank"]}
+    {"media_segments", ["type"]}
   ]
 
   def up do

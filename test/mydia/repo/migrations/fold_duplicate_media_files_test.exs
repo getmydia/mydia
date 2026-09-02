@@ -366,13 +366,13 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesTest do
     )
     """)
 
-    sql!("""
-    CREATE TABLE media_file_match_candidates (
-      id TEXT PRIMARY KEY,
-      media_file_id TEXT REFERENCES media_files(id) ON DELETE CASCADE,
-      rank INTEGER
-    )
-    """)
+    # media_file_match_candidates is deliberately absent.
+    # 20260830143721_split_import_candidates_from_media_files drops it, and that
+    # migration runs first, so by the time the fold runs no database has the
+    # table. Creating it here once hid #653's real failure: the fold only
+    # touches a dependent table when a duplicate group exists, so a fresh
+    # install migrated cleanly and CI stayed green while every populated
+    # install crashed on boot with "no such table".
   end
 
   defp seed_library_path(id, path) do
