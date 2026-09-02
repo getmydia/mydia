@@ -62,8 +62,11 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
 
   describe "fetch_by_id_cached/3 cache key" do
     test "varies by the config's language" do
-      es_key = "fetch_by_id:metadata_relay:603:tv_show:es-ES::official"
-      en_key = "fetch_by_id:metadata_relay:603:tv_show:en-US::official"
+      # media_type: :tv_show with no :provider opt legacy-routes to a
+      # {:tvdb, _} ref (see Ref.legacy_from_opts/2), so the key carries the
+      # "tvdb" tag rather than the config's own "metadata_relay" type.
+      es_key = "fetch_by_ref:tvdb:603:tv_show:es-ES::official"
+      en_key = "fetch_by_ref:tvdb:603:tv_show:en-US::official"
 
       Cache.put(es_key, :spanish_show)
       Cache.put(en_key, :english_show)
@@ -80,8 +83,8 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
     # the first caller's grouping and never notices: the payload is well formed,
     # just the wrong shape.
     test "varies by the requested season ordering" do
-      official_key = "fetch_by_id:metadata_relay:603:tv_show:en-US::official"
-      dvd_key = "fetch_by_id:metadata_relay:603:tv_show:en-US::dvd"
+      official_key = "fetch_by_ref:tvdb:603:tv_show:en-US::official"
+      dvd_key = "fetch_by_ref:tvdb:603:tv_show:en-US::dvd"
 
       Cache.put(official_key, :official_show)
       Cache.put(dvd_key, :dvd_show)

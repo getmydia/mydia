@@ -1217,7 +1217,7 @@ defmodule Mydia.Metadata.Provider.Relay do
 
       iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Relay.fetch_recommendations(config, "965150", media_type: :movie)
-      {:ok, [%Mydia.Metadata.Structs.SearchResult{title: "The Eternal Daughter"}]}
+      {:ok, [%Mydia.Metadata.Structs.SearchResult{title: "Midnight Ferry"}]}
   """
   @spec fetch_recommendations(map(), String.t(), keyword()) ::
           {:ok, [SearchResult.t()]} | {:error, Error.t()}

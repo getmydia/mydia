@@ -436,6 +436,25 @@ defmodule Mydia.MetadataTest do
     end
   end
 
+  describe "fetch_by_ref_cached/3 keys the cache by the ref" do
+    setup do
+      Mydia.Metadata.Cache.clear()
+      on_exit(&Mydia.Metadata.Cache.clear/0)
+      :ok
+    end
+
+    test "the same number under two providers does not share an entry" do
+      config = %{type: :metadata_relay, base_url: "http://example.invalid", options: %{}}
+
+      tvdb_key = Mydia.Metadata.fetch_by_ref_cache_key(config, {:tvdb, 603}, media_type: :tv_show)
+      tmdb_key = Mydia.Metadata.fetch_by_ref_cache_key(config, {:tmdb, 603}, media_type: :movie)
+
+      assert tvdb_key =~ "tvdb:603"
+      assert tmdb_key =~ "tmdb:603"
+      refute tvdb_key == tmdb_key
+    end
+  end
+
   describe "default_append_to_response/1" do
     test "movie fetches ask for release_dates, not content_ratings" do
       resources = Mydia.Metadata.default_append_to_response(:movie)

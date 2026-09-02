@@ -92,13 +92,12 @@ defmodule Mydia.MetadataCacheHelpers do
     relay = Metadata.default_relay_config()
     config = %{relay | base_url: "http://localhost:#{bypass.port}"}
 
-    # Mirrors the key fetch_by_id_cached/3 builds for these opts: no
-    # append_to_response, so that segment is empty, and a nil season order
-    # normalises to "official".
+    # Mirrors the key fetch_by_id_cached/3 builds for these opts via
+    # fetch_by_ref_cache_key/3: no append_to_response, so that segment is
+    # empty, a nil season order normalises to "official", and a bare movie
+    # id with no :provider opt legacy-routes to a {:tmdb, _} ref.
     on_exit(fn ->
-      Cache.delete(
-        "fetch_by_id:#{relay.type}:#{tmdb_id}:movie:#{relay.options.language}::official"
-      )
+      Cache.delete("fetch_by_ref:tmdb:#{tmdb_id}:movie:#{relay.options.language}::official")
     end)
 
     Bypass.expect_once(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->

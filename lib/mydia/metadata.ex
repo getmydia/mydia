@@ -41,6 +41,7 @@ defmodule Mydia.Metadata do
   @default_language "en-US"
 
   alias Mydia.Metadata.Provider
+  alias Mydia.Metadata.Ref
 
   @doc """
   Registers all known metadata provider adapters with the registry.
@@ -167,6 +168,35 @@ defmodule Mydia.Metadata do
   end
 
   @doc """
+  Fetches detailed metadata for a specific media item by a provider-tagged ref.
+
+  The ref carries the provider that owns the id (`{:tvdb, 280619}` or
+  `{:tmdb, 63639}`), so this dispatches to the right upstream API on its own
+  rather than guessing from `media_type`.
+
+  ## Parameters
+    - `config` - Provider configuration map
+    - `ref` - A `Mydia.Metadata.Ref.t()`
+    - `opts` - Fetch options (see `Mydia.Metadata.Provider` for available options)
+
+  ## Options
+    * `:media_type` - Media type (`:movie` or `:tv_show`, default: `:movie`)
+    * `:language` - Language for results (default: "en-US")
+    * `:append_to_response` - Additional data to include (e.g., ["credits", "images"])
+
+  ## Examples
+
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
+      iex> Mydia.Metadata.fetch_by_ref(config, {:tmdb, 603}, media_type: :movie)
+      {:ok, %{provider_id: "603", title: "The Matrix", runtime: 136, ...}}
+  """
+  def fetch_by_ref(%{type: type} = config, ref, opts \\ []) when is_atom(type) do
+    with {:ok, provider} <- Provider.Registry.get_provider(type) do
+      provider.fetch_by_ref(config, ref, opts)
+    end
+  end
+
+  @doc """
   Fetches detailed metadata for a specific media item by provider ID.
 
   ## Parameters
@@ -185,10 +215,52 @@ defmodule Mydia.Metadata do
       iex> Mydia.Metadata.fetch_by_id(config, "603", media_type: :movie)
       {:ok, %{provider_id: "603", title: "The Matrix", runtime: 136, ...}}
   """
+  # Shim. Deleted in the final task of this plan, along with every caller.
   def fetch_by_id(%{type: type} = config, provider_id, opts \\ []) when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.fetch_by_id(config, provider_id, opts)
-    end
+    fetch_by_ref(config, Ref.legacy_from_opts(provider_id, opts), opts)
+  end
+
+  @doc false
+  # A key builder that cannot be observed cannot be tested, hence public
+  # (with @doc false) rather than private. Includes the ref's provider tag so
+  # numerically-overlapping TVDB/TMDB ids never share a cache entry (e.g.
+  # TVDB series 603 vs TMDB movie 603) -- the ref makes that exact instead of
+  # the previous heuristic based on an opts[:provider] override.
+  def fetch_by_ref_cache_key(config, ref, opts) do
+    media_type = Keyword.get(opts, :media_type, :movie)
+    append = Keyword.get(opts, :append_to_response, []) |> Enum.sort() |> Enum.join(",")
+    # Default to the configured language (not a literal "en-US") so cache keys
+    # vary by language and non-English libraries don't read English-cached entries.
+    language = Keyword.get(opts, :language, config_language(config))
+    # The TVDB orderings of one series differ only in how the seasons list
+    # groups the same episodes, so two orderings of the same show would
+    # otherwise share a cache entry and the second caller would silently get
+    # the first one's grouping.
+    season_order = Mydia.Media.SeasonOrder.tvdb_type(Keyword.get(opts, :season_order))
+
+    "fetch_by_ref:#{Ref.to_param(ref)}:#{media_type}:#{language}:#{append}:#{season_order}"
+  end
+
+  @doc """
+  Fetches detailed metadata with caching, keyed by a provider-tagged ref.
+
+  This is a cached wrapper around `fetch_by_ref/3` that caches results
+  for 1 hour to reduce redundant API calls during bulk imports.
+
+  ## Examples
+
+      iex> config = Mydia.Metadata.default_relay_config()
+      iex> Mydia.Metadata.fetch_by_ref_cached(config, {:tmdb, 603}, media_type: :movie)
+      {:ok, %{provider_id: "603", title: "The Matrix", ...}}
+  """
+  def fetch_by_ref_cached(%{type: type} = config, ref, opts \\ []) when is_atom(type) do
+    alias Mydia.Metadata.Cache
+
+    Cache.fetch(
+      fetch_by_ref_cache_key(config, ref, opts),
+      fn -> fetch_by_ref(config, ref, opts) end,
+      ttl: :timer.hours(1)
+    )
   end
 
   @doc """
@@ -210,33 +282,9 @@ defmodule Mydia.Metadata do
       iex> Mydia.Metadata.fetch_by_id_cached(config, "603", media_type: :movie)
       {:ok, %{provider_id: "603", title: "The Matrix", ...}}
   """
+  # Shim. Deleted in the final task of this plan, along with every caller.
   def fetch_by_id_cached(%{type: type} = config, provider_id, opts \\ []) when is_atom(type) do
-    alias Mydia.Metadata.Cache
-
-    media_type = Keyword.get(opts, :media_type, :movie)
-    append = Keyword.get(opts, :append_to_response, []) |> Enum.sort() |> Enum.join(",")
-    # Default to the configured language (not a literal "en-US") so cache keys
-    # vary by language and non-English libraries don't read English-cached entries.
-    language = Keyword.get(opts, :language, config_language(config))
-    # Include the provider so numerically-overlapping TVDB/TMDB ids never share a
-    # cache entry (e.g. TVDB series 603 vs TMDB movie 603).
-    provider = Keyword.get(opts, :provider, type)
-    # The TVDB orderings of one series differ only in how the seasons list
-    # groups the same episodes, so two orderings of the same show would
-    # otherwise share a cache entry and the second caller would silently get
-    # the first one's grouping.
-    season_order = Mydia.Media.SeasonOrder.tvdb_type(Keyword.get(opts, :season_order))
-
-    cache_key =
-      "fetch_by_id:#{provider}:#{provider_id}:#{media_type}:#{language}:#{append}:#{season_order}"
-
-    Cache.fetch(
-      cache_key,
-      fn ->
-        fetch_by_id(config, provider_id, opts)
-      end,
-      ttl: :timer.hours(1)
-    )
+    fetch_by_ref_cached(config, Ref.legacy_from_opts(provider_id, opts), opts)
   end
 
   @doc """
@@ -287,6 +335,10 @@ defmodule Mydia.Metadata do
   @doc """
   Fetches TMDB recommendations for a title, cached in ETS for 24 hours.
 
+  Accepts only a `{:tmdb, id}` ref: TMDB recommendations are the only kind
+  the relay serves, so a TVDB ref has no meaning here and is rejected at the
+  function head rather than silently coerced.
+
   Relay-only, for the same reason as `fetch_collection_cached/3`: no other
   provider type has an equivalent concept, so routing one to the relay adapter
   would cache a response under a key naming a provider that never served it.
@@ -301,32 +353,79 @@ defmodule Mydia.Metadata do
   ## Examples
 
       iex> config = Mydia.Metadata.default_relay_config()
-      iex> Mydia.Metadata.fetch_recommendations_cached(config, "965150", media_type: :movie)
+      iex> Mydia.Metadata.fetch_recommendations_by_ref_cached(config, {:tmdb, 965_150}, media_type: :movie)
       {:ok, [%Mydia.Metadata.Structs.SearchResult{}]}
   """
-  def fetch_recommendations_cached(config, provider_id, opts \\ [])
+  def fetch_recommendations_by_ref_cached(config, ref, opts \\ [])
 
-  def fetch_recommendations_cached(%{type: :metadata_relay} = config, provider_id, opts) do
+  def fetch_recommendations_by_ref_cached(%{type: :metadata_relay} = config, {:tmdb, id}, opts) do
     alias Mydia.Metadata.Cache
     alias Mydia.Metadata.Provider.Relay
 
     media_type = Keyword.get(opts, :media_type, :movie)
     language = Keyword.get(opts, :language, config_language(config))
 
-    cache_key = "recommendations:metadata_relay:#{provider_id}:#{media_type}:#{language}"
+    cache_key = "recommendations:metadata_relay:#{id}:#{media_type}:#{language}"
 
     Cache.fetch(
       cache_key,
-      fn -> Relay.fetch_recommendations(config, provider_id, opts) end,
+      fn -> Relay.fetch_recommendations(config, to_string(id), opts) end,
       ttl: :timer.hours(24)
     )
   end
 
-  def fetch_recommendations_cached(%{type: type}, _provider_id, _opts) when is_atom(type) do
+  def fetch_recommendations_by_ref_cached(%{type: type}, {:tmdb, _id}, _opts)
+      when is_atom(type) do
     {:error,
      Provider.Error.invalid_config(
        "Recommendations are only available through the metadata relay, got: #{inspect(type)}"
      )}
+  end
+
+  @doc """
+  Fetches TMDB recommendations for a title, cached in ETS for 24 hours.
+
+  ## Examples
+
+      iex> config = Mydia.Metadata.default_relay_config()
+      iex> Mydia.Metadata.fetch_recommendations_cached(config, "965150", media_type: :movie)
+      {:ok, [%Mydia.Metadata.Structs.SearchResult{}]}
+  """
+  # Shim. Deleted in the final task of this plan, along with every caller.
+  # TMDB recommendations are the only kind the relay serves, so this always
+  # builds a {:tmdb, id} ref regardless of media_type -- unlike
+  # Ref.legacy_from_opts/2, which would tag an unmarked :tv_show as TVDB.
+  def fetch_recommendations_cached(config, provider_id, opts \\ []) do
+    fetch_recommendations_by_ref_cached(
+      config,
+      {:tmdb, String.to_integer(to_string(provider_id))},
+      opts
+    )
+  end
+
+  @doc """
+  Fetches images for a specific media item by a provider-tagged ref.
+
+  ## Parameters
+    - `config` - Provider configuration map
+    - `ref` - A `Mydia.Metadata.Ref.t()`
+    - `opts` - Image fetch options
+
+  ## Options
+    * `:media_type` - Media type (`:movie` or `:tv_show`, default: `:movie`)
+    * `:language` - Primary language for images
+    * `:include_image_language` - Additional languages to include
+
+  ## Examples
+
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
+      iex> Mydia.Metadata.fetch_images_by_ref(config, {:tmdb, 603}, media_type: :movie)
+      {:ok, %{posters: [...], backdrops: [...], logos: [...]}}
+  """
+  def fetch_images_by_ref(%{type: type} = config, ref, opts \\ []) when is_atom(type) do
+    with {:ok, provider} <- Provider.Registry.get_provider(type) do
+      provider.fetch_images_by_ref(config, ref, opts)
+    end
   end
 
   @doc """
@@ -348,9 +447,39 @@ defmodule Mydia.Metadata do
       iex> Mydia.Metadata.fetch_images(config, "603", media_type: :movie)
       {:ok, %{posters: [...], backdrops: [...], logos: [...]}}
   """
+  # Shim. Deleted in the final task of this plan, along with every caller.
   def fetch_images(%{type: type} = config, provider_id, opts \\ []) when is_atom(type) do
+    fetch_images_by_ref(config, Ref.legacy_from_opts(provider_id, opts), opts)
+  end
+
+  @doc """
+  Fetches season details with episode information for a TV show, addressed
+  by a provider-tagged ref naming the series.
+
+  TVDB addresses a season by its own id, not the series ref, so a TVDB fetch
+  still reads the season id from `opts[:tvdb_season_id]`; the ref only
+  disambiguates which provider owns the series itself.
+
+  ## Parameters
+    - `config` - Provider configuration map
+    - `ref` - A `Mydia.Metadata.Ref.t()` naming the series
+    - `season_number` - Season number to fetch
+    - `opts` - Season fetch options
+
+  ## Options
+    * `:language` - Language for results (default: "en-US")
+    * `:tvdb_season_id` - The TVDB season id, required when the series is on TVDB
+
+  ## Examples
+
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
+      iex> Mydia.Metadata.fetch_season_by_ref(config, {:tmdb, 1396}, 1)
+      {:ok, %{season_number: 1, episodes: [...], ...}}
+  """
+  def fetch_season_by_ref(%{type: type} = config, ref, season_number, opts \\ [])
+      when is_atom(type) do
     with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.fetch_images(config, provider_id, opts)
+      provider.fetch_season_by_ref(config, ref, season_number, opts)
     end
   end
 
@@ -372,11 +501,51 @@ defmodule Mydia.Metadata do
       iex> Mydia.Metadata.fetch_season(config, "1396", 1)
       {:ok, %{season_number: 1, episodes: [...], ...}}
   """
+  # Shim. Deleted in the final task of this plan, along with every caller.
   def fetch_season(%{type: type} = config, provider_id, season_number, opts \\ [])
       when is_atom(type) do
-    with {:ok, provider} <- Provider.Registry.get_provider(type) do
-      provider.fetch_season(config, provider_id, season_number, opts)
-    end
+    fetch_season_by_ref(config, Ref.legacy_from_opts(provider_id, opts), season_number, opts)
+  end
+
+  @doc """
+  Fetches season details with caching, keyed by a provider-tagged ref naming
+  the series.
+
+  This is a cached wrapper around `fetch_season_by_ref/4` that caches results
+  for 24 hours to reduce redundant API calls.
+
+  ## Options
+    * `:language` - Language for results (default: "en-US")
+    * `:tvdb_season_id` - The TVDB season id, required when the series is on TVDB
+
+  ## Examples
+
+      iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
+      iex> Mydia.Metadata.fetch_season_by_ref_cached(config, {:tmdb, 1396}, 1)
+      {:ok, %{season_number: 1, episodes: [...], ...}}
+  """
+  def fetch_season_by_ref_cached(%{type: type} = config, ref, season_number, opts \\ [])
+      when is_atom(type) do
+    alias Mydia.Metadata.Cache
+
+    # Default to the configured language so a non-English library does not read
+    # the English library's cached season (see fetch_by_ref_cache_key/3).
+    language = Keyword.get(opts, :language, config_language(config))
+    tvdb_season_id = Keyword.get(opts, :tvdb_season_id)
+    # The season key stays keyed by the raw numeric id (not the ref's provider
+    # tag): a TVDB season is already disambiguated by tvdb_season_id, and a
+    # TMDB season shares its series' numeric id space with nothing else this
+    # key is built from.
+    cache_key = build_season_cache_key(Ref.id(ref), season_number, language, tvdb_season_id)
+
+    # Cache for 24 hours
+    Cache.fetch(
+      cache_key,
+      fn ->
+        fetch_season_by_ref(config, ref, season_number, opts)
+      end,
+      ttl: :timer.hours(24)
+    )
   end
 
   @doc """
@@ -402,23 +571,14 @@ defmodule Mydia.Metadata do
       iex> Mydia.Metadata.fetch_season_cached(config, "1396", 1)
       {:ok, %{season_number: 1, episodes: [...], ...}}
   """
+  # Shim. Deleted in the final task of this plan, along with every caller.
   def fetch_season_cached(%{type: type} = config, provider_id, season_number, opts \\ [])
       when is_atom(type) do
-    alias Mydia.Metadata.Cache
-
-    # Default to the configured language so a non-English library does not read
-    # the English library's cached season (see fetch_by_id_cached/3).
-    language = Keyword.get(opts, :language, config_language(config))
-    tvdb_season_id = Keyword.get(opts, :tvdb_season_id)
-    cache_key = build_season_cache_key(provider_id, season_number, language, tvdb_season_id)
-
-    # Cache for 24 hours
-    Cache.fetch(
-      cache_key,
-      fn ->
-        fetch_season(config, provider_id, season_number, opts)
-      end,
-      ttl: :timer.hours(24)
+    fetch_season_by_ref_cached(
+      config,
+      Ref.legacy_from_opts(provider_id, opts),
+      season_number,
+      opts
     )
   end
 

@@ -3,7 +3,7 @@ defmodule Mydia.Metadata.Ref do
   A provider-tagged media id: `{:tmdb, 63639}` or `{:tvdb, 280619}`.
 
   A bare integer id is ambiguous. TMDB and TVDB number their catalogs
-  independently, so 280619 names The Expanse on TVDB and nothing at all on
+  independently, so 280619 names a series on TVDB and nothing at all on
   TMDB. Every function that fetches by id takes one of these instead of an
   integer, which is what stops a caller from sending an id to the wrong
   provider.
