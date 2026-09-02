@@ -74,6 +74,31 @@ defmodule Mydia.Library.RescanTrashGuardTest do
     assert active_count(movie) == 3
   end
 
+  test "leaves the row active and the bytes in place when the file reappears after the guard checked",
+       %{tmp: tmp, library_path: lib} do
+    # reject_files_still_on_disk/1's File.exists? check and the trash call
+    # that follows it happen at different times. A file that reappears in
+    # that gap - a reconnecting mount, a concurrent import restoring it -
+    # must not be moved. The three re-scan sites now call
+    # Library.trash_media_file/2 with `move: false`, which is what actually
+    # closes the window: TrashStore.store/2 refuses to move a present file
+    # no matter what an earlier check saw. This calls that same function the
+    # same way the re-scan sites do, directly on a file that is on disk, to
+    # prove the backstop holds even when a row reaches it despite being
+    # present.
+    movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+    relative_path = "Hollow Vale (2016)/Hollow.Vale.2016.1080p.mkv"
+    media_file = add_file(tmp, lib, movie, relative_path)
+    absolute = Path.join(tmp, relative_path)
+
+    assert {:error, _reason} = Library.trash_media_file(media_file, move: false)
+
+    assert File.exists?(absolute)
+    assert File.read!(absolute) == "contents of #{relative_path}"
+    assert is_nil(Repo.reload!(media_file).trashed_at)
+    assert active_count(movie) == 1
+  end
+
   test "still trashes a row whose file is genuinely gone", %{tmp: tmp, library_path: lib} do
     movie = MediaFixtures.media_item_fixture(%{type: "movie"})
 

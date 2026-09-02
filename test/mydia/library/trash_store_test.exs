@@ -99,6 +99,33 @@ defmodule Mydia.Library.TrashStoreTest do
     end
   end
 
+  # CodeRabbit finding: reject_files_still_on_disk/1 and this module's own
+  # File.exists?/1 check happen at different times, leaving a window where a
+  # file that reappears between them (a reconnecting mount, a concurrent
+  # import) still gets moved into the trash. `move: false` closes that
+  # structurally: it is the one option that guarantees do_store/2 - the only
+  # function in this module that calls File.rename/2 or File.cp/2 - is never
+  # reached for a file that is present.
+  describe "store/2 with move: false" do
+    @tag :tmp_dir
+    test "refuses and does not move a file that is present", %{tmp_dir: tmp_dir} do
+      {_root, media_file, path} = library_with_file(tmp_dir)
+
+      assert TrashStore.store(media_file, move: false) == {:error, :file_present}
+
+      assert File.exists?(path)
+      assert File.read!(path) == "video bytes"
+    end
+
+    @tag :tmp_dir
+    test "still reports a genuinely missing file as :missing", %{tmp_dir: tmp_dir} do
+      {_root, media_file, path} = library_with_file(tmp_dir)
+      File.rm!(path)
+
+      assert TrashStore.store(media_file, move: false) == {:ok, :missing}
+    end
+  end
+
   # The end-to-end cross-filesystem move needs a second filesystem, but the
   # contract that matters is in this one two-argument function: it is the only
   # place in the trash path that can delete the copy that just succeeded.
