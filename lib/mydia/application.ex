@@ -38,6 +38,10 @@ defmodule Mydia.Application do
       reset_stale_jobs()
       # Attach Oban job broadcaster for real-time job status updates
       Mydia.Jobs.Broadcaster.attach()
+      # Log Oban job failures. Without this a raising worker is silent: the
+      # crash lands only in oban_jobs.errors and a discarded job looks like a
+      # job that simply had nothing to do.
+      Mydia.Jobs.ErrorLogger.attach()
       # Register download client adapters after supervisor has started
       Mydia.Downloads.register_clients()
       # Register indexer adapters after supervisor has started
