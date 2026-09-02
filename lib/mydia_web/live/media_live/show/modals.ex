@@ -346,7 +346,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             <div>
               <h4 class="text-sm font-semibold text-base-content/70 mb-2">Origin</h4>
               <p class="text-sm">
-                Imported from the download <span class="font-mono text-xs">{@file_origin.title}</span>
+                Imported from the download
+                <span class="text-sm font-medium">{@file_origin.title}</span>
               </p>
               <%= if @file_origin.metadata["matched_from_client"] do %>
                 <p class="text-sm mt-1">

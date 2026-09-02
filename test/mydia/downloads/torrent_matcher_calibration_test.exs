@@ -34,6 +34,17 @@ defmodule Mydia.Downloads.TorrentMatcherCalibrationTest do
     {"Northgate Hall", "North Gate Nine Lives"}
   ]
 
+  # Same pairs, routed through the season-pack path instead of the
+  # single-episode path. One of the two production incidents behind issue
+  # #653 was five season packs attached to an unrelated series, so this path
+  # gets its own direct coverage rather than relying on "identical in form"
+  # to the TV path above.
+  @unrelated_season_packs [
+    {"Havenridge", "Haven Harbor Line"},
+    {"The Quiet Wards", "Quiet Water"},
+    {"Northgate Hall", "North Gate Nine Lives"}
+  ]
+
   describe "unrelated movie titles" do
     for {library_title, release_title} <- @unrelated_movies do
       test "#{library_title} does not match #{release_title}" do
@@ -79,6 +90,75 @@ defmodule Mydia.Downloads.TorrentMatcherCalibrationTest do
         assert {:error, reason} = TorrentMatcher.find_match(torrent_info)
         assert reason in [:no_match_found, :episode_not_found]
       end
+    end
+  end
+
+  describe "unrelated season pack titles" do
+    for {library_title, release_title} <- @unrelated_season_packs do
+      test "#{library_title} season pack does not match #{release_title}" do
+        insert(:media_item, %{
+          type: "tv_show",
+          title: unquote(library_title),
+          monitored: true
+        })
+
+        torrent_info = %{
+          type: :tv_season,
+          title: unquote(release_title),
+          season: 1,
+          quality: "1080p"
+        }
+
+        # The season-pack path never calls find_episode/2 (it matches the show
+        # only), so unlike the single-episode path, :episode_not_found is not a
+        # possible rejection reason here: an empty show_matches list is always
+        # :no_match_found.
+        assert {:error, :no_match_found} = TorrentMatcher.find_match(torrent_info)
+      end
+    end
+
+    test "a season pack near-miss is still offered as a suggestion" do
+      insert(:media_item, %{
+        type: "tv_show",
+        title: "Havenridge",
+        monitored: true
+      })
+
+      torrent_info = %{
+        type: :tv_season,
+        title: "Haven Harbor Line",
+        season: 1,
+        quality: "1080p"
+      }
+
+      assert {:error, :no_match_found} = TorrentMatcher.find_match(torrent_info)
+
+      suggestions = TorrentMatcher.find_top_candidates(torrent_info)
+      assert Enum.any?(suggestions, &(&1.title == "Havenridge"))
+    end
+
+    test "a legitimate season pack still matches after the gate" do
+      show =
+        insert(:media_item, %{
+          type: "tv_show",
+          title: "The Lowland Watch",
+          monitored: true
+        })
+
+      torrent_info = %{
+        type: :tv_season,
+        title: "Lowland Watch",
+        season: 2,
+        quality: "1080p"
+      }
+
+      assert {:ok, match} = TorrentMatcher.find_match(torrent_info)
+      assert match.media_item.id == show.id
+      assert match.episode == nil
+      # Confirms this reached find_tv_season_match_by_title/3 rather than the
+      # single-episode path: only build_tv_season_match_reason/3 writes
+      # "season pack" into the match reason.
+      assert match.match_reason =~ "season pack"
     end
   end
 

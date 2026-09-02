@@ -161,7 +161,8 @@ defmodule Mydia.Library.TextTest do
     end
 
     test "expands German umlauts before folding accents" do
-      # NFKD folding alone gives "falscher" against "faelscher".
+      # NFKD folding alone would turn "ä" into a bare "a" ("Bäume" -> "Baume"),
+      # which would not share a token with "Baeume".
       assert Text.title_token_coverage("Grüne Bäume", "Gruene Baeume") == 1.0
     end
 
