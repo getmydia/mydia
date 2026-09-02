@@ -11,9 +11,10 @@ defmodule Mydia.Jobs.ImportRunUnattendedTest do
   candidate in the outstanding set forever.
 
   `Mydia.MetadataStub` is used rather than Bypass because the promotion path
-  fans out over search, fetch_by_id and fetch_season, and the stub catalog is
-  self-consistent across all three (every id it returns is resolvable). It
-  mutates the global `Provider.Registry` Agent, hence `async: false`.
+  fans out over search, fetch_by_ref and fetch_season_by_ref, and the stub
+  catalog is self-consistent across all three (every ref it returns is
+  resolvable). It mutates the global `Provider.Registry` Agent, hence
+  `async: false`.
   """
   use Mydia.DataCase, async: false
 

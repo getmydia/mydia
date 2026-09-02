@@ -33,13 +33,13 @@ defmodule Mydia.Metadata.Provider.Relay do
       {:ok, results} = Relay.search(config, "The Matrix", media_type: :movie)
 
       # Fetch detailed metadata
-      {:ok, metadata} = Relay.fetch_by_id(config, "603", media_type: :movie)
+      {:ok, metadata} = Relay.fetch_by_ref(config, {:tmdb, 603}, media_type: :movie)
 
       # Fetch images
-      {:ok, images} = Relay.fetch_images(config, "603", media_type: :movie)
+      {:ok, images} = Relay.fetch_images_by_ref(config, {:tmdb, 603}, media_type: :movie)
 
       # Fetch TV season (for TV shows)
-      {:ok, season} = Relay.fetch_season(config, "1396", 1)
+      {:ok, season} = Relay.fetch_season_by_ref(config, {:tmdb, 1396}, 1)
 
   ## Relay Endpoints
 
@@ -204,12 +204,6 @@ defmodule Mydia.Metadata.Provider.Relay do
   def fetch_by_ref(config, {:tmdb, id}, opts) do
     media_type = Keyword.get(opts, :media_type, :movie)
     fetch_tmdb_by_id(config, to_string(id), media_type, opts)
-  end
-
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  @impl true
-  def fetch_by_id(config, provider_id, opts \\ []) do
-    fetch_by_ref(config, Ref.legacy_from_opts(provider_id, opts), opts)
   end
 
   # Fetch from TMDB (default behavior)
@@ -816,12 +810,6 @@ defmodule Mydia.Metadata.Provider.Relay do
     fetch_tmdb_images(config, to_string(id), media_type, opts)
   end
 
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  @impl true
-  def fetch_images(config, provider_id, opts \\ []) do
-    fetch_images_by_ref(config, Ref.legacy_from_opts(provider_id, opts), opts)
-  end
-
   defp fetch_tmdb_images(config, provider_id, media_type, opts) do
     language = Keyword.get(opts, :language)
     include_image_language = Keyword.get(opts, :include_image_language)
@@ -935,12 +923,6 @@ defmodule Mydia.Metadata.Provider.Relay do
     else
       fetch_season_tmdb(config, to_string(Ref.id(ref)), season_number, opts)
     end
-  end
-
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  @impl true
-  def fetch_season(config, provider_id, season_number, opts \\ []) do
-    fetch_season_by_ref(config, Ref.legacy_from_opts(provider_id, opts), season_number, opts)
   end
 
   defp fetch_season_tmdb(config, provider_id, season_number, opts) do

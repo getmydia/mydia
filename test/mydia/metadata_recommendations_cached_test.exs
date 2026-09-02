@@ -67,13 +67,21 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
     end)
 
     assert {:ok, [first]} =
-             Metadata.fetch_recommendations_cached(config, tmdb_id, media_type: :movie)
+             Metadata.fetch_recommendations_by_ref_cached(
+               config,
+               {:tmdb, String.to_integer(tmdb_id)},
+               media_type: :movie
+             )
 
     assert first.title == "Cached Title"
 
     # Bypass.expect_once would fail on a second request.
     assert {:ok, [^first]} =
-             Metadata.fetch_recommendations_cached(config, tmdb_id, media_type: :movie)
+             Metadata.fetch_recommendations_by_ref_cached(
+               config,
+               {:tmdb, String.to_integer(tmdb_id)},
+               media_type: :movie
+             )
   end
 
   test "keys the cache by language", %{bypass: bypass, config: config, tmdb_id: tmdb_id} do
@@ -84,10 +92,16 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
     end)
 
     assert {:ok, [english]} =
-             Metadata.fetch_recommendations_cached(config, tmdb_id, media_type: :movie)
+             Metadata.fetch_recommendations_by_ref_cached(
+               config,
+               {:tmdb, String.to_integer(tmdb_id)},
+               media_type: :movie
+             )
 
     assert {:ok, [french]} =
-             Metadata.fetch_recommendations_cached(config, tmdb_id,
+             Metadata.fetch_recommendations_by_ref_cached(
+               config,
+               {:tmdb, String.to_integer(tmdb_id)},
                media_type: :movie,
                language: "fr-FR"
              )
@@ -115,10 +129,18 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
     end)
 
     assert {:ok, [movie]} =
-             Metadata.fetch_recommendations_cached(config, tmdb_id, media_type: :movie)
+             Metadata.fetch_recommendations_by_ref_cached(
+               config,
+               {:tmdb, String.to_integer(tmdb_id)},
+               media_type: :movie
+             )
 
     assert {:ok, [show]} =
-             Metadata.fetch_recommendations_cached(config, tmdb_id, media_type: :tv_show)
+             Metadata.fetch_recommendations_by_ref_cached(
+               config,
+               {:tmdb, String.to_integer(tmdb_id)},
+               media_type: :tv_show
+             )
 
     assert movie.title == "A Movie"
     assert show.media_type == :tv_show
@@ -126,7 +148,9 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
 
   test "rejects a non-relay provider config", %{tmdb_id: tmdb_id} do
     assert {:error, %Error{type: :invalid_config}} =
-             Metadata.fetch_recommendations_cached(%{type: :not_the_relay}, tmdb_id,
+             Metadata.fetch_recommendations_by_ref_cached(
+               %{type: :not_the_relay},
+               {:tmdb, String.to_integer(tmdb_id)},
                media_type: :movie
              )
   end

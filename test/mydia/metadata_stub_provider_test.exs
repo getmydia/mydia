@@ -5,12 +5,13 @@ defmodule Mydia.MetadataStubProviderTest do
   import Mydia.MetadataStub
 
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.MetadataStubProvider
 
   setup :setup_metadata_stub
 
   describe "self-consistency" do
-    test "a movie id returned by search/3 is resolvable by fetch_by_id/3" do
+    test "a movie id returned by search/3 is resolvable by fetch_by_ref/3" do
       config = Metadata.default_relay_config()
 
       {:ok, [result]} = Metadata.search(config, "stub", media_type: :movie)
@@ -19,7 +20,7 @@ defmodule Mydia.MetadataStubProviderTest do
       assert result.media_type == :movie
 
       {:ok, metadata} =
-        Metadata.fetch_by_id(config, result.provider_id, media_type: :movie, provider: :tmdb)
+        Metadata.fetch_by_ref(config, Ref.from_search_result(result), media_type: :movie)
 
       assert metadata.title == MetadataStubProvider.movie_title()
     end
@@ -35,7 +36,7 @@ defmodule Mydia.MetadataStubProviderTest do
              "build_request_attrs/3 only stores tvdb_id when provider is :tvdb"
 
       {:ok, metadata} =
-        Metadata.fetch_by_id(config, result.provider_id, media_type: :tv_show, provider: :tvdb)
+        Metadata.fetch_by_ref(config, Ref.from_search_result(result), media_type: :tv_show)
 
       assert metadata.title == MetadataStubProvider.series_title()
       assert [season1, season2] = metadata.seasons
@@ -47,17 +48,16 @@ defmodule Mydia.MetadataStubProviderTest do
       config = Metadata.default_relay_config()
 
       assert {:error, %Metadata.Provider.Error{type: :not_found}} =
-               Metadata.fetch_by_id(config, to_string(MetadataStubProvider.missing_id()),
-                 media_type: :movie,
-                 provider: :tmdb
+               Metadata.fetch_by_ref(config, {:tmdb, MetadataStubProvider.missing_id()},
+                 media_type: :movie
                )
     end
 
-    test "fetch_season/4 returns episodes for the stub series" do
+    test "fetch_season_by_ref/4 returns episodes for the stub series" do
       config = Metadata.default_relay_config()
 
       {:ok, season} =
-        Metadata.fetch_season(config, to_string(MetadataStubProvider.series_tvdb_id()), 1, [])
+        Metadata.fetch_season_by_ref(config, MetadataStubProvider.series_ref(), 1, [])
 
       assert season.season_number == 1
       assert length(season.episodes) == 2

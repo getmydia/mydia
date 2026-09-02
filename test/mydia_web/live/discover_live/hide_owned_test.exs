@@ -165,7 +165,7 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
         %{"id" => keeper_id, "title" => "Velvet Static"}
       ])
 
-      # The add flow's metadata fetch (Add.from_provider -> Metadata.fetch_by_id)
+      # The add flow's metadata fetch (Add.from_provider -> Metadata.fetch_by_ref)
       # is uncached, unlike the curated-list lookups above, so it needs its own
       # Bypass and a temporary metadata_relay_url swap rather than a cache warm.
       bypass = Bypass.open()

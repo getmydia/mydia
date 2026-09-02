@@ -4,7 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.RailLibraryTargetTest do
   in.
 
   Asserted against `perform_add/4` rather than a rendered click. The add path
-  calls the uncached `Metadata.fetch_by_id/3` with the LiveView's
+  calls the uncached `Metadata.fetch_by_ref/3` with the LiveView's
   `metadata_config`, which `show.ex` builds from `default_relay_config/0`, and
   that reads global env. There is no seam to inject a Bypass config through
   `live/2`, and a test must not mutate global env to make one.

@@ -944,7 +944,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
 
       # Switch the show to the DVD ordering and rescan the same series id. The
       # second pass must not read the first pass's cached official grouping:
-      # fetch_by_id_cached/3 keys on the ordering precisely so it cannot.
+      # fetch_by_ref_cached/3 keys on the ordering precisely so it cannot.
       {:ok, switched} = Media.update_media_item(official, %{season_order: :dvd})
       backdate(switched)
 

@@ -31,7 +31,6 @@ defmodule Mydia.MetadataStubProvider do
   @behaviour Mydia.Metadata.Provider
 
   alias Mydia.Metadata.Provider.Error
-  alias Mydia.Metadata.Ref
 
   alias Mydia.Metadata.Structs.{
     EpisodeData,
@@ -191,12 +190,12 @@ defmodule Mydia.MetadataStubProvider do
     end
   end
 
-  # The ref catalog is the source of truth: only `{:tvdb, @series_tvdb_id}`
-  # and `{:tmdb, @movie_tmdb_id}` resolve. `{:tmdb, @series_tvdb_id}` -- the
-  # exact pairing the deleted hotfix guard singled out -- is simply not a key
-  # in this `case`, so it falls to the catch-all and answers not_found on its
-  # own, the same way the relay answers 404 for a TVDB id sent to TMDB's
-  # route.
+  # The ref catalog is the source of truth: `{:tvdb, @series_tvdb_id}`,
+  # `{:tmdb, @movie_tmdb_id}`, and `{:tmdb, @series_tmdb_id}` resolve.
+  # `{:tmdb, @series_tvdb_id}` -- the exact pairing the deleted hotfix guard
+  # singled out -- is simply not a key in this `case`, so it falls to the
+  # catch-all and answers not_found on its own, the same way the relay
+  # answers 404 for a TVDB id sent to TMDB's route.
   @impl true
   def fetch_by_ref(_config, ref, _opts) do
     count_fetch_by_id_call(ref)
@@ -210,25 +209,9 @@ defmodule Mydia.MetadataStubProvider do
     end
   end
 
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  # Forwards into `fetch_by_ref/3` via `Ref.legacy_from_opts/2`, mirroring
-  # every real provider (see `Provider.Relay.fetch_by_id/3`) so a caller that
-  # still goes through the id-based entry point is routed by exactly the same
-  # ref the `fetch_by_ref/3` entry point would compute.
-  @impl true
-  def fetch_by_id(config, provider_id, opts) do
-    fetch_by_ref(config, Ref.legacy_from_opts(provider_id, opts), opts)
-  end
-
   @impl true
   def fetch_images_by_ref(_config, _ref, _opts) do
     {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
-  end
-
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  @impl true
-  def fetch_images(config, provider_id, opts) do
-    fetch_images_by_ref(config, Ref.legacy_from_opts(provider_id, opts), opts)
   end
 
   @impl true
@@ -258,12 +241,6 @@ defmodule Mydia.MetadataStubProvider do
          }
        ]
      }}
-  end
-
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  @impl true
-  def fetch_season(config, provider_id, season_number, opts) do
-    fetch_season_by_ref(config, Ref.legacy_from_opts(provider_id, opts), season_number, opts)
   end
 
   @impl true

@@ -198,12 +198,12 @@ defmodule MydiaWeb.MediaLive.Show.RailPickerHostTest do
     # or `RecommendationEvents.perform_add/4`, both of which call
     # `Mydia.Media.Add.from_provider/4` for the card's tmdb_id — the one being
     # added, not the mounted movie's own. `from_provider/4` fetches that
-    # movie's full TMDB details through `Metadata.fetch_by_id/3` directly,
+    # movie's full TMDB details through `Metadata.fetch_by_ref/3` directly,
     # which is uncached (unlike the mount-time franchise/recommendations
     # lookups `Mydia.MetadataCacheHelpers` warms), so cache-warming it does
     # nothing: the request still leaves for the live relay every time
     # (confirmed by reading `Mydia.Media.Add.resolve_movie_attrs/4` and
-    # `Mydia.Metadata.fetch_by_id/3` — neither touches `Mydia.Metadata.Cache`).
+    # `Mydia.Metadata.fetch_by_ref/3` — neither touches `Mydia.Metadata.Cache`).
     # `test/mydia_web/features/library_picker_test.exs` hits this exact call
     # and already documents the fix: point `metadata_relay_url` at a Bypass
     # server for the duration of the test, matching the pattern here.

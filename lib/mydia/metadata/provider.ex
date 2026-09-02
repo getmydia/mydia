@@ -27,19 +27,19 @@ defmodule Mydia.Metadata.Provider do
         end
 
         @impl true
-        def fetch_by_id(config, provider_id, opts \\\\ []) do
-          # Fetch detailed metadata by provider-specific ID
+        def fetch_by_ref(config, ref, opts \\\\ []) do
+          # Fetch detailed metadata by a provider-tagged ref
           # Returns {:ok, metadata} or {:error, reason}
         end
 
         @impl true
-        def fetch_images(config, provider_id, opts \\\\ []) do
+        def fetch_images_by_ref(config, ref, opts \\\\ []) do
           # Fetch images (posters, backdrops) for media
           # Returns {:ok, images} or {:error, reason}
         end
 
         @impl true
-        def fetch_season(config, provider_id, season_number, opts \\\\ []) do
+        def fetch_season_by_ref(config, ref, season_number, opts \\\\ []) do
           # Fetch season details with episode information
           # Returns {:ok, season} or {:error, reason}
         end
@@ -81,7 +81,7 @@ defmodule Mydia.Metadata.Provider do
 
   ## Metadata Structure
 
-  The `fetch_by_id/3` callback should return detailed metadata maps:
+  The `fetch_by_ref/3` callback should return detailed metadata maps:
 
       %{
         provider_id: "12345",
@@ -125,7 +125,7 @@ defmodule Mydia.Metadata.Provider do
 
   ## Images Structure
 
-  The `fetch_images/3` callback should return an `ImagesResponse` struct:
+  The `fetch_images_by_ref/3` callback should return an `ImagesResponse` struct:
 
       %ImagesResponse{
         posters: [
@@ -141,7 +141,7 @@ defmodule Mydia.Metadata.Provider do
 
   ## Season Structure
 
-  The `fetch_season/4` callback should return season metadata:
+  The `fetch_season_by_ref/4` callback should return season metadata:
 
       %{
         season_number: 1,
@@ -274,29 +274,6 @@ defmodule Mydia.Metadata.Provider do
               {:ok, [search_result()]} | {:error, Error.t()}
 
   @doc """
-  Fetches detailed metadata for a specific media item by provider ID.
-
-  Returns `{:ok, metadata}` with complete metadata,
-  or `{:error, reason}` if the media is not found or an error occurs.
-
-  ## Options
-
-    * `:language` - Language for results (default: "en-US")
-    * `:append_to_response` - Additional data to include (e.g., ["credits", "images"])
-
-  ## Examples
-
-      iex> fetch_by_id(config, "603", media_type: :movie)
-      {:ok, %{provider_id: "603", title: "The Matrix", year: 1999, runtime: 136, ...}}
-
-      iex> fetch_by_id(config, "invalid_id", media_type: :movie)
-      {:error, %Error{type: :not_found, message: "Media not found"}}
-  """
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  @callback fetch_by_id(config(), provider_id :: String.t(), fetch_opts()) ::
-              {:ok, metadata()} | {:error, Error.t()}
-
-  @doc """
   Fetches detailed metadata for a specific media item by provider-tagged ref.
 
   The ref carries the provider that owns the id (`{:tvdb, 280619}` or
@@ -320,26 +297,6 @@ defmodule Mydia.Metadata.Provider do
               {:ok, metadata()} | {:error, Error.t()}
 
   @doc """
-  Fetches images for a specific media item.
-
-  Returns `{:ok, images}` with poster, backdrop, and logo images,
-  or `{:error, reason}` if an error occurs.
-
-  ## Options
-
-    * `:language` - Primary language for images
-    * `:include_image_language` - Additional languages to include
-
-  ## Examples
-
-      iex> fetch_images(config, "603", media_type: :movie)
-      {:ok, %ImagesResponse{posters: [...], backdrops: [...], logos: [...]}}
-  """
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  @callback fetch_images(config(), provider_id :: String.t(), image_opts()) ::
-              {:ok, images()} | {:error, Error.t()}
-
-  @doc """
   Fetches images for a specific media item by provider-tagged ref.
 
   Returns `{:ok, images}` with poster, backdrop, and logo images,
@@ -357,30 +314,6 @@ defmodule Mydia.Metadata.Provider do
   """
   @callback fetch_images_by_ref(config(), ref :: Ref.t(), image_opts()) ::
               {:ok, images()} | {:error, Error.t()}
-
-  @doc """
-  Fetches season details with episode information for a TV show.
-
-  Returns `{:ok, season}` with season and episode metadata,
-  or `{:error, reason}` if an error occurs.
-
-  ## Options
-
-    * `:language` - Language for results (default: "en-US")
-
-  ## Examples
-
-      iex> fetch_season(config, "1396", 1)
-      {:ok, %{season_number: 1, episodes: [%{episode_number: 1, name: "Pilot", ...}]}}
-  """
-  # Shim. Deleted in the final task of this plan, along with every caller.
-  @callback fetch_season(
-              config(),
-              provider_id :: String.t(),
-              season_number :: integer(),
-              season_opts()
-            ) ::
-              {:ok, season()} | {:error, Error.t()}
 
   @doc """
   Fetches season details with episode information for a TV show, addressed by

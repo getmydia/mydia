@@ -93,23 +93,4 @@ defmodule Mydia.Metadata.Ref do
   # this stays as read tolerance. It is not a default for new writes.
   defp normalize_provider(:tvdb), do: :tvdb
   defp normalize_provider(_tmdb_or_legacy_relay), do: :tmdb
-
-  @doc false
-  # Reproduces the routing `Provider.Relay` used before refs existed: TV goes
-  # to TVDB unless `provider: :tmdb` says otherwise. The one copy of this rule
-  # lives here so the old `fetch_by_id`/`fetch_images`/`fetch_season` shims in
-  # every provider can call it without duplicating the condition. Deleted in
-  # the final task of this plan, along with the shims that call it.
-  @spec legacy_from_opts(String.t() | integer(), keyword()) :: t()
-  def legacy_from_opts(provider_id, opts) do
-    media_type = Keyword.get(opts, :media_type, :movie)
-    provider = Keyword.get(opts, :provider)
-
-    tag =
-      if provider == :tvdb or (media_type == :tv_show and provider != :tmdb),
-        do: :tvdb,
-        else: :tmdb
-
-    {tag, String.to_integer(to_string(provider_id))}
-  end
 end

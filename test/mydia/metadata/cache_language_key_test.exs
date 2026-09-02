@@ -22,10 +22,10 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
     }
   end
 
-  describe "fetch_season_cached/4 cache key" do
+  describe "fetch_season_by_ref_cached/4 cache key" do
     test "varies by the config's language so two languages don't collide" do
-      es_key = Metadata.build_season_cache_key("100", 1, "es-ES", nil)
-      en_key = Metadata.build_season_cache_key("100", 1, "en-US", nil)
+      es_key = Metadata.build_season_cache_key(100, 1, "es-ES", nil)
+      en_key = Metadata.build_season_cache_key(100, 1, "en-US", nil)
 
       assert es_key != en_key
 
@@ -34,37 +34,38 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
 
       # Each config reads its own language's entry (cache hit, no fetch).
       assert {:ok, :spanish_season} =
-               Metadata.fetch_season_cached(config("es-ES"), "100", 1, [])
+               Metadata.fetch_season_by_ref_cached(config("es-ES"), {:tvdb, 100}, 1, [])
 
       assert {:ok, :english_season} =
-               Metadata.fetch_season_cached(config("en-US"), "100", 1, [])
+               Metadata.fetch_season_by_ref_cached(config("en-US"), {:tvdb, 100}, 1, [])
     end
 
     test "an explicit :language opt still overrides the config default" do
-      es_key = Metadata.build_season_cache_key("100", 1, "es-ES", nil)
+      es_key = Metadata.build_season_cache_key(100, 1, "es-ES", nil)
       Cache.put(es_key, :spanish_season)
 
       # Config says en-US, but the explicit opt wins and hits the es entry.
       assert {:ok, :spanish_season} =
-               Metadata.fetch_season_cached(config("en-US"), "100", 1, language: "es-ES")
+               Metadata.fetch_season_by_ref_cached(config("en-US"), {:tvdb, 100}, 1,
+                 language: "es-ES"
+               )
     end
 
     test "a bare config (no options.language) falls back to en-US" do
-      en_key = Metadata.build_season_cache_key("100", 1, "en-US", nil)
+      en_key = Metadata.build_season_cache_key(100, 1, "en-US", nil)
       Cache.put(en_key, :english_season)
 
       bare_config = %{type: :metadata_relay, base_url: "https://example.test"}
 
       assert {:ok, :english_season} =
-               Metadata.fetch_season_cached(bare_config, "100", 1, [])
+               Metadata.fetch_season_by_ref_cached(bare_config, {:tvdb, 100}, 1, [])
     end
   end
 
-  describe "fetch_by_id_cached/3 cache key" do
+  describe "fetch_by_ref_cached/3 cache key" do
     test "varies by the config's language" do
-      # media_type: :tv_show with no :provider opt legacy-routes to a
-      # {:tvdb, _} ref (see Ref.legacy_from_opts/2), so the key carries the
-      # "tvdb" tag rather than the config's own "metadata_relay" type.
+      # media_type: :tv_show routes through a {:tvdb, _} ref here, so the key
+      # carries the "tvdb" tag rather than the config's own "metadata_relay" type.
       es_key = "fetch_by_ref:tvdb:603:tv_show:es-ES::official"
       en_key = "fetch_by_ref:tvdb:603:tv_show:en-US::official"
 
@@ -72,10 +73,10 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
       Cache.put(en_key, :english_show)
 
       assert {:ok, :spanish_show} =
-               Metadata.fetch_by_id_cached(config("es-ES"), "603", media_type: :tv_show)
+               Metadata.fetch_by_ref_cached(config("es-ES"), {:tvdb, 603}, media_type: :tv_show)
 
       assert {:ok, :english_show} =
-               Metadata.fetch_by_id_cached(config("en-US"), "603", media_type: :tv_show)
+               Metadata.fetch_by_ref_cached(config("en-US"), {:tvdb, 603}, media_type: :tv_show)
     end
 
     # TVDB's orderings of one series describe the same episodes grouped
@@ -90,7 +91,7 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
       Cache.put(dvd_key, :dvd_show)
 
       assert {:ok, :dvd_show} =
-               Metadata.fetch_by_id_cached(config("en-US"), "603",
+               Metadata.fetch_by_ref_cached(config("en-US"), {:tvdb, 603},
                  media_type: :tv_show,
                  season_order: :dvd
                )
@@ -98,7 +99,7 @@ defmodule Mydia.Metadata.CacheLanguageKeyTest do
       # nil means "never asked" and resolves to the official ordering, so it
       # shares the key with an explicit :official rather than getting its own.
       assert {:ok, :official_show} =
-               Metadata.fetch_by_id_cached(config("en-US"), "603",
+               Metadata.fetch_by_ref_cached(config("en-US"), {:tvdb, 603},
                  media_type: :tv_show,
                  season_order: nil
                )

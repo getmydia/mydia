@@ -74,7 +74,9 @@ defmodule Mydia.MetadataCacheHelpers do
     end)
 
     {:ok, _results} =
-      Metadata.fetch_recommendations_cached(config, to_string(tmdb_id), media_type: media_type)
+      Metadata.fetch_recommendations_by_ref_cached(config, {:tmdb, tmdb_id},
+        media_type: media_type
+      )
 
     :ok
   end
@@ -92,10 +94,9 @@ defmodule Mydia.MetadataCacheHelpers do
     relay = Metadata.default_relay_config()
     config = %{relay | base_url: "http://localhost:#{bypass.port}"}
 
-    # Mirrors the key fetch_by_id_cached/3 builds for these opts via
+    # Mirrors the key fetch_by_ref_cached/3 builds for these opts via
     # fetch_by_ref_cache_key/3: no append_to_response, so that segment is
-    # empty, a nil season order normalises to "official", and a bare movie
-    # id with no :provider opt legacy-routes to a {:tmdb, _} ref.
+    # empty, and a nil season order normalises to "official".
     on_exit(fn ->
       Cache.delete("fetch_by_ref:tmdb:#{tmdb_id}:movie:#{relay.options.language}::official")
     end)
@@ -108,7 +109,7 @@ defmodule Mydia.MetadataCacheHelpers do
       |> Plug.Conn.resp(200, Jason.encode!(body))
     end)
 
-    {:ok, _details} = Metadata.fetch_by_id_cached(config, to_string(tmdb_id), media_type: :movie)
+    {:ok, _details} = Metadata.fetch_by_ref_cached(config, {:tmdb, tmdb_id}, media_type: :movie)
 
     :ok
   end
@@ -150,7 +151,7 @@ defmodule Mydia.MetadataCacheHelpers do
   same `/tmdb/movies|tv/trending` request but land in two different cache
   keys, so both need warming or one of the two LiveViews still escapes.
 
-  Unlike `fetch_by_id_cached/3` and friends, neither cached function accepts
+  Unlike `fetch_by_ref_cached/3` and friends, neither cached function accepts
   a config override, so this swaps `metadata_relay_url` for the duration of
   the call instead of building a throwaway config struct.
   """
@@ -255,7 +256,7 @@ defmodule Mydia.MetadataCacheHelpers do
   with the parsed release year when one is known, and the year rides in the
   cache key.
 
-  Unlike `fetch_recommendations_cached/3`, `search_cached/3` takes a
+  Unlike `fetch_recommendations_by_ref_cached/3`, `search_cached/3` takes a
   `config` argument directly, so this follows the throwaway-config shape the
   other helpers above use rather than the env-swap `warm_trending_cache/2`
   and `warm_genre_cache/2` need.

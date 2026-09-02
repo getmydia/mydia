@@ -109,12 +109,12 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     end
   end
 
-  describe "fetch_by_id/3" do
+  describe "fetch_by_ref/3" do
     @describetag :external
 
     test "fetches movie metadata by ID" do
       # The Matrix (1999) - TMDB ID: 603
-      assert {:ok, metadata} = Relay.fetch_by_id(@config, "603", media_type: :movie)
+      assert {:ok, metadata} = Relay.fetch_by_ref(@config, {:tmdb, 603}, media_type: :movie)
 
       assert metadata.provider_id == "603"
       assert metadata.provider == :tmdb
@@ -131,7 +131,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
     test "fetches TV show metadata by ID" do
       # Breaking Bad - TMDB ID: 1396
-      assert {:ok, metadata} = Relay.fetch_by_id(@config, "1396", media_type: :tv_show)
+      assert {:ok, metadata} = Relay.fetch_by_ref(@config, {:tmdb, 1396}, media_type: :tv_show)
 
       assert metadata.provider_id == "1396"
       assert metadata.provider == :metadata_relay
@@ -146,7 +146,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
     test "includes cast and crew when credits are appended" do
       assert {:ok, metadata} =
-               Relay.fetch_by_id(@config, "603",
+               Relay.fetch_by_ref(@config, {:tmdb, 603},
                  media_type: :movie,
                  append_to_response: ["credits"]
                )
@@ -171,11 +171,11 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
     test "returns error for non-existent ID" do
       assert {:error, %Error{type: :not_found}} =
-               Relay.fetch_by_id(@config, "99999999", media_type: :movie)
+               Relay.fetch_by_ref(@config, {:tmdb, 99_999_999}, media_type: :movie)
     end
 
     test "normalizes metadata structure correctly" do
-      assert {:ok, metadata} = Relay.fetch_by_id(@config, "603", media_type: :movie)
+      assert {:ok, metadata} = Relay.fetch_by_ref(@config, {:tmdb, 603}, media_type: :movie)
 
       # Required fields
       assert is_binary(metadata.provider_id)
@@ -200,11 +200,11 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     end
   end
 
-  describe "fetch_images/3" do
+  describe "fetch_images_by_ref/3" do
     @describetag :external
 
     test "fetches movie images" do
-      assert {:ok, images} = Relay.fetch_images(@config, "603", media_type: :movie)
+      assert {:ok, images} = Relay.fetch_images_by_ref(@config, {:tmdb, 603}, media_type: :movie)
 
       assert is_map(images)
       assert is_list(images.posters)
@@ -223,7 +223,9 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     end
 
     test "fetches TV show images" do
-      assert {:ok, images} = Relay.fetch_images(@config, "1396", media_type: :tv_show)
+      # Breaking Bad - TMDB ID: 1396
+      assert {:ok, images} =
+               Relay.fetch_images_by_ref(@config, {:tmdb, 1396}, media_type: :tv_show)
 
       assert is_map(images)
       assert is_list(images.posters)
@@ -233,11 +235,11 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
     test "returns error for non-existent ID" do
       assert {:error, %Error{type: :not_found}} =
-               Relay.fetch_images(@config, "99999999", media_type: :movie)
+               Relay.fetch_images_by_ref(@config, {:tmdb, 99_999_999}, media_type: :movie)
     end
 
     test "normalizes image structure correctly" do
-      assert {:ok, images} = Relay.fetch_images(@config, "603", media_type: :movie)
+      assert {:ok, images} = Relay.fetch_images_by_ref(@config, {:tmdb, 603}, media_type: :movie)
 
       poster = List.first(images.posters)
 
@@ -250,12 +252,12 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     end
   end
 
-  describe "fetch_season/4" do
+  describe "fetch_season_by_ref/4" do
     @describetag :external
 
     test "fetches TV show season with episodes" do
-      # Breaking Bad Season 1
-      assert {:ok, season} = Relay.fetch_season(@config, "1396", 1)
+      # Breaking Bad Season 1 - TMDB ID: 1396
+      assert {:ok, season} = Relay.fetch_season_by_ref(@config, {:tmdb, 1396}, 1)
 
       assert season.season_number == 1
       assert is_binary(season.name)
@@ -279,16 +281,16 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
     test "returns error for non-existent season" do
       assert {:error, %Error{type: :not_found}} =
-               Relay.fetch_season(@config, "1396", 999)
+               Relay.fetch_season_by_ref(@config, {:tmdb, 1396}, 999)
     end
 
     test "returns error for non-existent TV show" do
       assert {:error, %Error{type: :not_found}} =
-               Relay.fetch_season(@config, "99999999", 1)
+               Relay.fetch_season_by_ref(@config, {:tmdb, 99_999_999}, 1)
     end
 
     test "normalizes episode structure correctly" do
-      assert {:ok, season} = Relay.fetch_season(@config, "1396", 1)
+      assert {:ok, season} = Relay.fetch_season_by_ref(@config, {:tmdb, 1396}, 1)
 
       episode = List.first(season.episodes)
 
@@ -332,7 +334,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
     test "fetches metadata with custom language" do
       assert {:ok, metadata} =
-               Relay.fetch_by_id(@config, "603", media_type: :movie, language: "es-ES")
+               Relay.fetch_by_ref(@config, {:tmdb, 603}, media_type: :movie, language: "es-ES")
 
       assert is_binary(metadata.title)
       assert is_binary(metadata.overview)
@@ -342,9 +344,8 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       # Stranger Things (TVDB 305288) has Spanish translations. The TVDB path
       # selects from the returned translation bundle rather than hardcoding English.
       assert {:ok, metadata} =
-               Relay.fetch_by_id(@config, "305288",
+               Relay.fetch_by_ref(@config, {:tvdb, 305_288},
                  media_type: :tv_show,
-                 provider: :tvdb,
                  language: "es"
                )
 
@@ -370,13 +371,13 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     end
   end
 
-  describe "fetch_by_id/3 with TVDB provider" do
+  describe "fetch_by_ref/3 with TVDB provider" do
     @describetag :external
 
     test "fetches TV show metadata from TVDB by ID" do
       # Stranger Things - TVDB ID: 305288
       assert {:ok, metadata} =
-               Relay.fetch_by_id(@config, "305288", media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(@config, {:tvdb, 305_288}, media_type: :tv_show)
 
       assert metadata.provider_id == "305288"
       assert metadata.provider == :tvdb
@@ -389,7 +390,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     test "fetches another TV show from TVDB" do
       # The Last Kingdom - TVDB ID: 298566
       assert {:ok, metadata} =
-               Relay.fetch_by_id(@config, "298566", media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(@config, {:tvdb, 298_566}, media_type: :tv_show)
 
       assert metadata.provider_id == "298566"
       assert metadata.provider == :tvdb
@@ -399,13 +400,13 @@ defmodule Mydia.Metadata.Provider.RelayTest do
 
     test "returns error for non-existent TVDB ID" do
       assert {:error, %Error{type: :not_found}} =
-               Relay.fetch_by_id(@config, "99999999", media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(@config, {:tvdb, 99_999_999}, media_type: :tv_show)
     end
 
     test "fetches Breaking Bad from TVDB" do
       # Breaking Bad - TVDB ID: 81189
       assert {:ok, metadata} =
-               Relay.fetch_by_id(@config, "81189", media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(@config, {:tvdb, 81_189}, media_type: :tv_show)
 
       assert metadata.provider_id == "81189"
       assert metadata.provider == :tvdb
@@ -419,7 +420,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       # House of the Dragon - TVDB ID: 371572. TVDB carries 8 trailers for this
       # show, so no TMDB fallback should be needed.
       assert {:ok, metadata} =
-               Relay.fetch_by_id(@config, "371572", media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(@config, {:tvdb, 371_572}, media_type: :tv_show)
 
       assert metadata.provider == :tvdb
       assert [%Video{} | _] = metadata.videos
@@ -431,7 +432,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       # Game of Thrones - TVDB ID: 121361. TVDB carries no trailers, but its
       # remoteIds cross-references TheMovieDB.com 1399, which does.
       assert {:ok, metadata} =
-               Relay.fetch_by_id(@config, "121361", media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(@config, {:tvdb, 121_361}, media_type: :tv_show)
 
       assert metadata.provider == :tvdb
       assert [%Video{} | _] = metadata.videos
@@ -513,10 +514,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       end)
 
       assert {:ok, metadata} =
-               Relay.fetch_by_id(relay_config(bypass), to_string(tvdb_id),
-                 media_type: :tv_show,
-                 provider: :tvdb
-               )
+               Relay.fetch_by_ref(relay_config(bypass), {:tvdb, tvdb_id}, media_type: :tv_show)
 
       assert metadata.external_ids.tmdb == 1399
       assert metadata.external_ids.imdb == "tt0944947"
@@ -544,10 +542,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       end)
 
       assert {:ok, metadata} =
-               Relay.fetch_by_id(relay_config(bypass), to_string(tvdb_id),
-                 media_type: :tv_show,
-                 provider: :tvdb
-               )
+               Relay.fetch_by_ref(relay_config(bypass), {:tvdb, tvdb_id}, media_type: :tv_show)
 
       assert metadata.external_ids.tmdb == nil
     end
@@ -576,10 +571,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       end)
 
       assert {:ok, metadata} =
-               Relay.fetch_by_id(relay_config(bypass), to_string(tmdb_id),
-                 media_type: :tv_show,
-                 provider: :tmdb
-               )
+               Relay.fetch_by_ref(relay_config(bypass), {:tmdb, tmdb_id}, media_type: :tv_show)
 
       assert_receive {:append, append}
       assert append =~ "external_ids"

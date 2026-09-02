@@ -282,7 +282,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
 
   # Runs through start_async rather than inline: fetch_request_metadata/1
   # makes a relay round trip (TMDB via MediaAddHelpers.fetch_detail_metadata/2,
-  # or TVDB via Metadata.fetch_by_id/3), and doing that in the handle_event
+  # or TVDB via Metadata.fetch_by_ref/3), and doing that in the handle_event
   # would block the LiveView process while the popup is already on screen --
   # close_details and the Approve/Reject buttons would queue behind the fetch
   # and the modal would look frozen.

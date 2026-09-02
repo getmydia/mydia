@@ -188,7 +188,7 @@ defmodule Mydia.Media.FranchisesTest do
           }
         })
 
-      on_exit(fn -> Cache.delete("fetch_by_id:metadata_relay:831:movie:en-US:") end)
+      on_exit(fn -> Cache.delete("fetch_by_ref:tmdb:831:movie:en-US::official") end)
 
       Bypass.stub(bypass, "GET", "/tmdb/movies/831", fn conn ->
         body = %{
@@ -234,7 +234,7 @@ defmodule Mydia.Media.FranchisesTest do
           }
         })
 
-      on_exit(fn -> Cache.delete("fetch_by_id:metadata_relay:841:movie:en-US:") end)
+      on_exit(fn -> Cache.delete("fetch_by_ref:tmdb:841:movie:en-US::official") end)
 
       before_count = length(Mydia.Events.get_resource_events("media_item", movie.id, limit: 100))
 
@@ -290,7 +290,7 @@ defmodule Mydia.Media.FranchisesTest do
           }
         })
 
-      on_exit(fn -> Cache.delete("fetch_by_id:metadata_relay:861:movie:en-US:") end)
+      on_exit(fn -> Cache.delete("fetch_by_ref:tmdb:861:movie:en-US::official") end)
 
       Bypass.stub(bypass, "GET", "/tmdb/movies/861", fn conn ->
         body = %{
