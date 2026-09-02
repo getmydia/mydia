@@ -357,8 +357,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
              socket.assigns.selected_recommendations,
              id
            ) do
+      # Recommendations are not sent here: the TMDB cross-reference they need
+      # only exists once the detail metadata comes back (see
+      # handle_info({:fetch_detail_metadata, ...})), and sending the item's own
+      # id straight to TMDB is exactly the bug that produced a silently empty
+      # rail for every TVDB-sourced show.
       send(self(), {:fetch_detail_metadata, id, media_type})
-      send(self(), {:fetch_recommendations, id, media_type})
 
       {:noreply,
        socket
@@ -503,6 +507,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
     case MediaAddHelpers.fetch_detail_metadata(ref, media_type, nil) do
       {:ok, metadata} ->
+        # The recommendations fetch is only worth starting now: it needs the
+        # TMDB cross-reference the fetch above just resolved, which does not
+        # exist before this metadata comes back. `ref` (the item's own,
+        # pre-fetch ref) doubles as the identity check that keeps a
+        # late-arriving result from landing on a modal the user has since
+        # closed or replaced -- see handle_async(:load_recommendations, ...).
+        case recommendation_ref(metadata) do
+          nil -> :ok
+          tmdb_ref -> send(self(), {:fetch_recommendations, ref, tmdb_ref, media_type})
+        end
+
         {:noreply,
          socket
          |> assign(:selected_metadata, metadata)
@@ -518,10 +533,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # would block the LiveView process. The modal is already on screen by then, so
   # close_details, add and request would all queue behind the fetch and the
   # modal would look frozen.
-  def handle_info({:fetch_recommendations, tmdb_id, media_type}, socket) do
+  #
+  # `item_ref` names the show this fetch is *for* and rides along as the async
+  # key. It is not derived from `tmdb_ref` on purpose: a TVDB show's item_ref
+  # is its TVDB ref, even though the fetch itself queries by the resolved TMDB
+  # ref, so handle_async can compare it against whatever is selected when the
+  # result comes back rather than against the (possibly different) ref that
+  # was queried.
+  def handle_info({:fetch_recommendations, item_ref, tmdb_ref, media_type}, socket) do
     {:noreply,
-     start_async(socket, :load_recommendations, fn ->
-       Recommendations.for_tmdb_id(tmdb_id, media_type, nil)
+     start_async(socket, {:load_recommendations, item_ref}, fn ->
+       Recommendations.for_ref(tmdb_ref, media_type, nil)
      end)}
   end
 
@@ -664,18 +686,47 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
-  def handle_async(:load_recommendations, {:ok, {:ok, results}}, socket) do
-    {:noreply, assign(socket, :selected_recommendations, enrich_recommendations(socket, results))}
+  def handle_async({:load_recommendations, item_ref}, {:ok, {:ok, results}}, socket) do
+    {:noreply, apply_recommendations(socket, item_ref, results)}
   end
 
-  def handle_async(:load_recommendations, {:ok, :none}, socket) do
-    {:noreply, assign(socket, :selected_recommendations, [])}
+  def handle_async({:load_recommendations, item_ref}, {:ok, :none}, socket) do
+    {:noreply, apply_recommendations(socket, item_ref, [])}
   end
 
-  def handle_async(:load_recommendations, {:exit, reason}, socket) do
+  def handle_async({:load_recommendations, item_ref}, {:exit, reason}, socket) do
     Logger.warning("Discover recommendations lookup crashed: #{inspect(reason)}")
-    {:noreply, assign(socket, :selected_recommendations, [])}
+    {:noreply, apply_recommendations(socket, item_ref, [])}
   end
+
+  # A recommendations fetch takes a real relay round trip, during which the
+  # user can close the modal or open a different card. Either replaces
+  # `selected_item` (to nil, or to the new item) before this result comes
+  # back, so a match against the ref the fetch was started for is what stops a
+  # stale result from populating a rail that no longer belongs to it -- the
+  # async key alone only protects against a second fetch for the *same* item.
+  defp apply_recommendations(socket, item_ref, results) do
+    if current_item_ref(socket) == item_ref do
+      assign(socket, :selected_recommendations, enrich_recommendations(socket, results))
+    else
+      socket
+    end
+  end
+
+  defp current_item_ref(%{assigns: %{selected_item: nil}}), do: nil
+  defp current_item_ref(%{assigns: %{selected_item: item}}), do: Ref.from_search_result(item)
+
+  # A metadata fetch that came straight from TMDB already IS the TMDB ref: its
+  # own id needs no cross-reference. Only a TVDB-sourced fetch (a TVDB search
+  # result, or a TV show resolved to TVDB metadata via
+  # Settings.derive_tv_metadata_source/0) needs the cross-reference that TMDB
+  # recommendations cannot be reached without.
+  defp recommendation_ref(%{provider: :tmdb, id: id}) when is_integer(id), do: {:tmdb, id}
+
+  defp recommendation_ref(%{external_ids: %{tmdb: tmdb_id}}) when is_integer(tmdb_id),
+    do: {:tmdb, tmdb_id}
+
+  defp recommendation_ref(_metadata), do: nil
 
   # Request status matters as much as library status here: without it
   # `requested?/1` reads nil on every card and a guest is offered Request for a
