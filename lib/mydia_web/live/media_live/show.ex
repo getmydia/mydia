@@ -77,7 +77,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:default_quality_profile_name, default_quality_profile_name)
      |> assign(:show_file_delete_confirm, false)
      |> assign(:file_to_delete, nil)
-     |> assign(:delete_file_from_disk, true)
+     |> assign(:file_delete_mode, :trash)
      |> assign(:show_file_details_modal, false)
      |> assign(:file_details, nil)
      |> assign(:show_download_cancel_confirm, false)
@@ -332,8 +332,8 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("hide_file_delete_confirm", params, socket),
     do: FileEvents.hide_file_delete_confirm(params, socket)
 
-  def handle_event("toggle_file_delete_from_disk", params, socket),
-    do: FileEvents.toggle_file_delete_from_disk(params, socket)
+  def handle_event("toggle_file_delete_mode", params, socket),
+    do: FileEvents.toggle_file_delete_mode(params, socket)
 
   def handle_event("delete_media_file", params, socket),
     do: FileEvents.delete_media_file(params, socket)

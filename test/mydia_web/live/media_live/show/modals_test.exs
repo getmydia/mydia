@@ -166,33 +166,47 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       }
     end
 
-    test "defaults to deleting the file from disk" do
+    test "defaults to moving the file to trash" do
       html =
         render_component(&Modals.file_delete_confirm_modal/1,
           file_to_delete: file_to_delete(),
-          delete_file_from_disk: true
+          file_delete_mode: :trash
         )
 
-      # The "delete from disk" radio is pre-selected.
-      assert html =~ ~r/value="true"[^>]*checked/
-      refute html =~ ~r/value="false"[^>]*checked/
-      # Button reflects the destructive choice.
-      assert html =~ "Delete File"
-      assert html =~ ~s(phx-change="toggle_file_delete_from_disk")
-      # The old, now-inaccurate copy is gone.
-      refute html =~ "will remain on disk"
+      # The "trash" radio is pre-selected.
+      assert html =~ ~r/value="trash"[^>]*checked/
+      refute html =~ ~r/value="library_only"[^>]*checked/
+      refute html =~ ~r/value="permanent"[^>]*checked/
+      # Button reflects the trash choice.
+      assert html =~ "Move to trash"
+      assert html =~ ~s(phx-change="toggle_file_delete_mode")
     end
 
-    test "reflects the keep-on-disk choice when toggled off" do
+    test "reflects the library-only choice" do
       html =
         render_component(&Modals.file_delete_confirm_modal/1,
           file_to_delete: file_to_delete(),
-          delete_file_from_disk: false
+          file_delete_mode: :library_only
         )
 
-      assert html =~ ~r/value="false"[^>]*checked/
-      refute html =~ ~r/value="true"[^>]*checked/
-      assert html =~ "Remove from Library"
+      assert html =~ ~r/value="library_only"[^>]*checked/
+      refute html =~ ~r/value="trash"[^>]*checked/
+      refute html =~ ~r/value="permanent"[^>]*checked/
+      assert html =~ "Remove from library"
+    end
+
+    test "reflects the permanent choice and warns it cannot be undone" do
+      html =
+        render_component(&Modals.file_delete_confirm_modal/1,
+          file_to_delete: file_to_delete(),
+          file_delete_mode: :permanent
+        )
+
+      assert html =~ ~r/value="permanent"[^>]*checked/
+      refute html =~ ~r/value="trash"[^>]*checked/
+      refute html =~ ~r/value="library_only"[^>]*checked/
+      assert html =~ "Delete permanently"
+      assert html =~ "no way to undo it"
     end
   end
 

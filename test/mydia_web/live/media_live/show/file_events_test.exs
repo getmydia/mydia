@@ -54,35 +54,56 @@ defmodule MydiaWeb.MediaLive.Show.FileEventsTest do
     Mydia.Repo.preload(file, :library_path)
   end
 
-  defp delete_socket(ctx, file, delete_file_from_disk) do
+  defp delete_socket(ctx, file, mode) do
     stub_socket(%{
       current_user: ctx.user,
       media_item: ctx.media_item,
       file_to_delete: file,
-      delete_file_from_disk: delete_file_from_disk
+      file_delete_mode: mode
     })
   end
 
-  test "deletes the file and flashes info when delete_file_from_disk is true", ctx do
+  test "permanent mode deletes the file and flashes info", ctx do
     file = file_on_disk(ctx.library_path, ctx.media_item, "movie.mkv", "data")
     abs = MediaFile.absolute_path(file)
 
-    {:noreply, socket} = FileEvents.delete_media_file(%{}, delete_socket(ctx, file, true))
+    {:noreply, socket} = FileEvents.delete_media_file(%{}, delete_socket(ctx, file, :permanent))
 
     refute File.exists?(abs)
     refute Mydia.Repo.get(MediaFile, file.id)
     assert flash_text(socket, :info) =~ "including the file on disk"
   end
 
-  test "keeps the file and flashes info when delete_file_from_disk is false", ctx do
+  test "library_only mode keeps the file and flashes info", ctx do
     file = file_on_disk(ctx.library_path, ctx.media_item, "keep.mkv", "data")
     abs = MediaFile.absolute_path(file)
 
-    {:noreply, socket} = FileEvents.delete_media_file(%{}, delete_socket(ctx, file, false))
+    {:noreply, socket} =
+      FileEvents.delete_media_file(%{}, delete_socket(ctx, file, :library_only))
 
     assert File.exists?(abs)
     refute Mydia.Repo.get(MediaFile, file.id)
     assert flash_text(socket, :info) =~ "kept on disk"
+  end
+
+  test "trash mode moves the file to trash and flashes info", ctx do
+    trash_root =
+      Path.join(System.tmp_dir!(), "mydia_fe_trash_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(trash_root)
+    Application.put_env(:mydia, :trash_dir, trash_root)
+    on_exit(fn -> Application.delete_env(:mydia, :trash_dir) end)
+
+    file = file_on_disk(ctx.library_path, ctx.media_item, "trashed.mkv", "data")
+    abs = MediaFile.absolute_path(file)
+
+    {:noreply, socket} = FileEvents.delete_media_file(%{}, delete_socket(ctx, file, :trash))
+
+    refute File.exists?(abs)
+    reloaded = Mydia.Repo.get(MediaFile, file.id)
+    refute is_nil(reloaded.trashed_at)
+    assert reloaded.trashed_reason == :manual
+    assert flash_text(socket, :info) =~ "Moved to trash"
   end
 
   test "flashes an error but still deletes the record when removal fails", ctx do
@@ -100,7 +121,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEventsTest do
 
     file = Mydia.Repo.preload(file, :library_path)
 
-    {:noreply, socket} = FileEvents.delete_media_file(%{}, delete_socket(ctx, file, true))
+    {:noreply, socket} = FileEvents.delete_media_file(%{}, delete_socket(ctx, file, :permanent))
 
     refute Mydia.Repo.get(MediaFile, file.id)
     assert flash_text(socket, :error) =~ "could not be deleted"
