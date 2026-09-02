@@ -586,6 +586,21 @@ defmodule Mydia.Collections.SmartRules do
     end)
   end
 
+  defp build_dynamic("metadata.original_language", "not_in", values) when is_list(values) do
+    json_val = json_extract_dynamic(:metadata, "$.original_language")
+
+    matches_any =
+      Enum.reduce(values, dynamic([m], false), fn value, acc ->
+        dynamic([m], ^acc or ^json_val == ^value)
+      end)
+
+    # A row with no recorded original_language does not match any of the
+    # excluded values either, so it belongs in the result. Without the
+    # explicit is_nil check, a bare SQL NOT IN against NULL is NULL, not
+    # true, and the row is silently dropped instead of included.
+    dynamic([m], is_nil(^json_val) or not (^matches_any))
+  end
+
   defp build_dynamic("metadata.status", "eq", value) do
     dynamic([m], ^DB.json_equals(:metadata, "$.status", value))
   end
@@ -596,6 +611,19 @@ defmodule Mydia.Collections.SmartRules do
     Enum.reduce(values, dynamic([m], false), fn value, acc ->
       dynamic([m], ^acc or ^json_val == ^value)
     end)
+  end
+
+  defp build_dynamic("metadata.status", "not_in", values) when is_list(values) do
+    json_val = json_extract_dynamic(:metadata, "$.status")
+
+    matches_any =
+      Enum.reduce(values, dynamic([m], false), fn value, acc ->
+        dynamic([m], ^acc or ^json_val == ^value)
+      end)
+
+    # Same NULL handling as metadata.original_language above: a row with no
+    # recorded status is not one of the excluded statuses, so it stays in.
+    dynamic([m], is_nil(^json_val) or not (^matches_any))
   end
 
   defp build_dynamic("inserted_at", "gte", value) do

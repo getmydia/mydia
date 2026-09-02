@@ -400,6 +400,44 @@ defmodule Mydia.Collections.SmartRulesTest do
       assert length(items) == 1
       assert hd(items).id == japanese.id
     end
+
+    test "filters by metadata.original_language not_in, including items missing the field" do
+      japanese = media_item_fixture(%{type: "movie", metadata: %{"original_language" => "ja"}})
+      english = media_item_fixture(%{type: "movie", metadata: %{"original_language" => "en"}})
+      no_language = media_item_fixture(%{type: "movie", metadata: %{}})
+
+      rules = %{
+        "conditions" => [
+          %{"field" => "metadata.original_language", "operator" => "not_in", "value" => ["en"]}
+        ]
+      }
+
+      item_ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
+
+      assert japanese.id in item_ids
+      assert no_language.id in item_ids
+      refute english.id in item_ids
+    end
+
+    test "filters by metadata.status not_in, including items missing the field" do
+      returning =
+        media_item_fixture(%{type: "tv_show", metadata: %{"status" => "Returning Series"}})
+
+      ended = media_item_fixture(%{type: "tv_show", metadata: %{"status" => "Ended"}})
+      no_status = media_item_fixture(%{type: "tv_show", metadata: %{}})
+
+      rules = %{
+        "conditions" => [
+          %{"field" => "metadata.status", "operator" => "not_in", "value" => ["Ended"]}
+        ]
+      }
+
+      item_ids = SmartRules.execute_query!(rules) |> Enum.map(& &1.id)
+
+      assert returning.id in item_ids
+      assert no_status.id in item_ids
+      refute ended.id in item_ids
+    end
   end
 
   describe "helper functions" do
