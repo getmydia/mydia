@@ -314,17 +314,27 @@ defmodule MydiaWeb.DiscoverComponents do
         </button>
       <% not @item.in_library and @can_add -> %>
         <div class="join w-full mt-2">
+          <%!-- The visible label is "Add", not "Add to Library". daisyUI's
+                .btn has a fixed height (32px at btn-sm) and flex-wrap: nowrap,
+                which stops the icon and label splitting but not the label's own
+                text node from wrapping. "Add to Library" needs ~124px of button
+                width; a w-36 rail card gives the add half of the join 91px, so
+                it wrapped to two lines and spilled out of the pill. The full
+                wording stays as the accessible name and the tooltip. See
+                docs/superpowers/specs/2026-09-02-add-to-library-button-wrap-design.md --%>
           <button
             phx-click={@add_event}
             phx-value-tmdb_id={@item.provider_id}
             phx-value-media_type={@media_type}
             disabled={@adding}
+            title="Add to Library"
+            aria-label="Add to Library"
             class="btn btn-primary btn-sm join-item flex-1"
           >
             <%= if @adding do %>
               <span class="loading loading-spinner loading-xs"></span> Adding...
             <% else %>
-              <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+              <.icon name="hero-plus" class="w-4 h-4" /> Add
             <% end %>
           </button>
           <LibraryComponents.library_picker_button
