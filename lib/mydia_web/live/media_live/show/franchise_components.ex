@@ -9,6 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
   """
   use MydiaWeb, :html
 
+  alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.DiscoverComponents
 
   @doc """
@@ -25,7 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
   attr :libraries, :list, default: []
 
   def franchise_section(assigns) do
-    assigns = assign(assigns, :items, items(assigns.franchise))
+    assigns = assign(assigns, :items, rail_items(assigns.franchise))
 
     ~H"""
     <DiscoverComponents.media_rail
@@ -56,21 +57,41 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
     """
   end
 
-  defp items(franchise) do
+  @doc """
+  Maps `FranchiseEntry` structs onto the shape `media_rail/1` and
+  `TrendingDetailModal` both read.
+
+  Public because `DetailModalEvents` resolves a poster click against the same
+  list, and rebuilding it there would be a second place to keep in step.
+  """
+  # A SearchResult rather than a plain map, because TrendingDetailModal reads
+  # media_type, overview and backdrop_path by direct field access and
+  # FranchiseEntry carries none of the three. A plain map raised KeyError and
+  # took the page down the moment a franchise poster opened the dialog.
+  #
+  # overview and backdrop_path stay nil until the dialog's own metadata fetch
+  # lands, so it opens without a synopsis or backdrop for one beat, exactly as
+  # Discover does for a thin search result.
+  #
+  # The Map.put decorations are the same shape the recommendations rail already
+  # carries; see RecommendationEvents.decorate/3.
+  def rail_items(franchise) do
     Enum.map(franchise.entries, fn entry ->
-      %{
-        provider_id: entry.tmdb_id,
+      %SearchResult{
+        provider_id: to_string(entry.tmdb_id),
+        provider: :metadata_relay,
+        media_type: :movie,
         title: entry.title,
         year: entry.year,
         poster_path: entry.poster_path,
         vote_average: entry.vote_average,
-        in_library: entry.in_library?,
-        monitored: entry.monitored,
-        id: entry.media_item_id,
-        navigate: navigate_to(entry),
-        current: entry.current?,
-        request_status: entry.request_status
+        id: entry.media_item_id
       }
+      |> Map.put(:in_library, entry.in_library?)
+      |> Map.put(:monitored, entry.monitored)
+      |> Map.put(:navigate, navigate_to(entry))
+      |> Map.put(:current, entry.current?)
+      |> Map.put(:request_status, entry.request_status)
     end)
   end
 

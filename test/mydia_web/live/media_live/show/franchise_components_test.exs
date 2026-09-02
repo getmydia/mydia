@@ -197,6 +197,41 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponentsTest do
     assert missing =~ "7.4"
   end
 
+  test "rail items are SearchResult structs carrying what the detail dialog reads" do
+    entry = %Mydia.Media.FranchiseEntry{
+      tmdb_id: 4242,
+      title: "Harrow Lane",
+      year: 2021,
+      poster_path: "/p.jpg",
+      vote_average: 7.4,
+      media_item_id: nil,
+      in_library?: false,
+      monitored: false,
+      current?: false,
+      request_status: nil
+    }
+
+    franchise = %{name: "Harrow Collection", entries: [entry], owned_count: 0, total_count: 1}
+
+    [item] = FranchiseComponents.rail_items(franchise)
+
+    # TrendingDetailModal reads these three by direct field access. A plain map
+    # without them raises KeyError the moment a franchise poster opens it.
+    assert %Mydia.Metadata.Structs.SearchResult{media_type: :movie} = item
+    assert Map.has_key?(item, :overview)
+    assert Map.has_key?(item, :backdrop_path)
+
+    # provider_id is a string now. Every consumer already normalises with
+    # to_string/1, and the card's phx-value-id is unchanged either way.
+    assert item.provider_id == "4242"
+
+    # The rail decorations must survive the conversion.
+    assert item.in_library == false
+    assert item.monitored == false
+    assert item.current == false
+    assert item.navigate == nil
+  end
+
   # Slices one entry out of the section so an assertion cannot accidentally match
   # a sibling. `LazyHTML.filter/2` only matches root-level nodes and the entries
   # are nested inside #franchise-section, so this must be `query/2`.
