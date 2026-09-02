@@ -160,17 +160,27 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           has_files && "border-l-2 border-l-success"
         ]}
       >
-        <%!-- Mobile keeps two stacked rows. From sm up every wrapper collapses to
-              `display: contents`, which dissolves the boxes and promotes the cells
-              to items of one grid with fixed tracks. That is what makes quality,
-              air date and status form columns down the whole season instead of
-              drifting with each row's content. --%>
-        <div class={[
-          "flex flex-col gap-1",
-          "sm:grid sm:items-center sm:gap-x-3 sm:gap-y-0",
-          "sm:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
-        ]}>
-          <div class="flex items-center gap-1 flex-1 min-w-0 sm:contents">
+        <%!-- Mobile keeps two stacked rows. Once the `eprow` container is wide
+              enough every wrapper collapses to `display: contents`, which
+              dissolves the boxes and promotes the cells to items of one grid
+              with fixed tracks. That is what makes quality, air date and
+              status form columns down the whole season instead of drifting
+              with each row's content.
+
+              The container, not a viewport breakpoint: these tracks need about
+              500px, and at a 1024px viewport this column is 328px wide because
+              the app drawer and the page rail both open at `lg`. The old
+              breakpoint sent the toolbar 50px past the right edge of the
+              window. --%>
+        <div
+          id={"episode-#{episode.id}-grid"}
+          class={[
+            "flex flex-col gap-1",
+            "@lg/eprow:grid @lg/eprow:items-center @lg/eprow:gap-x-3 @lg/eprow:gap-y-0",
+            "@lg/eprow:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
+          ]}
+        >
+          <div class="flex items-center gap-1 flex-1 min-w-0 @lg/eprow:contents">
             <%!-- Chevron and number share one cell so they stay a single
                   toggle_episode_expanded target. ml-auto right-aligns the number,
                   which keeps two- and three-digit episodes in column: the chunk
@@ -183,7 +193,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   disclosure is reachable by keyboard. --%>
             <button
               type="button"
-              class="flex items-center gap-1 flex-shrink-0 sm:w-full cursor-pointer hover:text-primary"
+              class="flex items-center gap-1 flex-shrink-0 @lg/eprow:w-full cursor-pointer hover:text-primary"
               phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
               aria-expanded={to_string(is_expanded)}
@@ -193,7 +203,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                 name={if is_expanded, do: "hero-chevron-down", else: "hero-chevron-right"}
                 class="w-3 h-3 text-base-content/40"
               />
-              <span class="font-mono text-sm font-medium text-base-content/70 tabular-nums sm:ml-auto">
+              <span class="font-mono text-sm font-medium text-base-content/70 tabular-nums @lg/eprow:ml-auto">
                 {episode.episode_number}
               </span>
             </button>
@@ -214,19 +224,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             </button>
           </div>
 
-          <div class="flex items-center justify-between gap-2 sm:contents">
-            <div class="flex items-center gap-2 sm:contents">
-              <div class="flex items-center sm:justify-end">
+          <div class="flex items-center justify-between gap-2 @lg/eprow:contents">
+            <div class="flex items-center gap-2 @lg/eprow:contents">
+              <div class="flex items-center @lg/eprow:justify-end">
                 <span :if={quality} class="badge badge-sm badge-ghost font-mono tabular-nums">
                   {quality}
                 </span>
               </div>
-              <div class="text-xs text-base-content/50 tabular-nums sm:text-right">
+              <div class="text-xs text-base-content/50 tabular-nums @lg/eprow:text-right">
                 {episode.air_date && format_date(episode.air_date)}
               </div>
             </div>
 
-            <div class="flex items-center gap-2 sm:contents">
+            <div class="flex items-center gap-2 @lg/eprow:contents">
               <%!-- A 16px dot of colour, at every width. A visible state label
                     repeated down 170 rows is noise, and the row already says it
                     twice: the left border is green when files exist, and the
@@ -237,7 +247,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     The tooltip wraps the chip from the outside, never a
                     join-item. --%>
               <div
-                class="tooltip tooltip-left sm:justify-self-end"
+                class="tooltip tooltip-left @lg/eprow:justify-self-end"
                 data-tip={episode_status_tooltip(episode)}
               >
                 <span
@@ -253,7 +263,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     the container because btn-ghost has no border of its own and
                     the first item varies: the play slot is absent whenever
                     playback is off. --%>
-              <div class="flex-shrink-0 sm:justify-self-end sm:border-l sm:border-base-300 sm:pl-3">
+              <div class="flex-shrink-0 @lg/eprow:justify-self-end @lg/eprow:border-l @lg/eprow:border-base-300 @lg/eprow:pl-3">
                 <div
                   id={"episode-#{episode.id}-actions"}
                   class="join border border-base-300 rounded-lg [&>*:not(:first-child)]:border-l [&>*:not(:first-child)]:border-base-300"

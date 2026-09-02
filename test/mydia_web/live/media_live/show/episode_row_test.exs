@@ -146,6 +146,31 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
       # count passes on the header alone even if this toolbar were removed.
       assert html |> query("#episode-ep-1-actions > .join-item") |> Enum.count() == 4
     end
+
+    test "the row grid is driven by the eprow container, not the viewport" do
+      html = render_season([episode(media_files: [media_file()])])
+
+      [class] =
+        html |> query("#episode-ep-1-grid") |> LazyHTML.attribute("class")
+
+      assert class =~ "@lg/eprow:grid"
+      assert class =~ "@lg/eprow:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
+
+      refute class =~ "sm:",
+             "at 1024px the drawer and rail leave this column 328px wide, " <>
+               "and sm: calls that wide"
+    end
+
+    test "no part of the episode row switches on the viewport" do
+      # The twelve sm: utilities in season_components.ex are one mechanism:
+      # sm:contents dissolves the wrapper boxes so the cells become grid items.
+      # Half-migrating them produces a layout that is worse than either end
+      # state, so assert the file has none left rather than spot-checking.
+      source = File.read!("lib/mydia_web/live/media_live/show/season_components.ex")
+
+      refute source =~ "sm:",
+             "season_components.ex still contains a viewport breakpoint"
+    end
   end
 
   describe "season header actions" do
