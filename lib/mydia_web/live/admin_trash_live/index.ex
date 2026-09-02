@@ -216,11 +216,18 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   # params: see the moduledoc note "Sweep never takes a path from the
   # client". Params here carry no path, id, or other filesystem reference,
   # and must never be made to.
+  #
+  # Dropping the audit below takes the button with it, but a scan finishing
+  # mid-sweep puts a fresh one back. Two sweeps over overlapping entries would
+  # race `File.rm_rf/1` and make the reported counts depend on which task
+  # finished last, so one at a time.
+  def handle_event("sweep", _params, %{assigns: %{sweeping: true}} = socket),
+    do: {:noreply, socket}
+
   def handle_event("sweep", _params, socket) do
     # `sweep/1` calls `File.rm_rf/1` per entry, so it inherits the same
     # disconnected-mount hazard as the audit walk and runs off the LiveView
-    # process for the same reason. Dropping the audit as the task starts
-    # leaves nothing for a second click to re-sweep.
+    # process for the same reason.
     case socket.assigns.audit do
       nil ->
         {:noreply, socket}
