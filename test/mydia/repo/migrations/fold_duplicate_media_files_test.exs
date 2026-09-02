@@ -132,6 +132,71 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesTest do
   end
 
   @tag :tmp_dir
+  test "folds a three-way duplicate group onto the strictly richest row" do
+    build_pre_migration_schema()
+
+    seed_library_path("lib-plain", "/media/movies")
+    seed_media_item("item-1")
+
+    # Three active rows at one path. Dependent counts are made strictly
+    # decreasing (winner 4, loser1 2, loser2 1) so the winner is unambiguous
+    # from the primary "most dependents" signal alone and the outcome never
+    # rests on the {inserted_at, id} tiebreak.
+    seed_media_file("winner", "lib-plain", "Marrow Hollow (2015)/Marrow.Hollow.mkv", "item-1")
+    seed_media_file("loser1", "lib-plain", "Marrow Hollow (2015)/Marrow.Hollow.mkv", "item-1")
+    seed_media_file("loser2", "lib-plain", "Marrow Hollow (2015)/Marrow.Hollow.mkv", "item-1")
+
+    # winner: 4 dependents (1 media_hashes + 2 subtitles + 1 subtitle_track_settings)
+    sql!("INSERT INTO media_hashes (media_file_id, opensubtitles_hash) VALUES ('winner', 'aaa')")
+
+    sql!(
+      "INSERT INTO subtitles (id, media_file_id, subtitle_hash) VALUES ('s-w1', 'winner', 'h1')"
+    )
+
+    sql!(
+      "INSERT INTO subtitles (id, media_file_id, subtitle_hash) VALUES ('s-w2', 'winner', 'h2')"
+    )
+
+    sql!(
+      "INSERT INTO subtitle_track_settings (id, media_file_id, track_ref) VALUES ('trk1', 'winner', 'trk-w')"
+    )
+
+    # loser1: 2 dependents, one colliding with the winner (dropped) and one
+    # that moves across untouched.
+    sql!(
+      "INSERT INTO subtitles (id, media_file_id, subtitle_hash) VALUES ('s-l1-h2', 'loser1', 'h2')"
+    )
+
+    sql!(
+      "INSERT INTO subtitles (id, media_file_id, subtitle_hash) VALUES ('s-l1-h3', 'loser1', 'h3')"
+    )
+
+    # loser2: 1 dependent, no counterpart on the winner, so it moves across.
+    sql!(
+      "INSERT INTO transcode_jobs (id, media_file_id, resolution, type) VALUES ('tj1', 'loser2', '1080p', 'download')"
+    )
+
+    run_migration!(FoldDuplicateMediaFilesAndEnforcePathUniqueness, @version)
+
+    assert %{rows: [["winner"]]} = sql!("SELECT id FROM media_files")
+
+    # s-l1-h2 collided with the winner's own h2 and was dropped; s-l1-h3 had
+    # no counterpart and moved onto the winner alongside its original rows.
+    assert %{rows: [["s-l1-h3", "h3"], ["s-w1", "h1"], ["s-w2", "h2"]]} =
+             sql!("SELECT id, subtitle_hash FROM subtitles ORDER BY id")
+
+    assert %{rows: [["winner", "aaa"]]} =
+             sql!("SELECT media_file_id, opensubtitles_hash FROM media_hashes")
+
+    assert %{rows: [["trk1", "winner", "trk-w"]]} =
+             sql!("SELECT id, media_file_id, track_ref FROM subtitle_track_settings")
+
+    # loser2's transcode_jobs row had no counterpart on the winner and moved.
+    assert %{rows: [["tj1", "winner", "1080p", "download"]]} =
+             sql!("SELECT id, media_file_id, resolution, type FROM transcode_jobs")
+  end
+
+  @tag :tmp_dir
   test "rejects a second active row at the same library path and relative path" do
     build_pre_migration_schema()
 
