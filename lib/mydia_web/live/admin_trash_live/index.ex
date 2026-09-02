@@ -59,7 +59,7 @@ defmodule MydiaWeb.AdminTrashLive.Index do
         reason: socket.assigns.reason,
         limit: @per_page,
         offset: socket.assigns.page * @per_page,
-        preload: [:media_item, :episode, :library_path]
+        preload: [:media_item, :library_path, episode: :media_item]
       )
     )
   end
@@ -202,7 +202,9 @@ defmodule MydiaWeb.AdminTrashLive.Index do
   end
 
   defp fetch_trashed(id) do
-    Library.get_trashed_media_file(id, preload: [:media_item, :episode, :library_path])
+    Library.get_trashed_media_file(id,
+      preload: [:media_item, :library_path, episode: :media_item]
+    )
   end
 
   defp label(file), do: MydiaWeb.AdminTrashLive.Components.label_for(file)

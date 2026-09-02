@@ -236,17 +236,25 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   defp badge_class(:manual), do: "badge-neutral"
   defp badge_class(_), do: "badge-ghost"
 
-  # A trashed row can have no media item at all, so relative_path is the
+  # An episode's media_files row carries episode_id with media_item_id NULL;
+  # the show hangs off episode.media_item rather than off the file directly.
+  # See lib/mydia/media/README.md ("A TV media_file has media_item_id NULL"),
+  # which documents this exact shape shipping broken twice before (PR #430,
+  # PR #439). The episode clause is matched first, and ahead of the movie
+  # clause below, since a file could in principle carry both keys and the
+  # episode is the one that renders a useful label.
+  #
+  # A trashed row can have no media item at all (an episode whose show was
+  # deleted, or neither association loaded), so relative_path is the
   # fallback label rather than a crash.
-  def label_for(%MediaFile{media_item: %{title: title}} = file) when is_binary(title) do
-    case file.episode do
-      %{season_number: s, episode_number: e} ->
-        "#{title} S#{pad(s)}E#{pad(e)}"
-
-      _ ->
-        title
-    end
+  def label_for(%MediaFile{
+        episode: %{media_item: %{title: title}, season_number: s, episode_number: e}
+      })
+      when is_binary(title) do
+    "#{title} S#{pad(s)}E#{pad(e)}"
   end
+
+  def label_for(%MediaFile{media_item: %{title: title}}) when is_binary(title), do: title
 
   def label_for(%MediaFile{relative_path: path}) when is_binary(path), do: path
   def label_for(%MediaFile{}), do: "Unknown file"

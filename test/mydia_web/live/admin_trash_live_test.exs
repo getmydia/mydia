@@ -59,6 +59,34 @@ defmodule MydiaWeb.AdminTrashLiveTest do
     trashed
   end
 
+  # A TV episode's media_file carries episode_id with media_item_id NULL; the
+  # show lives at episode.media_item. A movie fixture (see trashed/4 above)
+  # cannot exercise that shape, which is why the label regressed twice
+  # before without a test catching it.
+  defp trashed_episode(ctx, name, reason, size) do
+    series_root = Path.join(ctx.root, "series")
+    File.mkdir_p!(series_root)
+    series_library_path = library_path_fixture(%{path: series_root, type: "series"})
+
+    File.write!(Path.join(series_root, name), String.duplicate("x", size))
+
+    show = media_item_fixture(%{type: "tv_show", title: "Nightfall Harbor"})
+    episode = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 4})
+
+    {:ok, media_file} =
+      Library.create_scanned_media_file(%{
+        relative_path: name,
+        library_path_id: series_library_path.id,
+        episode_id: episode.id,
+        size: size
+      })
+
+    {:ok, trashed} =
+      Library.trash_media_file(Repo.preload(media_file, :library_path), reason: reason)
+
+    trashed
+  end
+
   @tag :tmp_dir
   test "renders the trash page with a summary", %{conn: conn} = ctx do
     _a = trashed(ctx, "a.mkv", :missing, 10)
@@ -119,6 +147,19 @@ defmodule MydiaWeb.AdminTrashLiveTest do
 
     assert has_element?(view, "#trash-row-#{unknown.id}")
     refute has_element?(view, "#trash-row-#{pruned.id}")
+  end
+
+  @tag :tmp_dir
+  test "labels a trashed TV episode with the show title and episode number, not the file path",
+       %{conn: conn} = ctx do
+    file = trashed_episode(ctx, "episode.mkv", :upgraded, 10)
+
+    {:ok, view, _html} = live(conn, ~p"/admin/config/trash")
+
+    row = view |> element("#trash-row-#{file.id}") |> render()
+
+    assert row =~ "Nightfall Harbor S02E04"
+    refute row =~ "episode.mkv"
   end
 
   @tag :tmp_dir
