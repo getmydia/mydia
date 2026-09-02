@@ -602,12 +602,15 @@ defmodule Mydia.Library.MetadataEnricherTest do
         |> backdate()
 
       # Scanned into a TVDB library (match provider_type :tvdb, found via tvdb_id).
-      # The preserved :tmdb provenance means the refresh fetches TMDB.
+      # The preserved :tmdb provenance means the refresh fetches TMDB -- using
+      # the item's own tmdb_id, not the matched tvdb_id: the matched number
+      # belongs to the TVDB catalog and names nothing meaningful (or the
+      # wrong title) in TMDB's.
       Bypass.stub(
         bypass,
         "GET",
-        "/tmdb/tv/shows/#{tvdb_id}",
-        &respond_json(&1, tv_body(tvdb_id, "Stamped TMDB"))
+        "/tmdb/tv/shows/#{tmdb_id}",
+        &respond_json(&1, tv_body(tmdb_id, "Stamped TMDB"))
       )
 
       match = tv_match(tvdb_id, :tvdb, "Stamped TMDB")
@@ -784,6 +787,56 @@ defmodule Mydia.Library.MetadataEnricherTest do
       assert [event] = Events.list_events(type: "media_item.duplicate_provider_id")
       assert event.resource_id == incumbent.id
     end
+
+    # A TMDB-sourced show can also be found by a TVDB match (a rescan hits a
+    # folder tagged `[tvdb-...]`, and the row already carries that tvdb_id as
+    # a cross-reference). `existing_item.metadata_source` (:tmdb) then
+    # overrides the matched provider (:tvdb) when picking where to fetch from
+    # -- but the matched numeric id belongs to the TVDB catalog, not TMDB's.
+    # Sending it to the TMDB endpoint anyway would fetch and persist whatever
+    # unrelated title TMDB happens to have under that id. The update must use
+    # the item's own tmdb_id instead.
+    test "provenance override on the update path fetches the item's own id for that provider, not the matched id",
+         %{bypass: bypass, config: config} do
+      tmdb_id = System.unique_integer([:positive])
+      tvdb_id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Original Title",
+          tmdb_id: tmdb_id,
+          tvdb_id: tvdb_id,
+          metadata_source: :tmdb
+        })
+        |> backdate()
+
+      # What the fix must fetch: the item's own tmdb_id.
+      Bypass.stub(
+        bypass,
+        "GET",
+        "/tmdb/tv/shows/#{tmdb_id}",
+        &respond_json(&1, tv_body(tmdb_id, "Correct Update"))
+      )
+
+      # What the bug would fetch instead: the matched tvdb_id sent straight to
+      # the TMDB endpoint. Stubbed with different content so a regression
+      # shows up as the wrong title rather than a connection failure.
+      Bypass.stub(
+        bypass,
+        "GET",
+        "/tmdb/tv/shows/#{tvdb_id}",
+        &respond_json(&1, tv_body(tvdb_id, "Wrong Show"))
+      )
+
+      match = tv_match(tvdb_id, :tvdb, "Matched By Tvdb")
+
+      assert {:ok, updated} =
+               MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+
+      assert updated.id == item.id
+      assert updated.title == "Correct Update"
+    end
   end
 
   describe "episode enrichment threads original language (U5)" do
@@ -944,7 +997,7 @@ defmodule Mydia.Library.MetadataEnricherTest do
 
       # Switch the show to the DVD ordering and rescan the same series id. The
       # second pass must not read the first pass's cached official grouping:
-      # fetch_by_id_cached/3 keys on the ordering precisely so it cannot.
+      # fetch_by_ref_cached/3 keys on the ordering precisely so it cannot.
       {:ok, switched} = Media.update_media_item(official, %{season_order: :dvd})
       backdate(switched)
 

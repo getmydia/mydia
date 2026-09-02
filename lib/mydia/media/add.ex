@@ -18,6 +18,7 @@ defmodule Mydia.Media.Add do
   alias Mydia.Media
   alias Mydia.Media.ExternalIds
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Settings
 
   # Options consumed by `Media.create_media_item/2` rather than by attrs building.
@@ -34,28 +35,30 @@ defmodule Mydia.Media.Add do
   Performs every network call this module makes, so callers that need to keep
   HTTP out of a database transaction can run this first.
 
+  The ref's own tag decides the provider: a `{:tvdb, id}` ref fetches the TVDB
+  series directly rather than starting from a TMDB lookup, which is the only
+  meaningful choice for TV -- there is no TVDB movie catalog. There is no
+  `:provider` option any more; sending an id to the wrong provider is exactly
+  what a mistyped option used to allow.
+
   ## Options
 
-    * `:provider` - `:tmdb` (default) or `:tvdb`. `:tvdb` is only meaningful for
-      TV shows and fetches the TVDB series directly rather than starting from a
-      TMDB lookup.
     * Everything `build_media_item_attrs/3` accepts.
   """
-  @spec resolve_attrs(String.t() | integer(), :movie | :tv_show, map() | nil, keyword()) ::
+  @spec resolve_attrs(Ref.t() | nil, :movie | :tv_show, map() | nil, keyword()) ::
           {:ok, map()} | {:error, {:metadata, term()}}
-  def resolve_attrs(provider_id, media_type, config \\ nil, opts \\ [])
+  def resolve_attrs(ref, media_type, config \\ nil, opts \\ [])
 
   def resolve_attrs(nil, _media_type, _config, _opts), do: {:error, {:metadata, :no_provider_id}}
 
-  def resolve_attrs(provider_id, media_type, config, opts) do
+  def resolve_attrs({_provider, _id} = ref, media_type, config, opts) do
     config = config || Metadata.default_relay_config()
-    provider_id_int = parse_provider_id(provider_id)
-    provider_id = to_string(provider_id_int)
 
-    if media_type == :tv_show do
-      resolve_tv_show_attrs(provider_id, provider_id_int, config, opts)
-    else
-      resolve_movie_attrs(provider_id, provider_id_int, config, opts)
+    case {media_type, ref} do
+      {:movie, {:tmdb, _}} -> resolve_movie_attrs(ref, config, opts)
+      {:movie, {:tvdb, _}} -> {:error, {:metadata, :tvdb_ref_for_movie}}
+      {:tv_show, {:tvdb, _}} -> resolve_tv_show_attrs_from_tvdb(ref, config, opts)
+      {:tv_show, {:tmdb, _}} -> resolve_tv_show_attrs_from_tmdb(ref, config, opts)
     end
   end
 
@@ -192,12 +195,12 @@ defmodule Mydia.Media.Add do
   scan path establishes provenance later. Movies use TMDB and leave
   `metadata_source` nil.
   """
-  @spec from_provider(String.t() | integer(), :movie | :tv_show, map() | nil, keyword()) ::
+  @spec from_provider(Ref.t() | nil, :movie | :tv_show, map() | nil, keyword()) ::
           {:ok, Media.MediaItem.t()} | {:error, error()}
-  def from_provider(provider_id, media_type, config \\ nil, opts \\ []) do
+  def from_provider(ref, media_type, config \\ nil, opts \\ []) do
     config = config || Metadata.default_relay_config()
 
-    with {:ok, attrs} <- resolve_attrs(provider_id, media_type, config, opts) do
+    with {:ok, attrs} <- resolve_attrs(ref, media_type, config, opts) do
       from_attrs(attrs, config, opts)
     end
   end
@@ -305,7 +308,7 @@ defmodule Mydia.Media.Add do
   defp tvdb_id_from_metadata(_), do: nil
 
   defp fetch_tvdb_series(tvdb_id, config) do
-    case Metadata.fetch_by_id(config, to_string(tvdb_id), media_type: :tv_show, provider: :tvdb) do
+    case Metadata.fetch_by_ref(config, {:tvdb, tvdb_id}, media_type: :tv_show) do
       {:ok, tvdb_metadata} -> {:ok, tvdb_metadata, tvdb_id}
       {:error, _reason} -> {:error, :tvdb_not_found}
     end
@@ -324,10 +327,7 @@ defmodule Mydia.Media.Add do
     with {:ok, [first | _]} <- Metadata.search(config, tmdb_metadata.title, search_opts),
          {tvdb_id, ""} <- Integer.parse(first.provider_id),
          {:ok, tvdb_metadata} <-
-           Metadata.fetch_by_id(config, to_string(tvdb_id),
-             media_type: :tv_show,
-             provider: :tvdb
-           ) do
+           Metadata.fetch_by_ref(config, {:tvdb, tvdb_id}, media_type: :tv_show) do
       {:ok, tvdb_metadata, tvdb_id}
     else
       _ -> {:error, :tvdb_not_found}
@@ -343,37 +343,26 @@ defmodule Mydia.Media.Add do
 
   # Private helpers
 
-  defp resolve_movie_attrs(provider_id, provider_id_int, config, opts) do
-    case Metadata.fetch_by_id(config, provider_id, media_type: :movie, provider: :tmdb) do
+  defp resolve_movie_attrs(ref, config, opts) do
+    case Metadata.fetch_by_ref(config, ref, media_type: :movie) do
       {:ok, metadata} ->
-        {:ok,
-         build_media_item_attrs(metadata, :movie, Keyword.put(opts, :tmdb_id, provider_id_int))}
+        {:ok, build_media_item_attrs(metadata, :movie, Keyword.put(opts, :tmdb_id, Ref.id(ref)))}
 
       {:error, reason} ->
         {:error, {:metadata, reason}}
     end
   end
 
-  defp resolve_tv_show_attrs(provider_id, provider_id_int, config, opts) do
-    case Keyword.get(opts, :provider, :tmdb) do
-      :tvdb -> resolve_tv_show_attrs_from_tvdb(provider_id, provider_id_int, config, opts)
-      _ -> resolve_tv_show_attrs_from_tmdb(provider_id, provider_id_int, config, opts)
-    end
-  end
-
   # The request flow can hold a TVDB ID with no TMDB counterpart. Starting from
   # a TMDB lookup would send the TVDB id to the wrong provider.
-  defp resolve_tv_show_attrs_from_tvdb(provider_id, provider_id_int, config, opts) do
-    case Metadata.fetch_by_id(config, to_string(provider_id),
-           media_type: :tv_show,
-           provider: :tvdb
-         ) do
+  defp resolve_tv_show_attrs_from_tvdb(ref, config, opts) do
+    case Metadata.fetch_by_ref(config, ref, media_type: :tv_show) do
       {:ok, tvdb_metadata} ->
         {:ok,
          build_media_item_attrs(
            tvdb_metadata,
            :tv_show,
-           Keyword.merge(opts, tvdb_id: provider_id_int, metadata_source: :tvdb)
+           Keyword.merge(opts, tvdb_id: Ref.id(ref), metadata_source: :tvdb)
          )}
 
       {:error, reason} ->
@@ -381,7 +370,7 @@ defmodule Mydia.Media.Add do
     end
   end
 
-  defp resolve_tv_show_attrs_from_tmdb(provider_id, provider_id_int, config, opts) do
+  defp resolve_tv_show_attrs_from_tmdb(ref, config, opts) do
     # The initial fetch below is always TMDB, because that is the id we hold.
     # `primary_provider` selects which provider's metadata ends up as the
     # item's primary content, not which one is fetched first. `derived` may be
@@ -390,12 +379,12 @@ defmodule Mydia.Media.Add do
     derived = Settings.derive_tv_metadata_source()
     primary_provider = derived || :tvdb
 
-    case Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tmdb) do
+    case Metadata.fetch_by_ref(config, ref, media_type: :tv_show) do
       {:ok, tmdb_metadata} ->
         {:ok,
          build_tv_show_attrs(
            tmdb_metadata,
-           provider_id_int,
+           Ref.id(ref),
            derived,
            primary_provider,
            config,

@@ -17,14 +17,17 @@ defmodule Mydia.Metadata.Provider.RegistryTest do
     def search(_config, _query, _opts), do: {:ok, []}
 
     @impl true
-    def fetch_by_id(_config, _id, _opts), do: {:ok, %{}}
+    def fetch_by_ref(_config, _ref, _opts), do: {:ok, %{}}
 
     @impl true
-    def fetch_images(_config, _id, _opts),
+    def fetch_images_by_ref(_config, _ref, _opts),
       do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
 
     @impl true
-    def fetch_season(_config, _id, _season, _opts), do: {:ok, %{}}
+    def fetch_season_by_ref(_config, _ref, _season, _opts), do: {:ok, %{}}
+
+    @impl true
+    def fetch_trending(_config, _opts), do: {:ok, []}
   end
 
   defmodule AnotherTestProvider do
@@ -39,14 +42,17 @@ defmodule Mydia.Metadata.Provider.RegistryTest do
     def search(_config, _query, _opts), do: {:ok, []}
 
     @impl true
-    def fetch_by_id(_config, _id, _opts), do: {:ok, %{}}
+    def fetch_by_ref(_config, _ref, _opts), do: {:ok, %{}}
 
     @impl true
-    def fetch_images(_config, _id, _opts),
+    def fetch_images_by_ref(_config, _ref, _opts),
       do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
 
     @impl true
-    def fetch_season(_config, _id, _season, _opts), do: {:ok, %{}}
+    def fetch_season_by_ref(_config, _ref, _season, _opts), do: {:ok, %{}}
+
+    @impl true
+    def fetch_trending(_config, _opts), do: {:ok, []}
   end
 
   setup do

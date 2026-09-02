@@ -19,14 +19,14 @@ defmodule Mydia.MetadataTest do
     def search(_config, _query, _opts), do: {:ok, []}
 
     @impl true
-    def fetch_by_id(_config, _id, _opts), do: {:ok, %{}}
+    def fetch_by_ref(_config, _ref, _opts), do: {:ok, %{}}
 
     @impl true
-    def fetch_images(_config, _id, _opts),
+    def fetch_images_by_ref(_config, _ref, _opts),
       do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
 
     @impl true
-    def fetch_season(_config, _id, _season, _opts), do: {:ok, %{}}
+    def fetch_season_by_ref(_config, _ref, _season, _opts), do: {:ok, %{}}
 
     @impl true
     def fetch_trending(_config, opts) do
@@ -316,13 +316,13 @@ defmodule Mydia.MetadataTest do
       def search(_config, _query, _opts), do: {:error, :api_error}
 
       @impl true
-      def fetch_by_id(_config, _id, _opts), do: {:error, :not_found}
+      def fetch_by_ref(_config, _ref, _opts), do: {:error, :not_found}
 
       @impl true
-      def fetch_images(_config, _id, _opts), do: {:error, :api_error}
+      def fetch_images_by_ref(_config, _ref, _opts), do: {:error, :api_error}
 
       @impl true
-      def fetch_season(_config, _id, _season, _opts), do: {:error, :api_error}
+      def fetch_season_by_ref(_config, _ref, _season, _opts), do: {:error, :api_error}
 
       @impl true
       def fetch_trending(_config, _opts), do: {:error, :api_unavailable}
@@ -433,6 +433,67 @@ defmodule Mydia.MetadataTest do
     test "falls back to en-US when runtime_config is unset" do
       Application.delete_env(:mydia, :runtime_config)
       assert Metadata.metadata_language() == "en-US"
+    end
+  end
+
+  describe "fetch_by_ref_cached/3 keys the cache by the ref" do
+    setup do
+      Mydia.Metadata.Cache.clear()
+      on_exit(&Mydia.Metadata.Cache.clear/0)
+      :ok
+    end
+
+    test "the same number under two providers does not share an entry" do
+      config = %{type: :metadata_relay, base_url: "http://example.invalid", options: %{}}
+
+      tvdb_key = Mydia.Metadata.fetch_by_ref_cache_key(config, {:tvdb, 603}, media_type: :tv_show)
+      tmdb_key = Mydia.Metadata.fetch_by_ref_cache_key(config, {:tmdb, 603}, media_type: :movie)
+
+      assert tvdb_key =~ "tvdb:603"
+      assert tmdb_key =~ "tmdb:603"
+      refute tvdb_key == tmdb_key
+    end
+  end
+
+  describe "fetch_season_by_ref/4 and fetch_season_by_ref_cached/4 reject a TVDB series ref with no season id" do
+    # A TVDB series ref does not identify a season on its own. Without this
+    # guard, Provider.Relay.fetch_season_by_ref/4 falls back to treating the
+    # series' own numeric TVDB id as a TMDB series id (fetching or 404ing on
+    # an unrelated title), and fetch_season_by_ref_cached/4's cache key
+    # collapses onto whatever TMDB series shares that same integer.
+    setup do
+      Cache.clear()
+      on_exit(&Cache.clear/0)
+      config = %{type: :metadata_relay, base_url: "http://example.invalid", options: %{}}
+      %{config: config}
+    end
+
+    test "fetch_season_by_ref/4 rejects a TVDB ref missing :tvdb_season_id", %{config: config} do
+      assert {:error, %Provider.Error{type: :invalid_config}} =
+               Metadata.fetch_season_by_ref(config, {:tvdb, 280_619}, 1, [])
+    end
+
+    test "fetch_season_by_ref/4 still dispatches a TVDB ref that carries :tvdb_season_id", %{
+      config: config
+    } do
+      assert {:ok, %{}} =
+               Metadata.fetch_season_by_ref(config, {:tvdb, 280_619}, 1, tvdb_season_id: 999)
+    end
+
+    test "fetch_season_by_ref/4 never validates a TMDB ref (no season id concept there)", %{
+      config: config
+    } do
+      assert {:ok, %{}} = Metadata.fetch_season_by_ref(config, {:tmdb, 1396}, 1, [])
+    end
+
+    test "fetch_season_by_ref_cached/4 rejects a TVDB ref missing :tvdb_season_id and writes no cache entry",
+         %{config: config} do
+      cache_key = Metadata.build_season_cache_key(280_619, 1, "en-US", nil)
+
+      assert {:error, %Provider.Error{type: :invalid_config}} =
+               Metadata.fetch_season_by_ref_cached(config, {:tvdb, 280_619}, 1, [])
+
+      assert {:error, :not_found} = Cache.get(cache_key)
     end
   end
 

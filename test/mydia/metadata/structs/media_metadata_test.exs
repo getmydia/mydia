@@ -3,6 +3,43 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
 
   alias Mydia.Metadata.Structs.MediaMetadata
 
+  describe "provider provenance" do
+    test "defaults to :tmdb for a raw (string-keyed) API response map" do
+      body = %{"id" => 603, "title" => "The Matrix", "release_date" => "1999-03-30"}
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "603")
+
+      assert metadata.provider == :tmdb
+    end
+
+    # Mydia.Library.MetadataMatcher.lookup_tv_show_by_external_id/3 rewraps an
+    # already-fetched %MediaMetadata{} through Map.from_struct/1 (atom keys)
+    # and passes it back through here. That struct's own :provider is the
+    # real provenance and must survive the rewrap rather than being silently
+    # overwritten with the :tmdb default meant for a raw API response.
+    test "preserves :tvdb when rewrapping an atom-keyed MediaMetadata that carries it" do
+      rewrapped = %{
+        id: 280_619,
+        provider_id: "280619",
+        provider: :tvdb,
+        title: "Northbound",
+        media_type: :tv_show
+      }
+
+      metadata = MediaMetadata.from_api_response(rewrapped, :tv_show, "280619")
+
+      assert metadata.provider == :tvdb
+    end
+
+    test "ignores an unrecognised :provider value and falls back to :tmdb" do
+      data = %{id: 603, provider: :imdb}
+
+      metadata = MediaMetadata.from_api_response(data, :movie, "603")
+
+      assert metadata.provider == :tmdb
+    end
+  end
+
   describe "content_rating for movies" do
     test "picks the US certification when present" do
       body = %{

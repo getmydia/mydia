@@ -7,11 +7,25 @@ defmodule Mydia.MetadataStubProvider do
   `AdminRequestsLive.Index` calls `MediaRequests.approve_request/2` without a
   config, so injecting a Bypass config cannot cover the approval path.
 
-  The catalog is deliberately tiny and self-consistent: every id `search/3`
-  returns is resolvable by `fetch_by_id/3`, because approval re-fetches by that
-  id. A catalog that violates this reproduces the original defect, where the
-  test seeded an id the relay had never heard of and the approval silently
+  The catalog is deliberately tiny and self-consistent: every ref `search/3`
+  implies is resolvable by `fetch_by_ref/3`, because approval re-fetches by
+  that ref. A catalog that violates this reproduces the original defect, where
+  the test seeded an id the relay had never heard of and the approval silently
   failed.
+
+  The catalog is keyed by `Mydia.Metadata.Ref.t()`, not by a bare id: the
+  series lives only under `{:tvdb, series_tvdb_id()}` and the movie only under
+  `{:tmdb, movie_tmdb_id()}`. `{:tmdb, series_tvdb_id()}` is simply not in the
+  catalog, so a caller that sends the series' TVDB id to the TMDB route misses
+  naturally instead of getting an answer -- this is what let the Discover add
+  bug ship three times, because the old id-keyed stub answered that pairing
+  and made production's 404 invisible in tests.
+
+  There is also a TMDB-sourced series under `{:tmdb, series_tmdb_id()}`,
+  distinct from the TVDB-sourced one above. It exists for callers that need a
+  TV-shaped id owned by TMDB (an import list, for instance, carries TMDB ids
+  regardless of media type), so a test does not have to reach for the movie's
+  TMDB id and get a shape the real caller would never produce.
   """
 
   @behaviour Mydia.Metadata.Provider
@@ -29,10 +43,21 @@ defmodule Mydia.MetadataStubProvider do
 
   @movie_tmdb_id 550
   @series_tvdb_id 81_189
+  @series_tmdb_id 94_997
   @missing_id 999_999
+  # TVDB addresses a season by its own id, not the series ref (see
+  # `Mydia.Metadata.validate_tvdb_season_opts/2`). A real TVDB series payload
+  # carries one of these per season (`Relay.transform_tvdb_seasons/2` writes
+  # it as `tvdb_season_id`), so the catalog's TVDB-sourced series must too, or
+  # every caller that correctly threads `season.tvdb_season_id` through would
+  # find the stub's seasons unfetchable and only production would ever
+  # exercise that path.
+  @series_season1_tvdb_id 831_889
+  @series_season2_tvdb_id 831_890
 
   @movie_title "Stub Movie"
   @series_title "Stub Series"
+  @tmdb_series_title "Stub TMDB Series"
   @season_fetch_block_key {__MODULE__, :season_fetch_block}
   @fetch_by_id_counts_table :mydia_metadata_stub_fetch_by_id_counts
   @raise_on_fetch_by_id_key {__MODULE__, :raise_on_fetch_by_id}
@@ -44,14 +69,35 @@ defmodule Mydia.MetadataStubProvider do
   @doc "TVDB id of the catalog series."
   def series_tvdb_id, do: @series_tvdb_id
 
+  @doc "TMDB id of the catalog's TMDB-sourced series."
+  def series_tmdb_id, do: @series_tmdb_id
+
   @doc "Reserved id whose fetch always fails, for the approval-failure case."
   def missing_id, do: @missing_id
+
+  @doc "Ref of the catalog series."
+  def series_ref, do: {:tvdb, @series_tvdb_id}
+
+  @doc "TVDB season id of the catalog series' season 1."
+  def series_season1_tvdb_id, do: @series_season1_tvdb_id
+
+  @doc "TVDB season id of the catalog series' season 2."
+  def series_season2_tvdb_id, do: @series_season2_tvdb_id
+
+  @doc "Ref of the catalog's TMDB-sourced series."
+  def tmdb_series_ref, do: {:tmdb, @series_tmdb_id}
+
+  @doc "Ref of the catalog movie."
+  def movie_ref, do: {:tmdb, @movie_tmdb_id}
 
   @doc "Title of the catalog movie."
   def movie_title, do: @movie_title
 
   @doc "Title of the catalog series."
   def series_title, do: @series_title
+
+  @doc "Title of the catalog's TMDB-sourced series."
+  def tmdb_series_title, do: @tmdb_series_title
 
   @doc "Blocks the next season fetch until the calling test releases it."
   def block_next_season_fetch(owner) when is_pid(owner) do
@@ -86,9 +132,9 @@ defmodule Mydia.MetadataStubProvider do
   end
 
   @doc """
-  Starts (or clears) the `fetch_by_id/3` call counter.
+  Starts (or clears) the `fetch_by_ref/3` call counter.
 
-  Opt-in and purely additive: `fetch_by_id/3` only counts a call when this
+  Opt-in and purely additive: `fetch_by_ref/3` only counts a call when this
   table exists, so tests that never call this function see no behavior
   change. Used by `request_pages_poster_test.exs` to assert a permanently-
   unresolvable row is attempted exactly once per backfill pass, not retried
@@ -105,7 +151,7 @@ defmodule Mydia.MetadataStubProvider do
   end
 
   @doc """
-  Makes the next `fetch_by_id/3` call for `provider_id` raise instead of
+  Makes the next `fetch_by_ref/3` call for `media_ref` raise instead of
   returning the catalog entry.
 
   Opt-in and self-clearing: the next matching call consumes it and reverts to
@@ -116,29 +162,29 @@ defmodule Mydia.MetadataStubProvider do
   `MediaRequestBackfillTest` to prove a raise inside one row of a concurrent
   backfill does not crash the caller or stop sibling rows.
   """
-  def raise_on_fetch_by_id(provider_id) do
-    ref = make_ref()
-    :persistent_term.put(@raise_on_fetch_by_id_key, {to_string(provider_id), ref})
-    ref
+  def raise_on_fetch_by_id(media_ref) do
+    token = make_ref()
+    :persistent_term.put(@raise_on_fetch_by_id_key, {media_ref, token})
+    token
   end
 
   @doc "Clears a pending `raise_on_fetch_by_id/1` installed by a test, if not already consumed."
-  def clear_raise_on_fetch_by_id(ref) do
+  def clear_raise_on_fetch_by_id(token) do
     case :persistent_term.get(@raise_on_fetch_by_id_key, nil) do
-      {_provider_id, ^ref} -> :persistent_term.erase(@raise_on_fetch_by_id_key)
+      {_media_ref, ^token} -> :persistent_term.erase(@raise_on_fetch_by_id_key)
       _other -> :ok
     end
   end
 
-  @doc "Number of `fetch_by_id/3` calls observed for `provider_id` since the last reset."
-  def fetch_by_id_count(provider_id) do
+  @doc "Number of `fetch_by_ref/3` calls observed for `media_ref` since the last reset."
+  def fetch_by_id_count(media_ref) do
     case :ets.whereis(@fetch_by_id_counts_table) do
       :undefined ->
         0
 
       _tid ->
-        case :ets.lookup(@fetch_by_id_counts_table, provider_id) do
-          [{^provider_id, count}] -> count
+        case :ets.lookup(@fetch_by_id_counts_table, media_ref) do
+          [{^media_ref, count}] -> count
           [] -> 0
         end
     end
@@ -159,37 +205,32 @@ defmodule Mydia.MetadataStubProvider do
     end
   end
 
+  # The ref catalog is the source of truth: `{:tvdb, @series_tvdb_id}`,
+  # `{:tmdb, @movie_tmdb_id}`, and `{:tmdb, @series_tmdb_id}` resolve.
+  # `{:tmdb, @series_tvdb_id}` -- the exact pairing the deleted hotfix guard
+  # singled out -- is simply not a key in this `case`, so it falls to the
+  # catch-all and answers not_found on its own, the same way the relay
+  # answers 404 for a TVDB id sent to TMDB's route.
   @impl true
-  def fetch_by_id(_config, provider_id, opts) do
-    count_fetch_by_id_call(provider_id)
-    maybe_raise_on_fetch_by_id(provider_id)
+  def fetch_by_ref(_config, ref, _opts) do
+    count_fetch_by_id_call(ref)
+    maybe_raise_on_fetch_by_id(ref)
 
-    cond do
-      provider_id == to_string(@missing_id) ->
-        {:error, Error.not_found("Media not found: #{@missing_id}")}
-
-      # The catalog's series id is a TVDB id, and the relay answers 404 for a
-      # TVDB id on TMDB's route. Answering it anyway is what let the Discover
-      # add ship sending TVDB search ids to TMDB: production failed with
-      # "Media not found: <tvdb id>" while the stub happily returned the show.
-      provider_id == to_string(@series_tvdb_id) and Keyword.get(opts, :provider) == :tmdb ->
-        {:error, Error.not_found("Media not found: #{provider_id}")}
-
-      Keyword.get(opts, :provider) == :tvdb or Keyword.get(opts, :media_type) == :tv_show ->
-        {:ok, series_metadata()}
-
-      true ->
-        {:ok, movie_metadata()}
+    case ref do
+      {:tvdb, @series_tvdb_id} -> {:ok, series_metadata()}
+      {:tmdb, @movie_tmdb_id} -> {:ok, movie_metadata()}
+      {:tmdb, @series_tmdb_id} -> {:ok, tmdb_series_metadata()}
+      {_provider, id} -> {:error, Error.not_found("Media not found: #{id}")}
     end
   end
 
   @impl true
-  def fetch_images(_config, _provider_id, _opts) do
+  def fetch_images_by_ref(_config, _ref, _opts) do
     {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
   end
 
   @impl true
-  def fetch_season(_config, _provider_id, season_number, _opts) do
+  def fetch_season_by_ref(_config, _ref, season_number, _opts) do
     maybe_block_season_fetch()
 
     {:ok,
@@ -222,23 +263,23 @@ defmodule Mydia.MetadataStubProvider do
 
   ## Catalog
 
-  defp count_fetch_by_id_call(provider_id) do
+  defp count_fetch_by_id_call(media_ref) do
     case :ets.whereis(@fetch_by_id_counts_table) do
       :undefined ->
         :ok
 
       _tid ->
-        :ets.update_counter(@fetch_by_id_counts_table, provider_id, {2, 1}, {provider_id, 0})
+        :ets.update_counter(@fetch_by_id_counts_table, media_ref, {2, 1}, {media_ref, 0})
     end
 
     :ok
   end
 
-  defp maybe_raise_on_fetch_by_id(provider_id) do
+  defp maybe_raise_on_fetch_by_id(media_ref) do
     case :persistent_term.get(@raise_on_fetch_by_id_key, nil) do
-      {^provider_id, _ref} ->
+      {^media_ref, _token} ->
         :persistent_term.erase(@raise_on_fetch_by_id_key)
-        raise "MetadataStubProvider: forced fetch_by_id failure for #{provider_id}"
+        raise "MetadataStubProvider: forced fetch_by_id failure for #{inspect(media_ref)}"
 
       _other ->
         :ok
@@ -305,6 +346,41 @@ defmodule Mydia.MetadataStubProvider do
     }
   end
 
+  # A TMDB-sourced series, distinct from the TVDB-sourced @series_tvdb_id
+  # catalog entry. Import lists carry TMDB ids regardless of media type, so a
+  # TV import list needs a TMDB-sourced series to resolve against -- there was
+  # none in the catalog before this, which let the import-lists regression
+  # test paper over sending a TMDB id to TVDB by reusing the movie's TMDB id
+  # instead of reproducing the actual shape a TV import list produces.
+  defp tmdb_series_metadata do
+    %MediaMetadata{
+      provider_id: to_string(@series_tmdb_id),
+      provider: :tmdb,
+      media_type: :tv_show,
+      id: @series_tmdb_id,
+      title: @tmdb_series_title,
+      original_title: @tmdb_series_title,
+      year: 2016,
+      first_air_date: "2016-05-04",
+      overview: "A TMDB-sourced stub series used by the import list tests.",
+      genres: ["Mystery"],
+      poster_path: "/stub-tmdb-series-poster.jpg",
+      imdb_id: "tt0000949",
+      original_language: "en",
+      number_of_seasons: 1,
+      number_of_episodes: 2,
+      vote_average: 7.5,
+      seasons: [
+        %SeasonInfo{
+          season_number: 1,
+          name: "Season 1",
+          overview: "Stub season.",
+          episode_count: 2
+        }
+      ]
+    }
+  end
+
   defp movie_metadata do
     %MediaMetadata{
       provider_id: to_string(@movie_tmdb_id),
@@ -350,13 +426,15 @@ defmodule Mydia.MetadataStubProvider do
           season_number: 1,
           name: "Season 1",
           overview: "Stub season.",
-          episode_count: 2
+          episode_count: 2,
+          tvdb_season_id: @series_season1_tvdb_id
         },
         %SeasonInfo{
           season_number: 2,
           name: "Season 2",
           overview: "Stub season 2.",
-          episode_count: 2
+          episode_count: 2,
+          tvdb_season_id: @series_season2_tvdb_id
         }
       ]
     }

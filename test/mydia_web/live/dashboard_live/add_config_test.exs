@@ -21,7 +21,7 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     render_hook(view, "open_add_config", %{
-      "tmdb_id" => "551",
+      "ref" => "tmdb:551",
       "media_type" => "movie",
       "title" => "The Kestrel Protocol"
     })
@@ -35,7 +35,7 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     render_hook(view, "open_add_config", %{
-      "tmdb_id" => "551",
+      "ref" => "tmdb:551",
       "media_type" => "movie",
       "title" => "The Kestrel Protocol"
     })
@@ -49,7 +49,7 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     render_hook(view, "open_add_config", %{
-      "tmdb_id" => "551",
+      "ref" => "tmdb:551",
       "media_type" => "movie",
       "title" => "The Kestrel Protocol"
     })
@@ -106,7 +106,7 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     render_hook(view, "open_add_config", %{
-      "tmdb_id" => provider_id,
+      "ref" => "tmdb:#{provider_id}",
       "media_type" => "movie",
       "title" => "The Kestrel Protocol"
     })
@@ -176,7 +176,7 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     render_hook(view, "add_to_library", %{
-      "tmdb_id" => provider_id,
+      "ref" => "tmdb:#{provider_id}",
       "media_type" => "movie"
     })
 
@@ -202,7 +202,7 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
 
     release_gate(gate)
 
-    refute MapSet.member?(assigns.adding_item_ids, provider_id)
+    refute MapSet.member?(assigns.adding_item_ids, {:tmdb, String.to_integer(provider_id)})
 
     # Belt-and-braces: the add never dispatched, so it can never persist.
     assert Mydia.Media.get_media_item_by_tmdb(provider_id) == nil

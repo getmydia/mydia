@@ -27,19 +27,19 @@ defmodule Mydia.Metadata.Provider do
         end
 
         @impl true
-        def fetch_by_id(config, provider_id, opts \\\\ []) do
-          # Fetch detailed metadata by provider-specific ID
+        def fetch_by_ref(config, ref, opts \\\\ []) do
+          # Fetch detailed metadata by a provider-tagged ref
           # Returns {:ok, metadata} or {:error, reason}
         end
 
         @impl true
-        def fetch_images(config, provider_id, opts \\\\ []) do
+        def fetch_images_by_ref(config, ref, opts \\\\ []) do
           # Fetch images (posters, backdrops) for media
           # Returns {:ok, images} or {:error, reason}
         end
 
         @impl true
-        def fetch_season(config, provider_id, season_number, opts \\\\ []) do
+        def fetch_season_by_ref(config, ref, season_number, opts \\\\ []) do
           # Fetch season details with episode information
           # Returns {:ok, season} or {:error, reason}
         end
@@ -81,7 +81,7 @@ defmodule Mydia.Metadata.Provider do
 
   ## Metadata Structure
 
-  The `fetch_by_id/3` callback should return detailed metadata maps:
+  The `fetch_by_ref/3` callback should return detailed metadata maps:
 
       %{
         provider_id: "12345",
@@ -125,7 +125,7 @@ defmodule Mydia.Metadata.Provider do
 
   ## Images Structure
 
-  The `fetch_images/3` callback should return an `ImagesResponse` struct:
+  The `fetch_images_by_ref/3` callback should return an `ImagesResponse` struct:
 
       %ImagesResponse{
         posters: [
@@ -141,7 +141,7 @@ defmodule Mydia.Metadata.Provider do
 
   ## Season Structure
 
-  The `fetch_season/4` callback should return season metadata:
+  The `fetch_season_by_ref/4` callback should return season metadata:
 
       %{
         season_number: 1,
@@ -166,6 +166,7 @@ defmodule Mydia.Metadata.Provider do
   """
 
   alias Mydia.Metadata.Provider.Error
+  alias Mydia.Metadata.Ref
 
   @type config :: %{
           type: atom(),
@@ -273,7 +274,11 @@ defmodule Mydia.Metadata.Provider do
               {:ok, [search_result()]} | {:error, Error.t()}
 
   @doc """
-  Fetches detailed metadata for a specific media item by provider ID.
+  Fetches detailed metadata for a specific media item by provider-tagged ref.
+
+  The ref carries the provider that owns the id (`{:tvdb, 280619}` or
+  `{:tmdb, 63639}`), so this callback dispatches to the right upstream API on
+  its own rather than guessing from `media_type`.
 
   Returns `{:ok, metadata}` with complete metadata,
   or `{:error, reason}` if the media is not found or an error occurs.
@@ -285,17 +290,14 @@ defmodule Mydia.Metadata.Provider do
 
   ## Examples
 
-      iex> fetch_by_id(config, "603", media_type: :movie)
+      iex> fetch_by_ref(config, {:tmdb, 603}, media_type: :movie)
       {:ok, %{provider_id: "603", title: "The Matrix", year: 1999, runtime: 136, ...}}
-
-      iex> fetch_by_id(config, "invalid_id", media_type: :movie)
-      {:error, %Error{type: :not_found, message: "Media not found"}}
   """
-  @callback fetch_by_id(config(), provider_id :: String.t(), fetch_opts()) ::
+  @callback fetch_by_ref(config(), ref :: Ref.t(), fetch_opts()) ::
               {:ok, metadata()} | {:error, Error.t()}
 
   @doc """
-  Fetches images for a specific media item.
+  Fetches images for a specific media item by provider-tagged ref.
 
   Returns `{:ok, images}` with poster, backdrop, and logo images,
   or `{:error, reason}` if an error occurs.
@@ -307,14 +309,19 @@ defmodule Mydia.Metadata.Provider do
 
   ## Examples
 
-      iex> fetch_images(config, "603", media_type: :movie)
+      iex> fetch_images_by_ref(config, {:tmdb, 603}, media_type: :movie)
       {:ok, %ImagesResponse{posters: [...], backdrops: [...], logos: [...]}}
   """
-  @callback fetch_images(config(), provider_id :: String.t(), image_opts()) ::
+  @callback fetch_images_by_ref(config(), ref :: Ref.t(), image_opts()) ::
               {:ok, images()} | {:error, Error.t()}
 
   @doc """
-  Fetches season details with episode information for a TV show.
+  Fetches season details with episode information for a TV show, addressed by
+  a provider-tagged ref naming the series.
+
+  TVDB addresses a season by its own id rather than the series id, so a TVDB
+  fetch still reads the season id from `opts[:tvdb_season_id]`; the ref only
+  disambiguates which provider owns the series itself.
 
   Returns `{:ok, season}` with season and episode metadata,
   or `{:error, reason}` if an error occurs.
@@ -322,15 +329,16 @@ defmodule Mydia.Metadata.Provider do
   ## Options
 
     * `:language` - Language for results (default: "en-US")
+    * `:tvdb_season_id` - The TVDB season id, required when the series is on TVDB
 
   ## Examples
 
-      iex> fetch_season(config, "1396", 1)
+      iex> fetch_season_by_ref(config, {:tmdb, 1396}, 1, [])
       {:ok, %{season_number: 1, episodes: [%{episode_number: 1, name: "Pilot", ...}]}}
   """
-  @callback fetch_season(
+  @callback fetch_season_by_ref(
               config(),
-              provider_id :: String.t(),
+              ref :: Ref.t(),
               season_number :: integer(),
               season_opts()
             ) ::

@@ -35,7 +35,7 @@ defmodule MydiaWeb.DiscoverLive.AuthorizationTest do
       # handler itself must reject the event too: nothing stops a guest from
       # pushing the raw event over the socket.
       result =
-        render_click(view, "add_to_library", %{"tmdb_id" => "693134", "media_type" => "movie"})
+        render_click(view, "add_to_library", %{"ref" => "tmdb:693134", "media_type" => "movie"})
 
       assert result =~ "You do not have permission to add media items"
     end

@@ -1,6 +1,7 @@
 defmodule MydiaWeb.MediaLive.Show do
   use MydiaWeb, :live_view
   alias Mydia.Media
+  alias Mydia.Metadata.Ref
   alias Mydia.Settings
   alias MydiaWeb.MediaLive.Show.Modals
   alias MydiaWeb.MediaLive.Show.SubtitleModal
@@ -833,13 +834,18 @@ defmodule MydiaWeb.MediaLive.Show do
     end
   end
 
-  def handle_info({:fetch_detail_metadata, tmdb_id, media_type}, socket) do
+  def handle_info({:fetch_detail_metadata, _tmdb_id, media_type}, socket) do
+    # `selected_item` was just found and assigned by the show_details handler
+    # that sent this message, so its own ref already carries the provenance.
+    ref = Ref.from_search_result(socket.assigns.selected_item)
+
     {:noreply,
-     DetailModal.put_metadata(socket, MediaAddHelpers.fetch_detail_metadata(tmdb_id, media_type))}
+     DetailModal.put_metadata(socket, MediaAddHelpers.fetch_detail_metadata(ref, media_type))}
   end
 
-  def handle_info({:fetch_recommendations, tmdb_id, media_type}, socket) do
-    {:noreply, DetailModalEvents.fetch_recommendations(socket, tmdb_id, media_type)}
+  def handle_info({:fetch_recommendations, _tmdb_id, media_type}, socket) do
+    ref = Ref.from_search_result(socket.assigns.selected_item)
+    {:noreply, DetailModalEvents.fetch_recommendations(socket, ref, media_type)}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}

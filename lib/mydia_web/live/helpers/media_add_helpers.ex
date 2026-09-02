@@ -13,6 +13,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   alias Mydia.Media.AddDefaults
   alias Mydia.Media.FranchiseEntry
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
   alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
@@ -137,27 +138,25 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   convenience on top of it.
   """
   def handle_add_media_to_library(
-        provider_id,
+        ref,
         media_type,
         library_status_map,
         config \\ nil,
         opts \\ []
       ) do
     {search_on_add, add_opts} = Keyword.pop(opts, :search_on_add, false)
-    provider_id_int = Add.parse_provider_id(provider_id)
 
-    case Add.from_provider(provider_id, media_type, config, add_opts) do
+    case Add.from_provider(ref, media_type, config, add_opts) do
       {:ok, media_item} ->
         maybe_queue_search(media_item, search_on_add)
 
-        {:ok, media_item,
-         update_library_status_map(library_status_map, media_item, provider_id_int)}
+        {:ok, media_item, update_library_status_map(library_status_map, media_item)}
 
       # Not an error from here up: the show the user asked for is in the
       # library. Callers flash it as info and flip the card.
       {:error, {:already_in_library, media_item}} ->
         {:already_in_library, media_item,
-         update_library_status_map(library_status_map, media_item, provider_id_int)}
+         update_library_status_map(library_status_map, media_item)}
 
       {:error, _} = error ->
         error
@@ -200,33 +199,31 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   For movies, fetches TMDB metadata directly.
 
-  Pass `provider: :tvdb` when `provider_id` is already a TVDB series id, which
-  is what every Discover TV search result carries. The TMDB-first path above
-  only makes sense for a TMDB id, and the relay 404s a TVDB id on TMDB's route.
+  The ref's own tag decides the provider: a `{:tvdb, id}` ref (what every
+  Discover TV search result carries, since `Relay.search/3` routes `:tv_show`
+  to `/tvdb/search`) fetches TVDB directly, with no TMDB lookup to start from.
 
   An optional `config` can be injected for testing; defaults to
   `Metadata.default_relay_config()`.
   """
-  def fetch_detail_metadata(provider_id, media_type, config \\ nil, opts \\ []) do
-    config = config || Metadata.default_relay_config()
+  def fetch_detail_metadata(ref, media_type, config \\ nil)
 
-    cond do
-      media_type != :tv_show ->
-        Metadata.fetch_by_id(config, provider_id, media_type: :movie)
-
-      # The id is already a TVDB series id, so there is no TMDB lookup to start
-      # from: a Discover TV search result carries one, since `Relay.search/3`
-      # routes `:tv_show` to `/tvdb/search`. Asking TMDB for it 404s.
-      Keyword.get(opts, :provider) == :tvdb ->
-        Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tvdb)
-
-      true ->
-        fetch_tv_detail_from_tmdb(provider_id, config)
-    end
+  def fetch_detail_metadata({:tmdb, _} = ref, :movie, config) do
+    Metadata.fetch_by_ref(config || Metadata.default_relay_config(), ref, media_type: :movie)
   end
 
-  defp fetch_tv_detail_from_tmdb(provider_id, config) do
-    case Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tmdb) do
+  def fetch_detail_metadata({:tvdb, _}, :movie, _config), do: {:error, :tvdb_ref_for_movie}
+
+  def fetch_detail_metadata({:tvdb, _} = ref, :tv_show, config) do
+    Metadata.fetch_by_ref(config || Metadata.default_relay_config(), ref, media_type: :tv_show)
+  end
+
+  def fetch_detail_metadata({:tmdb, _} = ref, :tv_show, config) do
+    fetch_tv_detail_from_tmdb(ref, config || Metadata.default_relay_config())
+  end
+
+  defp fetch_tv_detail_from_tmdb(ref, config) do
+    case Metadata.fetch_by_ref(config, ref, media_type: :tv_show) do
       {:ok, tmdb_metadata} ->
         if Settings.derive_tv_metadata_source() == :tmdb do
           {:ok, tmdb_metadata}
@@ -268,15 +265,21 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   A miss falls back to the title the caret sends in `phx-value-title`, which is
   all the dialog strictly needs. A nil poster resolves to the placeholder in
   `AddMediaComponents.get_poster_url/1`.
+
+  Matched on the ref's own id alone, not its provider tag: within one call the
+  candidate lists are homogeneous by media type (Discover's grid and rail are
+  both movies or both TV shows for the active tab; the franchise strip and
+  recommendations rail are both TMDB), so the bare id is unambiguous here even
+  though it would not be safe to fetch by.
   """
-  @spec preview_for([list()], term(), String.t() | nil) :: %{
+  @spec preview_for([list()], Ref.t(), String.t() | nil) :: %{
           title: String.t(),
           year: integer() | nil,
           poster_path: String.t() | nil,
           overview: String.t() | nil
         }
-  def preview_for(candidate_lists, provider_id, fallback_title) do
-    id = to_string(provider_id)
+  def preview_for(candidate_lists, ref, fallback_title) do
+    id = to_string(Ref.id(ref))
 
     candidate_lists
     |> Enum.concat()
@@ -294,9 +297,10 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   library added or unmonitored since the page loaded must not show up as a
   stale option.
 
-  An unrecognised media type returns the socket untouched. The caret only ever
-  sends "movie" or "tv_show", so anything else is a forged event and opening a
-  dialog on it would be worse than doing nothing.
+  An unrecognised media type, or a `ref` that does not parse, returns the
+  socket untouched: the caret only ever sends a well-formed ref and "movie" or
+  "tv_show", so anything else is a forged event and opening a dialog on it
+  would be worse than doing nothing.
   """
   @spec put_add_config(Phoenix.LiveView.Socket.t(), map(), Mydia.Accounts.User.t() | nil, [
           list()
@@ -305,14 +309,19 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   def put_add_config(
         socket,
-        %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
+        %{"ref" => raw_ref, "media_type" => media_type} = params,
         user,
         candidate_lists
       ) do
-    case media_type do
-      "movie" -> assign_add_config(socket, provider_id, :movie, params, user, candidate_lists)
-      "tv_show" -> assign_add_config(socket, provider_id, :tv_show, params, user, candidate_lists)
-      _ -> socket
+    case {Ref.parse(raw_ref), media_type} do
+      {{:ok, ref}, "movie"} ->
+        assign_add_config(socket, ref, :movie, params, user, candidate_lists)
+
+      {{:ok, ref}, "tv_show"} ->
+        assign_add_config(socket, ref, :tv_show, params, user, candidate_lists)
+
+      _ ->
+        socket
     end
   end
 
@@ -371,7 +380,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   `Mydia.Media.Add` opts, and close the dialog. Only what happens after that
   differs, so the completion stays with the host.
 
-  Returns `{:ok, provider_id, media_type, opts, socket}` with the dialog
+  Returns `{:ok, ref, media_type, opts, socket}` with the dialog
   already closed, or `{:halt, socket}` when the event must end without adding
   anything. Three cases halt:
 
@@ -395,13 +404,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   that never assigned the key halts instead of raising.
   """
   @spec resolve_add_config_submit(Phoenix.LiveView.Socket.t(), map()) ::
-          {:ok, term(), :movie | :tv_show, keyword(), Phoenix.LiveView.Socket.t()}
+          {:ok, Ref.t(), :movie | :tv_show, keyword(), Phoenix.LiveView.Socket.t()}
           | {:halt, Phoenix.LiveView.Socket.t()}
   def resolve_add_config_submit(socket, params) do
     with :ok <- Authorization.authorize_create_media(socket),
-         %{provider_id: provider_id, media_type: media_type} <- socket.assigns[:add_config],
+         %{ref: ref, media_type: media_type} <- socket.assigns[:add_config],
          {:ok, opts} <- add_opts_from_config(params, media_type, socket.assigns.current_user) do
-      {:ok, provider_id, media_type, opts, clear_add_config(socket)}
+      {:ok, ref, media_type, opts, clear_add_config(socket)}
     else
       {:unauthorized, socket} ->
         {:halt, socket}
@@ -418,12 +427,12 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   end
 
   @doc """
-  Marks `provider_id` as in flight and sends `message` to the LiveView.
+  Marks `key` (a ref) as in flight and sends `message` to the LiveView.
 
   An impatient double-click sends the event twice before the first
   `handle_info` runs. Without this guard the second add lands on a title the
   first just created, resolves to `:already_in_library`, and flashes a false
-  failure for a title the user only meant to add once. A repeat for an id
+  failure for a title the user only meant to add once. A repeat for a ref
   already in flight is dropped and nothing is sent.
 
   `message` is opaque so the two add paths can share the guard: a plain click
@@ -435,8 +444,8 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   them itself.
   """
   @spec queue_add(Phoenix.LiveView.Socket.t(), term(), term()) :: Phoenix.LiveView.Socket.t()
-  def queue_add(socket, provider_id, message) do
-    if MapSet.member?(socket.assigns.adding_item_ids, provider_id) do
+  def queue_add(socket, key, message) do
+    if MapSet.member?(socket.assigns.adding_item_ids, key) do
       socket
     else
       send(self(), message)
@@ -444,19 +453,19 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       Phoenix.Component.assign(
         socket,
         :adding_item_ids,
-        MapSet.put(socket.assigns.adding_item_ids, provider_id)
+        MapSet.put(socket.assigns.adding_item_ids, key)
       )
     end
   end
 
   # Private helpers
 
-  defp assign_add_config(socket, provider_id, media_type, params, user, candidate_lists) do
+  defp assign_add_config(socket, ref, media_type, params, user, candidate_lists) do
     Phoenix.Component.assign(socket, :add_config, %{
-      provider_id: provider_id,
+      ref: ref,
       media_type: media_type,
       defaults: AddDefaults.resolve(user, media_type),
-      preview: preview_for(candidate_lists, provider_id, params["title"]),
+      preview: preview_for(candidate_lists, ref, params["title"]),
       libraries: candidate_libraries(media_type)
     })
   end
@@ -491,7 +500,15 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   defp presence(""), do: nil
   defp presence(value), do: value
 
-  defp update_library_status_map(library_status_map, media_item, tmdb_id_int) do
+  # The untagged key space is TMDB-only (see `enrich_with_library_status/2`
+  # above, which reads it before the tagged `{:tvdb, id}` key). Keying it off
+  # `Ref.id(ref)` used to put a TVDB add's own id there whenever the ref was
+  # `{:tvdb, id}`, since a ref's bare id carries no provider information once
+  # extracted -- a TMDB result with the same numeric id would then read the
+  # TVDB item's status. `media_item.tmdb_id` is the show's actual TMDB id (nil
+  # unless the add resolved a cross-reference), so a TVDB-only add no longer
+  # writes anything into this slot.
+  defp update_library_status_map(library_status_map, media_item) do
     entry = %{
       in_library: true,
       monitored: media_item.monitored,
@@ -499,7 +516,12 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       id: media_item.id
     }
 
-    map = Map.put(library_status_map, tmdb_id_int, entry)
+    map =
+      if media_item.tmdb_id do
+        Map.put(library_status_map, media_item.tmdb_id, entry)
+      else
+        library_status_map
+      end
 
     if media_item.tvdb_id do
       Map.put(map, {:tvdb, media_item.tvdb_id}, entry)

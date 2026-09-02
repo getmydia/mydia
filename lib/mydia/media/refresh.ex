@@ -128,12 +128,11 @@ defmodule Mydia.Media.Refresh do
   defp fetch(%MediaItem{} = media_item, provider_id, media_type, source, config) do
     fetch_opts = [
       media_type: media_type,
-      provider: source,
       append_to_response: Metadata.default_append_to_response(media_type),
       season_order: media_item.season_order
     ]
 
-    Metadata.fetch_by_id(config, to_string(provider_id), fetch_opts)
+    Metadata.fetch_by_ref(config, {source, provider_id}, fetch_opts)
   end
 
   # `source` is threaded in from the resolution that actually produced
@@ -239,10 +238,13 @@ defmodule Mydia.Media.Refresh do
   # Which provider issued the id stored inside the metadata blob.
   #
   # The blob records its own provenance: `Relay.fetch_tvdb_by_id/3` stamps
-  # `provider: :tvdb`, while the TMDB path leaves the
-  # `MediaMetadata.from_api_response/3` default of `:metadata_relay`. Assuming
-  # `:tmdb` unconditionally (as the old duplicated resolvers did) routes a TVDB
-  # id to `/tmdb/tv/shows/<tvdb-id>` and fetches an unrelated title.
+  # `provider: :tvdb`, while the TMDB path now stamps
+  # `MediaMetadata.from_api_response/3`'s default of `:tmdb` directly. The
+  # catch-all clause below still treats a stored `:metadata_relay` the same
+  # as `:tmdb`, which is what keeps old blobs (written before that default
+  # was corrected) resolving correctly. Assuming `:tmdb` unconditionally (as
+  # the old duplicated resolvers did) routes a TVDB id to
+  # `/tmdb/tv/shows/<tvdb-id>` and fetches an unrelated title.
   #
   # `metadata_source` still outranks the blob when set, since it is the
   # authoritative provenance recorded at match time.

@@ -203,33 +203,90 @@ defmodule Mydia.Library.MetadataEnricher do
       true ->
         provider_type = existing_item.metadata_source || match_provider_type
 
-        case fetch_full_metadata(
+        case resolve_fetch_provider_id(
+               existing_item,
                provider_id,
-               media_type,
-               config,
-               provider_type,
-               existing_item.season_order
+               match_provider_type,
+               provider_type
              ) do
-          {:ok, metadata} ->
-            attrs =
-              build_metadata_attrs(metadata, media_type, %{
-                provider_type: provider_type,
-                exclude_id: existing_item.id
-              })
+          {:ok, fetch_provider_id} ->
+            fetch_and_update(
+              existing_item,
+              fetch_provider_id,
+              provider_type,
+              media_type,
+              config
+            )
 
-            {:ok,
-             preparation(existing_item, provider_id, provider_type, media_type, :update, attrs),
-             metadata}
-
-          {:error, reason} ->
-            Logger.warning("Failed to fetch updated metadata, returning existing item",
+          {:error, :missing_stored_id} ->
+            Logger.warning(
+              "Stored provenance overrides the matched provider but the item has no id " <>
+                "for it; reusing existing metadata rather than fetching the matched id " <>
+                "under the wrong provider",
               id: existing_item.id,
-              reason: reason
+              stored_provider: provider_type,
+              matched_provider: match_provider_type
             )
 
             {:ok, preparation(existing_item, provider_id, provider_type, media_type, :reuse, nil),
              existing_item.metadata}
         end
+    end
+  end
+
+  # The matched numeric id (`provider_id`) is only guaranteed to belong to
+  # `match_provider_type`'s catalog -- that is the provider whose lookup found
+  # `existing_item` in the first place. When the item's own recorded
+  # provenance (`provider_type`, resolved as `existing_item.metadata_source ||
+  # match_provider_type`) differs from that, fetching `provider_id` from
+  # `provider_type` would send one provider's id to the other provider's
+  # endpoint and can silently overwrite the row with an unrelated title.
+  # Reuse the item's own stored id for the resolved provider instead, and
+  # refuse to fetch when it is missing rather than guess.
+  defp resolve_fetch_provider_id(_existing_item, provider_id, match_provider_type, provider_type)
+       when match_provider_type == provider_type,
+       do: {:ok, provider_id}
+
+  defp resolve_fetch_provider_id(existing_item, _provider_id, _match_provider_type, :tmdb) do
+    case existing_item.tmdb_id do
+      nil -> {:error, :missing_stored_id}
+      id -> {:ok, to_string(id)}
+    end
+  end
+
+  defp resolve_fetch_provider_id(existing_item, _provider_id, _match_provider_type, :tvdb) do
+    case existing_item.tvdb_id do
+      nil -> {:error, :missing_stored_id}
+      id -> {:ok, to_string(id)}
+    end
+  end
+
+  defp fetch_and_update(existing_item, provider_id, provider_type, media_type, config) do
+    case fetch_full_metadata(
+           provider_id,
+           media_type,
+           config,
+           provider_type,
+           existing_item.season_order
+         ) do
+      {:ok, metadata} ->
+        attrs =
+          build_metadata_attrs(metadata, media_type, %{
+            provider_type: provider_type,
+            exclude_id: existing_item.id
+          })
+
+        {:ok, preparation(existing_item, provider_id, provider_type, media_type, :update, attrs),
+         metadata}
+
+      {:error, reason} ->
+        Logger.warning("Failed to fetch updated metadata, returning existing item",
+          id: existing_item.id,
+          reason: reason
+        )
+
+        {:ok, preparation(existing_item, provider_id, provider_type, media_type, :reuse, nil),
+         existing_item.metadata}
     end
   end
 
@@ -251,15 +308,6 @@ defmodule Mydia.Library.MetadataEnricher do
       append_to_response: Metadata.default_append_to_response(media_type)
     ]
 
-    # For TV shows, fetch from the provider that supplied the match so a
-    # TMDB-matched show is not fetched from the TVDB endpoint (and vice versa).
-    fetch_opts =
-      if media_type == :tv_show && provider_type in [:tvdb, :tmdb] do
-        Keyword.put(fetch_opts, :provider, provider_type)
-      else
-        fetch_opts
-      end
-
     # The show's recorded season ordering. This path runs against items that are
     # already in the library, so without it an ordinary rescan of a DVD-ordered
     # show overwrites its metadata blob with the official season list — the same
@@ -272,7 +320,14 @@ defmodule Mydia.Library.MetadataEnricher do
         fetch_opts
       end
 
-    Metadata.fetch_by_id_cached(config, provider_id, fetch_opts)
+    # `provider_type` is the provider that supplied the match, so a
+    # TMDB-matched show is fetched from TMDB (and a TVDB one from TVDB) rather
+    # than guessed from media_type.
+    Metadata.fetch_by_ref_cached(
+      config,
+      {provider_type, String.to_integer(provider_id)},
+      fetch_opts
+    )
   end
 
   # The create path. Everything the provider owns, plus the monitoring default
@@ -298,8 +353,11 @@ defmodule Mydia.Library.MetadataEnricher do
   defp build_metadata_attrs(metadata, media_type, match_result) do
     provider_id = String.to_integer(to_string(metadata.provider_id))
 
-    raw_provider_type = Map.get(match_result, :provider_type, metadata.provider || :tmdb)
-    provider_type = normalize_provider_type(raw_provider_type, metadata)
+    # `match_result.provider_type` is already a concrete :tvdb / :tmdb value:
+    # MetadataMatcher resolves it from the search result that produced this
+    # match (via `Mydia.Metadata.Ref.from_search_result/1`) before the match
+    # result is ever built, so there is nothing left to hand-map here.
+    provider_type = Map.get(match_result, :provider_type, :tmdb)
 
     attrs = %{
       type: media_type_to_string(media_type),
@@ -342,14 +400,6 @@ defmodule Mydia.Library.MetadataEnricher do
       attrs
     end
   end
-
-  # Normalize any provider signal to a concrete :tvdb / :tmdb value. Search
-  # results from the relay carry provider: :metadata_relay for TMDB, which must
-  # map to :tmdb rather than leak through as an invalid metadata_source.
-  defp normalize_provider_type(:tvdb, _metadata), do: :tvdb
-  defp normalize_provider_type(:tmdb, _metadata), do: :tmdb
-  defp normalize_provider_type(_other, %{provider: :tvdb}), do: :tvdb
-  defp normalize_provider_type(_other, _metadata), do: :tmdb
 
   defp media_type_to_string(:movie), do: "movie"
   defp media_type_to_string(:tv_show), do: "tv_show"
@@ -395,7 +445,7 @@ defmodule Mydia.Library.MetadataEnricher do
         not episodes_exist_for_show?(preparation.media_item_id)
 
     if should_fetch? do
-      fetch_episode_seasons(metadata, preparation.provider_id, config)
+      fetch_episode_seasons(metadata, preparation.provider_id, preparation.provider_type, config)
     else
       {:ok, []}
     end
@@ -429,7 +479,7 @@ defmodule Mydia.Library.MetadataEnricher do
     :ok
   end
 
-  defp fetch_episode_seasons(metadata, provider_id, config) do
+  defp fetch_episode_seasons(metadata, provider_id, provider_type, config) do
     Logger.debug("Fetching episodes for TV show",
       provider_id: provider_id,
       title: if(is_map(metadata), do: Map.get(metadata, :title), else: nil)
@@ -443,6 +493,8 @@ defmodule Mydia.Library.MetadataEnricher do
     original_language = LanguageCode.original_language_from(metadata)
 
     if seasons != [] do
+      ref = {provider_type, String.to_integer(provider_id)}
+
       season_data =
         Enum.reduce(seasons, [], fn season, acc ->
           season_num = Map.get(season, :season_number, 0)
@@ -452,7 +504,7 @@ defmodule Mydia.Library.MetadataEnricher do
             [tvdb_season_id: tvdb_season_id, original_language: original_language]
             |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
-          case Metadata.fetch_season_cached(config, provider_id, season_num, fetch_opts) do
+          case Metadata.fetch_season_by_ref_cached(config, ref, season_num, fetch_opts) do
             {:ok, fetched_season} ->
               [fetched_season | acc]
 

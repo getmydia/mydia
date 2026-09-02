@@ -73,11 +73,17 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
   #
   # The Map.put decorations are the same shape the recommendations rail already
   # carries; see RecommendationEvents.decorate/3.
+  #
+  # A franchise entry is a TMDB collection member -- there is no TVDB
+  # equivalent -- so `provider: :tmdb` rather than `:metadata_relay`, which
+  # named the config type that served the response rather than the provider
+  # owning the id. `Ref.from_search_result/1`, which the shared card calls to
+  # build its `phx-value-ref`, needs the real provider.
   def rail_items(franchise) do
     Enum.map(franchise.entries, fn entry ->
       %SearchResult{
         provider_id: to_string(entry.tmdb_id),
-        provider: :metadata_relay,
+        provider: :tmdb,
         media_type: :movie,
         title: entry.title,
         year: entry.year,

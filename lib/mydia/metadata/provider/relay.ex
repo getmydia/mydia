@@ -33,13 +33,13 @@ defmodule Mydia.Metadata.Provider.Relay do
       {:ok, results} = Relay.search(config, "The Matrix", media_type: :movie)
 
       # Fetch detailed metadata
-      {:ok, metadata} = Relay.fetch_by_id(config, "603", media_type: :movie)
+      {:ok, metadata} = Relay.fetch_by_ref(config, {:tmdb, 603}, media_type: :movie)
 
       # Fetch images
-      {:ok, images} = Relay.fetch_images(config, "603", media_type: :movie)
+      {:ok, images} = Relay.fetch_images_by_ref(config, {:tmdb, 603}, media_type: :movie)
 
       # Fetch TV season (for TV shows)
-      {:ok, season} = Relay.fetch_season(config, "1396", 1)
+      {:ok, season} = Relay.fetch_season_by_ref(config, {:tmdb, 1396}, 1)
 
   ## Relay Endpoints
 
@@ -71,6 +71,7 @@ defmodule Mydia.Metadata.Provider.Relay do
   alias Mydia.Metadata.Provider.{Error, HTTP}
   alias Mydia.Metadata.LanguageCode
   alias Mydia.Metadata.ProviderIDRegistry
+  alias Mydia.Metadata.Ref
 
   alias Mydia.Metadata.Structs.{
     ImageData,
@@ -198,22 +199,17 @@ defmodule Mydia.Metadata.Provider.Relay do
   end
 
   @impl true
-  def fetch_by_id(config, provider_id, opts \\ []) do
-    media_type = Keyword.get(opts, :media_type, :movie)
-    provider = Keyword.get(opts, :provider)
+  def fetch_by_ref(config, {:tvdb, id}, opts), do: fetch_tvdb_by_id(config, to_string(id), opts)
 
-    # Route to TVDB for TV shows by default, or when explicitly requested
-    if provider == :tvdb || (media_type == :tv_show && provider != :tmdb) do
-      fetch_tvdb_by_id(config, provider_id, opts)
-    else
-      fetch_tmdb_by_id(config, provider_id, media_type, opts)
-    end
+  def fetch_by_ref(config, {:tmdb, id}, opts) do
+    media_type = Keyword.get(opts, :media_type, :movie)
+    fetch_tmdb_by_id(config, to_string(id), media_type, opts)
   end
 
   # Fetch from TMDB (default behavior)
   defp fetch_tmdb_by_id(config, provider_id, media_type, opts) do
     # Validate that the provider ID matches the requested media type
-    case ProviderIDRegistry.validate_id_type(provider_id, :tmdb, media_type) do
+    case ProviderIDRegistry.validate_id_type({:tmdb, String.to_integer(provider_id)}, media_type) do
       :ok ->
         # Validation passed, proceed with fetch
         perform_tmdb_fetch(config, provider_id, media_type, opts)
@@ -258,7 +254,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     case HTTP.get(req, endpoint, params: params) do
       {:ok, %{status: 200, body: body}} ->
         # Successful fetch - record the ID→type mapping
-        ProviderIDRegistry.record_id_type(provider_id, :tmdb, media_type)
+        ProviderIDRegistry.record_id_type({:tmdb, String.to_integer(provider_id)}, media_type)
         metadata = parse_metadata(body, media_type, provider_id)
         {:ok, metadata}
 
@@ -278,7 +274,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     media_type = Keyword.get(opts, :media_type, :tv_show)
 
     # Validate that the provider ID matches the requested media type
-    case ProviderIDRegistry.validate_id_type(provider_id, :tvdb, media_type) do
+    case ProviderIDRegistry.validate_id_type({:tvdb, String.to_integer(provider_id)}, media_type) do
       :ok ->
         # Validation passed, proceed with fetch
         perform_tvdb_fetch(config, provider_id, media_type, opts)
@@ -310,7 +306,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     case HTTP.get(req, endpoint, params: [meta: "translations"]) do
       {:ok, %{status: 200, body: body}} ->
         # Successful fetch - record the ID→type mapping
-        ProviderIDRegistry.record_id_type(provider_id, :tvdb, media_type)
+        ProviderIDRegistry.record_id_type({:tvdb, String.to_integer(provider_id)}, media_type)
         # TVDB wraps response in "data" key
         data = body["data"] || body
         # Transform TVDB response to TMDB-like format for parsing
@@ -412,9 +408,9 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   # The `is_binary(id)` guard is load-bearing, not defensive noise. `remoteIds`
   # is untyped relay-forwarded JSON, and a non-string id would flow into
-  # `ProviderIDRegistry.record_id_type/3`, whose `is_binary(provider_id)` guard
-  # would raise FunctionClauseError from inside the TVDB fetch — turning a
-  # missing trailer into a failed TV show fetch.
+  # `String.to_integer/1` ahead of `ProviderIDRegistry.record_id_type/2`,
+  # raising from inside the TVDB fetch and turning a missing trailer into a
+  # failed TV show fetch.
   defp tmdb_id_from_remote_ids(remote_ids) when is_list(remote_ids),
     do: find_remote_id(remote_ids, "TheMovieDB.com")
 
@@ -629,8 +625,8 @@ defmodule Mydia.Metadata.Provider.Relay do
   pay for a second series-level request just to pick a different ordering
   out of the same payload.
 
-  Unlike `fetch_season/4` (`Mydia.Metadata.fetch_season_cached/4`), this
-  skips the per-episode translation fetch: callers only need identity and
+  Unlike `fetch_season_by_ref/4` (`Mydia.Metadata.fetch_season_by_ref_cached/4`),
+  this skips the per-episode translation fetch: callers only need identity and
   position to build a `SeasonOrder.remap/3` mapping or count seasons, not
   localized names, so a 170-episode season costs one request instead of 171.
   """
@@ -806,15 +802,12 @@ defmodule Mydia.Metadata.Provider.Relay do
   defp transform_tvdb_artwork(_, _), do: nil
 
   @impl true
-  def fetch_images(config, provider_id, opts \\ []) do
-    media_type = Keyword.get(opts, :media_type, :movie)
-    provider = Keyword.get(opts, :provider)
+  def fetch_images_by_ref(config, {:tvdb, id}, _opts),
+    do: fetch_tvdb_images(config, to_string(id))
 
-    if provider == :tvdb || (media_type == :tv_show && provider != :tmdb) do
-      fetch_tvdb_images(config, provider_id)
-    else
-      fetch_tmdb_images(config, provider_id, media_type, opts)
-    end
+  def fetch_images_by_ref(config, {:tmdb, id}, opts) do
+    media_type = Keyword.get(opts, :media_type, :movie)
+    fetch_tmdb_images(config, to_string(id), media_type, opts)
   end
 
   defp fetch_tmdb_images(config, provider_id, media_type, opts) do
@@ -918,14 +911,17 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   defp parse_tvdb_artworks(_), do: ImagesResponse.new(%{posters: [], backdrops: [], logos: []})
 
+  # TVDB addresses a season by its own id, not by the series ref, so the
+  # branch here still keys off `opts[:tvdb_season_id]` rather than the ref's
+  # tag. The ref only supplies the series id for the TMDB path.
   @impl true
-  def fetch_season(config, provider_id, season_number, opts \\ []) do
+  def fetch_season_by_ref(config, ref, season_number, opts \\ []) do
     tvdb_season_id = Keyword.get(opts, :tvdb_season_id)
 
     if tvdb_season_id do
       fetch_season_tvdb(config, tvdb_season_id, opts)
     else
-      fetch_season_tmdb(config, provider_id, season_number, opts)
+      fetch_season_tmdb(config, to_string(Ref.id(ref)), season_number, opts)
     end
   end
 
@@ -1203,7 +1199,7 @@ defmodule Mydia.Metadata.Provider.Relay do
 
       iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Relay.fetch_recommendations(config, "965150", media_type: :movie)
-      {:ok, [%Mydia.Metadata.Structs.SearchResult{title: "The Eternal Daughter"}]}
+      {:ok, [%Mydia.Metadata.Structs.SearchResult{title: "Midnight Ferry"}]}
   """
   @spec fetch_recommendations(map(), String.t(), keyword()) ::
           {:ok, [SearchResult.t()]} | {:error, Error.t()}
@@ -1325,8 +1321,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     # This helps prevent future 404s from type mismatches
     if search_result.provider_id && media_type do
       ProviderIDRegistry.record_id_type(
-        to_string(search_result.provider_id),
-        :tmdb,
+        {:tmdb, String.to_integer(search_result.provider_id)},
         media_type
       )
     end
@@ -1369,7 +1364,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     display_overview = english_overview || data["overview"]
 
     # Record the ID→type mapping for TVDB
-    ProviderIDRegistry.record_id_type(provider_id, :tvdb, :tv_show)
+    ProviderIDRegistry.record_id_type({:tvdb, String.to_integer(provider_id)}, :tv_show)
 
     %SearchResult{
       provider_id: provider_id,

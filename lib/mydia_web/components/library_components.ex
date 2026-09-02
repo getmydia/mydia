@@ -533,7 +533,7 @@ defmodule MydiaWeb.LibraryComponents do
   not drive a CSS `:focus` dropdown. It pushes an event and the host opens the
   dialog.
   """
-  attr :tmdb_id, :any, default: nil
+  attr :ref, :string, default: nil
   attr :media_type, :any, default: nil
   attr :title, :string, default: ""
 
@@ -545,7 +545,7 @@ defmodule MydiaWeb.LibraryComponents do
       class="btn btn-primary btn-sm join-item px-2"
       title="Configure before adding"
       phx-click="open_add_config"
-      phx-value-tmdb_id={@tmdb_id}
+      phx-value-ref={@ref}
       phx-value-media_type={@media_type}
       phx-value-title={@title}
     >

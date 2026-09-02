@@ -96,7 +96,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponentsTest do
     missing = extract_entry(render(franchise(two_entries())), 672)
 
     assert missing =~ ~s(phx-click="add_franchise_movie")
-    assert missing =~ ~s(phx-value-tmdb_id="672")
+    assert missing =~ ~s(phx-value-ref="tmdb:672")
   end
 
   test "a missing entry is inert without permission" do

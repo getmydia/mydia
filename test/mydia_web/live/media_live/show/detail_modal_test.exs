@@ -20,6 +20,8 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
   import Mydia.MetadataCacheHelpers
   import Mydia.MetadataStub
 
+  alias Mydia.MetadataStubProvider
+
   setup :setup_metadata_stub
 
   setup %{conn: conn} do
@@ -228,7 +230,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
     # same canned "Stub Movie" for any provider_id, and TrendingDetailModal
     # prefers loaded metadata's title over the SearchResult's own once that
     # fetch lands (see title/2), so the header text is identical across every
-    # title this dialog ever opens over. The add button's phx-value-tmdb_id
+    # title this dialog ever opens over. The add button's phx-value-ref
     # is read straight off @item rather than @metadata, so it is what proves
     # the dialog actually swapped to the second-hop title rather than staying
     # on the first.
@@ -236,7 +238,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
 
     assert has_element?(
              view,
-             ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-tmdb_id="#{second_hop_tmdb_id}"])
+             ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-ref="tmdb:#{second_hop_tmdb_id}"])
            )
   end
 
@@ -282,7 +284,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
     |> element(
       # The visible label is "Add"; "Add to Library" lives in title/aria-label
       # since #673 stopped the card button wrapping to two lines.
-      ~s(#media-detail-modal-rail button[phx-click="add_selected_item"][phx-value-tmdb_id="#{dialog_pick_tmdb_id}"]),
+      ~s(#media-detail-modal-rail button[phx-click="add_selected_item"][phx-value-ref="tmdb:#{dialog_pick_tmdb_id}"]),
       "Add"
     )
     |> render_click()
@@ -347,7 +349,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
     # its own modal, see the comment on its `{:request_media, ...}` clause.
     view
     |> element(
-      ~s(#media-detail-modal-rail button[phx-click="request_selected_item"][phx-value-tmdb_id="#{dialog_only_tmdb_id}"]),
+      ~s(#media-detail-modal-rail button[phx-click="request_selected_item"][phx-value-ref="tmdb:#{dialog_only_tmdb_id}"]),
       "Request"
     )
     |> render_click()
@@ -361,7 +363,13 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
        %{conn: conn} do
     source_tmdb_id = unique_provider_id()
     collection_id = unique_provider_id()
-    missing_tmdb_id = unique_provider_id()
+    # The add itself fetches the missing entry's own metadata through
+    # Add.from_provider/4, which resolves through the stub's ref-keyed
+    # catalog (Mydia.MetadataStubProvider), not through warm_recommendations_cache
+    # below. A random id 404s there by design (that catalog is exactly what
+    # stops a broken add from looking healthy), so the entry being added has
+    # to be the stub's one known movie ref.
+    missing_tmdb_id = MetadataStubProvider.movie_tmdb_id()
 
     movie =
       media_item_fixture(%{
@@ -401,12 +409,12 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
 
     assert has_element?(
              view,
-             ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-tmdb_id="#{missing_tmdb_id}"])
+             ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-ref="tmdb:#{missing_tmdb_id}"])
            )
 
     view
     |> element(
-      ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-tmdb_id="#{missing_tmdb_id}"])
+      ~s(#media-detail-modal button[phx-click="add_selected_item"][phx-value-ref="tmdb:#{missing_tmdb_id}"])
     )
     |> render_click()
 

@@ -56,7 +56,7 @@ defmodule MydiaWeb.Api.MediaController do
 
   Returns:
     - 200: Media item successfully matched and updated
-    - 400: Invalid request (missing provider_id, invalid provider_type)
+    - 400: Invalid request (missing provider_id, non-numeric provider_id, invalid provider_type)
     - 404: Media item not found
     - 422: Metadata fetch failed or update failed
   """
@@ -119,6 +119,48 @@ defmodule MydiaWeb.Api.MediaController do
   defp parse_media_type(_), do: :movie
 
   defp perform_manual_match(conn, media_item, provider_id, provider_type, fetch_episodes) do
+    case parse_provider_id(provider_id) do
+      {:ok, provider_id_int} ->
+        do_perform_manual_match(
+          conn,
+          media_item,
+          to_string(provider_id_int),
+          provider_id_int,
+          provider_type,
+          fetch_episodes
+        )
+
+      :error ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "provider_id must be numeric"})
+    end
+  end
+
+  # A JSON body can send `provider_id` as either a string or a bare number.
+  # `Integer.parse/1` only accepts a binary and raises `FunctionClauseError` on
+  # an integer, which would take the request down with a 500 instead of the
+  # documented 400 for a numeric-looking payload like `"provider_id": 603`.
+  defp parse_provider_id(id) when is_integer(id) and id > 0, do: {:ok, id}
+  defp parse_provider_id(id) when is_integer(id), do: :error
+
+  defp parse_provider_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {int, ""} when int > 0 -> {:ok, int}
+      _ -> :error
+    end
+  end
+
+  defp parse_provider_id(_id), do: :error
+
+  defp do_perform_manual_match(
+         conn,
+         media_item,
+         provider_id,
+         provider_id_int,
+         provider_type,
+         fetch_episodes
+       ) do
     config = Metadata.default_relay_config()
     media_type = parse_media_type(media_item.type)
 
@@ -129,8 +171,11 @@ defmodule MydiaWeb.Api.MediaController do
       media_type: media_type
     )
 
-    # Fetch metadata from provider
-    case Metadata.fetch_by_id(config, provider_id, media_type: media_type) do
+    # Fetch metadata from provider. `provider_type` is explicit request input
+    # (validated above to be :tmdb or :tvdb), never guessed from media_type.
+    ref = {provider_type, provider_id_int}
+
+    case Metadata.fetch_by_ref(config, ref, media_type: media_type) do
       {:ok, metadata} ->
         # Build match result for enricher
         match_result = %{

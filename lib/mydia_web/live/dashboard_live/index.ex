@@ -11,6 +11,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias Mydia.Library
   alias Mydia.Downloads
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.MediaRequests
   alias Mydia.Accounts.Authorization
   alias MydiaWeb.DashboardLive.Components
@@ -19,13 +20,13 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
-  @unsupported_media_type "That media type is not supported."
-
   # How many trending items each rail keeps after a successful fetch (see the
   # Enum.take/2 calls below). The skeleton grid's `count` must match this or
   # the placeholder no longer reserves the same height as the settled row,
   # reintroducing the layout shift this feature exists to prevent.
   @trending_rail_limit 10
+
+  @unsupported_media_type "That media type is not supported."
 
   @impl true
   def mount(_params, _session, socket) do
@@ -167,12 +168,12 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   def handle_event("submit_add_config", %{"config" => params}, socket) do
     case MediaAddHelpers.resolve_add_config_submit(socket, params) do
-      {:ok, provider_id, media_type, opts, socket} ->
+      {:ok, ref, media_type, opts, socket} ->
         {:noreply,
          MediaAddHelpers.queue_add(
            socket,
-           provider_id,
-           {:add_media_to_library_with_opts, provider_id, media_type, opts}
+           ref,
+           {:add_media_to_library_with_opts, ref, media_type, opts}
          )}
 
       {:halt, socket} ->
@@ -182,17 +183,18 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   def handle_event(
         "add_to_library",
-        %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
+        %{"ref" => raw_ref, "media_type" => media_type} = params,
         socket
       ) do
-    with :ok <- LiveAuthorization.authorize_create_media(socket) do
+    with :ok <- LiveAuthorization.authorize_create_media(socket),
+         {:ok, ref} <- Ref.parse(raw_ref) do
       case parse_event_media_type(media_type) do
         {:ok, media_type_atom} ->
           {:noreply,
            MediaAddHelpers.queue_add(
              socket,
-             provider_id,
-             {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
+             ref,
+             {:add_media_to_library, ref, media_type_atom, params["library_path_id"]}
            )}
 
         :error ->
@@ -200,22 +202,24 @@ defmodule MydiaWeb.DashboardLive.Index do
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :error -> {:noreply, put_flash(socket, :error, "Could not add that item")}
     end
   end
 
   def handle_event(
         "request_media",
-        %{"tmdb_id" => provider_id, "media_type" => media_type},
+        %{"ref" => raw_ref, "media_type" => media_type},
         socket
       ) do
     with :ok <- LiveAuthorization.authorize_submit_request(socket),
+         {:ok, ref} <- Ref.parse(raw_ref),
          {:ok, media_type_atom} <- parse_event_media_type(media_type) do
-      socket = assign(socket, :requesting_item_id, provider_id)
-      send(self(), {:request_media, provider_id, media_type_atom})
+      socket = assign(socket, :requesting_item_id, to_string(Ref.id(ref)))
+      send(self(), {:request_media, ref, media_type_atom})
       {:noreply, socket}
     else
       {:unauthorized, socket} -> {:noreply, socket}
-      :error -> {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+      :error -> {:noreply, put_flash(socket, :error, "Could not request that item")}
     end
   end
 
@@ -286,35 +290,40 @@ defmodule MydiaWeb.DashboardLive.Index do
     {:noreply, socket}
   end
 
-  def handle_info({:fetch_detail_metadata, tmdb_id, media_type}, socket) do
+  def handle_info({:fetch_detail_metadata, _tmdb_id, media_type}, socket) do
+    # `selected_item` was just found and assigned by the show_details handler
+    # that sent this message, so its own ref already carries the provenance.
+    ref = Ref.from_search_result(socket.assigns.selected_item)
+
     {:noreply,
      DetailModal.put_metadata(
        socket,
-       MediaAddHelpers.fetch_detail_metadata(tmdb_id, media_type)
+       MediaAddHelpers.fetch_detail_metadata(ref, media_type)
      )}
   end
 
-  def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
+  def handle_info({:add_media_to_library, ref, media_type, library_path_id}, socket) do
     case MediaAddHelpers.library_path_opts(library_path_id, media_type) do
       {:error, :unknown_library} ->
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> put_flash(:error, "That library is no longer available. Nothing was added.")}
 
       {:ok, opts} ->
-        add_with_opts(provider_id, media_type, opts, socket)
+        add_with_opts(ref, media_type, opts, socket)
     end
   end
 
-  def handle_info({:add_media_to_library_with_opts, provider_id, media_type, opts}, socket) do
-    add_with_opts(provider_id, media_type, opts, socket)
+  def handle_info({:add_media_to_library_with_opts, ref, media_type, opts}, socket) do
+    add_with_opts(ref, media_type, opts, socket)
   end
 
-  def handle_info({:request_media, provider_id, media_type}, socket) do
+  def handle_info({:request_media, ref, media_type}, socket) do
     trending = socket.assigns.trending_movies ++ socket.assigns.trending_tv
+    id_string = to_string(Ref.id(ref))
 
-    case Enum.find(trending, &(to_string(&1.provider_id) == provider_id)) do
+    case Enum.find(trending, &(to_string(&1.provider_id) == id_string)) do
       nil ->
         {:noreply, assign(socket, :requesting_item_id, nil)}
 
@@ -344,9 +353,9 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   ## Private Helpers
 
-  defp add_with_opts(provider_id, media_type, opts, socket) do
+  defp add_with_opts(ref, media_type, opts, socket) do
     case MediaAddHelpers.handle_add_media_to_library(
-           provider_id,
+           ref,
            media_type,
            socket.assigns.library_status_map,
            nil,
@@ -366,7 +375,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> assign(:library_status_map, updated_map)
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
@@ -386,7 +395,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> assign(:library_status_map, updated_map)
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
@@ -396,7 +405,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:error, {:changeset, changeset}} ->
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> put_flash(
            :error,
            "Failed to add: #{MediaAddHelpers.format_changeset_errors(changeset)}"
@@ -405,15 +414,15 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:error, {:metadata, reason}} ->
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
     end
   end
 
-  # Four completion clauses all retire the same id. A MapSet rather than a
-  # single id so a second add cannot blank the first one's spinner (#459).
-  defp clear_adding(socket, provider_id) do
-    assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, provider_id))
+  # Four completion clauses all retire the same ref. A MapSet rather than a
+  # single ref so a second add cannot blank the first one's spinner (#459).
+  defp clear_adding(socket, ref) do
+    assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, ref))
   end
 
   defp format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"

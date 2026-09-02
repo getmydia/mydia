@@ -2713,6 +2713,62 @@ defmodule Mydia.MediaTest do
       # refresh and the episode refresh that reads the season list.
       assert :atomics.get(show_fetches, 1) == 2
     end
+
+    # The show-level fetch above only proves the season *list* comes from
+    # TMDB. Fetching each season's own episodes is a second, independent
+    # provider decision (create_episodes_for_season/3), made by asking
+    # `Mydia.Media.Refresh.resolve_provider/1` again rather than by checking
+    # whether media_item.tvdb_id happens to be set -- so it needs its own
+    # coverage. Only the TMDB season endpoint is stubbed; a wrong-provider
+    # fetch would hit an unstubbed TVDB path and the season would be
+    # reported as failed instead of created.
+    test "a TMDB-sourced show with a back-filled tvdb_id fetches its seasons from TMDB too", %{
+      bypass: bypass,
+      config: config
+    } do
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "TMDB Sourced With Seasons",
+          metadata_source: :tmdb,
+          tmdb_id: 22_345,
+          tvdb_id: 77_890
+        })
+
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/22345", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "id" => 22_345,
+            "name" => "TMDB Sourced With Seasons",
+            "first_air_date" => "2010-01-01",
+            "overview" => "x",
+            "credits" => %{"cast" => [], "crew" => []},
+            "genres" => [],
+            "seasons" => [%{"season_number" => 1, "name" => "Season 1"}]
+          })
+        )
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/tmdb/tv/shows/22345/1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "season_number" => 1,
+            "episodes" => [
+              %{"season_number" => 1, "episode_number" => 1, "name" => "Pilot"}
+            ]
+          })
+        )
+      end)
+
+      assert {:ok, 1} =
+               Mydia.Media.refresh_episodes_for_tv_show(item, config: config, force: true)
+    end
   end
 
   describe "file deletion return shape" do

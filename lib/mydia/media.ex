@@ -1600,9 +1600,10 @@ defmodule Mydia.Media do
         # DVD ordering would refetch the official one and drift straight back to
         # a single 170-episode season. nil resolves to "official" inside
         # SeasonOrder.tvdb_type/1, so passing it through unguarded is correct.
-        case Metadata.fetch_by_id(config, provider_id,
+        ref = {provider_source, String.to_integer(provider_id)}
+
+        case Metadata.fetch_by_ref(config, ref,
                media_type: :tv_show,
-               provider: provider_source,
                season_order: media_item.season_order
              ) do
           {:ok, metadata} ->
@@ -2014,22 +2015,19 @@ defmodule Mydia.Media do
   defp create_episodes_for_season(media_item, season, config) do
     alias Mydia.Metadata
 
-    # Get provider ID - prefer tvdb_id for TV shows
-    # Only use tvdb_season_id routing when we actually have a tvdb_id
-    {provider_id, has_tvdb} =
-      cond do
-        media_item.tvdb_id ->
-          {to_string(media_item.tvdb_id), true}
-
-        media_item.tmdb_id ->
-          {to_string(media_item.tmdb_id), false}
-
-        true ->
-          case media_item.metadata do
-            %{"provider_id" => id} when is_binary(id) -> {id, false}
-            _ -> {nil, false}
-          end
+    # `metadata_source` (when set) is the authoritative provenance; only fall
+    # back to the legacy TVDB-precedence rule and the stored-metadata
+    # provider_id when it is absent. Mirrors the full-metadata refresh in
+    # refresh_metadata/1 above, which resolves the same way for the same
+    # reason: a TMDB-sourced show carrying a back-filled tvdb_id must not have
+    # its episodes fetched from TVDB just because that id happens to exist.
+    {provider_id, provider} =
+      case Mydia.Media.Refresh.resolve_provider(media_item) do
+        {nil, nil} -> {nil, nil}
+        {id, source} -> {to_string(id), source}
       end
+
+    has_tvdb = provider == :tvdb
 
     # Pass tvdb_season_id only if we have a tvdb_id (otherwise season IDs are TMDB).
     # Thread the show's original language so episode selection can fall back to it
@@ -2047,9 +2045,11 @@ defmodule Mydia.Media do
         []
       end
 
-    case Metadata.fetch_season_cached(
+    ref = {provider, String.to_integer(provider_id)}
+
+    case Metadata.fetch_season_by_ref_cached(
            config,
-           to_string(provider_id),
+           ref,
            season.season_number,
            fetch_opts
          ) do

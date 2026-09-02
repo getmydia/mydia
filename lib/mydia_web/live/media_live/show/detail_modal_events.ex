@@ -22,6 +22,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   import Phoenix.LiveView, only: [start_async: 3]
 
   alias Mydia.Media.Recommendations
+  alias Mydia.Metadata.Ref
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
@@ -54,22 +55,34 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   @doc """
   Adds the title the dialog is open over, through the rail it belongs to.
   """
-  def add_selected_item(%{"tmdb_id" => tmdb_id} = params, socket) do
-    if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], tmdb_id) do
-      FranchiseEvents.add_franchise_movie(params, socket)
-    else
-      RecommendationEvents.add_recommendation(params, socket)
+  def add_selected_item(%{"ref" => raw_ref} = params, socket) do
+    case Ref.parse(raw_ref) do
+      {:ok, ref} ->
+        if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], ref) do
+          FranchiseEvents.add_franchise_movie(params, socket)
+        else
+          RecommendationEvents.add_recommendation(params, socket)
+        end
+
+      :error ->
+        {:noreply, socket}
     end
   end
 
   @doc """
   Requests the title the dialog is open over, through the rail it belongs to.
   """
-  def request_selected_item(%{"tmdb_id" => tmdb_id} = params, socket) do
-    if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], tmdb_id) do
-      FranchiseEvents.request_franchise_movie(params, socket)
-    else
-      RecommendationEvents.request_recommendation(params, socket)
+  def request_selected_item(%{"ref" => raw_ref} = params, socket) do
+    case Ref.parse(raw_ref) do
+      {:ok, ref} ->
+        if AddConfigEvents.franchise_entry?(socket.assigns[:franchise], ref) do
+          FranchiseEvents.request_franchise_movie(params, socket)
+        else
+          RecommendationEvents.request_recommendation(params, socket)
+        end
+
+      :error ->
+        {:noreply, socket}
     end
   end
 
@@ -95,11 +108,11 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   so doing it in the handle_info would queue Close, Add and Request behind the
   fetch and the dialog would look frozen.
   """
-  def fetch_recommendations(socket, tmdb_id, media_type) do
+  def fetch_recommendations(socket, ref, media_type) do
     config = socket.assigns.metadata_config
 
     start_async(socket, :load_selected_recommendations, fn ->
-      Recommendations.for_tmdb_id(tmdb_id, media_type, config)
+      Recommendations.for_ref(ref, media_type, config)
     end)
   end
 

@@ -134,7 +134,6 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
   defp add_to_library(import_list, item) do
     # Fetch full metadata
     config = Mydia.Metadata.default_relay_config()
-    tmdb_id = to_string(item.tmdb_id)
 
     media_type =
       case import_list.media_type do
@@ -143,10 +142,11 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
         mt -> mt
       end
 
-    # Import lists typically have TMDB IDs, so use provider: :tmdb to force TMDB fetch
-    fetch_opts = [media_type: media_type, provider: :tmdb]
+    # Import lists carry TMDB ids regardless of media type, so the ref is
+    # always tagged :tmdb.
+    fetch_opts = [media_type: media_type]
 
-    case Mydia.Metadata.fetch_by_id(config, tmdb_id, fetch_opts) do
+    case Mydia.Metadata.fetch_by_ref(config, {:tmdb, item.tmdb_id}, fetch_opts) do
       {:ok, metadata} ->
         create_media_item(import_list, item, metadata, config)
 

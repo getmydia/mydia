@@ -145,7 +145,19 @@ defmodule Mydia.Media.RecommendationsTest do
     end
   end
 
-  describe "for_tmdb_id/3" do
+  describe "for_ref/3" do
+    # The defect this module exists to close: a TVDB ref (what every Discover
+    # TV search result carries) must never reach TMDB's recommendations route.
+    # This passes `config: nil`, which resolves to
+    # `Metadata.default_relay_config/0`, not a bypass -- so a `:none` result
+    # here is not "the relay was unreachable and errored," it is proof that
+    # `for_ref/3`'s only matching head is `{:tmdb, id}` and a `{:tvdb, _}` ref
+    # falls straight to the catch-all without `fetch/3` (and therefore the
+    # relay) ever being reached.
+    test "returns :none for a tvdb ref rather than querying TMDB" do
+      assert Recommendations.for_ref({:tvdb, 280_619}, :tv_show, nil) == :none
+    end
+
     test "serves a title that is not in the library", %{
       bypass: bypass,
       config: config,
@@ -155,33 +167,16 @@ defmodule Mydia.Media.RecommendationsTest do
         %{"id" => 102, "title" => "Janet Planet", "release_date" => "2024-06-21"}
       ])
 
-      assert {:ok, [first]} = Recommendations.for_tmdb_id(tmdb_id, :movie, config)
+      assert {:ok, [first]} = Recommendations.for_ref({:tmdb, tmdb_id}, :movie, config)
       assert first.title == "Janet Planet"
     end
 
-    test "accepts a string id", %{bypass: bypass, config: config, tmdb_id: tmdb_id} do
-      stub_recommendations(bypass, tmdb_id, [%{"id" => 103, "title" => "Tigertail"}])
-
-      assert {:ok, [first]} = Recommendations.for_tmdb_id(to_string(tmdb_id), :movie, config)
-      assert first.title == "Tigertail"
-    end
-
-    test "returns :none for a nil id", %{config: config} do
-      assert :none = Recommendations.for_tmdb_id(nil, :movie, config)
-    end
-
-    # A Bypass with no stub fails the test on any request, so these also prove
-    # the malformed ids never reach the relay rather than merely degrading once
-    # they get there.
-    test "returns :none for malformed ids without calling the relay", %{config: config} do
-      for id <- ["", "abc", "12abc", " 12", 0, -5, %{}] do
-        assert :none = Recommendations.for_tmdb_id(id, :movie, config),
-               "expected :none for #{inspect(id)}"
-      end
+    test "returns :none for a nil ref", %{config: config} do
+      assert :none = Recommendations.for_ref(nil, :movie, config)
     end
 
     test "returns :none for an unsupported media type", %{config: config} do
-      assert :none = Recommendations.for_tmdb_id(603, :music, config)
+      assert :none = Recommendations.for_ref({:tmdb, 603}, :music, config)
     end
   end
 

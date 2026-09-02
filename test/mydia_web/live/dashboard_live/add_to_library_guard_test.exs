@@ -31,16 +31,16 @@ defmodule MydiaWeb.DashboardLive.AddToLibraryGuardTest do
   end
 
   test "a repeat add_to_library for an id already in flight is dropped" do
-    socket = stub_socket(MapSet.new(["693134"]))
+    socket = stub_socket(MapSet.new([{:tmdb, 693_134}]))
 
     {:noreply, updated} =
       Index.handle_event(
         "add_to_library",
-        %{"tmdb_id" => "693134", "media_type" => "movie"},
+        %{"ref" => "tmdb:693134", "media_type" => "movie"},
         socket
       )
 
-    assert updated.assigns.adding_item_ids == MapSet.new(["693134"])
+    assert updated.assigns.adding_item_ids == MapSet.new([{:tmdb, 693_134}])
     refute_received {:add_media_to_library, _, _, _}
   end
 
@@ -50,11 +50,11 @@ defmodule MydiaWeb.DashboardLive.AddToLibraryGuardTest do
     {:noreply, updated} =
       Index.handle_event(
         "add_to_library",
-        %{"tmdb_id" => "693134", "media_type" => "movie"},
+        %{"ref" => "tmdb:693134", "media_type" => "movie"},
         socket
       )
 
-    assert updated.assigns.adding_item_ids == MapSet.new(["693134"])
-    assert_received {:add_media_to_library, "693134", :movie, nil}
+    assert updated.assigns.adding_item_ids == MapSet.new([{:tmdb, 693_134}])
+    assert_received {:add_media_to_library, {:tmdb, 693_134}, :movie, nil}
   end
 end

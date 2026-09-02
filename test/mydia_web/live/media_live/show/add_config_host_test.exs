@@ -128,7 +128,7 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
 
   defp open_config(view, tmdb_id, title) do
     render_hook(view, "open_add_config", %{
-      "tmdb_id" => to_string(tmdb_id),
+      "ref" => "tmdb:#{tmdb_id}",
       "media_type" => "movie",
       "title" => title
     })

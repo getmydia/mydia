@@ -3,11 +3,11 @@ defmodule Mydia.Media.Recommendations do
   Resolves TMDB's recommendations for a title.
 
   Serves two surfaces with different inputs: the library detail page, which has a
-  `MediaItem` row, and the Discover modal, which has only a TMDB id and a type
+  `MediaItem` row, and the Discover modal, which has only a ref and a type
   because the title is not in the library.
 
-  Every outcome that is not a non-empty list collapses to `:none` — no tmdb_id,
-  an unsupported media type, an empty result, a relay error. The rail is meant to
+  Every outcome that is not a non-empty list collapses to `:none` — no ref, an
+  unsupported media type, an empty result, a relay error. The rail is meant to
   be silently absent whenever the lookup does not work out, so the caller has
   exactly one thing to check.
 
@@ -20,6 +20,7 @@ defmodule Mydia.Media.Recommendations do
 
   alias Mydia.Media.MediaItem
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
 
   @media_types %{"movie" => :movie, "tv_show" => :tv_show}
@@ -46,31 +47,30 @@ defmodule Mydia.Media.Recommendations do
 
   def for_media_item(%MediaItem{type: type, tmdb_id: tmdb_id}, config)
       when is_integer(tmdb_id) and is_map_key(@media_types, type) do
-    for_tmdb_id(tmdb_id, Map.fetch!(@media_types, type), config)
+    for_ref({:tmdb, tmdb_id}, Map.fetch!(@media_types, type), config)
   end
 
   def for_media_item(_media_item, _config), do: :none
 
   @doc """
-  Returns recommendations for a bare TMDB id, or `:none`.
+  Returns recommendations for a provider-tagged ref, or `:none`.
 
   This is the entry point for the Discover modal, where the title has no
   `MediaItem` row because it is not in the library.
+
+  Only a `{:tmdb, id}` ref carries recommendations: TMDB is the only provider
+  the relay asks, so a `{:tvdb, id}` ref (what every Discover TV search result
+  carries) falls to the catch-all rather than being sent to TMDB, which is how
+  the rail used to render silently empty for every TVDB-sourced show.
   """
-  @spec for_tmdb_id(integer() | String.t() | nil, :movie | :tv_show, map() | nil) ::
+  @spec for_ref(Ref.t() | nil, :movie | :tv_show, map() | nil) ::
           {:ok, [SearchResult.t()]} | :none
-  def for_tmdb_id(tmdb_id, media_type, config \\ nil)
+  def for_ref(ref, media_type, config \\ nil)
 
-  def for_tmdb_id(nil, _media_type, _config), do: :none
+  def for_ref({:tmdb, id}, media_type, config) when media_type in [:movie, :tv_show],
+    do: fetch(id, media_type, config)
 
-  def for_tmdb_id(tmdb_id, media_type, config) when media_type in [:movie, :tv_show] do
-    case normalize_tmdb_id(tmdb_id) do
-      {:ok, tmdb_id} -> fetch(tmdb_id, media_type, config)
-      :error -> :none
-    end
-  end
-
-  def for_tmdb_id(_tmdb_id, _media_type, _config), do: :none
+  def for_ref(_ref, _media_type, _config), do: :none
 
   @doc """
   Orders recommendations by Bayesian weighted rating and caps the list.
@@ -102,23 +102,12 @@ defmodule Mydia.Media.Recommendations do
     end
   end
 
-  # `""` and `"abc"` would otherwise be interpolated straight into a relay path
-  # and spend a request to learn what the shape already tells us.
-  defp normalize_tmdb_id(id) when is_integer(id) and id > 0, do: {:ok, to_string(id)}
-
-  defp normalize_tmdb_id(id) when is_binary(id) do
-    case Integer.parse(id) do
-      {parsed, ""} when parsed > 0 -> {:ok, to_string(parsed)}
-      _ -> :error
-    end
-  end
-
-  defp normalize_tmdb_id(_), do: :error
-
   defp fetch(tmdb_id, media_type, config) do
     config = config || Metadata.default_relay_config()
 
-    case Metadata.fetch_recommendations_cached(config, tmdb_id, media_type: media_type) do
+    case Metadata.fetch_recommendations_by_ref_cached(config, {:tmdb, tmdb_id},
+           media_type: media_type
+         ) do
       {:ok, []} ->
         :none
 

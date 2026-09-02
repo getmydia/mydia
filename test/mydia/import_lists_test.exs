@@ -5,6 +5,8 @@ defmodule Mydia.ImportListsTest do
   # only ever leaked on PostgreSQL. See test/README.md.
   use Mydia.DataCase, async: false
 
+  import Mydia.MetadataStub
+
   alias Mydia.ImportLists
   alias Mydia.ImportLists.{ImportList, ImportListItem}
 
@@ -1061,6 +1063,35 @@ defmodule Mydia.ImportListsTest do
 
       reloaded = ImportLists.get_import_list_item!(item.id)
       assert reloaded.status == "failed"
+    end
+  end
+
+  describe "add_item_to_library/2 provider routing" do
+    setup :setup_metadata_stub
+
+    test "a TV list item with a TMDB id fetches from TMDB" do
+      {:ok, import_list} =
+        ImportLists.create_import_list(%{
+          name: "Trending Shows",
+          type: "tmdb_trending",
+          media_type: "tv_show",
+          enabled: true,
+          sync_interval: 360,
+          auto_add: false,
+          monitored: true
+        })
+
+      {:ok, item} =
+        ImportLists.create_import_list_item(%{
+          import_list_id: import_list.id,
+          tmdb_id: Mydia.MetadataStubProvider.series_tmdb_id(),
+          title: "Harbour Lights",
+          status: "pending",
+          discovered_at: DateTime.utc_now()
+        })
+
+      assert {:ok, media_item} = ImportLists.add_item_to_library(item, import_list)
+      assert media_item.tmdb_id == Mydia.MetadataStubProvider.series_tmdb_id()
     end
   end
 

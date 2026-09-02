@@ -14,19 +14,26 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
   import Phoenix.LiveViewTest
   import Phoenix.Component, only: [sigil_H: 2]
 
+  alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.DiscoverComponents
 
+  # A real %SearchResult{}, not a bare map: Ref.from_search_result/1 (called
+  # to build the card's phx-value-ref) pattern-matches the struct on purpose.
+  # :tmdb is the only correct provider here, not a habit-default: every
+  # render_component call in this file passes media_type: :movie, and there
+  # is no TVDB movie catalog.
   defp item(attrs \\ %{}) do
-    Enum.into(attrs, %{
+    %SearchResult{
       provider_id: "101",
-      title: "The Eternal Daughter",
+      provider: :tmdb,
+      media_type: :movie,
+      title: "The Quiet Orchard",
       year: 2022,
       poster_path: "/poster.jpg",
-      vote_average: 6.9,
-      in_library: false,
-      monitored: false,
-      id: nil
-    })
+      vote_average: 6.9
+    }
+    |> Map.merge(%{in_library: false, monitored: false, id: nil})
+    |> Map.merge(Map.new(attrs))
   end
 
   defp user, do: %{id: Ecto.UUID.generate(), role: "admin", username: "admin"}
@@ -45,14 +52,14 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
   test "renders one card per item under the rail id" do
     html =
       render_component(&DiscoverComponents.media_rail/1,
-        items: [item(), item(%{provider_id: "102", title: "Janet Planet"})],
+        items: [item(), item(%{provider_id: "102", title: "Copper Static"})],
         media_type: :movie,
         current_user: user()
       )
 
     assert html =~ ~s(id="media-rail")
-    assert html =~ "The Eternal Daughter"
-    assert html =~ "Janet Planet"
+    assert html =~ "The Quiet Orchard"
+    assert html =~ "Copper Static"
   end
 
   # Regression: card_poster/1 used to hardcode loading="lazy" and w500 for
@@ -208,7 +215,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
     test "gives every item a wrapper id derived from the rail id" do
       html =
         render_component(&DiscoverComponents.media_rail/1,
-          items: [item(), item(%{provider_id: "102", title: "Janet Planet"})],
+          items: [item(), item(%{provider_id: "102", title: "Copper Static"})],
           media_type: :movie,
           current_user: user(),
           id: "franchise-section"
@@ -327,7 +334,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       &DiscoverComponents.media_rail/1,
       Keyword.merge(
         [
-          items: [item(), item(%{provider_id: "102", title: "Janet Planet"})],
+          items: [item(), item(%{provider_id: "102", title: "Copper Static"})],
           media_type: :movie,
           current_user: user(),
           collapsible: true,
@@ -346,7 +353,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       assert html =~ ~s(aria-expanded="false")
       refute html =~ ~s(id="media-rail-items")
       refute html =~ ~s(id="media-rail-item-101")
-      refute html =~ "The Eternal Daughter"
+      refute html =~ "The Quiet Orchard"
     end
 
     test "an expanded rail renders its cards under the strip id" do
@@ -355,7 +362,7 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
       assert html =~ ~s(aria-expanded="true")
       assert html =~ ~s(id="media-rail-items")
       assert html =~ ~s(id="media-rail-item-101")
-      assert html =~ "The Eternal Daughter"
+      assert html =~ "The Quiet Orchard"
     end
 
     # aria-controls must name an element that is actually in the document. The

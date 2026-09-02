@@ -13,7 +13,7 @@ defmodule MydiaWeb.AddMediaComponentsTest do
   defp config(overrides \\ %{}) do
     Map.merge(
       %{
-        provider_id: "551",
+        ref: {:tmdb, 551},
         media_type: :movie,
         defaults: %AddDefaults{
           library_path_id: "lib-1",

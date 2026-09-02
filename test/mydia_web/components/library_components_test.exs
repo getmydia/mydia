@@ -15,7 +15,8 @@ defmodule MydiaWeb.LibraryComponentsTest do
     # size. The zero-and-one-library cases that used to be hidden are asserted
     # end to end in the feature test instead, where a real library count exists.
     test "always renders the caret" do
-      html = render_button(%{tmdb_id: "551", media_type: "movie", title: "The Kestrel Protocol"})
+      html =
+        render_button(%{ref: "tmdb:551", media_type: "movie", title: "The Kestrel Protocol"})
 
       refute LazyHTML.from_fragment(html)
              |> LazyHTML.query(~s([data-test="add-config-caret"]))
@@ -23,13 +24,14 @@ defmodule MydiaWeb.LibraryComponentsTest do
     end
 
     test "pushes open_add_config with the card's identifiers" do
-      html = render_button(%{tmdb_id: "551", media_type: "movie", title: "The Kestrel Protocol"})
+      html =
+        render_button(%{ref: "tmdb:551", media_type: "movie", title: "The Kestrel Protocol"})
 
       caret =
         LazyHTML.from_fragment(html) |> LazyHTML.query(~s([data-test="add-config-caret"]))
 
       assert LazyHTML.attribute(caret, "phx-click") == ["open_add_config"]
-      assert LazyHTML.attribute(caret, "phx-value-tmdb_id") == ["551"]
+      assert LazyHTML.attribute(caret, "phx-value-ref") == ["tmdb:551"]
       assert LazyHTML.attribute(caret, "phx-value-media_type") == ["movie"]
       assert LazyHTML.attribute(caret, "phx-value-title") == ["The Kestrel Protocol"]
     end

@@ -20,7 +20,7 @@ defmodule MydiaWeb.AddMediaComponents do
   @doc """
   Renders the dialog for the card in `config`, or nothing when `config` is nil.
 
-  `config` is `%{provider_id:, media_type:, defaults:, preview:, libraries:}`,
+  `config` is `%{ref:, media_type:, defaults:, preview:, libraries:}`,
   built by `MydiaWeb.Live.Helpers.MediaAddHelpers.put_add_config/4`. `preview`
   is `%{title:, year:, poster_path:, overview:}` and any of its values except
   the title may be nil.

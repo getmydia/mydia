@@ -10,26 +10,50 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   import Phoenix.LiveViewTest
 
   alias Mydia.Metadata.Structs.MediaMetadata
+  alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.Live.Components.TrendingDetailModal
 
+  # A real %SearchResult{}, not a bare map: Ref.from_search_result/1 (called
+  # by item_ref/1 to build the card's phx-value-ref) pattern-matches the
+  # struct on purpose, so it can never lack a provider the way a hand-rolled
+  # map can. The default is TVDB because a TV show card in this app is
+  # predominantly TVDB-sourced (Relay.search/3 routes TV search to TVDB); a
+  # movie override always forces :tmdb below, since there is no TVDB movie
+  # catalog. No test in this file overrides provider_id or provider directly.
   defp item(attrs \\ %{}) do
-    Enum.into(attrs, %{
-      id: nil,
-      provider_id: "101",
-      title: "The Eternal Daughter",
-      year: 2022,
-      poster_path: "/poster.jpg",
-      backdrop_path: "/backdrop.jpg",
-      overview: "An overview.",
-      vote_average: 6.9,
-      media_type: :tv_show,
-      in_library: false,
-      monitored: false
-    })
+    merged =
+      Enum.into(attrs, %{
+        id: nil,
+        provider_id: "101",
+        title: "The Quiet Orchard",
+        year: 2022,
+        poster_path: "/poster.jpg",
+        backdrop_path: "/backdrop.jpg",
+        overview: "An overview.",
+        vote_average: 6.9,
+        media_type: :tv_show,
+        in_library: false,
+        monitored: false
+      })
+
+    provider = if merged.media_type == :movie, do: :tmdb, else: :tvdb
+
+    %SearchResult{
+      provider_id: merged.provider_id,
+      provider: provider,
+      media_type: merged.media_type,
+      title: merged.title,
+      year: merged.year,
+      poster_path: merged.poster_path,
+      backdrop_path: merged.backdrop_path,
+      overview: merged.overview,
+      vote_average: merged.vote_average
+    }
+    |> Map.merge(%{id: merged.id, in_library: merged.in_library, monitored: merged.monitored})
   end
 
   defp metadata(attrs) do
-    struct(MediaMetadata, Enum.into(attrs, %{title: "The Eternal Daughter", year: 2022}))
+    struct(MediaMetadata, Enum.into(attrs, %{title: "The Quiet Orchard", year: 2022}))
   end
 
   # `open: true` is mandatory. The whole modal body sits behind

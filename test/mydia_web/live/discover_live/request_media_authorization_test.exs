@@ -34,7 +34,7 @@ defmodule MydiaWeb.DiscoverLive.RequestMediaAuthorizationTest do
     {:noreply, updated} =
       Index.handle_event(
         "request_media",
-        %{"tmdb_id" => "693134", "media_type" => "movie"},
+        %{"ref" => "tmdb:693134", "media_type" => "movie"},
         socket
       )
 
@@ -49,11 +49,11 @@ defmodule MydiaWeb.DiscoverLive.RequestMediaAuthorizationTest do
     {:noreply, updated} =
       Index.handle_event(
         "request_media",
-        %{"tmdb_id" => "693134", "media_type" => "movie"},
+        %{"ref" => "tmdb:693134", "media_type" => "movie"},
         socket
       )
 
     assert updated.assigns.requesting_item_id == "693134"
-    assert_received {:request_media, "693134", :movie}
+    assert_received {:request_media, {:tmdb, 693_134}, :movie}
   end
 end

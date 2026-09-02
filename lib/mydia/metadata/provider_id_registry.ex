@@ -12,10 +12,10 @@ defmodule Mydia.Metadata.ProviderIDRegistry do
   ## Examples
 
       # Record a successful fetch
-      ProviderIDRegistry.record_id_type("456", :tmdb, :tv_show)
+      ProviderIDRegistry.record_id_type({:tmdb, 456}, :tv_show)
 
       # Check before fetching
-      case ProviderIDRegistry.validate_id_type("456", :tmdb, :movie) do
+      case ProviderIDRegistry.validate_id_type({:tmdb, 456}, :movie) do
         :ok -> # Safe to fetch
         {:error, :type_mismatch, actual_type} -> # Skip fetch, log warning
       end
@@ -23,6 +23,8 @@ defmodule Mydia.Metadata.ProviderIDRegistry do
 
   use GenServer
   require Logger
+
+  alias Mydia.Metadata.Ref
 
   @table_name :provider_id_registry
 
@@ -39,19 +41,17 @@ defmodule Mydia.Metadata.ProviderIDRegistry do
   This should be called after a successful metadata fetch (HTTP 200 response).
 
   ## Parameters
-    - `provider_id` - The provider-specific ID (e.g., "456")
-    - `provider` - Provider atom (e.g., :tmdb, :tvdb)
+    - `ref` - The provider-tagged id (e.g., `{:tmdb, 603}`)
     - `media_type` - Media type atom (e.g., :movie, :tv_show)
 
   ## Examples
 
-      iex> ProviderIDRegistry.record_id_type("603", :tmdb, :movie)
+      iex> ProviderIDRegistry.record_id_type({:tmdb, 603}, :movie)
       :ok
   """
-  def record_id_type(provider_id, provider, media_type)
-      when is_binary(provider_id) and is_atom(provider) and is_atom(media_type) do
-    key = {provider_id, provider}
-    :ets.insert(@table_name, {key, media_type})
+  @spec record_id_type(Ref.t(), atom()) :: :ok
+  def record_id_type({provider, id}, media_type) when is_atom(media_type) do
+    :ets.insert(@table_name, {{to_string(id), provider}, media_type})
     :ok
   end
 
@@ -66,22 +66,21 @@ defmodule Mydia.Metadata.ProviderIDRegistry do
   - The ID is known to belong to a different media type
 
   ## Parameters
-    - `provider_id` - The provider-specific ID (e.g., "456")
-    - `provider` - Provider atom (e.g., :tmdb, :tvdb)
+    - `ref` - The provider-tagged id (e.g., `{:tmdb, 456}`)
     - `media_type` - Requested media type atom (e.g., :movie, :tv_show)
 
   ## Examples
 
-      iex> ProviderIDRegistry.record_id_type("456", :tmdb, :tv_show)
-      iex> ProviderIDRegistry.validate_id_type("456", :tmdb, :movie)
+      iex> ProviderIDRegistry.record_id_type({:tmdb, 456}, :tv_show)
+      iex> ProviderIDRegistry.validate_id_type({:tmdb, 456}, :movie)
       {:error, :type_mismatch, :tv_show}
 
-      iex> ProviderIDRegistry.validate_id_type("999", :tmdb, :movie)
+      iex> ProviderIDRegistry.validate_id_type({:tmdb, 999}, :movie)
       :ok
   """
-  def validate_id_type(provider_id, provider, media_type)
-      when is_binary(provider_id) and is_atom(provider) and is_atom(media_type) do
-    key = {provider_id, provider}
+  @spec validate_id_type(Ref.t(), atom()) :: :ok | {:error, :type_mismatch, atom()}
+  def validate_id_type({provider, id}, media_type) when is_atom(media_type) do
+    key = {to_string(id), provider}
 
     case :ets.lookup(@table_name, key) do
       [{^key, ^media_type}] ->
@@ -105,7 +104,7 @@ defmodule Mydia.Metadata.ProviderIDRegistry do
 
   ## Examples
 
-      iex> ProviderIDRegistry.record_id_type("456", :tmdb, :tv_show)
+      iex> ProviderIDRegistry.record_id_type({:tmdb, 456}, :tv_show)
       iex> ProviderIDRegistry.get_known_type("456", :tmdb)
       {:ok, :tv_show}
 

@@ -162,12 +162,12 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
         })
 
       {:noreply, socket} =
-        FranchiseEvents.add_franchise_movie(%{"tmdb_id" => "1002"}, socket)
+        FranchiseEvents.add_franchise_movie(%{"ref" => "tmdb:1002"}, socket)
 
       assert MapSet.member?(socket.assigns.adding_franchise_tmdb_ids, 1002)
 
       # The async body is what performs the add; run it directly.
-      {:ok, media_item} = FranchiseEvents.perform_add(current, 1002, config)
+      {:ok, media_item} = FranchiseEvents.perform_add(current, {:tmdb, 1002}, config)
 
       assert media_item.tmdb_id == 1002
       assert media_item.title == "Missing Sequel"
@@ -197,7 +197,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       end)
 
       assert {:already_in_library, media_item} =
-               FranchiseEvents.perform_add(current, 1302, config)
+               FranchiseEvents.perform_add(current, {:tmdb, 1302}, config)
 
       assert media_item.id == existing.id
     end
@@ -215,7 +215,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
         })
 
       {:noreply, socket} =
-        FranchiseEvents.add_franchise_movie(%{"tmdb_id" => "1012"}, socket)
+        FranchiseEvents.add_franchise_movie(%{"ref" => "tmdb:1012"}, socket)
 
       assert MapSet.size(socket.assigns.adding_franchise_tmdb_ids) == 0
     end
@@ -239,11 +239,11 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
           connected: true
         )
 
-      {:noreply, socket} = FranchiseEvents.add_franchise_movie(%{"tmdb_id" => "1102"}, socket)
+      {:noreply, socket} = FranchiseEvents.add_franchise_movie(%{"ref" => "tmdb:1102"}, socket)
       first = in_flight_tasks(socket)
       assert Map.keys(first) == [{:add_franchise_movie, 1102}]
 
-      {:noreply, socket} = FranchiseEvents.add_franchise_movie(%{"tmdb_id" => "1102"}, socket)
+      {:noreply, socket} = FranchiseEvents.add_franchise_movie(%{"ref" => "tmdb:1102"}, socket)
 
       # An overwritten entry would carry a different ref and pid, and the first
       # task's result would then be discarded by LiveView.
@@ -270,10 +270,10 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
           connected: true
         )
 
-      {:noreply, socket} = FranchiseEvents.add_franchise_movie(%{"tmdb_id" => "1202"}, socket)
+      {:noreply, socket} = FranchiseEvents.add_franchise_movie(%{"ref" => "tmdb:1202"}, socket)
       first = in_flight_tasks(socket)[{:add_franchise_movie, 1202}]
 
-      {:noreply, socket} = FranchiseEvents.add_franchise_movie(%{"tmdb_id" => "1203"}, socket)
+      {:noreply, socket} = FranchiseEvents.add_franchise_movie(%{"ref" => "tmdb:1203"}, socket)
 
       tasks = in_flight_tasks(socket)
 
@@ -323,7 +323,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
 
       {:noreply, updated} =
         FranchiseEvents.request_franchise_movie(
-          %{"tmdb_id" => "672"},
+          %{"ref" => "tmdb:672"},
           guest_socket(franchise, user)
         )
 
@@ -338,18 +338,18 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
 
       assert {:noreply, _socket} =
                FranchiseEvents.request_franchise_movie(
-                 %{"tmdb_id" => "999"},
+                 %{"ref" => "tmdb:999"},
                  guest_socket(franchise, user)
                )
     end
 
-    test "ignores a malformed id" do
+    test "ignores a malformed ref" do
       user = user_fixture(%{role: "guest"})
       franchise = small_franchise([entry(%{tmdb_id: 671}), entry(%{tmdb_id: 672})])
 
       assert {:noreply, _socket} =
                FranchiseEvents.request_franchise_movie(
-                 %{"tmdb_id" => "not-a-number"},
+                 %{"ref" => "imdb:tt3230854"},
                  guest_socket(franchise, user)
                )
     end
@@ -359,7 +359,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
 
       assert {:noreply, _socket} =
                FranchiseEvents.request_franchise_movie(
-                 %{"tmdb_id" => "672"},
+                 %{"ref" => "tmdb:672"},
                  guest_socket(nil, user)
                )
     end
@@ -379,7 +379,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
 
       {:noreply, updated} =
         FranchiseEvents.request_franchise_movie(
-          %{"tmdb_id" => "672"},
+          %{"ref" => "tmdb:672"},
           guest_socket(franchise, user)
         )
 

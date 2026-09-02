@@ -47,7 +47,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       stub_tmdb(ctx, [tmdb_video("TMDBKEY1")])
 
       assert {:ok, metadata} =
-               Relay.fetch_by_id(ctx.config, ctx.tvdb_id, media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
       assert metadata.provider == :tvdb
       assert [%Video{} = video] = metadata.videos
@@ -70,7 +70,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       stub_tmdb(ctx, [tmdb_video("TMDBKEY1")])
 
       assert {:ok, metadata} =
-               Relay.fetch_by_id(ctx.config, ctx.tvdb_id, media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
       assert metadata.provider == :tvdb
       assert [%Video{} = video] = metadata.videos
@@ -90,7 +90,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
 
       for _ <- 1..3 do
         assert {:ok, metadata} =
-                 Relay.fetch_by_id(ctx.config, ctx.tvdb_id, media_type: :tv_show, provider: :tvdb)
+                 Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
         assert [%Video{key: "TMDBKEY1"}] = metadata.videos
       end
@@ -109,7 +109,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
 
       for _ <- 1..3 do
         assert {:ok, metadata} =
-                 Relay.fetch_by_id(ctx.config, ctx.tvdb_id, media_type: :tv_show, provider: :tvdb)
+                 Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
         assert metadata.videos == []
       end
@@ -125,7 +125,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       stub_tmdb(ctx, [tmdb_video("TMDBKEY1")])
 
       assert {:ok, metadata} =
-               Relay.fetch_by_id(ctx.config, ctx.tvdb_id, media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
       assert metadata.provider == :tvdb
       assert metadata.videos == []
@@ -145,7 +145,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       stub_tmdb(ctx, [tmdb_video("TMDBKEY1")])
 
       assert {:ok, metadata} =
-               Relay.fetch_by_id(ctx.config, ctx.tvdb_id, media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
       assert metadata.videos == []
       refute_receive {:relay_request, :tmdb}, 100
@@ -168,10 +168,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       # them so the suite output stays readable.
       ExUnit.CaptureLog.capture_log(fn ->
         assert {:ok, metadata} =
-                 Relay.fetch_by_id(ctx.config, ctx.tvdb_id,
-                   media_type: :tv_show,
-                   provider: :tvdb
-                 )
+                 Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
         # The binding constraint: a missing trailer never fails the fetch.
         assert metadata.provider == :tvdb
@@ -207,10 +204,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       # Req logs a warning per retry; swallow them so the suite stays readable.
       ExUnit.CaptureLog.capture_log(fn ->
         assert {:ok, metadata} =
-                 Relay.fetch_by_id(ctx.config, ctx.tvdb_id,
-                   media_type: :tv_show,
-                   provider: :tvdb
-                 )
+                 Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
         assert metadata.videos == []
       end)
@@ -220,7 +214,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       Agent.update(relay_state, fn _ -> :up end)
 
       assert {:ok, metadata} =
-               Relay.fetch_by_id(ctx.config, ctx.tvdb_id, media_type: :tv_show, provider: :tvdb)
+               Relay.fetch_by_ref(ctx.config, tvdb_ref(ctx), media_type: :tv_show)
 
       # Had the failure been memoized as a confirmed-empty result, this second
       # fetch would never reach TMDB and `videos` would still be [].
@@ -229,6 +223,8 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
   end
 
   ## Fixtures
+
+  defp tvdb_ref(ctx), do: {:tvdb, String.to_integer(ctx.tvdb_id)}
 
   defp tmdb_path(ctx), do: "/tmdb/tv/shows/#{ctx.tmdb_id}"
 

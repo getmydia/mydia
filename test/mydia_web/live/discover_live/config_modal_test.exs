@@ -98,7 +98,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     {:ok, view, _html} = live(conn, ~p"/discover")
 
     render_hook(view, "open_add_config", %{
-      "tmdb_id" => "551",
+      "ref" => "tmdb:551",
       "media_type" => "movie",
       "title" => "The Kestrel Protocol"
     })
@@ -121,7 +121,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
       chosen_library = library_path_fixture(%{type: :movies})
       profile = quality_profile_fixture()
 
-      # The add flow's own metadata fetch (Add.from_provider -> Metadata.fetch_by_id)
+      # The add flow's own metadata fetch (Add.from_provider -> Metadata.fetch_by_ref)
       # is uncached, unlike the search lookup warmed above, so it needs its own
       # Bypass and a temporary metadata_relay_url swap rather than a cache warm.
       bypass = Bypass.open()
@@ -289,7 +289,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
       end)
 
       # The detail modal's own metadata fetch (fetch_detail_metadata ->
-      # Metadata.fetch_by_id) is uncached, matching the add flow's own fetch
+      # Metadata.fetch_by_ref) is uncached, matching the add flow's own fetch
       # in the describe block above.
       Bypass.expect(bypass, "GET", "/tmdb/movies/#{provider_id}", fn conn ->
         body = %{

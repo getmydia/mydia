@@ -64,7 +64,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
 
       # Mock the FileParser.parse to return expected result
       # Mock the Metadata.search to return single match
-      # Mock the Metadata.fetch_by_id to return full metadata
+      # Mock the Metadata.fetch_by_ref to return full metadata
 
       view
       |> element(~s{button[phx-value-title="#{release_title}"]})

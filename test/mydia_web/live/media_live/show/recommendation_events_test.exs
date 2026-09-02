@@ -160,7 +160,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
         })
 
       {:noreply, updated} =
-        RecommendationEvents.request_recommendation(%{"tmdb_id" => to_string(tmdb_id)}, socket)
+        RecommendationEvents.request_recommendation(%{"ref" => "tmdb:#{tmdb_id}"}, socket)
 
       assert updated.assigns.recommendations == recommendations
       assert updated.assigns.requesting_recommendation_id == nil
@@ -195,7 +195,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
         })
 
       {:noreply, updated} =
-        RecommendationEvents.request_recommendation(%{"tmdb_id" => to_string(tmdb_id)}, socket)
+        RecommendationEvents.request_recommendation(%{"ref" => "tmdb:#{tmdb_id}"}, socket)
 
       assert [request] = MediaRequests.list_requests(status: "pending")
       assert request.title == "Dialog Only Title"

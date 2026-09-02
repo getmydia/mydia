@@ -117,7 +117,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tvdb_search(bypass, tvdb_id, "TMDB Lib Show", 2019)
 
       assert {:ok, item, _map} =
-               MediaAddHelpers.handle_add_media_to_library(to_string(id), :tv_show, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :tv_show, %{}, config)
 
       assert item.type == "tv_show"
       assert item.metadata_source == :tmdb
@@ -138,7 +138,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
-                 to_string(tmdb_id),
+                 {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
                  config
@@ -158,7 +158,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
-                 to_string(tmdb_id),
+                 {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
                  config
@@ -180,7 +180,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
-                 to_string(tmdb_id),
+                 {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
                  config
@@ -197,11 +197,36 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tmdb_movie(bypass, id, "A Movie", 2019)
 
       assert {:ok, item, _map} =
-               MediaAddHelpers.handle_add_media_to_library(to_string(id), :movie, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :movie, %{}, config)
 
       assert item.type == "movie"
       assert item.metadata_source == nil
       assert item.tmdb_id == id
+    end
+
+    # TMDB and TVDB number their catalogs independently, so a TVDB add's own
+    # numeric id can collide with an unrelated TMDB title's id.
+    # `update_library_status_map/2` used to write that bare id into the
+    # untagged (TMDB) key space, which `enrich_with_library_status/2` reads
+    # before the tagged `{:tvdb, id}` key -- a TMDB result sharing that
+    # integer would then render as already in the library.
+    test "TVDB add does not leak its id into the untagged (TMDB) key space",
+         %{bypass: bypass, config: config} do
+      tvdb_id = System.unique_integer([:positive])
+      stub_tvdb_extended(bypass, tvdb_id, "TVDB Only Show")
+
+      assert {:ok, item, updated_map} =
+               MediaAddHelpers.handle_add_media_to_library(
+                 {:tvdb, tvdb_id},
+                 :tv_show,
+                 %{},
+                 config
+               )
+
+      assert item.tvdb_id == tvdb_id
+      assert item.tmdb_id == nil
+      assert updated_map[{:tvdb, tvdb_id}][:in_library] == true
+      refute Map.has_key?(updated_map, tvdb_id)
     end
   end
 
@@ -236,7 +261,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tmdb_movie(bypass, id, "Already Added", 2019)
 
       assert {:already_in_library, item, updated_map} =
-               MediaAddHelpers.handle_add_media_to_library(to_string(id), :movie, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :movie, %{}, config)
 
       assert item.id == existing.id
       assert updated_map[id][:in_library] == true
@@ -264,25 +289,22 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tmdb_show(bypass, id, "Preview Show", 2019)
 
       assert {:ok, metadata} =
-               MediaAddHelpers.fetch_detail_metadata(to_string(id), :tv_show, config)
+               MediaAddHelpers.fetch_detail_metadata({:tmdb, id}, :tv_show, config)
 
       assert metadata.title == "Preview Show"
     end
 
     # A Discover TV search result is TVDB-sourced: `Relay.search/3` routes
-    # `:tv_show` to `/tvdb/search`, so the id the preview is opened with is a
-    # TVDB series id. Asking TMDB for it is a 404, which left every TV search
+    # `:tv_show` to `/tvdb/search`, so the ref the preview is opened with tags
+    # a TVDB series id. Asking TMDB for it is a 404, which left every TV search
     # result's preview panel blank. Same root cause as the add failing with
     # "Media not found: <tvdb id>".
-    test "fetches a TVDB-sourced id from TVDB rather than TMDB",
-         %{bypass: bypass, config: config} do
+    test "a tvdb ref fetches from TVDB", %{bypass: bypass, config: config} do
       library_path_fixture(%{type: "series", tv_metadata_source: :tvdb})
 
       id = System.unique_integer([:positive])
       stub_tvdb_extended(bypass, id, "Harbour Lights")
 
-      # What the real relay does with a TVDB id on a TMDB route, and what the
-      # preview used to ask for.
       Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{id}", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -290,9 +312,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       end)
 
       assert {:ok, metadata} =
-               MediaAddHelpers.fetch_detail_metadata(to_string(id), :tv_show, config,
-                 provider: :tvdb
-               )
+               MediaAddHelpers.fetch_detail_metadata({:tvdb, id}, :tv_show, config)
 
       assert metadata.title == "Harbour Lights"
     end
@@ -445,7 +465,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
         overview: "A courier loses the package."
       }
 
-      assert MediaAddHelpers.preview_for([[item]], "551", nil) == %{
+      assert MediaAddHelpers.preview_for([[item]], {:tmdb, 551}, nil) == %{
                title: "The Kestrel Protocol",
                year: 2021,
                poster_path: "/kestrel.jpg",
@@ -461,7 +481,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
         poster_path: "/harbour.jpg"
       }
 
-      assert MediaAddHelpers.preview_for([[entry]], 902, nil) == %{
+      assert MediaAddHelpers.preview_for([[entry]], {:tmdb, 902}, nil) == %{
                title: "Harbour Lights",
                year: 1998,
                poster_path: "/harbour.jpg",
@@ -472,18 +492,18 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     test "falls back to the name key on a plain enriched map" do
       item = %{provider_id: 77, name: "Glass Meridian", year: 2015, poster_path: nil}
 
-      assert MediaAddHelpers.preview_for([[item]], "77", nil).title == "Glass Meridian"
+      assert MediaAddHelpers.preview_for([[item]], {:tmdb, 77}, nil).title == "Glass Meridian"
     end
 
     test "searches every list in order" do
       grid = [%{provider_id: 1, title: "First"}]
       rail = [%{provider_id: 2, title: "Second"}]
 
-      assert MediaAddHelpers.preview_for([grid, rail], 2, nil).title == "Second"
+      assert MediaAddHelpers.preview_for([grid, rail], {:tmdb, 2}, nil).title == "Second"
     end
 
     test "falls back to the caret's title when nothing matches" do
-      assert MediaAddHelpers.preview_for([[], []], "404", "Only The Title") == %{
+      assert MediaAddHelpers.preview_for([[], []], {:tmdb, 404}, "Only The Title") == %{
                title: "Only The Title",
                year: nil,
                poster_path: nil,
@@ -492,7 +512,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     end
 
     test "falls back to an empty title when nothing matches and no title was sent" do
-      assert MediaAddHelpers.preview_for([[]], "404", nil).title == ""
+      assert MediaAddHelpers.preview_for([[]], {:tmdb, 404}, nil).title == ""
     end
   end
 
@@ -566,7 +586,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     defp open_kestrel_config(socket) do
       MediaAddHelpers.put_add_config(
         socket,
-        %{"tmdb_id" => "551", "media_type" => "movie", "title" => "The Kestrel Protocol"},
+        %{"ref" => "tmdb:551", "media_type" => "movie", "title" => "The Kestrel Protocol"},
         nil,
         []
       )
@@ -620,7 +640,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       }
     end
 
-    defp movie_config, do: %{provider_id: "551", media_type: :movie}
+    defp movie_config, do: %{ref: {:tmdb, 551}, media_type: :movie}
 
     test "returns opts and closes the dialog on the happy path", %{
       library: library,
@@ -632,7 +652,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
         "search_on_add" => "false"
       }
 
-      assert {:ok, "551", :movie, opts, socket} =
+      assert {:ok, {:tmdb, 551}, :movie, opts, socket} =
                MediaAddHelpers.resolve_add_config_submit(
                  submit_socket(user, movie_config()),
                  params
@@ -676,7 +696,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:halt, socket} =
                MediaAddHelpers.resolve_add_config_submit(
-                 submit_socket(user, %{provider_id: "551", media_type: :tv_show}),
+                 submit_socket(user, %{ref: {:tmdb, 551}, media_type: :tv_show}),
                  params
                )
 
