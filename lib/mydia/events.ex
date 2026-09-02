@@ -633,6 +633,44 @@ defmodule Mydia.Events do
   end
 
   @doc """
+  Records a media_file.prune_undone event: copies that `files_pruned/4` trashed
+  were put back.
+
+  Recording the prune and staying silent about its reversal would leave the
+  activity trail describing a library that no longer exists, so this is the
+  counterpart to `files_pruned/4` rather than an optional extra.
+
+  There is no keeper to name. An undo restores copies, it does not choose among
+  them, so the group is identified from the media item and any one restored
+  file.
+
+  ## Examples
+
+      iex> prune_undone(media_item, [restored_file], "admin")
+      :ok
+  """
+  def prune_undone(media_item, [file | _] = restored_files, actor_id) do
+    {resource_type, resource_id} = upgrade_resource(file, media_item)
+
+    create_event_async(%{
+      category: "media",
+      type: "media_file.prune_undone",
+      actor_type: :user,
+      actor_id: actor_id,
+      resource_type: resource_type,
+      resource_id: resource_id,
+      severity: :info,
+      metadata: %{
+        "title" => media_item.title,
+        "media_type" => media_item.type,
+        "restored" => Enum.map(restored_files, & &1.relative_path),
+        "restored_ids" => Enum.map(restored_files, & &1.id),
+        "bytes_restored" => restored_files |> Enum.map(&(&1.size || 0)) |> Enum.sum()
+      }
+    })
+  end
+
+  @doc """
   Records a media_file.upgrade_rejected event — the counterpart to
   `file_upgraded/4` for when the candidate release did not actually deliver
   the quality it claimed. The originating release is blacklisted separately
