@@ -77,7 +77,7 @@ defmodule Mydia.Collections.Presets do
     %Preset{
       key: "decade_2020s",
       name: "2020s",
-      description: "Everything released from 2020 onward.",
+      description: "Everything released between 2020 and 2029.",
       icon: "hero-film",
       group: "Decades",
       rules: %{
