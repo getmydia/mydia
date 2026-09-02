@@ -140,8 +140,8 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
   # `Mydia.MetadataCacheHelpers` warms above), so it always leaves for the
   # live relay unless redirected here. Left unstubbed, RelayGuard fails the
   # whole suite at exit even though the per-test output says 0 failures. See
-  # `rail_picker_host_test.exs`'s `stub_added_movie_details/3` and
-  # `dashboard_live/add_config_test.exs` for the same trap and fix.
+  # `stub_added_movie_details/2` below and `dashboard_live/add_config_test.exs`
+  # for the same trap and fix.
   defp stub_movie_details(tmdb_id, title) do
     bypass = Bypass.open()
     previous_metadata_relay_url = Application.get_env(:mydia, :metadata_relay_url)

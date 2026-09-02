@@ -87,10 +87,27 @@ defmodule MydiaWeb.AddMediaComponentsTest do
     end
 
     test "labels each library with its basename before its full path" do
-      html = render_modal(%{config: config(), quality_profiles: []})
+      # "/media/movies" cannot tell this apart from rendering the path alone:
+      # its own basename ("movies") is already a substring of the full path,
+      # so `html =~ "movies"` would pass even if Path.basename/1 were never
+      # called. "/srv/vault/cinema" cannot fake a pass that way: "cinema" is
+      # not a substring of the path's directory part ("/srv/vault"), so
+      # asserting basename-then-path only succeeds if the option's rendered
+      # text actually leads with the extracted basename.
+      html =
+        render_modal(%{
+          config: config(%{libraries: [library("lib-1", "/srv/vault/cinema")]}),
+          quality_profiles: []
+        })
 
-      assert html =~ "movies"
-      assert html =~ "/media/movies"
+      option_text =
+        document(html)
+        |> LazyHTML.query(~s(select[name="config[library_path_id]"] option[value="lib-1"]))
+        |> LazyHTML.text()
+        |> to_string()
+        |> String.trim()
+
+      assert option_text == "cinema · /srv/vault/cinema"
     end
 
     test "omits the season monitoring field for a movie" do

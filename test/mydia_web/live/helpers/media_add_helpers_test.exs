@@ -521,4 +521,56 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       assert opts[:search_on_add] == true
     end
   end
+
+  describe "put_add_config/4 library freshness" do
+    # candidate_libraries/1 is called from inside put_add_config/4 itself, at
+    # OPEN time, rather than being threaded in from an earlier assign a host
+    # captured at mount. `stale_snapshot` below stands in for that earlier
+    # assign: it is taken before the library that matters to each test exists
+    # (or before it is unmonitored), so if put_add_config/4 ever regressed to
+    # trusting a value computed earlier instead of recomputing it, the
+    # assertions on `updated` would see the stale list and fail.
+    defp open_socket do
+      %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}}}
+    end
+
+    defp open_kestrel_config(socket) do
+      MediaAddHelpers.put_add_config(
+        socket,
+        %{"tmdb_id" => "551", "media_type" => "movie", "title" => "The Kestrel Protocol"},
+        nil,
+        []
+      )
+    end
+
+    test "a library added after an earlier snapshot still appears as a candidate" do
+      library_path_fixture(%{type: :movies, monitored: true})
+
+      stale_snapshot = MediaAddHelpers.candidate_libraries(:movie)
+
+      late_library =
+        library_path_fixture(%{type: :movies, monitored: true, path: "/media/added-late"})
+
+      updated = open_kestrel_config(open_socket())
+      library_ids = Enum.map(updated.assigns.add_config.libraries, & &1.id)
+
+      refute late_library.id in Enum.map(stale_snapshot, & &1.id)
+      assert late_library.id in library_ids
+    end
+
+    test "a library unmonitored after an earlier snapshot is dropped as a candidate" do
+      library =
+        library_path_fixture(%{type: :movies, monitored: true, path: "/media/soon-unmonitored"})
+
+      stale_snapshot = MediaAddHelpers.candidate_libraries(:movie)
+      assert library.id in Enum.map(stale_snapshot, & &1.id)
+
+      {:ok, _library} = Mydia.Settings.update_library_path(library, %{monitored: false})
+
+      updated = open_kestrel_config(open_socket())
+      library_ids = Enum.map(updated.assigns.add_config.libraries, & &1.id)
+
+      refute library.id in library_ids
+    end
+  end
 end

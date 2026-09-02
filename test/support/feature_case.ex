@@ -131,7 +131,7 @@ defmodule MydiaWeb.FeatureCase do
     # test asserts on trending content, confirmed by grep across
     # test/mydia_web/features/ before relying on it.
     #
-    # library_picker_test.exs manages its own separate Bypass, its own
+    # add_config_flow_test.exs manages its own separate Bypass, its own
     # metadata_relay_url, and its own Cache.clear() afterwards; its `setup`
     # runs after this one (declared later in that file) and simply
     # overwrites what this warms, so there is no conflict between the two.

@@ -76,6 +76,42 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     assert Mydia.Media.list_media_items() == []
   end
 
+  # library_picker_button/1 (the caret) used to be gated behind
+  # `length(@libraries) > 1`, so a single-library install never saw it and
+  # had no way to reach the quality profile, monitoring or search-on-add
+  # controls short of the plain one-click add. It now renders unconditionally
+  # regardless of library count; setup/1 above seeds exactly one library.
+  test "the caret opens the configure dialog on an install with one library", %{conn: conn} do
+    # The plain trending mount is warmed empty (setup/1 above), so a card
+    # (and its caret) needs the "quiet harbour" search cache instead, matching
+    # every other card-rendering test in this file.
+    {:ok, view, _html} = live(conn, ~p"/discover?type=movie&q=quiet+harbour")
+
+    assert has_element?(view, ~s([data-test="add-config-caret"]))
+  end
+
+  # Parity with dashboard_live/add_config_test.exs's "submit_add_config with a
+  # forged library flashes and adds nothing": Discover had no equivalent
+  # coverage for a crafted `library_path_id` that names no real, monitored,
+  # type-matching row.
+  test "a rejected library flashes rather than silently adding elsewhere", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/discover")
+
+    render_hook(view, "open_add_config", %{
+      "tmdb_id" => "551",
+      "media_type" => "movie",
+      "title" => "The Kestrel Protocol"
+    })
+
+    html =
+      render_hook(view, "submit_add_config", %{
+        "config" => %{"library_path_id" => "not-a-real-id", "monitored" => "true"}
+      })
+
+    assert html =~ "That library is no longer available"
+    assert Mydia.Media.list_media_items() == []
+  end
+
   # submit_add_config's own glue (params["monitored"] == "true", presence/1 on
   # the selects, and the add_config map lookup) is what these cover.
   # AddDefaults.resolve/3, to_add_opts/1 and handle_add_media_to_library/5 are

@@ -6,7 +6,7 @@ defmodule MydiaWeb.DiscoverLive.RecommendationsLookupTest do
   against `items` alone silently drops it and the modal never swaps. That failure
   is invisible in the UI, which is why it gets a direct test.
 
-  No rendering test here on purpose: see the header of library_picker_test.exs.
+  No rendering test here on purpose: see the header of add_config_flow_test.exs.
   """
 
   use ExUnit.Case, async: true
