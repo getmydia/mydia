@@ -50,8 +50,8 @@ defmodule MydiaWeb.DiscoverComponents do
         <div class="card-body p-3">
           <div class="skeleton h-4 w-full"></div>
           <div class="skeleton h-4 w-2/3"></div>
-          <div class="mt-auto flex flex-col gap-2">
-            <div class="skeleton h-3 w-10"></div>
+          <div class="mt-auto flex flex-col gap-4">
+            <div class="skeleton h-4 w-10"></div>
             <div class="skeleton h-8 w-full"></div>
           </div>
         </div>
