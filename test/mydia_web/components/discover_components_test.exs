@@ -29,8 +29,7 @@ defmodule MydiaWeb.DiscoverComponentsTest do
         media_type: :movie,
         current_user: guest(),
         adding_ids: MapSet.new(),
-        requesting_item_id: nil,
-        libraries: []
+        requesting_item_id: nil
       }
       |> Map.merge(Map.delete(assigns_overrides, :item))
 
@@ -177,22 +176,15 @@ defmodule MydiaWeb.DiscoverComponentsTest do
   # container at any placement. The picker is now a page-level dialog, which
   # the container cannot clip, so rail cards can target a chosen library
   # again. See #465.
-  describe "media_rail library picker" do
-    test "a rail card offers the picker when the host supplies several libraries" do
-      html =
-        rail(%{
-          libraries: [%{id: "a", path: "/m/a"}, %{id: "b", path: "/m/b"}]
-        })
-
-      assert html =~ "Add to Library"
-      assert html =~ "library-picker-caret"
-    end
-
-    test "a rail card offers no picker when the host supplies none" do
+  describe "media_rail configure caret" do
+    # The caret no longer gates on `libraries` at all: it opens the merged
+    # configure dialog directly, so it renders unconditionally. `libraries`
+    # is not even an attr on media_rail/1 or trending_card/1 anymore.
+    test "a rail card offers the caret" do
       html = rail(%{})
 
       assert html =~ "Add to Library"
-      refute html =~ "library-picker-caret"
+      assert html =~ "add-config-caret"
     end
   end
 

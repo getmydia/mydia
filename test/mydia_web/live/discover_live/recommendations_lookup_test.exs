@@ -10,7 +10,7 @@ defmodule MydiaWeb.DiscoverLive.RecommendationsLookupTest do
   detail page became a third host; this file keeps Discover's two-list shape
   under test.
 
-  No rendering test here on purpose: see the header of library_picker_test.exs.
+  No rendering test here on purpose: see the header of add_config_flow_test.exs.
   """
 
   use ExUnit.Case, async: true

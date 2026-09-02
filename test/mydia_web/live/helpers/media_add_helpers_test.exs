@@ -375,62 +375,6 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     end)
   end
 
-  describe "library picker assigns" do
-    defp socket do
-      %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, library_picker: nil}}
-    end
-
-    test "opening reads the candidate libraries at open time" do
-      library_path_fixture(%{path: "/media/picker-a", type: "movies"})
-      library_path_fixture(%{path: "/media/picker-b", type: "movies"})
-
-      updated =
-        MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "693134",
-          "media_type" => "movie",
-          "title" => "Dune: Part Two"
-        })
-
-      picker = updated.assigns.library_picker
-
-      assert picker.tmdb_id == "693134"
-      assert picker.media_type == :movie
-      assert picker.title == "Dune: Part Two"
-      assert length(picker.libraries) == 2
-    end
-
-    test "a missing title becomes an empty string rather than nil" do
-      library_path_fixture(%{path: "/media/picker-c", type: "movies"})
-      library_path_fixture(%{path: "/media/picker-d", type: "movies"})
-
-      updated =
-        MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "1",
-          "media_type" => "movie"
-        })
-
-      assert updated.assigns.library_picker.title == ""
-    end
-
-    test "an unrecognised media type opens nothing" do
-      updated =
-        MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "1",
-          "media_type" => "podcast"
-        })
-
-      assert updated.assigns.library_picker == nil
-    end
-
-    test "clearing closes the dialog" do
-      opened = %Phoenix.LiveView.Socket{
-        assigns: %{__changed__: %{}, library_picker: %{tmdb_id: "1"}}
-      }
-
-      assert MediaAddHelpers.clear_library_picker(opened).assigns.library_picker == nil
-    end
-  end
-
   describe "library_path_opts/2" do
     test "returns no options when no library was chosen" do
       assert {:ok, []} = MediaAddHelpers.library_path_opts(nil, :movie)
@@ -485,6 +429,176 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
     test "rejects an integer value instead of silently treating it as no choice" do
       assert {:error, :unknown_library} = MediaAddHelpers.library_path_opts(1, :movie)
+    end
+  end
+
+  describe "preview_for/3" do
+    test "reads title, year, poster and overview off a SearchResult" do
+      item = %Mydia.Metadata.Structs.SearchResult{
+        provider_id: "551",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "The Kestrel Protocol",
+        year: 2021,
+        poster_path: "/kestrel.jpg",
+        overview: "A courier loses the package."
+      }
+
+      assert MediaAddHelpers.preview_for([[item]], "551", nil) == %{
+               title: "The Kestrel Protocol",
+               year: 2021,
+               poster_path: "/kestrel.jpg",
+               overview: "A courier loses the package."
+             }
+    end
+
+    test "matches a FranchiseEntry on tmdb_id and leaves overview nil" do
+      entry = %Mydia.Media.FranchiseEntry{
+        tmdb_id: 902,
+        title: "Harbour Lights",
+        year: 1998,
+        poster_path: "/harbour.jpg"
+      }
+
+      assert MediaAddHelpers.preview_for([[entry]], 902, nil) == %{
+               title: "Harbour Lights",
+               year: 1998,
+               poster_path: "/harbour.jpg",
+               overview: nil
+             }
+    end
+
+    test "falls back to the name key on a plain enriched map" do
+      item = %{provider_id: 77, name: "Glass Meridian", year: 2015, poster_path: nil}
+
+      assert MediaAddHelpers.preview_for([[item]], "77", nil).title == "Glass Meridian"
+    end
+
+    test "searches every list in order" do
+      grid = [%{provider_id: 1, title: "First"}]
+      rail = [%{provider_id: 2, title: "Second"}]
+
+      assert MediaAddHelpers.preview_for([grid, rail], 2, nil).title == "Second"
+    end
+
+    test "falls back to the caret's title when nothing matches" do
+      assert MediaAddHelpers.preview_for([[], []], "404", "Only The Title") == %{
+               title: "Only The Title",
+               year: nil,
+               poster_path: nil,
+               overview: nil
+             }
+    end
+
+    test "falls back to an empty title when nothing matches and no title was sent" do
+      assert MediaAddHelpers.preview_for([[]], "404", nil).title == ""
+    end
+  end
+
+  describe "add_opts_from_config/3" do
+    setup do
+      library = library_path_fixture(%{type: :movies, monitored: true})
+      %{library: library}
+    end
+
+    test "returns add opts for a valid library", %{library: library} do
+      params = %{
+        "library_path_id" => to_string(library.id),
+        "quality_profile_id" => "",
+        "monitored" => "true",
+        "search_on_add" => "false"
+      }
+
+      assert {:ok, opts} = MediaAddHelpers.add_opts_from_config(params, :movie, nil)
+      assert opts[:library_path_id] == to_string(library.id)
+      assert opts[:monitored] == true
+      assert opts[:search_on_add] == false
+    end
+
+    test "rejects a library that is not a candidate for the media type", %{library: library} do
+      params = %{"library_path_id" => to_string(library.id), "monitored" => "true"}
+
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.add_opts_from_config(params, :tv_show, nil)
+    end
+
+    test "rejects a forged library id" do
+      params = %{"library_path_id" => "not-a-real-id", "monitored" => "true"}
+
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.add_opts_from_config(params, :movie, nil)
+    end
+
+    test "treats a blank library id as no choice and still resolves defaults" do
+      params = %{"library_path_id" => "", "monitored" => "false", "search_on_add" => "false"}
+
+      assert {:ok, opts} = MediaAddHelpers.add_opts_from_config(params, :movie, nil)
+      assert opts[:monitored] == false
+    end
+
+    test "carries season_monitoring through for TV" do
+      params = %{
+        "library_path_id" => "",
+        "monitored" => "true",
+        "season_monitoring" => "first",
+        "search_on_add" => "true"
+      }
+
+      assert {:ok, opts} = MediaAddHelpers.add_opts_from_config(params, :tv_show, nil)
+      assert opts[:season_monitoring] == "first"
+      assert opts[:search_on_add] == true
+    end
+  end
+
+  describe "put_add_config/4 library freshness" do
+    # candidate_libraries/1 is called from inside put_add_config/4 itself, at
+    # OPEN time, rather than being threaded in from an earlier assign a host
+    # captured at mount. `stale_snapshot` below stands in for that earlier
+    # assign: it is taken before the library that matters to each test exists
+    # (or before it is unmonitored), so if put_add_config/4 ever regressed to
+    # trusting a value computed earlier instead of recomputing it, the
+    # assertions on `updated` would see the stale list and fail.
+    defp open_socket do
+      %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}}}
+    end
+
+    defp open_kestrel_config(socket) do
+      MediaAddHelpers.put_add_config(
+        socket,
+        %{"tmdb_id" => "551", "media_type" => "movie", "title" => "The Kestrel Protocol"},
+        nil,
+        []
+      )
+    end
+
+    test "a library added after an earlier snapshot still appears as a candidate" do
+      library_path_fixture(%{type: :movies, monitored: true})
+
+      stale_snapshot = MediaAddHelpers.candidate_libraries(:movie)
+
+      late_library =
+        library_path_fixture(%{type: :movies, monitored: true, path: "/media/added-late"})
+
+      updated = open_kestrel_config(open_socket())
+      library_ids = Enum.map(updated.assigns.add_config.libraries, & &1.id)
+
+      refute late_library.id in Enum.map(stale_snapshot, & &1.id)
+      assert late_library.id in library_ids
+    end
+
+    test "a library unmonitored after an earlier snapshot is dropped as a candidate" do
+      library =
+        library_path_fixture(%{type: :movies, monitored: true, path: "/media/soon-unmonitored"})
+
+      stale_snapshot = MediaAddHelpers.candidate_libraries(:movie)
+      assert library.id in Enum.map(stale_snapshot, & &1.id)
+
+      {:ok, _library} = Mydia.Settings.update_library_path(library, %{monitored: false})
+
+      updated = open_kestrel_config(open_socket())
+      library_ids = Enum.map(updated.assigns.add_config.libraries, & &1.id)
+
+      refute library.id in library_ids
     end
   end
 end

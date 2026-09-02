@@ -32,8 +32,6 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModalActionsTest do
       loading: false,
       current_user: %{role: "admin"},
       open: true,
-      libraries: [],
-      picker_open: false,
       config_open: false
     }
   end

@@ -10,7 +10,10 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   require Logger
 
   alias Mydia.Media.Add
+  alias Mydia.Media.AddDefaults
+  alias Mydia.Media.FranchiseEntry
   alias Mydia.Metadata
+  alias Mydia.Metadata.Structs.SearchResult
   alias Mydia.Settings
 
   @doc """
@@ -32,44 +35,6 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       lp.type in allowed and lp.monitored and
         not String.starts_with?(to_string(lp.id), "runtime::")
     end)
-  end
-
-  @doc """
-  Opens the library picker dialog for one card.
-
-  The candidate list is read here rather than carried from mount, so a library
-  added or unmonitored since the page loaded cannot show up as a stale option.
-
-  An unrecognised media type returns the socket untouched: the caret only ever
-  sends "movie" or "tv_show", so anything else is a forged event and opening a
-  dialog with an empty list would be worse than doing nothing.
-  """
-  @spec put_library_picker(Phoenix.LiveView.Socket.t(), map()) :: Phoenix.LiveView.Socket.t()
-  def put_library_picker(socket, %{"tmdb_id" => tmdb_id, "media_type" => media_type} = params) do
-    case media_type do
-      "movie" -> assign_library_picker(socket, tmdb_id, :movie, params["title"])
-      "tv_show" -> assign_library_picker(socket, tmdb_id, :tv_show, params["title"])
-      _ -> socket
-    end
-  end
-
-  def put_library_picker(socket, _params), do: socket
-
-  @doc """
-  Closes the library picker dialog.
-  """
-  @spec clear_library_picker(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
-  def clear_library_picker(socket) do
-    Phoenix.Component.assign(socket, :library_picker, nil)
-  end
-
-  defp assign_library_picker(socket, tmdb_id, media_type, title) do
-    Phoenix.Component.assign(socket, :library_picker, %{
-      tmdb_id: tmdb_id,
-      media_type: media_type,
-      title: title || "",
-      libraries: candidate_libraries(media_type)
-    })
   end
 
   @doc """
@@ -286,7 +251,156 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     |> Enum.map_join("; ", fn {field, errors} -> "#{field}: #{Enum.join(errors, ", ")}" end)
   end
 
+  @doc """
+  Builds the merged dialog's preview panel for one clicked card.
+
+  `candidate_lists` are the item collections the host already holds in assigns.
+  They are searched in order, so a host passes its grid before its rail.
+
+  The lists hold three different shapes. Discover and Dashboard carry
+  `SearchResult` structs and enriched maps built from them; the detail page's
+  franchise strip carries `FranchiseEntry`, which has no `overview` field and
+  is keyed on `tmdb_id` rather than `provider_id`.
+
+  A miss falls back to the title the caret sends in `phx-value-title`, which is
+  all the dialog strictly needs. A nil poster resolves to the placeholder in
+  `AddMediaComponents.get_poster_url/1`.
+  """
+  @spec preview_for([list()], term(), String.t() | nil) :: %{
+          title: String.t(),
+          year: integer() | nil,
+          poster_path: String.t() | nil,
+          overview: String.t() | nil
+        }
+  def preview_for(candidate_lists, provider_id, fallback_title) do
+    id = to_string(provider_id)
+
+    candidate_lists
+    |> Enum.concat()
+    |> Enum.find(&(entry_id(&1) == id))
+    |> case do
+      nil -> %{title: fallback_title || "", year: nil, poster_path: nil, overview: nil}
+      entry -> preview_entry(entry)
+    end
+  end
+
+  @doc """
+  Opens the merged Configure Before Adding dialog for one card.
+
+  The candidate libraries are read here rather than carried from mount, so a
+  library added or unmonitored since the page loaded must not show up as a
+  stale option.
+
+  An unrecognised media type returns the socket untouched. The caret only ever
+  sends "movie" or "tv_show", so anything else is a forged event and opening a
+  dialog on it would be worse than doing nothing.
+  """
+  @spec put_add_config(Phoenix.LiveView.Socket.t(), map(), Mydia.Accounts.User.t() | nil, [
+          list()
+        ]) :: Phoenix.LiveView.Socket.t()
+  def put_add_config(socket, params, user, candidate_lists)
+
+  def put_add_config(
+        socket,
+        %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
+        user,
+        candidate_lists
+      ) do
+    case media_type do
+      "movie" -> assign_add_config(socket, provider_id, :movie, params, user, candidate_lists)
+      "tv_show" -> assign_add_config(socket, provider_id, :tv_show, params, user, candidate_lists)
+      _ -> socket
+    end
+  end
+
+  def put_add_config(socket, _params, _user, _candidate_lists), do: socket
+
+  @doc """
+  Closes the merged dialog.
+  """
+  @spec clear_add_config(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+  def clear_add_config(socket) do
+    Phoenix.Component.assign(socket, :add_config, nil)
+  end
+
+  @doc """
+  Turns the dialog's submitted `config[...]` params into `Mydia.Media.Add` opts.
+
+  `library_path_opts/2` runs first and its rejection is propagated rather than
+  swallowed. That call is authorization, not convenience: the value arrives in
+  event params, so without it a crafted submit can name any `library_paths`
+  row, including one of the wrong type for the media being added.
+
+  A rejected quality profile is deliberately quieter. `AddDefaults` validates it
+  through `Settings.quality_profile_exists?/1` and falls back to the instance
+  default, because a stale profile still produces a usable add where a
+  wrong-type library path does not.
+
+  `:search_on_add` is put back onto the list after `to_add_opts/1`, which omits
+  it because `Add` does not accept it.
+  """
+  @spec add_opts_from_config(map(), :movie | :tv_show, Mydia.Accounts.User.t() | nil) ::
+          {:ok, keyword()} | {:error, :unknown_library}
+  def add_opts_from_config(params, media_type, user) do
+    with {:ok, library_opts} <-
+           library_path_opts(presence(params["library_path_id"]), media_type) do
+      defaults =
+        AddDefaults.resolve(user, media_type,
+          library_path_id: library_opts[:library_path_id],
+          quality_profile_id: presence(params["quality_profile_id"]),
+          monitored: params["monitored"] == "true",
+          season_monitoring: presence(params["season_monitoring"]),
+          search_on_add: params["search_on_add"] == "true"
+        )
+
+      {:ok,
+       defaults
+       |> AddDefaults.to_add_opts()
+       |> Keyword.put(:search_on_add, defaults.search_on_add)}
+    end
+  end
+
   # Private helpers
+
+  defp assign_add_config(socket, provider_id, media_type, params, user, candidate_lists) do
+    Phoenix.Component.assign(socket, :add_config, %{
+      provider_id: provider_id,
+      media_type: media_type,
+      defaults: AddDefaults.resolve(user, media_type),
+      preview: preview_for(candidate_lists, provider_id, params["title"]),
+      libraries: candidate_libraries(media_type)
+    })
+  end
+
+  defp entry_id(%FranchiseEntry{tmdb_id: id}) when not is_nil(id), do: to_string(id)
+  defp entry_id(%{provider_id: id}) when not is_nil(id), do: to_string(id)
+  defp entry_id(_entry), do: nil
+
+  defp preview_entry(%SearchResult{} = item) do
+    %{
+      title: item.title || item.name,
+      year: item.year,
+      poster_path: item.poster_path,
+      overview: item.overview
+    }
+  end
+
+  defp preview_entry(%FranchiseEntry{} = entry) do
+    %{title: entry.title, year: entry.year, poster_path: entry.poster_path, overview: nil}
+  end
+
+  defp preview_entry(entry) when is_map(entry) do
+    %{
+      title: Map.get(entry, :title) || Map.get(entry, :name),
+      year: Map.get(entry, :year),
+      poster_path: Map.get(entry, :poster_path),
+      overview: Map.get(entry, :overview)
+    }
+  end
+
+  defp presence(nil), do: nil
+  defp presence(""), do: nil
+  defp presence(value), do: value
 
   defp update_library_status_map(library_status_map, media_item, tmdb_id_int) do
     entry = %{
