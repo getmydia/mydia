@@ -101,6 +101,18 @@ defmodule MydiaWeb.DiscoverComponents do
         </div>
       <% end %>
       <%= cond do %>
+        <%!-- The card for the title whose page you are already on. It draws the
+              ring, renders no action, and must not open a dialog about itself:
+              the franchise strip gives it no `navigate` on purpose, so without
+              this branch a rail-level on_select would make it clickable. --%>
+        <% @current -> %>
+          <.card_poster
+            item={@item}
+            media_type={@media_type}
+            loading={@loading}
+            poster_size={@poster_size}
+            class="rounded-t-box"
+          />
         <% @navigate -> %>
           <.link navigate={@navigate} class="block">
             <.card_poster
@@ -194,8 +206,8 @@ defmodule MydiaWeb.DiscoverComponents do
 
   attr :id, :string, default: "media-rail"
   attr :title, :string, default: "More like this"
-  # :any, not :string - see the note on trending_card/1. The media detail page
-  # passes nil here because it has no show_details handler.
+  # :any, not :string - see the note on trending_card/1. nil renders an inert
+  # poster, which is what a host with no show_details handler needs.
   attr :on_select, :any, default: "show_details"
   # Forwarded to trending_card/1. A host LiveView that does not handle
   # "add_to_library"/"request_media" must override these or the first click on
