@@ -32,6 +32,19 @@ defmodule MydiaWeb.Components.NoGhostSegmentsTest do
            """
   end
 
+  test "the scanner does not let a > inside a class expression truncate the value" do
+    # This is the exact shape a reviewer found could defeat a naive
+    # `class=[\s\S]*?>` scan: `@count > 3` inside the class list has its own
+    # literal `>`, so a non-greedy match to "the next >" stops there instead
+    # of at the tag's closing bracket, and btn-primary/btn-ghost after it are
+    # never seen. Assert the real extractor keeps going past it.
+    fixture = ~S"""
+    <button class={["btn join-item", @count > 3 && "btn-primary", !@selected? && "btn-ghost"]}>
+    """
+
+    assert offends?(fixture)
+  end
+
   # A naive whole-file split on every `join` class occurrence (the join
   # container itself, or any `join-item` member) over-reaches: a file's last
   # join-related match is routinely an all-ghost admin action strip (edit /
@@ -42,24 +55,75 @@ defmodule MydiaWeb.Components.NoGhostSegmentsTest do
   # finished tree (admin_*_live/components.ex and friends), none of them
   # near each other, let alone in the same join.
   #
-  # Scan per opening tag instead: `class=` up to that tag's own closing `>`
-  # is one element's complete class expression, whether it is a plain string
-  # or a `class={[...]}` list. A file offends only when some tag combines
-  # `join-item` with `btn-ghost` and some tag combines `join-item` with
-  # `btn-primary`, which is what a ghost-vs-primary mismatch inside one join
-  # looks like at the markup level, regardless of whether the button markup
-  # is written inline or shared through a helper component (as in
-  # `MydiaWeb.SegmentedControl`'s own private `segment/1`, whose single
-  # class list applies `btn-primary` or `btn-ghost` conditionally on
-  # `@selected?`).
-  defp ghost_segment?(path) do
-    tags =
-      path
-      |> File.read!()
-      |> then(&Regex.scan(~r/class=[\s\S]*?>/, &1))
-      |> Enum.map(&hd/1)
+  # Scan per class attribute VALUE instead of per tag. `class="..."` and
+  # `class={...}` are extracted properly rather than by scanning to a `>`:
+  # a plain string runs to the next `"`, and a `{...}` expression is walked
+  # char by char counting brace depth, so a `>` or `->` inside the
+  # expression (a guard, a `cond`, an interpolation) cannot be mistaken for
+  # the end of the value. A file offends only when some class value combines
+  # `join-item` with `btn-ghost` and some class value combines `join-item`
+  # with `btn-primary`, which is what a ghost-vs-primary mismatch inside one
+  # join looks like at the markup level, regardless of whether the button
+  # markup is written inline or shared through a helper component (as in
+  # `MydiaWeb.SegmentedControl`'s own private `segment/1`, whose single class
+  # list applies `btn-primary` or `btn-ghost` conditionally on `@selected?`).
+  defp ghost_segment?(path), do: path |> File.read!() |> offends?()
 
-    Enum.any?(tags, &(&1 =~ "join-item" and &1 =~ "btn-ghost")) and
-      Enum.any?(tags, &(&1 =~ "join-item" and &1 =~ "btn-primary"))
+  defp offends?(content) do
+    values = class_attribute_values(content)
+
+    Enum.any?(values, &(&1 =~ "join-item" and &1 =~ "btn-ghost")) and
+      Enum.any?(values, &(&1 =~ "join-item" and &1 =~ "btn-primary"))
+  end
+
+  defp class_attribute_values(content) do
+    content
+    |> class_attr_starts()
+    |> Enum.map(&extract_class_value(content, &1))
+  end
+
+  # Byte offset right after each `class=` occurrence, i.e. where the value
+  # (a `"` or a `{`) begins.
+  defp class_attr_starts(content), do: class_attr_starts(content, 0, [])
+
+  defp class_attr_starts(content, offset, acc) when offset <= byte_size(content) do
+    case :binary.match(content, "class=", scope: {offset, byte_size(content) - offset}) do
+      {start, len} -> class_attr_starts(content, start + len, [start + len | acc])
+      :nomatch -> Enum.reverse(acc)
+    end
+  end
+
+  defp extract_class_value(content, pos) when pos < byte_size(content) do
+    case :binary.at(content, pos) do
+      ?" -> extract_quoted(content, pos + 1)
+      ?{ -> extract_braced(content, pos + 1, 1, pos + 1)
+      _ -> ""
+    end
+  end
+
+  defp extract_class_value(_content, _pos), do: ""
+
+  # class="..." runs to the next literal quote.
+  defp extract_quoted(content, start) do
+    case :binary.match(content, "\"", scope: {start, byte_size(content) - start}) do
+      {stop, _} -> binary_part(content, start, stop - start)
+      :nomatch -> binary_part(content, start, byte_size(content) - start)
+    end
+  end
+
+  # class={...} runs to the `}` that balances the opening `{`, counting
+  # nested braces along the way (a `cond`/`if`, a map, string interpolation)
+  # so any `>` inside never ends the scan early.
+  defp extract_braced(content, pos, depth, value_start) when pos < byte_size(content) do
+    case :binary.at(content, pos) do
+      ?{ -> extract_braced(content, pos + 1, depth + 1, value_start)
+      ?} when depth == 1 -> binary_part(content, value_start, pos - value_start)
+      ?} -> extract_braced(content, pos + 1, depth - 1, value_start)
+      _ -> extract_braced(content, pos + 1, depth, value_start)
+    end
+  end
+
+  defp extract_braced(content, pos, _depth, value_start) do
+    binary_part(content, value_start, pos - value_start)
   end
 end
