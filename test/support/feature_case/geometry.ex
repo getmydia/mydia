@@ -73,6 +73,51 @@ defmodule MydiaWeb.FeatureCase.Geometry do
   end
 
   @doc """
+  Asserts `selector_a` and `selector_b` have the same rendered height, within
+  `tolerance_px`.
+
+  Built for skeleton/real card height parity: a placeholder that visually
+  promises to reserve a real element's height must actually do so, or the
+  page collapses and re-expands once real content replaces it. Compares the
+  first match of each selector.
+
+  `tolerance_px` defaults to 1, deliberately small. Sub-pixel layout
+  differences are normal and a 0-tolerance assertion would be flaky, but the
+  regression this helper exists to catch was 12px, so 1px cannot hide it.
+  """
+  def assert_same_height(session, selector_a, selector_b, tolerance_px \\ 1) do
+    case eval(session, same_height_script(), [selector_a, selector_b]) do
+      "__missing_a__" ->
+        flunk("assert_same_height/4: no element matched #{inspect(selector_a)}")
+
+      "__missing_b__" ->
+        flunk("assert_same_height/4: no element matched #{inspect(selector_b)}")
+
+      "__zero_size_a__" ->
+        flunk(
+          "assert_same_height/4: #{inspect(selector_a)} has zero height, so there is nothing to compare"
+        )
+
+      "__zero_size_b__" ->
+        flunk(
+          "assert_same_height/4: #{inspect(selector_b)} has zero height, so there is nothing to compare"
+        )
+
+      %{"a" => height_a, "b" => height_b} ->
+        delta = abs(height_a - height_b)
+
+        if delta <= tolerance_px do
+          session
+        else
+          flunk(
+            "#{selector_a} is #{format_px(height_a)}px but #{selector_b} is " <>
+              "#{format_px(height_b)}px (delta #{format_px(delta)}px, tolerance #{tolerance_px}px)"
+          )
+        end
+    end
+  end
+
+  @doc """
   Asserts the element is not clipped by its nearest scrollable ancestor.
   """
   def refute_clipped(session, selector) do
@@ -133,6 +178,41 @@ defmodule MydiaWeb.FeatureCase.Geometry do
     }
     return covering;
     """
+  end
+
+  defp same_height_script do
+    """
+    var selectorA = arguments[0];
+    var selectorB = arguments[1];
+
+    var elA = document.querySelector(selectorA);
+    if (!elA) { return '__missing_a__'; }
+
+    var elB = document.querySelector(selectorB);
+    if (!elB) { return '__missing_b__'; }
+
+    var heightA = elA.getBoundingClientRect().height;
+    if (heightA === 0) { return '__zero_size_a__'; }
+
+    var heightB = elB.getBoundingClientRect().height;
+    if (heightB === 0) { return '__zero_size_b__'; }
+
+    return {a: heightA, b: heightB};
+    """
+  end
+
+  # Renders a pixel measurement without a spurious ".0" (200, not 200.0) while
+  # keeping real sub-pixel deltas visible (341.5).
+  defp format_px(value) when is_integer(value), do: Integer.to_string(value)
+
+  defp format_px(value) when is_float(value) do
+    rounded = Float.round(value, 1)
+
+    if rounded == trunc(rounded) do
+      rounded |> trunc() |> Integer.to_string()
+    else
+      Float.to_string(rounded)
+    end
   end
 
   defp viewport_script do

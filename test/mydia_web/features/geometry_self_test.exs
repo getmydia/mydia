@@ -132,6 +132,205 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
     end
   end
 
+  describe "assert_same_height/4" do
+    @tag :feature
+    test "passes for two elements with equal height", %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> visit("/")
+      |> wait_for_liveview()
+
+      inject(session, """
+        var a = document.createElement('div');
+        a.id = 'geo-height-eq-a';
+        a.style.cssText =
+          'position:fixed;top:10px;left:10px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(a);
+
+        var b = document.createElement('div');
+        b.id = 'geo-height-eq-b';
+        b.style.cssText =
+          'position:fixed;top:10px;left:200px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(b);
+      """)
+
+      assert_same_height(session, "#geo-height-eq-a", "#geo-height-eq-b")
+    end
+
+    @tag :feature
+    test "passes when the difference is within tolerance", %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> visit("/")
+      |> wait_for_liveview()
+
+      inject(session, """
+        var a = document.createElement('div');
+        a.id = 'geo-height-tol-a';
+        a.style.cssText =
+          'position:fixed;top:10px;left:10px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(a);
+
+        var b = document.createElement('div');
+        b.id = 'geo-height-tol-b';
+        b.style.cssText =
+          'position:fixed;top:10px;left:200px;width:50px;height:200.5px;z-index:9999';
+        document.body.appendChild(b);
+      """)
+
+      assert_same_height(session, "#geo-height-tol-a", "#geo-height-tol-b")
+    end
+
+    @tag :feature
+    test "fails and names both selectors, both heights, and the delta when they differ",
+         %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> visit("/")
+      |> wait_for_liveview()
+
+      inject(session, """
+        var a = document.createElement('div');
+        a.id = 'geo-height-diff-a';
+        a.style.cssText =
+          'position:fixed;top:10px;left:10px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(a);
+
+        var b = document.createElement('div');
+        b.id = 'geo-height-diff-b';
+        b.style.cssText =
+          'position:fixed;top:10px;left:200px;width:50px;height:212px;z-index:9999';
+        document.body.appendChild(b);
+      """)
+
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          assert_same_height(session, "#geo-height-diff-a", "#geo-height-diff-b")
+        end
+
+      assert error.message =~ "geo-height-diff-a"
+      assert error.message =~ "geo-height-diff-b"
+      assert error.message =~ "200px"
+      assert error.message =~ "212px"
+      assert error.message =~ "delta 12px"
+    end
+
+    @tag :feature
+    test "fails with a distinct sentinel when the first selector matches nothing",
+         %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> visit("/")
+      |> wait_for_liveview()
+
+      inject(session, """
+        var b = document.createElement('div');
+        b.id = 'geo-height-onlyb';
+        b.style.cssText =
+          'position:fixed;top:10px;left:200px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(b);
+      """)
+
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          assert_same_height(session, "#geo-height-missing-a", "#geo-height-onlyb")
+        end
+
+      assert error.message =~ "geo-height-missing-a"
+    end
+
+    @tag :feature
+    test "fails with a distinct sentinel when the second selector matches nothing",
+         %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> visit("/")
+      |> wait_for_liveview()
+
+      inject(session, """
+        var a = document.createElement('div');
+        a.id = 'geo-height-onlya';
+        a.style.cssText =
+          'position:fixed;top:10px;left:10px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(a);
+      """)
+
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          assert_same_height(session, "#geo-height-onlya", "#geo-height-missing-b")
+        end
+
+      assert error.message =~ "geo-height-missing-b"
+    end
+
+    @tag :feature
+    test "fails with a distinct sentinel when the first element has zero height",
+         %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> visit("/")
+      |> wait_for_liveview()
+
+      inject(session, """
+        var a = document.createElement('div');
+        a.id = 'geo-height-zero-a';
+        a.style.cssText =
+          'position:fixed;top:10px;left:10px;width:50px;height:0px;z-index:9999';
+        document.body.appendChild(a);
+
+        var b = document.createElement('div');
+        b.id = 'geo-height-zero-b';
+        b.style.cssText =
+          'position:fixed;top:10px;left:200px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(b);
+      """)
+
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          assert_same_height(session, "#geo-height-zero-a", "#geo-height-zero-b")
+        end
+
+      assert error.message =~ "geo-height-zero-a"
+    end
+
+    @tag :feature
+    test "fails with a distinct sentinel when the second element has zero height",
+         %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> visit("/")
+      |> wait_for_liveview()
+
+      inject(session, """
+        var a = document.createElement('div');
+        a.id = 'geo-height-zerob-a';
+        a.style.cssText =
+          'position:fixed;top:10px;left:10px;width:50px;height:200px;z-index:9999';
+        document.body.appendChild(a);
+
+        var b = document.createElement('div');
+        b.id = 'geo-height-zerob-b';
+        b.style.cssText =
+          'position:fixed;top:10px;left:200px;width:50px;height:0px;z-index:9999';
+        document.body.appendChild(b);
+      """)
+
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          assert_same_height(session, "#geo-height-zerob-a", "#geo-height-zerob-b")
+        end
+
+      assert error.message =~ "geo-height-zerob-b"
+    end
+  end
+
   defp inject(session, script) do
     Wallaby.Browser.execute_script(session, script, [])
     session
