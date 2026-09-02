@@ -125,13 +125,26 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     {collection_id, collection_name} = parse_collection(data["belongs_to_collection"])
     external_ids = parse_external_ids(data["external_ids"])
 
+    # `data` is usually a raw TMDB API response map (string keys), which never
+    # carries a `:provider` key, so this defaults to :tmdb. But a caller can
+    # also rewrap an existing `%MediaMetadata{}` here (e.g.
+    # `Mydia.Library.MetadataMatcher.lookup_tv_show_by_external_id/3` via
+    # `Map.from_struct/1`, which produces atom keys); when that struct's own
+    # `:provider` survives onto `data`, it is the real provenance and must
+    # win over the TMDB default.
+    provider =
+      case data[:provider] do
+        value when value in [:tmdb, :tvdb] -> value
+        _ -> :tmdb
+      end
+
     base_metadata = %__MODULE__{
       id: data["id"],
       provider_id: to_string(provider_id),
       # The provider that owns this id, not the config type that served it.
       # `Mydia.Media.Refresh.stored_blob_provider/2` still tolerates a stored
       # `:metadata_relay` for blobs written before this was corrected.
-      provider: :tmdb,
+      provider: provider,
       title: title,
       original_title: data["original_title"] || data["original_name"],
       year: year,
