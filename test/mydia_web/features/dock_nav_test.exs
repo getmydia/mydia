@@ -76,5 +76,69 @@ defmodule MydiaWeb.Features.DockNavTest do
 
       assert Wallaby.Browser.has_css?(session, "[data-phx-main].phx-connected")
     end
+
+    @tag :feature
+    test "the sidebar user menu is tappable while the drawer is open",
+         %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> resize_window(390, 844)
+      |> visit("/")
+      |> wait_for_liveview()
+
+      # The hamburger is `<label for="main-drawer">` (layouts.ex). A real click
+      # on a label toggles its associated checkbox, which is the only thing
+      # daisyUI's drawer is driven by.
+      session
+      |> click(Query.css(~s(label[for="main-drawer"])))
+
+      # Two separate transitions run here and only one of them is visibility.
+      # `.drawer-side` flips computed visibility to "visible" at the end of a
+      # 0.1s delay, but the sidebar slides in independently: daisyUI puts
+      # `transition: translate .3s ease-out` with no delay on
+      # `.drawer-side > :not(.drawer-overlay)`, animating `translate: -100%` to
+      # `0%`. Waiting on visibility alone therefore probes mid-slide, with the
+      # sidebar still partly off screen to the left. Wait on the geometry the
+      # assertions below actually depend on.
+      eventually(
+        fn ->
+          script = """
+          var aside = document.querySelector('.drawer-side > :not(.drawer-overlay)');
+          if (!aside) { return '__missing__'; }
+          if (window.getComputedStyle(aside).visibility !== 'visible') { return 'hidden'; }
+          return aside.getBoundingClientRect().left;
+          """
+
+          case eval_js(session, script) do
+            left when is_number(left) and left >= -0.5 -> {:ok, :open}
+            _ -> :error
+          end
+        end,
+        description: "the drawer sidebar finishing its slide-in"
+      )
+
+      # The sidebar scrolls: scrollHeight runs past the viewport once the
+      # admin nav section renders. The user menu only reaches the bottom edge
+      # of the screen, where the dock floats, when it is scrolled all the way
+      # down, so probe that worst case rather than the initial position.
+      scroll_bottom = """
+      var side = document.querySelector('.drawer-side');
+      if (!side) { return '__missing__'; }
+      side.scrollTop = side.scrollHeight;
+      return side.scrollTop;
+      """
+
+      refute eval_js(session, scroll_bottom) == "__missing__",
+             "expected a .drawer-side element to scroll"
+
+      # `refute_covered/2` skips sample points that fall outside the viewport
+      # (elementFromPoint returns null there), so an off-screen element would
+      # pass vacuously. Assert the rect is on screen first, so the cover check
+      # cannot silently no-op.
+      session
+      |> assert_in_viewport("#sidebar-user-menu")
+      |> refute_covered("#sidebar-user-menu")
+    end
   end
 end
