@@ -10,7 +10,7 @@ defmodule MydiaWeb.PosterCardGridSkeletonTest do
 
   import Phoenix.LiveViewTest
 
-  alias MydiaWeb.DiscoverComponents
+  alias MydiaWeb.PosterCardComponents
 
   defp render_skeleton(overrides \\ %{}) do
     assigns =
@@ -19,7 +19,7 @@ defmodule MydiaWeb.PosterCardGridSkeletonTest do
         overrides
       )
 
-    render_component(&DiscoverComponents.poster_card_grid_skeleton/1, assigns)
+    render_component(&PosterCardComponents.poster_card_grid_skeleton/1, assigns)
     |> LazyHTML.from_fragment()
   end
 
