@@ -101,6 +101,27 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     end
   end
 
+  # Runs the trash for one group instead of the whole library. The ids are
+  # narrowed to that group's marked losers, and `keepers` still goes through:
+  # `execute/3` rebuilds the plan, and without the overrides it would re-rank
+  # the group with the default keeper and discard whatever the operator's Keep
+  # and Trash choices implied.
+  def handle_event("trash_group_now", %{"subject" => subject_id}, socket) do
+    with decision when not is_nil(decision) <- find_decision(socket, subject_id),
+         ids = group_selection(socket, decision),
+         false <- ids == [] do
+      actor_id = to_string(socket.assigns.current_scope.user.id)
+      result = Prune.execute(ids, actor_id, socket.assigns.keepers)
+
+      {:noreply,
+       socket
+       |> put_flash(:info, flash_for(result))
+       |> load_plan()}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
   def handle_event("trash_all_duplicates", _params, socket) do
     {:noreply, socket |> assign(:kept, MapSet.new()) |> assign_selection()}
   end
@@ -194,6 +215,12 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
 
   defp find_decision(socket, subject_id),
     do: Enum.find(socket.assigns.decisions, &(&1.group.subject_id == subject_id))
+
+  defp group_selection(socket, decision) do
+    for file <- decision.losers,
+        MapSet.member?(socket.assigns.selected, file.id),
+        do: file.id
+  end
 
   defp load_plan(socket) do
     plan = Prune.plan(socket.assigns.keepers)

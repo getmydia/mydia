@@ -115,11 +115,13 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   attr :selected, :any, required: true
 
   defp decision_row(assigns) do
-    selected_count = Enum.count(assigns.decision.losers, &MapSet.member?(assigns.selected, &1.id))
+    selected = assigns.selected
+    marked = Enum.filter(assigns.decision.losers, &MapSet.member?(selected, &1.id))
 
     assigns =
       assigns
-      |> assign(:selected_count, selected_count)
+      |> assign(:selected_count, length(marked))
+      |> assign(:selected_bytes, Enum.reduce(marked, 0, &(&2 + (&1.size || 0))))
       |> assign(:files, [assigns.decision.keeper | assigns.decision.losers])
 
     ~H"""
@@ -139,26 +141,31 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         <span :if={@selected_count == 0} class="badge badge-sm badge-outline">Keeping all</span>
 
         <button
-          :if={@selected_count > 0}
-          id={"duplicates-group-keep-#{@decision.group.subject_id}"}
+          id={"duplicates-group-mark-#{@decision.group.subject_id}"}
           type="button"
           class="btn btn-sm btn-ghost ml-auto sm:ml-2"
-          aria-label={"Keep every file in #{subject_label(@decision.group)}"}
-          phx-click="keep_group"
+          aria-label={
+            if @selected_count > 0,
+              do: "Keep every file in #{subject_label(@decision.group)}",
+              else: "Mark every duplicate in #{subject_label(@decision.group)} for trash"
+          }
+          phx-click={if @selected_count > 0, do: "keep_group", else: "trash_group"}
           phx-value-subject={@decision.group.subject_id}
         >
-          Keep all
+          {if @selected_count > 0, do: "Keep all", else: "Mark all for trash"}
         </button>
         <button
-          :if={@selected_count == 0}
           id={"duplicates-group-trash-#{@decision.group.subject_id}"}
           type="button"
-          class="btn btn-sm btn-ghost ml-auto sm:ml-2"
-          aria-label={"Trash every duplicate in #{subject_label(@decision.group)}"}
-          phx-click="trash_group"
+          class="btn btn-sm btn-error"
+          disabled={@selected_count == 0}
+          aria-label={"Trash the marked duplicates in #{subject_label(@decision.group)}"}
+          phx-click="trash_group_now"
           phx-value-subject={@decision.group.subject_id}
+          phx-disable-with="Trashing..."
         >
-          Trash duplicates
+          <.icon name="hero-trash" class="w-4 h-4" />
+          Trash {file_count(@selected_count)} ({humanize_bytes(@selected_bytes)})
         </button>
       </div>
 
@@ -347,9 +354,15 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
     """
   end
 
-  defp subject_label(%{subject_type: :movie, subject: movie}), do: movie.title
+  @doc """
+  The operator-facing name of a group's subject. Public because the LiveView
+  builds the undo toast's label from it, and a movie title or a
+  "Show S01E02" string is a display concern that belongs here rather than
+  duplicated in the page module.
+  """
+  def subject_label(%{subject_type: :movie, subject: movie}), do: movie.title
 
-  defp subject_label(%{subject_type: :episode, subject: episode, media_item: show}) do
+  def subject_label(%{subject_type: :episode, subject: episode, media_item: show}) do
     "#{show.title} S#{pad(episode.season_number)}E#{pad(episode.episode_number)}"
   end
 

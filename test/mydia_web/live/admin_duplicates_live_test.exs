@@ -220,27 +220,104 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       refute trashed?(keeper)
     end
 
-    test "Keep all spares the whole group, and Trash duplicates puts it back",
-         %{conn: conn} do
+    test "the marking toggle spares the whole group and puts it back", %{conn: conn} do
       {_show, episode, files} = duplicated_episode(@three_files)
       keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
       losers = Enum.reject(files, &(&1.id == keeper.id))
 
       {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
 
-      view |> element("#duplicates-group-keep-#{episode.id}") |> render_click()
+      view |> element("#duplicates-group-mark-#{episode.id}") |> render_click()
 
       for loser <- losers do
         assert has_element?(view, "#duplicates-keep-#{loser.id}[checked]")
       end
 
       assert has_element?(view, "#duplicates-trash-selected[disabled]")
+      # Nothing was trashed: this control only marks.
+      for file <- files, do: refute(trashed?(file))
 
-      view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
+      view |> element("#duplicates-group-mark-#{episode.id}") |> render_click()
 
       for loser <- losers do
         assert has_element?(view, "#duplicates-trash-#{loser.id}[checked]")
       end
+    end
+
+    test "the group trash button trashes only its own group", %{conn: conn} do
+      {_show_a, episode_a, files_a} = duplicated_episode(@three_files)
+      {_show_b, _episode_b, files_b} = duplicated_episode(@three_files)
+      keeper_a = Enum.find(files_a, &(&1.relative_path =~ "1080p"))
+      losers_a = Enum.reject(files_a, &(&1.id == keeper_a.id))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-group-trash-#{episode_a.id}") |> render_click()
+
+      for loser <- losers_a, do: assert(trashed?(loser))
+      refute trashed?(keeper_a)
+      for file <- files_b, do: refute(trashed?(file))
+    end
+
+    test "the group trash button spares a file set to Keep", %{conn: conn} do
+      {_show, episode, files} = duplicated_episode(@three_files)
+      keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      spared = Enum.find(files, &(&1.relative_path =~ "480p"))
+      doomed = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-keep-#{spared.id}") |> render_click()
+      view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
+
+      assert trashed?(doomed)
+      refute trashed?(spared)
+      refute trashed?(keeper)
+    end
+
+    test "the group trash button honours a keeper override", %{conn: conn} do
+      # Trashing the best copy promotes the next one. The group button has to
+      # hand execute/3 that override, or the ranked keeper is re-derived as the
+      # 1080p file and the run is aborted as :would_leave_no_file.
+      {_show, episode, files} = duplicated_episode()
+      high = Enum.find(files, &(&1.relative_path =~ "1080p"))
+      low = Enum.find(files, &(&1.relative_path =~ "360p"))
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-trash-#{high.id}") |> render_click()
+      view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
+
+      assert trashed?(high)
+      refute trashed?(low)
+    end
+
+    test "a fully pruned group leaves the page entirely", %{conn: conn} do
+      # Grouping.multi_file_ids/1 selects with `having count > 1` over untrashed
+      # rows, so a group down to one file is no longer a group. It must not
+      # reappear under Needs Attention as a :nothing_to_prune refusal.
+      {_show, episode, _files} = duplicated_episode()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      assert has_element?(view, "#duplicates-group-#{episode.id}")
+
+      view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
+
+      refute has_element?(view, "#duplicates-group-#{episode.id}")
+      refute has_element?(view, "#duplicates-refusal-#{episode.id}")
+    end
+
+    test "the group trash button is disabled when the group has nothing marked",
+         %{conn: conn} do
+      {_show, episode, _files} = duplicated_episode(@three_files)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      refute has_element?(view, "#duplicates-group-trash-#{episode.id}[disabled]")
+
+      view |> element("#duplicates-group-mark-#{episode.id}") |> render_click()
+
+      assert has_element?(view, "#duplicates-group-trash-#{episode.id}[disabled]")
     end
 
     test "the confirmation modal opens on Trash and closes on Cancel without trashing anything",
