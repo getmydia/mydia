@@ -17,6 +17,7 @@ defmodule Mydia.MetadataStubProvider do
   @behaviour Mydia.Metadata.Provider
 
   alias Mydia.Metadata.Provider.Error
+  alias Mydia.Metadata.Ref
 
   alias Mydia.Metadata.Structs.{
     EpisodeData,
@@ -181,6 +182,29 @@ defmodule Mydia.MetadataStubProvider do
       true ->
         {:ok, movie_metadata()}
     end
+  end
+
+  # This stub predates refs. Rather than duplicate `fetch_by_id/3`'s routing
+  # (which several tests exercise directly), the ref variants just forward to
+  # the old ones with the ref's provider folded into `opts`, so both entry
+  # points hit the same catalog logic.
+  @impl true
+  def fetch_by_ref(config, ref, opts) do
+    fetch_by_id(
+      config,
+      to_string(Ref.id(ref)),
+      Keyword.put_new(opts, :provider, Ref.provider(ref))
+    )
+  end
+
+  @impl true
+  def fetch_images_by_ref(config, ref, opts) do
+    fetch_images(config, to_string(Ref.id(ref)), opts)
+  end
+
+  @impl true
+  def fetch_season_by_ref(config, ref, season_number, opts) do
+    fetch_season(config, to_string(Ref.id(ref)), season_number, opts)
   end
 
   @impl true

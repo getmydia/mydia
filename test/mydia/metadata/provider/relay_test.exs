@@ -587,6 +587,68 @@ defmodule Mydia.Metadata.Provider.RelayTest do
     end
   end
 
+  describe "fetch_by_ref/3 routes on the ref tag, not the media type" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "a tvdb ref hits the TVDB series route", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "GET", "/tvdb/series/280619/extended", fn conn ->
+        body = %{
+          "data" => %{
+            "id" => 280_619,
+            "name" => "Harbour Lights",
+            "overview" => "x",
+            "first_air_date" => "2015-12-14",
+            "genres" => [],
+            "seasons" => []
+          }
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:ok, metadata} =
+               Relay.fetch_by_ref(config, {:tvdb, 280_619}, media_type: :tv_show)
+
+      assert metadata.title == "Harbour Lights"
+      assert metadata.provider == :tvdb
+    end
+
+    test "a tmdb ref for a TV show hits the TMDB route", %{bypass: bypass, config: config} do
+      Bypass.expect_once(bypass, "GET", "/tmdb/tv/shows/63639", fn conn ->
+        body = %{
+          "id" => 63_639,
+          "name" => "Harbour Lights",
+          "first_air_date" => "2015-12-14",
+          "overview" => "x",
+          "credits" => %{"cast" => [], "crew" => []},
+          "genres" => [],
+          "seasons" => []
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
+      assert {:ok, metadata} =
+               Relay.fetch_by_ref(config, {:tmdb, 63_639}, media_type: :tv_show)
+
+      assert metadata.title == "Harbour Lights"
+    end
+  end
+
   defp relay_config(bypass) do
     %{
       type: :metadata_relay,
