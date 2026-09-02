@@ -106,7 +106,7 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       refute html =~ "Requesting..."
     end
 
-    test "keeps Add to Library for non-guest users" do
+    test "offers the add action instead of a request for non-guest users" do
       html = card(%{current_user: %{role: "admin", id: "admin-1"}})
 
       assert html =~ "Add to Library"
@@ -205,9 +205,10 @@ defmodule MydiaWeb.DiscoverComponentsTest do
         |> LazyHTML.from_fragment()
         |> LazyHTML.query(~s(button[phx-click="add_to_library"]))
 
-      # Guard the cardinality first: LazyHTML.attribute/2 on a zero-node match
-      # returns [], so a missing button would otherwise sail past the
-      # attribute assertion below.
+      # Guard the cardinality first: LazyHTML.attribute/2 silently drops any
+      # matched node that lacks the attribute, so a spurious second button
+      # missing aria-label would still produce a single-element list below
+      # and pass the assertion undetected.
       assert Enum.count(button) == 1
       assert LazyHTML.attribute(button, "aria-label") == ["Add to Library"]
       assert LazyHTML.attribute(button, "title") == ["Add to Library"]
