@@ -949,9 +949,8 @@ defmodule Mydia.Library do
   def purge_media_file(%MediaFile{} = media_file) do
     media_file = Repo.preload(media_file, :library_path)
 
-    with :ok <- TrashStore.discard(media_file, trash_state(media_file)),
-         :ok <- delete_if_still_trashed(media_file) do
-      :ok
+    with :ok <- TrashStore.discard(media_file, trash_state(media_file)) do
+      delete_if_still_trashed(media_file)
     end
   end
 
