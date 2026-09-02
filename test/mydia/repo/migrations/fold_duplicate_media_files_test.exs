@@ -197,6 +197,59 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesTest do
   end
 
   @tag :tmp_dir
+  test "clears the winner's own supersedes pointer instead of pointing it at itself" do
+    build_pre_migration_schema()
+
+    seed_library_path("lib-plain", "/media/movies")
+    seed_media_item("item-1")
+
+    # winner was imported as an upgrade over loser (supersedes_media_file_id
+    # points at loser), and loser is also the duplicate row this group folds
+    # away. A plain repoint (UPDATE ... WHERE supersedes_media_file_id =
+    # loser) would land on the winner too, since the winner's own pointer
+    # matches the WHERE clause, leaving it pointing at itself.
+    seed_media_file("winner", "lib-plain", "Amber Foundry (2013)/Amber.Foundry.mkv", "item-1")
+    seed_media_file("loser", "lib-plain", "Amber Foundry (2013)/Amber.Foundry.mkv", "item-1")
+
+    sql!("UPDATE media_files SET supersedes_media_file_id = 'loser' WHERE id = 'winner'")
+
+    # Give the winner strictly more dependents so it is the unambiguous
+    # winner regardless of the tiebreak.
+    sql!("INSERT INTO media_hashes (media_file_id, opensubtitles_hash) VALUES ('winner', 'aaa')")
+
+    run_migration!(FoldDuplicateMediaFilesAndEnforcePathUniqueness, @version)
+
+    assert %{rows: [["winner", nil]]} =
+             sql!("SELECT id, supersedes_media_file_id FROM media_files")
+  end
+
+  @tag :tmp_dir
+  test "repoints a third row's supersedes pointer off the loser onto the winner" do
+    build_pre_migration_schema()
+
+    seed_library_path("lib-plain", "/media/movies")
+    seed_media_item("item-1")
+
+    seed_media_file("winner", "lib-plain", "Marrow Hollow (2015)/Marrow.Hollow.mkv", "item-1")
+    seed_media_file("loser", "lib-plain", "Marrow Hollow (2015)/Marrow.Hollow.mkv", "item-1")
+
+    seed_media_file(
+      "newer",
+      "lib-plain",
+      "Marrow Hollow (2015) [newer]/Marrow.Hollow.mkv",
+      "item-1"
+    )
+
+    sql!("UPDATE media_files SET supersedes_media_file_id = 'loser' WHERE id = 'newer'")
+    sql!("INSERT INTO media_hashes (media_file_id, opensubtitles_hash) VALUES ('winner', 'aaa')")
+
+    run_migration!(FoldDuplicateMediaFilesAndEnforcePathUniqueness, @version)
+
+    assert %{rows: [["newer", "winner"], ["winner", nil]]} =
+             sql!("SELECT id, supersedes_media_file_id FROM media_files ORDER BY id")
+  end
+
+  @tag :tmp_dir
   test "rejects a second active row at the same library path and relative path" do
     build_pre_migration_schema()
 

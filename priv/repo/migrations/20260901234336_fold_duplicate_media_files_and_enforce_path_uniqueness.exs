@@ -140,9 +140,26 @@ defmodule Mydia.Repo.Migrations.FoldDuplicateMediaFilesAndEnforcePathUniqueness 
     Enum.each(losers, fn {loser_id, _count, _inserted_at} ->
       Enum.each(@dependents, fn dependent -> repoint(dependent, loser_id, winner_id) end)
 
+      # Excludes the winner itself. Without the guard, a winner whose own
+      # supersedes_media_file_id already pointed at the loser it is absorbing
+      # would be repointed onto its own id. Upgrades.superseded_file/1 does a
+      # plain Repo.get(MediaFile, id) on that pointer and returns whatever
+      # untrashed row comes back with no self-reference check, so
+      # finalize_comparison/2 would compare the winner against itself and the
+      # upgrade branch could then trash the very file it just decided to
+      # keep. The winner's own pointer is cleared instead, in the second
+      # statement below, which is what Upgrades.superseded_file/1 already
+      # treats as "nothing to compare against" (the :orphaned outcome).
       exec("""
       UPDATE media_files SET supersedes_media_file_id = #{lit(winner_id)}
       WHERE supersedes_media_file_id = #{lit(loser_id)}
+        AND id <> #{lit(winner_id)}
+      """)
+
+      exec("""
+      UPDATE media_files SET supersedes_media_file_id = NULL
+      WHERE id = #{lit(winner_id)}
+        AND supersedes_media_file_id = #{lit(loser_id)}
       """)
 
       exec("DELETE FROM media_files WHERE id = #{lit(loser_id)}")
