@@ -855,6 +855,108 @@ defmodule Mydia.Library do
     {:ok, count}
   end
 
+  @doc """
+  Lists trashed media files for the operator-facing trash page.
+
+  Newest first, because the thing an operator wants to undo is almost always
+  the thing that just happened.
+
+  ## Options
+
+    * `:reason` - restrict to one `trashed_reason`. `nil` (the default) returns
+      every trashed row regardless of reason. To select rows whose reason is
+      itself unknown, pass `:unknown`; a literal `nil` cannot mean both "no
+      filter" and "filter to no reason".
+    * `:limit`, `:offset` - pagination.
+    * `:preload` - passed to `Mydia.QueryHelpers.maybe_preload/2`.
+  """
+  @spec list_trashed_media_files(keyword()) :: [MediaFile.t()]
+  def list_trashed_media_files(opts \\ []) do
+    MediaFile
+    |> where([f], not is_nil(f.trashed_at))
+    |> filter_by_trashed_reason(Keyword.get(opts, :reason))
+    |> order_by([f], desc: f.trashed_at, desc: f.id)
+    |> maybe_limit(Keyword.get(opts, :limit))
+    |> maybe_offset(Keyword.get(opts, :offset))
+    |> maybe_preload(opts[:preload])
+    |> Repo.all()
+  end
+
+  defp filter_by_trashed_reason(query, nil), do: query
+
+  defp filter_by_trashed_reason(query, :unknown),
+    do: where(query, [f], is_nil(f.trashed_reason))
+
+  defp filter_by_trashed_reason(query, reason) when is_atom(reason),
+    do: where(query, [f], f.trashed_reason == ^reason)
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, n) when is_integer(n), do: limit(query, ^n)
+
+  defp maybe_offset(query, nil), do: query
+  defp maybe_offset(query, n) when is_integer(n), do: offset(query, ^n)
+
+  @doc """
+  Counts trashed media files grouped by reason, for the filter chips.
+
+  The map is keyed by the `trashed_reason` atom, with `nil` holding rows
+  trashed before the column existed. A reason with no rows is absent from the
+  map rather than present with a zero.
+  """
+  @spec count_trashed_media_files() :: %{optional(atom()) => non_neg_integer()}
+  def count_trashed_media_files do
+    MediaFile
+    |> where([f], not is_nil(f.trashed_at))
+    |> group_by([f], f.trashed_reason)
+    |> select([f], {f.trashed_reason, count(f.id)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc """
+  Count and total bytes of everything in the trash.
+
+  One aggregate over `media_files`, with no filesystem access at all: this
+  runs on every render of the trash page, and a disconnected NAS mount must
+  not be able to hang it. Bytes nothing accounts for are a separate,
+  operator-triggered concern; see `Mydia.Library.TrashStore.audit/0`.
+  """
+  @spec trashed_summary() :: %{count: non_neg_integer(), bytes: non_neg_integer()}
+  def trashed_summary do
+    {count, bytes} =
+      MediaFile
+      |> where([f], not is_nil(f.trashed_at))
+      |> select([f], {count(f.id), sum(f.size)})
+      |> Repo.one()
+
+    %{count: count || 0, bytes: bytes || 0}
+  end
+
+  @doc """
+  Permanently deletes one trashed media file: its bytes and then its row.
+
+  The same pair `purge_old_trashed_media_files/1` runs, for a single row the
+  operator picked by hand. `TrashStore.discard/2` decides what may be deleted
+  from the trash state recorded on the row, which is why this must never do
+  its own `File.rm/1`: a row trashed while its file was already missing may
+  have a live file at its library path today.
+
+  Returns `{:error, :not_trashed}` rather than deleting an active row.
+  """
+  @spec purge_media_file(MediaFile.t()) :: :ok | {:error, term()}
+  def purge_media_file(%MediaFile{trashed_at: nil}), do: {:error, :not_trashed}
+
+  def purge_media_file(%MediaFile{} = media_file) do
+    media_file = Repo.preload(media_file, :library_path)
+
+    with :ok <- TrashStore.discard(media_file, trash_state(media_file)),
+         {:ok, _} <- Repo.delete(media_file) do
+      :ok
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   # How a row came to be trashed, recorded on the row itself. Three states,
   # and `TrashStore.discard/2` treats all three differently:
   #
