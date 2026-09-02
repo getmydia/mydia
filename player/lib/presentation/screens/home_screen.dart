@@ -13,7 +13,7 @@ import '../widgets/content_rail.dart';
 import 'continue_watching/continue_watching_actions.dart' as cw_actions;
 import '../widgets/freshness_header.dart';
 import '../widgets/glass_surface.dart';
-import '../widgets/shimmer_card.dart';
+import 'home/home_loading_skeleton.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/dock_insets.dart';
 import '../../core/theme/colors.dart';
@@ -164,7 +164,7 @@ class HomeScreen extends ConsumerWidget {
                 loading: () {
                   // No hero pick yet -> calm static fallback.
                   publishBackdropSource(ref, BackdropSource.none);
-                  return _buildShimmerLoading(context);
+                  return const HomeLoadingSkeleton();
                 },
                 error: (error, stackTrace) {
                   publishBackdropSource(ref, BackdropSource.none);
@@ -267,24 +267,6 @@ class HomeScreen extends ConsumerWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildShimmerLoading(BuildContext context) {
-    final isDesktop = Breakpoints.isDesktop(context);
-    final safeAreaTop = MediaQuery.of(context).padding.top;
-    return ListView(
-      padding:
-          EdgeInsets.only(top: isDesktop ? 0 : safeAreaTop + kToolbarHeight),
-      children: [
-        const _ShimmerHero(),
-        SizedBox(height: isDesktop ? 32 : 24),
-        const ShimmerRail(count: 5),
-        SizedBox(height: isDesktop ? 24 : 16),
-        const ShimmerRail(count: 5),
-        SizedBox(height: isDesktop ? 24 : 16),
-        const ShimmerRail(count: 5),
-      ],
     );
   }
 
@@ -610,107 +592,6 @@ class _HeroSection extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShimmerHero extends StatelessWidget {
-  const _ShimmerHero();
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isDesktop = Breakpoints.isDesktop(context);
-    // Match the responsive hero height from _HeroSection
-    final heroHeight = isDesktop
-        ? (size.height * 0.45).clamp(300.0, 450.0)
-        : size.height * 0.5;
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-
-    return Container(
-      width: size.width,
-      height: heroHeight,
-      color: AppColors.surface,
-      child: Stack(
-        children: [
-          // Shimmer effect
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.background.withValues(alpha: 0.4),
-                    Colors.transparent,
-                    AppColors.background.withValues(alpha: 0.9),
-                    AppColors.background,
-                  ],
-                  stops: const [0.0, 0.3, 0.7, 1.0],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: horizontalPadding,
-            right: horizontalPadding,
-            bottom: isDesktop ? 32 : 24,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 80,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: 200,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 120,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: AppColors.shimmerBase,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.shimmerBase,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 120,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.shimmerBase,
-                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ],
