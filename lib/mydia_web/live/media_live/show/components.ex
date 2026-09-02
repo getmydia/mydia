@@ -969,8 +969,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   width. --%>
             <ul class="menu w-full flex-nowrap bg-base-100 rounded-box p-0 mt-2">
               <li :for={file <- @extras} id={"extra-#{file.id}"} class="min-w-0 flex-nowrap">
-                <div class="min-w-0 items-stretch flex flex-col gap-2 p-4 rounded-none sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <div class="min-w-0 sm:flex-1 flex flex-col gap-1">
+                <div
+                  id={"extra-row-#{file.id}"}
+                  class="min-w-0 items-stretch flex flex-col gap-2 p-4 rounded-none @lg/mfrow:flex-row @lg/mfrow:items-center @lg/mfrow:justify-between @lg/mfrow:gap-4"
+                >
+                  <div class="min-w-0 @lg/mfrow:flex-1 flex flex-col gap-1">
                     <p
                       id={"extra-name-#{file.id}"}
                       class="text-sm font-mono truncate"
@@ -989,7 +992,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <button
                     id={"promote-#{file.id}"}
                     type="button"
-                    class="btn btn-ghost self-end sm:self-auto sm:btn-sm"
+                    class="btn btn-ghost self-end @lg/mfrow:self-auto @lg/mfrow:btn-sm"
                     title="This is a version, not an extra"
                     phx-click="promote_to_version"
                     phx-value-id={file.id}

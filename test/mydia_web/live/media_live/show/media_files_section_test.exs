@@ -290,6 +290,32 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
       assert class =~ "@lg/mfrow:btn-sm"
       refute has_bare?(class, "btn-sm")
     end
+
+    test "the extras row switches on the same container as the versions row" do
+      media_item = %Mydia.Media.MediaItem{
+        id: "item-1",
+        type: "movie",
+        title: "Ashvale Hollow",
+        episodes: [],
+        media_files: [
+          %{
+            file("extra-1", "Ashvale.Hollow.2024.Behind.The.Lantern.Featurette.1080p.mkv")
+            | extra_kind: "featurette",
+              extra_source: "filename"
+          }
+        ]
+      }
+
+      html = section_html(media_item)
+
+      row_class = class_of(html, "#extra-row-extra-1")
+      assert row_class =~ "@lg/mfrow:flex-row"
+      refute row_class =~ "sm:"
+
+      button_class = class_of(html, "#promote-extra-1")
+      assert button_class =~ "@lg/mfrow:btn-sm"
+      refute has_bare?(button_class, "btn-sm")
+    end
   end
 
   describe "refresh_all_file_metadata/2" do
