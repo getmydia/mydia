@@ -548,6 +548,17 @@ defmodule Mydia.Jobs.LibraryScanner do
 
                 {restored_count + 1, unknown_acc}
 
+              {:ok, _restored, :trash_copy_retained} ->
+                Logger.warning(
+                  "Restored a trashed media file whose library path was already occupied; " <>
+                    "the trashed copy was left in place and nothing will purge it " <>
+                    "automatically. See the trash directory audit on /admin/config/trash.",
+                  path: file_info.path,
+                  relative_path: relative_path
+                )
+
+                {restored_count + 1, unknown_acc}
+
               {:error, reason} ->
                 Logger.error("Failed to restore trashed media file",
                   path: file_info.path,

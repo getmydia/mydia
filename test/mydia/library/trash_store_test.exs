@@ -221,7 +221,7 @@ defmodule Mydia.Library.TrashStoreTest do
 
       File.write!(path, "something else")
 
-      assert {:ok, restored} = Library.restore_media_file(trashed)
+      assert {:ok, restored, :trash_copy_retained} = Library.restore_media_file(trashed)
 
       assert is_nil(restored.trashed_at)
       assert File.read!(path) == "something else"
@@ -348,6 +348,39 @@ defmodule Mydia.Library.TrashStoreTest do
 
       assert {:ok, 1} = Library.purge_old_trashed_media_files(30)
       refute File.exists?(path)
+    end
+  end
+
+  describe "restore_media_file/1 return shape" do
+    @tag :tmp_dir
+    test "signals when the trashed copy was kept", %{tmp_dir: tmp_dir} do
+      {root, media_file, path} = library_with_file(tmp_dir, "occupied.mkv")
+
+      {:ok, trashed} = Library.trash_media_file(media_file, reason: :manual)
+      refute File.exists?(path)
+
+      # Something else takes the library path back before the restore runs.
+      File.write!(path, "a different file entirely")
+
+      assert {:ok, restored, :trash_copy_retained} = Library.restore_media_file(trashed)
+      assert is_nil(restored.trashed_at)
+      assert File.read!(path) == "a different file entirely"
+      # The row still points at the trashed copy, so it stays reclaimable.
+      assert restored.metadata.extra["trashed_path"]
+      assert File.exists?(restored.metadata.extra["trashed_path"])
+
+      _ = root
+    end
+
+    @tag :tmp_dir
+    test "a clean restore stays a two-tuple", %{tmp_dir: tmp_dir} do
+      {_root, media_file, path} = library_with_file(tmp_dir, "clean.mkv")
+
+      {:ok, trashed} = Library.trash_media_file(media_file, reason: :manual)
+      assert {:ok, restored} = Library.restore_media_file(trashed)
+
+      assert is_nil(restored.trashed_at)
+      assert File.exists?(path)
     end
   end
 

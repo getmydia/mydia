@@ -754,9 +754,18 @@ defmodule Mydia.Library do
   left where it is rather than clobbering what is there, and the row keeps
   pointing at it so those bytes stay reclaimable instead of becoming an
   untracked file under `.mydia-trash/`.
+
+  The retained case returns `{:ok, media_file, :trash_copy_retained}` rather
+  than a plain `{:ok, media_file}`, because a caller has to tell the operator
+  that two copies now exist and only one of them is the library's. This
+  mirrors `delete_media_file/2`, which already signals a partial success the
+  same way.
   """
   @spec restore_media_file(MediaFile.t()) ::
-          {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
+          {:ok, MediaFile.t()}
+          | {:ok, MediaFile.t(), :trash_copy_retained}
+          | {:error, Ecto.Changeset.t()}
+          | {:error, term()}
   def restore_media_file(%MediaFile{} = media_file) do
     media_file = Repo.preload(media_file, :library_path)
 
@@ -774,6 +783,10 @@ defmodule Mydia.Library do
         media_file
         |> Ecto.Changeset.change(trashed_at: nil, trashed_reason: nil)
         |> Repo.update()
+        |> case do
+          {:ok, restored} -> {:ok, restored, :trash_copy_retained}
+          {:error, changeset} -> {:error, changeset}
+        end
 
       {:error, reason} ->
         Logger.error("Could not restore a trashed media file",
