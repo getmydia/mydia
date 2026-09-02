@@ -101,6 +101,18 @@ defmodule MydiaWeb.DiscoverComponents do
         </div>
       <% end %>
       <%= cond do %>
+        <%!-- The card for the title whose page you are already on. It draws the
+              ring, renders no action, and must not open a dialog about itself:
+              the franchise strip gives it no `navigate` on purpose, so without
+              this branch a rail-level on_select would make it clickable. --%>
+        <% @current -> %>
+          <.card_poster
+            item={@item}
+            media_type={@media_type}
+            loading={@loading}
+            poster_size={@poster_size}
+            class="rounded-t-box"
+          />
         <% @navigate -> %>
           <.link navigate={@navigate} class="block">
             <.card_poster
