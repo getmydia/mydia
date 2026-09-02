@@ -181,10 +181,10 @@
               <.poster_card_body title={result.title || result.name}>
                 <:meta>
                   <p class="text-xs text-base-content/70">{format_year(result)}</p>
-                  <p :if={result.overview} class="text-xs text-base-content/60 line-clamp-2">
+                  <p :if={result.overview} class="text-xs text-base-content/60 line-clamp-2 mt-1">
                     {result.overview}
                   </p>
-                  <div class="card-actions flex-col gap-1">
+                  <div class="card-actions flex-col gap-1 mt-2">
                     <%= if is_added do %>
                       <.link
                         navigate={~p"/media/#{media_item_id}"}

@@ -367,7 +367,7 @@
           <%!-- Grid Card View --%>
           <div
             id={"grid-item-#{item.id}"}
-            class="relative group media-grid-item"
+            class="relative group media-grid-item h-full"
             data-selected={to_string(MapSet.member?(@selected_ids, item.id))}
             phx-click="toggle_select"
             phx-value-id={item.id}

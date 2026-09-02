@@ -26,8 +26,10 @@ defmodule MydiaWeb.PosterCardComponents do
   `mt-auto` on the metadata wrapper replaces daisyUI's
   `.card-body p { flex-grow: 1 }`, which pinned Discover's action button to the
   bottom only because its year happened to be a `p`. The wrapper repeats
-  card-body's own `gap-2` so children keep the spacing they had when they were
-  direct card-body children.
+  card-body's own `gap-2` so the gap between metadata children is unchanged. Gap
+  and margin are additive, not interchangeable: a caller that also had margin
+  utilities on those children (an `mt-1` on an overview paragraph, an `mt-2` on
+  `card-actions`) must keep them, or that spacing is silently deleted.
 
   The caller's `.card` has to stretch to its row for `mt-auto` to have anything
   to push against. Where the card is nested below the grid or flex item rather

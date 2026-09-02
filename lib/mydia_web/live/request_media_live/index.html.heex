@@ -92,10 +92,10 @@
               <.poster_card_body title={result.title || result.name}>
                 <:meta>
                   <p class="text-xs text-base-content/70">{format_year(result)}</p>
-                  <p :if={result.overview} class="text-xs text-base-content/60 line-clamp-2">
+                  <p :if={result.overview} class="text-xs text-base-content/60 line-clamp-2 mt-1">
                     {result.overview}
                   </p>
-                  <div class="card-actions">
+                  <div class="card-actions mt-2">
                     <%= if is_requested do %>
                       <button class="btn btn-success btn-sm btn-block" disabled>
                         <.icon name="hero-check" class="w-4 h-4" /> Requested
