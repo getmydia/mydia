@@ -635,7 +635,11 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   of being carried across one blindly.
 
   A `magnet:` Location resolves without issuing a second request at all, so no
-  credential is transmitted to the host that named it.
+  credential is transmitted to the host that named it, regardless of
+  `definition.follow_redirect`. An http(s) Location instead honours
+  `follow_redirect`: when it is `false` the hop is not taken and this returns
+  an error naming the status and Location, the same wording
+  `validate_response/1` uses for an unfollowed redirect in the search path.
   """
   @spec execute_download_request(
           Parsed.t(),
@@ -669,6 +673,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         follow_download_redirect(
           definition,
           url,
+          status,
           headers,
           request_params,
           user_config,
@@ -693,6 +698,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
   defp follow_download_redirect(
          definition,
          url,
+         status,
          headers,
          request_params,
          user_config,
@@ -704,10 +710,14 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
         {:error, Error.search_failed("Redirect with no Location header for #{url}")}
 
       "magnet:" <> _ = magnet ->
+        # A magnet Location is the payload itself, handed over via a header
+        # rather than a second request. Reading it issues no request and
+        # leaks no credential, so this resolves regardless of
+        # `follow_redirect: false`.
         Logger.info("Cardigann download URL redirected to a magnet")
         {:ok, {:magnet, magnet}}
 
-      location ->
+      location when definition.follow_redirect ->
         next =
           url
           |> URI.parse()
@@ -715,6 +725,12 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
           |> URI.to_string()
 
         execute_download_request(definition, next, request_params, user_config, config, hops - 1)
+
+      location ->
+        {:error,
+         Error.search_failed(
+           "Redirected (HTTP #{status}) to #{location} and the redirect was not followed"
+         )}
     end
   end
 

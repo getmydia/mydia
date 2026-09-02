@@ -26,6 +26,18 @@ defmodule Mydia.Application do
 
     children = children()
 
+    # Attached before the supervisor starts, unlike its sibling
+    # Mydia.Jobs.Broadcaster below: Oban is one of the children
+    # Supervisor.start_link/2 is about to start, and it can begin executing
+    # (and failing) jobs immediately. Attaching after start_link/2 leaves a
+    # window where a job can fail before anything is listening, and the
+    # failure goes unlogged, exactly what this handler exists to prevent. This
+    # is safe to do this early because the handler only calls Logger.error and
+    # touches no Repo. Broadcaster cannot move here: its handler calls
+    # Mydia.Jobs.list_executing_jobs(), which needs the Repo child already
+    # running.
+    Mydia.Jobs.ErrorLogger.attach()
+
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Mydia.Supervisor]
@@ -38,10 +50,6 @@ defmodule Mydia.Application do
       reset_stale_jobs()
       # Attach Oban job broadcaster for real-time job status updates
       Mydia.Jobs.Broadcaster.attach()
-      # Log Oban job failures. Without this a raising worker is silent: the
-      # crash lands only in oban_jobs.errors and a discarded job looks like a
-      # job that simply had nothing to do.
-      Mydia.Jobs.ErrorLogger.attach()
       # Register download client adapters after supervisor has started
       Mydia.Downloads.register_clients()
       # Register indexer adapters after supervisor has started

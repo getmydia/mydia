@@ -21,7 +21,7 @@ defmodule Mydia.Indexers.CardigannSearchEngineRedirectTest do
       download: %{selectors: [%{selector: "a.dl", attribute: "href"}]},
       settings: [],
       request_delay: nil,
-      follow_redirect: true
+      follow_redirect: Keyword.get(opts, :follow_redirect, true)
     }
   end
 
@@ -88,6 +88,52 @@ defmodule Mydia.Indexers.CardigannSearchEngineRedirectTest do
              )
 
     assert message =~ "Too many redirects"
+  end
+
+  test "with follow_redirect: false, a 302 to a magnet still resolves to the magnet" do
+    bypass = Bypass.open()
+
+    Bypass.expect_once(bypass, "GET", "/dl/4", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("location", @magnet)
+      |> Plug.Conn.resp(302, "")
+    end)
+
+    assert {:ok, {:magnet, @magnet}} =
+             CardigannSearchEngine.execute_download_request(
+               definition(bypass.port, follow_redirect: false),
+               "http://localhost:#{bypass.port}/dl/4",
+               params(),
+               %{},
+               %{}
+             )
+  end
+
+  test "with follow_redirect: false, a 302 to an http url errors without hitting the target" do
+    bypass = Bypass.open()
+
+    Bypass.expect_once(bypass, "GET", "/dl/5", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_header("location", "/files/b.torrent")
+      |> Plug.Conn.resp(302, "")
+    end)
+
+    # No route registered for /files/b.torrent: Bypass fails the test if it
+    # receives a request that was never expected or stubbed, so a redirect
+    # hop taken here fails the test rather than passing quietly.
+
+    assert {:error, %{message: message}} =
+             CardigannSearchEngine.execute_download_request(
+               definition(bypass.port, follow_redirect: false),
+               "http://localhost:#{bypass.port}/dl/5",
+               params(),
+               %{},
+               %{}
+             )
+
+    assert message =~ "Redirected (HTTP 302)"
+    assert message =~ "/files/b.torrent"
+    assert message =~ "redirect was not followed"
   end
 
   test "a 3xx with no Location header is an error, not a crash" do

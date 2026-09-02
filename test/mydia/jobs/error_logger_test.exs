@@ -6,9 +6,20 @@ defmodule Mydia.Jobs.ErrorLoggerTest do
   alias Mydia.Jobs.ErrorLogger
 
   setup do
-    _ = ErrorLogger.detach()
-    :ok = ErrorLogger.attach()
-    on_exit(fn -> ErrorLogger.detach() end)
+    # Mydia.Application.start/2 already attached this handler at boot, so
+    # attach/0 here normally returns {:error, :already_exists} and this test
+    # must leave the application's handler alone. Only detach on exit when
+    # this test's own attach/0 call is the one that succeeded (a standalone
+    # run, or a run where a prior test left it detached) - unconditionally
+    # detaching first, as this used to, left ErrorLogger globally detached
+    # for the rest of the suite process once the application's own attach had
+    # already happened.
+    on_exit_detach? = ErrorLogger.attach() == :ok
+
+    on_exit(fn ->
+      if on_exit_detach?, do: ErrorLogger.detach()
+    end)
+
     :ok
   end
 
