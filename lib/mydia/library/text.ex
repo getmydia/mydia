@@ -105,6 +105,48 @@ defmodule Mydia.Library.Text do
 
   def title_similarity(_title1, _title2), do: 0.0
 
+  @doc """
+  Fraction of `library_title`'s significant words that appear in `release_title`.
+
+  One-directional on purpose. Extra words on the release side are normal:
+  subtitles, edition markers, and release cruft the parser did not strip.
+  A word missing from the release side means the release is a different work.
+  A symmetric measure cannot express that difference, which is why this is not
+  a Jaccard or F1 score.
+
+  Normalization differs from `normalize_title/1` in three ways that are
+  load-bearing:
+
+    * punctuation becomes whitespace instead of vanishing, so `"Iron-Ridge"`
+      and `"Iron Ridge"` agree rather than becoming `ironridge` and
+      `iron ridge`
+    * German umlauts expand before accent folding, so `"Bäume"` and
+      `"Baeume"` agree rather than becoming `baume` and `baeume`
+    * articles are dropped rather than rotated to the end, so a stray `the`
+      cannot change the score depending on which side carried it
+
+  Returns `0.0` when either side has no significant words.
+  """
+  @spec title_token_coverage(String.t(), String.t()) :: float()
+  def title_token_coverage(library_title, release_title)
+      when is_binary(library_title) and is_binary(release_title) do
+    library_tokens = coverage_tokens(library_title)
+    release_tokens = coverage_tokens(release_title)
+
+    if MapSet.size(library_tokens) == 0 or MapSet.size(release_tokens) == 0 do
+      0.0
+    else
+      matched =
+        library_tokens
+        |> MapSet.intersection(release_tokens)
+        |> MapSet.size()
+
+      matched / MapSet.size(library_tokens)
+    end
+  end
+
+  def title_token_coverage(_library_title, _release_title), do: 0.0
+
   # ---- Internals ----
 
   defp light_normalize(title) do
@@ -159,5 +201,40 @@ defmodule Mydia.Library.Text do
       [_, article, rest] -> "#{rest} #{article}"
       _ -> title
     end
+  end
+
+  # Articles carry no identifying signal and appear on one side as often as
+  # both. Dropping them beats `normalize_articles/1`'s rotation here, which
+  # would leave a `the` token in one set and not the other.
+  @coverage_stopwords MapSet.new(~w(the a an))
+
+  # Umlaut expansion must run before `nfkd_normalize/1`, which would otherwise
+  # fold "ä" to a bare "a". Mirrors the order in
+  # `Mydia.Downloads.TorrentMatcher.normalize_unicode/1`, whose behaviour the
+  # matcher's existing tests depend on.
+  defp coverage_tokens(title) do
+    title
+    |> String.downcase()
+    |> convert_roman_numerals()
+    |> String.replace(~r/\s+&\s+/, " and ")
+    |> expand_umlauts()
+    |> nfkd_normalize()
+    |> strip_combining_marks()
+    |> String.replace(~r/[^\w\s]/u, " ")
+    |> String.split(~r/\s+/u, trim: true)
+    |> Enum.reject(&insignificant_token?/1)
+    |> MapSet.new()
+  end
+
+  defp insignificant_token?(token) do
+    String.length(token) < 2 or MapSet.member?(@coverage_stopwords, token)
+  end
+
+  defp expand_umlauts(title) do
+    title
+    |> String.replace("ä", "ae")
+    |> String.replace("ö", "oe")
+    |> String.replace("ü", "ue")
+    |> String.replace("ß", "ss")
   end
 end

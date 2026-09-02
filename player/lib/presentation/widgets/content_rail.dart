@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
-import '../../core/layout/breakpoints.dart';
+import '../../core/layout/rail_metrics.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/continue_watching_item.dart';
@@ -111,15 +111,12 @@ class _ContentRailState extends State<ContentRail> {
       return const SizedBox.shrink();
     }
 
-    final railHeight = Breakpoints.getRailHeight(context);
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final cardSpacing = Breakpoints.getCardSpacing(context);
-    final isDesktop = Breakpoints.isDesktop(context);
+    final metrics = RailMetrics.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context, horizontalPadding, isDesktop),
+        _buildHeader(context, metrics),
 
         // Scrollable content with fade edges. A collapsed rail builds none of
         // it, so a hidden rail costs no cards and no poster fetches.
@@ -129,8 +126,8 @@ class _ContentRailState extends State<ContentRail> {
           alignment: Alignment.topCenter,
           child: _expanded
               ? SizedBox(
-                  height: railHeight,
-                  child: _buildRailBody(horizontalPadding, cardSpacing),
+                  height: metrics.railHeight,
+                  child: _buildRailBody(metrics),
                 )
               : const SizedBox(width: double.infinity, height: 0),
         ),
@@ -140,22 +137,18 @@ class _ContentRailState extends State<ContentRail> {
 
   /// The header line. When [ContentRail.collapsible] it doubles as the
   /// disclosure control for the strip below it.
-  Widget _buildHeader(
-    BuildContext context,
-    double horizontalPadding,
-    bool isDesktop,
-  ) {
+  Widget _buildHeader(BuildContext context, RailMetrics metrics) {
     // Closed, the title sits directly above whatever follows it, so it keeps
     // only enough room to read as its own line rather than the gap that an
     // open rail needs above its posters.
     final bottomPadding =
-        _expanded ? (isDesktop ? 20.0 : 16.0) : (isDesktop ? 10.0 : 8.0);
+        _expanded ? metrics.headerBottomPadding : metrics.headerBottomCollapsed;
 
     final header = Padding(
       padding: EdgeInsets.fromLTRB(
-        horizontalPadding,
-        isDesktop ? 32 : 24,
-        horizontalPadding,
+        metrics.horizontalPadding,
+        metrics.headerTopPadding,
+        metrics.horizontalPadding,
         bottomPadding,
       ),
       child: Row(
@@ -210,7 +203,7 @@ class _ContentRailState extends State<ContentRail> {
     );
   }
 
-  Widget _buildRailBody(double horizontalPadding, double cardSpacing) {
+  Widget _buildRailBody(RailMetrics metrics) {
     return Stack(
       children: [
         // Main scrollable list. The wrapper is what makes a plain mouse wheel
@@ -224,17 +217,19 @@ class _ContentRailState extends State<ContentRail> {
             scrollCacheExtent: InputCapabilities.directionalPrimary
                 ? const ScrollCacheExtent.pixels(_directionalCacheExtent)
                 : null,
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            padding:
+                EdgeInsets.symmetric(horizontal: metrics.horizontalPadding),
             itemCount: widget.items.length,
             itemBuilder: (context, index) {
               final item = widget.items[index];
               return Padding(
                 key: _keyFor(item, index),
                 padding: EdgeInsets.only(
-                  right: index < widget.items.length - 1 ? cardSpacing : 0,
+                  right:
+                      index < widget.items.length - 1 ? metrics.cardSpacing : 0,
                 ),
                 child: RailFocusScroller(
-                  child: _buildCard(context, item),
+                  child: _buildCard(context, item, metrics),
                 ),
               );
             },
@@ -300,8 +295,8 @@ class _ContentRailState extends State<ContentRail> {
     return ValueKey('rail-$index');
   }
 
-  Widget _buildCard(BuildContext context, dynamic item) {
-    final cardSize = Breakpoints.getCardSize(context);
+  Widget _buildCard(BuildContext context, dynamic item, RailMetrics metrics) {
+    final cardSize = metrics.cardSize;
 
     if (item is ContinueWatchingItem) {
       final target = MediaContextTarget(

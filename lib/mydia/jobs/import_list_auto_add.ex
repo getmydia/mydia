@@ -97,25 +97,33 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
     end
   end
 
+  # Note: an item found already in the library links to the existing media
+  # item and counts as :added, same as a freshly created one; see
+  # process_item/2. Nothing currently returns :skipped, but the bucket stays
+  # in the accumulator so the shape (and the Logger.info call below that
+  # reads stats.skipped) doesn't have to change if a future path adds one.
   defp process_pending_items(import_list, pending_items) do
     Enum.reduce(pending_items, %{added: 0, skipped: 0, failed: 0}, fn item, acc ->
       case process_item(import_list, item) do
         :added -> %{acc | added: acc.added + 1}
-        :skipped -> %{acc | skipped: acc.skipped + 1}
         :failed -> %{acc | failed: acc.failed + 1}
       end
     end)
   end
 
   defp process_item(import_list, item) do
-    # First check if already in library
-    case ImportLists.check_duplicate(item.tmdb_id, import_list.media_type) do
+    # First check if already in library (by tmdb_id, falling back to
+    # title+year for library items that predate any external id)
+    case ImportLists.check_duplicate(item.tmdb_id, import_list.media_type, item.title, item.year) do
       {:duplicate, media_item} ->
-        # Already exists, mark as skipped
-        ImportLists.mark_item_skipped(item, "Already in library")
-        # Link to existing media item
+        # Already exists: link to it. A single write, marking the item
+        # "added" (mark_item_added/2 also clears any skip_reason). An earlier
+        # version wrote mark_item_skipped/2 first and mark_item_added/2 right
+        # after, which immediately overwrote the skip, so the row always
+        # ended up "added" in the database while this function still
+        # reported :skipped to the caller, which disagreed with reality.
         ImportLists.mark_item_added(item, media_item.id)
-        :skipped
+        :added
 
       :not_found ->
         # Try to add to library

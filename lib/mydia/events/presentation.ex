@@ -107,6 +107,18 @@ defmodule Mydia.Events.Presentation do
       color: "text-info",
       title: "Duplicate pruned"
     },
+    %{
+      type: "media_file.returned_to_review",
+      icon: "hero-arrow-uturn-left",
+      color: "text-warning",
+      title: "Returned to review"
+    },
+    %{
+      type: "media_file.prune_undone",
+      icon: "hero-arrow-uturn-left",
+      color: "text-warning",
+      title: "Duplicate prune undone"
+    },
 
     # download.*
     %{
@@ -401,6 +413,28 @@ defmodule Mydia.Events.Presentation do
     end
   end
 
+  def detail(%Event{type: "media_file.returned_to_review", metadata: metadata}) do
+    case metadata["file_path"] do
+      nil -> title_of(metadata)
+      path -> "#{title_of(metadata)}, #{Path.basename(path)} sent to review"
+    end
+  end
+
+  def detail(%Event{type: "media_file.prune_undone", metadata: metadata}) do
+    restored = metadata["restored"] || []
+    count = length(restored)
+    suffix = if count == 1, do: "file", else: "files"
+    base = "#{title_of(metadata)}, #{count} #{suffix} restored"
+
+    case metadata["bytes_restored"] do
+      bytes when is_integer(bytes) and bytes > 0 ->
+        "#{base}, #{humanize_bytes(bytes)} returned"
+
+      _ ->
+        base
+    end
+  end
+
   @plain_download_types ~w(
     download.initiated download.completed download.cancelled
     download.paused download.resumed download.unstalled
@@ -569,8 +603,9 @@ defmodule Mydia.Events.Presentation do
 
     simple_fields =
       changes
-      |> Map.take(["title", "original_title", "year"])
+      |> Map.take(["title", "original_title", "year", "monitored", "monitor_new_seasons"])
       |> Map.keys()
+      |> Enum.map(&field_label/1)
 
     case metadata_fields ++ simple_fields do
       [] -> nil
@@ -579,7 +614,7 @@ defmodule Mydia.Events.Presentation do
   end
 
   defp summarize_fields(fields) do
-    names = fields |> Enum.take(3) |> Enum.map(&field_name/1)
+    names = fields |> Enum.take(3) |> Enum.map(&(&1 |> field_name() |> field_label()))
     remaining = length(fields) - 3
 
     if remaining > 0 do
@@ -589,9 +624,61 @@ defmodule Mydia.Events.Presentation do
     end
   end
 
-  defp field_name(%{"field" => field}), do: field
+  defp field_name(%{"field" => field}) when is_binary(field), do: field
   defp field_name(field) when is_binary(field), do: field
   defp field_name(_), do: "field"
+
+  # Field labels used by both renderers of a media_item.updated changeset:
+  # this module's own one-line `changes_summary/1` and the expanded
+  # breakdown in `MydiaWeb.ActivityLive.Index.format_change_details/1`. One
+  # map here keeps them from drifting apart on the same field, which is how
+  # the summary ended up rendering the raw `monitor_new_seasons` next to the
+  # expanded view's "New season monitoring" for the same event.
+  @field_labels %{
+    "title" => "Title",
+    "original_title" => "Original Title",
+    "year" => "Year",
+    "monitored" => "Monitoring",
+    "monitor_new_seasons" => "New season monitoring",
+    "overview" => "Description",
+    "poster" => "Poster",
+    "backdrop" => "Backdrop",
+    "tagline" => "Tagline",
+    "rating" => "Rating",
+    "runtime" => "Runtime",
+    "genres" => "Genres",
+    "cast" => "Cast",
+    "crew" => "Crew"
+  }
+
+  @doc """
+  Human-readable label for a `media_item.updated` changed-field name.
+
+  Shared by `changes_summary/1` here and
+  `MydiaWeb.ActivityLive.Index.format_change_details/1`, so the short
+  summary and the expanded Activity Feed breakdown always agree on how a
+  field is labeled.
+
+  `MydiaWeb.ActivityLive.Index.format_change_details/1` calls this directly
+  with a raw `"field"` value pulled out of persisted event metadata, without
+  going through `field_name/1` first. A malformed or legacy event (hand-edited,
+  or written by a version of this code with a different metadata shape) can
+  carry `nil` or a number there instead of a string. `Phoenix.Naming.humanize/1`
+  only has clauses for an atom or a binary and raises `FunctionClauseError` on
+  anything else, which would take down the whole Activity Feed and item
+  history timeline over one bad row. Guarded here so a non-binary, non-atom
+  value renders a fixed fallback label instead.
+  """
+  @spec field_label(term()) :: String.t()
+  def field_label(field) when is_binary(field) do
+    Map.get(@field_labels, field, Phoenix.Naming.humanize(field))
+  end
+
+  def field_label(field) when is_atom(field) and not is_nil(field) do
+    Map.get(@field_labels, field, Phoenix.Naming.humanize(field))
+  end
+
+  def field_label(_field), do: "Unknown field"
 
   # Renders " S01E02" or " S01" when the metadata carries season and episode.
   defp episode_part(metadata) do

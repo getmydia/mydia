@@ -6,6 +6,12 @@ defmodule MydiaWeb.GuestRequestFlowTest do
   substrings that `/admin/requests` always contains, so approval could fail in
   CI while the test stayed green. Assert database state for anything that is a
   state change.
+
+  The guest submission step used to go through the now-deleted
+  `RequestMediaLive.Index` (`/request/movie`), including a confirm-and-add-notes
+  modal. Discover's one-click Request button has no such modal and no
+  requester-notes field, so the submission steps below click the card's
+  Request button directly and no longer exercise a notes field.
   """
 
   # async: false: setup_metadata_stub mutates the global Provider.Registry, and
@@ -15,6 +21,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
 
   import Phoenix.LiveViewTest
   import Mydia.MetadataStub
+  import Mydia.MetadataCacheHelpers
 
   alias Mydia.Media
   alias Mydia.Media.MediaRequest
@@ -34,29 +41,48 @@ defmodule MydiaWeb.GuestRequestFlowTest do
   defp guest_conn(conn, guest), do: log_in_user(conn, guest)
   defp admin_conn(conn, admin), do: log_in_user(conn, admin)
 
+  # request_media's actual create happens in a handle_info the render_click
+  # round trip does not wait on (it resolves the card from socket state
+  # first), matching the wait_until_media_item/1 pattern in
+  # discover_live/config_modal_test.exs.
+  defp wait_until_request(clause, retries \\ 200)
+
+  defp wait_until_request(clause, 0) do
+    flunk("no MediaRequest matching #{inspect(clause)} was created in time")
+  end
+
+  defp wait_until_request(clause, retries) do
+    case Repo.get_by(MediaRequest, clause) do
+      nil ->
+        Process.sleep(10)
+        wait_until_request(clause, retries - 1)
+
+      request ->
+        request
+    end
+  end
+
   describe "movie request lifecycle" do
     test "guest submits a movie request and an admin approves it into the library",
          %{conn: conn, guest: guest, admin: admin} do
       # --- Guest submits ---
-      {:ok, view, _html} = live(guest_conn(conn, guest), ~p"/request/movie?q=stub")
+      warm_genre_cache(:movie, [])
+      {:ok, view, _html} = live(guest_conn(conn, guest), ~p"/discover?type=movie&q=stub")
 
       assert render(view) =~ MetadataStubProvider.movie_title()
 
       view
-      |> element(~s(button[phx-click="open_request_modal"][phx-value-index="0"]))
+      |> element(
+        ~s(button[phx-click="request_media"][phx-value-tmdb_id="#{MetadataStubProvider.movie_tmdb_id()}"])
+      )
       |> render_click()
 
-      view
-      |> form("#request-modal-form", request: %{requester_notes: "Please add this one"})
-      |> render_submit()
-
-      request = Repo.get_by!(MediaRequest, tmdb_id: MetadataStubProvider.movie_tmdb_id())
+      request = wait_until_request(tmdb_id: MetadataStubProvider.movie_tmdb_id())
 
       assert request.status == "pending"
       assert request.media_type == "movie"
       assert request.title == MetadataStubProvider.movie_title()
       assert request.requester_id == guest.id
-      assert request.requester_notes == "Please add this one"
       assert is_nil(request.media_item_id)
 
       # --- Guest sees it pending ---
@@ -95,21 +121,30 @@ defmodule MydiaWeb.GuestRequestFlowTest do
   end
 
   describe "tv request lifecycle" do
+    # `MediaRequestHelpers.handle_request_media/3` used to store the provider
+    # id as tmdb_id unconditionally, even for a `provider: :tvdb` search
+    # result. The deleted `RequestMediaLive.Index.build_request_attrs/3`
+    # branched on the result's provider and stored tvdb_id for exactly this
+    # case; that branch had been dropped somewhere between the two
+    # implementations, so a TVDB-sourced TV request was misfiled under
+    # tmdb_id (and MediaRequests' tmdb_id-only duplicate checks silently
+    # skipped it). handle_request_media/3 now restores that branching, and
+    # check_duplicate_media/1 and check_duplicate_request/1 also check
+    # tvdb_id.
     test "guest submits a series request stored by tvdb id and approval creates the show",
          %{conn: conn, guest: guest, admin: admin} do
-      {:ok, view, _html} = live(guest_conn(conn, guest), ~p"/request/series?q=stub")
+      warm_genre_cache(:tv_show, [])
+      {:ok, view, _html} = live(guest_conn(conn, guest), ~p"/discover?type=tv_show&q=stub")
 
       assert render(view) =~ MetadataStubProvider.series_title()
 
       view
-      |> element(~s(button[phx-click="open_request_modal"][phx-value-index="0"]))
+      |> element(
+        ~s(button[phx-click="request_media"][phx-value-tmdb_id="#{MetadataStubProvider.series_tvdb_id()}"])
+      )
       |> render_click()
 
-      view
-      |> form("#request-modal-form", request: %{requester_notes: "Series please"})
-      |> render_submit()
-
-      request = Repo.get_by!(MediaRequest, tvdb_id: MetadataStubProvider.series_tvdb_id())
+      request = wait_until_request(tvdb_id: MetadataStubProvider.series_tvdb_id())
 
       assert request.status == "pending"
       assert request.media_type == "tv_show"

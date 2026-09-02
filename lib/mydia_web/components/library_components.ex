@@ -11,6 +11,7 @@ defmodule MydiaWeb.LibraryComponents do
 
   # Import only what we need to avoid circular dependency
   import MydiaWeb.CoreComponents, only: [icon: 1, modal: 1]
+  import MydiaWeb.SegmentedControl, only: [segmented_control: 1]
 
   use Phoenix.VerifiedRoutes,
     endpoint: MydiaWeb.Endpoint,
@@ -251,22 +252,9 @@ defmodule MydiaWeb.LibraryComponents do
   @doc """
   Renders a view mode toggle (grid/list).
 
-  Icon-only, so `aria-label` carries each button's accessible name and
-  `aria-pressed` its state. `aria-pressed` is wrapped in `to_string/1` because
-  HEEx renders a `true` attribute value as a bare attribute and omits it for
-  `false`, and ARIA needs the literal strings.
-
-  Each tooltip sits on a wrapper `div` rather than on the button. daisyUI
-  reveals the tip via `.tooltip:has(:focus-visible)`, and `:has()` implies a
-  descendant combinator, so a `.tooltip` button whose only descendant is the
-  non-focusable icon `<span>` never shows its tip to a keyboard user.
-
-  `join-item` stays on the button and is deliberately kept off the wrapper:
-  `.join-item > *` resets `--join-ss`/`--join-se`/`--join-es`/`--join-ee` to
-  `initial`, so a button nested inside a `join-item` wrapper computes every
-  corner to 0 and the filled active button spills square out of the join's
-  rounded end cap. Left off the wrapper, the join's radius variables inherit
-  straight through to the button and the caps render as before.
+  The buttons are icon-only. `MydiaWeb.SegmentedControl` owns the accessible
+  naming, the tooltip wrapper and the `join-item` placement that icon-only
+  segments need; see its moduledoc for why each is shaped the way it is.
 
   Kept in step with `MydiaWeb.GridDensityComponents.grid_density_toggle/1`,
   which sits directly beside this on the Libraries toolbar.
@@ -279,40 +267,16 @@ defmodule MydiaWeb.LibraryComponents do
 
   def view_mode_toggle(assigns) do
     ~H"""
-    <div class="join" role="group" aria-label="View mode">
-      <div class="tooltip tooltip-bottom" data-tip="Grid">
-        <button
-          type="button"
-          class={[
-            "btn btn-sm btn-square join-item",
-            @view_mode == :grid && "btn-primary",
-            @view_mode != :grid && "btn-ghost"
-          ]}
-          phx-click="toggle_view"
-          phx-value-mode="grid"
-          aria-label="Grid"
-          aria-pressed={to_string(@view_mode == :grid)}
-        >
-          <.icon name="hero-squares-2x2" class="w-4 h-4" />
-        </button>
-      </div>
-      <div class="tooltip tooltip-bottom" data-tip="List">
-        <button
-          type="button"
-          class={[
-            "btn btn-sm btn-square join-item",
-            @view_mode == :list && "btn-primary",
-            @view_mode != :list && "btn-ghost"
-          ]}
-          phx-click="toggle_view"
-          phx-value-mode="list"
-          aria-label="List"
-          aria-pressed={to_string(@view_mode == :list)}
-        >
-          <.icon name="hero-list-bullet" class="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+    <.segmented_control
+      value={@view_mode}
+      event="toggle_view"
+      param="mode"
+      label="View mode"
+      icon_only
+    >
+      <:option value="grid" label="Grid" icon="hero-squares-2x2" />
+      <:option value="list" label="List" icon="hero-list-bullet" />
+    </.segmented_control>
     """
   end
 
@@ -560,7 +524,11 @@ defmodule MydiaWeb.LibraryComponents do
   The caret half of the "Add to Library" split button.
 
   Renders nothing when there are fewer than two candidates, so a
-  single-library install sees the plain add button exactly as before.
+  single-library install sees the plain add button exactly as before. Set
+  `always_show` to keep the caret reachable regardless of candidate count: on
+  Discover the caret also opens the Configure entry inside
+  `library_picker_dialog/1`, which must stay reachable even with zero or one
+  library.
 
   This is a real `<button>` rather than a `div[role="button"]` because it no
   longer drives a CSS `:focus` dropdown. It pushes an event and the host opens
@@ -570,11 +538,12 @@ defmodule MydiaWeb.LibraryComponents do
   attr :tmdb_id, :any, default: nil
   attr :media_type, :any, default: nil
   attr :title, :string, default: ""
+  attr :always_show, :boolean, default: false
 
   def library_picker_button(assigns) do
     ~H"""
     <button
-      :if={length(@libraries) > 1}
+      :if={length(@libraries) > 1 or @always_show}
       type="button"
       data-test="library-picker-caret"
       class="btn btn-primary btn-sm join-item px-2"
@@ -605,6 +574,12 @@ defmodule MydiaWeb.LibraryComponents do
 
   Libraries have no `name` column, only `path`, so each entry shows the
   basename with the full path as secondary text.
+
+  `configure_event` is nil by default, which renders no Configure entry at
+  all: Dashboard and the media detail page's rail host this same dialog but
+  have no `open_add_config` handler, and a stray click there would crash the
+  LiveView with no matching `handle_event` clause. Discover is the only host
+  that passes it.
   """
   attr :picker, :map,
     default: nil,
@@ -612,6 +587,7 @@ defmodule MydiaWeb.LibraryComponents do
 
   attr :event, :string, default: "add_to_library"
   attr :on_cancel, :string, default: "close_library_picker"
+  attr :configure_event, :string, default: nil
 
   def library_picker_dialog(assigns) do
     ~H"""
@@ -639,6 +615,17 @@ defmodule MydiaWeb.LibraryComponents do
             >
               <span class="font-medium">{Path.basename(library.path)}</span>
               <span class="text-xs text-base-content/50 truncate w-full">{library.path}</span>
+            </button>
+          </li>
+          <li :if={@configure_event}>
+            <button
+              id="discover-configure-add"
+              type="button"
+              phx-click={@configure_event}
+              phx-value-tmdb_id={@picker.tmdb_id}
+              phx-value-media_type={@picker.media_type}
+            >
+              <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Configure...
             </button>
           </li>
         </ul>

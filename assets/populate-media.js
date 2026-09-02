@@ -42,12 +42,12 @@ async function addSeries(page, seriesName) {
   console.log(`📺 Adding series: ${seriesName}`);
 
   try {
-    await page.goto(`${config.baseUrl}/add/series`);
+    await page.goto(`${config.baseUrl}/discover?type=tv_show`);
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(1000);
 
     // Check if the search input exists
-    const searchInput = page.locator('input[name="search"]');
+    const searchInput = page.locator("#discover-search-input");
     const inputExists = (await searchInput.count()) > 0;
 
     if (!inputExists) {
@@ -62,24 +62,30 @@ async function addSeries(page, seriesName) {
 
     // Enter search query
     await searchInput.fill(seriesName);
-    await page.click('button[type="submit"]:has-text("Search")');
+    await page.locator('#discover-search-form button[type="submit"]').click();
 
-    // Wait for search results
-    await page.waitForTimeout(3000);
-
-    // Click the first "Add" button (quick_add) - excluding "Added" buttons
+    // Discover's search runs a metadata-relay round trip after the submit
+    // resolves, so the results are not on the page yet when click() returns.
+    // Wait on the button itself rather than a fixed sleep: it appears as
+    // soon as the round trip lands, and this still tolerates a slow relay
+    // up to the timeout instead of guessing a fixed delay.
     const addButton = page
-      .locator(
-        'button:has-text("Add"):not(:has-text("Added")):not(:has-text("Adding"))',
-      )
+      .locator('#discover-grid button:has-text("Add to Library")')
       .first();
-    if (await addButton.isVisible({ timeout: 5000 })) {
-      await addButton.click();
-      console.log(`  ✓ Added ${seriesName}`);
-      await page.waitForTimeout(2000);
-    } else {
+
+    const found = await addButton
+      .waitFor({ state: "visible", timeout: 15000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!found) {
       console.log(`  ⚠ No results found for ${seriesName}`);
+      return;
     }
+
+    await addButton.click();
+    console.log(`  ✓ Added ${seriesName}`);
+    await page.waitForTimeout(2000);
   } catch (error) {
     console.log(`  ✗ Error adding ${seriesName}: ${error.message}`);
   }
@@ -92,12 +98,12 @@ async function addMovie(page, movieName) {
   console.log(`🎬 Adding movie: ${movieName}`);
 
   try {
-    await page.goto(`${config.baseUrl}/add/movie`);
+    await page.goto(`${config.baseUrl}/discover?type=movie`);
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(1000);
 
     // Check if the search input exists
-    const searchInput = page.locator('input[name="search"]');
+    const searchInput = page.locator("#discover-search-input");
     const inputExists = (await searchInput.count()) > 0;
 
     if (!inputExists) {
@@ -109,24 +115,28 @@ async function addMovie(page, movieName) {
 
     // Enter search query
     await searchInput.fill(movieName);
-    await page.click('button[type="submit"]:has-text("Search")');
+    await page.locator('#discover-search-form button[type="submit"]').click();
 
-    // Wait for search results
-    await page.waitForTimeout(3000);
-
-    // Click the first "Add" button (quick_add) - excluding "Added" buttons
+    // See the identical comment in addSeries: the relay round trip lands
+    // after click() resolves, so wait on the button rather than a fixed
+    // sleep.
     const addButton = page
-      .locator(
-        'button:has-text("Add"):not(:has-text("Added")):not(:has-text("Adding"))',
-      )
+      .locator('#discover-grid button:has-text("Add to Library")')
       .first();
-    if (await addButton.isVisible({ timeout: 5000 })) {
-      await addButton.click();
-      console.log(`  ✓ Added ${movieName}`);
-      await page.waitForTimeout(2000);
-    } else {
+
+    const found = await addButton
+      .waitFor({ state: "visible", timeout: 15000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!found) {
       console.log(`  ⚠ No results found for ${movieName}`);
+      return;
     }
+
+    await addButton.click();
+    console.log(`  ✓ Added ${movieName}`);
+    await page.waitForTimeout(2000);
   } catch (error) {
     console.log(`  ✗ Error adding ${movieName}: ${error.message}`);
   }

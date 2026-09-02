@@ -179,12 +179,10 @@ defmodule Mydia.Jobs.ImportListSync do
         }
 
         case ImportLists.upsert_import_list_item(attrs) do
-          {:ok, %{id: id}} when is_binary(id) ->
-            # Check if this was a new insert or update by looking at discovered_at
-            # If discovered_at matches now, it's likely new
+          {:ok, _item, :created} ->
             %{acc | total: acc.total + 1, new: acc.new + 1}
 
-          {:ok, _} ->
+          {:ok, _item, :updated} ->
             %{acc | total: acc.total + 1, updated: acc.updated + 1}
 
           {:error, _} ->

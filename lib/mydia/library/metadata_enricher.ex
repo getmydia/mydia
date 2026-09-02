@@ -212,7 +212,7 @@ defmodule Mydia.Library.MetadataEnricher do
              ) do
           {:ok, metadata} ->
             attrs =
-              build_media_item_attrs(metadata, media_type, %{
+              build_metadata_attrs(metadata, media_type, %{
                 provider_type: provider_type,
                 exclude_id: existing_item.id
               })
@@ -275,7 +275,27 @@ defmodule Mydia.Library.MetadataEnricher do
     Metadata.fetch_by_id_cached(config, provider_id, fetch_opts)
   end
 
+  # The create path. Everything the provider owns, plus the monitoring default
+  # for an item that has no operator decision yet because it does not exist yet.
   defp build_media_item_attrs(metadata, media_type, match_result) do
+    metadata
+    |> build_metadata_attrs(media_type, match_result)
+    |> Map.put(:monitored, true)
+  end
+
+  # The update path. Strictly the fields the metadata provider owns.
+  #
+  # `:monitored` is absent on purpose and must stay absent. This function's
+  # output is written over a row the operator may have configured, and
+  # `MediaItem.changeset/2` casts `:monitored`, so putting it back here silently
+  # re-enables monitoring on every item an ordinary scan re-enriches. That was
+  # the bug in getmydia/mydia#653. `Media.upsert_episodes_from_season/3` keeps
+  # the same rule one level down for the same reason.
+  #
+  # `:monitor_new_seasons`, `:quality_profile_id` and `:library_path_id` are
+  # operator settings too. None of them is built here today. None of them
+  # should be added here later.
+  defp build_metadata_attrs(metadata, media_type, match_result) do
     provider_id = String.to_integer(to_string(metadata.provider_id))
 
     raw_provider_type = Map.get(match_result, :provider_type, metadata.provider || :tmdb)
@@ -287,8 +307,7 @@ defmodule Mydia.Library.MetadataEnricher do
       original_title: metadata.original_title,
       year: extract_year(metadata),
       imdb_id: metadata.imdb_id,
-      metadata: metadata,
-      monitored: true
+      metadata: metadata
     }
 
     # Set the id of the provider that produced the match, then add whatever

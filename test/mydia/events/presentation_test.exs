@@ -143,7 +143,44 @@ defmodule Mydia.Events.PresentationTest do
           )
         )
 
-      assert detail == "Arrival, metadata refresh (title)"
+      assert detail == "Arrival, metadata refresh (Title)"
+    end
+
+    test "updated includes a monitored change in the summary" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Arrival",
+              "reason" => "Monitoring disabled",
+              "changes" => %{"monitored" => %{"old" => true, "new" => false}}
+            }
+          )
+        )
+
+      # Matches the label the expanded Activity Feed breakdown uses for the
+      # same field (MydiaWeb.ActivityLive.Index.humanize_field_name/1), both
+      # sourced from Presentation.field_label/1.
+      assert detail == "Arrival, monitoring disabled (Monitoring)"
+    end
+
+    test "updated includes a monitor_new_seasons change in the summary" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Severance",
+              "reason" => "Updated",
+              "changes" => %{
+                "monitor_new_seasons" => %{"old" => "all", "new" => "none"}
+              }
+            }
+          )
+        )
+
+      assert detail == "Severance, updated (New season monitoring)"
     end
 
     test "updated degrades to the title alone" do
@@ -190,6 +227,50 @@ defmodule Mydia.Events.PresentationTest do
                  metadata: %{"title" => "Severance", "episode_count" => 9}
                )
              ) == "Severance, 9 episodes"
+    end
+
+    test "updated does not raise on a metadata_fields entry with a malformed field name" do
+      # A hand-edited or legacy row could carry anything under "field". This
+      # must render, not crash the whole Activity Feed over one bad event.
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Arrival",
+              "reason" => "Metadata refreshed",
+              "changes" => %{
+                "metadata_fields" => [
+                  %{"field" => nil, "old" => "a", "new" => "b"},
+                  %{"field" => 42, "old" => "c", "new" => "d"}
+                ]
+              }
+            }
+          )
+        )
+
+      assert is_binary(detail)
+      assert detail =~ "Arrival"
+    end
+  end
+
+  describe "field_label/1" do
+    test "maps a known field to its curated label" do
+      assert Presentation.field_label("monitored") == "Monitoring"
+    end
+
+    test "humanizes an unknown but well-formed string field" do
+      assert Presentation.field_label("release_year") == "Release year"
+    end
+
+    test "falls back to a fixed label for nil, instead of raising" do
+      assert Presentation.field_label(nil) == "Unknown field"
+    end
+
+    test "falls back to a fixed label for a non-string, non-atom value" do
+      assert Presentation.field_label(42) == "Unknown field"
+      assert Presentation.field_label(%{"not" => "a field name"}) == "Unknown field"
+      assert Presentation.field_label(["nope"]) == "Unknown field"
     end
   end
 
@@ -330,6 +411,35 @@ defmodule Mydia.Events.PresentationTest do
                  metadata: %{"kept" => "Arrival/Arrival.2160p.mkv", "trashed" => ["a.mkv"]}
                )
              ) == "Unknown, 1 file trashed"
+    end
+
+    test "prune_undone reports how many files came back and the bytes restored" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.prune_undone",
+                 metadata: %{
+                   "title" => "Harbor Lights",
+                   "restored" => ["Harbor Lights/Harbor.Lights.S02E03.360p.mp4"],
+                   "bytes_restored" => 2_147_483_648
+                 }
+               )
+             ) == "Harbor Lights, 1 file restored, 2.0 GB returned"
+    end
+
+    test "prune_undone pluralizes for more than one restored file" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.prune_undone",
+                 metadata: %{
+                   "title" => "Harbor Lights",
+                   "restored" => [
+                     "Harbor Lights/Harbor.Lights.S02E03.360p.mp4",
+                     "Harbor Lights/Harbor.Lights.S02E03.480p.mp4"
+                   ],
+                   "bytes_restored" => 500_000
+                 }
+               )
+             ) == "Harbor Lights, 2 files restored, 500000 B returned"
     end
   end
 
