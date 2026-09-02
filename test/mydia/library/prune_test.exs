@@ -11,7 +11,19 @@ defmodule Mydia.Library.PruneTest do
 
   defp episode_with(file_names, duration) do
     show = media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013})
-    episode = episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 3})
+    episode_with(show, 3, file_names, duration)
+  end
+
+  # Attaches a new episode to an existing show, so a test can put two
+  # episodes of the same show through undo/2 in one call.
+  defp episode_with(show, episode_number, file_names, duration) do
+    episode =
+      episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 2,
+        episode_number: episode_number
+      })
+
     lp = library_path_fixture(%{type: "series"})
 
     files =
@@ -276,6 +288,65 @@ defmodule Mydia.Library.PruneTest do
       assert event.resource_id == episode.id
       assert event.metadata["restored"] == [loser.relative_path]
       assert event.metadata["bytes_restored"] == 1_000_000_000
+    end
+
+    test "emits one prune_undone event per episode, not per show, when undoing across episodes of the same show" do
+      show = media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013})
+
+      {episode_a, files_a} =
+        episode_with(
+          show,
+          3,
+          [
+            {"Harbor Lights/Season 02/Harbor.Lights.S02E03.1080p.BluRay.x265.mp4",
+             %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656, size: 3_000_000_000}},
+            {"Harbor Lights/Season 02/Harbor.Lights.S02E03.360p.WEBRip.x264.mp4",
+             %{resolution: "360p", codec: "h264", bitrate: 1_000_000, size: 1_000_000_000}}
+          ],
+          1320.0
+        )
+
+      {episode_b, files_b} =
+        episode_with(
+          show,
+          4,
+          [
+            {"Harbor Lights/Season 02/Harbor.Lights.S02E04.1080p.BluRay.x265.mp4",
+             %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656, size: 3_000_000_000}},
+            {"Harbor Lights/Season 02/Harbor.Lights.S02E04.360p.WEBRip.x264.mp4",
+             %{resolution: "360p", codec: "h264", bitrate: 1_000_000, size: 1_000_000_000}}
+          ],
+          1320.0
+        )
+
+      loser_a = Enum.find(files_a, &(&1.relative_path =~ "360p"))
+      loser_b = Enum.find(files_b, &(&1.relative_path =~ "360p"))
+
+      %{trashed: [_]} = Prune.execute([loser_a.id], "admin")
+      %{trashed: [_]} = Prune.execute([loser_b.id], "admin")
+
+      result = Prune.undo([loser_a.id, loser_b.id], "admin")
+
+      assert length(result.restored) == 2
+      assert result.failed == []
+
+      events =
+        Mydia.Events.Event
+        |> Ecto.Query.where(type: "media_file.prune_undone")
+        |> Mydia.Repo.all()
+
+      assert length(events) == 2
+
+      by_resource_id = Map.new(events, &{&1.resource_id, &1})
+
+      assert event_a = Map.get(by_resource_id, episode_a.id)
+      assert event_b = Map.get(by_resource_id, episode_b.id)
+
+      assert event_a.resource_type == "episode"
+      assert event_b.resource_type == "episode"
+
+      assert event_a.metadata["restored"] == [loser_a.relative_path]
+      assert event_b.metadata["restored"] == [loser_b.relative_path]
     end
   end
 end

@@ -174,29 +174,33 @@ defmodule Mydia.Library.Prune do
     %{restored: restored, failed: failed}
   end
 
-  # One event per media item, mirroring the per-group shape of the
-  # `media_file.pruned` events `execute/3` writes.
+  # One event per subject (episode or movie), mirroring the per-group shape of
+  # the `media_file.pruned` events `execute/3` writes.
   #
-  # The grouping key is the media item's id, not the struct: two rows reached
-  # through different association paths (a movie's own `media_item`, an
-  # episode's parent) carry different preload states and would not compare
-  # equal as structs, splitting one item across two events.
+  # The grouping key is the file's own subject, not the media item: a show's
+  # `media_item` is shared by every one of its episodes, so grouping by media
+  # item would fold two different episodes' restored files into one event and
+  # silently drop the other.
   #
   # `restored` holds rows returned by `Repo.update/1`, which do not carry the
-  # preloads, so the media item is read from the matching row loaded before the
-  # restore.
+  # preloads, so both the subject key and the media item are read from the
+  # matching row loaded before the restore.
   defp announce_restored(restored, loaded, actor_id) do
     by_id = Map.new(loaded, &{&1.id, &1})
 
     restored
-    |> Enum.map(fn file -> {media_item_of(Map.fetch!(by_id, file.id)), file} end)
-    |> Enum.reject(fn {media_item, _file} -> is_nil(media_item) end)
-    |> Enum.group_by(fn {media_item, _file} -> media_item.id end)
-    |> Enum.each(fn {_id, pairs} ->
-      [{media_item, _} | _] = pairs
-      Events.prune_undone(media_item, Enum.map(pairs, &elem(&1, 1)), actor_id)
+    |> Enum.map(&Map.fetch!(by_id, &1.id))
+    |> Enum.group_by(&subject_key/1)
+    |> Enum.each(fn {_key, files} ->
+      case media_item_of(hd(files)) do
+        nil -> :ok
+        media_item -> Events.prune_undone(media_item, files, actor_id)
+      end
     end)
   end
+
+  defp subject_key(%MediaFile{episode_id: id}) when not is_nil(id), do: {:episode, id}
+  defp subject_key(%MediaFile{media_item_id: id}), do: {:media_item, id}
 
   # Preloaded by undo/2 as `[:media_item, episode: :media_item]`, so neither
   # clause queries.
