@@ -16,8 +16,12 @@ defmodule Mydia.Jobs.TrashCleanup do
   ## Configuration
 
   Retention is `media.trash_retention_days` in the layered config, settable in
-  the admin UI, in YAML, or with `TRASH_RETENTION_DAYS`. It defaults to 30
-  days; 0 purges on the next daily run.
+  YAML, in the database overlay, or with `TRASH_RETENTION_DAYS`. It defaults
+  to 30 days; 0 purges on the next daily run.
+
+  There is no form control for it on the settings page yet, which it shares
+  with its neighbours in the `media` section (`monitor_by_default` and the two
+  refresh thresholds are equally overlay-only).
 
   The trash directory itself defaults to a `.mydia-trash` directory beside
   each library path and can be overridden with `MYDIA_TRASH_DIR`. That is a
