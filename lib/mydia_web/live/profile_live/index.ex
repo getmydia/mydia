@@ -10,9 +10,9 @@ defmodule MydiaWeb.ProfileLive.Index do
   alias MydiaWeb.Formatters
 
   @themes [
-    {"System", "system"},
-    {"Light", "light"},
-    {"Dark", "dark"}
+    {"System", "system", "hero-computer-desktop"},
+    {"Light", "light", "hero-sun"},
+    {"Dark", "dark", "hero-moon"}
   ]
 
   @add_pref_keys ~w(

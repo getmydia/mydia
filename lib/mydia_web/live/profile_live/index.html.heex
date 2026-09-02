@@ -116,29 +116,21 @@
               <p class="text-sm text-base-content/60 mb-3">
                 Choose how Mydia looks. System will match your device's theme.
               </p>
-              <div class="join">
-                <%= for {label, value} <- @themes do %>
-                  <button
-                    type="button"
-                    class={[
-                      "join-item btn",
-                      if(@theme == value, do: "btn-primary", else: "btn-ghost")
-                    ]}
-                    phx-click="update_theme"
-                    phx-value-theme={value}
-                  >
-                    <%= case value do %>
-                      <% "system" -> %>
-                        <.icon name="hero-computer-desktop" class="w-4 h-4 mr-1" />
-                      <% "light" -> %>
-                        <.icon name="hero-sun" class="w-4 h-4 mr-1" />
-                      <% "dark" -> %>
-                        <.icon name="hero-moon" class="w-4 h-4 mr-1" />
-                    <% end %>
-                    {label}
-                  </button>
-                <% end %>
-              </div>
+              <.segmented_control
+                id="theme-picker"
+                value={@theme}
+                event="update_theme"
+                param="theme"
+                label="Theme"
+                size="md"
+              >
+                <:option
+                  :for={{label, value, icon} <- @themes}
+                  value={value}
+                  label={label}
+                  icon={icon}
+                />
+              </.segmented_control>
             </div>
 
             <div class="divider my-2"></div>

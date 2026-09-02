@@ -34,8 +34,12 @@
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
 
-/* Use the data attribute for dark mode  */
-@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+/* Use the data attribute for dark mode.
+   The theme names are `mydia-dark` / `mydia-light` (see root.html.heex), not
+   the bare `dark` this variant originally targeted. Against `[data-theme=dark]`
+   the variant matched no element that exists, so every `dark:` utility silently
+   produced nothing. Guarded by test/mydia_web/components/dark_variant_test.exs. */
+@custom-variant dark (&:where([data-theme=mydia-dark], [data-theme=mydia-dark] *));
 
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session],

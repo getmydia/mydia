@@ -49,58 +49,19 @@
                 Time Period
               </span>
             </div>
-            <div class="join">
-              <button
-                class={[
-                  "join-item btn btn-sm",
-                  if(@date_filter == "all", do: "btn-active", else: "")
-                ]}
-                phx-click="filter_date"
-                phx-value-date="all"
-              >
-                All
-              </button>
-              <button
-                class={[
-                  "join-item btn btn-sm",
-                  if(@date_filter == "today", do: "btn-active", else: "")
-                ]}
-                phx-click="filter_date"
-                phx-value-date="today"
-              >
-                Today
-              </button>
-              <button
-                class={[
-                  "join-item btn btn-sm",
-                  if(@date_filter == "yesterday", do: "btn-active", else: "")
-                ]}
-                phx-click="filter_date"
-                phx-value-date="yesterday"
-              >
-                Yesterday
-              </button>
-              <button
-                class={[
-                  "join-item btn btn-sm",
-                  if(@date_filter == "week", do: "btn-active", else: "")
-                ]}
-                phx-click="filter_date"
-                phx-value-date="week"
-              >
-                7 Days
-              </button>
-              <button
-                class={[
-                  "join-item btn btn-sm",
-                  if(@date_filter == "month", do: "btn-active", else: "")
-                ]}
-                phx-click="filter_date"
-                phx-value-date="month"
-              >
-                30 Days
-              </button>
-            </div>
+            <.segmented_control
+              id="activity-date-filter"
+              value={@date_filter}
+              event="filter_date"
+              param="date"
+              label="Time period"
+            >
+              <:option value="all" label="All" />
+              <:option value="today" label="Today" />
+              <:option value="yesterday" label="Yesterday" />
+              <:option value="week" label="7 Days" />
+              <:option value="month" label="30 Days" />
+            </.segmented_control>
           </div>
         </div>
       </div>

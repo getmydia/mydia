@@ -11,6 +11,7 @@ defmodule MydiaWeb.LibraryComponents do
 
   # Import only what we need to avoid circular dependency
   import MydiaWeb.CoreComponents, only: [icon: 1, modal: 1]
+  import MydiaWeb.SegmentedControl, only: [segmented_control: 1]
 
   use Phoenix.VerifiedRoutes,
     endpoint: MydiaWeb.Endpoint,
@@ -251,22 +252,9 @@ defmodule MydiaWeb.LibraryComponents do
   @doc """
   Renders a view mode toggle (grid/list).
 
-  Icon-only, so `aria-label` carries each button's accessible name and
-  `aria-pressed` its state. `aria-pressed` is wrapped in `to_string/1` because
-  HEEx renders a `true` attribute value as a bare attribute and omits it for
-  `false`, and ARIA needs the literal strings.
-
-  Each tooltip sits on a wrapper `div` rather than on the button. daisyUI
-  reveals the tip via `.tooltip:has(:focus-visible)`, and `:has()` implies a
-  descendant combinator, so a `.tooltip` button whose only descendant is the
-  non-focusable icon `<span>` never shows its tip to a keyboard user.
-
-  `join-item` stays on the button and is deliberately kept off the wrapper:
-  `.join-item > *` resets `--join-ss`/`--join-se`/`--join-es`/`--join-ee` to
-  `initial`, so a button nested inside a `join-item` wrapper computes every
-  corner to 0 and the filled active button spills square out of the join's
-  rounded end cap. Left off the wrapper, the join's radius variables inherit
-  straight through to the button and the caps render as before.
+  The buttons are icon-only. `MydiaWeb.SegmentedControl` owns the accessible
+  naming, the tooltip wrapper and the `join-item` placement that icon-only
+  segments need; see its moduledoc for why each is shaped the way it is.
 
   Kept in step with `MydiaWeb.GridDensityComponents.grid_density_toggle/1`,
   which sits directly beside this on the Libraries toolbar.
@@ -279,40 +267,16 @@ defmodule MydiaWeb.LibraryComponents do
 
   def view_mode_toggle(assigns) do
     ~H"""
-    <div class="join" role="group" aria-label="View mode">
-      <div class="tooltip tooltip-bottom" data-tip="Grid">
-        <button
-          type="button"
-          class={[
-            "btn btn-sm btn-square join-item",
-            @view_mode == :grid && "btn-primary",
-            @view_mode != :grid && "btn-ghost"
-          ]}
-          phx-click="toggle_view"
-          phx-value-mode="grid"
-          aria-label="Grid"
-          aria-pressed={to_string(@view_mode == :grid)}
-        >
-          <.icon name="hero-squares-2x2" class="w-4 h-4" />
-        </button>
-      </div>
-      <div class="tooltip tooltip-bottom" data-tip="List">
-        <button
-          type="button"
-          class={[
-            "btn btn-sm btn-square join-item",
-            @view_mode == :list && "btn-primary",
-            @view_mode != :list && "btn-ghost"
-          ]}
-          phx-click="toggle_view"
-          phx-value-mode="list"
-          aria-label="List"
-          aria-pressed={to_string(@view_mode == :list)}
-        >
-          <.icon name="hero-list-bullet" class="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+    <.segmented_control
+      value={@view_mode}
+      event="toggle_view"
+      param="mode"
+      label="View mode"
+      icon_only
+    >
+      <:option value="grid" label="Grid" icon="hero-squares-2x2" />
+      <:option value="list" label="List" icon="hero-list-bullet" />
+    </.segmented_control>
     """
   end
 
