@@ -504,7 +504,7 @@ defmodule Mydia.Jobs.LibraryScanner do
       # Library.trash_media_file/1 has nothing to move, so a failure here is
       # a database problem. Log it and keep going rather than crashing the
       # whole scan over one row.
-      case Library.trash_media_file(media_file) do
+      case Library.trash_media_file(media_file, reason: :missing) do
         {:ok, _} ->
           Logger.debug("Trashed media file record", path: absolute_path)
 

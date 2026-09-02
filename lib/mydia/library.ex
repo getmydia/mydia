@@ -660,6 +660,11 @@ defmodule Mydia.Library do
   three re-scan functions in this module pass it: a file the diff called
   missing but that has since reappeared must never be moved out of the
   library.
+
+    * `:reason` - why this file is being trashed, one of `:missing`,
+      `:upgraded`, `:upgrade_rejected`, `:pruned` or `:manual`. Optional;
+      omitting it leaves `trashed_reason` nil, which the trash page renders as
+      "Unknown". Every caller in this codebase passes one.
   """
   @spec trash_media_file(MediaFile.t(), keyword()) ::
           {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
@@ -671,6 +676,7 @@ defmodule Mydia.Library do
         media_file
         |> Ecto.Changeset.change(
           trashed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          trashed_reason: Keyword.get(opts, :reason),
           metadata: put_trash_state(media_file.metadata, outcome)
         )
         |> Repo.update()
@@ -759,13 +765,14 @@ defmodule Mydia.Library do
         media_file
         |> Ecto.Changeset.change(
           trashed_at: nil,
+          trashed_reason: nil,
           metadata: drop_trash_state(media_file.metadata)
         )
         |> Repo.update()
 
       {:ok, :trash_copy_retained} ->
         media_file
-        |> Ecto.Changeset.change(trashed_at: nil)
+        |> Ecto.Changeset.change(trashed_at: nil, trashed_reason: nil)
         |> Repo.update()
 
       {:error, reason} ->
@@ -1269,7 +1276,7 @@ defmodule Mydia.Library do
                 missing_files
                 |> reject_files_still_on_disk()
                 |> Enum.count(fn file ->
-                  match?({:ok, _}, trash_media_file(file, move: false))
+                  match?({:ok, _}, trash_media_file(file, move: false, reason: :missing))
                 end)
 
               Logger.info("Found new files during re-scan",
@@ -1444,7 +1451,7 @@ defmodule Mydia.Library do
                 missing_files
                 |> reject_files_still_on_disk()
                 |> Enum.count(fn file ->
-                  match?({:ok, _}, trash_media_file(file, move: false))
+                  match?({:ok, _}, trash_media_file(file, move: false, reason: :missing))
                 end)
 
               Logger.info("Found new files for season during re-scan",
@@ -1602,7 +1609,7 @@ defmodule Mydia.Library do
                 missing_files
                 |> reject_files_still_on_disk()
                 |> Enum.count(fn file ->
-                  match?({:ok, _}, trash_media_file(file, move: false))
+                  match?({:ok, _}, trash_media_file(file, move: false, reason: :missing))
                 end)
 
               Logger.info("Found new files during movie re-scan",

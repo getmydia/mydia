@@ -123,7 +123,7 @@ defmodule Mydia.Library.Prune do
 
   defp trash_all(files) do
     Enum.reduce(files, {[], []}, fn file, {ok, bad} ->
-      case Library.trash_media_file(file) do
+      case Library.trash_media_file(file, reason: :pruned) do
         {:ok, trashed} ->
           {ok ++ [trashed], bad}
 

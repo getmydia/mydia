@@ -420,7 +420,7 @@ defmodule Mydia.Upgrades do
   defp resolve_media_context(%MediaFile{}), do: {nil, nil}
 
   defp apply_upgrade(new_file, old_file, media_item, comparison) do
-    with {:ok, trashed_old} <- Library.trash_media_file(old_file),
+    with {:ok, trashed_old} <- Library.trash_media_file(old_file, reason: :upgraded),
          {:ok, _new_file} <- clear_pointer(new_file) do
       Events.file_upgraded(new_file, trashed_old, media_item, comparison)
       {:ok, :upgraded}
@@ -436,7 +436,7 @@ defmodule Mydia.Upgrades do
   # daily. Blacklists.add/5 upserts on (indexer, guid), so it is idempotent
   # and the reorder cannot make the data-safety story worse.
   defp apply_rejection(new_file, old_file, media_item, comparison) do
-    with {:ok, trashed_new} <- Library.trash_media_file(new_file) do
+    with {:ok, trashed_new} <- Library.trash_media_file(new_file, reason: :upgrade_rejected) do
       blacklisted? = blacklist_release(trashed_new)
 
       with {:ok, _new_file} <- clear_pointer(trashed_new) do
