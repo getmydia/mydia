@@ -5,9 +5,9 @@ defmodule MydiaWeb.ProfileLive.Index do
   alias Mydia.Accounts.UserPreference
 
   @themes [
-    {"System", "system"},
-    {"Light", "light"},
-    {"Dark", "dark"}
+    {"System", "system", "hero-computer-desktop"},
+    {"Light", "light", "hero-sun"},
+    {"Dark", "dark", "hero-moon"}
   ]
 
   @impl true

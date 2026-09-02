@@ -14,22 +14,16 @@
         <%!-- Media type toggle + category tabs --%>
         <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
           <div id="discover-view-controls" class="flex flex-wrap items-center gap-3">
-            <div class="join">
-              <button
-                phx-click="switch_media_type"
-                phx-value-type="movie"
-                class={["join-item btn btn-sm gap-1.5", @media_type == :movie && "btn-active"]}
-              >
-                <.icon name="hero-film" class="w-4 h-4" /> Movies
-              </button>
-              <button
-                phx-click="switch_media_type"
-                phx-value-type="tv_show"
-                class={["join-item btn btn-sm gap-1.5", @media_type == :tv_show && "btn-active"]}
-              >
-                <.icon name="hero-tv" class="w-4 h-4" /> TV Shows
-              </button>
-            </div>
+            <.segmented_control
+              id="discover-media-type"
+              value={@media_type}
+              event="switch_media_type"
+              param="type"
+              label="Media type"
+            >
+              <:option value="movie" label="Movies" icon="hero-film" />
+              <:option value="tv_show" label="TV Shows" icon="hero-tv" />
+            </.segmented_control>
 
             <.grid_density_toggle id="discover-density-toggle" density={@grid_density} />
           </div>
