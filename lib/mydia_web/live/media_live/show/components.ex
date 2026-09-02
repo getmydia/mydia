@@ -535,13 +535,26 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
   def episode_file_row(assigns) do
     ~H"""
-    <div class="flex items-start justify-between gap-4 py-1">
+    <%!-- Stacked by default, one row once there is room for one. The container
+          is `eprow`, declared on the episode wrapper in
+          SeasonComponents.episode_rows/1, not here: this row's own width is
+          what the query decides, so it cannot be the thing being queried.
+
+          The strip below is `flex-shrink-0` at 136px. Against a 245px row on a
+          375px phone that left the filename 69px, which rendered 8 characters
+          of a 92-character name and wrapped the badge line underneath onto
+          four lines. --%>
+    <div
+      id={"episode-file-row-#{@file.id}"}
+      class="flex flex-col gap-3 py-1 @lg/eprow:flex-row @lg/eprow:items-start @lg/eprow:justify-between @lg/eprow:gap-4"
+    >
       <%!-- File info --%>
-      <div class="flex flex-col gap-1 min-w-0 flex-1">
+      <div class="flex flex-col gap-1 min-w-0 @lg/eprow:flex-1">
         <%!-- Filename row --%>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0">
           <.icon name="hero-document" class="w-4 h-4 text-base-content/50 flex-shrink-0" />
           <span
+            id={"episode-file-name-#{@file.id}"}
             class="font-mono text-sm truncate"
             title={Mydia.Library.MediaFile.display_path(@file)}
           >
@@ -549,7 +562,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           </span>
         </div>
         <%!-- Technical details row --%>
-        <div class="flex flex-wrap items-center gap-1.5 pl-6 text-xs">
+        <div class="flex flex-wrap items-center gap-1.5 pl-0 text-xs @lg/eprow:pl-6">
           <span class="badge badge-primary badge-xs">{@file.resolution || "?"}</span>
           <%= if @file.codec do %>
             <span class="text-base-content/60" title={@file.codec}>
@@ -572,13 +585,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         />
       </div>
       <%!-- File actions --%>
-      <div class="flex items-center gap-1 flex-shrink-0">
+      <div class="flex items-center justify-end gap-1 flex-shrink-0">
         <button
           id={"subtitle-open-#{@file.id}"}
           type="button"
           phx-click="open_subtitle_manage"
           phx-value-media-file-id={@file.id}
-          class="btn btn-ghost btn-xs btn-square"
+          class="btn btn-ghost btn-square @lg/eprow:btn-xs"
           aria-label="Manage subtitles"
           title="Subtitles"
         >
@@ -594,7 +607,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <div
               tabindex="0"
               role="button"
-              class="btn btn-ghost btn-xs btn-square"
+              class="btn btn-ghost btn-square @lg/eprow:btn-xs"
               title="Pre-transcode"
             >
               <.icon name="hero-wrench" class="w-4 h-4" />
@@ -621,7 +634,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             href={
               flutter_player_url("episode", @episode.id, file_id: @file.id, title: @episode.title)
             }
-            class="btn btn-ghost btn-xs btn-square"
+            class="btn btn-ghost btn-square @lg/eprow:btn-xs"
             title="Play this file"
           >
             <.icon name="hero-play-solid" class="w-4 h-4" />
@@ -631,7 +644,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           type="button"
           phx-click="mark_file_preferred"
           phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-xs btn-square"
+          class="btn btn-ghost btn-square @lg/eprow:btn-xs"
           title="Mark as preferred"
         >
           <.icon name="hero-star" class="w-4 h-4" />
@@ -641,7 +654,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           type="button"
           phx-click="show_file_delete_confirm"
           phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-xs btn-square text-error hover:bg-error hover:text-error-content"
+          class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @lg/eprow:btn-xs"
           title="Delete file"
         >
           <.icon name="hero-trash" class="w-4 h-4" />
@@ -650,7 +663,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     </div>
     <%!-- Transcode job badges --%>
     <%= if @transcode_jobs != [] do %>
-      <div class="flex flex-wrap items-center gap-2 pl-6 mt-1">
+      <div class="flex flex-wrap items-center gap-2 pl-0 mt-1 @lg/eprow:pl-6">
         <.transcode_badge
           :for={job <- @transcode_jobs}
           job={job}

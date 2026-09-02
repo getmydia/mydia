@@ -140,7 +140,26 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
       status = get_episode_status(episode)
       quality = get_episode_quality_badge(episode) %>
 
-      <div class={["py-2 px-3", has_files && "border-l-2 border-l-success"]}>
+      <%!-- The `eprow` size container. Everything from here down that needs to
+            know how much room it has queries this element rather than the
+            viewport, because two layout switches sit between the window and
+            this column: the app drawer becomes permanent at `lg`
+            (layouts.ex, `drawer lg:drawer-open`, 256px) and this page's own
+            left rail appears at `md` and widens to 20rem at `lg`
+            (show.html.heex). Both take width away at the moment a viewport
+            breakpoint grants it, so this column is 328px wide at a 1024px
+            viewport and 576px wide at 640px. Measured, both.
+
+            It has to be this element and not the detail panel below, because
+            the query changes that panel's margin and a container whose own
+            size depends on the query is not resolvable. --%>
+      <div
+        id={"episode-#{episode.id}-row"}
+        class={[
+          "@container/eprow py-2 px-3",
+          has_files && "border-l-2 border-l-success"
+        ]}
+      >
         <%!-- Mobile keeps two stacked rows. From sm up every wrapper collapses to
               `display: contents`, which dissolves the boxes and promotes the cells
               to items of one grid with fixed tracks. That is what makes quality,
@@ -326,7 +345,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         </div>
 
         <%= if is_expanded do %>
-          <div id={"episode-#{episode.id}-detail"} class="mt-2 ml-8 space-y-1">
+          <div id={"episode-#{episode.id}-detail"} class="mt-2 ml-2 @lg/eprow:ml-8 space-y-1">
             <%= if has_files do %>
               <div :for={file <- episode.media_files} class="bg-base-200/50 rounded p-2">
                 <Components.episode_file_row
