@@ -64,6 +64,29 @@ defmodule MydiaWeb.CollectionLive.IndexTest do
       assert "2010s" in names
     end
 
+    test "reopening the gallery makes an added preset addable again", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/collections")
+      view |> element("#browse-presets-button") |> render_click()
+      view |> element("#preset-add-decade_2000s") |> render_click()
+
+      refute has_element?(view, "#preset-add-decade_2000s")
+
+      view |> element("#close-preset-gallery") |> render_click()
+      view |> element("#browse-presets-button") |> render_click()
+
+      # The added state is scoped to one visit, so it can never outlive the
+      # collection it describes. Duplicates are permitted by design; the
+      # name-match hint warns without blocking.
+      assert has_element?(view, "#preset-add-decade_2000s")
+      refute has_element?(view, "#preset-added-decade_2000s")
+      assert render(view) =~ "You already have a collection with this name."
+
+      view |> element("#preset-add-decade_2000s") |> render_click()
+
+      assert Collections.list_collections(user)
+             |> Enum.count(&(&1.name == "2000s")) == 2
+    end
+
     test "an unknown preset key flashes instead of crashing", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/collections")
       view |> element("#browse-presets-button") |> render_click()

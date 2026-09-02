@@ -361,10 +361,16 @@ defmodule MydiaWeb.CollectionLive.Index do
   end
 
   def handle_event("open_preset_gallery", _params, socket) do
+    # `added_presets` is a per-visit confirmation that the click landed, not a
+    # record of what exists. Clearing it on open keeps duplicates addable, as
+    # `add_preset/2` allows, and stops the badge outliving the collection it
+    # describes when one is removed elsewhere. The soft name-match hint, which is
+    # recomputed from the live list, is what warns about an existing collection.
     {:noreply,
      socket
      |> assign(:show_preset_gallery, true)
      |> assign(:preset_counts, %{})
+     |> assign(:added_presets, MapSet.new())
      |> start_async(:preset_counts, fn -> preset_counts() end)}
   end
 
