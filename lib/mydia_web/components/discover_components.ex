@@ -206,8 +206,8 @@ defmodule MydiaWeb.DiscoverComponents do
 
   attr :id, :string, default: "media-rail"
   attr :title, :string, default: "More like this"
-  # :any, not :string - see the note on trending_card/1. The media detail page
-  # passes nil here because it has no show_details handler.
+  # :any, not :string - see the note on trending_card/1. nil renders an inert
+  # poster, which is what a host with no show_details handler needs.
   attr :on_select, :any, default: "show_details"
   # Forwarded to trending_card/1. A host LiveView that does not handle
   # "add_to_library"/"request_media" must override these or the first click on

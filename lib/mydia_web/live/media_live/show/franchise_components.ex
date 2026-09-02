@@ -38,7 +38,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
       can_add={@can_add}
       adding_ids={@adding_tmdb_ids}
       libraries={@libraries}
-      on_select={nil}
+      on_select="show_details"
       add_event="add_franchise_movie"
       request_event="request_franchise_movie"
     >

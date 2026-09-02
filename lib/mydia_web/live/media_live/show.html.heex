@@ -457,6 +457,27 @@
     />
   <% end %>
 
+  <%!-- Same dialog Discover and the Dashboard use. picker_open guards Escape:
+        library_picker_dialog/1 is z-[1000] above this z-999, both bind
+        phx-window-keydown, and phx-window-keydown is not scoped by visual
+        stacking, so without it one Escape press would close both layers.
+        config_open is false because this page has no configure-before-adding
+        modal; the attr has no default on purpose. --%>
+  <.live_component
+    module={MydiaWeb.Live.Components.TrendingDetailModal}
+    id="media-detail-modal"
+    item={@selected_item}
+    metadata={@selected_metadata}
+    loading={@detail_loading}
+    current_user={@current_user}
+    open={@selected_item != nil}
+    libraries={@target_library_candidates}
+    picker_open={@library_picker != nil}
+    config_open={false}
+    add_event="add_selected_item"
+    request_event="request_selected_item"
+  />
+
   <MydiaWeb.LibraryComponents.library_picker_dialog
     picker={@library_picker}
     event="add_from_library_picker"

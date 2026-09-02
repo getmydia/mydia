@@ -20,6 +20,9 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
   alias MydiaWeb.MediaLive.Show.RecommendationComponents
   alias MydiaWeb.MediaLive.Show.LibraryPickerEvents
+  alias MydiaWeb.Live.Helpers.DetailModal
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
+  alias MydiaWeb.MediaLive.Show.DetailModalEvents
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
 
   # Import helper modules
@@ -181,6 +184,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:requesting_recommendation_id, nil)
      |> assign_new(:metadata_config, fn -> Mydia.Metadata.default_relay_config() end)
      |> assign_new(:library_picker, fn -> nil end)
+     |> DetailModal.init()
      |> assign(
        :can_create_media,
        Mydia.Accounts.Authorization.can_create_media?(socket.assigns.current_user)
@@ -571,6 +575,20 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("add_from_library_picker", params, socket),
     do: LibraryPickerEvents.add_from_library_picker(params, socket)
 
+  # Detail dialog events
+
+  def handle_event("show_details", params, socket),
+    do: DetailModalEvents.show_details(params, socket)
+
+  def handle_event("close_details", params, socket),
+    do: DetailModalEvents.close_details(params, socket)
+
+  def handle_event("add_selected_item", params, socket),
+    do: DetailModalEvents.add_selected_item(params, socket)
+
+  def handle_event("request_selected_item", params, socket),
+    do: DetailModalEvents.request_selected_item(params, socket)
+
   @impl true
   def handle_info({:download_created, download}, socket) do
     if download_for_media?(download, socket.assigns.media_item) do
@@ -812,6 +830,11 @@ defmodule MydiaWeb.MediaLive.Show do
     else
       {:noreply, socket}
     end
+  end
+
+  def handle_info({:fetch_detail_metadata, tmdb_id, media_type}, socket) do
+    {:noreply,
+     DetailModal.put_metadata(socket, MediaAddHelpers.fetch_detail_metadata(tmdb_id, media_type))}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
