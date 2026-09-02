@@ -27,24 +27,25 @@ defmodule Mydia.Library.MultiEpisodeRelink do
 
   require Logger
 
+  # Rows are read a page at a time, keyed on media_file id, so a large library
+  # is never held in memory at once and each page is written before the next is
+  # read. Only files whose *name* parses to more than one episode cost any
+  # episode lookups, which on a real library is a small minority.
+  @batch_size 500
+
   @doc """
   Adds the missing episode links across the whole library.
 
+  ## Options
+
+    * `:batch_size` - rows per page (default #{@batch_size}). Exists so tests can
+      force the pagination boundary without inserting a full page of fixtures.
+
   Returns `{:ok, %{files_relinked: n, links_added: m}}`.
   """
-  def run do
-    result =
-      candidates()
-      |> Enum.reduce(%{files_relinked: 0, links_added: 0}, fn {media_file, media_item_id, season},
-                                                              acc ->
-        case relink(media_file, media_item_id, season) do
-          {:ok, added} when added > 0 ->
-            %{acc | files_relinked: acc.files_relinked + 1, links_added: acc.links_added + added}
-
-          _ ->
-            acc
-        end
-      end)
+  def run(opts \\ []) do
+    batch_size = Keyword.get(opts, :batch_size, @batch_size)
+    result = reduce_batches(nil, %{files_relinked: 0, links_added: 0}, batch_size)
 
     if result.files_relinked > 0 do
       Logger.info(
@@ -56,22 +57,50 @@ defmodule Mydia.Library.MultiEpisodeRelink do
     {:ok, result}
   end
 
-  # Every matched, untrashed TV file, paired with the show and season its
-  # primary episode belongs to. The parse decides whether it is interesting;
-  # SQLite has no portable regex, so the filter happens in Elixir.
-  defp candidates do
+  defp reduce_batches(after_id, acc, batch_size) do
+    case candidates(after_id, batch_size) do
+      [] ->
+        acc
+
+      batch ->
+        acc = Enum.reduce(batch, acc, &relink_row/2)
+        {last_id, _, _, _} = List.last(batch)
+        reduce_batches(last_id, acc, batch_size)
+    end
+  end
+
+  defp relink_row({id, relative_path, media_item_id, season}, acc) do
+    case relink(id, relative_path, media_item_id, season) do
+      {:ok, added} when added > 0 ->
+        %{acc | files_relinked: acc.files_relinked + 1, links_added: acc.links_added + added}
+
+      _ ->
+        acc
+    end
+  end
+
+  # One page of matched, untrashed TV files, paired with the show and season the
+  # primary episode belongs to. Only the four columns the parse needs are read;
+  # the parse decides whether a row is interesting, since SQLite has no portable
+  # regex to filter multi-episode names in SQL.
+  defp candidates(after_id, batch_size) do
     from(mf in MediaFile,
       join: e in Episode,
       on: e.id == mf.episode_id,
       where: is_nil(mf.trashed_at),
       where: not is_nil(mf.relative_path),
-      select: {mf, e.media_item_id, e.season_number}
+      order_by: [asc: mf.id],
+      limit: ^batch_size,
+      select: {mf.id, mf.relative_path, e.media_item_id, e.season_number}
     )
+    |> then(fn query ->
+      if after_id, do: where(query, [mf], mf.id > ^after_id), else: query
+    end)
     |> Repo.all()
   end
 
-  defp relink(%MediaFile{} = media_file, media_item_id, season) do
-    parsed = media_file.relative_path |> Path.basename() |> ReleaseParser.parse()
+  defp relink(id, relative_path, media_item_id, season) do
+    parsed = relative_path |> Path.basename() |> ReleaseParser.parse()
 
     episode_numbers = parsed.episodes || []
 
@@ -84,16 +113,17 @@ defmodule Mydia.Library.MultiEpisodeRelink do
         |> Enum.map(&Media.get_episode_by_number(media_item_id, season, &1))
         |> Enum.reject(&is_nil/1)
 
-      link_if_new(media_file, episodes)
+      link_if_new(id, episodes)
     else
       {:ok, 0}
     end
   end
 
-  defp link_if_new(_media_file, episodes) when length(episodes) < 2, do: {:ok, 0}
+  defp link_if_new(_id, episodes) when length(episodes) < 2, do: {:ok, 0}
 
-  defp link_if_new(%MediaFile{} = media_file, episodes) do
+  defp link_if_new(id, episodes) do
     # Strictly additive, so a link this repair does not know about survives.
-    Library.add_episode_links(media_file, Enum.map(episodes, & &1.id))
+    # Only the id is needed; the row itself was never loaded.
+    Library.add_episode_links(%MediaFile{id: id}, Enum.map(episodes, & &1.id))
   end
 end

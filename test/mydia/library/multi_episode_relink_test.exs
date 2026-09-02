@@ -88,6 +88,37 @@ defmodule Mydia.Library.MultiEpisodeRelinkTest do
       assert [] = Repo.preload(ep10, :media_files).media_files
     end
 
+    test "relinks every file when the work spans several batches", %{
+      show: show,
+      library_path: library_path
+    } do
+      # Four two-episode files read with batch_size 2, so the keyset loop has to
+      # page three times. With a bug in the cursor this either loops forever or
+      # relinks only the first page.
+      pairs =
+        for {first, second} <- [{1, 2}, {3, 4}, {5, 6}, {7, 8}] do
+          ep_a = insert(:episode, %{media_item: show, season_number: 2, episode_number: first})
+          ep_b = insert(:episode, %{media_item: show, season_number: 2, episode_number: second})
+
+          legacy_file(
+            show,
+            library_path,
+            "Fathom Rift S02E0#{first}E0#{second} Tidewater.mkv",
+            ep_a
+          )
+
+          {ep_a, ep_b}
+        end
+
+      assert {:ok, %{files_relinked: 4, links_added: 4}} =
+               MultiEpisodeRelink.run(batch_size: 2)
+
+      for {ep_a, ep_b} <- pairs do
+        assert [_] = Repo.preload(ep_a, :media_files).media_files
+        assert [_] = Repo.preload(ep_b, :media_files).media_files
+      end
+    end
+
     test "does not invent a link for an episode the show does not have", %{
       show: show,
       library_path: library_path,

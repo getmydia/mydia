@@ -157,15 +157,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   which keeps two- and three-digit episodes in column: the chunk
                   threshold is 50, and TVDB puts 170 Black Clover episodes in one
                   season. --%>
-            <div
+            <%!-- Every row expands, files or not. An episode with no file is
+                  the one a viewer most needs to ask about, and gating the
+                  disclosure on has_files used to leave exactly that row inert
+                  with nothing to click. Buttons rather than divs, so the
+                  disclosure is reachable by keyboard. --%>
+            <button
+              type="button"
               class="flex items-center gap-1 flex-shrink-0 sm:w-full cursor-pointer hover:text-primary"
               phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
+              aria-expanded={to_string(is_expanded)}
+              aria-controls={"episode-#{episode.id}-detail"}
             >
-              <%!-- Every row expands, files or not. An episode with no file is
-                    the one a viewer most needs to ask about, and gating the
-                    disclosure on has_files used to leave exactly that row inert
-                    with nothing to click. --%>
               <.icon
                 name={if is_expanded, do: "hero-chevron-down", else: "hero-chevron-right"}
                 class="w-3 h-3 text-base-content/40"
@@ -173,17 +177,22 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
               <span class="font-mono text-sm font-medium text-base-content/70 tabular-nums sm:ml-auto">
                 {episode.episode_number}
               </span>
-            </div>
+            </button>
 
-            <div
-              class="flex-1 min-w-0 cursor-pointer"
+            <%!-- text-left because a button centres its text by default, which
+                  would break the title column. --%>
+            <button
+              type="button"
+              class="flex-1 min-w-0 cursor-pointer text-left"
               phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
+              aria-expanded={to_string(is_expanded)}
+              aria-controls={"episode-#{episode.id}-detail"}
             >
               <span class="text-sm font-medium truncate block hover:text-primary">
                 {episode.title || "TBA"}
               </span>
-            </div>
+            </button>
           </div>
 
           <div class="flex items-center justify-between gap-2 sm:contents">
@@ -317,7 +326,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         </div>
 
         <%= if is_expanded do %>
-          <div class="mt-2 ml-8 space-y-1">
+          <div id={"episode-#{episode.id}-detail"} class="mt-2 ml-8 space-y-1">
             <%= if has_files do %>
               <div :for={file <- episode.media_files} class="bg-base-200/50 rounded p-2">
                 <Components.episode_file_row
