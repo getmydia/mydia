@@ -3,25 +3,28 @@ defmodule MydiaWeb.DiscoverComponentsTest do
 
   import Phoenix.LiveViewTest
 
+  alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.DiscoverComponents
 
   defp guest, do: %{role: "guest", id: "guest-1"}
 
+  # A real %SearchResult{}, not a bare map: Ref.from_search_result/1 (called
+  # to build the card's phx-value-ref) pattern-matches the struct on purpose.
+  # :tmdb is not a habit-default here -- every card in this file is a movie
+  # (media_type: :movie throughout), and there is no TVDB movie catalog, so
+  # :tmdb is the only correct provider for it.
   defp card(assigns_overrides) do
     item =
-      Map.merge(
-        %{
-          provider_id: "693134",
-          title: "Dune: Part Two",
-          year: 2024,
-          poster_path: "/dune.jpg",
-          in_library: false,
-          monitored: false,
-          id: nil,
-          request_status: nil
-        },
-        Map.get(assigns_overrides, :item, %{})
-      )
+      %SearchResult{
+        provider_id: "693134",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Dune: Part Two",
+        year: 2024,
+        poster_path: "/dune.jpg"
+      }
+      |> Map.merge(%{in_library: false, monitored: false, id: nil, request_status: nil})
+      |> Map.merge(Map.get(assigns_overrides, :item, %{}))
 
     assigns =
       %{
@@ -55,16 +58,16 @@ defmodule MydiaWeb.DiscoverComponentsTest do
   end
 
   defp rail(overrides) do
-    item = %{
-      provider_id: "693134",
-      title: "Dune: Part Two",
-      year: 2024,
-      poster_path: "/dune.jpg",
-      in_library: false,
-      monitored: false,
-      id: nil,
-      request_status: nil
-    }
+    item =
+      %SearchResult{
+        provider_id: "693134",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Dune: Part Two",
+        year: 2024,
+        poster_path: "/dune.jpg"
+      }
+      |> Map.merge(%{in_library: false, monitored: false, id: nil, request_status: nil})
 
     assigns =
       Map.merge(

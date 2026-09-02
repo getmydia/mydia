@@ -14,19 +14,26 @@ defmodule MydiaWeb.Components.MediaRailComponentTest do
   import Phoenix.LiveViewTest
   import Phoenix.Component, only: [sigil_H: 2]
 
+  alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.DiscoverComponents
 
+  # A real %SearchResult{}, not a bare map: Ref.from_search_result/1 (called
+  # to build the card's phx-value-ref) pattern-matches the struct on purpose.
+  # :tmdb is the only correct provider here, not a habit-default: every
+  # render_component call in this file passes media_type: :movie, and there
+  # is no TVDB movie catalog.
   defp item(attrs \\ %{}) do
-    Enum.into(attrs, %{
+    %SearchResult{
       provider_id: "101",
+      provider: :tmdb,
+      media_type: :movie,
       title: "The Eternal Daughter",
       year: 2022,
       poster_path: "/poster.jpg",
-      vote_average: 6.9,
-      in_library: false,
-      monitored: false,
-      id: nil
-    })
+      vote_average: 6.9
+    }
+    |> Map.merge(%{in_library: false, monitored: false, id: nil})
+    |> Map.merge(Map.new(attrs))
   end
 
   defp user, do: %{id: Ecto.UUID.generate(), role: "admin", username: "admin"}

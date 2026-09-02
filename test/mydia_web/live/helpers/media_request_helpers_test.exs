@@ -3,6 +3,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
 
   alias Mydia.{Accounts, MediaRequests}
   alias Mydia.Media.MediaRequest
+  alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
 
   defp guest do
@@ -19,12 +20,30 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
     user
   end
 
+  # Real %SearchResult{}s, not bare maps: Ref.from_search_result/1
+  # pattern-matches the struct on purpose, so a caller can never build one
+  # without a real provider. item/2 is always exercised as a movie
+  # (media_type: :movie is what every caller of handle_request_media/3 below
+  # passes) and tvdb_item/2 always as a TVDB-sourced show, so :tmdb/:tvdb here
+  # are not habit-defaults -- they are what each fixture actually represents.
   defp item(tmdb_id, title \\ "Card Movie") do
-    %{provider_id: to_string(tmdb_id), title: title, year: 2024}
+    %SearchResult{
+      provider_id: to_string(tmdb_id),
+      provider: :tmdb,
+      media_type: :movie,
+      title: title,
+      year: 2024
+    }
   end
 
   defp tvdb_item(tvdb_id, title \\ "Card Series") do
-    %{provider_id: to_string(tvdb_id), title: title, year: 2024, provider: :tvdb}
+    %SearchResult{
+      provider_id: to_string(tvdb_id),
+      provider: :tvdb,
+      media_type: :tv_show,
+      title: title,
+      year: 2024
+    }
   end
 
   describe "handle_request_media/3" do

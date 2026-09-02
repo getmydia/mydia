@@ -72,17 +72,19 @@ defmodule Mydia.Metadata.Ref do
   own provider parsing, so a non-integer id there is a parsing bug worth
   surfacing rather than a user input worth tolerating.
 
-  Accepts a bare map carrying `provider_id`, not only a real `%SearchResult{}`:
-  `DiscoverComponents.trending_card/1` draws its cards from several producers
-  (search results, franchise entries, hand-built rail items in tests) that do
-  not all construct the struct. A missing `:provider` key defaults to `:tmdb`
-  via `normalize_provider/1`, same as an explicitly nil one -- every one of
-  these shapes was TMDB-only before refs existed, so this preserves that
-  default rather than widening what the shared card can be handed.
+  Deliberately locked to the real struct rather than any map carrying
+  `provider_id`. This function's whole point is "the item already knows its
+  own provenance, so do not guess" -- `SearchResult` enforces `:provider` at
+  construction (`@enforce_keys`), so a real one can never lack it. A bare map
+  can, and defaulting a missing `:provider` to `:tmdb` here would be the exact
+  silent-guess defect this refactor exists to delete, sitting in the one
+  place built to prevent it. Callers that only have a plain map (a franchise
+  entry, a hand-built test fixture) must build a real `%SearchResult{}` with
+  the provider they actually mean, not lean on a default here.
   """
-  @spec from_search_result(SearchResult.t() | map()) :: t()
-  def from_search_result(%{provider_id: provider_id} = item) do
-    {normalize_provider(Map.get(item, :provider)), String.to_integer(to_string(provider_id))}
+  @spec from_search_result(SearchResult.t()) :: t()
+  def from_search_result(%SearchResult{provider: provider, provider_id: provider_id}) do
+    {normalize_provider(provider), String.to_integer(to_string(provider_id))}
   end
 
   # `:metadata_relay` names the config type that served a response, not the
