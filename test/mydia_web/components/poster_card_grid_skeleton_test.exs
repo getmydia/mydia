@@ -35,6 +35,15 @@ defmodule MydiaWeb.PosterCardGridSkeletonTest do
     assert doc |> LazyHTML.query("div.card") |> Enum.count() == 20
   end
 
+  # 1..0 has an implicit step of -1 in Elixir, so a naive `1..@count` would
+  # render two stray cards ([1, 0]) instead of none. Guards the explicit
+  # ascending step in poster_card_grid_skeleton/1 against regressing.
+  test "renders zero placeholder cards for a count of zero" do
+    doc = render_skeleton(%{count: 0})
+
+    assert doc |> LazyHTML.query("div.card") |> Enum.count() == 0
+  end
+
   test "applies the caller's column and gap classes to the grid" do
     doc = render_skeleton(%{columns: "grid-cols-4 xl:grid-cols-12", gap: "gap-3 md:gap-4"})
 

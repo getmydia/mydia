@@ -60,7 +60,7 @@ defmodule MydiaWeb.DashboardLive.LoadingSkeletonTest do
     refute has_element?(view, "#trending-tv-skeleton")
   end
 
-  test "each skeleton renders 10 placeholder cards, matching the Enum.take(10) real rails use",
+  test "each skeleton renders as many placeholder cards as the LiveView's trending rail limit",
        %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
 
@@ -69,7 +69,12 @@ defmodule MydiaWeb.DashboardLive.LoadingSkeletonTest do
     movies_cards = doc |> LazyHTML.query("#trending-movies-skeleton div.card") |> Enum.count()
     tv_cards = doc |> LazyHTML.query("#trending-tv-skeleton div.card") |> Enum.count()
 
-    assert movies_cards == 10
-    assert tv_cards == 10
+    # Asserted against the LiveView's own limit, not a literal, so a change to
+    # @trending_rail_limit in index.ex cannot leave this test green while the
+    # skeleton and the settled row count drift apart.
+    limit = MydiaWeb.DashboardLive.Index.trending_rail_limit()
+
+    assert movies_cards == limit
+    assert tv_cards == limit
   end
 end

@@ -20,6 +20,12 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   @unsupported_media_type "That media type is not supported."
 
+  # How many trending items each rail keeps after a successful fetch (see the
+  # Enum.take/2 calls below). The skeleton grid's `count` must match this or
+  # the placeholder no longer reserves the same height as the settled row,
+  # reintroducing the layout shift this feature exists to prevent.
+  @trending_rail_limit 10
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -31,6 +37,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:trending_tv_loading, true)
         |> assign(:trending_movies, [])
         |> assign(:trending_tv, [])
+        |> assign(:trending_rail_limit, @trending_rail_limit)
         |> assign(:library_status_map, %{})
         |> assign(:adding_item_ids, MapSet.new())
         |> assign(:requesting_item_id, nil)
@@ -48,6 +55,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:trending_tv_loading, false)
         |> assign(:trending_movies, [])
         |> assign(:trending_tv, [])
+        |> assign(:trending_rail_limit, @trending_rail_limit)
         |> assign(:movie_count, 0)
         |> assign(:tv_show_count, 0)
         |> assign(:active_downloads_count, 0)
@@ -239,7 +247,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:ok, movies} ->
         enriched_movies =
           movies
-          |> Enum.take(10)
+          |> Enum.take(@trending_rail_limit)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
@@ -261,7 +269,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:ok, shows} ->
         enriched_shows =
           shows
-          |> Enum.take(10)
+          |> Enum.take(@trending_rail_limit)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
@@ -335,6 +343,12 @@ defmodule MydiaWeb.DashboardLive.Index do
     Logger.warning("Unhandled message in DashboardLive.Index: #{inspect(msg)}")
     {:noreply, socket}
   end
+
+  @doc false
+  # Exposes @trending_rail_limit so the regression test can assert the
+  # skeleton's placeholder count against the same value this module uses,
+  # rather than duplicating the literal in both places.
+  def trending_rail_limit, do: @trending_rail_limit
 
   ## Private Helpers
 

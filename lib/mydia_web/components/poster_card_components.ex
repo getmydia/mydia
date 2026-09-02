@@ -100,12 +100,22 @@ defmodule MydiaWeb.PosterCardComponents do
   def poster_card_grid_skeleton(assigns) do
     ~H"""
     <div id={@id} class={["grid", @gap, @columns]} role="status" aria-label="Loading titles">
-      <div :for={_ <- 1..@count} class="card bg-base-100 shadow-lg h-full">
+      <%!-- 1..@count//1 rather than 1..@count: with an implicit step, Elixir
+            infers -1 whenever @count < 1, so 1..0 is [1, 0] and count: 0 would
+            render two stray cards instead of none. The explicit ascending
+            step makes 0 and negative counts render zero cards. --%>
+      <div :for={_ <- 1..@count//1} class="card bg-base-100 shadow-lg h-full">
         <div class="skeleton aspect-[2/3] rounded-t-box rounded-b-none"></div>
         <div class="card-body p-3">
           <div class="skeleton h-4 w-full"></div>
           <div class="skeleton h-4 w-2/3"></div>
+          <%!-- gap-4, not poster_card_body's gap-2 above: every real action
+                element (badges, add button) also carries its own mt-2 on top
+                of card-body's gap, so real cards space these by 16px total. --%>
           <div class="mt-auto flex flex-col gap-4">
+            <%!-- h-4, not h-3: text-xs line-height is 1rem/16px and is not
+                  derived from its 0.75rem font-size, so h-4 matches the real
+                  year bar's rendered height. --%>
             <div class="skeleton h-4 w-10"></div>
             <div class="skeleton h-8 w-full"></div>
           </div>

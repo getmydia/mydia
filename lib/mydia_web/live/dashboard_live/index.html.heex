@@ -214,10 +214,12 @@
 
     <%= cond do %>
       <% @trending_movies_loading -> %>
-        <%!-- count matches the Enum.take(10) in index.ex's :load_trending_movies handler --%>
+        <%!-- count is @trending_rail_limit, the same limit index.ex's
+              :load_trending_movies handler passes to Enum.take/2, so the
+              placeholder always matches the settled row count --%>
         <.poster_card_grid_skeleton
           id="trending-movies-skeleton"
-          count={10}
+          count={@trending_rail_limit}
           columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
           gap="gap-3 md:gap-4"
         />
@@ -254,10 +256,12 @@
 
     <%= cond do %>
       <% @trending_tv_loading -> %>
-        <%!-- count matches the Enum.take(10) in index.ex's :load_trending_tv handler --%>
+        <%!-- count is @trending_rail_limit, the same limit index.ex's
+              :load_trending_tv handler passes to Enum.take/2, so the
+              placeholder always matches the settled row count --%>
         <.poster_card_grid_skeleton
           id="trending-tv-skeleton"
-          count={10}
+          count={@trending_rail_limit}
           columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
           gap="gap-3 md:gap-4"
         />
