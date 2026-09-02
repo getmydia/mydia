@@ -13,8 +13,17 @@ defmodule Mydia.Playback.NextEpisodeTest do
     %Progress{episode_id: episode_id, watched: true, completion_percentage: 100.0}
   end
 
-  defp partial(episode_id, pct) do
-    %Progress{episode_id: episode_id, watched: false, completion_percentage: pct}
+  # `position_seconds` is derived from the percentage so a helper-built row is
+  # internally consistent. A percentage with no position would sit under the
+  # resume floor and read as a stray scrub rather than as real viewing.
+  defp partial(episode_id, pct, duration \\ 1400) do
+    %Progress{
+      episode_id: episode_id,
+      watched: false,
+      position_seconds: round(duration * pct / 100),
+      duration_seconds: duration,
+      completion_percentage: pct
+    }
   end
 
   describe "determine/2" do
@@ -58,6 +67,56 @@ defmodule Mydia.Playback.NextEpisodeTest do
       # auto-marks watched at 90%, but a sync passing `authoritative_watched:
       # true` preserves the remote's own unwatched flag at any percentage.
       assert {:next, %Episode{id: "a"}} = NextEpisode.determine(episodes, progress)
+    end
+
+    test "a few seconds on a much later episode does not outrank the first unwatched one" do
+      episodes = [ep("a", 1, 1), ep("b", 1, 2), ep("c", 1, 3), ep("d", 3, 6)]
+
+      progress = %{
+        "a" => watched("a"),
+        "b" => watched("b"),
+        "d" => partial("d", 0.63, 1422)
+      }
+
+      assert {:next, %Episode{id: "c"}} = NextEpisode.determine(episodes, progress)
+    end
+
+    test "real viewing on a later episode still wins over an earlier unwatched one" do
+      episodes = [ep("a", 1, 1), ep("b", 1, 2), ep("c", 1, 3), ep("d", 3, 6)]
+
+      progress = %{
+        "a" => watched("a"),
+        "b" => watched("b"),
+        "d" => partial("d", 30.0, 1422)
+      }
+
+      assert {:continue, %Episode{id: "d"}} = NextEpisode.determine(episodes, progress)
+    end
+
+    test "a stray scrub on the first unwatched episode still returns that episode" do
+      episodes = [ep("a", 1, 1), ep("b", 1, 2)]
+      progress = %{"a" => watched("a"), "b" => partial("b", 0.5, 1400)}
+
+      assert {:next, %Episode{id: "b"}} = NextEpisode.determine(episodes, progress)
+    end
+
+    test "a row with no position at all is not a resume point" do
+      episodes = [ep("a", 1, 1), ep("b", 1, 2)]
+
+      progress = %{
+        "a" => watched("a"),
+        "b" => %Progress{episode_id: "b", watched: false, completion_percentage: 0.0}
+      }
+
+      assert {:next, %Episode{id: "b"}} = NextEpisode.determine(episodes, progress)
+    end
+
+    test "the resume floor is configurable" do
+      episodes = [ep("a", 1, 1), ep("b", 1, 2)]
+      progress = %{"a" => partial("a", 5.0, 1400)}
+
+      assert {:next, %Episode{id: "a"}} =
+               NextEpisode.determine(episodes, progress, min_position_seconds: 300)
     end
   end
 end

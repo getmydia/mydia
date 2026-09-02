@@ -61,7 +61,7 @@ defmodule Mydia.Playback.OnDeck do
 
     dismissals = load_dismissals(user_id)
 
-    (movie_entries(counting) ++ show_entries(counting, user_id))
+    (movie_entries(counting) ++ show_entries(counting, user_id, min_position))
     |> Enum.reject(&dismissed?(&1, dismissals))
     |> Enum.sort_by(&sort_key/1, :desc)
     |> Enum.take(limit)
@@ -130,7 +130,7 @@ defmodule Mydia.Playback.OnDeck do
     end
   end
 
-  defp show_entries(counting, user_id) do
+  defp show_entries(counting, user_id, min_position) do
     episode_rows = Enum.filter(counting, &(not is_nil(&1.episode_id)))
     episode_ids = Enum.map(episode_rows, & &1.episode_id)
     episode_to_show = load_episode_show_ids(episode_ids)
@@ -160,14 +160,15 @@ defmodule Mydia.Playback.OnDeck do
             show,
             Map.get(episodes_by_show, show_id, []),
             progress_by_episode,
-            sort_at_by_show[show_id]
+            sort_at_by_show[show_id],
+            min_position
           ),
         not is_nil(entry) do
       entry
     end
   end
 
-  defp build_show_entry(show, episodes, progress_by_episode, sort_at) do
+  defp build_show_entry(show, episodes, progress_by_episode, sort_at, min_position) do
     progress_map =
       Enum.reduce(episodes, %{}, fn episode, acc ->
         case Map.get(progress_by_episode, episode.id) do
@@ -176,7 +177,10 @@ defmodule Mydia.Playback.OnDeck do
         end
       end)
 
-    case NextEpisode.determine(episodes, progress_map) do
+    # The same floor that decided the show belongs on the rail also decides
+    # which episode it names, so a row too small to count as viewing cannot
+    # become the card's resume point.
+    case NextEpisode.determine(episodes, progress_map, min_position_seconds: min_position) do
       {:continue, episode} ->
         episode_entry(show, episode, :continue, Map.get(progress_map, episode.id), sort_at)
 
