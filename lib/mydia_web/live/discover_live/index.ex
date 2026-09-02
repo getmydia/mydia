@@ -1,13 +1,18 @@
 defmodule MydiaWeb.DiscoverLive.Index do
   use MydiaWeb, :live_view
 
+  import MydiaWeb.AddMediaComponents
   import MydiaWeb.DiscoverComponents
 
   require Logger
 
+  alias Mydia.Accounts
+  alias Mydia.Accounts.UserPreference
   alias Mydia.Media
+  alias Mydia.Media.AddDefaults
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
+  alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
@@ -38,6 +43,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   @unsupported_media_type "That media type is not supported."
 
+  # The provider returns fixed-size pages. Removing owned titles from one can
+  # empty it entirely, which would look like the end of the results. Fetch the
+  # next page when that happens, bounded so a fully-owned category cannot spin.
+  @max_auto_advance 3
+
   @impl true
   def mount(_params, _session, socket) do
     socket =
@@ -46,6 +56,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:languages, MydiaWeb.Languages.all())
       |> assign(:sort_options, @sort_options)
       |> assign(:items, [])
+      |> assign(:visible_items, [])
       |> assign(:loading, true)
       |> assign(:loading_more, false)
       |> assign(:page, 1)
@@ -63,7 +74,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:detail_loading, false)
       |> assign(:libraries, [])
       |> assign(:library_picker, nil)
+      |> assign(:add_config, nil)
+      |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current()
+      |> assign_hide_owned()
 
     {:ok, socket}
   end
@@ -109,6 +123,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:sort_by, sort_by)
         |> assign(:page, page)
         |> assign(:items, [])
+        |> assign_visible_items()
         |> assign(:loading, true)
         |> assign(:load_error, nil)
         |> assign(:has_more, false)
@@ -205,7 +220,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_event("load_more", _, socket) do
     if socket.assigns.has_more and not socket.assigns.loading_more do
       next_page = socket.assigns.page + 1
-      send(self(), {:load_page, next_page})
+      send(self(), {:load_page, next_page, 0})
       {:noreply, assign(socket, :loading_more, true)}
     else
       {:noreply, socket}
@@ -220,39 +235,109 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, MediaAddHelpers.clear_library_picker(socket)}
   end
 
+  # Reached from the Configure entry inside library_picker_dialog/1. The item
+  # is looked up from the current grid/rail rather than carried in the click's
+  # own params: the caret only ever sends tmdb_id and media_type, and the
+  # preview panel needs the title, poster and overview that only a real
+  # SearchResult carries.
+  def handle_event(
+        "open_add_config",
+        %{"tmdb_id" => provider_id, "media_type" => media_type},
+        socket
+      ) do
+    case parse_event_media_type(media_type) do
+      {:ok, media_type_atom} ->
+        defaults = AddDefaults.resolve(socket.assigns.current_user, media_type_atom)
+
+        item =
+          find_selectable_item(
+            socket.assigns.items,
+            socket.assigns.selected_recommendations,
+            provider_id
+          )
+
+        {:noreply,
+         socket
+         |> MediaAddHelpers.clear_library_picker()
+         |> assign(:add_config, %{
+           provider_id: provider_id,
+           media_type: media_type_atom,
+           defaults: defaults,
+           item: item
+         })}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+    end
+  end
+
+  def handle_event("close_add_config", _params, socket) do
+    {:noreply, assign(socket, :add_config, nil)}
+  end
+
+  def handle_event("submit_add_config", %{"config" => params}, socket) do
+    with :ok <- Authorization.authorize_create_media(socket),
+         %{provider_id: provider_id, media_type: media_type} <- socket.assigns.add_config do
+      defaults =
+        AddDefaults.resolve(socket.assigns.current_user, media_type,
+          library_path_id: presence(params["library_path_id"]),
+          quality_profile_id: presence(params["quality_profile_id"]),
+          monitored: params["monitored"] == "true",
+          season_monitoring: presence(params["season_monitoring"]),
+          search_on_add: params["search_on_add"] == "true"
+        )
+
+      opts =
+        defaults
+        |> AddDefaults.to_add_opts()
+        |> Keyword.put(:search_on_add, defaults.search_on_add)
+
+      send(self(), {:add_media_to_library_with_opts, provider_id, media_type, opts})
+
+      {:noreply, assign(socket, :add_config, nil)}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+      nil -> {:noreply, socket}
+    end
+  end
+
   def handle_event(
         "add_to_library",
         %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
         socket
       ) do
-    socket = MediaAddHelpers.clear_library_picker(socket)
+    with :ok <- Authorization.authorize_create_media(socket) do
+      socket = MediaAddHelpers.clear_library_picker(socket)
 
-    case parse_event_media_type(media_type) do
-      {:ok, media_type_atom} ->
-        # An impatient double-click sends the event twice before the first
-        # handle_info runs. Without this guard the second add lands on a title
-        # the first just created, and resolves to :already_in_library, flashing
-        # a false failure for a title the user only meant to add once.
-        if MapSet.member?(socket.assigns.adding_item_ids, provider_id) do
-          {:noreply, socket}
-        else
-          socket =
-            assign(
-              socket,
-              :adding_item_ids,
-              MapSet.put(socket.assigns.adding_item_ids, provider_id)
+      case parse_event_media_type(media_type) do
+        {:ok, media_type_atom} ->
+          # An impatient double-click sends the event twice before the first
+          # handle_info runs. Without this guard the second add lands on a title
+          # the first just created, and resolves to :already_in_library, flashing
+          # a false failure for a title the user only meant to add once.
+          if MapSet.member?(socket.assigns.adding_item_ids, provider_id) do
+            {:noreply, socket}
+          else
+            socket =
+              assign(
+                socket,
+                :adding_item_ids,
+                MapSet.put(socket.assigns.adding_item_ids, provider_id)
+              )
+
+            send(
+              self(),
+              {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
             )
 
-          send(
-            self(),
-            {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
-          )
+            {:noreply, socket}
+          end
 
-          {:noreply, socket}
-        end
-
-      :error ->
-        {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+        :error ->
+          {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
     end
   end
 
@@ -306,6 +391,42 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, GridDensity.put(socket, density)}
   end
 
+  def handle_event("toggle_hide_owned", _params, socket) do
+    value = not socket.assigns.hide_owned
+
+    # A rejected write leaves the toggle where it was rather than flipping the
+    # grid for a preference that will be gone on the next mount. Mirrors
+    # `GridDensity.put/2`.
+    case persist_hide_owned(socket, value) do
+      :ok ->
+        {:noreply,
+         socket
+         |> assign(:hide_owned, value)
+         |> assign_visible_items()
+         |> maybe_auto_advance(0)}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
+    end
+  end
+
+  defp persist_hide_owned(socket, value) do
+    case socket.assigns[:current_user] do
+      nil ->
+        :ok
+
+      user ->
+        preference = Accounts.get_user_preference!(user)
+
+        case Accounts.update_preference(preference, %{
+               "preferences" => %{"discover_hide_owned" => value}
+             }) do
+          {:ok, _} -> :ok
+          {:error, _changeset} -> :error
+        end
+    end
+  end
+
   # Info handlers
 
   @impl true
@@ -343,11 +464,15 @@ defmodule MydiaWeb.DiscoverLive.Index do
           Metadata.fetch_curated_list(category, media_type: media_type, page: page)
       end
 
-    socket = handle_load_result(socket, result, :replace)
+    socket =
+      socket
+      |> handle_load_result(result, :replace)
+      |> maybe_auto_advance(0)
+
     {:noreply, socket}
   end
 
-  def handle_info({:load_page, page}, socket) do
+  def handle_info({:load_page, page, advances}, socket) do
     %{
       media_type: media_type,
       search_mode: search_mode,
@@ -369,8 +494,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
           Metadata.fetch_curated_list(category, media_type: media_type, page: page)
       end
 
-    socket = handle_load_result(socket, result, :append)
-    {:noreply, assign(socket, :loading_more, false)}
+    socket =
+      socket
+      |> handle_load_result(result, :append)
+      |> assign(:loading_more, false)
+      |> maybe_auto_advance(advances)
+
+    {:noreply, socket}
   end
 
   def handle_info({:fetch_detail_metadata, tmdb_id, media_type}, socket) do
@@ -399,16 +529,21 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
-    case MediaAddHelpers.library_path_opts(library_path_id, media_type) do
-      {:error, :unknown_library} ->
-        {:noreply,
-         socket
-         |> clear_adding(provider_id)
-         |> put_flash(:error, "That library is no longer available. Nothing was added.")}
+    defaults =
+      AddDefaults.resolve(socket.assigns.current_user, media_type,
+        library_path_id: presence(library_path_id)
+      )
 
-      {:ok, opts} ->
-        add_with_opts(provider_id, media_type, opts, socket)
-    end
+    opts =
+      defaults
+      |> AddDefaults.to_add_opts()
+      |> Keyword.put(:search_on_add, defaults.search_on_add)
+
+    add_with_opts(provider_id, media_type, opts, socket)
+  end
+
+  def handle_info({:add_media_to_library_with_opts, provider_id, media_type, opts}, socket) do
+    add_with_opts(provider_id, media_type, opts, socket)
   end
 
   def handle_info({:request_media, provider_id, media_type}, socket) do
@@ -427,6 +562,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
         {:noreply, submit_request(socket, item, media_type)}
     end
   end
+
+  # The picker's blank placeholder ("") and an ordinary card click's nil both
+  # mean "no explicit choice"; anything else is a client-supplied library id
+  # override for the resolver.
+  defp presence(nil), do: nil
+  defp presence(""), do: nil
+  defp presence(value), do: value
 
   defp add_with_opts(provider_id, media_type, opts, socket) do
     case MediaAddHelpers.handle_add_media_to_library(
@@ -456,6 +598,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
+         |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
@@ -470,6 +613,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> clear_adding(provider_id)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
+         |> assign_visible_items()
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
       {:error, {:changeset, changeset}} ->
@@ -511,6 +655,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:requesting_item_id, nil)
         |> assign(:request_status_map, request_status_map)
         |> assign(:items, items)
+        |> assign_visible_items()
         |> assign(:selected_recommendations, recommendations)
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
@@ -575,6 +720,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   # Private helpers
 
+  defp assign_hide_owned(socket) do
+    value =
+      case socket.assigns[:current_user] do
+        nil -> false
+        user -> user |> Accounts.get_user_preference!() |> UserPreference.discover_hide_owned()
+      end
+
+    assign(socket, :hide_owned, value)
+  end
+
   defp handle_load_result(socket, result, mode) do
     case result do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
@@ -592,6 +747,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         socket
         |> assign(:items, items)
+        |> assign_visible_items()
         |> assign(:page, page)
         |> assign(:total_pages, total_pages)
         |> assign(:has_more, page < total_pages)
@@ -614,6 +770,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         socket
         |> assign(:items, items)
+        |> assign_visible_items()
         |> assign(:has_more, false)
         |> assign(:load_error, nil)
         |> assign(:loading, false)
@@ -623,8 +780,42 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         socket
         |> assign(:items, if(mode == :append, do: socket.assigns.items, else: []))
+        |> assign_visible_items()
         |> assign(:load_error, reason)
         |> assign(:loading, false)
+    end
+  end
+
+  # Derives :visible_items from :items and :hide_owned. Call this everywhere
+  # either of those is assigned, so the template never filters.
+  defp assign_visible_items(socket) do
+    visible =
+      if socket.assigns.hide_owned do
+        Enum.reject(socket.assigns.items, & &1.in_library)
+      else
+        socket.assigns.items
+      end
+
+    assign(socket, :visible_items, visible)
+  end
+
+  defp maybe_auto_advance(socket, advances) do
+    cond do
+      not socket.assigns.hide_owned ->
+        socket
+
+      advances >= @max_auto_advance ->
+        socket
+
+      socket.assigns.visible_items != [] ->
+        socket
+
+      not socket.assigns.has_more ->
+        socket
+
+      true ->
+        send(self(), {:load_page, socket.assigns.page + 1, advances + 1})
+        assign(socket, :loading_more, true)
     end
   end
 

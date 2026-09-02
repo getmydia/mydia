@@ -36,8 +36,8 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   # `<%= if @open do %>` (trending_detail_modal.ex:40), so omitting it renders
   # an empty dialog and every assertion below fails for the wrong reason.
   # `rail: []` is an undeclared slot the template calls `render_slot/1` on;
-  # without it the render raises KeyError. `picker_open` has no default (see
-  # the moduledoc) so it must always be passed too.
+  # without it the render raises KeyError. `picker_open` and `config_open`
+  # have no default (see the moduledoc) so both must always be passed too.
   defp render_modal(item, metadata, opts \\ []) do
     render_component(TrendingDetailModal,
       id: "trending-detail-modal",
@@ -48,7 +48,8 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       current_user: %{id: Ecto.UUID.generate(), role: "admin", username: "admin"},
       libraries: [],
       rail: [],
-      picker_open: Keyword.get(opts, :picker_open, false)
+      picker_open: Keyword.get(opts, :picker_open, false),
+      config_open: Keyword.get(opts, :config_open, false)
     )
   end
 
@@ -92,6 +93,21 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
 
     test "does not bind Escape while the library picker dialog is open" do
       html = render_modal(item(), metadata(%{number_of_seasons: 3}), picker_open: true)
+      document = LazyHTML.from_fragment(html)
+
+      dialog = LazyHTML.filter(document, "dialog")
+
+      assert Enum.count(dialog) == 1
+      assert LazyHTML.attribute(dialog, "phx-window-keydown") == []
+    end
+
+    # Discover's Configure entry (MydiaWeb.AddMediaComponents.add_config_modal/1)
+    # is reachable from a caret inside this modal's own recommendations rail,
+    # and opening it clears @library_picker (so picker_open alone reads false
+    # again). Without this guard a single Escape press would fire both
+    # close_add_config and close_details.
+    test "does not bind Escape while the configure-before-adding modal is open" do
+      html = render_modal(item(), metadata(%{number_of_seasons: 3}), config_open: true)
       document = LazyHTML.from_fragment(html)
 
       dialog = LazyHTML.filter(document, "dialog")

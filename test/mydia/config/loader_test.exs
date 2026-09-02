@@ -45,7 +45,8 @@ defmodule Mydia.Config.LoaderTest do
         "OBAN_POLL_INTERVAL",
         "MAX_TRANSCODE_HEIGHT",
         "AUTO_SEARCH_MIN_SEEDERS",
-        "SUBTITLE_LANGUAGE"
+        "SUBTITLE_LANGUAGE",
+        "DEFAULT_SEASON_MONITORING"
       ] ++ download_client_vars ++ library_path_vars
 
     # Store original values
@@ -1137,6 +1138,18 @@ defmodule Mydia.Config.LoaderTest do
       assert {:error, _reason} = Loader.reload(config_file: "nonexistent.yml")
       # Contract: on error the previously cached config is left untouched.
       assert Application.get_env(:mydia, :runtime_config) == good
+    end
+  end
+
+  describe "media default_season_monitoring (DEFAULT_SEASON_MONITORING)" do
+    test "loads default_season_monitoring from DEFAULT_SEASON_MONITORING" do
+      # The shared setup clears and restores this var, so a deployment that
+      # sets it does not lose it to this test.
+      System.put_env("DEFAULT_SEASON_MONITORING", "first")
+
+      {:ok, config} = Mydia.Config.Loader.load(sources: [:env])
+
+      assert config.media.default_season_monitoring == "first"
     end
   end
 end

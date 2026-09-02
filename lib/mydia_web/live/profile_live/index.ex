@@ -1,8 +1,13 @@
 defmodule MydiaWeb.ProfileLive.Index do
   use MydiaWeb, :live_view
 
+  import MydiaWeb.ProfileLive.Components
+
   alias Mydia.Accounts
   alias Mydia.Accounts.UserPreference
+  alias Mydia.Settings
+  alias Mydia.Settings.LibraryPath
+  alias MydiaWeb.Formatters
 
   @themes [
     {"System", "system"},
@@ -10,11 +15,21 @@ defmodule MydiaWeb.ProfileLive.Index do
     {"Dark", "dark"}
   ]
 
+  @add_pref_keys ~w(
+    add_movie_library_path_id
+    add_series_library_path_id
+    add_quality_profile_id
+    add_season_monitoring
+    add_monitored
+    add_search_on_add
+  )
+
   @impl true
   def mount(_params, _session, socket) do
     user = socket.assigns.current_user
     is_oidc_user = Accounts.oidc_user?(user)
     preference = Accounts.get_user_preference!(user)
+    libraries = Settings.list_library_paths()
 
     socket =
       socket
@@ -27,6 +42,20 @@ defmodule MydiaWeb.ProfileLive.Index do
       |> assign(:preference, preference)
       |> assign(:themes, @themes)
       |> assign(:theme, UserPreference.theme(preference))
+      # Add defaults
+      |> assign(
+        :movie_library_options,
+        library_options(libraries, LibraryPath.movie_library_types())
+      )
+      |> assign(
+        :series_library_options,
+        library_options(libraries, LibraryPath.series_library_types())
+      )
+      |> assign(
+        :quality_profile_options,
+        Enum.map(Settings.list_quality_profiles(), &{&1.id, &1.name})
+      )
+      |> assign(:add_prefs, preference.preferences)
 
     {:ok, socket}
   end
@@ -133,6 +162,25 @@ defmodule MydiaWeb.ProfileLive.Index do
   end
 
   @impl true
+  def handle_event("update_add_defaults", params, socket) do
+    changes =
+      @add_pref_keys
+      |> Enum.filter(&Map.has_key?(params, &1))
+      |> Map.new(fn key -> {key, normalize_add_pref(key, params[key])} end)
+
+    case Accounts.update_preference(socket.assigns.preference, %{"preferences" => changes}) do
+      {:ok, preference} ->
+        {:noreply,
+         socket
+         |> assign(:preference, preference)
+         |> assign(:add_prefs, preference.preferences)}
+
+      {:error, changeset} ->
+        {:noreply, put_flash(socket, :error, Formatters.format_changeset_errors(changeset))}
+    end
+  end
+
+  @impl true
   def handle_event("toggle_hide_player", _params, socket) do
     hidden = !socket.assigns.hide_player
 
@@ -149,6 +197,18 @@ defmodule MydiaWeb.ProfileLive.Index do
   end
 
   ## Private Helpers
+
+  defp library_options(libraries, types) do
+    libraries
+    |> Enum.filter(&(&1.type in types))
+    |> Enum.map(&{&1.id, &1.path})
+  end
+
+  # An empty select means "inherit", stored as nil rather than "".
+  defp normalize_add_pref(_key, ""), do: nil
+  defp normalize_add_pref(key, "true") when key in ~w(add_monitored add_search_on_add), do: true
+  defp normalize_add_pref(key, "false") when key in ~w(add_monitored add_search_on_add), do: false
+  defp normalize_add_pref(_key, value), do: value
 
   defp password_changeset(params \\ %{}) do
     types = %{

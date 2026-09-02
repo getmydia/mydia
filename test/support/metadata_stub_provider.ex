@@ -278,9 +278,10 @@ defmodule Mydia.MetadataStubProvider do
     }
   end
 
-  # provider: :tvdb is load-bearing. RequestMediaLive.Index.build_request_attrs/3
-  # only stores tvdb_id when the result carries it, and MediaRequests routes
-  # approval by which id is present.
+  # provider: :tvdb is load-bearing for `series_search_result/0`:
+  # `MediaRequestHelpers.handle_request_media/3` branches on it to store the
+  # id under tvdb_id rather than tmdb_id for a TV show request. See the
+  # guest-request tv lifecycle tests in guest_request_flow_test.exs.
   defp series_search_result do
     %SearchResult{
       provider_id: to_string(@series_tvdb_id),

@@ -428,13 +428,83 @@ defmodule Mydia.Accounts do
   @doc """
   Updates a user's preferences.
 
-  The attrs should be a map with string keys matching preference names.
+  `attrs` is either a flat map of preference keys to merge into what is
+  already stored, e.g. `%{"theme" => "dark"}` (the existing convention used
+  throughout the app), or that same delta nested under a `"preferences"` key,
+  e.g. `%{"preferences" => %{"theme" => "dark"}}` (the shape a changeset-driven
+  form naturally submits). Either way the delta is merged with the existing
+  preferences rather than replacing them.
   """
   def update_preference(%UserPreference{} = preference, attrs) do
+    delta = Map.get(attrs, "preferences", attrs)
+
     preference
-    |> UserPreference.update_preferences_changeset(attrs)
+    |> UserPreference.update_preferences_changeset(delta)
+    |> validate_add_references(delta)
     |> Repo.update()
   end
+
+  # The two ID-valued add preferences point at rows, which the schema module
+  # cannot check without pulling Repo into it. A stale value already stored is
+  # tolerated at read time by `Mydia.Media.AddDefaults`; this only stops a user
+  # storing an ID that is already wrong when they save it.
+  #
+  # Validation reads `delta`, the raw map this call was asked to write, never
+  # the changeset's merged `:preferences` (which also carries every value
+  # already on the row). Checking the merged map would re-validate untouched
+  # keys on every save, so if an admin later deletes a quality profile or
+  # library path a user has stored here, that user's next unrelated
+  # preference update (e.g. a theme change) would fail on a value they are
+  # not even editing.
+  defp validate_add_references(changeset, delta) do
+    changeset
+    |> validate_reference(
+      delta,
+      "add_quality_profile_id",
+      &Mydia.Settings.quality_profile_exists?/1
+    )
+    |> validate_reference(
+      delta,
+      "add_movie_library_path_id",
+      &Mydia.Settings.library_path_exists_as_type?(
+        &1,
+        Mydia.Settings.LibraryPath.movie_library_types()
+      )
+    )
+    |> validate_reference(
+      delta,
+      "add_series_library_path_id",
+      &Mydia.Settings.library_path_exists_as_type?(
+        &1,
+        Mydia.Settings.LibraryPath.series_library_types()
+      )
+    )
+  end
+
+  defp validate_reference(changeset, delta, key, exists?) do
+    case delta_fetch(delta, key) do
+      nil ->
+        changeset
+
+      "" ->
+        changeset
+
+      id ->
+        if exists?.(id),
+          do: changeset,
+          else: Ecto.Changeset.add_error(changeset, :preferences, "unknown #{key}: #{id}")
+    end
+  end
+
+  # `key` is always one of a handful of literals this module passes in
+  # (never derived from user input), so converting it to check an
+  # atom-keyed delta alongside a string-keyed one carries none of the
+  # unbounded-atom-creation risk `String.to_atom/1` normally has.
+  defp delta_fetch(delta, key) when is_map(delta) do
+    Map.get(delta, key) || Map.get(delta, String.to_atom(key))
+  end
+
+  defp delta_fetch(_delta, _key), do: nil
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking preference changes.

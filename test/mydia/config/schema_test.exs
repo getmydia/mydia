@@ -518,6 +518,24 @@ defmodule Mydia.Config.SchemaTest do
     end
   end
 
+  describe "media.default_season_monitoring" do
+    test "defaults to all" do
+      assert Schema.defaults().media.default_season_monitoring == "all"
+    end
+
+    test "accepts every supported value" do
+      for value <- ["all", "first", "future", "none"] do
+        changeset = Schema.changeset(%Schema{}, %{media: %{default_season_monitoring: value}})
+        assert changeset.valid?, "expected #{value} to be accepted"
+      end
+    end
+
+    test "rejects an unsupported value" do
+      changeset = Schema.changeset(%Schema{}, %{media: %{default_season_monitoring: "sometimes"}})
+      refute changeset.valid?
+    end
+  end
+
   defp library_path_attrs(extra) do
     %{library_paths: [Map.merge(%{path: "/media/movies", type: :movies}, extra)]}
   end

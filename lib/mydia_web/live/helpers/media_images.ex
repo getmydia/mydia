@@ -3,8 +3,10 @@ defmodule MydiaWeb.Live.Helpers.MediaImages do
   Image URLs for a `Mydia.Media.MediaItem`.
 
   Shared by the media library grid, the media detail page, and the dashboard
-  recently-added rail. The search-result variants in `AddMediaLive` and
-  `RequestMediaLive` take a different shape and are intentionally separate.
+  recently-added rail. A raw search result (as rendered on Discover) has no
+  `MediaMetadata` struct yet, so it reads `poster_path` straight off the
+  provider payload via `Mydia.Metadata.ImageUrl` instead of going through
+  this module.
   """
 
   alias Mydia.Metadata.ImageUrl

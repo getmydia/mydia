@@ -349,22 +349,6 @@ defmodule MydiaWeb.Layouts do
 
                 <li>
                   <.link
-                    navigate="/request/movie"
-                    class={nav_active?(@current_path, "/request/movie", false) && "active"}
-                  >
-                    <.icon name="hero-film" class="w-5 h-5" /> Request Movie
-                  </.link>
-                </li>
-                <li>
-                  <.link
-                    navigate="/request/series"
-                    class={nav_active?(@current_path, "/request/series", false) && "active"}
-                  >
-                    <.icon name="hero-tv" class="w-5 h-5" /> Request Series
-                  </.link>
-                </li>
-                <li>
-                  <.link
                     navigate="/requests"
                     class={nav_active?(@current_path, "/requests", true) && "active"}
                   >
@@ -617,12 +601,6 @@ defmodule MydiaWeb.Layouts do
       />
 
       <%= if @current_user && @current_user.role == "guest" do %>
-        <.dock_link
-          path="/request/movie"
-          current_path={@current_path}
-          icon="hero-film"
-          label="Request"
-        />
         <.dock_link
           path="/requests"
           current_path={@current_path}

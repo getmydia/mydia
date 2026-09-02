@@ -86,7 +86,7 @@
       <%= if @current_user && @current_user.role == "guest" do %>
         <%!-- Guest users see request options --%>
         <.link
-          navigate={~p"/request/movie"}
+          navigate={~p"/discover?type=movie"}
           class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
         >
           <div class="card-body flex-row items-center gap-4">
@@ -101,7 +101,7 @@
         </.link>
 
         <.link
-          navigate={~p"/request/series"}
+          navigate={~p"/discover?type=tv_show"}
           class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
         >
           <div class="card-body flex-row items-center gap-4">
@@ -132,7 +132,7 @@
       <% else %>
         <%!-- Admin users see add and import options --%>
         <.link
-          navigate={~p"/add/movie"}
+          navigate={~p"/discover?type=movie"}
           class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
         >
           <div class="card-body flex-row items-center gap-4">
@@ -147,7 +147,7 @@
         </.link>
 
         <.link
-          navigate={~p"/add/series"}
+          navigate={~p"/discover?type=tv_show"}
           class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
         >
           <div class="card-body flex-row items-center gap-4">
@@ -393,6 +393,7 @@
       )
     }
     picker_open={@library_picker != nil}
+    config_open={false}
   />
 
   <%!-- Rendered once per page rather than once per card. See

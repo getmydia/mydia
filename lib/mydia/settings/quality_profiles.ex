@@ -398,6 +398,19 @@ defmodule Mydia.Settings.QualityProfiles do
     set_default_quality_profile(to_string(profile_id))
   end
 
+  # A malformed id cannot be cast to the `:binary_id` column on PostgreSQL,
+  # which raises `Ecto.Query.CastError` inside `Repo.exists?` instead of
+  # returning false. SQLite stores `binary_id` as unconstrained TEXT, so no
+  # cast error fires there; a malformed id there simply matches no row. This
+  # mirrors the adapter split documented in `Mydia.Repo.ForeignKeyGuard`
+  # (lib/mydia/repo/foreign_key_guard.ex) for the identical pattern: a value
+  # the adapter cannot even cast certainly does not exist.
+  def quality_profile_exists?(id) do
+    Repo.exists?(from p in QualityProfile, where: p.id == ^id)
+  rescue
+    Ecto.Query.CastError -> false
+  end
+
   ## Private Functions
 
   # Seeds `media.default_quality_profile_id` on a genuinely fresh install.
