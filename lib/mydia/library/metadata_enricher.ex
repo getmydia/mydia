@@ -298,8 +298,11 @@ defmodule Mydia.Library.MetadataEnricher do
   defp build_metadata_attrs(metadata, media_type, match_result) do
     provider_id = String.to_integer(to_string(metadata.provider_id))
 
-    raw_provider_type = Map.get(match_result, :provider_type, metadata.provider || :tmdb)
-    provider_type = normalize_provider_type(raw_provider_type, metadata)
+    # `match_result.provider_type` is already a concrete :tvdb / :tmdb value:
+    # MetadataMatcher resolves it from the search result that produced this
+    # match (via `Mydia.Metadata.Ref.from_search_result/1`) before the match
+    # result is ever built, so there is nothing left to hand-map here.
+    provider_type = Map.get(match_result, :provider_type, :tmdb)
 
     attrs = %{
       type: media_type_to_string(media_type),
@@ -342,14 +345,6 @@ defmodule Mydia.Library.MetadataEnricher do
       attrs
     end
   end
-
-  # Normalize any provider signal to a concrete :tvdb / :tmdb value. Search
-  # results from the relay carry provider: :metadata_relay for TMDB, which must
-  # map to :tmdb rather than leak through as an invalid metadata_source.
-  defp normalize_provider_type(:tvdb, _metadata), do: :tvdb
-  defp normalize_provider_type(:tmdb, _metadata), do: :tmdb
-  defp normalize_provider_type(_other, %{provider: :tvdb}), do: :tvdb
-  defp normalize_provider_type(_other, _metadata), do: :tmdb
 
   defp media_type_to_string(:movie), do: "movie"
   defp media_type_to_string(:tv_show), do: "tv_show"

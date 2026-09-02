@@ -83,7 +83,10 @@ defmodule Mydia.Metadata.Structs.SearchResult do
 
     %__MODULE__{
       provider_id: to_string(data["id"]),
-      provider: :metadata_relay,
+      # The provider that owns this id, not the config type that served it.
+      # `Mydia.Metadata.Ref` still maps a stored `:metadata_relay` to `:tmdb`
+      # for blobs written before this was corrected.
+      provider: :tmdb,
       title: title,
       original_title: data["original_title"] || data["original_name"],
       name: data["name"],

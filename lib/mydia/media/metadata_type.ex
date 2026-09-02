@@ -94,7 +94,7 @@ defmodule Mydia.Media.MetadataType do
 
     # Extract required fields with fallback values
     provider_id = data[:provider_id] || to_string(data[:id] || "")
-    provider = atomize_value(data[:provider] || :metadata_relay)
+    provider = atomize_value(data[:provider] || :tmdb)
     media_type = atomize_value(data[:media_type] || :movie)
 
     %MediaMetadata{

@@ -46,7 +46,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert results != []
 
       first_result = List.first(results)
-      assert first_result.provider == :metadata_relay
+      assert first_result.provider == :tmdb
       assert first_result.media_type == :movie
       assert String.contains?(String.downcase(first_result.title), "matrix")
       assert is_binary(first_result.provider_id)
@@ -80,7 +80,7 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, [result | _]} = Relay.search(@config, "The Matrix", media_type: :movie)
 
       assert is_binary(result.provider_id)
-      assert result.provider == :metadata_relay
+      assert result.provider == :tmdb
       assert is_binary(result.title)
       assert result.media_type in [:movie, :tv_show]
 

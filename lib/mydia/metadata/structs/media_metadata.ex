@@ -128,7 +128,10 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     base_metadata = %__MODULE__{
       id: data["id"],
       provider_id: to_string(provider_id),
-      provider: :metadata_relay,
+      # The provider that owns this id, not the config type that served it.
+      # `Mydia.Media.Refresh.stored_blob_provider/2` still tolerates a stored
+      # `:metadata_relay` for blobs written before this was corrected.
+      provider: :tmdb,
       title: title,
       original_title: data["original_title"] || data["original_name"],
       year: year,

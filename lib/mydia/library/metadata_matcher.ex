@@ -16,6 +16,7 @@ defmodule Mydia.Library.MetadataMatcher do
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Library.Structs.MatchResult
   alias Mydia.Library.Text
+  alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.MediaMetadata
 
   @type match_result :: MatchResult.t()
@@ -529,10 +530,8 @@ defmodule Mydia.Library.MetadataMatcher do
                 to_string(series.provider_id)
               )
 
-            # Normalize the search result's provider to a concrete TV source.
-            # TVDB results carry provider: :tvdb; TMDB results carry
-            # provider: :metadata_relay, which maps to :tmdb.
-            provider_type = if series.provider == :tvdb, do: :tvdb, else: :tmdb
+            # The search result already knows its own provenance.
+            provider_type = Ref.provider(Ref.from_search_result(series))
 
             {:ok,
              MatchResult.new(
@@ -785,10 +784,8 @@ defmodule Mydia.Library.MetadataMatcher do
             to_string(best_match.provider_id)
           )
 
-        # Normalize the search result's provider to a concrete TV source.
-        # TVDB results carry provider: :tvdb; TMDB results carry
-        # provider: :metadata_relay, which maps to :tmdb.
-        provider_type = if best_match.provider == :tvdb, do: :tvdb, else: :tmdb
+        # The search result already knows its own provenance.
+        provider_type = Ref.provider(Ref.from_search_result(best_match))
 
         {:ok,
          MatchResult.new(

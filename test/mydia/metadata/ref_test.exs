@@ -72,4 +72,17 @@ defmodule Mydia.Metadata.RefTest do
       assert_raise ArgumentError, fn -> Ref.from_search_result(result) end
     end
   end
+
+  describe "producer provenance" do
+    test "a TMDB search result says :tmdb, not the config type" do
+      result =
+        Mydia.Metadata.Structs.SearchResult.from_api_response(
+          %{"id" => 63_639, "name" => "Harbour Lights", "media_type" => "tv"},
+          media_type: :tv_show
+        )
+
+      assert result.provider == :tmdb
+      assert Ref.from_search_result(result) == {:tmdb, 63_639}
+    end
+  end
 end
