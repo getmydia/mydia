@@ -222,7 +222,6 @@
               current_user={@current_user}
               adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
-              libraries={@libraries}
               loading={if(index < 6, do: nil, else: "lazy")}
             />
           <% end %>
@@ -256,7 +255,6 @@
     loading={@detail_loading}
     current_user={@current_user}
     open={@selected_item != nil}
-    libraries={@libraries}
     picker_open={false}
     config_open={@add_config != nil}
   >
@@ -269,7 +267,6 @@
         current_user={@current_user}
         adding_ids={@adding_item_ids}
         requesting_item_id={@requesting_item_id}
-        libraries={@libraries}
       />
     </:rail>
   </.live_component>

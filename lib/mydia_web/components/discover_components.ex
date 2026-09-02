@@ -38,7 +38,6 @@ defmodule MydiaWeb.DiscoverComponents do
   # SearchResult's provider_id is a string.
   attr :adding_ids, MapSet, default: MapSet.new()
   attr :requesting_item_id, :string, default: nil
-  attr :libraries, :list, default: []
   # :any rather than :string because nil is a meaningful value here: it renders
   # an inert poster, which is what a LiveView with no select handler needs.
   # Typing this :string makes `on_select={nil}` a compile error under
@@ -140,7 +139,6 @@ defmodule MydiaWeb.DiscoverComponents do
             current_user={@current_user}
             adding={@adding?}
             requesting_item_id={@requesting_item_id}
-            libraries={@libraries}
             add_event={@add_event}
             request_event={@request_event}
             can_add={@can_add}
@@ -181,11 +179,6 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :current_user, :map, required: true
   attr :adding_ids, MapSet, default: MapSet.new()
   attr :requesting_item_id, :string, default: nil
-  # The rail is a horizontal scroll container, so the old anchored dropdown
-  # could not escape it at any placement and was withdrawn here (#465). The
-  # picker is now a page-level dialog, which no ancestor's overflow can clip,
-  # so the attr is back. A host that passes nothing still gets no caret.
-  attr :libraries, :list, default: []
 
   attr :id, :string, default: "media-rail"
   attr :title, :string, default: "More like this"
@@ -262,7 +255,6 @@ defmodule MydiaWeb.DiscoverComponents do
             adding_ids={@adding_ids}
             current={Map.get(item, :current, false)}
             requesting_item_id={@requesting_item_id}
-            libraries={@libraries}
             on_select={@on_select}
             navigate={Map.get(item, :navigate)}
             add_event={@add_event}
@@ -281,7 +273,6 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :current_user, :map, required: true
   attr :adding, :boolean, default: false
   attr :requesting_item_id, :string, default: nil
-  attr :libraries, :list, default: []
   attr :add_event, :string, default: "add_to_library"
   attr :request_event, :string, default: "request_media"
   attr :can_add, :boolean, default: true

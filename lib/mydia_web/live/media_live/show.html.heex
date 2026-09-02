@@ -250,7 +250,6 @@
             adding_ids={@adding_recommendation_tmdb_ids}
             requesting_item_id={@requesting_recommendation_id}
             can_add={@can_create_media}
-            libraries={@target_library_candidates}
           />
           <%!-- Episodes Section (TV Shows Only) --%>
           <Components.episodes_section
@@ -286,7 +285,6 @@
             can_add={@can_create_media}
             current_user={@current_user}
             adding_tmdb_ids={@adding_franchise_tmdb_ids}
-            libraries={@target_library_candidates}
           />
           <%!-- Recommendations, movie placement. Expanded here, so it sits below
                 the file list: 500px of posters between the overview and the file
@@ -302,7 +300,6 @@
             adding_ids={@adding_recommendation_tmdb_ids}
             requesting_item_id={@requesting_recommendation_id}
             can_add={@can_create_media}
-            libraries={@target_library_candidates}
           />
         </div>
         <%!-- History. A sibling of the main column rather than part of it: past

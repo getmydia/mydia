@@ -237,7 +237,6 @@
               current_user={@current_user}
               adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
-              libraries={@movie_libraries}
               loading={if(index < 6, do: nil, else: "lazy")}
             />
           <% end %>
@@ -279,7 +278,6 @@
               current_user={@current_user}
               adding_ids={@adding_item_ids}
               requesting_item_id={@requesting_item_id}
-              libraries={@show_libraries}
               loading={if(index < 6, do: nil, else: "lazy")}
             />
           <% end %>
@@ -386,12 +384,6 @@
     loading={@detail_loading}
     current_user={@current_user}
     open={@selected_item != nil}
-    libraries={
-      if(@selected_item && @selected_item.media_type == :tv_show,
-        do: @show_libraries,
-        else: @movie_libraries
-      )
-    }
     picker_open={false}
     config_open={false}
   />

@@ -46,7 +46,6 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       metadata: metadata,
       loading: false,
       current_user: %{id: Ecto.UUID.generate(), role: "admin", username: "admin"},
-      libraries: [],
       rail: [],
       picker_open: Keyword.get(opts, :picker_open, false),
       config_open: Keyword.get(opts, :config_open, false)

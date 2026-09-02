@@ -15,7 +15,6 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
         loading={@detail_loading}
         current_user={@current_user}
         open={@selected_item != nil}
-        libraries={@libraries}
         picker_open={@library_picker != nil}
         config_open={false}
       />
@@ -299,7 +298,6 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign_new(:open, fn -> false end)
      |> assign_new(:loading, fn -> false end)
      |> assign_new(:metadata, fn -> nil end)
-     |> assign_new(:libraries, fn -> [] end)
      # Optional slot: the dashboard renders this modal without one.
      |> assign_new(:rail, fn -> [] end)
      # Optional slot: Dashboard and Discovery render the default header actions.

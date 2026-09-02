@@ -29,8 +29,7 @@ defmodule MydiaWeb.DiscoverComponentsTest do
         media_type: :movie,
         current_user: guest(),
         adding_ids: MapSet.new(),
-        requesting_item_id: nil,
-        libraries: []
+        requesting_item_id: nil
       }
       |> Map.merge(Map.delete(assigns_overrides, :item))
 
@@ -179,19 +178,9 @@ defmodule MydiaWeb.DiscoverComponentsTest do
   # again. See #465.
   describe "media_rail configure caret" do
     # The caret no longer gates on `libraries` at all: it opens the merged
-    # configure dialog directly, so it is worth reaching regardless of how
-    # many libraries the install has.
-    test "a rail card offers the caret when the host supplies several libraries" do
-      html =
-        rail(%{
-          libraries: [%{id: "a", path: "/m/a"}, %{id: "b", path: "/m/b"}]
-        })
-
-      assert html =~ "Add to Library"
-      assert html =~ "add-config-caret"
-    end
-
-    test "a rail card still offers the caret when the host supplies none" do
+    # configure dialog directly, so it renders unconditionally. `libraries`
+    # is not even an attr on media_rail/1 or trending_card/1 anymore.
+    test "a rail card offers the caret" do
       html = rail(%{})
 
       assert html =~ "Add to Library"

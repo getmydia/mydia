@@ -45,8 +45,6 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:selected_item, nil)
         |> assign(:selected_metadata, nil)
         |> assign(:detail_loading, false)
-        |> assign(:movie_libraries, MediaAddHelpers.candidate_libraries(:movie))
-        |> assign(:show_libraries, MediaAddHelpers.candidate_libraries(:tv_show))
         |> assign(:add_config, nil)
         |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
         |> load_dashboard_data()
@@ -72,8 +70,6 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:selected_item, nil)
         |> assign(:selected_metadata, nil)
         |> assign(:detail_loading, false)
-        |> assign(:movie_libraries, [])
-        |> assign(:show_libraries, [])
         |> assign(:add_config, nil)
         |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
       end

@@ -72,7 +72,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:selected_recommendations, [])
       |> assign(:load_error, nil)
       |> assign(:detail_loading, false)
-      |> assign(:libraries, [])
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current()
@@ -126,7 +125,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:loading, true)
         |> assign(:load_error, nil)
         |> assign(:has_more, false)
-        |> assign(:libraries, MediaAddHelpers.candidate_libraries(media_type))
 
       # Load genres if not loaded yet or media type changed
       socket =
@@ -161,8 +159,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:selected_language, nil)
        |> assign(:selected_year, nil)
        |> assign(:min_rating, nil)
-       |> assign(:sort_by, "popularity.desc")
-       |> assign(:libraries, MediaAddHelpers.candidate_libraries(:movie))}
+       |> assign(:sort_by, "popularity.desc")}
     end
   end
 
