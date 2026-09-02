@@ -9,6 +9,7 @@ defmodule MydiaWeb.DiscoverComponents do
   import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1]
 
   alias Mydia.Metadata.ImageUrl
+  alias Mydia.Metadata.Ref
   alias MydiaWeb.LibraryComponents
 
   use Phoenix.VerifiedRoutes,
@@ -33,9 +34,12 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :current_user, :map, required: true
   # The ids whose add is in flight. A MapSet rather than a single id because
   # every rail can have several adds running at once, and a single id has to
-  # pick an arbitrary survivor when one of them finishes (#459). Members are
-  # compared as strings: the detail page sets hold parsed integers while a
-  # SearchResult's provider_id is a string.
+  # pick an arbitrary survivor when one of them finishes (#459). Members are a
+  # mix by host: DiscoverLive holds `Ref.t()` tuples (matched by full ref
+  # equality, so a same-numbered TMDB and TVDB id cannot cross-clear each
+  # other's spinner); the franchise and recommendation rails hold plain
+  # tmdb ids, which are always TMDB and so compared as strings against
+  # `item.provider_id`.
   attr :adding_ids, MapSet, default: MapSet.new()
   attr :requesting_item_id, :string, default: nil
   attr :libraries, :list, default: []
@@ -156,12 +160,18 @@ defmodule MydiaWeb.DiscoverComponents do
     """
   end
 
-  # Members and provider ids are normalised to strings on both sides. The hosts
-  # genuinely disagree about the type and cannot cheaply be made to agree, and a
-  # mismatch under MapSet.member?/2 would silently draw no spinner at all.
+  # Members and provider ids are normalised to strings on both sides, except a
+  # ref-tuple member (DiscoverLive), which is compared by full ref equality
+  # instead. The hosts genuinely disagree about the shape and cannot cheaply be
+  # made to agree, and a mismatch under MapSet.member?/2 would silently draw no
+  # spinner at all.
   defp adding?(%{item: item, adding_ids: adding_ids}) do
     provider_id = to_string(item.provider_id)
-    Enum.any?(adding_ids, &(to_string(&1) == provider_id))
+
+    Enum.any?(adding_ids, fn
+      {_provider, _id} = ref -> ref == Ref.from_search_result(item)
+      other -> to_string(other) == provider_id
+    end)
   end
 
   @doc """
@@ -293,12 +303,14 @@ defmodule MydiaWeb.DiscoverComponents do
   attr :always_show_caret, :boolean, default: false
 
   defp trending_card_action(assigns) do
+    assigns = assign(assigns, :ref_param, Ref.to_param(Ref.from_search_result(assigns.item)))
+
     ~H"""
     <%= cond do %>
       <% not @item.in_library and guest?(@current_user) -> %>
         <button
           phx-click={@request_event}
-          phx-value-tmdb_id={@item.provider_id}
+          phx-value-ref={@ref_param}
           phx-value-media_type={@media_type}
           disabled={requested?(@item) or requesting?(@item, @requesting_item_id)}
           class="btn btn-primary btn-sm mt-2 w-full"
@@ -316,7 +328,7 @@ defmodule MydiaWeb.DiscoverComponents do
         <div class="join w-full mt-2">
           <button
             phx-click={@add_event}
-            phx-value-tmdb_id={@item.provider_id}
+            phx-value-ref={@ref_param}
             phx-value-media_type={@media_type}
             disabled={@adding}
             class="btn btn-primary btn-sm join-item flex-1"
@@ -329,7 +341,7 @@ defmodule MydiaWeb.DiscoverComponents do
           </button>
           <LibraryComponents.library_picker_button
             libraries={@libraries}
-            tmdb_id={@item.provider_id}
+            ref={@ref_param}
             media_type={@media_type}
             title={@item.title}
             always_show={@always_show_caret}

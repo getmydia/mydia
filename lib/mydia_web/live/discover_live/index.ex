@@ -12,6 +12,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Media.AddDefaults
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
@@ -40,8 +41,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {"primary_release_date.desc", "Newest First"},
     {"primary_release_date.asc", "Oldest First"}
   ]
-
-  @unsupported_media_type "That media type is not supported."
 
   # The provider returns fixed-size pages. Removing owned titles from one can
   # empty it entirely, which would look like the end of the results. Fetch the
@@ -237,37 +236,36 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   # Reached from the Configure entry inside library_picker_dialog/1. The item
   # is looked up from the current grid/rail rather than carried in the click's
-  # own params: the caret only ever sends tmdb_id and media_type, and the
-  # preview panel needs the title, poster and overview that only a real
-  # SearchResult carries.
+  # own params: the caret only ever sends ref and media_type, and the preview
+  # panel needs the title, poster and overview that only a real SearchResult
+  # carries.
   def handle_event(
         "open_add_config",
-        %{"tmdb_id" => provider_id, "media_type" => media_type},
+        %{"ref" => raw_ref, "media_type" => media_type},
         socket
       ) do
-    case parse_event_media_type(media_type) do
-      {:ok, media_type_atom} ->
-        defaults = AddDefaults.resolve(socket.assigns.current_user, media_type_atom)
+    with {:ok, ref} <- Ref.parse(raw_ref),
+         {:ok, media_type_atom} <- parse_event_media_type(media_type) do
+      defaults = AddDefaults.resolve(socket.assigns.current_user, media_type_atom)
 
-        item =
-          find_selectable_item(
-            socket.assigns.items,
-            socket.assigns.selected_recommendations,
-            provider_id
-          )
+      item =
+        find_selectable_item(
+          socket.assigns.items,
+          socket.assigns.selected_recommendations,
+          Ref.id(ref)
+        )
 
-        {:noreply,
-         socket
-         |> MediaAddHelpers.clear_library_picker()
-         |> assign(:add_config, %{
-           provider_id: provider_id,
-           media_type: media_type_atom,
-           defaults: defaults,
-           item: item
-         })}
-
-      :error ->
-        {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+      {:noreply,
+       socket
+       |> MediaAddHelpers.clear_library_picker()
+       |> assign(:add_config, %{
+         ref: ref,
+         media_type: media_type_atom,
+         defaults: defaults,
+         item: item
+       })}
+    else
+      :error -> {:noreply, put_flash(socket, :error, "Could not configure that item")}
     end
   end
 
@@ -277,7 +275,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   def handle_event("submit_add_config", %{"config" => params}, socket) do
     with :ok <- Authorization.authorize_create_media(socket),
-         %{provider_id: provider_id, media_type: media_type} <- socket.assigns.add_config do
+         %{ref: ref, media_type: media_type} <- socket.assigns.add_config do
       defaults =
         AddDefaults.resolve(socket.assigns.current_user, media_type,
           library_path_id: presence(params["library_path_id"]),
@@ -292,7 +290,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> AddDefaults.to_add_opts()
         |> Keyword.put(:search_on_add, defaults.search_on_add)
 
-      send(self(), {:add_media_to_library_with_opts, provider_id, media_type, opts})
+      send(self(), {:add_media_to_library_with_opts, ref, media_type, opts})
 
       {:noreply, assign(socket, :add_config, nil)}
     else
@@ -303,57 +301,51 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   def handle_event(
         "add_to_library",
-        %{"tmdb_id" => provider_id, "media_type" => media_type} = params,
+        %{"ref" => raw_ref, "media_type" => media_type} = params,
         socket
       ) do
-    with :ok <- Authorization.authorize_create_media(socket) do
+    with :ok <- Authorization.authorize_create_media(socket),
+         {:ok, ref} <- Ref.parse(raw_ref),
+         {:ok, media_type_atom} <- parse_event_media_type(media_type) do
       socket = MediaAddHelpers.clear_library_picker(socket)
 
-      case parse_event_media_type(media_type) do
-        {:ok, media_type_atom} ->
-          # An impatient double-click sends the event twice before the first
-          # handle_info runs. Without this guard the second add lands on a title
-          # the first just created, and resolves to :already_in_library, flashing
-          # a false failure for a title the user only meant to add once.
-          if MapSet.member?(socket.assigns.adding_item_ids, provider_id) do
-            {:noreply, socket}
-          else
-            socket =
-              assign(
-                socket,
-                :adding_item_ids,
-                MapSet.put(socket.assigns.adding_item_ids, provider_id)
-              )
+      # An impatient double-click sends the event twice before the first
+      # handle_info runs. Without this guard the second add lands on a title
+      # the first just created, and resolves to :already_in_library, flashing
+      # a false failure for a title the user only meant to add once.
+      if MapSet.member?(socket.assigns.adding_item_ids, ref) do
+        {:noreply, socket}
+      else
+        socket =
+          assign(socket, :adding_item_ids, MapSet.put(socket.assigns.adding_item_ids, ref))
 
-            send(
-              self(),
-              {:add_media_to_library, provider_id, media_type_atom, params["library_path_id"]}
-            )
+        send(
+          self(),
+          {:add_media_to_library, ref, media_type_atom, params["library_path_id"]}
+        )
 
-            {:noreply, socket}
-          end
-
-        :error ->
-          {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+        {:noreply, socket}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :error -> {:noreply, put_flash(socket, :error, "Could not add that item")}
     end
   end
 
   def handle_event(
         "request_media",
-        %{"tmdb_id" => provider_id, "media_type" => media_type},
+        %{"ref" => raw_ref, "media_type" => media_type},
         socket
       ) do
     with :ok <- Authorization.authorize_submit_request(socket),
+         {:ok, ref} <- Ref.parse(raw_ref),
          {:ok, media_type_atom} <- parse_event_media_type(media_type) do
-      socket = assign(socket, :requesting_item_id, provider_id)
-      send(self(), {:request_media, provider_id, media_type_atom})
+      socket = assign(socket, :requesting_item_id, to_string(Ref.id(ref)))
+      send(self(), {:request_media, ref, media_type_atom})
       {:noreply, socket}
     else
       {:unauthorized, socket} -> {:noreply, socket}
-      :error -> {:noreply, put_flash(socket, :error, @unsupported_media_type)}
+      :error -> {:noreply, put_flash(socket, :error, "Could not request that item")}
     end
   end
 
@@ -503,10 +495,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, socket}
   end
 
-  def handle_info({:fetch_detail_metadata, provider_id, media_type}, socket) do
-    opts = put_source_provider([], provider_id, socket)
+  def handle_info({:fetch_detail_metadata, _provider_id, media_type}, socket) do
+    # `selected_item` was just found and assigned by the show_details handler
+    # that sent this message, so its own ref already carries the provenance a
+    # click's bare id cannot: no need to re-derive the provider from opts.
+    ref = Ref.from_search_result(socket.assigns.selected_item)
 
-    case MediaAddHelpers.fetch_detail_metadata(provider_id, media_type, nil, opts) do
+    case MediaAddHelpers.fetch_detail_metadata(ref, media_type, nil) do
       {:ok, metadata} ->
         {:noreply,
          socket
@@ -530,7 +525,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
      end)}
   end
 
-  def handle_info({:add_media_to_library, provider_id, media_type, library_path_id}, socket) do
+  def handle_info({:add_media_to_library, ref, media_type, library_path_id}, socket) do
     defaults =
       AddDefaults.resolve(socket.assigns.current_user, media_type,
         library_path_id: presence(library_path_id)
@@ -541,56 +536,27 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> AddDefaults.to_add_opts()
       |> Keyword.put(:search_on_add, defaults.search_on_add)
 
-    add_with_opts(provider_id, media_type, opts, socket)
+    add_with_opts(ref, media_type, opts, socket)
   end
 
-  def handle_info({:add_media_to_library_with_opts, provider_id, media_type, opts}, socket) do
-    add_with_opts(provider_id, media_type, opts, socket)
+  def handle_info({:add_media_to_library_with_opts, ref, media_type, opts}, socket) do
+    add_with_opts(ref, media_type, opts, socket)
   end
 
-  def handle_info({:request_media, provider_id, media_type}, socket) do
+  def handle_info({:request_media, ref, media_type}, socket) do
     # Also resolves against the recommendations rail. A rail title is not in
     # `items`, so searching only that list made a guest's Request click from
     # inside the modal silently do nothing.
     case find_selectable_item(
            socket.assigns.items,
            socket.assigns.selected_recommendations,
-           provider_id
+           Ref.id(ref)
          ) do
       nil ->
         {:noreply, assign(socket, :requesting_item_id, nil)}
 
       item ->
         {:noreply, submit_request(socket, item, media_type)}
-    end
-  end
-
-  # Tells the add flow which provider the clicked id came from.
-  #
-  # `Relay.search/3` routes every TV search to TVDB, so a TV search result's
-  # `provider_id` is a TVDB series id even though the card ships it in a param
-  # named `tmdb_id`. `Mydia.Media.Add` defaults to TMDB, so without this the
-  # add fetches a TVDB id from `/tmdb/tv/shows/:id`: usually a 404 surfaced as
-  # "Failed to fetch metadata: ... Media not found", and worse when the id
-  # happens to name a real TMDB show, since the row is then built from the
-  # wrong title.
-  #
-  # Resolved from the item server-side rather than trusted from the click,
-  # mirroring `MediaRequestHelpers.build_request_attrs/3`, which has branched on
-  # `item.provider` for the Request button all along. An id that no longer
-  # resolves against the current page falls through to the TMDB default, which
-  # is what trending, discover and the recommendations rail all return.
-  defp put_source_provider(opts, provider_id, socket) do
-    item =
-      find_selectable_item(
-        socket.assigns.items,
-        socket.assigns.selected_recommendations,
-        provider_id
-      )
-
-    case item && Map.get(item, :provider) do
-      :tvdb -> Keyword.put(opts, :provider, :tvdb)
-      _ -> opts
     end
   end
 
@@ -601,13 +567,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp presence(""), do: nil
   defp presence(value), do: value
 
-  defp add_with_opts(provider_id, media_type, opts, socket) do
+  defp add_with_opts(ref, media_type, opts, socket) do
     case MediaAddHelpers.handle_add_media_to_library(
-           provider_id,
+           ref,
            media_type,
            socket.assigns.library_status_map,
            nil,
-           put_source_provider(opts, provider_id, socket)
+           opts
          ) do
       {:ok, media_item, updated_map} ->
         items =
@@ -626,7 +592,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
          |> assign_visible_items()
@@ -641,7 +607,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> assign(:library_status_map, updated_map)
          |> assign(:items, items)
          |> assign_visible_items()
@@ -650,7 +616,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       {:error, {:changeset, changeset}} ->
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> put_flash(
            :error,
            "Failed to add: #{MediaAddHelpers.format_changeset_errors(changeset)}"
@@ -659,7 +625,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       {:error, {:metadata, reason}} ->
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> put_flash(:error, "Failed to fetch metadata: #{inspect(reason)}")}
     end
   end
@@ -720,10 +686,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
     |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
   end
 
-  # Four completion clauses all retire the same id. A MapSet rather than a
-  # single id so a second add cannot blank the first one's spinner (#459).
-  defp clear_adding(socket, provider_id) do
-    assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, provider_id))
+  # Four completion clauses all retire the same ref. A MapSet rather than a
+  # single ref so a second add cannot blank the first one's spinner (#459).
+  # Keyed on the parsed ref (not the raw string), matching what add_to_library
+  # puts in on the way in.
+  defp clear_adding(socket, ref) do
+    assign(socket, :adding_item_ids, MapSet.delete(socket.assigns.adding_item_ids, ref))
   end
 
   defp request_error_message(:duplicate_media), do: "That title is already in the library."

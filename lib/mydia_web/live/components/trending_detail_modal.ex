@@ -71,10 +71,13 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   """
   use MydiaWeb, :live_component
 
+  alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.Video
 
   @impl true
   def render(assigns) do
+    assigns = assign(assigns, :item_ref, item_ref(assigns.item))
+
     ~H"""
     <dialog
       id={@id}
@@ -161,7 +164,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                       <%= if @current_user && @current_user.role == "guest" do %>
                         <button
                           phx-click="request_media"
-                          phx-value-tmdb_id={@item.provider_id}
+                          phx-value-ref={@item_ref}
                           phx-value-media_type={media_type_string(@item)}
                           disabled={Map.get(@item, :request_status) != nil}
                           class="btn btn-primary"
@@ -176,7 +179,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                         <div class="join">
                           <button
                             phx-click="add_to_library"
-                            phx-value-tmdb_id={@item.provider_id}
+                            phx-value-ref={@item_ref}
                             phx-value-media_type={media_type_string(@item)}
                             class="btn btn-primary join-item"
                           >
@@ -184,7 +187,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                           </button>
                           <.library_picker_button
                             libraries={@libraries}
-                            tmdb_id={@item.provider_id}
+                            ref={@item_ref}
                             media_type={media_type_string(@item)}
                             title={@item.title}
                           />
@@ -308,6 +311,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   end
 
   # Helper functions for accessing data from either SearchResult (item) or MediaMetadata
+
+  # `@item` is nil while the modal is closed (`open={@selected_item != nil}`),
+  # and `render/1` runs on every diff regardless, so this guards against
+  # building a ref out of nothing on a render the template never uses it in.
+  defp item_ref(nil), do: nil
+  defp item_ref(item), do: Ref.to_param(Ref.from_search_result(item))
 
   defp title(item, nil), do: item.title
   defp title(_item, metadata), do: metadata.title

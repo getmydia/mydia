@@ -73,7 +73,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
 
       view
       |> element(
-        ~s(button[phx-click="request_media"][phx-value-tmdb_id="#{MetadataStubProvider.movie_tmdb_id()}"])
+        ~s(button[phx-click="request_media"][phx-value-ref="tmdb:#{MetadataStubProvider.movie_tmdb_id()}"])
       )
       |> render_click()
 
@@ -140,7 +140,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
 
       view
       |> element(
-        ~s(button[phx-click="request_media"][phx-value-tmdb_id="#{MetadataStubProvider.series_tvdb_id()}"])
+        ~s(button[phx-click="request_media"][phx-value-ref="tvdb:#{MetadataStubProvider.series_tvdb_id()}"])
       )
       |> render_click()
 

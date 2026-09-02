@@ -85,7 +85,7 @@ defmodule MydiaWeb.DiscoverComponentsTest do
       html = card(%{})
 
       assert html =~ ~s(phx-click="request_media")
-      assert html =~ ~s(phx-value-tmdb_id="693134")
+      assert html =~ ~s(phx-value-ref="tmdb:693134")
       assert html =~ "Request"
       refute html =~ "/request/movie?tmdb_id="
     end

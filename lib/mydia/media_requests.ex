@@ -112,13 +112,10 @@ defmodule Mydia.MediaRequests do
   end
 
   defp resolve_media_attrs(request, opts) do
-    {provider_id, provider} = request_provider(request)
+    ref = MediaRequest.external_ref(request)
     media_type = if request.media_type == "movie", do: :movie, else: :tv_show
 
-    case Add.resolve_attrs(provider_id, media_type, opts[:config],
-           provider: provider,
-           monitored: true
-         ) do
+    case Add.resolve_attrs(ref, media_type, opts[:config], monitored: true) do
       {:ok, media_attrs} ->
         {:ok, media_attrs}
 
@@ -130,17 +127,6 @@ defmodule Mydia.MediaRequests do
         {:error, {:metadata, reason}}
     end
   end
-
-  # A request may carry a TVDB id with no TMDB counterpart (the series search
-  # page stores whichever the provider returned). Sending a TVDB id down the
-  # TMDB path would fetch the wrong show.
-  defp request_provider(%MediaRequest{tmdb_id: tmdb_id}) when is_integer(tmdb_id),
-    do: {tmdb_id, :tmdb}
-
-  defp request_provider(%MediaRequest{tvdb_id: tvdb_id}) when is_integer(tvdb_id),
-    do: {tvdb_id, :tvdb}
-
-  defp request_provider(_request), do: {nil, :tmdb}
 
   defp insert_approval(request, media_attrs, attrs, opts) do
     Multi.new()

@@ -68,7 +68,7 @@ defmodule MydiaWeb.DiscoverLive.AutoSearchTest do
 
     {:ok, media_item, _map} =
       MediaAddHelpers.handle_add_media_to_library(
-        provider_id,
+        {:tmdb, provider_id},
         :movie,
         %{},
         relay_config(bypass),
@@ -90,7 +90,7 @@ defmodule MydiaWeb.DiscoverLive.AutoSearchTest do
 
     {:ok, media_item, _map} =
       MediaAddHelpers.handle_add_media_to_library(
-        provider_id,
+        {:tmdb, provider_id},
         :movie,
         %{},
         relay_config(bypass),

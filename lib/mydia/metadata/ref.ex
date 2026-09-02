@@ -71,10 +71,18 @@ defmodule Mydia.Metadata.Ref do
   Raises when `provider_id` is not an integer. A `SearchResult` is built by our
   own provider parsing, so a non-integer id there is a parsing bug worth
   surfacing rather than a user input worth tolerating.
+
+  Accepts a bare map carrying `provider_id`, not only a real `%SearchResult{}`:
+  `DiscoverComponents.trending_card/1` draws its cards from several producers
+  (search results, franchise entries, hand-built rail items in tests) that do
+  not all construct the struct. A missing `:provider` key defaults to `:tmdb`
+  via `normalize_provider/1`, same as an explicitly nil one -- every one of
+  these shapes was TMDB-only before refs existed, so this preserves that
+  default rather than widening what the shared card can be handed.
   """
-  @spec from_search_result(SearchResult.t()) :: t()
-  def from_search_result(%SearchResult{provider: provider, provider_id: provider_id}) do
-    {normalize_provider(provider), String.to_integer(to_string(provider_id))}
+  @spec from_search_result(SearchResult.t() | map()) :: t()
+  def from_search_result(%{provider_id: provider_id} = item) do
+    {normalize_provider(Map.get(item, :provider)), String.to_integer(to_string(provider_id))}
   end
 
   # `:metadata_relay` names the config type that served a response, not the

@@ -199,7 +199,7 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
       assert has_element?(view, "#discover-grid h3", "Glass Horizon")
 
       view
-      |> element("button[phx-click='add_to_library'][phx-value-tmdb_id='#{addable_id}']")
+      |> element("button[phx-click='add_to_library'][phx-value-ref='tmdb:#{addable_id}']")
       |> render_click()
 
       wait_until(fn -> not has_element?(view, "#discover-grid h3", "Glass Horizon") end)

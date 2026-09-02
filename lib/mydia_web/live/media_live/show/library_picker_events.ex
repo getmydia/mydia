@@ -14,6 +14,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryPickerEvents do
   """
 
   alias Mydia.Media.FranchiseEntry
+  alias Mydia.Metadata.Ref
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
@@ -38,22 +39,26 @@ defmodule MydiaWeb.MediaLive.Show.LibraryPickerEvents do
   The dialog is closed first, unconditionally: leaving it open while an async
   add runs would let a second choice queue behind the first.
   """
-  def add_from_library_picker(%{"tmdb_id" => tmdb_id} = params, socket) do
+  def add_from_library_picker(%{"ref" => raw_ref} = params, socket) do
     socket = MediaAddHelpers.clear_library_picker(socket)
 
-    if franchise_entry?(socket.assigns[:franchise], tmdb_id) do
-      FranchiseEvents.add_franchise_movie(params, socket)
-    else
-      RecommendationEvents.add_recommendation(params, socket)
+    case Ref.parse(raw_ref) do
+      {:ok, ref} ->
+        if franchise_entry?(socket.assigns[:franchise], Ref.id(ref)) do
+          FranchiseEvents.add_franchise_movie(params, socket)
+        else
+          RecommendationEvents.add_recommendation(params, socket)
+        end
+
+      :error ->
+        {:noreply, socket}
     end
   end
 
   defp franchise_entry?(nil, _tmdb_id), do: false
 
   defp franchise_entry?(%{entries: entries}, tmdb_id) do
-    Enum.any?(entries, fn %FranchiseEntry{} = entry ->
-      to_string(entry.tmdb_id) == to_string(tmdb_id)
-    end)
+    Enum.any?(entries, fn %FranchiseEntry{} = entry -> entry.tmdb_id == tmdb_id end)
   end
 
   defp franchise_entry?(_franchise, _tmdb_id), do: false

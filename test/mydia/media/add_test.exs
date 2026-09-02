@@ -64,7 +64,7 @@ defmodule Mydia.Media.AddTest do
       id = System.unique_integer([:positive])
       stub_tmdb_movie(bypass, id, "Poster Movie", "/poster.jpg")
 
-      assert {:ok, attrs} = Add.resolve_attrs(id, :movie, relay_config(bypass))
+      assert {:ok, attrs} = Add.resolve_attrs({:tmdb, id}, :movie, relay_config(bypass))
 
       assert attrs.type == "movie"
       assert attrs.title == "Poster Movie"
@@ -77,7 +77,8 @@ defmodule Mydia.Media.AddTest do
       id = System.unique_integer([:positive])
       Bypass.down(bypass)
 
-      assert {:error, {:metadata, _reason}} = Add.resolve_attrs(id, :movie, relay_config(bypass))
+      assert {:error, {:metadata, _reason}} =
+               Add.resolve_attrs({:tmdb, id}, :movie, relay_config(bypass))
     end
   end
 
@@ -87,7 +88,7 @@ defmodule Mydia.Media.AddTest do
       id = System.unique_integer([:positive])
       stub_tmdb_movie(bypass, id, "Created Movie", "/created.jpg")
 
-      assert {:ok, item} = Add.from_provider(id, :movie, relay_config(bypass))
+      assert {:ok, item} = Add.from_provider({:tmdb, id}, :movie, relay_config(bypass))
 
       assert item.title == "Created Movie"
       assert item.tmdb_id == id
@@ -99,7 +100,9 @@ defmodule Mydia.Media.AddTest do
       id = System.unique_integer([:positive])
       Bypass.down(bypass)
 
-      assert {:error, {:metadata, _reason}} = Add.from_provider(id, :movie, relay_config(bypass))
+      assert {:error, {:metadata, _reason}} =
+               Add.from_provider({:tmdb, id}, :movie, relay_config(bypass))
+
       refute Mydia.Media.get_media_item_by_tmdb(id)
     end
   end
@@ -129,8 +132,7 @@ defmodule Mydia.Media.AddTest do
         |> Plug.Conn.resp(200, Jason.encode!(body))
       end)
 
-      assert {:ok, attrs} =
-               Add.resolve_attrs(tvdb_id, :tv_show, relay_config(bypass), provider: :tvdb)
+      assert {:ok, attrs} = Add.resolve_attrs({:tvdb, tvdb_id}, :tv_show, relay_config(bypass))
 
       assert attrs.tvdb_id == tvdb_id
       assert attrs.tmdb_id == tmdb_id
@@ -181,7 +183,7 @@ defmodule Mydia.Media.AddTest do
         |> Plug.Conn.resp(200, Jason.encode!(%{"data" => []}))
       end)
 
-      assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+      assert {:ok, attrs} = Add.resolve_attrs({:tmdb, tmdb_id}, :tv_show, relay_config(bypass))
 
       assert attrs.tvdb_id == tvdb_id
       refute_receive :searched
@@ -230,7 +232,7 @@ defmodule Mydia.Media.AddTest do
       # :tmdb-primary clause, which pipes build_media_item_attrs/3's output
       # through lookup_and_add_tvdb_id/2 -- the only path that reaches the
       # guard clause under test.
-      assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+      assert {:ok, attrs} = Add.resolve_attrs({:tmdb, tmdb_id}, :tv_show, relay_config(bypass))
 
       assert attrs.tvdb_id == exact_tvdb_id
     end
@@ -316,7 +318,9 @@ defmodule Mydia.Media.AddTest do
 
       {attrs, log} =
         with_log(fn ->
-          assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+          assert {:ok, attrs} =
+                   Add.resolve_attrs({:tmdb, tmdb_id}, :tv_show, relay_config(bypass))
+
           attrs
         end)
 
@@ -361,7 +365,9 @@ defmodule Mydia.Media.AddTest do
 
       {attrs, log} =
         with_log(fn ->
-          assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+          assert {:ok, attrs} =
+                   Add.resolve_attrs({:tmdb, tmdb_id}, :tv_show, relay_config(bypass))
+
           attrs
         end)
 
@@ -405,7 +411,7 @@ defmodule Mydia.Media.AddTest do
         %{"tvdb_id" => fuzzy_tvdb_id, "name" => "Missing Its Tvdb Id", "year" => "2011"}
       ])
 
-      assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+      assert {:ok, attrs} = Add.resolve_attrs({:tmdb, tmdb_id}, :tv_show, relay_config(bypass))
 
       assert attrs.tvdb_id == fuzzy_tvdb_id
       assert is_nil(attrs.metadata.external_ids.tvdb)
@@ -436,7 +442,7 @@ defmodule Mydia.Media.AddTest do
       stub_tmdb_tv_show(bypass, tmdb_id, "Exact Xref", exact_tvdb_id)
       stub_tvdb_search(bypass, [])
 
-      assert {:ok, attrs} = Add.resolve_attrs(tmdb_id, :tv_show, relay_config(bypass))
+      assert {:ok, attrs} = Add.resolve_attrs({:tmdb, tmdb_id}, :tv_show, relay_config(bypass))
 
       assert attrs.metadata.external_ids.tvdb == exact_tvdb_id
 

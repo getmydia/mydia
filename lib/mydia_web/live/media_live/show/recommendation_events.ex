@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias Mydia.Media
   alias Mydia.Media.Add
   alias Mydia.Media.Recommendations
+  alias Mydia.Metadata.Ref
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
@@ -83,15 +84,13 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   overwrites rather than cancels under an existing key, which would silently drop
   the first result.
   """
-  def add_recommendation(%{"tmdb_id" => tmdb_id} = params, socket) do
+  def add_recommendation(%{"ref" => raw_ref} = params, socket) do
     media_type = if socket.assigns.media_item.type == "tv_show", do: :tv_show, else: :movie
 
     with :ok <- Authorization.authorize_create_media(socket),
+         {:ok, ref} <- Ref.parse(raw_ref),
          {:ok, opts} <- MediaAddHelpers.library_path_opts(params["library_path_id"], media_type) do
-      case Integer.parse(tmdb_id) do
-        {parsed, ""} -> dispatch_add(parsed, opts, socket)
-        _ -> {:noreply, socket}
-      end
+      dispatch_add(ref, opts, socket)
     else
       {:unauthorized, socket} ->
         {:noreply, socket}
@@ -99,6 +98,9 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       {:error, :unknown_library} ->
         {:noreply,
          put_flash(socket, :error, "That library is no longer available. Nothing was added.")}
+
+      :error ->
+        {:noreply, socket}
     end
   end
 
@@ -106,10 +108,13 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   # tmdb_id unique index and flash a failure for a row the first add just
   # created, so a repeat for an id already in flight is dropped.
   #
-  # The in-flight set stays keyed on tmdb_id alone and `opts` rides beside it.
-  # Folding the library into the key would let a double-click through two
+  # The in-flight set stays keyed on the tmdb id alone (recommendations are
+  # always TMDB-sourced, so the ref's tag never varies) and `opts` rides beside
+  # it. Folding the library into the key would let a double-click through two
   # different libraries past this guard and onto the unique index.
-  defp dispatch_add(tmdb_id, opts, socket) do
+  defp dispatch_add(ref, opts, socket) do
+    tmdb_id = Ref.id(ref)
+
     if MapSet.member?(socket.assigns.adding_recommendation_tmdb_ids, tmdb_id) do
       {:noreply, socket}
     else
@@ -120,7 +125,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
         socket
         |> mark_in_flight(tmdb_id)
         |> start_async({:add_recommendation, tmdb_id}, fn ->
-          perform_add(media_item, tmdb_id, config, opts)
+          perform_add(media_item, ref, config, opts)
         end)
 
       {:noreply, socket}
@@ -134,14 +139,18 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   needs its own handler for it: the card's event reaches `MediaLive.Show`, which
   otherwise has no `request_media` clause at all.
   """
-  def request_recommendation(%{"tmdb_id" => tmdb_id}, socket) do
-    with :ok <- Authorization.authorize_submit_request(socket) do
-      case Enum.find(socket.assigns.recommendations, &(to_string(&1.provider_id) == tmdb_id)) do
+  def request_recommendation(%{"ref" => raw_ref}, socket) do
+    with :ok <- Authorization.authorize_submit_request(socket),
+         {:ok, ref} <- Ref.parse(raw_ref) do
+      id_string = to_string(Ref.id(ref))
+
+      case Enum.find(socket.assigns.recommendations, &(to_string(&1.provider_id) == id_string)) do
         nil -> {:noreply, socket}
-        item -> submit_request(item, tmdb_id, socket)
+        item -> submit_request(item, id_string, socket)
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
+      :error -> {:noreply, socket}
     end
   end
 
@@ -182,11 +191,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   Performs the add. Public so it can be exercised directly in tests without a
   live process.
   """
-  def perform_add(media_item, tmdb_id, config, opts \\ []) do
+  def perform_add(media_item, ref, config, opts \\ []) do
     media_type = if media_item.type == "tv_show", do: :tv_show, else: :movie
 
     MediaAddHelpers.handle_add_media_to_library(
-      to_string(tmdb_id),
+      ref,
       media_type,
       %{},
       config,

@@ -9,6 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
   """
   use MydiaWeb, :html
 
+  alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.DiscoverComponents
 
   @doc """
@@ -56,21 +57,29 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseComponents do
     """
   end
 
+  # A franchise entry is a TMDB collection member -- there is no TVDB
+  # equivalent -- so it is built as a real %SearchResult{} with `provider:
+  # :tmdb` rather than a bare map. `Ref.from_search_result/1`, which the shared
+  # card calls to build its `phx-value-ref`, pattern-matches on the struct.
   defp items(franchise) do
     Enum.map(franchise.entries, fn entry ->
-      %{
-        provider_id: entry.tmdb_id,
+      %SearchResult{
+        provider_id: to_string(entry.tmdb_id),
+        provider: :tmdb,
+        media_type: :movie,
         title: entry.title,
         year: entry.year,
         poster_path: entry.poster_path,
-        vote_average: entry.vote_average,
+        vote_average: entry.vote_average
+      }
+      |> Map.merge(%{
         in_library: entry.in_library?,
         monitored: entry.monitored,
         id: entry.media_item_id,
         navigate: navigate_to(entry),
         current: entry.current?,
         request_status: entry.request_status
-      }
+      })
     end)
   end
 

@@ -57,7 +57,7 @@ defmodule MydiaWeb.MediaLive.Show.RailLibraryTargetTest do
       config = bypass_relay_config(added_tmdb_id, "Recommended")
 
       assert {:ok, added} =
-               RecommendationEvents.perform_add(source, added_tmdb_id, config,
+               RecommendationEvents.perform_add(source, {:tmdb, added_tmdb_id}, config,
                  library_path_id: to_string(chosen.id)
                )
 
@@ -71,7 +71,8 @@ defmodule MydiaWeb.MediaLive.Show.RailLibraryTargetTest do
       added_tmdb_id = unique_provider_id()
       config = bypass_relay_config(added_tmdb_id, "Recommended")
 
-      assert {:ok, added} = RecommendationEvents.perform_add(source, added_tmdb_id, config)
+      assert {:ok, added} =
+               RecommendationEvents.perform_add(source, {:tmdb, added_tmdb_id}, config)
 
       # No library_path_id is written at add time when no choice was made:
       # `library_path_opts/2` returns `{:ok, []}` for that case, same as
@@ -95,7 +96,7 @@ defmodule MydiaWeb.MediaLive.Show.RailLibraryTargetTest do
       config = bypass_relay_config(added_tmdb_id, "Second")
 
       assert {:ok, added} =
-               FranchiseEvents.perform_add(source, added_tmdb_id, config,
+               FranchiseEvents.perform_add(source, {:tmdb, added_tmdb_id}, config,
                  library_path_id: to_string(chosen.id)
                )
 
@@ -109,7 +110,7 @@ defmodule MydiaWeb.MediaLive.Show.RailLibraryTargetTest do
       added_tmdb_id = unique_provider_id()
       config = bypass_relay_config(added_tmdb_id, "Second")
 
-      assert {:ok, added} = FranchiseEvents.perform_add(source, added_tmdb_id, config)
+      assert {:ok, added} = FranchiseEvents.perform_add(source, {:tmdb, added_tmdb_id}, config)
 
       # See the mirrored comment in the recommendations describe block above:
       # no library_path_id is written at add time when no choice was made.

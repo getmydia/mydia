@@ -116,7 +116,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tvdb_search(bypass, tvdb_id, "TMDB Lib Show", 2019)
 
       assert {:ok, item, _map} =
-               MediaAddHelpers.handle_add_media_to_library(to_string(id), :tv_show, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :tv_show, %{}, config)
 
       assert item.type == "tv_show"
       assert item.metadata_source == :tmdb
@@ -137,7 +137,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
-                 to_string(tmdb_id),
+                 {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
                  config
@@ -157,7 +157,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
-                 to_string(tmdb_id),
+                 {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
                  config
@@ -179,7 +179,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
-                 to_string(tmdb_id),
+                 {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
                  config
@@ -196,7 +196,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tmdb_movie(bypass, id, "A Movie", 2019)
 
       assert {:ok, item, _map} =
-               MediaAddHelpers.handle_add_media_to_library(to_string(id), :movie, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :movie, %{}, config)
 
       assert item.type == "movie"
       assert item.metadata_source == nil
@@ -235,7 +235,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tmdb_movie(bypass, id, "Already Added", 2019)
 
       assert {:already_in_library, item, updated_map} =
-               MediaAddHelpers.handle_add_media_to_library(to_string(id), :movie, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :movie, %{}, config)
 
       assert item.id == existing.id
       assert updated_map[id][:in_library] == true
@@ -263,25 +263,22 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tmdb_show(bypass, id, "Preview Show", 2019)
 
       assert {:ok, metadata} =
-               MediaAddHelpers.fetch_detail_metadata(to_string(id), :tv_show, config)
+               MediaAddHelpers.fetch_detail_metadata({:tmdb, id}, :tv_show, config)
 
       assert metadata.title == "Preview Show"
     end
 
     # A Discover TV search result is TVDB-sourced: `Relay.search/3` routes
-    # `:tv_show` to `/tvdb/search`, so the id the preview is opened with is a
-    # TVDB series id. Asking TMDB for it is a 404, which left every TV search
+    # `:tv_show` to `/tvdb/search`, so the ref the preview is opened with tags
+    # a TVDB series id. Asking TMDB for it is a 404, which left every TV search
     # result's preview panel blank. Same root cause as the add failing with
     # "Media not found: <tvdb id>".
-    test "fetches a TVDB-sourced id from TVDB rather than TMDB",
-         %{bypass: bypass, config: config} do
+    test "a tvdb ref fetches from TVDB", %{bypass: bypass, config: config} do
       library_path_fixture(%{type: "series", tv_metadata_source: :tvdb})
 
       id = System.unique_integer([:positive])
       stub_tvdb_extended(bypass, id, "Harbour Lights")
 
-      # What the real relay does with a TVDB id on a TMDB route, and what the
-      # preview used to ask for.
       Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{id}", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -289,9 +286,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       end)
 
       assert {:ok, metadata} =
-               MediaAddHelpers.fetch_detail_metadata(to_string(id), :tv_show, config,
-                 provider: :tvdb
-               )
+               MediaAddHelpers.fetch_detail_metadata({:tvdb, id}, :tv_show, config)
 
       assert metadata.title == "Harbour Lights"
     end
@@ -386,16 +381,16 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       updated =
         MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "693134",
+          "ref" => "tmdb:693134",
           "media_type" => "movie",
-          "title" => "Dune: Part Two"
+          "title" => "Lunar Static: Part Two"
         })
 
       picker = updated.assigns.library_picker
 
-      assert picker.tmdb_id == "693134"
+      assert picker.ref == {:tmdb, 693_134}
       assert picker.media_type == :movie
-      assert picker.title == "Dune: Part Two"
+      assert picker.title == "Lunar Static: Part Two"
       assert length(picker.libraries) == 2
     end
 
@@ -405,7 +400,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       updated =
         MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "1",
+          "ref" => "tmdb:1",
           "media_type" => "movie"
         })
 
@@ -415,8 +410,18 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     test "an unrecognised media type opens nothing" do
       updated =
         MediaAddHelpers.put_library_picker(socket(), %{
-          "tmdb_id" => "1",
+          "ref" => "tmdb:1",
           "media_type" => "podcast"
+        })
+
+      assert updated.assigns.library_picker == nil
+    end
+
+    test "a malformed ref opens nothing" do
+      updated =
+        MediaAddHelpers.put_library_picker(socket(), %{
+          "ref" => "imdb:tt3230854",
+          "media_type" => "movie"
         })
 
       assert updated.assigns.library_picker == nil
@@ -424,7 +429,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
     test "clearing closes the dialog" do
       opened = %Phoenix.LiveView.Socket{
-        assigns: %{__changed__: %{}, library_picker: %{tmdb_id: "1"}}
+        assigns: %{__changed__: %{}, library_picker: %{ref: {:tmdb, 1}}}
       }
 
       assert MediaAddHelpers.clear_library_picker(opened).assigns.library_picker == nil

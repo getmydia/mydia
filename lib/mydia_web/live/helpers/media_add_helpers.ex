@@ -11,6 +11,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   alias Mydia.Media.Add
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Settings
 
   @doc """
@@ -40,15 +41,17 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   The candidate list is read here rather than carried from mount, so a library
   added or unmonitored since the page loaded cannot show up as a stale option.
 
-  An unrecognised media type returns the socket untouched: the caret only ever
-  sends "movie" or "tv_show", so anything else is a forged event and opening a
-  dialog with an empty list would be worse than doing nothing.
+  An unrecognised media type, or a `ref` that does not parse, returns the
+  socket untouched: the caret only ever sends a well-formed ref and "movie" or
+  "tv_show", so anything else is a forged event and opening a dialog with an
+  empty list (or a ref nothing downstream can use) would be worse than doing
+  nothing.
   """
   @spec put_library_picker(Phoenix.LiveView.Socket.t(), map()) :: Phoenix.LiveView.Socket.t()
-  def put_library_picker(socket, %{"tmdb_id" => tmdb_id, "media_type" => media_type} = params) do
-    case media_type do
-      "movie" -> assign_library_picker(socket, tmdb_id, :movie, params["title"])
-      "tv_show" -> assign_library_picker(socket, tmdb_id, :tv_show, params["title"])
+  def put_library_picker(socket, %{"ref" => raw_ref, "media_type" => media_type} = params) do
+    case {Ref.parse(raw_ref), media_type} do
+      {{:ok, ref}, "movie"} -> assign_library_picker(socket, ref, :movie, params["title"])
+      {{:ok, ref}, "tv_show"} -> assign_library_picker(socket, ref, :tv_show, params["title"])
       _ -> socket
     end
   end
@@ -63,9 +66,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
     Phoenix.Component.assign(socket, :library_picker, nil)
   end
 
-  defp assign_library_picker(socket, tmdb_id, media_type, title) do
+  defp assign_library_picker(socket, ref, media_type, title) do
     Phoenix.Component.assign(socket, :library_picker, %{
-      tmdb_id: tmdb_id,
+      ref: ref,
       media_type: media_type,
       title: title || "",
       libraries: candidate_libraries(media_type)
@@ -169,27 +172,25 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   convenience on top of it.
   """
   def handle_add_media_to_library(
-        provider_id,
+        ref,
         media_type,
         library_status_map,
         config \\ nil,
         opts \\ []
       ) do
     {search_on_add, add_opts} = Keyword.pop(opts, :search_on_add, false)
-    provider_id_int = Add.parse_provider_id(provider_id)
 
-    case Add.from_provider(provider_id, media_type, config, add_opts) do
+    case Add.from_provider(ref, media_type, config, add_opts) do
       {:ok, media_item} ->
         maybe_queue_search(media_item, search_on_add)
 
-        {:ok, media_item,
-         update_library_status_map(library_status_map, media_item, provider_id_int)}
+        {:ok, media_item, update_library_status_map(library_status_map, media_item, Ref.id(ref))}
 
       # Not an error from here up: the show the user asked for is in the
       # library. Callers flash it as info and flip the card.
       {:error, {:already_in_library, media_item}} ->
         {:already_in_library, media_item,
-         update_library_status_map(library_status_map, media_item, provider_id_int)}
+         update_library_status_map(library_status_map, media_item, Ref.id(ref))}
 
       {:error, _} = error ->
         error
@@ -232,33 +233,29 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   For movies, fetches TMDB metadata directly.
 
-  Pass `provider: :tvdb` when `provider_id` is already a TVDB series id, which
-  is what every Discover TV search result carries. The TMDB-first path above
-  only makes sense for a TMDB id, and the relay 404s a TVDB id on TMDB's route.
+  The ref's own tag decides the provider: a `{:tvdb, id}` ref (what every
+  Discover TV search result carries, since `Relay.search/3` routes `:tv_show`
+  to `/tvdb/search`) fetches TVDB directly, with no TMDB lookup to start from.
 
   An optional `config` can be injected for testing; defaults to
   `Metadata.default_relay_config()`.
   """
-  def fetch_detail_metadata(provider_id, media_type, config \\ nil, opts \\ []) do
-    config = config || Metadata.default_relay_config()
+  def fetch_detail_metadata(ref, media_type, config \\ nil)
 
-    cond do
-      media_type != :tv_show ->
-        Metadata.fetch_by_id(config, provider_id, media_type: :movie)
-
-      # The id is already a TVDB series id, so there is no TMDB lookup to start
-      # from: a Discover TV search result carries one, since `Relay.search/3`
-      # routes `:tv_show` to `/tvdb/search`. Asking TMDB for it 404s.
-      Keyword.get(opts, :provider) == :tvdb ->
-        Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tvdb)
-
-      true ->
-        fetch_tv_detail_from_tmdb(provider_id, config)
-    end
+  def fetch_detail_metadata(ref, :movie, config) do
+    Metadata.fetch_by_ref(config || Metadata.default_relay_config(), ref, media_type: :movie)
   end
 
-  defp fetch_tv_detail_from_tmdb(provider_id, config) do
-    case Metadata.fetch_by_id(config, provider_id, media_type: :tv_show, provider: :tmdb) do
+  def fetch_detail_metadata({:tvdb, _} = ref, :tv_show, config) do
+    Metadata.fetch_by_ref(config || Metadata.default_relay_config(), ref, media_type: :tv_show)
+  end
+
+  def fetch_detail_metadata({:tmdb, _} = ref, :tv_show, config) do
+    fetch_tv_detail_from_tmdb(ref, config || Metadata.default_relay_config())
+  end
+
+  defp fetch_tv_detail_from_tmdb(ref, config) do
+    case Metadata.fetch_by_ref(config, ref, media_type: :tv_show) do
       {:ok, tmdb_metadata} ->
         if Settings.derive_tv_metadata_source() == :tmdb do
           {:ok, tmdb_metadata}

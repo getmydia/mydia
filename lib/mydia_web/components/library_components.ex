@@ -7,6 +7,7 @@ defmodule MydiaWeb.LibraryComponents do
   """
   use Phoenix.Component
 
+  alias Mydia.Metadata.Ref
   alias Phoenix.LiveView.JS
 
   # Import only what we need to avoid circular dependency
@@ -535,7 +536,7 @@ defmodule MydiaWeb.LibraryComponents do
   `library_picker_dialog/1`.
   """
   attr :libraries, :list, required: true
-  attr :tmdb_id, :any, default: nil
+  attr :ref, :string, default: nil
   attr :media_type, :any, default: nil
   attr :title, :string, default: ""
   attr :always_show, :boolean, default: false
@@ -549,7 +550,7 @@ defmodule MydiaWeb.LibraryComponents do
       class="btn btn-primary btn-sm join-item px-2"
       title="Choose a library"
       phx-click="open_library_picker"
-      phx-value-tmdb_id={@tmdb_id}
+      phx-value-ref={@ref}
       phx-value-media_type={@media_type}
       phx-value-title={@title}
     >
@@ -583,7 +584,7 @@ defmodule MydiaWeb.LibraryComponents do
   """
   attr :picker, :map,
     default: nil,
-    doc: "nil, or %{tmdb_id:, media_type:, title:, libraries:} for the card being added"
+    doc: "nil, or %{ref:, media_type:, title:, libraries:} for the card being added"
 
   attr :event, :string, default: "add_to_library"
   attr :on_cancel, :string, default: "close_library_picker"
@@ -609,7 +610,7 @@ defmodule MydiaWeb.LibraryComponents do
               data-test="library-picker-option"
               phx-click={@event}
               phx-value-library_path_id={library.id}
-              phx-value-tmdb_id={@picker.tmdb_id}
+              phx-value-ref={Ref.to_param(@picker.ref)}
               phx-value-media_type={@picker.media_type}
               class="flex-col items-start gap-0"
             >
@@ -622,7 +623,7 @@ defmodule MydiaWeb.LibraryComponents do
               id="discover-configure-add"
               type="button"
               phx-click={@configure_event}
-              phx-value-tmdb_id={@picker.tmdb_id}
+              phx-value-ref={Ref.to_param(@picker.ref)}
               phx-value-media_type={@picker.media_type}
             >
               <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Configure...

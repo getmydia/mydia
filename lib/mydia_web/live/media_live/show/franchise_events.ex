@@ -7,6 +7,8 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Media.FranchiseEntry
   alias Mydia.Media.Franchises
+  alias Mydia.Metadata.Ref
+  alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
@@ -64,10 +66,11 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   cancels a task under an existing key, which would silently drop the first
   result.
   """
-  def add_franchise_movie(%{"tmdb_id" => tmdb_id} = params, socket) do
+  def add_franchise_movie(%{"ref" => raw_ref} = params, socket) do
     with :ok <- Authorization.authorize_create_media(socket),
+         {:ok, ref} <- Ref.parse(raw_ref),
          {:ok, opts} <- MediaAddHelpers.library_path_opts(params["library_path_id"], :movie) do
-      start_add(tmdb_id, opts, socket)
+      dispatch_add(ref, opts, socket)
     else
       {:unauthorized, socket} ->
         {:noreply, socket}
@@ -75,13 +78,9 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
       {:error, :unknown_library} ->
         {:noreply,
          put_flash(socket, :error, "That library is no longer available. Nothing was added.")}
-    end
-  end
 
-  defp start_add(tmdb_id, opts, socket) do
-    case Integer.parse(tmdb_id) do
-      {tmdb_id, ""} -> dispatch_add(tmdb_id, opts, socket)
-      _ -> {:noreply, socket}
+      :error ->
+        {:noreply, socket}
     end
   end
 
@@ -89,8 +88,11 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   # tmdb_id unique index and flash a failure for a row the first add just
   # created, so a repeat for an id already in flight is dropped.
   #
-  # The in-flight set stays keyed on tmdb_id alone and `opts` rides beside it.
-  defp dispatch_add(tmdb_id, opts, socket) do
+  # The in-flight set stays keyed on the tmdb id alone (a franchise is always a
+  # TMDB collection, so the ref's tag never varies) and `opts` rides beside it.
+  defp dispatch_add(ref, opts, socket) do
+    tmdb_id = Ref.id(ref)
+
     if MapSet.member?(socket.assigns.adding_franchise_tmdb_ids, tmdb_id) do
       {:noreply, socket}
     else
@@ -101,7 +103,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
         socket
         |> mark_in_flight(tmdb_id)
         |> start_async({:add_franchise_movie, tmdb_id}, fn ->
-          perform_add(media_item, tmdb_id, config, opts)
+          perform_add(media_item, ref, config, opts)
         end)
 
       {:noreply, socket}
@@ -112,9 +114,9 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   Performs the add. Public so it can be exercised directly in tests without a
   live process.
   """
-  def perform_add(media_item, tmdb_id, config, opts \\ []) do
+  def perform_add(media_item, ref, config, opts \\ []) do
     MediaAddHelpers.handle_add_media_to_library(
-      to_string(tmdb_id),
+      ref,
       :movie,
       %{},
       config,
@@ -138,10 +140,10 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   Without this handler the first click raises `FunctionClauseError` and takes the
   detail page down.
   """
-  def request_franchise_movie(%{"tmdb_id" => tmdb_id}, socket) do
+  def request_franchise_movie(%{"ref" => raw_ref}, socket) do
     with :ok <- Authorization.authorize_submit_request(socket),
-         {parsed, ""} <- Integer.parse(tmdb_id),
-         %FranchiseEntry{} = entry <- find_entry(socket.assigns.franchise, parsed) do
+         {:ok, ref} <- Ref.parse(raw_ref),
+         %FranchiseEntry{} = entry <- find_entry(socket.assigns.franchise, Ref.id(ref)) do
       submit_request(entry, socket)
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -217,11 +219,18 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   defp find_entry(franchise, tmdb_id),
     do: Enum.find(franchise.entries, &(&1.tmdb_id == tmdb_id))
 
-  # handle_request_media/3 reads provider_id, title and year off a plain map. A
-  # FranchiseEntry carries tmdb_id rather than provider_id, so build the shape it
-  # wants instead of widening the helper.
+  # handle_request_media/3 reads a Ref.from_search_result/1-shaped item. A
+  # FranchiseEntry carries tmdb_id rather than provider_id/provider, so build a
+  # real SearchResult instead of widening the helper. A franchise entry is
+  # always a TMDB collection member.
   defp submit_request(entry, socket) do
-    item = %{provider_id: to_string(entry.tmdb_id), title: entry.title, year: entry.year}
+    item = %SearchResult{
+      provider_id: to_string(entry.tmdb_id),
+      provider: :tmdb,
+      media_type: :movie,
+      title: entry.title,
+      year: entry.year
+    }
 
     case MediaRequestHelpers.handle_request_media(item, :movie, socket.assigns.current_user.id) do
       {:ok, request, _status_updates} ->

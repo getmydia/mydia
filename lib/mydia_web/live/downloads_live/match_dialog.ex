@@ -18,6 +18,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   alias Mydia.Media
   alias Mydia.Media.Add
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Settings
 
   @result_limit 10
@@ -237,7 +238,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
         {:error, %{dialog | error: "That result is no longer available. Search again."}}
 
       result ->
-        case Add.from_provider(result.provider_id, dialog.type, nil, add_opts(result)) do
+        case Add.from_provider(Ref.from_search_result(result), dialog.type, nil, add_opts()) do
           {:ok, item} -> {:added, item}
           {:error, {:already_in_library, item}} -> {:added, item}
           {:error, reason} -> {:error, %{dialog | error: add_error(reason)}}
@@ -251,16 +252,12 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
     end)
   end
 
-  # A TV search result carries a TVDB id, but Add defaults TV to TMDB. Without
-  # this the TVDB id is sent to TMDB and resolves to the wrong show or nothing.
-  defp add_opts(result) do
-    opts = [
+  defp add_opts do
+    [
       monitored: true,
       season_monitoring: "all",
       quality_profile_id: Settings.get_default_quality_profile_id()
     ]
-
-    if result.provider == :tvdb, do: Keyword.put(opts, :provider, :tvdb), else: opts
   end
 
   defp add_error({:metadata, _reason}), do: "Couldn't fetch metadata for that title."

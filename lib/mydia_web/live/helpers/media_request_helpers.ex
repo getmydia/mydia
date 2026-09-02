@@ -10,7 +10,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   alias Mydia.Media.Add
   alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
-  alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
 
@@ -97,8 +97,6 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   @spec handle_request_media(map(), :movie | :tv_show, String.t()) ::
           {:ok, Mydia.Media.MediaRequest.t(), map()} | {:error, term()}
   def handle_request_media(item, media_type, requester_id) do
-    provider_id = Add.parse_provider_id(item.provider_id)
-
     base = %{
       media_type: if(media_type == :movie, do: "movie", else: "tv_show"),
       title: item.title,
@@ -110,11 +108,14 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
     # A TV show sourced from TVDB stores tvdb_id instead of tmdb_id; every
     # other case (movies always, TV shows sourced from TMDB) is unchanged.
     # Mirrors the deleted RequestMediaLive.Index.build_request_attrs/3.
+    #
+    # `media_type` gates this, not the ref's tag alone: there is no TVDB movie
+    # catalog, so a movie card mistagged `provider: :tvdb` still stores under
+    # tmdb_id rather than an id space that does not exist for movies.
     attrs =
-      if media_type == :tv_show and Map.get(item, :provider) == :tvdb do
-        Map.put(base, :tvdb_id, provider_id)
-      else
-        Map.put(base, :tmdb_id, provider_id)
+      case {media_type, Ref.from_search_result(item)} do
+        {:tv_show, {:tvdb, id}} -> Map.put(base, :tvdb_id, id)
+        {_media_type, ref} -> Map.put(base, :tmdb_id, Ref.id(ref))
       end
 
     case MediaRequests.create_request(attrs) do
@@ -129,36 +130,25 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   @doc """
   Resolves provider metadata for a request.
 
-  Lives here rather than in `Mydia.MediaRequests` because the TMDB branch
-  delegates to `MediaAddHelpers.fetch_detail_metadata/2`, which is already a
-  web helper. Putting it in the context would point a context module at
-  `MydiaWeb`.
+  Lives here rather than in `Mydia.MediaRequests` because it delegates to
+  `MediaAddHelpers.fetch_detail_metadata/3`, which is already a web helper.
+  Putting it in the context would point a context module at `MydiaWeb`.
 
-  The TMDB branch reuses the Discovery helper so both surfaces show the same
-  metadata for the same title, including its TMDB-to-TVDB resolution for TV.
-  The TVDB branch mirrors `Mydia.Media.Add.fetch_tvdb_series/2` and exists
-  because a TV request made on a TVDB-configured instance stores no tmdb_id.
+  `MediaRequest.external_ref/1` already carries the provider that owns the
+  stored id, so it passes straight through with no conversion: a TMDB-sourced
+  request reuses the Discovery helper's TMDB-to-TVDB resolution for TV, and a
+  TVDB-sourced request (stored when a TV request is made on a
+  TVDB-configured instance, which has no tmdb_id) fetches TVDB directly.
   """
   @spec fetch_request_metadata(MediaRequest.t()) ::
           {:ok, Mydia.Metadata.Structs.MediaMetadata.t()} | {:error, term()}
   def fetch_request_metadata(%MediaRequest{} = request) do
     case MediaRequest.external_ref(request) do
-      {:tmdb, tmdb_id} ->
-        MediaAddHelpers.fetch_detail_metadata(
-          to_string(tmdb_id),
-          MediaRequest.media_type_atom(request)
-        )
-
-      {:tvdb, tvdb_id} ->
-        Metadata.fetch_by_id(
-          Metadata.default_relay_config(),
-          to_string(tvdb_id),
-          media_type: :tv_show,
-          provider: :tvdb
-        )
-
       nil ->
         {:error, :no_provider_id}
+
+      ref ->
+        MediaAddHelpers.fetch_detail_metadata(ref, MediaRequest.media_type_atom(request))
     end
   end
 
@@ -231,7 +221,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
     # `maybe_backfill_posters/2` (see their `handle_async(:backfill_posters,
     # ...)`), not the LiveView process itself. `fetch_request_metadata/1`
     # parses an upstream JSON payload this code does not control (via
-    # `MediaAddHelpers.fetch_detail_metadata/2` and `Metadata.fetch_by_id/3`
+    # `MediaAddHelpers.fetch_detail_metadata/3` and `Metadata.fetch_by_ref/3`
     # into the relay provider), so a malformed response raising here is
     # realistic. An uncaught raise here would still be isolated from the
     # LiveView process -- `start_async/3` reports it to `handle_async/3` as

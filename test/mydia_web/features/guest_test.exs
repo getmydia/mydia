@@ -57,7 +57,7 @@ defmodule MydiaWeb.Features.GuestTest do
       session
       |> click(
         Query.css(
-          ~s(button[phx-click="request_media"][phx-value-tmdb_id="#{MetadataStubProvider.movie_tmdb_id()}"])
+          ~s(button[phx-click="request_media"][phx-value-ref="tmdb:#{MetadataStubProvider.movie_tmdb_id()}"])
         )
       )
 

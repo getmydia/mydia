@@ -16,9 +16,9 @@ defmodule MydiaWeb.LibraryComponentsTest do
       Map.merge(
         %{
           libraries: libraries(2),
-          tmdb_id: "693134",
+          ref: "tmdb:693134",
           media_type: :movie,
-          title: "Dune: Part Two"
+          title: "Lunar Static: Part Two"
         },
         overrides
       )
@@ -31,9 +31,9 @@ defmodule MydiaWeb.LibraryComponentsTest do
       Map.merge(
         %{
           picker: %{
-            tmdb_id: "693134",
+            ref: {:tmdb, 693_134},
             media_type: :movie,
-            title: "Dune: Part Two",
+            title: "Lunar Static: Part Two",
             libraries: libraries(2)
           }
         },
@@ -55,9 +55,9 @@ defmodule MydiaWeb.LibraryComponentsTest do
       caret = LazyHTML.query(document, ~s(button[data-test="library-picker-caret"]))
 
       assert LazyHTML.attribute(caret, "phx-click") == ["open_library_picker"]
-      assert LazyHTML.attribute(caret, "phx-value-tmdb_id") == ["693134"]
+      assert LazyHTML.attribute(caret, "phx-value-ref") == ["tmdb:693134"]
       assert LazyHTML.attribute(caret, "phx-value-media_type") == ["movie"]
-      assert LazyHTML.attribute(caret, "phx-value-title") == ["Dune: Part Two"]
+      assert LazyHTML.attribute(caret, "phx-value-title") == ["Lunar Static: Part Two"]
     end
   end
 
@@ -100,7 +100,7 @@ defmodule MydiaWeb.LibraryComponentsTest do
 
       assert LazyHTML.attribute(options, "phx-click") == ["add_to_library", "add_to_library"]
       assert LazyHTML.attribute(options, "phx-value-library_path_id") == ["lib-1", "lib-2"]
-      assert LazyHTML.attribute(options, "phx-value-tmdb_id") == ["693134", "693134"]
+      assert LazyHTML.attribute(options, "phx-value-ref") == ["tmdb:693134", "tmdb:693134"]
       assert LazyHTML.attribute(options, "phx-value-media_type") == ["movie", "movie"]
     end
 
@@ -122,7 +122,7 @@ defmodule MydiaWeb.LibraryComponentsTest do
     end
 
     test "names the title being added" do
-      assert picker_dialog() =~ "Dune: Part Two"
+      assert picker_dialog() =~ "Lunar Static: Part Two"
     end
 
     test "offers cancel and a backdrop that both close the dialog" do
