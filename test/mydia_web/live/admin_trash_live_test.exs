@@ -239,6 +239,34 @@ defmodule MydiaWeb.AdminTrashLiveTest do
 
       assert_enqueued(worker: Mydia.Jobs.TrashAction)
     end
+
+    @tag :tmp_dir
+    test "switching the reason filter clears a select-all-matching selection",
+         %{conn: conn} = ctx do
+      for n <- 1..60, do: trashed(ctx, "m#{n}.mkv", :missing, 10)
+      pruned = trashed(ctx, "p.mkv", :pruned, 10)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/trash")
+
+      html = view |> element("#trash-filter-missing") |> render_click()
+
+      # The bulk bar, and the "select all matching" button inside it, only
+      # render once something is selected; tick one visible row first so the
+      # button appears, then reach for "select all" to get the rest.
+      one_visible_id = html |> row_ids() |> Enum.at(0)
+      view |> element("#trash-select-#{one_visible_id}") |> render_click()
+      view |> element("#trash-select-all-matching") |> render_click()
+      assert has_element?(view, "#trash-bulk-bar")
+
+      # {:all_matching, :missing} must not survive a switch to Pruned: the
+      # tuple carries the reason it was made under, and enqueuing it after
+      # the filter moved on would purge or restore the wrong 60 files while
+      # the bar shows a small, unrelated Pruned count instead.
+      html = view |> element("#trash-filter-pruned") |> render_click()
+
+      refute has_element?(view, "#trash-bulk-bar")
+      refute checked?(html, "trash-select-#{pruned.id}")
+    end
   end
 
   describe "pagination" do
@@ -267,5 +295,12 @@ defmodule MydiaWeb.AdminTrashLiveTest do
     |> Regex.scan(html)
     |> Enum.map(fn [_, id] -> id end)
     |> MapSet.new()
+  end
+
+  defp checked?(html, id) do
+    case Regex.run(~r/<input[^>]*id="#{id}"[^>]*>/, html) do
+      [tag] -> tag =~ "checked"
+      nil -> false
+    end
   end
 end

@@ -87,7 +87,7 @@ defmodule Mydia.Jobs.TrashActionTest do
   end
 
   @tag :tmp_dir
-  test "a partial failure still processes the rest", ctx do
+  test "a retained copy still processes the rest", ctx do
     a = trashed(ctx, "a.mkv", :missing)
     b = trashed(ctx, "b.mkv", :missing)
 
@@ -103,5 +103,53 @@ defmodule Mydia.Jobs.TrashActionTest do
 
     assert is_nil(Repo.reload(a).trashed_at)
     assert is_nil(Repo.reload(b).trashed_at)
+  end
+
+  @tag :tmp_dir
+  test "a restore failure does not stop the batch, and the failed row stays trashed", ctx do
+    nested = Path.join(ctx.root, "nested")
+    File.mkdir_p!(nested)
+
+    a = trashed(ctx, "nested/a.mkv", :missing)
+    b = trashed(ctx, "b.mkv", :missing)
+
+    # a's directory emptied out when its file moved into the trash. Replacing
+    # it with a plain file means restoring a means mkdir_p-ing over a file: a
+    # structural failure that fails regardless of privilege, unlike a
+    # permission bit, which a root-run test would sail straight through.
+    File.rmdir!(nested)
+    File.write!(nested, "not a directory anymore")
+
+    assert :ok =
+             perform_job(TrashAction, %{
+               "action" => "restore",
+               "selection" => %{"type" => "ids", "ids" => [a.id, b.id]}
+             })
+
+    refute is_nil(Repo.reload(a).trashed_at)
+    assert is_nil(Repo.reload(b).trashed_at)
+  end
+
+  @tag :tmp_dir
+  test "a purge failure does not stop the batch, and the failed row's row survives", ctx do
+    a = trashed(ctx, "a.mkv", :pruned)
+    b = trashed(ctx, "b.mkv", :pruned)
+
+    # Swap a's trashed file for a directory of the same name. File.rm/1
+    # refuses to unlink a directory, which fails structurally (unlike a
+    # permission bit) so this is a real {:error, reason} out of
+    # TrashStore.discard/2, not a contrived one.
+    trash_path = a.metadata.extra["trashed_path"]
+    File.rm!(trash_path)
+    File.mkdir_p!(trash_path)
+
+    assert :ok =
+             perform_job(TrashAction, %{
+               "action" => "purge",
+               "selection" => %{"type" => "ids", "ids" => [a.id, b.id]}
+             })
+
+    refute is_nil(Repo.get(Mydia.Library.MediaFile, a.id))
+    assert is_nil(Repo.get(Mydia.Library.MediaFile, b.id))
   end
 end

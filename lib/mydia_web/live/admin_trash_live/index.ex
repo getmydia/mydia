@@ -78,7 +78,7 @@ defmodule MydiaWeb.AdminTrashLive.Index do
 
   @impl true
   def handle_event("filter_reason", %{"reason" => ""}, socket) do
-    {:noreply, socket |> assign(reason: nil, page: 0) |> load()}
+    {:noreply, socket |> assign(reason: nil, page: 0, selection: MapSet.new()) |> load()}
   end
 
   def handle_event("filter_reason", %{"reason" => reason}, socket) do
@@ -90,7 +90,12 @@ defmodule MydiaWeb.AdminTrashLive.Index do
         if to_string(r) == reason, do: r
       end)
 
-    {:noreply, socket |> assign(reason: parsed, page: 0) |> load()}
+    # A selection, explicit or "all matching", is scoped to the filter that
+    # was active when it was made. `{:all_matching, :missing}` means every
+    # Missing row, not whatever the next filter happens to show, so changing
+    # the filter must drop it rather than let it silently retarget a
+    # destructive bulk action at the wrong rows.
+    {:noreply, socket |> assign(reason: parsed, page: 0, selection: MapSet.new()) |> load()}
   end
 
   def handle_event("paginate", %{"page" => page}, socket) do
