@@ -959,6 +959,68 @@ defmodule MydiaWeb.MediaLive.IndexTest do
     end
   end
 
+  describe "batch edit" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    # getmydia/mydia#653 regression: a batch re-enable through this modal used
+    # to write `monitored` with a bare Repo.update_all and record no decision,
+    # indistinguishable to Mydia.Jobs.MonitoringRepair from the metadata
+    # enricher's silent flip.
+    test "setting monitored records a decision for every selected item", %{conn: conn} do
+      movie_a = media_item_fixture(%{title: "Harrowgate Signal", type: "movie", monitored: false})
+      movie_b = media_item_fixture(%{title: "Pallid Meridian", type: "movie", monitored: false})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => movie_a.id})
+      render_click(view, "toggle_select", %{"id" => movie_b.id})
+
+      render_click(view, "show_batch_edit", %{})
+      render_submit(view, "batch_edit_submit", %{"batch_edit" => %{"monitored" => "true"}})
+
+      assert Mydia.Media.get_media_item!(movie_a.id).monitored
+      assert Mydia.Media.get_media_item!(movie_b.id).monitored
+
+      for item <- [movie_a, movie_b] do
+        assert [event] =
+                 Mydia.Events.list_events(
+                   type: "media_item.monitoring_changed",
+                   resource_type: "media_item",
+                   resource_id: item.id
+                 )
+
+        assert event.metadata["monitored"] == true
+      end
+    end
+
+    test "a quality-profile-only batch emits no monitoring event", %{conn: conn} do
+      profile = Mydia.SettingsFixtures.quality_profile_fixture()
+      movie = media_item_fixture(%{title: "Quiet Aftermath", type: "movie"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => movie.id})
+
+      render_click(view, "show_batch_edit", %{})
+
+      render_submit(view, "batch_edit_submit", %{
+        "batch_edit" => %{"quality_profile_id" => profile.id, "monitored" => "no_change"}
+      })
+
+      assert Mydia.Media.get_media_item!(movie.id).quality_profile_id == profile.id
+
+      assert Mydia.Events.list_events(
+               type: "media_item.monitoring_changed",
+               resource_type: "media_item",
+               resource_id: movie.id
+             ) == []
+    end
+  end
+
   describe "poster badge stack" do
     setup %{conn: conn} do
       admin = admin_user_fixture()
