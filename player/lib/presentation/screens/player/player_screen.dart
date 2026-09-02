@@ -440,9 +440,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// discarded, and nothing could rebuild it.
   List<app_models.SubtitleTrack> _serverSubtitleTracks = [];
 
-  /// The tracks actually offered to the viewer, and the list
-  /// `subtitleTrackCount` gates the subtitle button on. Derived: never
-  /// assigned outside [_applySubtitleTracks].
+  /// The tracks actually offered to the viewer in the subtitle sheet.
+  /// Derived: never assigned outside [_applySubtitleTracks].
   List<app_models.SubtitleTrack> _subtitleTracks = [];
   app_models.SubtitleTrack? _selectedSubtitleTrack;
   List<app_models_audio.AudioTrack> _audioTracks = [];

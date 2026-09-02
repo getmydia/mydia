@@ -117,12 +117,11 @@ void main() {
     test(
         'falls back to the server list when media_kit has probed nothing '
         'yet in direct play', () {
-      // The regression this whole change exists for. mpv discovers tracks
-      // asynchronously while it probes, and on a remote file the probe
-      // routinely outruns the fixed 500ms sample after `open()`. Dropping
-      // the server's embedded tracks here left `_subtitleTracks` empty and
-      // `panel_controls.dart`'s `subtitleTrackCount > 0` gate rendered the
-      // button dead for the whole session.
+      // mpv discovers tracks asynchronously while it probes, and on a remote
+      // file the probe routinely outruns the fixed 500ms sample after
+      // `open()`. Dropping the server's embedded tracks here left
+      // `_subtitleTracks` empty for the whole session, so the sheet offered
+      // nothing for a file whose container was full of subtitles.
       final tracks = resolveSubtitleTracks(
         serverTracks: [textTrack, embeddedTextTrack],
         mpvTracks: const [],

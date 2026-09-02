@@ -116,6 +116,7 @@ Widget _panel(double width) {
                 secondary: SecondaryCluster(
                   subtitleTrackCount: 1,
                   audioTrackCount: 2,
+                  onSubtitleTap: () {},
                   gap: metrics.secondaryGap,
                   onQualityTap: () {},
                 ),
