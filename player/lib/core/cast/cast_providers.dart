@@ -46,40 +46,46 @@ final castBackendProvider = Provider<CastBackend>((ref) {
 /// first-run/timing gap, not a steady-state condition: Mydia targets simply
 /// do not appear yet.
 ///
-/// That is not the only way this goes stale, though, and the other way *is*
-/// steady-state. `p2pServiceProvider` is a plain, permanent `Provider` — it
-/// is never invalidated, so `ref.watch` here never triggers a rebuild — yet
-/// the same `P2pService` instance's `host` can be swapped out from under it:
-/// `P2pStatusNotifier.reinitializeWithRelayUrl` (wired to the relay-URL
-/// field on `login_screen.dart`, reachable again any time auth is lost and
-/// the app falls back to that screen while a `CastSessionManager` built
-/// during an earlier authenticated session is still alive) calls
-/// `P2pService.reset()`, which nulls `_host` and rebuilds a new one via
-/// `initialize()` on that one long-lived service. Nothing observes that
-/// swap: whatever this provider last returned — including a
-/// `MydiaCastBackend` wrapping the *old*, now-abandoned `P2PHost` — keeps
-/// being handed out, and `castSessionManagerProvider` below reads this only
-/// once, baking the result into its `CastSessionManager`'s
-/// `CastBackendRegistry` for that manager's whole lifetime. The old host is
-/// never explicitly torn down either (the Rust side only drops it on GC),
-/// so the failure is silent: Mydia casting and discovery through the stale
-/// backend simply stop working, with nothing in the UI pointing at why.
+/// That is not the only way this goes stale, though, and the other way used
+/// to be steady-state. `p2pServiceProvider` is a plain, permanent
+/// `Provider`: it is never invalidated, so `ref.watch` here never triggers
+/// a rebuild on its own. The same `P2pService` instance's `host` can still be
+/// swapped out from under it: `P2pStatusNotifier.reinitializeWithRelayUrl`
+/// (wired to the relay-URL field on `login_screen.dart`, reachable again any
+/// time auth is lost and the app falls back to that screen while a
+/// `CastSessionManager` built during an earlier authenticated session is
+/// still alive) calls `P2pService.reset()`, which nulls `_host` and rebuilds
+/// a new one via `initialize()` on that one long-lived service. This
+/// provider now also watches `p2pStatusNotifierProvider`, which is broadcast
+/// on both `initialize()` and `reset()`, so that swap does trigger a rebuild
+/// here and the backend this provider hands out is refreshed.
 ///
-/// A real fix needs `CastSessionManager` to re-resolve its Mydia backend
-/// live instead of capturing it once — which means changing what
-/// `CastBackendRegistry` holds — or, short of that, invalidating
-/// `castSessionManagerProvider` itself on every relay change, which would
-/// tear down *any* live cast session (Chromecast/DLNA included, not just
-/// Mydia) as a side effect of an unrelated P2P setting change. Both are
-/// bigger than this provider; noted here rather than silently patched
+/// What is still broken: `castSessionManagerProvider` below reads this
+/// provider only once, baking whatever it returned at that moment into its
+/// `CastSessionManager`'s `CastBackendRegistry` for that manager's whole
+/// lifetime. A rebuild here after the manager already exists does not
+/// reach it. The old host is never explicitly torn down either (the Rust
+/// side only drops it on GC). A real fix needs `CastSessionManager` to
+/// re-resolve its Mydia backend live instead of capturing it once, which
+/// means changing what `CastBackendRegistry` holds, or, short of that,
+/// invalidating `castSessionManagerProvider` itself on every relay change,
+/// which would tear down *any* live cast session (Chromecast/DLNA included,
+/// not just Mydia) as a side effect of an unrelated P2P setting change. Both
+/// are bigger than this provider; noted here rather than silently patched
 /// half-way.
 ///
 /// Overridden in tests with a fake; the real construction path (a live iroh
 /// host, a real roster fetch) is not exercised by this build's test suite.
 final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
   final p2pService = ref.watch(p2pServiceProvider);
+  // Watched for its own sake: `p2pServiceProvider` is a plain `Provider`
+  // that is never invalidated, so watching it alone cannot observe
+  // `initialize()` or `reset()` swapping the host underneath, and this
+  // provider would keep handing out a backend wrapping an abandoned host.
+  // The status record is broadcast on both transitions.
+  final p2pStatus = ref.watch(p2pStatusNotifierProvider);
   final host = p2pService.host;
-  final selfNodeId = p2pService.nodeId;
+  final selfNodeId = p2pStatus.nodeId;
   final client = ref.watch(graphqlClientProvider);
 
   if (host == null || selfNodeId == null || client == null) return null;
@@ -128,8 +134,10 @@ const _ambientResweepInterval = Duration(seconds: 30);
 /// host yet, no resolved node ID, or no signed-in GraphQL client.
 final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
   final p2pService = ref.watch(p2pServiceProvider);
+  // Same reason as `mydiaCastBackendProvider` above.
+  final p2pStatus = ref.watch(p2pStatusNotifierProvider);
   final host = p2pService.host;
-  final selfNodeId = p2pService.nodeId;
+  final selfNodeId = p2pStatus.nodeId;
   final client = ref.watch(graphqlClientProvider);
 
   if (host == null || selfNodeId == null || client == null) return null;

@@ -222,6 +222,73 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
+  Finds or creates the device row for a password login.
+
+  Pairing mints a device token and goes through `create_device/1`; a password
+  login authenticates the user directly, with no pairing flow to hand it a
+  device token. `remote_devices.token_hash` is still `NOT NULL` and `UNIQUE`
+  though, so this generates a random token exactly like pairing does, hashes
+  it into the new row, and discards the plaintext, on purpose: nobody ever
+  holds the preimage, so the row can never authenticate as a device token,
+  matching the reality that this device re-authenticates with the user's own
+  credentials. Both paths must end with a `RemoteDevice`, because that row is
+  what `registerDeviceNode` keys on and therefore what makes a player
+  discoverable at all.
+
+  Keyed on the client-supplied `client_device_id` so a returning client reuses
+  its row instead of adding one on every launch. The token is only generated
+  on the insert branch: a returning client keeps its original row and hash
+  untouched.
+
+  Two concurrent first-time logins for the same `client_device_id` can both
+  pass the lookup above before either insert lands. The loser hits the
+  `unique_constraint([:user_id, :client_device_id])` on `login_changeset/2`;
+  rather than surface that as a failed login, re-read the row the winner just
+  created and return it, so both callers end up with the same device instead
+  of one of them erroring out.
+  """
+  def find_or_create_login_device(%{user_id: user_id, client_device_id: client_device_id} = attrs) do
+    case Repo.get_by(RemoteDevice, user_id: user_id, client_device_id: client_device_id) do
+      nil -> insert_login_device(attrs, user_id, client_device_id)
+      device -> {:ok, device}
+    end
+  end
+
+  defp insert_login_device(attrs, user_id, client_device_id) do
+    %RemoteDevice{}
+    |> RemoteDevice.login_changeset(Map.put(attrs, :token, generate_login_device_token()))
+    |> Repo.insert()
+    |> case do
+      {:ok, device} ->
+        {:ok, device}
+
+      {:error, changeset} = error ->
+        if unique_constraint_error?(changeset) do
+          case Repo.get_by(RemoteDevice, user_id: user_id, client_device_id: client_device_id) do
+            nil -> error
+            device -> {:ok, device}
+          end
+        else
+          error
+        end
+    end
+  end
+
+  defp unique_constraint_error?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn {_field, {_message, opts}} ->
+      Keyword.get(opts, :constraint) == :unique
+    end)
+  end
+
+  # Unused, unretrievable token for a password-login device. Hashed into
+  # token_hash and immediately discarded, so the row satisfies the NOT NULL
+  # and UNIQUE constraints on that column while remaining unable to
+  # authenticate as a device token.
+  defp generate_login_device_token do
+    :crypto.strong_rand_bytes(32) |> Base.encode64(padding: false)
+  end
+
+  @doc """
   Updates the last seen timestamp for a device.
   """
   def touch_device(device) do

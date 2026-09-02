@@ -900,8 +900,8 @@ class DownloadsScreen extends ConsumerWidget {
                   ],
                   // DownloadsScreen's app bar is always visible (no
                   // desktop suppression), so it carries its own cast
-                  // affordance instead of the shell's overlay — see
-                  // AppShell._hasOwnCastButton.
+                  // affordance instead of the shell's overlay. See
+                  // AppShell.needsCastOverlay.
                   CastButton(
                     onPressed: () => pickCastDevice(context, ref),
                   ),

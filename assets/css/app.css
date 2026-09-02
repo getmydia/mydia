@@ -11,6 +11,13 @@
    scanner can see. Safelist them so they're always built. */
 @source inline("status-{success,error,warning,info,neutral}");
 
+/* Sidebar section icons are chosen at runtime from collections.sidebar_icon,
+   and the allowlist that defines them lives in lib/mydia/collections/, which is
+   outside the @source globs above. Without this, an icon that happens not to be
+   used anywhere in lib/mydia_web gets no CSS at all and renders as a blank box.
+   test/mydia/collections/sidebar_icon_safelist_test.exs keeps the two in sync. */
+@source inline("hero-{sparkles,film,tv,star,bolt,fire,globe-alt,face-smile,rocket-launch,squares-2x2,book-open,beaker}");
+
 /* A Tailwind plugin that makes "hero-#{ICON}" classes available.
    The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";
@@ -230,4 +237,21 @@
 
 .changelog-entry[open] > summary .hero-chevron-right {
   transform: rotate(90deg);
+}
+
+/* The mobile dock is `fixed` at z-50, above the drawer sidebar (z-40), so it
+   floats over the sidebar at every scroll offset. While the drawer is open the
+   dock's links are redundant with the sidebar nav and it completely covers the
+   sidebar's user menu, so fade it out and take it out of the hit test.
+
+   `pointer-events: none` is what lets taps reach the menu underneath.
+   `visibility: hidden` also drops the dock from the tab order and the
+   accessibility tree. Deliberately not `display: none`: the DockNav hook reads
+   getBoundingClientRect() of the active link on every LiveView patch to place
+   #dock-indicator, and a display:none rect is all zeros, which would strand the
+   indicator in the viewport corner. */
+#main-drawer:checked ~ .drawer-content #mobile-dock {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }

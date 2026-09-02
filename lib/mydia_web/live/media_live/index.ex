@@ -1,10 +1,13 @@
 defmodule MydiaWeb.MediaLive.Index do
   use MydiaWeb, :live_view
+  alias Mydia.Accounts
   alias Mydia.Media
   alias Mydia.Media.AvailabilityStatus
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Settings
   alias Mydia.Collections
+  alias Mydia.Collections.Collection
+  alias Mydia.Collections.SmartRules
   alias Mydia.Downloads.DownloadService
   alias Mydia.Search
   alias MydiaWeb.Live.Authorization
@@ -12,12 +15,17 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.MediaLive.Show.Helpers, as: MediaFileHelpers
 
   import MydiaWeb.GridDensityComponents
+  import MydiaWeb.MediaLive.Index.SectionComponents
 
   require Logger
 
   @items_per_page 50
   @items_per_scroll 25
   @auto_search_confirm_threshold 50
+
+  # Ten is enough anime to be a nuisance in a mixed list and few enough that a
+  # library with a handful of stray titles is left alone.
+  @anime_nudge_threshold 10
 
   @impl true
   def mount(_params, _session, socket) do
@@ -48,6 +56,14 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:scanning, false)
      |> assign(:scan_result, nil)
      |> assign(:scan_progress, nil)
+     |> assign(:section, nil)
+     |> assign(:section_owned?, false)
+     |> assign(:section_query, nil)
+     |> assign(:section_error, false)
+     |> assign(:show_section_settings, false)
+     |> assign(:section_form, nil)
+     |> assign(:section_exclusive_eligible, false)
+     |> assign(:show_anime_nudge, false)
      |> assign(:show_add_to_collection_modal, false)
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
@@ -63,6 +79,7 @@ defmodule MydiaWeb.MediaLive.Index do
     socket
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
+    |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> load_media_items(reset: true)
   end
 
@@ -70,7 +87,61 @@ defmodule MydiaWeb.MediaLive.Index do
     socket
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
+    |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> load_media_items(reset: true)
+  end
+
+  defp apply_action(socket, :section, %{"id" => id}) do
+    case Collections.get_collection(socket.assigns.current_user, id) do
+      %Collection{type: "smart"} = collection ->
+        socket
+        |> assign(:page_title, collection.name)
+        # mount/3 does not assign :filter_type; only :movies and :tv_shows do.
+        # The library scan handlers read it unguarded, and their existing
+        # {nil, _} clause is the right behaviour for a section.
+        |> assign(:filter_type, nil)
+        |> assign(:section, collection)
+        |> assign(:section_owned?, collection.user_id == socket.assigns.current_user.id)
+        |> load_section(collection)
+
+      _not_found_or_not_smart ->
+        socket
+        |> put_flash(:error, "That section is no longer available.")
+        |> push_navigate(to: ~p"/")
+    end
+  end
+
+  defp load_section(socket, collection) do
+    case SmartRules.query(collection.smart_rules || "{}") do
+      {:ok, query} ->
+        socket
+        |> assign(:section_query, query)
+        |> assign(:section_error, false)
+        |> load_media_items(reset: true)
+
+      {:error, reason} ->
+        Logger.warning("Section #{collection.id} has unusable rules: #{inspect(reason)}")
+
+        socket
+        |> assign(:section_query, nil)
+        |> assign(:section_error, true)
+        |> assign(:media_items_empty?, true)
+        |> assign(:all_visible_ids, MapSet.new())
+        |> assign(:has_more, false)
+        |> stream(:media_items, [], reset: true)
+    end
+  end
+
+  defp anime_nudge?(socket) do
+    user = socket.assigns.current_user
+    anime = Enum.map(Mydia.Media.MediaCategory.anime_categories(), &Atom.to_string/1)
+    pinned = Collections.pinned_categories(socket.assigns[:sections] || [])
+
+    cond do
+      Accounts.anime_nudge_dismissed?(user) -> false
+      Enum.any?(anime, &(&1 in pinned)) -> false
+      true -> Media.count_media_items(category_in: anime) >= @anime_nudge_threshold
+    end
   end
 
   @impl true
@@ -549,6 +620,102 @@ defmodule MydiaWeb.MediaLive.Index do
     end
   end
 
+  def handle_event("open_section_settings", _params, socket) do
+    with_section(socket, fn section ->
+      {:noreply,
+       socket
+       |> assign(:show_section_settings, true)
+       |> assign(:section_exclusive_eligible, Collections.exclusive_eligible?(section))
+       |> assign(
+         :section_form,
+         to_form(
+           %{
+             "name" => section.name,
+             "sidebar_icon" => section.sidebar_icon,
+             "exclusive" => section.exclusive
+           },
+           as: :section
+         )
+       )}
+    end)
+  end
+
+  def handle_event("close_section_settings", _params, socket) do
+    {:noreply, assign(socket, :show_section_settings, false)}
+  end
+
+  def handle_event("save_section", %{"section" => params}, socket) do
+    with_section(socket, fn section ->
+      user = socket.assigns.current_user
+
+      attrs = %{
+        name: params["name"],
+        sidebar_icon: params["sidebar_icon"],
+        exclusive: params["exclusive"] == "true" and Collections.exclusive_eligible?(section)
+      }
+
+      case Collections.update_collection(user, section, attrs) do
+        {:ok, updated} ->
+          {:noreply,
+           socket
+           |> assign(:section, updated)
+           |> assign(:page_title, updated.name)
+           |> assign(:show_section_settings, false)
+           |> assign(:excluded_categories, Collections.claimed_categories(user))
+           |> put_flash(:info, "Section updated")}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not update the section")}
+      end
+    end)
+  end
+
+  def handle_event("unpin_section", _params, socket) do
+    with_section(socket, fn section ->
+      user = socket.assigns.current_user
+
+      case Collections.unpin_section(user, section) do
+        {:ok, _collection} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Section removed from the sidebar")
+           |> push_navigate(to: ~p"/tv")}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not remove the section")}
+      end
+    end)
+  end
+
+  def handle_event("dismiss_anime_nudge", _params, socket) do
+    Accounts.dismiss_anime_nudge(socket.assigns.current_user)
+    {:noreply, assign(socket, :show_anime_nudge, false)}
+  end
+
+  def handle_event("accept_anime_nudge", _params, socket) do
+    user = socket.assigns.current_user
+    preset = Mydia.Collections.SectionPresets.get("anime")
+
+    with {:ok, collection} <-
+           Collections.create_collection(user, %{
+             name: preset.name,
+             type: "smart",
+             visibility: "private",
+             smart_rules: Jason.encode!(preset.rules)
+           }),
+         {:ok, pinned} <-
+           Collections.pin_section(user, collection,
+             sidebar_icon: preset.icon,
+             exclusive: preset.exclusive
+           ) do
+      Accounts.dismiss_anime_nudge(user)
+      {:noreply, push_navigate(socket, to: ~p"/sections/#{pinned.id}")}
+    else
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not create the Anime section")}
+    end
+  end
+
   @impl true
   def handle_info({:download_updated, _download_id}, socket) do
     # Just trigger a re-render to update the downloads counter in the sidebar
@@ -644,6 +811,16 @@ defmodule MydiaWeb.MediaLive.Index do
     {:noreply, socket}
   end
 
+  # Guards event handlers that only make sense on a section page. A
+  # hand-crafted client event fired from /movies or /tv, where @section is
+  # nil, would otherwise crash the socket instead of being a no-op.
+  defp with_section(socket, fun) do
+    case socket.assigns.section do
+      nil -> {:noreply, socket}
+      section -> fun.(section)
+    end
+  end
+
   defp run_batch_auto_search(socket) do
     ids = MapSet.to_list(socket.assigns.selected_ids)
     {items, skipped} = Media.partition_for_auto_search(ids)
@@ -733,6 +910,15 @@ defmodule MydiaWeb.MediaLive.Index do
     active_files_query = Mydia.Library.MediaFile.versions()
 
     []
+    |> maybe_add_filter(:base_query, assigns[:section_query])
+    # A section's own base_query already selects its claimed categories, so
+    # excluding those same categories here would contradict it and empty the
+    # section out. The exclusion only makes sense off of section pages, where
+    # it is what removes claimed items from the built-in Movies/TV listings.
+    |> maybe_add_filter(
+      :exclude_categories,
+      if(is_nil(assigns[:section]), do: assigns[:excluded_categories], else: [])
+    )
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
     |> Keyword.put(:preload, [
@@ -743,6 +929,7 @@ defmodule MydiaWeb.MediaLive.Index do
     ])
   end
 
+  defp maybe_add_filter(opts, _key, []), do: opts
   defp maybe_add_filter(opts, _key, nil), do: opts
   defp maybe_add_filter(opts, key, value), do: Keyword.put(opts, key, value)
 

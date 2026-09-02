@@ -1,14 +1,29 @@
 name: CI / Player E2E
 
 on:
-  # Push only. This job's internal dorny/paths-filter treats lib/**, config/**,
-  # priv/**, mix.exs and Dockerfile as relevant on purpose, so backend PRs pulled
-  # the full 20-minute run. Narrowing that list was rejected: the filter block
-  # documents an invariant that `relevant` must be a superset of `server`,
-  # `toolbox` and `relay`, and records two past bugs from violating it. Dropping
-  # the PR trigger sidesteps the filter entirely. The filter itself is guarded
-  # on `github.event_name == 'pull_request'`, so it goes inert on its own and is
-  # left in place to keep a revert to a one-line change.
+  # Runs on PRs and on push to master. The internal dorny/paths-filter decides
+  # what actually executes: `relevant` gates whether the job runs at all, and
+  # the per-image filters choose pull-versus-build for each of the three
+  # images independently.
+  #
+  # This trigger was removed on 2026-08-12 because every backend PR paid a
+  # from-source server build, at roughly 20 minutes. It is restored because
+  # that build was far more expensive than it needed to be: every cache flag
+  # in this job was a silent no-op until 2026-09-01, so those runs were fully
+  # cold. See the "Expose GitHub Actions runtime for BuildKit" step.
+  #
+  # Expected job time by PR shape:
+  #   player, docs or CI paths only  pull all three images, around 10m
+  #   backend paths                  build the server, pull the rest, ~19m
+  #   nothing under `relevant`       skipped in seconds
+  #
+  # If backend PRs still feel slow, the next lever is NOT narrowing the
+  # `relevant` filter, which the filter block explains would reintroduce two
+  # past bugs. It is warming the Rust build: roughly 6m20s of `mix compile` is
+  # mydia_p2p and mydia_subsync compiling in release mode from a cold
+  # target/, which no BuildKit cache backend can carry because it lives in a
+  # RUN --mount=type=cache. That needs a Dockerfile change.
+  pull_request:
   push:
     branches: [master, main]
   workflow_dispatch:
@@ -22,7 +37,20 @@ jobs:
     name: Publish / Toolbox
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    needs: test-player-e2e
+    # Deliberately NOT `needs: test-player-e2e`, and do not add it back.
+    #
+    # This job builds a toolchain image (Flutter, GTK, mpv). The E2E tests do
+    # not validate it. The test container bind-mounts the repo at /workspace
+    # and runs `flutter pub get`, `build_runner` and `flutter test -d linux`
+    # at runtime, so the tests exercise the commit's player source against
+    # this toolchain, never the toolchain itself. A green test run is not
+    # evidence the image is good, and a red one is not evidence it is bad.
+    #
+    # Gating on the test job also created a deadlock that does not
+    # self-recover: a failing or timed-out test run blocked both the registry
+    # tag AND the player-toolbox cache scope from ever refreshing, so the next
+    # push started from the same cold state that caused the failure. See the
+    # timeout-minutes comment on test-player-e2e.
     permissions:
       contents: read
       packages: write
@@ -59,19 +87,21 @@ jobs:
     # from this cap. Pull-path runs finish well inside it.
     #
     # The cap must still fit a worst-case cold run, where all three images are
-    # built from source with empty caches. Two independent findings set the
-    # number. First, a timed-out run blocks publish-toolbox (needs:
-    # test-player-e2e) from ever populating the registry tag or cache, so every
-    # following push stays in the same cold-start state; see cache-to below for
-    # the other half of that fix. Second, master previously observed the player
-    # test image spending around 20 minutes in its apt layer alone, timing the
-    # job out at 30 without running a single test, which is why the cap was
-    # raised to 60 there.
+    # built from source with empty caches. Master previously observed the
+    # player test image spending around 20 minutes in its apt layer alone,
+    # timing the job out at 30 without running a single test, which is why
+    # the cap was raised to 60 there.
+    #
+    # publish-toolbox now runs independently of this job's outcome: it has no
+    # `needs: test-player-e2e`, and it is the sole writer of the
+    # player-toolbox cache scope. A timed-out or failed run here no longer
+    # starves the toolbox registry tag or its cache, so the cap is purely a
+    # runaway guard now, not a deadlock prevention mechanism.
     #
     # Measured cold non-PR runs on this design are 22m48s and 25m22s, so 30
     # would usually pass and would fail on a slow-mirror day. 60 is kept: the
-    # cost of a generous runaway guard is nothing, and the cost of tripping it
-    # is a deadlock that does not self-recover.
+    # cost of a generous runaway guard is nothing, and there is no deadlock
+    # cost left to weigh against it.
     timeout-minutes: 60
     permissions:
       contents: read
@@ -164,6 +194,28 @@ jobs:
         if: steps.should.outputs.run == 'true'
         uses: docker/setup-buildx-action@v4
 
+      # Exposes ACTIONS_RUNTIME_TOKEN and ACTIONS_CACHE_URL/ACTIONS_RESULTS_URL
+      # to the job environment. GitHub injects those into actions only, never
+      # into `run:` steps, and both resolve steps below call `docker buildx
+      # build` from a `run:` step. Without this, every `--cache-from` and
+      # `--cache-to type=gha` in this job is a SILENT no-op: BuildKit skips the
+      # cache backend and the build succeeds anyway, so nothing points at the
+      # problem.
+      #
+      # Measured on run 33444861643, a green master push, before this step
+      # existed: the only build that logged `importing cache manifest` was the
+      # `Publish / Toolbox` job, which uses `docker/build-push-action`. The
+      # server build imported no manifest and produced zero CACHED layers
+      # across a 12m30s run. The `player-toolbox` cache scope had exactly one
+      # entry ever, written by that same action-based job.
+      #
+      # Do NOT delete this as redundant with setup-buildx-action. That action
+      # creates the builder; it does not put the runtime token in the
+      # environment of later `run:` steps.
+      - name: Expose GitHub Actions runtime for BuildKit
+        if: steps.should.outputs.run == 'true'
+        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
+
       # The resolve steps below replace the former `docker compose build`.
       # They pull by default and build only what a PR actually changed, which
       # removes the cold-build cost from the common path rather than trying to
@@ -180,9 +232,15 @@ jobs:
       #
       # That revert also noted layer caching could not bootstrap, because a
       # cold build that cannot finish inside the job budget never exports a
-      # cache. That is addressed here from both ends: pulls mean most runs
-      # never build at all, and the non-PR builds below export cache so a cold
-      # run still leaves something warm behind.
+      # cache. That is addressed from both ends: pulls mean most runs never
+      # build at all, and the relay build below still exports cache on push
+      # runs so a cold run leaves something warm behind. The toolbox scope is
+      # no longer written from here; publish-toolbox writes it instead.
+      #
+      # Both halves of that only became true on 2026-09-01, when the runtime
+      # step above was added. Every cache flag in this job was inert before
+      # then, so any build timing recorded in these comments and dated earlier
+      # describes a fully cold build with no cache reads or writes.
       - name: Log in to registry
         if: steps.should.outputs.run == 'true'
         uses: docker/login-action@v4
@@ -237,19 +295,23 @@ jobs:
           # docker-sqlite scope: the GHA cache is capped at 10 GB with LRU
           # eviction, and docker-sqlite is populated by a different workflow,
           # so writing to it here would evict entries that workflow depends
-          # on. player-toolbox and relay-master are different: only jobs in
-          # this file ever write to them, so there is no cross-workflow
-          # contention. Populating them on non-PR builds means even a
-          # timed-out first run (see timeout-minutes above) leaves a warm
-          # cache behind, so the next push is fast instead of repeating the
-          # same cold build. Restricted to non-PR events to match the two
-          # registry tags themselves, which publish-toolbox and ci-relay.yml
-          # only ever push on push events; a PR build's layers are not
-          # something master's cache should be seeded from.
-          TOOLBOX_CACHE_TO=()
+          # on. relay-master is an exception: only ci-relay.yml and this job
+          # ever write to it, and ci-relay.yml runs only on metadata-relay
+          # paths so concurrency is rare. publish-toolbox owns the
+          # player-toolbox scope exclusively since publish-toolbox stopped
+          # waiting on this job's test result, which is what used to justify
+          # populating that scope from here; this job reads the scope but
+          # does not write it. Populating relay on push builds means even a
+          # timed-out first run leaves a warm cache behind, so the next push
+          # is fast instead of repeating the same cold build.
+          # Restricted to push events only, to match the registry tags
+          # themselves, which ci-relay.yml only ever pushes on push events. A
+          # pull_request build's layers are not something master's cache
+          # should be seeded from, and neither is a workflow_dispatch build's:
+          # a manual run from a feature branch, such as while smoke testing
+          # this workflow, must not seed the shared relay-master scope.
           RELAY_CACHE_TO=()
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            TOOLBOX_CACHE_TO=(--cache-to type=gha,mode=max,scope=player-toolbox)
+          if [ "${{ github.event_name }}" = "push" ]; then
             RELAY_CACHE_TO=(--cache-to type=gha,mode=max,scope=relay-master)
           fi
 
@@ -270,7 +332,6 @@ jobs:
             docker buildx build \
               --file player/Dockerfile.test \
               --cache-from type=gha,scope=player-toolbox \
-              "${TOOLBOX_CACHE_TO[@]}" \
               --load --tag "$TOOLBOX" .
           fi
 
@@ -300,17 +361,90 @@ jobs:
           echo "Toolbox image: $TOOLBOX"
           echo "Relay image: $RELAY"
 
+      # Two retry granularities, because the two known flakes cost very
+      # different amounts.
+      #
+      # `e2e_relay` intermittently dies at boot with `sys_sigaltstack():
+      # Internal error: Failed to set alternate signal stack` (exit 134)
+      # before any test runs. That was 3 of the 10 failures across the 12
+      # master pushes surveyed on 2026-08-31, and it hit a docs-only PR and a
+      # CI-config PR, so it is environmental, not a code regression. Retrying
+      # startup costs seconds, so it gets 3 attempts.
+      #
+      # A test failure costs a full ~6m30s cycle, so it gets exactly one
+      # retry. The stack is torn down first: the mydia container is seeded at
+      # boot and the tests mutate it, so reusing it would not be a clean
+      # retry.
+      #
+      # A pass on cycle 2 is reported as a warning, not silence. A retried
+      # pass is a flaky run and the log must say so, or this step quietly
+      # hides the regressions the job exists to catch.
       - name: Run player E2E tests
         if: steps.should.outputs.run == 'true'
-        run: |
-          docker compose -f compose.player-e2e.yml up \
-            --abort-on-container-exit \
-            --exit-code-from test
         env:
           E2E_TEST_TARGET: integration_test/all_tests.dart
           MYDIA_E2E_IMAGE: ${{ steps.server.outputs.image }}
           PLAYER_E2E_TOOLBOX_IMAGE: ${{ steps.aux.outputs.toolbox }}
           RELAY_E2E_IMAGE: ${{ steps.aux.outputs.relay }}
+        run: |
+          # The default shell for a `run:` block is `bash -e {0}`, so -e is
+          # already ON. Left alone it aborts the step on the first failing
+          # compose call and no retry ever runs. `set -uo pipefail` does not
+          # turn it off; only `set +e` does.
+          set +e
+          set -uo pipefail
+
+          compose() { docker compose -f compose.player-e2e.yml "$@"; }
+
+          start_deps() {
+            local attempt
+            for attempt in 1 2 3; do
+              echo "::group::Dependency startup attempt ${attempt}/3"
+              if compose up -d --wait relay mydia; then
+                echo "::endgroup::"
+                echo "::notice::Dependencies healthy on attempt ${attempt}/3."
+                if [ "$attempt" -gt 1 ]; then
+                  echo "::warning::Dependencies needed ${attempt} attempts to start. This run is FLAKY, not clean. See e2e-deps-attempt-*-logs.txt in the artifacts."
+                  echo "E2E_RETRIED=true" >> "$GITHUB_ENV"
+                fi
+                return 0
+              fi
+              echo "::endgroup::"
+              echo "::warning::Dependency startup failed on attempt ${attempt}/3."
+              compose logs --no-color relay mydia 2>&1 | tee "e2e-deps-attempt-${attempt}-logs.txt" || true
+              compose down -v || true
+            done
+            return 1
+          }
+
+          for cycle in 1 2; do
+            if ! start_deps; then
+              echo "::error::Dependencies failed to start after 3 attempts (cycle ${cycle}/2)."
+              exit 1
+            fi
+
+            echo "::group::Test cycle ${cycle}/2"
+            compose up --abort-on-container-exit --exit-code-from test test
+            status=$?
+            echo "::endgroup::"
+
+            if [ "$status" -eq 0 ]; then
+              if [ "$cycle" -gt 1 ]; then
+                echo "::warning::Player E2E passed only on cycle ${cycle}. This run is FLAKY, not clean. See e2e-cycle-1-logs.txt in the artifacts."
+                echo "E2E_RETRIED=true" >> "$GITHUB_ENV"
+              fi
+              exit 0
+            fi
+
+            if [ "$cycle" -lt 2 ]; then
+              echo "::warning::Player E2E failed on cycle 1 (exit ${status}); retrying once from a clean stack."
+              compose logs --no-color > e2e-cycle-1-logs.txt 2>&1 || true
+              compose down -v || true
+            fi
+          done
+
+          echo "::error::Player E2E failed on both cycles."
+          exit 1
 
       - name: Collect service logs
         if: failure() && steps.should.outputs.run == 'true'
@@ -319,15 +453,27 @@ jobs:
           docker compose -f compose.player-e2e.yml logs relay > relay-logs.txt 2>&1 || true
           docker compose -f compose.player-e2e.yml logs test > test-logs.txt 2>&1 || true
 
-      - name: Upload logs on failure
-        if: failure() && steps.should.outputs.run == 'true'
+      - name: Upload logs on failure or retry
+        # Not purely failure()-gated: a retried success (E2E_RETRIED=true,
+        # set by the "Run player E2E tests" step above) is flaky, not clean,
+        # and its warning points here for e2e-cycle-1-logs.txt or
+        # e2e-deps-attempt-*-logs.txt. If this stayed failure()-only, that
+        # pointer would name a file nobody could ever retrieve. Do not
+        # simplify this back to failure() alone.
+        if: (failure() || env.E2E_RETRIED == 'true') && steps.should.outputs.run == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: player-e2e-logs
+          # e2e-cycle-1-logs.txt exists only when a first test cycle failed
+          # and was retried. e2e-deps-attempt-*-logs.txt exists only for
+          # dependency startup attempts that failed. upload-artifact defaults
+          # to if-no-files-found: warn, so their absence is not an error.
           path: |
             mydia-logs.txt
             relay-logs.txt
             test-logs.txt
+            e2e-cycle-1-logs.txt
+            e2e-deps-attempt-*-logs.txt
           retention-days: 7
 
       - name: Cleanup

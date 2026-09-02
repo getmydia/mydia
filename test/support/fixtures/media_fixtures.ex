@@ -29,6 +29,30 @@ defmodule Mydia.MediaFixtures do
   end
 
   @doc """
+  Generate a media item with a specific category.
+
+  `MediaItem.changeset/2` does not cast `:category` and `create_media_item/2`
+  auto-classifies from metadata after insert, so a category passed to
+  `media_item_fixture/1` is silently dropped. This sets it afterwards with
+  `override: true` so nothing reclassifies it later. Pass `nil` for an item
+  that has not been classified yet.
+  """
+  def categorized_media_item_fixture(attrs, category) do
+    item = media_item_fixture(attrs)
+
+    case category do
+      nil ->
+        item
+        |> Ecto.Changeset.change(%{category: nil, category_override: true})
+        |> Mydia.Repo.update!()
+
+      category ->
+        {:ok, updated} = Mydia.Media.update_category(item, category, override: true)
+        updated
+    end
+  end
+
+  @doc """
   Generate an episode.
   """
   def episode_fixture(attrs \\ %{}) do

@@ -28,7 +28,7 @@ defmodule Mydia.Library.BatchMatcher do
   path with no result gets no `ImportCandidate` update, stays in the
   outstanding set (`Mydia.ImportCandidates.outstanding/3`), and is reselected
   by every later chunk forever. `Mydia.ImportCandidates`'s rematch path
-  (`ImportCandidates.rematch/2`) depends on the same guarantee for its own
+  (`ImportCandidates.drain_rematch/2`) depends on the same guarantee for its own
   `ImportCandidate` rows.
 
   Two layers keep that true. `MetadataMatcher.match_file/2` is HTTP plus

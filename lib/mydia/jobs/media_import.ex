@@ -1761,27 +1761,42 @@ defmodule Mydia.Jobs.MediaImport do
         {:ok, media_file}
 
       {:error, changeset} ->
-        # Check if this is a library type mismatch error
-        if has_library_type_mismatch_error?(changeset) do
-          media_type = if episode, do: "TV show", else: "movie"
+        cond do
+          # A concurrent import (this job racing its own retry, or two
+          # workers racing the same season pack) can lose the create/1 race
+          # after this process already decided the path was free: another
+          # insert won and the unique index on (library_path_id,
+          # relative_path) for active rows (migration 20260901234336) turns
+          # the loser's insert into a changeset error instead of a second
+          # row. Adopt the row that won instead of failing the import --
+          # the same "someone already put this here" reuse this function
+          # already does before attempting to place the file (see "Reusing
+          # existing media file" above) and the `{:existing, path}` branch
+          # of resolve_conflict_path/2, just caught one step later.
+          duplicate_active_path_error?(changeset) ->
+            adopt_duplicate_active_path(library_path.id, relative_path, path)
 
-          Logger.error("Library type mismatch during import",
-            path: path,
-            media_type: media_type,
-            download_id: download.id,
-            media_item_id: download.media_item_id,
-            episode_id: episode && episode.id,
-            errors: format_changeset_errors(changeset)
-          )
+          has_library_type_mismatch_error?(changeset) ->
+            media_type = if episode, do: "TV show", else: "movie"
 
-          {:error, :library_type_mismatch}
-        else
-          Logger.error("Failed to create media file record",
-            path: path,
-            errors: inspect(changeset.errors)
-          )
+            Logger.error("Library type mismatch during import",
+              path: path,
+              media_type: media_type,
+              download_id: download.id,
+              media_item_id: download.media_item_id,
+              episode_id: episode && episode.id,
+              errors: format_changeset_errors(changeset)
+            )
 
-          {:error, :database_error}
+            {:error, :library_type_mismatch}
+
+          true ->
+            Logger.error("Failed to create media file record",
+              path: path,
+              errors: inspect(changeset.errors)
+            )
+
+            {:error, :database_error}
         end
     end
   end
@@ -1891,6 +1906,42 @@ defmodule Mydia.Jobs.MediaImport do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, _key, ""), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  # Matches the specific violation `guard_unique_active_path/1` in
+  # MediaFile attaches to :relative_path (declared under two constraint
+  # names there because ecto_sqlite3 reports a convention-derived name
+  # rather than the real one for a partial index) -- never a genuine
+  # validation failure, which must still surface as an error.
+  defp duplicate_active_path_error?(changeset) do
+    Enum.any?(changeset.errors, fn {field, {_message, opts}} ->
+      field == :relative_path and Keyword.get(opts, :constraint) == :unique
+    end)
+  end
+
+  # Looks up the row that won the race and adopts it. A miss here (the
+  # constraint fired but no active row exists for this path) means it was
+  # trashed or deleted between the insert and this read -- nothing to adopt,
+  # so report the original failure and let the caller retry.
+  defp adopt_duplicate_active_path(library_path_id, relative_path, path) do
+    case Library.get_media_file_by_relative_path(library_path_id, relative_path) do
+      nil ->
+        Logger.error("Duplicate-path constraint hit but no active row found to adopt",
+          path: path,
+          library_path_id: library_path_id,
+          relative_path: relative_path
+        )
+
+        {:error, :database_error}
+
+      existing ->
+        Logger.info("Reusing existing media file after a duplicate-path race",
+          path: path,
+          id: existing.id
+        )
+
+        {:ok, existing}
+    end
+  end
 
   # Checks if a changeset has a library type mismatch error
   defp has_library_type_mismatch_error?(changeset) do

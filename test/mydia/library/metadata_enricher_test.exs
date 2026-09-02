@@ -972,6 +972,185 @@ defmodule Mydia.Library.MetadataEnricherTest do
     |> Enum.map(&{&1.season_number, &1.episode_count})
   end
 
+  describe "monitored on the update path" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      %{bypass: bypass, config: config}
+    end
+
+    test "an unmonitored movie is still unmonitored after re-enrichment",
+         %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Quiet Harbour",
+          year: 2019,
+          tmdb_id: id,
+          monitored: false
+        })
+        |> backdate()
+
+      Bypass.stub(
+        bypass,
+        "GET",
+        "/tmdb/movies/#{id}",
+        &respond_json(&1, movie_body(id, "Quiet Harbour"))
+      )
+
+      match = %{
+        provider_id: to_string(id),
+        provider_type: :tmdb,
+        title: "Quiet Harbour",
+        metadata: %{media_type: :movie}
+      }
+
+      assert {:ok, updated} =
+               MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+
+      assert updated.id == item.id
+      refute updated.monitored
+      refute Repo.get!(MediaItem, item.id).monitored
+    end
+
+    test "an unmonitored show is still unmonitored after re-enrichment",
+         %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Lanternwick",
+          tmdb_id: id,
+          metadata_source: :tmdb,
+          monitored: false
+        })
+        |> backdate()
+
+      Bypass.stub(
+        bypass,
+        "GET",
+        "/tmdb/tv/shows/#{id}",
+        &respond_json(&1, tv_body(id, "Lanternwick"))
+      )
+
+      match = tv_match(id, :tmdb, "Lanternwick")
+
+      assert {:ok, updated} =
+               MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+
+      assert updated.id == item.id
+      refute updated.monitored
+    end
+
+    test "a monitored item stays monitored after re-enrichment",
+         %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Copperline",
+          year: 2019,
+          tmdb_id: id,
+          monitored: true
+        })
+        |> backdate()
+
+      Bypass.stub(
+        bypass,
+        "GET",
+        "/tmdb/movies/#{id}",
+        &respond_json(&1, movie_body(id, "Copperline"))
+      )
+
+      match = %{
+        provider_id: to_string(id),
+        provider_type: :tmdb,
+        title: "Copperline",
+        metadata: %{media_type: :movie}
+      }
+
+      assert {:ok, updated} =
+               MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+
+      assert updated.id == item.id
+      assert updated.monitored
+    end
+
+    # Guards the other direction: Part 1 must not narrow the update attrs so far
+    # that the enricher stops doing its actual job.
+    test "the update still writes the metadata fields it owns",
+         %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Stale Title",
+          year: 1999,
+          tmdb_id: id,
+          monitored: false
+        })
+        |> backdate()
+
+      Bypass.stub(
+        bypass,
+        "GET",
+        "/tmdb/movies/#{id}",
+        &respond_json(&1, movie_body(id, "Marrowfield"))
+      )
+
+      match = %{
+        provider_id: to_string(id),
+        provider_type: :tmdb,
+        title: "Marrowfield",
+        metadata: %{media_type: :movie}
+      }
+
+      assert {:ok, updated} =
+               MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+
+      assert updated.id == item.id
+      assert updated.title == "Marrowfield"
+      # movie_body/2 hardcodes a 2019-01-01 release date.
+      assert updated.year == 2019
+      refute updated.monitored
+    end
+
+    test "a brand new item is created monitored",
+         %{bypass: bypass, config: config} do
+      id = System.unique_integer([:positive])
+
+      Bypass.stub(
+        bypass,
+        "GET",
+        "/tmdb/movies/#{id}",
+        &respond_json(&1, movie_body(id, "Ninebark"))
+      )
+
+      match = %{
+        provider_id: to_string(id),
+        provider_type: :tmdb,
+        title: "Ninebark",
+        metadata: %{media_type: :movie}
+      }
+
+      assert {:ok, created} =
+               MetadataEnricher.enrich(match, config: config, fetch_episodes: false)
+
+      assert created.monitored
+    end
+  end
+
   defp tv_match(id, provider_type, title) do
     %{
       provider_id: to_string(id),

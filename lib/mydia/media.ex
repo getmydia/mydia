@@ -22,6 +22,9 @@ defmodule Mydia.Media do
     - `:ids` - Filter to a specific list of media item ids
     - `:monitored` - Filter by monitored status (true/false)
     - `:category` - Filter by category (atom or string, e.g., :anime_movie or "anime_movie")
+    - `:exclude_categories` - Drop these categories from the result (list of atoms or strings)
+    - `:category_in` - Keep only these categories in the result (list of atoms or strings)
+    - `:base_query` - Ecto query to start from instead of the full MediaItem table
     - `:library_path_type` - Filter by library path type (:movies, :series, etc.)
     - `:search` - Search by title (case-insensitive substring match)
     - `:added_since` - Filter to items inserted after this DateTime
@@ -31,7 +34,7 @@ defmodule Mydia.Media do
   """
   @spec list_media_items(keyword()) :: [MediaItem.t()]
   def list_media_items(opts \\ []) do
-    MediaItem
+    (opts[:base_query] || MediaItem)
     |> apply_media_item_filters(opts)
     |> maybe_preload(opts[:preload])
     |> Repo.all()
@@ -407,7 +410,12 @@ defmodule Mydia.Media do
 
     simple_changes =
       changes
-      |> Map.take([:title, :original_title, :year])
+      # :monitored and :monitor_new_seasons are operator settings, not metadata.
+      # They are here so that a write of either lands in the item's history with
+      # its old and new value, whichever caller made it. Without that, the
+      # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
+      # from an ordinary "Metadata enriched" update for three weeks.
+      |> Map.take([:title, :original_title, :year, :monitored, :monitor_new_seasons])
       |> Enum.map(fn {field, new_value} ->
         old_value = Map.get(original, field)
         {field, %{old: old_value, new: new_value}}
@@ -694,12 +702,24 @@ defmodule Mydia.Media do
   Only updates non-nil attributes. Returns `{:ok, count}` on success
   where count is the number of updated items, or `{:error, :not_found}` if
   `attrs` references a quality profile or library path that does not exist.
+
+  When `attrs` sets `:monitored`, this records a monitoring decision for every
+  affected item, exactly like `update_media_items_monitored/3` does. Without
+  that, an operator re-enabling monitoring here instead of through the
+  dedicated toggle would leave no decision on record, and
+  `Mydia.Jobs.MonitoringRepair` would read the item's last recorded decision
+  as the earlier disable and undo the re-enable on the next boot
+  (getmydia/mydia#653). A batch that does not touch `:monitored` emits nothing.
+
+  ## Options
+    - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :system
+    - `:actor_id` - The ID of the actor (user_id, job name, etc.)
   """
-  @spec update_media_items_batch([binary()], map()) ::
+  @spec update_media_items_batch([binary()], map(), keyword()) ::
           {:ok, non_neg_integer()} | {:error, :not_found | term()}
-  def update_media_items_batch(ids, attrs) when is_list(ids) and is_map(attrs) do
+  def update_media_items_batch(ids, attrs, opts \\ []) when is_list(ids) and is_map(attrs) do
     if referenced_foreign_keys_exist?(attrs) do
-      do_update_media_items_batch(ids, attrs)
+      do_update_media_items_batch(ids, attrs, opts)
     else
       {:error, :not_found}
     end
@@ -724,7 +744,7 @@ defmodule Mydia.Media do
     Ecto.Query.CastError -> false
   end
 
-  defp do_update_media_items_batch(ids, attrs) do
+  defp do_update_media_items_batch(ids, attrs, opts) do
     Repo.transaction(fn ->
       # Build the update list, only including non-nil values
       updates =
@@ -735,15 +755,49 @@ defmodule Mydia.Media do
 
       if map_size(updates) > 1 do
         # More than just updated_at
-        MediaItem
-        |> where([m], m.id in ^ids)
-        |> Repo.update_all(set: Map.to_list(updates))
-        |> elem(0)
+
+        # Fetch media items before the update, but only when the batch
+        # touches :monitored: a quality-profile-only batch has nothing to
+        # record and should pay no extra query.
+        media_items =
+          if Map.has_key?(updates, :monitored) do
+            MediaItem
+            |> where([m], m.id in ^ids)
+            |> Repo.all()
+          else
+            []
+          end
+
+        {count, _} =
+          MediaItem
+          |> where([m], m.id in ^ids)
+          |> Repo.update_all(set: Map.to_list(updates))
+
+        unless media_items == [] do
+          monitored = normalize_monitored(Map.fetch!(updates, :monitored))
+          actor_type = Keyword.get(opts, :actor_type, :system)
+          actor_id = Keyword.get(opts, :actor_id, "media_context")
+
+          Enum.each(media_items, fn media_item ->
+            Events.media_item_monitoring_changed(media_item, monitored, actor_type, actor_id)
+          end)
+        end
+
+        count
       else
         0
       end
     end)
   end
+
+  # The batch edit form in the LiveView posts "true"/"false" strings; direct
+  # callers (tests, other contexts) pass real booleans. Repo.update_all casts
+  # either shape fine for the write itself, but the monitoring_changed event's
+  # metadata must carry an actual boolean, not the literal string "true".
+  defp normalize_monitored(true), do: true
+  defp normalize_monitored(false), do: false
+  defp normalize_monitored("true"), do: true
+  defp normalize_monitored("false"), do: false
 
   @doc """
   Deletes multiple media items in a transaction.
@@ -830,23 +884,38 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Returns the count of movies in the library.
+  Returns the count of media items matching the given filter options.
+
+  Accepts the same options as `list_media_items/1`, but aggregates in the
+  database instead of loading rows.
   """
-  @spec count_movies() :: non_neg_integer()
-  def count_movies do
-    MediaItem
-    |> where([m], m.type == "movie")
+  @spec count_media_items(keyword()) :: non_neg_integer()
+  def count_media_items(opts \\ []) do
+    (opts[:base_query] || MediaItem)
+    |> apply_media_item_filters(opts)
     |> Repo.aggregate(:count)
   end
 
   @doc """
-  Returns the count of TV shows in the library.
+  Returns the count of movies in the library.
+
+  ## Options
+    - `:exclude_categories` - Drop these categories from the count
   """
-  @spec count_tv_shows() :: non_neg_integer()
-  def count_tv_shows do
-    MediaItem
-    |> where([m], m.type == "tv_show")
-    |> Repo.aggregate(:count)
+  @spec count_movies(keyword()) :: non_neg_integer()
+  def count_movies(opts \\ []) do
+    count_media_items(Keyword.merge(Keyword.take(opts, [:exclude_categories]), type: "movie"))
+  end
+
+  @doc """
+  Returns the count of TV shows in the library.
+
+  ## Options
+    - `:exclude_categories` - Drop these categories from the count
+  """
+  @spec count_tv_shows(keyword()) :: non_neg_integer()
+  def count_tv_shows(opts \\ []) do
+    count_media_items(Keyword.merge(Keyword.take(opts, [:exclude_categories]), type: "tv_show"))
   end
 
   @doc """
@@ -2148,6 +2217,16 @@ defmodule Mydia.Media do
       {:category, category}, query when is_binary(category) ->
         where(query, [m], m.category == ^category)
 
+      {:exclude_categories, []}, query ->
+        query
+
+      {:exclude_categories, categories}, query when is_list(categories) ->
+        names = Enum.map(categories, &to_string/1)
+        # `category` is nullable and SQL evaluates NULL NOT IN (...) to NULL,
+        # which drops the row. An item that has not been classified yet must
+        # stay on the page it is already on, so keep NULLs explicitly.
+        where(query, [m], is_nil(m.category) or m.category not in ^names)
+
       {:library_path_type, library_type}, query ->
         filter_by_library_path_type(query, library_type)
 
@@ -2166,6 +2245,13 @@ defmodule Mydia.Media do
 
       {:has_files, true}, query ->
         filter_by_has_files(query)
+
+      {:category_in, []}, query ->
+        query
+
+      {:category_in, categories}, query when is_list(categories) ->
+        names = Enum.map(categories, &to_string/1)
+        where(query, [m], m.category in ^names)
 
       _other, query ->
         query

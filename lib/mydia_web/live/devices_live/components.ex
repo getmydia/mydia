@@ -241,6 +241,10 @@ defmodule MydiaWeb.DevicesLive.Components do
     %{id: "linux", name: "Linux tarball", icon: "hero-archive-box", label: "Download .tar.gz"}
   ]
 
+  attr :hide_player, :boolean,
+    default: false,
+    doc: "when true, omit the browser player tile from the download list"
+
   def download_card(assigns) do
     assigns = assign(assigns, :downloads, @downloads)
 
@@ -277,6 +281,7 @@ defmodule MydiaWeb.DevicesLive.Components do
           </a>
 
           <.link
+            :if={!@hide_player}
             id="download-web"
             navigate={~p"/player"}
             class="flex items-center gap-3 p-4 rounded-xl border border-base-300 hover:border-primary/40 hover:shadow-md transition-all"

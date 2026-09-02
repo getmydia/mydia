@@ -5,6 +5,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   require Logger
 
+  alias Mydia.Accounts
   alias Mydia.Media
   alias Mydia.Media.RecentlyAdded
   alias Mydia.Library
@@ -78,9 +79,14 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   defp load_dashboard_data(socket) do
-    # Load basic stats
-    movie_count = Media.count_movies()
-    tv_show_count = Media.count_tv_shows()
+    # Load basic stats. The nav hook (MydiaWeb.Live.UserAuth.on_mount
+    # :load_navigation_data) runs before mount/3 and already assigns
+    # :excluded_categories, so reuse it here rather than recomputing it. This
+    # keeps the dashboard's :movie_count / :tv_show_count assigns in sync with
+    # the sidebar badges, which the same assign keys drive in Layouts.app.
+    excluded_categories = socket.assigns[:excluded_categories] || []
+    movie_count = Media.count_movies(exclude_categories: excluded_categories)
+    tv_show_count = Media.count_tv_shows(exclude_categories: excluded_categories)
     active_downloads_count = Downloads.count_active_downloads()
     total_storage = Library.total_storage_bytes() |> format_bytes()
 
@@ -132,6 +138,16 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   @impl true
+  def handle_event("dismiss_player_banner", _params, socket) do
+    case Accounts.dismiss_player_banner(socket.assigns.current_user) do
+      {:ok, _preference} ->
+        {:noreply, assign(socket, :player_banner_dismissed, true)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not dismiss that. Please try again.")}
+    end
+  end
+
   def handle_event("open_library_picker", params, socket) do
     {:noreply, MediaAddHelpers.put_library_picker(socket, params)}
   end

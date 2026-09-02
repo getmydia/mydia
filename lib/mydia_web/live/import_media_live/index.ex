@@ -25,20 +25,21 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # `phx-value-band` is client-controlled, so the atom it names is looked up
   # rather than converted. An unknown value is a silent no-op because there is
   # no form state to explain a rejection to.
-  # `:ignored` is not a confidence band -- it is a status -- but it rides the
-  # same chip row and the same client-controlled atom lookup as the real
-  # bands, and load_groups/1 translates it into ImportCandidates.page/2's
-  # `:status` option rather than its `:band` option (which has no clause for
-  # it and would raise).
+  # `:ignored` and `:queued` are not confidence bands -- they are statuses --
+  # but they ride the same chip row and the same client-controlled atom
+  # lookup as the real bands, and load_groups/1 translates them into
+  # ImportCandidates.page/2's `:status` option rather than its `:band` option
+  # (which has no clause for either and would raise).
   @bands %{
     "all" => :all,
     "ready" => :ready,
     "needs_attention" => :needs_attention,
     "no_match" => :no_match,
+    "queued" => :queued,
     "ignored" => :ignored
   }
 
-  @empty_band_counts %{ready: 0, needs_attention: 0, no_match: 0, ignored: 0, total: 0}
+  @empty_band_counts %{ready: 0, needs_attention: 0, no_match: 0, queued: 0, ignored: 0, total: 0}
 
   # How long an :import_candidates_changed burst is allowed to coalesce into
   # one refresh. The scanner and the match phase can each broadcast many of
@@ -243,9 +244,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
            socket.assigns.selected_library_path_id do
       {:noreply,
        socket
-       |> accept_result(
-         ImportCandidates.accept_all_matched(library_path_id, allow_episode_creation: true)
-       )}
+       |> queue_result(ImportCandidates.queue_accept_all_matched(library_path_id))}
     else
       {:unauthorized, socket} -> {:noreply, socket}
       nil -> {:noreply, put_flash(socket, :error, "Select a library before importing results.")}
@@ -290,7 +289,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   def handle_event("select_band", %{"band" => band}, socket) do
     case Map.fetch(@bands, band) do
       {:ok, band} ->
-        status = if band == :ignored, do: "ignored", else: "pending"
+        {status, _band} = status_for_band(band)
 
         {:noreply,
          socket
@@ -309,7 +308,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_event("search", %{"q" => q}, socket) do
-    status = if socket.assigns.band == :ignored, do: "ignored", else: "pending"
+    {status, _band} = status_for_band(socket.assigns.band)
 
     {:noreply,
      socket
@@ -362,7 +361,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_event("select_current_page", _params, socket) do
-    status = if socket.assigns.band == :ignored, do: "ignored", else: "pending"
+    {status, _band} = status_for_band(socket.assigns.band)
 
     selection =
       socket.assigns.selected_library_path_id
@@ -373,8 +372,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   end
 
   def handle_event("select_all_matching", _params, socket) do
-    status = if socket.assigns.band == :ignored, do: "ignored", else: "pending"
-    page_band = if socket.assigns.band == :ignored, do: :all, else: socket.assigns.band
+    {status, page_band} = status_for_band(socket.assigns.band)
     filter = %{band: page_band, q: socket.assigns.search}
 
     selection =
@@ -401,11 +399,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("accept_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      {:noreply,
-       socket
-       |> accept_result(
-         ImportCandidates.accept(socket.assigns.selection, allow_episode_creation: true)
-       )}
+      {:noreply, queue_result(socket, ImportCandidates.queue_accept(socket.assigns.selection))}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -443,15 +437,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
   def handle_event("rematch_selected", _params, socket) do
     with :ok <- Authorization.authorize_import_media(socket) do
-      selection = socket.assigns.selection
-      count = SelectionScope.count(selection)
+      {:ok, %{queued: queued}} = ImportCandidates.queue_rematch(socket.assigns.selection)
 
       {:noreply,
        socket
-       |> put_flash(:info, "Re-matching #{count} group(s)…")
+       |> put_flash(:info, "Queued #{queued} group(s) for re-matching.")
        |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
        |> load_groups()
-       |> start_async(:rematch_candidates, fn -> ImportCandidates.rematch(selection) end)}
+       |> refresh_counts()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -705,22 +698,6 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     {:noreply, socket}
   end
 
-  def handle_async(:rematch_candidates, {:ok, {:ok, stats}}, socket) do
-    message =
-      if stats.failures > 0 do
-        "Re-matched #{stats.files} file(s), #{stats.failures} failed."
-      else
-        "Re-matched #{stats.files} file(s)."
-      end
-
-    {:noreply, socket |> put_flash(:info, message) |> load_groups() |> refresh_counts()}
-  end
-
-  def handle_async(:rematch_candidates, {:exit, reason}, socket) do
-    Logger.warning("Batch re-match crashed", reason: inspect(reason))
-    {:noreply, put_flash(socket, :error, "Re-match failed. Try again.")}
-  end
-
   @impl true
   def handle_info({:import_run_progress, run}, socket) do
     socket =
@@ -814,13 +791,26 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     "Cleared #{candidates} scan result(s). Dismissed decisions are preserved."
   end
 
-  defp accept_result(socket, {:ok, %{accepted: accepted}}) do
+  defp queue_result(socket, {:ok, %{queued: queued, skipped: skipped}}) do
     socket
-    |> put_flash(:info, "Accepted #{accepted} group(s).")
+    |> put_flash(:info, queue_message(queued, skipped))
     |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
     |> load_groups()
     |> refresh_counts()
   end
+
+  # The skipped count was previously dropped on the floor, so a user who
+  # selected 40 groups and saw 12 promoted was told "Accepted 12 group(s)" with
+  # no account of the rest. The wording stays generic because a skip covers
+  # three distinct causes and the flash has no room to distinguish them; the
+  # per-group reason lands on the row as queue_error.
+  defp queue_message(queued, 0), do: "Queued #{queued} group(s) for import."
+
+  defp queue_message(0, skipped),
+    do: "Nothing queued. #{skipped} group(s) have nothing to import from."
+
+  defp queue_message(queued, skipped),
+    do: "Queued #{queued} group(s) for import. #{skipped} skipped, nothing to import from."
 
   defp show_outcome(socket, run) do
     socket =
@@ -942,11 +932,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   defp load_groups(socket) do
     library_path_id = socket.assigns.selected_library_path_id
     band = socket.assigns.band
-    # `:ignored` is a status, not a real band -- ImportCandidates.page/2's
-    # :band option has no clause for it, so it goes through :status instead
-    # and the band filter itself is left at :all (a dismissed group's own
-    # confidence band plays no part in the Ignored view).
-    {status, page_band} = if band == :ignored, do: {"ignored", :all}, else: {"pending", band}
+    {status, page_band} = status_for_band(band)
     filter = %{band: page_band, q: socket.assigns.search}
 
     {groups, next_cursor} =
@@ -985,6 +971,14 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     |> assign(:expanded_ids, expanded)
   end
 
+  # `:queued` and `:ignored` are statuses, not confidence bands. Neither is a
+  # clause of ImportCandidates.page/2's `:band` option, which would raise, so
+  # both go through `:status` with the band itself left at `:all` (a queued or
+  # dismissed group's own confidence band plays no part in those views).
+  defp status_for_band(:ignored), do: {"ignored", :all}
+  defp status_for_band(:queued), do: {"queued", :all}
+  defp status_for_band(band), do: {"pending", band}
+
   # Recomputes the counts that only change when a group's status changes,
   # not on every page move or search keystroke: the current library's band
   # breakdown for the filter chips, the Ignored chip's own count, and every
@@ -1004,6 +998,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       library_path_id
       |> ImportCandidates.band_counts()
       |> Map.put(:ignored, ImportCandidates.count_by_status(library_path_id, "ignored"))
+      |> Map.put(:queued, ImportCandidates.count_by_status(library_path_id, "queued"))
 
     socket
     |> assign(:band_counts, band_counts)
@@ -1029,7 +1024,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   # will drop out on the next full `load_groups/1` regardless.
   defp refresh_group_row(socket, anchor_key) do
     library_path_id = socket.assigns.selected_library_path_id
-    status = if socket.assigns.band == :ignored, do: "ignored", else: "pending"
+    {status, _band} = status_for_band(socket.assigns.band)
 
     case ImportCandidates.get_group(library_path_id, anchor_key, status: status) do
       nil -> socket

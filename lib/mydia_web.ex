@@ -93,6 +93,8 @@ defmodule MydiaWeb do
       import MydiaWeb.CollectionComponents
       # Admin configuration page chrome (admin_page)
       import MydiaWeb.AdminComponents
+      # Poster card body: shared title box and bottom-pinned metadata
+      import MydiaWeb.PosterCardComponents
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

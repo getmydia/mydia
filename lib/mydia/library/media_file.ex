@@ -306,6 +306,7 @@ defmodule Mydia.Library.MediaFile do
       name: :media_files_has_parent,
       message: "must belong to a media item or episode"
     )
+    |> guard_unique_active_path()
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:quality_profile_id)
@@ -363,10 +364,35 @@ defmodule Mydia.Library.MediaFile do
       name: :media_files_has_parent,
       message: "must belong to a media item or episode"
     )
+    |> guard_unique_active_path()
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
+  end
+
+  # Two names for one guarantee: on Postgres the constraint violation reports
+  # the real index name. SQLite's driver never gets an index name back from a
+  # partial-unique violation (just "UNIQUE constraint failed: <table>.<col>,
+  # <table>.<col>"), so ecto_sqlite3 guesses "<table>_<col>_<col>_index"
+  # instead, which happens to collide with the plain (non-unique,
+  # non-partial) index of that same conventional name created by
+  # add_import_scale_indexes. Declaring both lets either adapter's error
+  # resolve to the same changeset error. Kept as one shared function so the
+  # two names never drift out of sync between changeset/2 and
+  # scan_changeset/2.
+  defp guard_unique_active_path(changeset) do
+    changeset
+    |> unique_constraint([:library_path_id, :relative_path],
+      name: :media_files_active_library_path_relative_path_index,
+      error_key: :relative_path,
+      message: "already tracked at this library path"
+    )
+    |> unique_constraint([:library_path_id, :relative_path],
+      name: :media_files_library_path_id_relative_path_index,
+      error_key: :relative_path,
+      message: "already tracked at this library path"
+    )
   end
 
   # Ensure either media_item_id or episode_id is set, but not both

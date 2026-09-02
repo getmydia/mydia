@@ -6,6 +6,7 @@ defmodule MydiaWeb.DiscoverComponents do
   use Phoenix.Component
 
   import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
+  import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1]
 
   alias Mydia.Metadata.ImageUrl
   alias MydiaWeb.LibraryComponents
@@ -75,7 +76,7 @@ defmodule MydiaWeb.DiscoverComponents do
 
     ~H"""
     <div class={[
-      "card bg-base-100 shadow-sm hover:shadow-md transition-shadow relative group",
+      "card bg-base-100 shadow-lg hover:shadow-xl transition-shadow relative group h-full",
       @current && "ring-2 ring-primary"
     ]}>
       <%= if (vote = Map.get(@item, :vote_average)) && vote > 0 do %>
@@ -133,27 +134,24 @@ defmodule MydiaWeb.DiscoverComponents do
             class="rounded-t-box"
           />
       <% end %>
-      <div class="card-body p-3">
-        <h3 class="font-semibold text-sm line-clamp-2" title={@item.title}>
-          {@item.title}
-        </h3>
-        <%= if @item.year do %>
-          <p class="text-xs text-base-content/60">{@item.year}</p>
-        <% end %>
-        <.trending_card_action
-          :if={not @current}
-          item={@item}
-          media_type={@media_type}
-          current_user={@current_user}
-          adding={@adding?}
-          requesting_item_id={@requesting_item_id}
-          libraries={@libraries}
-          add_event={@add_event}
-          request_event={@request_event}
-          can_add={@can_add}
-          always_show_caret={@always_show_caret}
-        />
-      </div>
+      <.poster_card_body title={@item.title}>
+        <:meta>
+          <p :if={@item.year} class="text-xs text-base-content/60">{@item.year}</p>
+          <.trending_card_action
+            :if={not @current}
+            item={@item}
+            media_type={@media_type}
+            current_user={@current_user}
+            adding={@adding?}
+            requesting_item_id={@requesting_item_id}
+            libraries={@libraries}
+            add_event={@add_event}
+            request_event={@request_event}
+            can_add={@can_add}
+            always_show_caret={@always_show_caret}
+          />
+        </:meta>
+      </.poster_card_body>
     </div>
     """
   end

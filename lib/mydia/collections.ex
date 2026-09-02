@@ -28,7 +28,7 @@ defmodule Mydia.Collections do
   import Mydia.QueryHelpers
   alias Mydia.Repo
   alias Mydia.Collections.{Collection, CollectionItem, SmartRules}
-  alias Mydia.Media.MediaItem
+  alias Mydia.Media.{MediaCategory, MediaItem}
   alias Mydia.Accounts.User
 
   ## Collections
@@ -65,6 +65,128 @@ defmodule Mydia.Collections do
     |> apply_collection_filters(opts)
     |> maybe_preload(opts[:preload])
     |> Repo.all()
+  end
+
+  @doc """
+  Returns the collections the user has pinned to their sidebar, in order.
+
+  Pins are owner scoped. A shared collection pinned by its owner appears only
+  in the owner's sidebar, which is what keeps a section from turning into a
+  fixed section for everyone on the instance.
+  """
+  @spec list_pinned_sections(User.t()) :: [Collection.t()]
+  def list_pinned_sections(%User{} = user) do
+    from(c in Collection,
+      where: c.user_id == ^user.id and not is_nil(c.pinned_position),
+      order_by: [asc: c.pinned_position, asc: c.name]
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Returns the category names that the user's exclusive sections have claimed
+  away from the built-in Movies and TV pages.
+
+  Derived from the rules on every read rather than stored, so it cannot drift
+  from the rules that produced it. Returns `[]` for anything it cannot read
+  with certainty, including malformed JSON, because the caller is the sidebar
+  and the library pages: failing open is the only safe direction.
+  """
+  @spec claimed_categories(User.t() | [Collection.t()]) :: [binary()]
+  def claimed_categories(%User{} = user) do
+    user |> list_pinned_sections() |> claimed_categories()
+  end
+
+  def claimed_categories(sections) when is_list(sections) do
+    sections
+    |> Enum.filter(& &1.exclusive)
+    |> pinned_categories()
+  end
+
+  @doc """
+  Returns the category names covered by every pinned section, whether or not
+  that section is exclusive.
+
+  `claimed_categories/1` answers "what has been taken away from Movies and TV".
+  This answers the broader "does a section for these categories already exist",
+  which is what decides whether to stop suggesting the user create one. A
+  non-exclusive section is still a section the user made on purpose.
+  """
+  @spec pinned_categories([Collection.t()]) :: [binary()]
+  def pinned_categories(sections) when is_list(sections) do
+    sections
+    |> Enum.flat_map(&section_categories/1)
+    |> Enum.uniq()
+  end
+
+  @doc """
+  Returns true when a collection's rules are simple enough to be made exclusive.
+
+  Only a single `category in [...]` condition qualifies. A richer rule set
+  cannot be cleanly subtracted from the Movies and TV queries, so the toggle is
+  not offered for it.
+  """
+  @spec exclusive_eligible?(Collection.t()) :: boolean()
+  def exclusive_eligible?(%Collection{} = collection) do
+    section_categories(collection) != []
+  end
+
+  @doc """
+  Pins a collection to the user's sidebar, appending it after existing sections.
+
+  Only a smart collection can be pinned. A manual collection has no
+  `smart_rules`, and `MediaLive.Index`'s section page falls back to `"{}"` for
+  a nil rule set, which is an unfiltered query, so pinning one would put the
+  entire library behind a section link. Refuses with `{:error, :not_smart}`
+  instead.
+
+  ## Options
+    - `:sidebar_icon` - hero icon name from `Collection.valid_sidebar_icons/0`
+    - `:exclusive` - claim the section's categories away from Movies and TV
+  """
+  @spec pin_section(User.t(), Collection.t(), keyword()) ::
+          {:ok, Collection.t()}
+          | {:error, Ecto.Changeset.t() | :unauthorized | :system_collection | :not_smart}
+  def pin_section(user, collection, opts \\ [])
+
+  def pin_section(%User{} = _user, %Collection{type: "manual"} = _collection, _opts) do
+    {:error, :not_smart}
+  end
+
+  def pin_section(%User{} = user, %Collection{type: "smart"} = collection, opts) do
+    next_position =
+      user
+      |> list_pinned_sections()
+      |> Enum.map(& &1.pinned_position)
+      |> Enum.max(fn -> -1 end)
+      |> Kernel.+(1)
+
+    exclusive = Keyword.get(opts, :exclusive, false) and exclusive_eligible?(collection)
+
+    attrs = %{pinned_position: next_position, exclusive: exclusive}
+
+    attrs =
+      case Keyword.fetch(opts, :sidebar_icon) do
+        {:ok, icon} -> Map.put(attrs, :sidebar_icon, icon)
+        :error -> attrs
+      end
+
+    update_collection(user, collection, attrs)
+  end
+
+  @doc """
+  Removes a collection from the sidebar. The collection itself is kept.
+
+  Exclusivity is cleared at the same time, so an unpinned section can never go
+  on hiding items from a page the user can no longer navigate away from.
+  """
+  @spec unpin_section(User.t(), Collection.t()) ::
+          {:ok, Collection.t()} | {:error, Ecto.Changeset.t()}
+  def unpin_section(%User{} = user, %Collection{} = collection) do
+    update_collection(user, collection, %{
+      pinned_position: nil,
+      exclusive: false
+    })
   end
 
   @doc """
@@ -628,6 +750,30 @@ defmodule Mydia.Collections do
   end
 
   ## Private Helpers
+
+  # Returns the category names a section covers, or [] when the rules are
+  # anything other than exactly one `category in [...]` condition.
+  defp section_categories(%Collection{type: "smart", smart_rules: rules})
+       when is_binary(rules) do
+    case Jason.decode(rules) do
+      {:ok, %{"conditions" => [condition]}} -> condition_categories(condition)
+      _ -> []
+    end
+  end
+
+  defp section_categories(_collection), do: []
+
+  defp condition_categories(%{
+         "field" => "category",
+         "operator" => "in",
+         "value" => values
+       })
+       when is_list(values) do
+    known = Enum.map(MediaCategory.all(), &Atom.to_string/1)
+    Enum.filter(values, &(&1 in known))
+  end
+
+  defp condition_categories(_condition), do: []
 
   defp apply_pagination(query, opts) do
     query

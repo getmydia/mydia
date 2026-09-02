@@ -10,8 +10,8 @@ defmodule Mydia.Subtitles.Uploader do
   a brand new sidecar to adopt on the next rescan.
 
   Unlike a search result, an uploaded file's format is not declared by
-  anything trustworthy: the filename extension `allow_upload`'s `accept`
-  option checks is entirely client-controlled. The real gate is
+  anything trustworthy: the filename extension the upload modal's file input
+  filters on is entirely client-controlled. The real gate is
   `Mydia.Subtitles.Format.detect/1`, run on the bytes actually received, the
   same function `Downloader` and `Sidecars` both already trust for the same
   reason.

@@ -68,4 +68,23 @@ void main() {
       expect(gate.shouldAttempt, isFalse);
     });
   });
+
+  group('RemoteControlInitGate after a failed attempt', () {
+    test('still allows a retry once registration succeeds', () {
+      final gate = RemoteControlInitGate();
+
+      // First attempt runs and fails before wiring a receiver.
+      expect(gate.shouldAttempt, isTrue);
+      gate.begin();
+      gate.end();
+
+      // A later registration success must be able to drive another attempt.
+      expect(gate.shouldAttempt, isTrue);
+      gate.begin();
+      gate.succeed();
+      gate.end();
+
+      expect(gate.shouldAttempt, isFalse);
+    });
+  });
 }

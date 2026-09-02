@@ -4,24 +4,15 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
   # jobs are inserted but never executed by the test run.
   use Oban.Testing, repo: Mydia.Repo
 
-  import Ecto.Query
   import Phoenix.LiveViewTest
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
-  import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
   alias Mydia.ImportCandidates
   alias Mydia.Library
-  alias Mydia.Library.{ImportCandidate, ImportCandidateGroup, MediaFile}
+  alias Mydia.Library.{ImportCandidate, ImportCandidateGroup}
   alias Mydia.Repo
-
-  # "import all accepts every provider-matched result..." promotes a
-  # candidate with no locally pre-existing media item (the "uncertain" case),
-  # which makes CandidatePromotion enrich through a live provider fetch. The
-  # stub keeps that fetch on loopback instead of the real relay -- the test
-  # sandbox refuses real outbound HTTP outright.
-  setup :setup_metadata_stub
 
   setup %{conn: conn} do
     # The app skips Oban entirely in test env (see Mydia.Application), so
@@ -552,13 +543,64 @@ defmodule MydiaWeb.ImportMediaRunControlTest do
     |> element("#import-all-results")
     |> render_click()
 
-    refute Repo.get(ImportCandidate, confident.id)
-    refute Repo.get(ImportCandidate, uncertain.id)
-    assert Repo.get(ImportCandidate, unmatched.id)
-    assert Repo.get(ImportCandidate, local.id)
-    assert Repo.get(ImportCandidate, other.id)
+    # Both provider-matched groups in the selected library are queued for
+    # import, regardless of confidence -- "Import all" is the explicit human
+    # override. The unmatched and local-show groups in the same library are
+    # left alone, and so is every candidate in the other library: that
+    # isolation is what this test exists to protect.
+    assert Repo.reload!(confident).queued_op == "accept"
+    assert Repo.reload!(uncertain).queued_op == "accept"
+    assert is_nil(Repo.reload!(unmatched).queued_op)
+    assert is_nil(Repo.reload!(local).queued_op)
+    assert is_nil(Repo.reload!(other).queued_op)
+  end
 
-    assert Repo.exists?(from(f in MediaFile, where: f.media_item_id == ^confident_movie.id))
+  test "queuing an accept enqueues the accept-drain worker", %{
+    conn: conn,
+    library_path: lp
+  } do
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 9101})
+
+    import_candidate_fixture(%{
+      library_path_id: lp.id,
+      anchor_key: "queue worker movie",
+      media_type: "movie",
+      provider_type: "tmdb",
+      provider_id: to_string(movie.tmdb_id),
+      title: movie.title,
+      year: movie.year,
+      confidence: 0.99,
+      parsed_info: %{"type" => "movie"}
+    })
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{lp.id}")
+
+    view |> element("#import-all-results") |> render_click()
+
+    assert_enqueued(
+      worker: Mydia.Jobs.ApplyImportCandidates,
+      queue: :default,
+      args: %{"library_path_id" => lp.id}
+    )
+  end
+
+  test "queuing a re-match enqueues the rematch-drain worker", %{
+    conn: conn,
+    library_path: lp
+  } do
+    candidate =
+      import_candidate_fixture(%{library_path_id: lp.id, anchor_key: "queue worker rematch"})
+
+    {:ok, view, _html} = live(conn, ~p"/import?library_path_id=#{lp.id}")
+
+    render_click(view, "toggle_group", %{"id" => candidate.anchor_key})
+    view |> element("#rematch-selected") |> render_click()
+
+    assert_enqueued(
+      worker: Mydia.Jobs.RematchImportCandidates,
+      queue: :default,
+      args: %{"library_path_id" => lp.id}
+    )
   end
 
   test "scan controls and review are both visible while idle", %{conn: conn} do

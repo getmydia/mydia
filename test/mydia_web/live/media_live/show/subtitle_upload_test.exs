@@ -64,6 +64,27 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleUploadTest do
     view |> element("#subtitle-manage-upload") |> render_click()
   end
 
+  # The four extensions are the file input's own accept attribute, not
+  # allow_upload's accept: option. That option resolves every entry through
+  # MIME.has_type?/1, so it required registering the subtitle types on the mime
+  # dependency at compile time, which no builder that compiles dependencies in
+  # isolation can reproduce; it left the NixOS module of v0.14.0-beta.4 unable
+  # to boot. See Mydia.Config.DependencyCompileEnvTest.
+  #
+  # allow_upload is now accept: :any, so nothing raises if this attribute is
+  # dropped. The file dialog would just silently stop filtering, and only the
+  # server-side Format.detect/1 gate would remain. This asserts the client-side
+  # half is still there.
+  test "the file input filters the dialog to subtitle extensions", %{conn: conn} do
+    {media_item, media_file} = movie_with_media_file()
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+
+    open_upload_modal(view, media_file.id)
+
+    assert has_element?(view, ~s(input[type="file"][accept=".srt,.ass,.ssa,.vtt"]))
+  end
+
   test "uploads an SRT and creates an upload-origin track", %{conn: conn} do
     {media_item, media_file} = movie_with_media_file()
 

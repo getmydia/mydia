@@ -94,18 +94,39 @@ defmodule Mydia.Library.TrashStore do
 
   Returns `{:error, reason}` when a file that is present could not be moved.
   The caller must not mark the row trashed in that case.
+
+  ## Options
+
+    * `:move` - defaults to `true`. With `move: false`, a present file is
+      never touched: `do_store/2` (the actual `File.rename/2`/`File.cp/2`)
+      is never called, and the function returns `{:error, :file_present}`
+      instead. An absent file still returns `{:ok, :missing}`, exactly as
+      with the default.
+
+      This exists for callers that only ever want to record a file as
+      missing, never move bytes - a re-scan's "this row's file is gone"
+      path, in particular. `Library.reject_files_still_on_disk/1` already
+      checks `File.exists?` before a re-scan calls this, but that check and
+      this one happen at different times; a file that reappears on disk in
+      between (a reconnecting mount, a concurrent import) must not be moved
+      into the trash out from under whatever put it there. `move: false`
+      makes that structurally impossible rather than merely unlikely: there
+      is no code path from "file present" to a move.
   """
-  @spec store(MediaFile.t()) :: {:ok, {:moved, String.t()} | :missing} | {:error, term()}
-  def store(%MediaFile{} = media_file) do
+  @spec store(MediaFile.t(), keyword()) ::
+          {:ok, {:moved, String.t()} | :missing} | {:error, term()}
+  def store(%MediaFile{} = media_file, opts \\ []) do
+    move? = Keyword.get(opts, :move, true)
+
     case MediaFile.absolute_path(media_file) do
       nil ->
         {:ok, :missing}
 
       source ->
-        if File.exists?(source) do
-          do_store(media_file, source)
-        else
-          {:ok, :missing}
+        cond do
+          not File.exists?(source) -> {:ok, :missing}
+          move? -> do_store(media_file, source)
+          true -> {:error, :file_present}
         end
     end
   end

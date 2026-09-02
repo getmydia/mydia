@@ -40,6 +40,7 @@ defmodule MydiaWeb.Layouts do
   attr :current_user, :map, default: nil, doc: "the currently authenticated user"
   attr :movie_count, :integer, default: 0, doc: "number of movies in library"
   attr :tv_show_count, :integer, default: 0, doc: "number of TV shows in library"
+  attr :sections, :list, default: [], doc: "collections the user pinned to the sidebar"
   attr :downloads_count, :integer, default: 0, doc: "number of active downloads"
   attr :pending_requests_count, :integer, default: 0, doc: "number of pending requests"
 
@@ -55,6 +56,10 @@ defmodule MydiaWeb.Layouts do
   attr :changelog_notice, :map,
     default: nil,
     doc: "unread release notes, as %{version: String.t(), older_count: non_neg_integer()}"
+
+  attr :hide_player, :boolean,
+    default: false,
+    doc: "when true, suppress the player entry points in the sidebar and mobile dock"
 
   attr :current_path, :string,
     default: nil,
@@ -103,7 +108,7 @@ defmodule MydiaWeb.Layouts do
               </span>
             </div>
             <div class="flex items-center gap-2">
-              <.link navigate={~p"/changelog"} class="btn btn-sm btn-primary">
+              <.link navigate={~p"/changelog"} class="btn btn-sm btn-neutral">
                 See what's new
               </.link>
               <button
@@ -119,7 +124,11 @@ defmodule MydiaWeb.Layouts do
           </div>
           {render_slot(@inner_block)}
         </main>
-        <.mobile_dock current_user={@current_user} current_path={@current_path} />
+        <.mobile_dock
+          current_user={@current_user}
+          current_path={@current_path}
+          hide_player={@hide_player}
+        />
       </div>
 
       <!-- Sidebar -->
@@ -135,6 +144,8 @@ defmodule MydiaWeb.Layouts do
                 <h1 class="text-2xl font-bold">Mydia</h1>
               </div>
               <a
+                :if={!@hide_player}
+                id="sidebar-player-link"
                 href="/player"
                 class="btn btn-primary btn-sm gap-1.5 rounded-full shadow-sm hover:shadow-md transition-shadow"
                 title="Open Player"
@@ -167,13 +178,32 @@ defmodule MydiaWeb.Layouts do
                   class={nav_active?(@current_path, "/movies", false) && "active"}
                 >
                   <.icon name="hero-film" class="w-5 h-5" /> Movies
-                  <span class="badge badge-sm">{@movie_count}</span>
+                  <span id="nav-movie-count" class="badge badge-sm">{@movie_count}</span>
                 </.link>
               </li>
               <li>
                 <.link navigate="/tv" class={nav_active?(@current_path, "/tv", false) && "active"}>
                   <.icon name="hero-tv" class="w-5 h-5" /> TV Shows
-                  <span class="badge badge-sm">{@tv_show_count}</span>
+                  <span id="nav-tv-count" class="badge badge-sm">{@tv_show_count}</span>
+                </.link>
+              </li>
+              <li :for={section <- @sections}>
+                <.link
+                  id={"nav-section-#{section.id}"}
+                  navigate={~p"/sections/#{section.id}"}
+                  class={nav_active?(@current_path, "/sections/#{section.id}", false) && "active"}
+                >
+                  <.icon name={section.sidebar_icon || "hero-squares-2x2"} class="w-5 h-5" />
+                  {section.name}
+                </.link>
+              </li>
+              <li>
+                <.link
+                  id="nav-add-section"
+                  navigate={~p"/sections/new"}
+                  class="text-base-content/60 hover:text-base-content"
+                >
+                  <.icon name="hero-plus" class="w-5 h-5" /> Add section
                 </.link>
               </li>
               <li class="menu-title mt-4">
@@ -369,7 +399,7 @@ defmodule MydiaWeb.Layouts do
             </button>
 
             <div class="dropdown dropdown-top dropdown-end w-full">
-              <label tabindex="0" class="btn btn-ghost w-full justify-start">
+              <label id="sidebar-user-menu" tabindex="0" class="btn btn-ghost w-full justify-start">
                 <div class="avatar placeholder">
                   <div class="bg-neutral text-neutral-content rounded-full w-8">
                     <span class="text-xs">
@@ -535,6 +565,10 @@ defmodule MydiaWeb.Layouts do
   attr :current_user, :map, default: nil, doc: "the currently authenticated user"
   attr :current_path, :string, default: nil, doc: "the current request path"
 
+  attr :hide_player, :boolean,
+    default: false,
+    doc: "when true, omit the Player tab from the dock"
+
   def mobile_dock(assigns) do
     ~H"""
     <nav
@@ -545,6 +579,7 @@ defmodule MydiaWeb.Layouts do
         "bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))]",
         "flex items-center justify-around",
         "rounded-2xl px-2 py-2",
+        "transition-[opacity,visibility] duration-200 ease-out",
         "bg-base-100/60 backdrop-blur-3xl backdrop-saturate-150",
         "border border-white/20",
         "shadow-[0_8px_32px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.2)]"
@@ -587,6 +622,8 @@ defmodule MydiaWeb.Layouts do
           label="Downloads"
         />
         <a
+          :if={!@hide_player}
+          id="dock-player-link"
           href="/player"
           data-dock-link
           class="flex flex-col items-center justify-center min-w-[52px] py-1.5 rounded-xl text-primary hover:bg-primary/10 transition-[color,opacity] duration-300 ease-in-out relative z-10"

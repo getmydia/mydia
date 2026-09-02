@@ -35,35 +35,31 @@ class AppShell extends ConsumerStatefulWidget {
     required this.location,
   });
 
-  /// Routes whose own screen already renders a [CastButton] in a real,
-  /// always-visible app bar.
+  /// Whether the shell must paint [CastOverlayButton] over [location].
   ///
   /// [CastOverlayButton] exists only for screens with nowhere else to put the
-  /// affordance — the desktop browse screens that suppress their app bar
-  /// entirely (Home/Unwatched/Favorites/RecentlyAdded/Collections). Library,
-  /// Downloads, Settings and Search all keep a real app bar on every
-  /// platform, with their own action buttons (sort/view-toggle, cancel-all,
-  /// clear, etc.) living in the exact top-right band this overlay paints
-  /// into. Rendering the overlay there too would sit on top of — and
-  /// intercept taps for — those existing buttons. Do not delete this check
-  /// "to simplify": it is what keeps the overlay from colliding with a
-  /// screen's own app bar the next time one grows an action.
+  /// affordance: ones that suppress their app bar on desktop and so have no
+  /// top-right band of their own. Home is the last such destination.
+  ///
+  /// This used to be the opposite question, `hasOwnCastButton`, answered by an
+  /// allowlist of every route that carries its own [CastButton]. That list was
+  /// a maintenance trap and it drifted twice: `/calendar` and `/filter/:id`
+  /// both grew a real app bar with a [CastButton] in it, neither was added,
+  /// and both ended up with two cast buttons stacked in the same corner:
+  /// the overlay floating above the screen's own bar, which reads as a
+  /// doubled header.
+  ///
+  /// Inverting it makes the safe answer the default. Every in-shell browse
+  /// screen now goes through `BrowseScaffold`, which always renders a glass
+  /// bar with a trailing [CastButton] on every platform, so a new route is
+  /// correct without touching this function. Only a screen that deliberately
+  /// suppresses its bar needs naming here, and adding one is a conscious act.
   ///
   /// Public (rather than a private helper on [_AppShellState]) and annotated
   /// `@visibleForTesting` purely so a test can assert the routing decision
   /// directly, without reconstructing the shell's full provider graph.
   @visibleForTesting
-  static bool hasOwnCastButton(String location) =>
-      location.startsWith('/movies') ||
-      location.startsWith('/shows') ||
-      location.startsWith('/downloads') ||
-      location.startsWith('/settings') ||
-      location.startsWith('/search') ||
-      location.startsWith('/unwatched') ||
-      location.startsWith('/continue-watching') ||
-      location.startsWith('/favorites') ||
-      location.startsWith('/recently-added') ||
-      location.startsWith('/collections');
+  static bool needsCastOverlay(String location) => location == '/';
 
   /// Builds the shell's cast overlay for the desktop or mobile branch.
   ///
@@ -74,7 +70,7 @@ class AppShell extends ConsumerStatefulWidget {
   /// mobile app bar — never `MediaQuery.paddingOf(context).top` folded in on
   /// top of that, or the button sits under the strip twice.
   ///
-  /// Public (rather than inlined at each call site) and annotated
+  /// Public (rather than inlined in [castOverlaySlot]) and annotated
   /// `@visibleForTesting` so a test can exercise the exact value this shell
   /// computes for each branch directly, instead of re-declaring the numbers
   /// in a mirror that can silently drift from the real call sites.
@@ -82,6 +78,33 @@ class AppShell extends ConsumerStatefulWidget {
   static Widget castOverlay({required bool isDesktop}) => CastOverlayButton(
         topInset: isDesktop ? 12 : kToolbarHeight + 8,
       );
+
+  /// The overlay slot both branches drop into their `Stack`: the real
+  /// [castOverlay] on a route that needs one, an inert zero-size box
+  /// otherwise.
+  ///
+  /// The routing decision lives in here, rather than as an `if` at the two
+  /// call sites, so that a test can exercise it for real. When the `if` was
+  /// at the call sites, the only way to cover it was for the test to rebuild
+  /// the same conditional around [needsCastOverlay], a mirror, which proves
+  /// the mirror works and nothing about the shell. Reviewing #645, CodeRabbit
+  /// caught exactly that: the `/calendar` case would have passed even if this
+  /// widget still used the old predicate. Calling the seam removes the mirror,
+  /// the same way [castOverlay] already removed the one around its `topInset`
+  /// arithmetic.
+  ///
+  /// `SizedBox.shrink()` rather than omitting the child: [CastOverlayButton]
+  /// builds a `Positioned`, so the slot is a `Stack` child either way, and a
+  /// zero-size unpositioned child cannot grow a loose `Stack` or paint
+  /// anything.
+  @visibleForTesting
+  static Widget castOverlaySlot({
+    required String location,
+    required bool isDesktop,
+  }) =>
+      needsCastOverlay(location)
+          ? castOverlay(isDesktop: isDesktop)
+          : const SizedBox.shrink();
 
   /// The gutter both the desktop and mobile branches wrap their main content
   /// column in: a `SafeArea` that consumes the ambient `MediaQuery.padding`
@@ -295,7 +318,6 @@ class _AppShellState extends ConsumerState<AppShell>
     // proper repaint propagation on mobile when combined with GlobalKey
     // on the Scaffold (causing the "stuck navigation" bug).
     final isDesktop = Breakpoints.isDesktop(context);
-    final showCastOverlay = !AppShell.hasOwnCastButton(location);
 
     // Shell-level ambient backdrop, fed by the active browse screen. Sits behind
     // the (now transparent) in-shell Scaffolds for all browse screens (plan U5).
@@ -332,7 +354,7 @@ class _AppShellState extends ConsumerState<AppShell>
                 ),
               ],
             ),
-            if (showCastOverlay) AppShell.castOverlay(isDesktop: true),
+            AppShell.castOverlaySlot(location: location, isDesktop: true),
           ],
         ),
       );
@@ -368,7 +390,7 @@ class _AppShellState extends ConsumerState<AppShell>
               ],
             ),
           ),
-          if (showCastOverlay) AppShell.castOverlay(isDesktop: false),
+          AppShell.castOverlaySlot(location: location, isDesktop: false),
         ],
       ),
       bottomNavigationBar: AppShell.dockChrome(

@@ -32,6 +32,28 @@ defmodule MydiaWeb.CollectionLive.Components do
     assign_new(socket, :rules_value_options, fn -> SmartRulesFields.value_options() end)
   end
 
+  @doc """
+  Normalizes a condition value into the list form the multi-value operators store.
+
+  Accepts both shapes the editor deals in: the list a `<select multiple>`
+  submits, and the comma-joined string every text input round-trips through.
+  """
+  def value_list(nil), do: []
+
+  def value_list(value) when is_list(value),
+    do: value |> Enum.map(&to_string/1) |> trim_present()
+
+  def value_list(value), do: value |> to_string() |> String.split(",") |> trim_present()
+
+  @doc """
+  Collapses a condition value to the single string the scalar inputs expect.
+  """
+  def value_string(nil), do: ""
+  def value_string(value) when is_list(value), do: Enum.join(value, ", ")
+  def value_string(value), do: to_string(value)
+
+  defp trim_present(values), do: values |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+
   # Smart rules editor component
   attr :conditions, :list, required: true
   attr :match_type, :string, required: true
@@ -276,17 +298,34 @@ defmodule MydiaWeb.CollectionLive.Components do
 
   # Enum fields - options are loaded once when the dialog opens, never in render
   defp render_value_input(assigns, %{type: :enum}) do
-    assigns = assign(assigns, :options, Map.get(assigns.value_options, assigns.field, []))
+    multi? = SmartRulesFields.multi_value_operator?(assigns.operator)
+    stored = value_list(assigns.value)
+
+    # Switching an operator from multi-value to scalar leaves the old list behind
+    # for one change event. A single select can only carry one value, so narrow to
+    # the first rather than marking several options selected at once.
+    selected = if multi?, do: stored, else: Enum.take(stored, 1)
+
+    assigns =
+      assigns
+      |> assign(:multi, multi?)
+      |> assign(:selected, selected)
+      |> assign(
+        :options,
+        with_stored_values(Map.get(assigns.value_options, assigns.field, []), selected)
+      )
 
     ~H"""
     <select
-      name={"conditions[#{@index}][value]"}
+      name={if @multi, do: "conditions[#{@index}][value][]", else: "conditions[#{@index}][value]"}
+      multiple={@multi}
+      size={@multi && 4}
       class="select select-sm select-bordered flex-1 min-w-0 bg-base-100"
     >
-      <option value="">Select...</option>
-      <%= for {val, label} <- @options do %>
-        <option value={val} selected={@value == val or @value == to_string(val)}>{label}</option>
-      <% end %>
+      <option :if={not @multi} value="">Select...</option>
+      <option :for={{val, label} <- @options} value={val} selected={to_string(val) in @selected}>
+        {label}
+      </option>
     </select>
     """
   end
@@ -378,6 +417,17 @@ defmodule MydiaWeb.CollectionLive.Components do
       placeholder={value_placeholder(@operator)}
     />
     """
+  end
+
+  # A saved rule can name a value the library does not currently produce: a genre
+  # every matching item has since lost, or one that never matched anything. The
+  # options come from a scan of what is in the library, so such a value has no
+  # option to be selected on - and because this select is a live form field, the
+  # next change event would post the empty placeholder back and quietly erase the
+  # rule. Appending the stored value keeps it both visible and round-trippable.
+  defp with_stored_values(options, selected) do
+    known = MapSet.new(options, fn {val, _label} -> to_string(val) end)
+    options ++ for val <- selected, not MapSet.member?(known, val), do: {val, val}
   end
 
   defp format_date_value(nil), do: ""

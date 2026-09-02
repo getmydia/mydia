@@ -80,7 +80,17 @@ RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
 # ============================================
 # Elixir Build Stage
 # ============================================
-FROM elixir:1.19-alpine AS builder
+# Digest-pinned, not tag-pinned, because the official elixir images publish no
+# Alpine-qualified tag: the variants are <version>[-otp-NN]-alpine and nothing
+# more, so a tag cannot express which Alpine a builder runs on. This digest
+# carries Alpine 3.23.5. It matters because this stage runs the BEAM to
+# compile, and musl 1.2.6 (Alpine 3.24) aborts the VM at startup on a CPU with
+# a large XSAVE area. See metadata-relay/Dockerfile for the full explanation.
+#
+# Nothing bumps this automatically: .github/dependabot.yml has no docker
+# ecosystem. It is pinned for correctness, not currency. Move it once a
+# released OTP tag carries erlang/otp#11376.
+FROM elixir:1.19-alpine@sha256:c504b910bbc1d5dccefb2d81e6a49a7747b931ab737c1e774a46fdf85906ef11 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -122,14 +132,14 @@ RUN mix local.hex --force && mix local.rebar --force
 # It CANNOT be changed at runtime - each Docker image is built for a specific database
 ARG DATABASE_TYPE=sqlite
 
-# Build commit hash for development/master builds
-# When set, the version will display as "X.Y.Z*<short-commit>" instead of just "X.Y.Z"
-ARG BUILD_COMMIT=""
+# BUILD_COMMIT is deliberately not declared here. Its value changes on every
+# commit, so setting it at this height makes every RUN below uncacheable. It
+# lives beside BUILD_VERSION just above `mix compile`; the full explanation is
+# in the comment there, and ci.yml fails the build if it moves back up.
 
 # Set build environment
 ENV MIX_ENV=prod
 ENV DATABASE_TYPE=${DATABASE_TYPE}
-ENV BUILD_COMMIT=${BUILD_COMMIT}
 
 # Create app directory
 WORKDIR /app
@@ -168,9 +178,31 @@ COPY plugins ./plugins
 # Copy Flutter build output from flutter-builder stage
 COPY --from=flutter-builder /app/player/build/web ./priv/static/player
 
-# Application version: set by CI from the git tag, defaults to "dev" for local builds
+# Build identity. BUILD_VERSION is set by CI from the git tag and defaults to
+# "dev" for local builds. BUILD_COMMIT is the SHA, set for master and release
+# builds so the version renders as "X.Y.Z*<short-commit>".
+#
+# Both are read at compile time: mix.exs reads BUILD_VERSION for the project
+# version, and Mydia.System captures BUILD_COMMIT into a module attribute. Both
+# also change per build, so this position, below the dependency layers and above
+# `mix compile`, is load-bearing in both directions.
+#
+# Higher is wrong. BuildKit folds a RUN's environment into its ExecOp cache key,
+# while a COPY is a FileOp that ignores it, so a commit-varying ENV above
+# `mix deps.get` and `mix deps.compile` leaves those two permanently uncacheable
+# in ci-docker.yml, release.yml and ci-player-e2e.yml at once. That asymmetry is
+# what hid the bug for so long: the build log showed `COPY mix.exs mix.lock` as
+# CACHED with every RUN beneath it missing, which reads as impossible. Here it
+# costs nothing, because the source COPYs above already vary per commit.
+#
+# Lower is also wrong. `mix release` recompiles nothing, so setting BUILD_COMMIT
+# after `mix compile` leaves Mydia.System's attribute nil and drops the commit
+# suffix from the version and from crash reports, with no build or test failure
+# to catch it. ci.yml guards this placement.
 ARG BUILD_VERSION=""
 ENV BUILD_VERSION=${BUILD_VERSION}
+ARG BUILD_COMMIT=""
+ENV BUILD_COMMIT=${BUILD_COMMIT}
 
 # Compile application (includes building Rust NIFs via Rustler)
 # Cache cargo for Rust NIF compilation
@@ -202,7 +234,19 @@ RUN mix release
 # ============================================
 # Runtime Stage
 # ============================================
-FROM erlang:28-alpine
+# Alpine 3.23, and not an erlang image. metadata-relay/Dockerfile carries the
+# full explanation: musl 1.2.6, which Alpine 3.24 ships, tightened
+# sigaltstack() to reject any size below sysconf(_SC_MINSIGSTKSZ), which on a
+# CPU with a large XSAVE area exceeds the fixed 8 KB OTP 28 asks for, so the VM
+# aborts at startup. erlang:28-alpine happens to be built on 3.23.5 with musl
+# 1.2.5 today, but no tag of that image pins an Alpine version, so an upstream
+# rebuild would break every user with such a CPU and no commit here.
+#
+# No erlang base is needed. mix.exs declares no `releases`, so include_erts
+# defaults to true and the release carries the ERTS the builder produced. This
+# image's own OTP was never executed, only its shared libraries were, and those
+# are installed explicitly below.
+FROM alpine:3.23
 
 # Database type: sqlite (default) or postgres
 # This argument is only used for image labels - the actual adapter is already compiled
@@ -222,6 +266,8 @@ LABEL org.opencontainers.image.title="Mydia" \
 # libpq is needed for PostgreSQL connections at runtime
 # sqlite provides the sqlite3 CLI for database inspection
 # openssl is needed for self-signed certificate generation
+# libstdc++ and ncurses-libs came from the erlang base this image used to use;
+# the bundled ERTS and the Rust NIFs link against them
 RUN apk add --no-cache \
     sqlite \
     libpq \
@@ -233,7 +279,9 @@ RUN apk add --no-cache \
     su-exec \
     tzdata \
     shadow \
-    openssl
+    openssl \
+    libstdc++ \
+    ncurses-libs
 
 # Create app user with default UID/GID (will be updated by entrypoint if needed)
 RUN addgroup -g 1000 mydia && \

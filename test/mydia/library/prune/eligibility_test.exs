@@ -31,16 +31,66 @@ defmodule Mydia.Library.Prune.EligibilityTest do
 
   defp duration(seconds), do: %{"container" => "mkv", "duration" => seconds}
 
+  # Builds a group with two rows sharing the same (library_path_id,
+  # relative_path) key. Two ACTIVE rows genuinely at the same library path
+  # and relative path are no longer reachable: migration
+  # 20260901234336_fold_duplicate_media_files_and_enforce_path_uniqueness
+  # added a partial unique index on (library_path_id, relative_path) scoped
+  # `WHERE trashed_at IS NULL`, and every insert goes through a changeset
+  # that enforces it (confirmed nothing in lib/ bypasses it with a raw
+  # insert) -- `media_file_fixture/1` itself now fails on the second call
+  # for a duplicate active path.
+  #
+  # The index does not reach a row with a nil library_path_id, though, and
+  # `populate_media_file_relative_paths` leaves a file sitting outside every
+  # configured library path with both `relative_path` and `library_path_id`
+  # nil (see lib/mydia/media/README.md, "media_files.path is nil on every
+  # row") rather than clearing it. Two such orphaned rows attached to the
+  # same subject collide on that shared `{nil, nil}` key at the Elixir
+  # equality this check uses, even though SQL uniqueness never compares two
+  # NULLs equal -- so `:duplicate_registration` still guards a real state,
+  # just this narrower one now. Bypass the changeset with `Repo.update_all/2`
+  # (`validate_required([:relative_path, :library_path_id])` would otherwise
+  # refuse to create the row at all) to reach it, the same way
+  # `backdate_media_file/2` bypasses the changeset for `inserted_at`.
+  defp orphaned_duplicate_group do
+    movie = media_item_fixture(%{type: "movie", title: "Muppets Most Wanted", year: 2014})
+    lp = library_path_fixture(%{type: "movies"})
+
+    files =
+      for path <- ["Muppets/Muppets.1.mkv", "Muppets/Muppets.2.mkv"] do
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: path,
+          metadata: duration(6000.0)
+        })
+      end
+
+    ids = Enum.map(files, & &1.id)
+
+    Mydia.Repo.update_all(
+      from(f in Mydia.Library.MediaFile, where: f.id in ^ids),
+      set: [library_path_id: nil, relative_path: nil]
+    )
+
+    files = Enum.map(files, &Mydia.Repo.reload!/1)
+
+    %Group{
+      subject_type: :movie,
+      subject_id: movie.id,
+      subject: movie,
+      media_item: Mydia.Repo.preload(movie, :episodes),
+      files: Mydia.Repo.preload(files, :library_path)
+    }
+  end
+
   describe "check/1 duplicate registration" do
-    test "refuses two rows sharing library_path_id and relative_path" do
-      group =
-        movie_group([
-          %{relative_path: "Muppets/Muppets.mkv", metadata: duration(6000.0)},
-          %{relative_path: "Muppets/Muppets.mkv", metadata: duration(6000.0)}
-        ])
+    test "refuses two orphaned rows sharing a nil library_path_id and relative_path" do
+      group = orphaned_duplicate_group()
 
       assert {:refused, :duplicate_registration, detail} = Eligibility.check(group)
-      assert detail.path == "Muppets/Muppets.mkv"
+      assert detail.path == nil
     end
   end
 
@@ -128,11 +178,7 @@ defmodule Mydia.Library.Prune.EligibilityTest do
     test "reports duplicate_registration ahead of duration agreement" do
       # Identical rows trivially agree on duration. The scanner bug is the
       # more actionable reason, so it must win.
-      group =
-        movie_group([
-          %{relative_path: "same.mkv", metadata: duration(6000.0)},
-          %{relative_path: "same.mkv", metadata: duration(6000.0)}
-        ])
+      group = orphaned_duplicate_group()
 
       assert {:refused, :duplicate_registration, _} = Eligibility.check(group)
     end

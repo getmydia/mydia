@@ -140,6 +140,26 @@
                 <% end %>
               </div>
             </div>
+
+            <div class="divider my-2"></div>
+
+            <div class="form-control w-full">
+              <span class="label-text font-medium">Player</span>
+              <p class="text-sm text-base-content/60 mb-3">
+                Takes the player shortcuts out of the sidebar, the mobile dock and the dashboard.
+                Play buttons on movies and episodes keep working, and the player itself stays
+                available if you open it directly.
+              </p>
+              <.input
+                type="checkbox"
+                id="hide-player-toggle"
+                name="hide_player"
+                label="Hide the player"
+                class="toggle toggle-primary"
+                checked={@hide_player}
+                phx-click="toggle_hide_player"
+              />
+            </div>
           </div>
         </div>
 

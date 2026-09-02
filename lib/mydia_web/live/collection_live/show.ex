@@ -15,7 +15,8 @@ defmodule MydiaWeb.CollectionLive.Show do
   alias Mydia.Collections.Collection
   alias Mydia.Media
 
-  import MydiaWeb.CollectionLive.Components, only: [smart_rules_editor: 1, load_value_options: 1]
+  import MydiaWeb.CollectionLive.Components,
+    only: [smart_rules_editor: 1, load_value_options: 1, value_list: 1, value_string: 1]
 
   @items_per_page 50
   @default_condition %{"field" => "", "operator" => "eq", "value" => ""}
@@ -95,12 +96,9 @@ defmodule MydiaWeb.CollectionLive.Show do
     %{
       "field" => Map.get(cond, "field", ""),
       "operator" => Map.get(cond, "operator", "eq"),
-      "value" => format_condition_value(Map.get(cond, "value", ""))
+      "value" => value_string(Map.get(cond, "value", ""))
     }
   end
-
-  defp format_condition_value(value) when is_list(value), do: Enum.join(value, ", ")
-  defp format_condition_value(value), do: to_string(value)
 
   @impl true
   def handle_params(params, _url, socket) do
@@ -192,6 +190,28 @@ defmodule MydiaWeb.CollectionLive.Show do
                 <.icon name="hero-funnel" class="w-4 h-4" /> Edit Rules
               </button>
             <% end %>
+            <%!-- Pin/unpin as a sidebar section: owned, smart, non-system collections only --%>
+            <%= if can_pin?(@collection, @current_user) do %>
+              <%= if @collection.pinned_position do %>
+                <button
+                  id="unpin-collection"
+                  type="button"
+                  class="btn btn-ghost btn-sm gap-1"
+                  phx-click="unpin_collection"
+                >
+                  <.icon name="hero-bookmark-slash" class="w-4 h-4" /> Unpin from sidebar
+                </button>
+              <% else %>
+                <button
+                  id="pin-collection"
+                  type="button"
+                  class="btn btn-outline btn-primary btn-sm gap-1"
+                  phx-click="pin_collection"
+                >
+                  <.icon name="hero-bookmark" class="w-4 h-4" /> Pin to sidebar
+                </button>
+              <% end %>
+            <% end %>
             <%!-- Settings dropdown for non-system collections --%>
             <%= if not @collection.is_system and can_edit?(@collection, @current_user) do %>
               <div class="dropdown dropdown-end">
@@ -225,7 +245,7 @@ defmodule MydiaWeb.CollectionLive.Show do
           phx-viewport-bottom={@has_more && "load_more"}
           class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4"
         >
-          <div :for={{id, item} <- @streams.items} id={id} class="relative group">
+          <div :for={{id, item} <- @streams.items} id={id} class="relative group h-full">
             <%!-- Remove button for manual collections --%>
             <%= if @collection.type == "manual" and can_edit?(@collection, @current_user) do %>
               <button
@@ -239,13 +259,14 @@ defmodule MydiaWeb.CollectionLive.Show do
               </button>
             <% end %>
 
-            <.link navigate={item_href(item)} class="block">
-              <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
+            <.link navigate={item_href(item)} class="block h-full">
+              <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
                 <.poster_figure src={item.poster_url} alt={item.title} />
-                <div class="card-body p-3">
-                  <h3 class="card-title text-sm line-clamp-2">{item.title}</h3>
-                  <span class="text-xs text-base-content/70">{item.year}</span>
-                </div>
+                <.poster_card_body title={item.title}>
+                  <:meta>
+                    <span class="text-xs text-base-content/70">{item.year}</span>
+                  </:meta>
+                </.poster_card_body>
               </div>
             </.link>
           </div>
@@ -759,6 +780,38 @@ defmodule MydiaWeb.CollectionLive.Show do
     end
   end
 
+  def handle_event("pin_collection", _params, socket) do
+    collection = socket.assigns.collection
+    user = socket.assigns.current_user
+
+    case Collections.pin_section(user, collection) do
+      {:ok, pinned} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Pinned to sidebar")
+         |> push_navigate(to: ~p"/sections/#{pinned.id}")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, pin_error_message(reason))}
+    end
+  end
+
+  def handle_event("unpin_collection", _params, socket) do
+    collection = socket.assigns.collection
+    user = socket.assigns.current_user
+
+    case Collections.unpin_section(user, collection) do
+      {:ok, updated} ->
+        {:noreply,
+         socket
+         |> assign(:collection, updated)
+         |> put_flash(:info, "Removed from sidebar")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, pin_error_message(reason))}
+    end
+  end
+
   # Add Items Modal handlers
 
   def handle_event("open_add_items_modal", _params, socket) do
@@ -891,7 +944,7 @@ defmodule MydiaWeb.CollectionLive.Show do
               %{
                 "field" => new_field,
                 "operator" => cond["operator"] || old_cond["operator"] || "eq",
-                "value" => cond["value"] || ""
+                "value" => value_string(cond["value"])
               }
             end
           end)
@@ -992,11 +1045,14 @@ defmodule MydiaWeb.CollectionLive.Show do
 
   defp parse_condition_value(_field, value, operator)
        when operator in ["in", "not_in", "contains_any"] do
-    # Split comma-separated values into a list
-    value
-    |> String.split(",")
-    |> Enum.map(&String.trim/1)
-    |> Enum.filter(&(&1 != ""))
+    value_list(value)
+  end
+
+  # A multi-select's list can outlive a switch to a scalar operator by one change
+  # event. The editor narrows that list to its first entry, so parse the same one
+  # rather than a joined string, which would match nothing.
+  defp parse_condition_value(field, value, operator) when is_list(value) do
+    parse_condition_value(field, value |> value_list() |> List.first(""), operator)
   end
 
   defp parse_condition_value(_field, value, "between") do
@@ -1114,6 +1170,26 @@ defmodule MydiaWeb.CollectionLive.Show do
   defp can_edit?(%Collection{user_id: user_id}, %{id: current_user_id}) do
     user_id == current_user_id
   end
+
+  # A collection can be pinned to the sidebar only when it is owned, smart
+  # (a manual collection has no rules to scope a section query), and not a
+  # system collection (Favorites cannot be repurposed as a section).
+  defp can_pin?(%Collection{type: "smart", is_system: false} = collection, user) do
+    can_edit?(collection, user)
+  end
+
+  defp can_pin?(_collection, _user), do: false
+
+  defp pin_error_message(:not_smart),
+    do: "Only smart collections can be pinned to the sidebar"
+
+  defp pin_error_message(:unauthorized),
+    do: "You don't have permission to pin this collection"
+
+  defp pin_error_message(:system_collection),
+    do: "System collections cannot be pinned to the sidebar"
+
+  defp pin_error_message(%Ecto.Changeset{} = changeset), do: extract_changeset_error(changeset)
 
   defp type_badge_class("smart"), do: "badge-secondary"
   defp type_badge_class("manual"), do: "badge-primary"
