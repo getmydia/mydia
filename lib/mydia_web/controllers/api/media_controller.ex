@@ -129,8 +129,11 @@ defmodule MydiaWeb.Api.MediaController do
       media_type: media_type
     )
 
-    # Fetch metadata from provider
-    case Metadata.fetch_by_id(config, provider_id, media_type: media_type) do
+    # Fetch metadata from provider. `provider_type` is explicit request input
+    # (validated above to be :tmdb or :tvdb), never guessed from media_type.
+    ref = {provider_type, String.to_integer(provider_id)}
+
+    case Metadata.fetch_by_ref(config, ref, media_type: media_type) do
       {:ok, metadata} ->
         # Build match result for enricher
         match_result = %{

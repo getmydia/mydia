@@ -5,6 +5,7 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Indexers.CategoryMapping
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Media
   alias Mydia.Downloads
   alias Mydia.Settings
@@ -1355,9 +1356,12 @@ defmodule MydiaWeb.SearchLive.Index do
   end
 
   defp fetch_full_metadata(config, match, media_type) do
-    provider_id = match.provider_id
+    # `match` is the search result the id came from, so its own provenance
+    # (`:tmdb` or `:tvdb`) names the provider, rather than guessing from
+    # media_type.
+    ref = Ref.from_search_result(match)
 
-    case Metadata.fetch_by_id(config, to_string(provider_id), media_type: media_type) do
+    case Metadata.fetch_by_ref(config, ref, media_type: media_type) do
       {:ok, metadata} ->
         {:ok, metadata}
 

@@ -177,8 +177,9 @@ defmodule Mydia.Library.MetadataMatcher do
         )
 
         fetch_opts = Keyword.merge(opts, media_type: :movie)
+        ref = {:tmdb, String.to_integer(id)}
 
-        case Metadata.fetch_by_id(config, id, fetch_opts) do
+        case Metadata.fetch_by_ref(config, ref, fetch_opts) do
           {:ok, result} ->
             Logger.info("Direct TMDB lookup successful",
               tmdb_id: id,
@@ -331,8 +332,9 @@ defmodule Mydia.Library.MetadataMatcher do
         )
 
         fetch_opts = Keyword.merge(opts, media_type: :tv_show)
+        ref = {:tmdb, String.to_integer(id)}
 
-        case Metadata.fetch_by_id(config, id, fetch_opts) do
+        case Metadata.fetch_by_ref(config, ref, fetch_opts) do
           {:ok, result} ->
             Logger.info("Direct TMDB TV show lookup successful",
               tmdb_id: id,
@@ -371,9 +373,10 @@ defmodule Mydia.Library.MetadataMatcher do
         )
 
         # For TVDB, we need to use the TVDB-specific fetch
-        fetch_opts = Keyword.merge(opts, media_type: :tv_show, provider: :tvdb)
+        fetch_opts = Keyword.merge(opts, media_type: :tv_show)
+        ref = {:tvdb, String.to_integer(id)}
 
-        case Metadata.fetch_by_id(config, id, fetch_opts) do
+        case Metadata.fetch_by_ref(config, ref, fetch_opts) do
           {:ok, result} ->
             Logger.info("Direct TVDB TV show lookup successful",
               tvdb_id: id,

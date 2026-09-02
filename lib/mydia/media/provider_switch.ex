@@ -225,9 +225,8 @@ defmodule Mydia.Media.ProviderSwitch do
     # show back at "never asked" and lets the suggestion banner re-offer the
     # new provider's alternative ordering if it has one.
     with {:ok, metadata} <-
-           Mydia.Metadata.fetch_by_id(config, new_id,
+           Mydia.Metadata.fetch_by_ref(config, {target_provider, String.to_integer(new_id)},
              media_type: :tv_show,
-             provider: target_provider,
              append_to_response: Mydia.Metadata.default_append_to_response(:tv_show)
            ),
          {:ok, season_datas, expected_episode_count} <-
@@ -362,9 +361,11 @@ defmodule Mydia.Media.ProviderSwitch do
             {:halt, {:error, {:missing_tvdb_season_id, season.season_number}}}
 
           {:ok, opts} ->
-            case Mydia.Metadata.fetch_season_cached(
+            ref = {target_provider, String.to_integer(provider_id)}
+
+            case Mydia.Metadata.fetch_season_by_ref_cached(
                    config,
-                   to_string(provider_id),
+                   ref,
                    season.season_number,
                    opts
                  ) do

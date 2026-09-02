@@ -52,7 +52,7 @@ defmodule Mydia.Media.Franchises do
        do: {:ok, id}
 
   defp resolve_collection_id(%MediaItem{tmdb_id: tmdb_id} = item, config) do
-    case Metadata.fetch_by_id_cached(config, to_string(tmdb_id), media_type: :movie) do
+    case Metadata.fetch_by_ref_cached(config, {:tmdb, tmdb_id}, media_type: :movie) do
       {:ok, %{collection_id: id} = fresh} when is_integer(id) ->
         persist_pointer(item, fresh)
         {:ok, id}

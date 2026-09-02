@@ -251,15 +251,6 @@ defmodule Mydia.Library.MetadataEnricher do
       append_to_response: Metadata.default_append_to_response(media_type)
     ]
 
-    # For TV shows, fetch from the provider that supplied the match so a
-    # TMDB-matched show is not fetched from the TVDB endpoint (and vice versa).
-    fetch_opts =
-      if media_type == :tv_show && provider_type in [:tvdb, :tmdb] do
-        Keyword.put(fetch_opts, :provider, provider_type)
-      else
-        fetch_opts
-      end
-
     # The show's recorded season ordering. This path runs against items that are
     # already in the library, so without it an ordinary rescan of a DVD-ordered
     # show overwrites its metadata blob with the official season list — the same
@@ -272,7 +263,14 @@ defmodule Mydia.Library.MetadataEnricher do
         fetch_opts
       end
 
-    Metadata.fetch_by_id_cached(config, provider_id, fetch_opts)
+    # `provider_type` is the provider that supplied the match, so a
+    # TMDB-matched show is fetched from TMDB (and a TVDB one from TVDB) rather
+    # than guessed from media_type.
+    Metadata.fetch_by_ref_cached(
+      config,
+      {provider_type, String.to_integer(provider_id)},
+      fetch_opts
+    )
   end
 
   # The create path. Everything the provider owns, plus the monitoring default
@@ -390,7 +388,7 @@ defmodule Mydia.Library.MetadataEnricher do
         not episodes_exist_for_show?(preparation.media_item_id)
 
     if should_fetch? do
-      fetch_episode_seasons(metadata, preparation.provider_id, config)
+      fetch_episode_seasons(metadata, preparation.provider_id, preparation.provider_type, config)
     else
       {:ok, []}
     end
@@ -424,7 +422,7 @@ defmodule Mydia.Library.MetadataEnricher do
     :ok
   end
 
-  defp fetch_episode_seasons(metadata, provider_id, config) do
+  defp fetch_episode_seasons(metadata, provider_id, provider_type, config) do
     Logger.debug("Fetching episodes for TV show",
       provider_id: provider_id,
       title: if(is_map(metadata), do: Map.get(metadata, :title), else: nil)
@@ -438,6 +436,8 @@ defmodule Mydia.Library.MetadataEnricher do
     original_language = LanguageCode.original_language_from(metadata)
 
     if seasons != [] do
+      ref = {provider_type, String.to_integer(provider_id)}
+
       season_data =
         Enum.reduce(seasons, [], fn season, acc ->
           season_num = Map.get(season, :season_number, 0)
@@ -447,7 +447,7 @@ defmodule Mydia.Library.MetadataEnricher do
             [tvdb_season_id: tvdb_season_id, original_language: original_language]
             |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
-          case Metadata.fetch_season_cached(config, provider_id, season_num, fetch_opts) do
+          case Metadata.fetch_season_by_ref_cached(config, ref, season_num, fetch_opts) do
             {:ok, fetched_season} ->
               [fetched_season | acc]
 

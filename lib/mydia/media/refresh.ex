@@ -128,12 +128,11 @@ defmodule Mydia.Media.Refresh do
   defp fetch(%MediaItem{} = media_item, provider_id, media_type, source, config) do
     fetch_opts = [
       media_type: media_type,
-      provider: source,
       append_to_response: Metadata.default_append_to_response(media_type),
       season_order: media_item.season_order
     ]
 
-    Metadata.fetch_by_id(config, to_string(provider_id), fetch_opts)
+    Metadata.fetch_by_ref(config, {source, provider_id}, fetch_opts)
   end
 
   # `source` is threaded in from the resolution that actually produced

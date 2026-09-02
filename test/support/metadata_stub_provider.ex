@@ -20,6 +20,12 @@ defmodule Mydia.MetadataStubProvider do
   naturally instead of getting an answer -- this is what let the Discover add
   bug ship three times, because the old id-keyed stub answered that pairing
   and made production's 404 invisible in tests.
+
+  There is also a TMDB-sourced series under `{:tmdb, series_tmdb_id()}`,
+  distinct from the TVDB-sourced one above. It exists for callers that need a
+  TV-shaped id owned by TMDB (an import list, for instance, carries TMDB ids
+  regardless of media type), so a test does not have to reach for the movie's
+  TMDB id and get a shape the real caller would never produce.
   """
 
   @behaviour Mydia.Metadata.Provider
@@ -38,10 +44,12 @@ defmodule Mydia.MetadataStubProvider do
 
   @movie_tmdb_id 550
   @series_tvdb_id 81_189
+  @series_tmdb_id 94_997
   @missing_id 999_999
 
   @movie_title "Stub Movie"
   @series_title "Stub Series"
+  @tmdb_series_title "Stub TMDB Series"
   @season_fetch_block_key {__MODULE__, :season_fetch_block}
   @fetch_by_id_counts_table :mydia_metadata_stub_fetch_by_id_counts
   @raise_on_fetch_by_id_key {__MODULE__, :raise_on_fetch_by_id}
@@ -53,11 +61,17 @@ defmodule Mydia.MetadataStubProvider do
   @doc "TVDB id of the catalog series."
   def series_tvdb_id, do: @series_tvdb_id
 
+  @doc "TMDB id of the catalog's TMDB-sourced series."
+  def series_tmdb_id, do: @series_tmdb_id
+
   @doc "Reserved id whose fetch always fails, for the approval-failure case."
   def missing_id, do: @missing_id
 
   @doc "Ref of the catalog series."
   def series_ref, do: {:tvdb, @series_tvdb_id}
+
+  @doc "Ref of the catalog's TMDB-sourced series."
+  def tmdb_series_ref, do: {:tmdb, @series_tmdb_id}
 
   @doc "Ref of the catalog movie."
   def movie_ref, do: {:tmdb, @movie_tmdb_id}
@@ -67,6 +81,9 @@ defmodule Mydia.MetadataStubProvider do
 
   @doc "Title of the catalog series."
   def series_title, do: @series_title
+
+  @doc "Title of the catalog's TMDB-sourced series."
+  def tmdb_series_title, do: @tmdb_series_title
 
   @doc "Blocks the next season fetch until the calling test releases it."
   def block_next_season_fetch(owner) when is_pid(owner) do
@@ -188,6 +205,7 @@ defmodule Mydia.MetadataStubProvider do
     case ref do
       {:tvdb, @series_tvdb_id} -> {:ok, series_metadata()}
       {:tmdb, @movie_tmdb_id} -> {:ok, movie_metadata()}
+      {:tmdb, @series_tmdb_id} -> {:ok, tmdb_series_metadata()}
       {_provider, id} -> {:error, Error.not_found("Media not found: #{id}")}
     end
   end
@@ -333,6 +351,41 @@ defmodule Mydia.MetadataStubProvider do
       overview: "A stub series used by the guest request tests.",
       poster_path: "/stub-series-poster.jpg",
       vote_average: 9.0
+    }
+  end
+
+  # A TMDB-sourced series, distinct from the TVDB-sourced @series_tvdb_id
+  # catalog entry. Import lists carry TMDB ids regardless of media type, so a
+  # TV import list needs a TMDB-sourced series to resolve against -- there was
+  # none in the catalog before this, which let the import-lists regression
+  # test paper over sending a TMDB id to TVDB by reusing the movie's TMDB id
+  # instead of reproducing the actual shape a TV import list produces.
+  defp tmdb_series_metadata do
+    %MediaMetadata{
+      provider_id: to_string(@series_tmdb_id),
+      provider: :tmdb,
+      media_type: :tv_show,
+      id: @series_tmdb_id,
+      title: @tmdb_series_title,
+      original_title: @tmdb_series_title,
+      year: 2016,
+      first_air_date: "2016-05-04",
+      overview: "A TMDB-sourced stub series used by the import list tests.",
+      genres: ["Mystery"],
+      poster_path: "/stub-tmdb-series-poster.jpg",
+      imdb_id: "tt0000949",
+      original_language: "en",
+      number_of_seasons: 1,
+      number_of_episodes: 2,
+      vote_average: 7.5,
+      seasons: [
+        %SeasonInfo{
+          season_number: 1,
+          name: "Season 1",
+          overview: "Stub season.",
+          episode_count: 2
+        }
+      ]
     }
   end
 

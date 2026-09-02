@@ -596,7 +596,9 @@ defmodule Mydia.ImportLists do
     config = Mydia.Metadata.default_relay_config()
     media_type = normalize_media_type(import_list.media_type)
 
-    case Mydia.Metadata.fetch_by_id(config, to_string(item.tmdb_id), media_type: media_type) do
+    # Import lists carry TMDB ids regardless of media type: `item.tmdb_id`
+    # always names a TMDB catalog entry, never a TVDB one.
+    case Mydia.Metadata.fetch_by_ref(config, {:tmdb, item.tmdb_id}, media_type: media_type) do
       {:ok, metadata} ->
         create_media_from_metadata(item, import_list, metadata)
 
