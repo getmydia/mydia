@@ -15,6 +15,14 @@ defmodule Mydia.Downloads.UntrackedMatcher do
   This dual-matching prevents issues when download clients reuse numeric IDs
   after torrents are removed from the client.
 
+  ## Confidence
+
+  Adoption requires `@adoption_confidence` (0.9), higher than the matcher's own
+  default threshold, because adopting moves a file the operator owns. A release
+  that matches less confidently than that is not adopted and not hidden: it
+  stays under Downloads, External, with suggestions and a one-click manual
+  adoption.
+
   ## Opting out
 
   Adoption is per-client, governed by `Mydia.Downloads.ExternalPolicy`. A
@@ -23,6 +31,13 @@ defmodule Mydia.Downloads.UntrackedMatcher do
   still surfaced by `Mydia.Downloads.ExternalTorrents` under Downloads,
   External, where it can be matched by hand. See issue #531.
   """
+
+  # Adoption physically relocates a file the operator owns, so it is held to a
+  # higher bar than a surface that only makes a suggestion. A release above the
+  # matcher's own threshold but below this stays visible under Downloads,
+  # External, where `Mydia.Downloads.ExternalTorrents` lists it with
+  # suggestions and one-click manual adoption. See issue #653.
+  @adoption_confidence 0.9
 
   require Logger
   alias Mydia.Downloads
@@ -207,7 +222,11 @@ defmodule Mydia.Downloads.UntrackedMatcher do
     Logger.debug("Processing untracked torrent: #{torrent.name}")
 
     with {:ok, parsed_info} <- ReleaseIntake.parse_release(torrent.name),
-         {:ok, match} <- TorrentMatcher.find_match(parsed_info, monitored_only: false) do
+         {:ok, match} <-
+           TorrentMatcher.find_match(parsed_info,
+             monitored_only: false,
+             confidence_threshold: @adoption_confidence
+           ) do
       case create_download_record(torrent, match, parsed_info) do
         {:ok, download} ->
           Logger.info(

@@ -200,4 +200,59 @@ defmodule Mydia.Downloads.UntrackedMatcherTest do
                ])
     end
   end
+
+  describe "adoption confidence bar" do
+    test "does not adopt a match below the adoption bar" do
+      # A release whose title covers the library title but whose year is one
+      # off scores 0.85: above the matcher's 0.8 threshold, below adoption's
+      # 0.9. Adoption moves the operator's file, so it declines and leaves the
+      # torrent under Downloads, External.
+      insert(:media_item, %{
+        type: "movie",
+        title: "Zephyr Station",
+        year: 2030,
+        monitored: true
+      })
+
+      assert {:error, :no_library_match} =
+               UntrackedMatcher.process_untracked_torrent(
+                 torrent("Zephyr.Station.2031.1080p.WEB-DL.x265")
+               )
+
+      assert Repo.aggregate(Mydia.Downloads.Download, :count) == 0
+    end
+
+    test "does not adopt a release the coverage gate rejects" do
+      insert(:media_item, %{
+        type: "movie",
+        title: "Nightglass",
+        year: 2029,
+        monitored: true
+      })
+
+      assert {:error, :no_library_match} =
+               UntrackedMatcher.process_untracked_torrent(
+                 torrent("Nightglider.2029.1080p.WEB-DL.x265")
+               )
+
+      assert Repo.aggregate(Mydia.Downloads.Download, :count) == 0
+    end
+
+    test "adopts a match at or above the adoption bar" do
+      movie =
+        insert(:media_item, %{
+          type: "movie",
+          title: "Zephyr Station",
+          year: 2030,
+          monitored: true
+        })
+
+      assert {:ok, download} =
+               UntrackedMatcher.process_untracked_torrent(
+                 torrent("Zephyr.Station.2030.1080p.WEB-DL.x265")
+               )
+
+      assert download.media_item_id == movie.id
+    end
+  end
 end
