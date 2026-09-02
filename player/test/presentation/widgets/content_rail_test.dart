@@ -10,6 +10,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/layout/rail_metrics.dart';
 import 'package:player/domain/models/continue_watching_item.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/domain/models/progress.dart';
@@ -19,6 +20,7 @@ import 'package:player/domain/models/watch_status.dart';
 import 'package:player/presentation/widgets/content_rail.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 import 'package:player/presentation/widgets/media_context_menu.dart';
+import 'package:player/presentation/widgets/poster_frame.dart';
 import 'package:player/presentation/widgets/progress_overlay.dart';
 import 'package:player/presentation/widgets/watch_indicator.dart';
 
@@ -521,6 +523,52 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ProgressOverlay), findsNothing);
+    });
+  });
+
+  group('ContentRail geometry', () {
+    testWidgets('matches RailMetrics at the mobile tier', (tester) async {
+      tester.view.physicalSize = const Size(599, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _host(ContentRail(title: 'Recently Added', items: _items(5))),
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byType(ContentRail));
+      final metrics = RailMetrics.of(context);
+      final railTop = tester.getTopLeft(find.byType(ContentRail));
+      final firstPoster = tester.getRect(find.byType(PosterFrame).first);
+
+      expect(firstPoster.left - railTop.dx, metrics.horizontalPadding);
+      expect(firstPoster.width, metrics.cardSize.width);
+      expect(firstPoster.height, metrics.cardSize.height);
+    });
+
+    testWidgets('matches RailMetrics at the desktop tier', (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _host(ContentRail(title: 'Recently Added', items: _items(5))),
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byType(ContentRail));
+      final metrics = RailMetrics.of(context);
+      final railTop = tester.getTopLeft(find.byType(ContentRail));
+      final second = tester.getRect(find.byType(PosterFrame).at(1));
+
+      expect(
+        second.left - railTop.dx,
+        metrics.horizontalPadding +
+            metrics.cardSize.width +
+            metrics.cardSpacing,
+      );
+      expect(second.width, metrics.cardSize.width);
     });
   });
 }
