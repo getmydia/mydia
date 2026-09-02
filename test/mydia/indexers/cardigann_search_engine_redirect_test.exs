@@ -108,4 +108,27 @@ defmodule Mydia.Indexers.CardigannSearchEngineRedirectTest do
 
     assert message =~ "no Location header"
   end
+
+  describe "execute_http_request/5 error containment" do
+    test "a redirect to an unsupported scheme returns an error instead of raising" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "ftp://example.invalid/x")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      assert {:error, %{message: message}} =
+               CardigannSearchEngine.execute_http_request(
+                 definition(bypass.port),
+                 "http://localhost:#{bypass.port}/search",
+                 params(),
+                 %{},
+                 %{}
+               )
+
+      assert message =~ "Request failed" or message =~ "Connection failed"
+    end
+  end
 end

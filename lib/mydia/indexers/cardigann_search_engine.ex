@@ -593,14 +593,7 @@ defmodule Mydia.Indexers.CardigannSearchEngine do
     Logger.debug("Request params: #{inspect(request_params.query_params)}")
 
     # Execute request based on method
-    result =
-      case request_params.method do
-        :get ->
-          Req.get(url, req_opts)
-
-        :post ->
-          Req.post(url, req_opts)
-      end
+    result = safe_request(request_params.method, url, req_opts)
 
     case result do
       {:ok, %Req.Response{status: status, body: body, headers: headers}} ->
