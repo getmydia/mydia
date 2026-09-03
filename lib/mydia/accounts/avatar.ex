@@ -61,18 +61,18 @@ defmodule Mydia.Accounts.Avatar do
 
   def delete_avatar_file("/generated/avatars/" <> filename) do
     # Prevent path traversal by extracting the basename only
-    safe_filename = Path.basename(filename)
+    case Path.basename(filename) do
+      empty_or_dot when empty_or_dot in ["", "."] ->
+        :ok
 
-    if safe_filename not in ["", "."] do
-      target_path = Path.join(storage_dir(), safe_filename)
+      safe_filename ->
+        target_path = Path.join(storage_dir(), safe_filename)
 
-      case File.rm(target_path) do
-        :ok -> :ok
-        {:error, :enoent} -> :ok
-        {:error, _reason} -> :ok
-      end
-    else
-      :ok
+        case File.rm(target_path) do
+          :ok -> :ok
+          {:error, :enoent} -> :ok
+          {:error, _reason} -> :ok
+        end
     end
   end
 
