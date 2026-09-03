@@ -194,6 +194,15 @@ defmodule Mydia.MediaRequests do
           "Request #{request.id} approved by user #{attrs[:approved_by_id]}, linked to media #{media_item.id}"
         )
 
+        if not created? do
+          auto_approve_matching_requests(
+            media_item,
+            actor_type: :user,
+            actor_id: attrs[:approved_by_id],
+            exclude_request_id: request.id
+          )
+        end
+
         {:ok, %{request: updated_request, media_item: media_item}, created?}
 
       {:error, :media_item, changeset, _changes} ->
@@ -308,37 +317,40 @@ defmodule Mydia.MediaRequests do
     default_notes =
       Keyword.get(opts, :admin_notes, "Automatically approved: title added to library")
 
-    results =
-      Enum.reduce_while(requests, {:ok, []}, fn request, {:ok, acc} ->
-        attrs = %{
-          media_item_id: media_item.id,
-          approved_by_id: approved_by_id,
-          admin_notes: request.admin_notes || default_notes
-        }
+    approved_list =
+      Enum.reduce(requests, [], fn request, acc ->
+        case Repo.get(MediaRequest, request.id) do
+          %MediaRequest{status: "pending"} = fresh_request ->
+            attrs = %{
+              media_item_id: media_item.id,
+              approved_by_id: approved_by_id,
+              admin_notes: fresh_request.admin_notes || default_notes
+            }
 
-        case request
-             |> MediaRequest.auto_approve_changeset(attrs)
-             |> Repo.update() do
-          {:ok, updated} ->
-            Logger.info(
-              "Auto-approved request #{request.id} for media #{media_item.id} (#{media_item.title})"
-            )
+            case fresh_request
+                 |> MediaRequest.auto_approve_changeset(attrs)
+                 |> Repo.update() do
+              {:ok, updated} ->
+                Logger.info(
+                  "Auto-approved request #{fresh_request.id} for media #{media_item.id} (#{media_item.title})"
+                )
 
-            {:cont, {:ok, [updated | acc]}}
+                [updated | acc]
 
-          {:error, changeset} ->
-            Logger.error(
-              "Failed to auto-approve request #{request.id}: #{inspect(changeset.errors)}"
-            )
+              {:error, changeset} ->
+                Logger.error(
+                  "Failed to auto-approve request #{fresh_request.id}: #{inspect(changeset.errors)}"
+                )
 
-            {:halt, {:error, changeset}}
+                acc
+            end
+
+          _other ->
+            acc
         end
       end)
 
-    case results do
-      {:ok, approved_list} -> {:ok, Enum.reverse(approved_list)}
-      error -> error
-    end
+    {:ok, Enum.reverse(approved_list)}
   end
 
   @doc """
@@ -346,11 +358,13 @@ defmodule Mydia.MediaRequests do
   """
   @spec list_pending_matching_requests(MediaItem.t(), keyword()) :: [MediaRequest.t()]
   def list_pending_matching_requests(%MediaItem{} = media_item, opts \\ []) do
+    # As documented in lib/mydia/media/add.ex:116-123, IMDb IDs carry no unique
+    # index and TVDB's remoteIds can hand split and spin-off series a shared
+    # IMDb ID. We match only across stable primary provider IDs (TMDB and TVDB).
     dynamic_cond =
       false
       |> maybe_or_match_id(:tmdb_id, media_item.tmdb_id)
       |> maybe_or_match_id(:tvdb_id, media_item.tvdb_id)
-      |> maybe_or_match_id(:imdb_id, media_item.imdb_id)
 
     if dynamic_cond == false do
       []
@@ -375,8 +389,6 @@ defmodule Mydia.MediaRequests do
   defp maybe_or_match_id(dynamic, :tmdb_id, val), do: dynamic([r], ^dynamic or r.tmdb_id == ^val)
   defp maybe_or_match_id(false, :tvdb_id, val), do: dynamic([r], r.tvdb_id == ^val)
   defp maybe_or_match_id(dynamic, :tvdb_id, val), do: dynamic([r], ^dynamic or r.tvdb_id == ^val)
-  defp maybe_or_match_id(false, :imdb_id, val), do: dynamic([r], r.imdb_id == ^val)
-  defp maybe_or_match_id(dynamic, :imdb_id, val), do: dynamic([r], ^dynamic or r.imdb_id == ^val)
 
   defp resolve_approved_by_id(opts) do
     cond do

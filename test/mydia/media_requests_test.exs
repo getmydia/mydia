@@ -803,22 +803,28 @@ defmodule Mydia.MediaRequestsTest do
       assert approved.approved_at != nil
     end
 
-    test "auto-approves pending request matching IMDB ID", %{user: user} do
+    test "does not auto-approve based on IMDB ID alone without TMDB or TVDB match", %{user: user} do
       request =
         create_request(user, %{
           imdb_id: "tt1234567",
-          tmdb_id: nil,
+          tmdb_id: 11111,
           media_type: "movie",
           title: "IMDB Movie"
         })
 
-      media_item = create_media_item(%{type: "movie", imdb_id: "tt1234567", title: "IMDB Movie"})
+      # Item with same IMDB ID but different TMDB ID (e.g. shared remoteIds across spin-offs)
+      media_item =
+        create_media_item(%{
+          type: "movie",
+          tmdb_id: 22222,
+          imdb_id: "tt1234567",
+          title: "Other Movie"
+        })
 
-      assert {:ok, [approved]} = MediaRequests.auto_approve_matching_requests(media_item)
+      assert {:ok, []} = MediaRequests.auto_approve_matching_requests(media_item)
 
-      assert approved.id == request.id
-      assert approved.status == "approved"
-      assert approved.media_item_id == media_item.id
+      reloaded = MediaRequests.get_request!(request.id)
+      assert reloaded.status == "pending"
     end
 
     test "honors exclude_request_id option", %{user: user} do

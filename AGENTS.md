@@ -344,7 +344,7 @@ done | cut -d_ -f1 | sort | uniq -d
 - Push the branch to origin (`git push -u origin <branch>`) and create the PR (`gh pr create`).
 - Enable auto-merge immediately (`gh pr merge <pr-number> --auto --merge`).
 - Poll checks and review comments (`gh pr checks <pr-number>`, `gh pr view <pr-number> --comments`).
-- Actively review and resolve CodeRabbit comments or reviewer feedback: evaluate technical validity, apply changes, run tests, commit inside devenv shell, and push to update the PR.
+- Actively review and resolve CodeRabbit comments or reviewer feedback: evaluate technical validity, apply changes, run `./dev mix precommit`, commit inside devenv shell, and push to update the PR.
 - Monitor until CI checks complete and the PR is successfully merged into `master`.
 - Only clean up or delete the worktree after the merge is verified.
 
