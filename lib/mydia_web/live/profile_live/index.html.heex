@@ -152,7 +152,8 @@
 
               <.input
                 field={@profile_form[:avatar_url]}
-                type="url"
+                type="text"
+                value={external_avatar_url(@profile_form[:avatar_url].value)}
                 label="Avatar URL"
                 placeholder="https://example.com/avatar.jpg"
               />

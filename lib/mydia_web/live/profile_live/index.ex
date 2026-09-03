@@ -75,8 +75,18 @@ defmodule MydiaWeb.ProfileLive.Index do
 
   @impl true
   def handle_event("validate_profile", %{"user" => params}, socket) do
+    user = socket.assigns.current_user
+
+    params =
+      if params["avatar_url"] in ["", nil] and is_binary(user.avatar_url) and
+           String.starts_with?(user.avatar_url, "/generated/avatars/") do
+        Map.put(params, "avatar_url", user.avatar_url)
+      else
+        params
+      end
+
     changeset =
-      socket.assigns.current_user
+      user
       |> Accounts.change_profile(params)
       |> Map.put(:action, :validate)
 
@@ -110,32 +120,55 @@ defmodule MydiaWeb.ProfileLive.Index do
   def handle_event("save_profile", %{"user" => params}, socket) do
     user = socket.assigns.current_user
 
-    uploaded_avatar_url =
-      consume_uploaded_entries(socket, :avatar, fn %{path: path}, entry ->
-        case Avatar.store_avatar(user, path, entry.client_name) do
-          {:ok, url_path} -> {:ok, url_path}
-          {:error, reason} -> {:error, reason}
-        end
-      end)
-      |> List.first()
-
     params =
-      if uploaded_avatar_url do
-        Map.put(params, "avatar_url", uploaded_avatar_url)
+      if params["avatar_url"] in ["", nil] and is_binary(user.avatar_url) and
+           String.starts_with?(user.avatar_url, "/generated/avatars/") do
+        Map.put(params, "avatar_url", user.avatar_url)
       else
         params
       end
 
-    case Accounts.update_profile(user, params) do
-      {:ok, updated_user} ->
-        {:noreply,
-         socket
-         |> assign(:current_user, updated_user)
-         |> assign(:profile_form, to_form(Accounts.change_profile(updated_user)))
-         |> put_flash(:info, "Profile updated successfully")}
+    validation_changeset =
+      user
+      |> Accounts.change_profile(params)
+      |> Map.put(:action, :validate)
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :profile_form, to_form(changeset))}
+    if validation_changeset.valid? do
+      uploaded_avatar_url =
+        consume_uploaded_entries(socket, :avatar, fn %{path: path}, entry ->
+          case Avatar.store_avatar(user, path, entry.client_name) do
+            {:ok, url_path} -> {:ok, url_path}
+            {:error, reason} -> {:error, reason}
+          end
+        end)
+        |> List.first()
+
+      params =
+        if uploaded_avatar_url do
+          Map.put(params, "avatar_url", uploaded_avatar_url)
+        else
+          params
+        end
+
+      case Accounts.update_profile(user, params) do
+        {:ok, updated_user} ->
+          if is_binary(user.avatar_url) and
+               String.starts_with?(user.avatar_url, "/generated/avatars/") and
+               updated_user.avatar_url != user.avatar_url do
+            Accounts.delete_avatar_file(user.avatar_url)
+          end
+
+          {:noreply,
+           socket
+           |> assign(:current_user, updated_user)
+           |> assign(:profile_form, to_form(Accounts.change_profile(updated_user)))
+           |> put_flash(:info, "Profile updated successfully")}
+
+        {:error, changeset} ->
+          {:noreply, assign(socket, :profile_form, to_form(changeset))}
+      end
+    else
+      {:noreply, assign(socket, :profile_form, to_form(validation_changeset))}
     end
   end
 
@@ -306,4 +339,14 @@ defmodule MydiaWeb.ProfileLive.Index do
     do: "Unacceptable file type. Please upload a JPG, PNG, WebP, or GIF."
 
   defp upload_error_to_string(other), do: "Upload error: #{inspect(other)}"
+
+  defp external_avatar_url(value) when is_binary(value) do
+    if String.starts_with?(value, "/generated/avatars/") do
+      ""
+    else
+      value
+    end
+  end
+
+  defp external_avatar_url(_), do: ""
 end

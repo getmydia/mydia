@@ -247,5 +247,111 @@ defmodule MydiaWeb.ProfileLiveTest do
       assert {:error, [[_, :not_accepted]]} = preflight_upload(avatar)
       assert render(view) =~ "Unacceptable file type"
     end
+
+    test "avatar URL input uses type text and leaves field blank for local generated avatars", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, user} =
+        Accounts.update_profile(user, %{
+          avatar_url: "/generated/avatars/avatar-#{user.id}-123.png"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      assert has_element?(view, "input[type='text'][name*='avatar_url']")
+      refute has_element?(view, "input[type='url'][name*='avatar_url']")
+
+      avatar_input = element(view, "input[name*='avatar_url']")
+      assert render(avatar_input) =~ ~s(value="")
+
+      view
+      |> form("#profile-form", %{
+        "user" => %{"display_name" => "Updated Name", "avatar_url" => ""}
+      })
+      |> render_submit()
+
+      assert render(view) =~ "Profile updated successfully"
+      reloaded = Accounts.get_user!(user.id)
+      assert reloaded.display_name == "Updated Name"
+      assert reloaded.avatar_url == "/generated/avatars/avatar-#{user.id}-123.png"
+    end
+
+    test "cleans up old local avatar file on disk when replacing with an external URL", %{
+      conn: conn,
+      user: user
+    } do
+      dir = Mydia.Accounts.Avatar.storage_dir()
+      File.mkdir_p!(dir)
+      filename = "avatar-#{user.id}-to-replace.png"
+      file_path = Path.join(dir, filename)
+      File.write!(file_path, "local avatar data")
+
+      {:ok, user} =
+        Accounts.update_profile(user, %{avatar_url: "/generated/avatars/#{filename}"})
+
+      assert File.exists?(file_path)
+
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      view
+      |> form("#profile-form", %{
+        "user" => %{
+          "display_name" => user.display_name || "User",
+          "avatar_url" => "https://example.com/external-avatar.jpg"
+        }
+      })
+      |> render_submit()
+
+      assert render(view) =~ "Profile updated successfully"
+      refute File.exists?(file_path)
+
+      reloaded = Accounts.get_user!(user.id)
+      assert reloaded.avatar_url == "https://example.com/external-avatar.jpg"
+    end
+
+    test "does not write avatar file to disk if profile validation fails", %{
+      conn: conn,
+      user: user
+    } do
+      dir = Mydia.Accounts.Avatar.storage_dir()
+      File.mkdir_p!(dir)
+
+      Path.wildcard(Path.join(dir, "avatar-#{user.id}-*"))
+      |> Enum.each(&File.rm/1)
+
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      png_data =
+        <<137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8,
+          6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5,
+          0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130>>
+
+      avatar =
+        file_input(view, "#profile-form", :avatar, [
+          %{
+            name: "avatar.png",
+            content: png_data,
+            type: "image/png"
+          }
+        ])
+
+      render_upload(avatar, "avatar.png")
+
+      too_long_name = String.duplicate("a", 101)
+
+      view
+      |> form("#profile-form", %{"user" => %{"display_name" => too_long_name}})
+      |> render_submit()
+
+      assert render(view) =~ "should be at most 100 character(s)"
+      refute render(view) =~ "Profile updated successfully"
+
+      written_files = Path.wildcard(Path.join(dir, "avatar-#{user.id}-*"))
+      assert written_files == []
+
+      reloaded = Accounts.get_user!(user.id)
+      assert is_nil(reloaded.avatar_url)
+    end
   end
 end
