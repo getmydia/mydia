@@ -44,7 +44,7 @@ defmodule Mydia.Accounts.AvatarTest do
       assert File.read!(disk_path) == png_data
     end
 
-    test "removes previous uploaded avatar file when replacing with a new one" do
+    test "does not remove previous uploaded avatar file immediately when replacing with a new one" do
       tmp_file = Path.join(System.tmp_dir!(), "test-avatar-old.jpg")
       File.write!(tmp_file, "fake-jpg-content")
 
@@ -60,7 +60,7 @@ defmodule Mydia.Accounts.AvatarTest do
       second_disk_path = Path.join(Avatar.storage_dir(), Path.basename(second_url))
 
       assert File.exists?(second_disk_path)
-      refute File.exists?(first_disk_path)
+      assert File.exists?(first_disk_path)
     end
 
     test "rejects unsupported file extension" do
@@ -72,22 +72,14 @@ defmodule Mydia.Accounts.AvatarTest do
   end
 
   describe "delete_avatar_file/1" do
-    test "removes uploaded avatar file from disk" do
-      filename = "avatar-#{@user.id}-1234567890.jpg"
-      path = Path.join(Avatar.storage_dir(), filename)
-      File.write!(path, "avatar-bytes")
-      assert File.exists?(path)
-
-      assert :ok == Avatar.delete_avatar_file("/generated/avatars/#{filename}")
-      refute File.exists?(path)
-    end
-
     test "ignores external URLs safely without error" do
-      assert :ok == Avatar.delete_avatar_file("https://example.com/avatar.jpg")
-      assert :ok == Avatar.delete_avatar_file(nil)
+      assert :ok ==
+               Avatar.delete_avatar_file(%{@user | avatar_url: "https://example.com/avatar.jpg"})
+
+      assert :ok == Avatar.delete_avatar_file(%{@user | avatar_url: nil})
     end
 
-    test "accepts user struct directly" do
+    test "accepts user struct directly and removes file from disk" do
       filename = "avatar-#{@user.id}-9876543210.png"
       path = Path.join(Avatar.storage_dir(), filename)
       File.write!(path, "user-avatar-bytes")
@@ -98,7 +90,25 @@ defmodule Mydia.Accounts.AvatarTest do
       refute File.exists?(path)
     end
 
-    test "Mydia.Accounts.delete_avatar_file/1 delegates properly for user and url" do
+    test "refuses to delete an avatar belonging to another user ID (IDOR protection)" do
+      other_user_id = "01914902-86ee-7359-b570-5cb65860d999"
+      filename = "avatar-#{other_user_id}-1234567890.jpg"
+      path = Path.join(Avatar.storage_dir(), filename)
+      File.write!(path, "other-user-avatar-bytes")
+      assert File.exists?(path)
+
+      # Attempt to delete the file using @user struct but pointing to the other user's file
+      user = %{@user | avatar_url: "/generated/avatars/#{filename}"}
+      assert :ok == Avatar.delete_avatar_file(user)
+
+      # The file should still exist
+      assert File.exists?(path)
+
+      # Clean up
+      File.rm(path)
+    end
+
+    test "Mydia.Accounts.delete_avatar_file/1 delegates properly for user" do
       filename = "avatar-#{@user.id}-1122334455.webp"
       path = Path.join(Avatar.storage_dir(), filename)
       File.write!(path, "delegated-bytes")
@@ -106,12 +116,6 @@ defmodule Mydia.Accounts.AvatarTest do
 
       user = %{@user | avatar_url: "/generated/avatars/#{filename}"}
       assert :ok == Accounts.delete_avatar_file(user)
-      refute File.exists?(path)
-
-      File.write!(path, "delegated-bytes-2")
-      assert File.exists?(path)
-
-      assert :ok == Accounts.delete_avatar_file("/generated/avatars/#{filename}")
       refute File.exists?(path)
     end
   end

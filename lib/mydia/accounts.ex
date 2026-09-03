@@ -374,8 +374,7 @@ defmodule Mydia.Accounts do
   @doc """
   Deletes the user's avatar image file from disk if it was an uploaded avatar.
   """
-  def delete_avatar_file(%User{avatar_url: avatar_url}), do: delete_avatar_file(avatar_url)
-  def delete_avatar_file(avatar_url), do: Avatar.delete_avatar_file(avatar_url)
+  def delete_avatar_file(%User{} = user), do: Avatar.delete_avatar_file(user)
 
   @doc """
   Changes a user's password with current password verification.

@@ -38,8 +38,6 @@ defmodule Mydia.Accounts.Avatar do
 
       case File.copy(temp_path, target_path) do
         {:ok, _bytes} ->
-          # Clean up any existing uploaded avatar for this user after copy succeeds
-          delete_avatar_file(user.avatar_url)
           {:ok, "/generated/avatars/#{filename}"}
 
         {:error, reason} ->
@@ -52,29 +50,26 @@ defmodule Mydia.Accounts.Avatar do
 
   @doc """
   Deletes an uploaded avatar file from disk if the URL is a local `/generated/avatars/` path,
-  or given a user struct whose avatar_url is set.
+  verifying that the file belongs to the given user.
   Silently returns `:ok` if `avatar_url` is nil, an external URL, or if the file does not exist.
   """
-  @spec delete_avatar_file(User.t() | String.t() | nil) :: :ok
-  def delete_avatar_file(%User{avatar_url: avatar_url}), do: delete_avatar_file(avatar_url)
-  def delete_avatar_file(nil), do: :ok
+  @spec delete_avatar_file(User.t()) :: :ok
+  def delete_avatar_file(%User{id: user_id, avatar_url: "/generated/avatars/" <> filename}) do
+    safe_filename = Path.basename(filename)
+    expected_prefix = "avatar-#{user_id}-"
 
-  def delete_avatar_file("/generated/avatars/" <> filename) do
-    # Prevent path traversal by extracting the basename only
-    case Path.basename(filename) do
-      empty_or_dot when empty_or_dot in ["", "."] ->
-        :ok
+    if String.starts_with?(safe_filename, expected_prefix) do
+      target_path = Path.join(storage_dir(), safe_filename)
 
-      safe_filename ->
-        target_path = Path.join(storage_dir(), safe_filename)
-
-        case File.rm(target_path) do
-          :ok -> :ok
-          {:error, :enoent} -> :ok
-          {:error, _reason} -> :ok
-        end
+      case File.rm(target_path) do
+        :ok -> :ok
+        {:error, :enoent} -> :ok
+        {:error, _reason} -> :ok
+      end
+    else
+      :ok
     end
   end
 
-  def delete_avatar_file(_external_url), do: :ok
+  def delete_avatar_file(%User{}), do: :ok
 end

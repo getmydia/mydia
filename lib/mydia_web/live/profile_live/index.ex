@@ -101,10 +101,11 @@ defmodule MydiaWeb.ProfileLive.Index do
   @impl true
   def handle_event("remove_avatar", _params, socket) do
     user = socket.assigns.current_user
-    Accounts.delete_avatar_file(user)
 
     case Accounts.update_profile(user, %{"avatar_url" => nil}) do
       {:ok, updated_user} ->
+        Accounts.delete_avatar_file(user)
+
         {:noreply,
          socket
          |> assign(:current_user, updated_user)
@@ -155,7 +156,7 @@ defmodule MydiaWeb.ProfileLive.Index do
           if is_binary(user.avatar_url) and
                String.starts_with?(user.avatar_url, "/generated/avatars/") and
                updated_user.avatar_url != user.avatar_url do
-            Accounts.delete_avatar_file(user.avatar_url)
+            Accounts.delete_avatar_file(user)
           end
 
           {:noreply,
