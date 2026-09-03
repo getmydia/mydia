@@ -1,8 +1,8 @@
 defmodule MydiaWeb.CoreComponents.PosterFigureTest do
   @moduledoc """
-  The hover transform is the assertion that matters. It is the thing that was
-  hand-copied across eight files and drifted, and the only reason this
-  component exists.
+  The hover structure is the assertion that matters. It is the behavior that
+  was hand-copied across eight files and drifted, and the reason this component
+  exists.
   """
 
   use ExUnit.Case, async: true
@@ -11,15 +11,21 @@ defmodule MydiaWeb.CoreComponents.PosterFigureTest do
   import Phoenix.LiveViewTest
   import MydiaWeb.CoreComponents
 
-  test "renders the poster with the shared hover transform" do
+  test "renders the poster with DaisyUI's 3D hover structure" do
     html =
       render_component(&poster_figure/1, src: "/p.jpg", alt: "Aftersun")
 
     assert html =~ ~s(src="/p.jpg")
     assert html =~ ~s(alt="Aftersun")
-    assert html =~ "group-hover:scale-105"
-    assert html =~ "transition-transform"
     assert html =~ "aspect-[2/3]"
+
+    fragment = LazyHTML.from_fragment(html)
+    hover_3d = LazyHTML.query(fragment, ".hover-3d")
+
+    assert Enum.count(hover_3d) == 1
+    assert fragment |> LazyHTML.query(".hover-3d > figure") |> Enum.count() == 1
+    assert fragment |> LazyHTML.query(".hover-3d > div") |> Enum.count() == 8
+    refute html =~ "group-hover:scale-105"
   end
 
   test "lazy loads by default" do
@@ -41,14 +47,15 @@ defmodule MydiaWeb.CoreComponents.PosterFigureTest do
     assert html =~ "hero-tv"
   end
 
-  # The fallback shipped without the transform at first, so a grid mixing
-  # poster-less cards with poster-bearing ones lifted only some of them on
-  # hover. Pinned here because nothing else would catch it coming back.
-  test "the fallback carries the same hover transform as the poster" do
+  # The fallback shipped outside the shared hover structure at first, so a
+  # grid mixing poster-less cards with poster-bearing ones lifted only some of
+  # them. Pinned here because nothing else would catch it coming back.
+  test "the fallback lives inside the same 3D hover structure as the poster" do
     html = render_component(&poster_figure/1, src: nil, alt: "A")
+    fragment = LazyHTML.from_fragment(html)
 
-    assert html =~ "group-hover:scale-105"
-    assert html =~ "transition-transform"
+    assert fragment |> LazyHTML.query(".hover-3d > figure") |> Enum.count() == 1
+    assert fragment |> LazyHTML.query(".hover-3d > div") |> Enum.count() == 8
   end
 
   test "appends caller classes to the figure" do
