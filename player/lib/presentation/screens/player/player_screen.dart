@@ -4795,8 +4795,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           onSubtitleTap: _showSubtitleSelector,
           // Hidden when the ladder collapsed to Original alone — a source
           // shorter than every rung, a local file, or a height the server
-          // never reported — matching how subtitles and audio disable
-          // themselves at zero tracks rather than opening a one-item menu.
+          // never reported — matching how audio disables itself at zero
+          // tracks rather than opening a one-item menu.
           onQualityTap: _qualityLadder.length > 1 ? _showQualitySelector : null,
           // Null where no fullscreen route exists, which hides the button
           // rather than leaving a dead one — matching how `onQualityTap`
