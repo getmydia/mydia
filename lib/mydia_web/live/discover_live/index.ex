@@ -43,9 +43,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {"primary_release_date.asc", "Oldest First"}
   ]
 
-  # The provider returns fixed-size pages. Removing owned titles from one can
-  # empty it entirely, which would look like the end of the results. Fetch the
-  # next page when that happens, bounded so a fully-owned category cannot spin.
+  # The provider returns fixed-size pages of this many results. Removing owned
+  # titles from one leaves a short grid, or an empty one, which looks like the
+  # end of the results. Keep fetching until the grid holds a page worth of
+  # unowned titles, bounded so a fully-owned category cannot spin.
+  @page_size 20
   @max_auto_advance 3
 
   @unsupported_media_type "That media type is not supported."
@@ -214,7 +216,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   def handle_event("load_more", _, socket) do
     if socket.assigns.has_more and not socket.assigns.loading_more do
       next_page = socket.assigns.page + 1
-      send(self(), {:load_page, next_page, 0})
+      target = length(socket.assigns.visible_items) + @page_size
+      send(self(), {:load_page, next_page, 0, target})
       {:noreply, assign(socket, :loading_more, true)}
     else
       {:noreply, socket}
@@ -337,7 +340,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
          socket
          |> assign(:hide_owned, value)
          |> assign_visible_items()
-         |> maybe_auto_advance(0)}
+         |> maybe_auto_advance(0, @page_size)}
 
       :error ->
         {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
@@ -401,12 +404,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
     socket =
       socket
       |> handle_load_result(result, :replace)
-      |> maybe_auto_advance(0)
+      |> maybe_auto_advance(0, @page_size)
 
     {:noreply, socket}
   end
 
-  def handle_info({:load_page, page, advances}, socket) do
+  def handle_info({:load_page, page, advances, target}, socket) do
     %{
       media_type: media_type,
       search_mode: search_mode,
@@ -432,7 +435,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       socket
       |> handle_load_result(result, :append)
       |> assign(:loading_more, false)
-      |> maybe_auto_advance(advances)
+      |> maybe_auto_advance(advances, target)
 
     {:noreply, socket}
   end
@@ -788,7 +791,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
     assign(socket, :visible_items, visible)
   end
 
-  defp maybe_auto_advance(socket, advances) do
+  # `target` is how many unowned titles the grid should end up holding. A fresh
+  # load asks for a full page; "Load more" asks for a full page on top of what
+  # is already on screen, so a click always buys roughly a page of new titles
+  # however many of them turn out to be owned.
+  defp maybe_auto_advance(socket, advances, target) do
     cond do
       not socket.assigns.hide_owned ->
         socket
@@ -796,14 +803,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
       advances >= @max_auto_advance ->
         socket
 
-      socket.assigns.visible_items != [] ->
+      length(socket.assigns.visible_items) >= target ->
         socket
 
       not socket.assigns.has_more ->
         socket
 
       true ->
-        send(self(), {:load_page, socket.assigns.page + 1, advances + 1})
+        send(self(), {:load_page, socket.assigns.page + 1, advances + 1, target})
         assign(socket, :loading_more, true)
     end
   end
