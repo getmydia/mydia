@@ -4809,7 +4809,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           isFullscreen: _fullscreen.isFullscreen.value,
           isAlwaysOnTop: _isAlwaysOnTop,
           audioTrackCount: _audioTracks.length,
-          subtitleTrackCount: _subtitleTracks.length,
           selectedAudioLabel: _selectedAudioTrack?.displayName,
           selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
           selectedQualityLabel: (_effectiveQuality ?? _selectedQuality).label,

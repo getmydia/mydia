@@ -192,8 +192,10 @@ class SecondaryCluster extends StatelessWidget {
   final VoidCallback? onFullscreenTap;
   final VoidCallback? onAlwaysOnTopTap;
 
+  /// Gates the audio button, and only the audio button. There is no subtitle
+  /// equivalent on purpose: the subtitles button opens its sheet whatever the
+  /// file has, because the sheet is where a missing subtitle gets downloaded.
   final int audioTrackCount;
-  final int subtitleTrackCount;
   final String? selectedAudioLabel;
   final String? selectedSubtitleLabel;
   final String? selectedQualityLabel;
@@ -208,7 +210,6 @@ class SecondaryCluster extends StatelessWidget {
     this.onFullscreenTap,
     this.onAlwaysOnTopTap,
     this.audioTrackCount = 0,
-    this.subtitleTrackCount = 0,
     this.selectedAudioLabel,
     this.selectedSubtitleLabel,
     this.selectedQualityLabel,

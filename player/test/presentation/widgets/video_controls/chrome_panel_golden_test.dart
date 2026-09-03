@@ -114,7 +114,6 @@ Widget _panel(double width) {
                 // would never exercise the 4-button layout this whole change
                 // exists to enable.
                 secondary: SecondaryCluster(
-                  subtitleTrackCount: 1,
                   audioTrackCount: 2,
                   onSubtitleTap: () {},
                   gap: metrics.secondaryGap,

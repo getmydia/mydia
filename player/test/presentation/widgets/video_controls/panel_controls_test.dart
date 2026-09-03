@@ -249,10 +249,10 @@ void main() {
 
     // The regression this change exists for. A file with no subtitle tracks
     // is exactly when a viewer wants the sheet, because the sheet is where
-    // subtitles are searched for and downloaded. The old `subtitleTrackCount
-    // > 0` gate made that unreachable, so the tap assertion matters as much
-    // as the `enabled` one: an enabled button with a null `onTap` would pass
-    // the first check and still do nothing.
+    // subtitles are searched for and downloaded. The old track-count gate
+    // made that unreachable, so the tap assertion matters as much as the
+    // `enabled` one: an enabled button with a null `onTap` would pass the
+    // first check and still do nothing.
     testWidgets('keeps subtitles tappable when the file has no tracks',
         (tester) async {
       var tapped = false;
@@ -280,7 +280,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           SecondaryCluster(
-            subtitleTrackCount: 2,
             audioTrackCount: 3,
             onSubtitleTap: () {},
             onAudioTap: () {},
@@ -450,7 +449,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           SecondaryCluster(
-            subtitleTrackCount: 1,
             audioTrackCount: 1,
             onSubtitleTap: () {},
             onAudioTap: () {},
