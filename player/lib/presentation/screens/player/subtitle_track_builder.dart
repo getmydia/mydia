@@ -42,9 +42,9 @@ List<SubtitleTrack> selectableTracks(
 ///    deliverable tracks. mpv discovers tracks asynchronously while it
 ///    probes, so on a remote file the probe routinely finishes after the
 ///    fixed sample taken just after `open()`. Before this fallback existed
-///    that left the list empty and `panel_controls.dart`'s
-///    `subtitleTrackCount > 0` gate rendered the subtitle button
-///    permanently dead. Selecting one of these fetches its body over the
+///    that left the list empty, so the sheet offered nothing and a viewer
+///    had to go searching online for subtitles the file already carried.
+///    Selecting one of these fetches its body over the
 ///    `SubtitleContent` query, the same path sidecars already take; image
 ///    tracks are dropped because there is no body to fetch for a bitmap.
 ///

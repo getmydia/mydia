@@ -505,7 +505,6 @@ class PlaybackChrome extends StatefulWidget {
   final bool isFullscreen;
   final bool isAlwaysOnTop;
   final int audioTrackCount;
-  final int subtitleTrackCount;
   final String? selectedAudioLabel;
   final String? selectedSubtitleLabel;
   final String? selectedQualityLabel;
@@ -535,7 +534,6 @@ class PlaybackChrome extends StatefulWidget {
     this.isFullscreen = false,
     this.isAlwaysOnTop = false,
     this.audioTrackCount = 0,
-    this.subtitleTrackCount = 0,
     this.selectedAudioLabel,
     this.selectedSubtitleLabel,
     this.selectedQualityLabel,
@@ -682,7 +680,6 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                   ? widget.onAlwaysOnTopTap
                                   : null,
                               audioTrackCount: widget.audioTrackCount,
-                              subtitleTrackCount: widget.subtitleTrackCount,
                               selectedAudioLabel: widget.selectedAudioLabel,
                               selectedSubtitleLabel:
                                   widget.selectedSubtitleLabel,

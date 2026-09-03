@@ -440,9 +440,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// discarded, and nothing could rebuild it.
   List<app_models.SubtitleTrack> _serverSubtitleTracks = [];
 
-  /// The tracks actually offered to the viewer, and the list
-  /// `subtitleTrackCount` gates the subtitle button on. Derived: never
-  /// assigned outside [_applySubtitleTracks].
+  /// The tracks actually offered to the viewer in the subtitle sheet.
+  /// Derived: never assigned outside [_applySubtitleTracks].
   List<app_models.SubtitleTrack> _subtitleTracks = [];
   app_models.SubtitleTrack? _selectedSubtitleTrack;
   List<app_models_audio.AudioTrack> _audioTracks = [];
@@ -4796,8 +4795,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           onSubtitleTap: _showSubtitleSelector,
           // Hidden when the ladder collapsed to Original alone — a source
           // shorter than every rung, a local file, or a height the server
-          // never reported — matching how subtitles and audio disable
-          // themselves at zero tracks rather than opening a one-item menu.
+          // never reported — matching how audio disables itself at zero
+          // tracks rather than opening a one-item menu.
           onQualityTap: _qualityLadder.length > 1 ? _showQualitySelector : null,
           // Null where no fullscreen route exists, which hides the button
           // rather than leaving a dead one — matching how `onQualityTap`
@@ -4810,7 +4809,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           isFullscreen: _fullscreen.isFullscreen.value,
           isAlwaysOnTop: _isAlwaysOnTop,
           audioTrackCount: _audioTracks.length,
-          subtitleTrackCount: _subtitleTracks.length,
           selectedAudioLabel: _selectedAudioTrack?.displayName,
           selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
           selectedQualityLabel: (_effectiveQuality ?? _selectedQuality).label,

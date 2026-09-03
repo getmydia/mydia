@@ -93,8 +93,8 @@ Widget _panel(double width, {bool quality = false, bool alwaysOnTop = false}) {
                 )
               : null,
           secondary: SecondaryCluster(
-            subtitleTrackCount: 1,
             audioTrackCount: 2,
+            onSubtitleTap: () {},
             gap: metrics.secondaryGap,
             onQualityTap: quality ? () {} : null,
             // Unconditional, because this helper measures the worst case and

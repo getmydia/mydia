@@ -61,6 +61,9 @@ const _downloaded = SubtitleTrack(
 Widget _host({
   required Future<SubtitleSearchOutcome> Function(List<String>) onSearch,
   required Future<SubtitleTrack> Function(SubtitleCandidate) onDownload,
+  // Defaults to the one-track list every existing test in this file assumes.
+  // Pass `const []` to exercise the empty state.
+  List<SubtitleTrack> tracks = const [_existing],
   ValueChanged<SubtitleTrackSelection>? capture,
   ValueListenable<int?>? subtitleDelayMs,
   // True by default: most tests in this file that do pass a non-null
@@ -79,7 +82,7 @@ Widget _host({
           onPressed: () async {
             final result = await showSubtitleTrackSelector(
               context,
-              const [_existing],
+              tracks,
               null,
               onSearch: onSearch,
               onDownload: onDownload,
@@ -117,6 +120,65 @@ void main() {
     expect(find.text('Off'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Search online'), findsOneWidget);
+  });
+
+  testWidgets('offers search as the empty state when the file has no tracks',
+      (tester) async {
+    var searched = false;
+    await tester.pumpWidget(_host(
+      tracks: const [],
+      onSearch: (_) async {
+        searched = true;
+        return const SubtitleSearchOutcome(results: [], providers: []);
+      },
+      onDownload: (_) async => _downloaded,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('This file has no subtitles.'), findsOneWidget);
+    // "Off" stays first: turning subtitles off must not need a search.
+    expect(find.text('Off'), findsOneWidget);
+
+    // Exactly one search affordance. The bottom row is suppressed in this
+    // branch so the sheet never shows two.
+    expect(find.text('Search online'), findsOneWidget);
+
+    // Found by key, not by `find.widgetWithText(FilledButton, ...)`.
+    // `FilledButton.icon` returns a private `_FilledButtonWithIcon`, and
+    // `find.byType` compares `runtimeType` exactly rather than walking the
+    // subclass chain, so a type finder silently matches nothing here.
+    await tester.tap(find.byKey(SubtitleTrackSelectorSheet.emptySearchKey));
+    await tester.pumpAndSettle();
+
+    expect(searched, isTrue);
+  });
+
+  testWidgets('keeps the bottom search row when the file has tracks',
+      (tester) async {
+    var searched = false;
+    await tester.pumpWidget(_host(
+      onSearch: (_) async {
+        searched = true;
+        return const SubtitleSearchOutcome(results: [], providers: []);
+      },
+      onDownload: (_) async => _downloaded,
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('This file has no subtitles.'), findsNothing);
+    expect(
+      find.byKey(SubtitleTrackSelectorSheet.emptySearchKey),
+      findsNothing,
+    );
+
+    await tester.tap(find.text('Search online'));
+    await tester.pumpAndSettle();
+
+    expect(searched, isTrue);
   });
 
   testWidgets('tapping Off returns SubtitleTrackOff, not a cancellation',

@@ -222,17 +222,11 @@ void main() {
   });
 
   group('SecondaryCluster', () {
-    testWidgets('disables track buttons when no tracks exist', (tester) async {
+    testWidgets('disables audio when no audio tracks exist', (tester) async {
       await tester.pumpWidget(
         _host(const SecondaryCluster(onFullscreenTap: null)),
       );
 
-      expect(
-        tester
-            .widget<ControlButton>(find.byKey(SecondaryCluster.subtitlesKey))
-            .enabled,
-        isFalse,
-      );
       expect(
         tester
             .widget<ControlButton>(find.byKey(SecondaryCluster.audioKey))
@@ -241,11 +235,51 @@ void main() {
       );
     });
 
+    testWidgets('disables subtitles only when no handler is wired',
+        (tester) async {
+      await tester.pumpWidget(_host(const SecondaryCluster()));
+
+      expect(
+        tester
+            .widget<ControlButton>(find.byKey(SecondaryCluster.subtitlesKey))
+            .enabled,
+        isFalse,
+      );
+    });
+
+    // The regression this change exists for. A file with no subtitle tracks
+    // is exactly when a viewer wants the sheet, because the sheet is where
+    // subtitles are searched for and downloaded. The old track-count gate
+    // made that unreachable, so the tap assertion matters as much as the
+    // `enabled` one: an enabled button with a null `onTap` would pass the
+    // first check and still do nothing.
+    testWidgets('keeps subtitles tappable when the file has no tracks',
+        (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        _host(
+          SecondaryCluster(
+            onSubtitleTap: () => tapped = true,
+            onAudioTap: () {},
+          ),
+        ),
+      );
+
+      expect(
+        tester
+            .widget<ControlButton>(find.byKey(SecondaryCluster.subtitlesKey))
+            .enabled,
+        isTrue,
+      );
+
+      await tester.tap(find.byKey(SecondaryCluster.subtitlesKey));
+      expect(tapped, isTrue);
+    });
+
     testWidgets('enables track buttons when tracks exist', (tester) async {
       await tester.pumpWidget(
         _host(
           SecondaryCluster(
-            subtitleTrackCount: 2,
             audioTrackCount: 3,
             onSubtitleTap: () {},
             onAudioTap: () {},
@@ -415,7 +449,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           SecondaryCluster(
-            subtitleTrackCount: 1,
             audioTrackCount: 1,
             onSubtitleTap: () {},
             onAudioTap: () {},

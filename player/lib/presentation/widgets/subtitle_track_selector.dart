@@ -167,6 +167,13 @@ class SubtitleTrackSelectorSheet extends StatefulWidget {
     required this.onSaveSubtitleDelay,
   });
 
+  /// The empty state's search button.
+  ///
+  /// A key rather than a type finder, because `FilledButton.icon` builds a
+  /// private `_FilledButtonWithIcon` and `find.byType(FilledButton)` compares
+  /// `runtimeType` exactly, so it would match nothing.
+  static const Key emptySearchKey = Key('subtitle-sheet-empty-search');
+
   @override
   State<SubtitleTrackSelectorSheet> createState() =>
       _SubtitleTrackSelectorSheetState();
@@ -374,12 +381,47 @@ class _SubtitleTrackSelectorSheetState
             onTap: () => Navigator.of(context).pop(const SubtitleTrackOff()),
           ),
           const Divider(color: Colors.grey, height: 1),
+          // The state a subtitle-less file now lands in every time, since the
+          // button that opens this sheet is no longer gated on the track
+          // count. A grey line stating the problem would be a dead end; the
+          // search that fixes it belongs right here rather than below the
+          // delay row and a divider.
+          //
+          // `width: double.infinity` is what lets the inner column centre:
+          // the enclosing column is `crossAxisAlignment: start`, so an
+          // intrinsically-sized child would sit hard against the left edge.
+          // `mainAxisSize: min` is required too, because this sits inside a
+          // `SingleChildScrollView` and the vertical constraint is unbounded.
           if (widget.tracks.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text(
-                'No subtitle tracks available',
-                style: TextStyle(color: Colors.grey),
+            SizedBox(
+              width: double.infinity,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'This file has no subtitles.',
+                      style: TextStyle(color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      key: SubtitleTrackSelectorSheet.emptySearchKey,
+                      onPressed: _search,
+                      icon: const Icon(Icons.search),
+                      label: const Text('Search online'),
+                      // Explicit colours, not the ambient theme: this sheet
+                      // sets its own `Colors.grey[900]` background and white
+                      // text, so a themed button inherits the wrong contrast.
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             )
           else
@@ -423,15 +465,20 @@ class _SubtitleTrackSelectorSheetState
               );
             },
           ),
-          const Divider(color: Colors.grey, height: 1),
-          ListTile(
-            leading: const Icon(Icons.search, color: Colors.grey),
-            title: const Text(
-              'Search online',
-              style: TextStyle(color: Colors.white),
+          // Only with tracks present. With none, the empty state above is
+          // already the search affordance, and two in one sheet reads as two
+          // different actions.
+          if (widget.tracks.isNotEmpty) ...[
+            const Divider(color: Colors.grey, height: 1),
+            ListTile(
+              leading: const Icon(Icons.search, color: Colors.grey),
+              title: const Text(
+                'Search online',
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: _search,
             ),
-            onTap: _search,
-          ),
+          ],
         ],
       ),
     );

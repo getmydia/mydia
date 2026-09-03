@@ -192,8 +192,10 @@ class SecondaryCluster extends StatelessWidget {
   final VoidCallback? onFullscreenTap;
   final VoidCallback? onAlwaysOnTopTap;
 
+  /// Gates the audio button, and only the audio button. There is no subtitle
+  /// equivalent on purpose: the subtitles button opens its sheet whatever the
+  /// file has, because the sheet is where a missing subtitle gets downloaded.
   final int audioTrackCount;
-  final int subtitleTrackCount;
   final String? selectedAudioLabel;
   final String? selectedSubtitleLabel;
   final String? selectedQualityLabel;
@@ -208,7 +210,6 @@ class SecondaryCluster extends StatelessWidget {
     this.onFullscreenTap,
     this.onAlwaysOnTopTap,
     this.audioTrackCount = 0,
-    this.subtitleTrackCount = 0,
     this.selectedAudioLabel,
     this.selectedSubtitleLabel,
     this.selectedQualityLabel,
@@ -238,22 +239,32 @@ class SecondaryCluster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtitlesEnabled = subtitleTrackCount > 0;
     final audioEnabled = audioTrackCount > 0;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Never gated on how many subtitle tracks the file has. A file with
+        // none is precisely when a viewer wants this sheet, because the sheet
+        // is where subtitles are searched for and downloaded. A count gate
+        // used to live here and made that unreachable.
+        //
+        // `enabled` follows the same rule `onQualityTap` and `onFullscreenTap`
+        // use below: a button is live when something is listening to it.
+        // `player_screen.dart` wires `onSubtitleTap` unconditionally, so in
+        // the running app this is always true.
+        //
+        // The audio button below keeps its count gate on purpose. No provider
+        // will hand you an audio track, so a disabled button there is telling
+        // the truth rather than hiding a way in.
         ControlButton(
           key: subtitlesKey,
           icon: Icons.subtitles_rounded,
           iconSize: 18,
           size: 32,
-          enabled: subtitlesEnabled,
-          tooltip: subtitlesEnabled
-              ? 'Subtitles: ${selectedSubtitleLabel ?? 'Off'}'
-              : 'No subtitles',
-          onTap: subtitlesEnabled ? onSubtitleTap : null,
+          enabled: onSubtitleTap != null,
+          tooltip: 'Subtitles: ${selectedSubtitleLabel ?? 'Off'}',
+          onTap: onSubtitleTap,
         ),
         SizedBox(width: gap),
         ControlButton(
