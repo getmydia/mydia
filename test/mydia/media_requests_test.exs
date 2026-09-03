@@ -399,7 +399,19 @@ defmodule Mydia.MediaRequestsTest do
         })
 
       bypass = Bypass.open()
-      stub_tmdb_tv_show(bypass, request.tmdb_id, request.title)
+
+      # Two real seasons, so "none" (fetch nothing) and "all" (fetch
+      # everything) actually diverge. `stub_tmdb_tv_show/4`'s seasons list
+      # only needs to name the seasons; the episodes themselves come from the
+      # per-season endpoint stubbed below.
+      stub_tmdb_tv_show(bypass, request.tmdb_id, request.title, [
+        %{"season_number" => 1, "episode_count" => 2},
+        %{"season_number" => 2, "episode_count" => 3}
+      ])
+
+      stub_tmdb_season(bypass, request.tmdb_id, 1, 2)
+      stub_tmdb_season(bypass, request.tmdb_id, 2, 3)
+
       # A TMDB-sourced show with no tvdb_id triggers maybe_discover_tvdb_id
       # during the episode refresh; this stub keeps that lookup off the network.
       stub_tvdb_search_empty(bypass)
@@ -424,6 +436,27 @@ defmodule Mydia.MediaRequestsTest do
                from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id),
                :count
              ) == 0
+    end
+
+    test "creates episodes for every season when season monitoring is all", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 season_monitoring: "all"
+               )
+
+      assert media_item.type == "tv_show"
+
+      # The stub offers 2 + 3 = 5 episodes across two seasons; "all" must
+      # fetch every one of them, in contrast to "none" fetching zero above.
+      assert Repo.aggregate(
+               from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id),
+               :count
+             ) == 5
     end
   end
 
@@ -605,18 +638,45 @@ defmodule Mydia.MediaRequestsTest do
     end)
   end
 
-  defp stub_tmdb_tv_show(bypass, id, title) do
+  defp stub_tmdb_tv_show(bypass, id, title, seasons \\ []) do
     body = %{
       "id" => id,
       "name" => title,
       "first_air_date" => "2021-03-04",
       "overview" => "x",
       "credits" => %{"cast" => [], "crew" => []},
-      "seasons" => [],
+      "seasons" => seasons,
       "genres" => []
     }
 
     Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{id}", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+  end
+
+  # Backs the per-season fetch `refresh_episodes_for_tv_show/2` makes for a
+  # TMDB-sourced show (relay.ex's `fetch_season_tmdb/4`), independent of the
+  # season list on the show-level stub above. `episode_count` episodes are
+  # numbered 1.., which is all `EpisodeData.from_api_response/1` requires.
+  defp stub_tmdb_season(bypass, tmdb_id, season_number, episode_count) do
+    episodes =
+      for episode_number <- 1..episode_count do
+        %{
+          "season_number" => season_number,
+          "episode_number" => episode_number,
+          "name" => "Episode #{episode_number}"
+        }
+      end
+
+    body = %{
+      "season_number" => season_number,
+      "name" => "Season #{season_number}",
+      "episodes" => episodes
+    }
+
+    Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}/#{season_number}", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(body))
