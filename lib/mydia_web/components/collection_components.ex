@@ -179,19 +179,15 @@ defmodule MydiaWeb.CollectionComponents do
     """
   end
 
-  # Renders a poster collage from multiple poster paths.
-  # Displays:
-  # - 4 posters: 2x2 grid
-  # - 3 posters: 1 large + 2 small on right
-  # - 2 posters: side by side
-  # - 1 poster: full size
-  # - 0 posters: placeholder icon
+  # Renders the collection artwork as a DaisyUI hover gallery. The component
+  # reveals each image in a horizontal hover zone. The collection grid supplies
+  # at most four paths; a collection with no artwork keeps the placeholder.
   attr :poster_paths, :list, required: true
   attr :collection_type, :string, default: "manual"
 
   defp poster_collage(%{poster_paths: []} = assigns) do
     ~H"""
-    <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-base-200 to-base-300 group-hover:scale-105 transition-transform duration-300">
+    <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-base-200 to-base-300">
       <.icon
         name={if @collection_type == "smart", do: "hero-sparkles", else: "hero-folder"}
         class="w-16 h-16 text-base-content/20"
@@ -200,67 +196,22 @@ defmodule MydiaWeb.CollectionComponents do
     """
   end
 
-  defp poster_collage(%{poster_paths: [path]} = assigns) do
-    assigns = assign(assigns, :url, tmdb_poster_url(path))
+  defp poster_collage(assigns) do
+    posters =
+      assigns.poster_paths
+      |> Enum.map(&tmdb_poster_url/1)
+      |> Enum.with_index()
+
+    assigns = assign(assigns, :posters, posters)
 
     ~H"""
-    <img
-      src={@url}
-      alt="Collection poster"
-      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-      loading="lazy"
-    />
-    """
-  end
-
-  defp poster_collage(%{poster_paths: [path1, path2]} = assigns) do
-    assigns =
-      assigns
-      |> assign(:url1, tmdb_poster_url(path1))
-      |> assign(:url2, tmdb_poster_url(path2))
-
-    ~H"""
-    <div class="grid grid-cols-2 w-full h-full group-hover:scale-105 transition-transform duration-300">
-      <img src={@url1} alt="" class="w-full h-full object-cover" loading="lazy" />
-      <img src={@url2} alt="" class="w-full h-full object-cover" loading="lazy" />
-    </div>
-    """
-  end
-
-  defp poster_collage(%{poster_paths: [path1, path2, path3]} = assigns) do
-    assigns =
-      assigns
-      |> assign(:url1, tmdb_poster_url(path1))
-      |> assign(:url2, tmdb_poster_url(path2))
-      |> assign(:url3, tmdb_poster_url(path3))
-
-    ~H"""
-    <div class="grid grid-cols-2 w-full h-full group-hover:scale-105 transition-transform duration-300">
-      <img src={@url1} alt="" class="w-full h-full object-cover row-span-2" loading="lazy" />
-      <div class="flex flex-col">
-        <img src={@url2} alt="" class="w-full h-1/2 object-cover" loading="lazy" />
-        <img src={@url3} alt="" class="w-full h-1/2 object-cover" loading="lazy" />
-      </div>
-    </div>
-    """
-  end
-
-  defp poster_collage(%{poster_paths: paths} = assigns) when length(paths) >= 4 do
-    [path1, path2, path3, path4 | _] = paths
-
-    assigns =
-      assigns
-      |> assign(:url1, tmdb_poster_url(path1))
-      |> assign(:url2, tmdb_poster_url(path2))
-      |> assign(:url3, tmdb_poster_url(path3))
-      |> assign(:url4, tmdb_poster_url(path4))
-
-    ~H"""
-    <div class="grid grid-cols-2 grid-rows-2 w-full h-full group-hover:scale-105 transition-transform duration-300">
-      <img src={@url1} alt="" class="w-full h-full object-cover" loading="lazy" />
-      <img src={@url2} alt="" class="w-full h-full object-cover" loading="lazy" />
-      <img src={@url3} alt="" class="w-full h-full object-cover" loading="lazy" />
-      <img src={@url4} alt="" class="w-full h-full object-cover" loading="lazy" />
+    <div class="hover-gallery w-full h-full">
+      <img
+        :for={{url, index} <- @posters}
+        src={url}
+        alt={if index == 0, do: "Collection poster", else: ""}
+        loading="lazy"
+      />
     </div>
     """
   end

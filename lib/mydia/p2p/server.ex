@@ -19,6 +19,22 @@ defmodule Mydia.P2p.Server do
   alias Mydia.Streaming.SessionSubtitles
   alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
+  # What a peer is told when handling its request failed unexpectedly.
+  #
+  # Deliberately says nothing. `accept_inbound` admits a connection on a
+  # matching ALPN alone, so the peer reading this need not have authenticated,
+  # and the exception text behind it is written for an operator: adapter
+  # errors quoting SQL, struct and module names, filesystem paths. The full
+  # `Exception.format/3` output, stacktrace included, goes to the log, where
+  # the operator can see it and the peer cannot.
+  @opaque_failure "Request failed"
+
+  # How long one peer request may run before its task is killed and its slot
+  # returned. Matches the Rust core's `RESPONSE_TIMEOUT`: past that the peer has
+  # already been handed a timeout error and stopped waiting, so anything still
+  # running is work whose result nothing will read.
+  @request_timeout :timer.seconds(30)
+
   @doc """
   Status information about the p2p host.
   """
@@ -249,22 +265,23 @@ defmodule Mydia.P2p.Server do
   def handle_info({:ok, "request_received", "pairing", request_id, req}, state) do
     Logger.info("P2P Request: Pairing from #{req.device_name}")
 
-    response =
-      if RemoteAccess.enabled?() do
-        handle_pairing_request(req)
-      else
-        Logger.info("P2P Request: Pairing refused, remote access is disabled")
+    serve_request(state.resource, request_id, "pairing", fn ->
+      response =
+        if RemoteAccess.enabled?() do
+          handle_pairing_request(req)
+        else
+          Logger.info("P2P Request: Pairing refused, remote access is disabled")
 
-        %P2p.PairingResponse{
-          success: false,
-          error: "Remote access is disabled on this server"
-        }
-      end
+          %P2p.PairingResponse{
+            success: false,
+            error: "Remote access is disabled on this server"
+          }
+        end
 
-    # Wrap in tagged enum tuple as expected by NIF
-    response_enum = {:pairing, response}
+      # Wrap in tagged enum tuple as expected by NIF
+      {:pairing, response}
+    end)
 
-    P2p.send_response(state.resource, request_id, response_enum)
     {:noreply, state}
   end
 
@@ -274,44 +291,48 @@ defmodule Mydia.P2p.Server do
   end
 
   def handle_info({:ok, "request_received", "read_media", request_id, req}, state) do
-    cond do
-      not RemoteAccess.enabled?() ->
-        P2p.send_response(state.resource, request_id, {:error, "Remote access is disabled"})
+    resource = state.resource
 
-      # Validate file path exists
-      # SECURITY: In production, verify path is within allowed directories!
-      File.exists?(req.file_path) ->
-        # Use the optimized NIF to read chunk and respond
-        P2p.respond_with_file_chunk(
-          state.resource,
-          request_id,
-          req.file_path,
-          req.offset,
-          req.length
-        )
+    serve_request(resource, request_id, "read_media", fn ->
+      cond do
+        not RemoteAccess.enabled?() ->
+          {:error, "Remote access is disabled"}
 
-      true ->
-        Logger.warning("Requested file not found: #{req.file_path}")
-        P2p.send_response(state.resource, request_id, {:error, "File not found"})
-    end
+        # Validate file path exists
+        # SECURITY: In production, verify path is within allowed directories!
+        File.exists?(req.file_path) ->
+          # Use the optimized NIF to read chunk and respond. It answers the
+          # peer itself, so there is no response left for `serve_request`
+          # to send.
+          P2p.respond_with_file_chunk(
+            resource,
+            request_id,
+            req.file_path,
+            req.offset,
+            req.length
+          )
+
+          :responded
+
+        true ->
+          Logger.warning("Requested file not found: #{req.file_path}")
+          {:error, "File not found"}
+      end
+    end)
 
     {:noreply, state}
   end
 
   def handle_info({:ok, "request_received", "graphql", request_id, req}, state) do
-    if RemoteAccess.enabled?() do
-      handle_graphql_request(request_id, req, state)
-    else
-      Logger.debug("P2P Request: GraphQL refused, remote access is disabled")
+    # Read what the request needs out of the GenServer's state here; the task
+    # below must not close over `state`.
+    peer_connection_type = infer_peer_connection_type(state.connected_peers)
 
-      response = %P2p.GraphQLResponse{
-        data: nil,
-        errors: encode_graphql_errors([%{message: "Remote access is disabled on this server"}])
-      }
+    serve_request(state.resource, request_id, "GraphQL request", fn ->
+      {:graphql, graphql_response(req, peer_connection_type)}
+    end)
 
-      P2p.send_response(state.resource, request_id, {:graphql, response})
-      {:noreply, state}
-    end
+    {:noreply, state}
   end
 
   def handle_info({:ok, "unknown_request"}, state) do
@@ -393,7 +414,28 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp handle_graphql_request(request_id, req, state) do
+  @doc """
+  Builds the response to one peer's GraphQL request, refusing it outright when
+  remote access is switched off.
+
+  Public for the same reason as `run_graphql/5`: this is the gate that keeps a
+  server with remote access disabled from answering peer queries at all, and it
+  is worth pinning without standing up a host and a NIF resource to reach it.
+  """
+  def graphql_response(req, peer_connection_type) do
+    if RemoteAccess.enabled?() do
+      run_graphql_request(req, peer_connection_type)
+    else
+      Logger.debug("P2P Request: GraphQL refused, remote access is disabled")
+
+      %P2p.GraphQLResponse{
+        data: nil,
+        errors: encode_graphql_errors([%{message: "Remote access is disabled on this server"}])
+      }
+    end
+  end
+
+  defp run_graphql_request(req, peer_connection_type) do
     Logger.debug("P2P Request: GraphQL query")
 
     # Parse variables from JSON
@@ -401,55 +443,174 @@ defmodule Mydia.P2p.Server do
 
     # Build context from auth token, marking source as p2p
     # Include peer connection type so resolvers can enforce relay caps
-    peer_connection_type = infer_peer_connection_type(state.connected_peers)
-
     context =
       build_graphql_context(req.auth_token, :p2p, peer_connection_type, req.device_profile)
 
     # Execute the GraphQL query with logging
-    result =
-      GraphQLLogging.run(
-        req.query,
-        MydiaWeb.Schema,
-        variables: variables,
-        operation_name: req.operation_name,
-        context: context
+    result = run_graphql(req.query, variables, req.operation_name, context)
+
+    build_graphql_response(result)
+  end
+
+  defp build_graphql_response(result) do
+    case result do
+      {:ok, %{data: data, errors: errors}} ->
+        %P2p.GraphQLResponse{
+          data: encode_json(data),
+          errors: encode_graphql_errors(errors)
+        }
+
+      {:ok, %{data: data}} ->
+        %P2p.GraphQLResponse{
+          data: encode_json(data),
+          errors: nil
+        }
+
+      # Query validation errors (no data key, only errors)
+      {:ok, %{errors: errors}} ->
+        Logger.warning("GraphQL validation error: #{inspect(errors)}")
+
+        %P2p.GraphQLResponse{
+          data: nil,
+          errors: encode_graphql_errors(errors)
+        }
+
+      {:error, reason} ->
+        Logger.warning("GraphQL execution failed: #{inspect(reason)}")
+
+        # A reason that is already a sentence is sent as one. `inspect/1` on a
+        # binary wraps it in quotes, which the player would render verbatim.
+        message = if is_binary(reason), do: reason, else: inspect(reason)
+
+        %P2p.GraphQLResponse{
+          data: nil,
+          errors: encode_json([%{message: message}])
+        }
+    end
+  end
+
+  @doc """
+  Runs a GraphQL document on behalf of a peer, turning a crashing resolver into
+  an error result.
+
+  Public, and taking `schema`, only so the regression test can drive it without
+  a live NIF resource and against resolvers that fail on purpose.
+
+  Absinthe lets an exception raised by a resolver escape to whoever called it,
+  and here that caller is the `Mydia.P2p.Server` process itself. An escaping
+  exception therefore did not fail one query, it killed the P2P host: the
+  supervisor rebuilt the endpoint, every paired player lost its connection and
+  had to redial, and the operator saw the node "reconnect" for no visible
+  reason. Production took three such restarts in a single week, from
+  `updateEpisodeProgress` and `updateMovieProgress` meeting
+  `Exqlite.Error: Database busy` under a concurrent write.
+
+  One peer's failing request is not a reason to disconnect every other peer, so
+  the failure is logged with its stacktrace, reported to the peer that caused
+  it, and the host stays up.
+  """
+  def run_graphql(query, variables, operation_name, context, schema \\ MydiaWeb.Schema) do
+    GraphQLLogging.run(
+      query,
+      schema,
+      variables: variables,
+      operation_name: operation_name,
+      context: context
+    )
+  rescue
+    exception ->
+      Logger.error(
+        "P2P GraphQL request crashed: " <>
+          Exception.format(:error, exception, __STACKTRACE__)
       )
 
-    response =
-      case result do
-        {:ok, %{data: data, errors: errors}} ->
-          %P2p.GraphQLResponse{
-            data: encode_json(data),
-            errors: encode_graphql_errors(errors)
-          }
+      {:error, @opaque_failure}
+  catch
+    kind, reason ->
+      Logger.error(
+        "P2P GraphQL request #{kind}: " <>
+          Exception.format(kind, reason, __STACKTRACE__)
+      )
 
-        {:ok, %{data: data}} ->
-          %P2p.GraphQLResponse{
-            data: encode_json(data),
-            errors: nil
-          }
+      {:error, @opaque_failure}
+  end
 
-        # Query validation errors (no data key, only errors)
-        {:ok, %{errors: errors}} ->
-          Logger.warning("GraphQL validation error: #{inspect(errors)}")
+  # Serve one peer request off the GenServer, and answer it exactly once.
+  #
+  # `Mydia.P2p.Server` owns the NIF resource and every peer's connection
+  # state, so work it does inline in a callback is time the host spends
+  # answering nothing else: not another peer's query, not a `peer_connected`
+  # event. Worse, an exception raised inline does not fail that one request,
+  # it kills the host, and the supervisor's restart drops every paired player
+  # at once. Production took three such restarts in a week, all from GraphQL
+  # mutations. `stream_hls_response` has always spawned for the throughput
+  # half of this; the request handlers spawn for both halves.
+  #
+  # `fun` returns the tagged response tuple to send back, or `:responded` if
+  # it already answered the peer itself. Either way exactly one response goes
+  # out, including when `fun` raises: a peer that gets nothing back waits out
+  # the Rust core's 30s `RESPONSE_TIMEOUT` instead, which is a worse failure
+  # than an error it can act on immediately.
+  #
+  # The tasks run under `Mydia.P2p.RequestSupervisor`, which is bounded: iroh
+  # accepts an inbound connection on a matching ALPN alone, so a peer needs no
+  # credential to make the host spawn these. `start_child` is not linked to
+  # this process, so a task that dies despite the rescue below still cannot
+  # take the host with it, and past `max_children` the peer is refused outright
+  # rather than the host quietly accumulating work it will never finish.
+  #
+  # A bound is only worth having if slots come back, so the work runs in a
+  # second task the first one waits on with a deadline. Nothing else would end
+  # it: a handler blocked on an unresponsive filesystem never returns, and the
+  # Rust `RESPONSE_TIMEOUT` only abandons the peer's side of the exchange, it
+  # cannot reach into the BEAM and stop the task. Without this, requests that
+  # hang hold their slots for the life of the process and the host eventually
+  # answers nothing but "Server busy".
+  # Public, and taking `timeout`, only so the regression test can drive a
+  # handler that hangs without waiting out the real 30 seconds.
+  @doc false
+  def serve_request(resource, request_id, describe, fun, timeout \\ @request_timeout) do
+    task = fn ->
+      worker = Task.Supervisor.async_nolink(Mydia.P2p.RequestSupervisor, fun)
 
-          %P2p.GraphQLResponse{
-            data: nil,
-            errors: encode_graphql_errors(errors)
-          }
+      response =
+        case Task.yield(worker, timeout) || Task.shutdown(worker, :brutal_kill) do
+          {:ok, response} ->
+            response
 
-        {:error, reason} ->
-          Logger.warning("GraphQL execution failed: #{inspect(reason)}")
+          {:exit, reason} ->
+            # `async_nolink` means a handler that raises exits the worker
+            # instead of propagating here. The exit reason still carries the
+            # exception and its stacktrace, so the operator loses nothing.
+            Logger.error("P2P #{describe} crashed: " <> Exception.format(:exit, reason))
+            {:error, @opaque_failure}
 
-          %P2p.GraphQLResponse{
-            data: nil,
-            errors: encode_json([%{message: inspect(reason)}])
-          }
+          nil ->
+            Logger.error("P2P #{describe} timed out after #{timeout}ms and was killed")
+
+            {:error, @opaque_failure}
+        end
+
+      case response do
+        :responded -> :ok
+        response -> P2p.send_response(resource, request_id, response)
       end
+    end
 
-    P2p.send_response(state.resource, request_id, {:graphql, response})
-    {:noreply, state}
+    case Task.Supervisor.start_child(Mydia.P2p.RequestSupervisor, task) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, :max_children} ->
+        Logger.warning("P2P #{describe} refused: too many requests in flight")
+        P2p.send_response(resource, request_id, {:error, "Server busy, try again"})
+
+      {:error, reason} ->
+        Logger.error("P2P #{describe} could not be started: #{inspect(reason)}")
+        P2p.send_response(resource, request_id, {:error, "Request failed"})
+    end
+
+    :ok
   end
 
   defp stream_hls_response(resource, stream_id, req) do

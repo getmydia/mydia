@@ -140,18 +140,59 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
       status = get_episode_status(episode)
       quality = get_episode_quality_badge(episode) %>
 
-      <div class={["py-2 px-3", has_files && "border-l-2 border-l-success"]}>
-        <%!-- Mobile keeps two stacked rows. From sm up every wrapper collapses to
-              `display: contents`, which dissolves the boxes and promotes the cells
-              to items of one grid with fixed tracks. That is what makes quality,
-              air date and status form columns down the whole season instead of
-              drifting with each row's content. --%>
-        <div class={[
-          "flex flex-col gap-1",
-          "sm:grid sm:items-center sm:gap-x-3 sm:gap-y-0",
-          "sm:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
-        ]}>
-          <div class="flex items-center gap-1 flex-1 min-w-0 sm:contents">
+      <%!-- The `eprow` size container. Everything from here down that needs to
+            know how much room it has queries this element rather than the
+            viewport, because two layout switches sit between the window and
+            this column: the app drawer becomes permanent at `lg`
+            (layouts.ex, `drawer lg:drawer-open`, 256px) and this page's own
+            left rail appears at `md` and widens to 20rem at `lg`
+            (show.html.heex). Both take width away at the moment a viewport
+            breakpoint grants it, so this column is 328px wide at a 1024px
+            viewport and 576px wide at 640px. Measured, both.
+
+            It has to be this element and not the detail panel below, because
+            the query changes that panel's margin and a container whose own
+            size depends on the query is not resolvable.
+
+            The threshold below is `@md` (28rem / 448px), lowered from `@lg`
+            (32rem / 512px) originally. A container query measures the
+            container's content box, so the `px-3` padding on this element is
+            not part of what the threshold compares against -- content-box
+            width runs well below the border-box numbers measured above. At
+            `@lg`, this row's content box was only 501px at a 900px viewport,
+            on the wrong side of 512px, so a vertical scrollbar appearing was
+            enough to flip the layout between stacked and one-line.
+            `@md`/448px clears that case by 53px and still leaves 768px 79px
+            clear on the other side; 448 has no significance beyond that
+            margin. --%>
+      <div
+        id={"episode-#{episode.id}-row"}
+        class={[
+          "@container/eprow py-2 px-3",
+          has_files && "border-l-2 border-l-success"
+        ]}
+      >
+        <%!-- Mobile keeps two stacked rows. Once the `eprow` container is wide
+              enough every wrapper collapses to `display: contents`, which
+              dissolves the boxes and promotes the cells to items of one grid
+              with fixed tracks. That is what makes quality, air date and
+              status form columns down the whole season instead of drifting
+              with each row's content.
+
+              The container, not a viewport breakpoint: these tracks need about
+              500px, and at a 1024px viewport this column is 328px wide because
+              the app drawer and the page rail both open at `lg`. The old
+              breakpoint sent the toolbar 50px past the right edge of the
+              window. --%>
+        <div
+          id={"episode-#{episode.id}-grid"}
+          class={[
+            "flex flex-col gap-1",
+            "@md/eprow:grid @md/eprow:items-center @md/eprow:gap-x-3 @md/eprow:gap-y-0",
+            "@md/eprow:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
+          ]}
+        >
+          <div class="flex items-center gap-1 flex-1 min-w-0 @md/eprow:contents">
             <%!-- Chevron and number share one cell so they stay a single
                   toggle_episode_expanded target. ml-auto right-aligns the number,
                   which keeps two- and three-digit episodes in column: the chunk
@@ -164,7 +205,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   disclosure is reachable by keyboard. --%>
             <button
               type="button"
-              class="flex items-center gap-1 flex-shrink-0 sm:w-full cursor-pointer hover:text-primary"
+              class="flex items-center gap-1 flex-shrink-0 @md/eprow:w-full cursor-pointer hover:text-primary"
               phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
               aria-expanded={to_string(is_expanded)}
@@ -174,7 +215,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                 name={if is_expanded, do: "hero-chevron-down", else: "hero-chevron-right"}
                 class="w-3 h-3 text-base-content/40"
               />
-              <span class="font-mono text-sm font-medium text-base-content/70 tabular-nums sm:ml-auto">
+              <span class="font-mono text-sm font-medium text-base-content/70 tabular-nums @md/eprow:ml-auto">
                 {episode.episode_number}
               </span>
             </button>
@@ -195,19 +236,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             </button>
           </div>
 
-          <div class="flex items-center justify-between gap-2 sm:contents">
-            <div class="flex items-center gap-2 sm:contents">
-              <div class="flex items-center sm:justify-end">
+          <div class="flex items-center justify-between gap-2 @md/eprow:contents">
+            <div class="flex items-center gap-2 @md/eprow:contents">
+              <div class="flex items-center @md/eprow:justify-end">
                 <span :if={quality} class="badge badge-sm badge-ghost font-mono tabular-nums">
                   {quality}
                 </span>
               </div>
-              <div class="text-xs text-base-content/50 tabular-nums sm:text-right">
+              <div class="text-xs text-base-content/50 tabular-nums @md/eprow:text-right">
                 {episode.air_date && format_date(episode.air_date)}
               </div>
             </div>
 
-            <div class="flex items-center gap-2 sm:contents">
+            <div class="flex items-center gap-2 @md/eprow:contents">
               <%!-- A 16px dot of colour, at every width. A visible state label
                     repeated down 170 rows is noise, and the row already says it
                     twice: the left border is green when files exist, and the
@@ -218,7 +259,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     The tooltip wraps the chip from the outside, never a
                     join-item. --%>
               <div
-                class="tooltip tooltip-left sm:justify-self-end"
+                class="tooltip tooltip-left @md/eprow:justify-self-end"
                 data-tip={episode_status_tooltip(episode)}
               >
                 <span
@@ -234,7 +275,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     the container because btn-ghost has no border of its own and
                     the first item varies: the play slot is absent whenever
                     playback is off. --%>
-              <div class="flex-shrink-0 sm:justify-self-end sm:border-l sm:border-base-300 sm:pl-3">
+              <div class="flex-shrink-0 @md/eprow:justify-self-end @md/eprow:border-l @md/eprow:border-base-300 @md/eprow:pl-3">
                 <div
                   id={"episode-#{episode.id}-actions"}
                   class="join border border-base-300 rounded-lg [&>*:not(:first-child)]:border-l [&>*:not(:first-child)]:border-base-300"
@@ -326,7 +367,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         </div>
 
         <%= if is_expanded do %>
-          <div id={"episode-#{episode.id}-detail"} class="mt-2 ml-8 space-y-1">
+          <div id={"episode-#{episode.id}-detail"} class="mt-2 ml-2 @md/eprow:ml-8 space-y-1">
             <%= if has_files do %>
               <div :for={file <- episode.media_files} class="bg-base-200/50 rounded p-2">
                 <Components.episode_file_row

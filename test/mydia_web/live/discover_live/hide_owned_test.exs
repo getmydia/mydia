@@ -233,15 +233,75 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
 
       {:noreply, socket} = Index.handle_info(:load_data, socket)
 
-      assert_received {:load_page, 2, 1}
+      assert_received {:load_page, 2, 1, 20}
       assert socket.assigns.visible_items == []
       assert socket.assigns.loading_more == true
 
-      {:noreply, socket} = Index.handle_info({:load_page, 2, 1}, socket)
+      {:noreply, socket} = Index.handle_info({:load_page, 2, 1, 20}, socket)
 
-      refute_received {:load_page, _page, _advances}
+      refute_received {:load_page, _page, _advances, _target}
       assert [%{title: "Paper Comet"}] = socket.assigns.visible_items
       assert socket.assigns.loading_more == false
+    end
+
+    test "keeps fetching while a partly-owned page leaves the grid short" do
+      owned_a = unique_provider_id()
+      owned_b = unique_provider_id()
+      survivor = unique_provider_id()
+      next_page_id = unique_provider_id()
+
+      seed_curated_page(1, 2, [
+        curated_result(owned_a, "Marooned Aurora"),
+        curated_result(owned_b, "Tin Meridian"),
+        curated_result(survivor, "Paper Comet")
+      ])
+
+      seed_curated_page(2, 2, [curated_result(next_page_id, "Velvet Static")])
+
+      library_status_map = %{
+        owned_a => %{in_library: true, monitored: true, type: "movie", id: "a"},
+        owned_b => %{in_library: true, monitored: true, type: "movie", id: "b"}
+      }
+
+      socket = curated_socket(%{library_status_map: library_status_map})
+
+      {:noreply, socket} = Index.handle_info(:load_data, socket)
+
+      # One survivor out of three is not a full grid, so the page that is
+      # partly owned must advance just like a fully-owned one.
+      assert [%{title: "Paper Comet"}] = socket.assigns.visible_items
+      assert_received {:load_page, 2, 1, 20}
+      assert socket.assigns.loading_more == true
+
+      {:noreply, socket} = Index.handle_info({:load_page, 2, 1, 20}, socket)
+
+      # Page 2 was the last one, so the chain stops without reaching the target.
+      refute_received {:load_page, _page, _advances, _target}
+      assert [%{title: "Paper Comet"}, %{title: "Velvet Static"}] = socket.assigns.visible_items
+      assert socket.assigns.loading_more == false
+    end
+
+    test "load_more aims for a full page of new titles on top of what is shown" do
+      owned_id = unique_provider_id()
+      shown = for n <- 1..5, do: curated_result(unique_provider_id(), "Shown #{n}")
+
+      seed_curated_page(2, 9, [curated_result(owned_id, "Marooned Aurora")])
+
+      library_status_map = %{
+        owned_id => %{in_library: true, monitored: true, type: "movie", id: "owned"}
+      }
+
+      socket =
+        curated_socket(%{
+          library_status_map: library_status_map,
+          items: shown,
+          visible_items: shown
+        })
+
+      {:noreply, _socket} = Index.handle_event("load_more", %{}, socket)
+
+      # Five already on screen, so the click is asking for twenty-five.
+      assert_received {:load_page, 2, 0, 25}
     end
 
     test "gives up after three fetches so a fully-owned category cannot spin forever" do
@@ -258,16 +318,16 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
       socket = curated_socket(%{library_status_map: library_status_map})
 
       {:noreply, socket} = Index.handle_info(:load_data, socket)
-      assert_received {:load_page, 2, 1}
+      assert_received {:load_page, 2, 1, 20}
 
-      {:noreply, socket} = Index.handle_info({:load_page, 2, 1}, socket)
-      assert_received {:load_page, 3, 2}
+      {:noreply, socket} = Index.handle_info({:load_page, 2, 1, 20}, socket)
+      assert_received {:load_page, 3, 2, 20}
 
-      {:noreply, socket} = Index.handle_info({:load_page, 3, 2}, socket)
-      assert_received {:load_page, 4, 3}
+      {:noreply, socket} = Index.handle_info({:load_page, 3, 2, 20}, socket)
+      assert_received {:load_page, 4, 3, 20}
 
-      {:noreply, socket} = Index.handle_info({:load_page, 4, 3}, socket)
-      refute_received {:load_page, _page, _advances}
+      {:noreply, socket} = Index.handle_info({:load_page, 4, 3, 20}, socket)
+      refute_received {:load_page, _page, _advances, _target}
 
       # Still owned, still more pages available: the bound stopped it, not the
       # data running out.

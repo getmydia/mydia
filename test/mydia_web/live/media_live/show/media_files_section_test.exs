@@ -242,6 +242,82 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
     end
   end
 
+  # Matches the bare utility only, so "@md/mfrow:btn-sm" does not count as
+  # "btn-sm". Without this the refutes below pass on the broken markup.
+  defp has_bare?(class, utility) do
+    Regex.match?(~r/(^|\s)#{Regex.escape(utility)}(\s|$)/, class)
+  end
+
+  defp class_of(html, selector) do
+    [class] =
+      html |> LazyHTML.from_fragment() |> LazyHTML.query(selector) |> LazyHTML.attribute("class")
+
+    class
+  end
+
+  describe "narrow-column layout" do
+    setup do
+      media_item = %Mydia.Media.MediaItem{
+        id: "item-1",
+        type: "movie",
+        title: "Ashvale Hollow",
+        episodes: [],
+        media_files: [
+          file("file-1", "Ashvale.Hollow.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-GROUP.mkv")
+        ]
+      }
+
+      %{html: section_html(media_item)}
+    end
+
+    test "the card body declares the mfrow container", %{html: html} do
+      assert class_of(html, "#media-files-section .card-body") =~ "@container/mfrow"
+    end
+
+    test "the version row switches on the container, not the viewport", %{html: html} do
+      class = class_of(html, "#version-row-file-1")
+
+      assert class =~ "flex-col"
+      assert class =~ "@md/mfrow:flex-row"
+
+      refute class =~ "sm:",
+             "at 1024px this column is 312px wide and sm: calls it wide"
+    end
+
+    test "action buttons stay full-size until the column is wide", %{html: html} do
+      class = class_of(html, "#file-delete-file-1")
+
+      assert class =~ "@md/mfrow:btn-sm"
+      refute has_bare?(class, "btn-sm")
+    end
+
+    test "the extras row switches on the same container as the versions row" do
+      media_item = %Mydia.Media.MediaItem{
+        id: "item-1",
+        type: "movie",
+        title: "Ashvale Hollow",
+        episodes: [],
+        media_files: [
+          %{
+            file("extra-1", "Ashvale.Hollow.2024.Behind.The.Lantern.Featurette.1080p.mkv")
+            | extra_kind: "featurette",
+              extra_source: "filename"
+          }
+        ]
+      }
+
+      html = section_html(media_item)
+
+      row_class = class_of(html, "#extra-row-extra-1")
+      assert row_class =~ "@md/mfrow:flex-row"
+      refute row_class =~ "sm:"
+
+      button_class = class_of(html, "#promote-extra-1")
+      assert button_class =~ "@md/mfrow:btn-sm"
+      refute has_bare?(button_class, "btn-sm")
+    end
+  end
+
   describe "refresh_all_file_metadata/2" do
     test "reports nothing to refresh when a TV show really has no files" do
       show = media_item_fixture(%{type: "tv_show"})

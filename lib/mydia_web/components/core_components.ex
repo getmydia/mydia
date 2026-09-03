@@ -450,11 +450,13 @@ defmodule MydiaWeb.CoreComponents do
   end
 
   @doc """
-  A 2:3 poster in a hover-scaling figure.
+  A 2:3 poster in DaisyUI's 3D hover wrapper.
 
-  The hover transform used to be hand-written at every poster grid in the app,
-  which is why three of them had it and five did not. It lives here now so a
-  new grid gets it by construction.
+  The hover effect used to be hand-written at every poster grid in the app,
+  which is why three of them had it and five did not. It lives here so a new
+  grid gets the same interaction by construction. DaisyUI's `hover-3d`
+  component requires the content followed by eight empty hover zones; keeping
+  that structure here prevents callers from drifting.
 
   The `group` class stays on the caller's own wrapper rather than moving in
   here. Those wrappers differ per page: some are a plain `relative group`, the
@@ -486,25 +488,29 @@ defmodule MydiaWeb.CoreComponents do
 
   def poster_figure(assigns) do
     ~H"""
-    <figure class={["relative aspect-[2/3] overflow-hidden bg-base-300", @class]}>
-      <img
-        :if={@src}
-        src={@src}
-        alt={@alt}
-        loading={@loading}
-        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-      />
-      <%!-- The fallback carries the same hover transform as the img above. A card
-            whose poster is missing is still a link, and a grid where only some
-            cards lift on hover reads as broken rather than as a distinction. --%>
-      <div
-        :if={is_nil(@src)}
-        class="w-full h-full flex items-center justify-center group-hover:scale-105 transition-transform duration-300"
-      >
-        <.icon name={@fallback_icon} class="w-16 h-16 text-base-content/20" />
-      </div>
-      {render_slot(@overlay)}
-    </figure>
+    <div class="hover-3d w-full">
+      <figure class={["relative aspect-[2/3] overflow-hidden bg-base-300", @class]}>
+        <img
+          :if={@src}
+          src={@src}
+          alt={@alt}
+          loading={@loading}
+          class="w-full h-full object-cover"
+        />
+        <div :if={is_nil(@src)} class="w-full h-full flex items-center justify-center">
+          <.icon name={@fallback_icon} class="w-16 h-16 text-base-content/20" />
+        </div>
+        {render_slot(@overlay)}
+      </figure>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
     """
   end
 

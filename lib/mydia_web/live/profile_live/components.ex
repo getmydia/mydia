@@ -16,19 +16,21 @@ defmodule MydiaWeb.ProfileLive.Components do
 
   def inherit_select(assigns) do
     ~H"""
-    <label class="form-control">
-      <span class="label-text">{@label}</span>
-      <select name={@name} class="select select-bordered select-sm">
-        <option value="">Use server default</option>
-        <option
-          :for={{value, label} <- @options}
-          value={to_string(value)}
-          selected={@value == value}
-        >
-          {label}
-        </option>
-      </select>
-    </label>
+    <div>
+      <label class="block">
+        <span class="label mb-1 text-sm font-medium text-base-content/80">{@label}</span>
+        <select name={@name} class="select select-bordered select-sm w-full">
+          <option value="">Use server default</option>
+          <option
+            :for={{value, label} <- @options}
+            value={to_string(value)}
+            selected={@value == value}
+          >
+            {label}
+          </option>
+        </select>
+      </label>
+    </div>
     """
   end
 end

@@ -535,13 +535,26 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
   def episode_file_row(assigns) do
     ~H"""
-    <div class="flex items-start justify-between gap-4 py-1">
+    <%!-- Stacked by default, one row once there is room for one. The container
+          is `eprow`, declared on the episode wrapper in
+          SeasonComponents.episode_rows/1, not here: this row's own width is
+          what the query decides, so it cannot be the thing being queried.
+
+          The strip below is `flex-shrink-0` at 136px. Against a 245px row on a
+          375px phone that left the filename 69px, which rendered 8 characters
+          of a 92-character name and wrapped the badge line underneath onto
+          four lines. --%>
+    <div
+      id={"episode-file-row-#{@file.id}"}
+      class="flex flex-col gap-3 py-1 @md/eprow:flex-row @md/eprow:items-start @md/eprow:justify-between @md/eprow:gap-4"
+    >
       <%!-- File info --%>
-      <div class="flex flex-col gap-1 min-w-0 flex-1">
+      <div class="flex flex-col gap-1 min-w-0 @md/eprow:flex-1">
         <%!-- Filename row --%>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0">
           <.icon name="hero-document" class="w-4 h-4 text-base-content/50 flex-shrink-0" />
           <span
+            id={"episode-file-name-#{@file.id}"}
             class="font-mono text-sm truncate"
             title={Mydia.Library.MediaFile.display_path(@file)}
           >
@@ -549,7 +562,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           </span>
         </div>
         <%!-- Technical details row --%>
-        <div class="flex flex-wrap items-center gap-1.5 pl-6 text-xs">
+        <div class="flex flex-wrap items-center gap-1.5 pl-0 text-xs @md/eprow:pl-6">
           <span class="badge badge-primary badge-xs">{@file.resolution || "?"}</span>
           <%= if @file.codec do %>
             <span class="text-base-content/60" title={@file.codec}>
@@ -572,13 +585,13 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         />
       </div>
       <%!-- File actions --%>
-      <div class="flex items-center gap-1 flex-shrink-0">
+      <div class="flex items-center justify-end gap-1 flex-shrink-0">
         <button
           id={"subtitle-open-#{@file.id}"}
           type="button"
           phx-click="open_subtitle_manage"
           phx-value-media-file-id={@file.id}
-          class="btn btn-ghost btn-xs btn-square"
+          class="btn btn-ghost btn-square @md/eprow:btn-xs"
           aria-label="Manage subtitles"
           title="Subtitles"
         >
@@ -594,7 +607,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <div
               tabindex="0"
               role="button"
-              class="btn btn-ghost btn-xs btn-square"
+              class="btn btn-ghost btn-square @md/eprow:btn-xs"
               title="Pre-transcode"
             >
               <.icon name="hero-wrench" class="w-4 h-4" />
@@ -621,7 +634,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             href={
               flutter_player_url("episode", @episode.id, file_id: @file.id, title: @episode.title)
             }
-            class="btn btn-ghost btn-xs btn-square"
+            class="btn btn-ghost btn-square @md/eprow:btn-xs"
             title="Play this file"
           >
             <.icon name="hero-play-solid" class="w-4 h-4" />
@@ -631,7 +644,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           type="button"
           phx-click="mark_file_preferred"
           phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-xs btn-square"
+          class="btn btn-ghost btn-square @md/eprow:btn-xs"
           title="Mark as preferred"
         >
           <.icon name="hero-star" class="w-4 h-4" />
@@ -641,7 +654,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           type="button"
           phx-click="show_file_delete_confirm"
           phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-xs btn-square text-error hover:bg-error hover:text-error-content"
+          class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @md/eprow:btn-xs"
           title="Delete file"
         >
           <.icon name="hero-trash" class="w-4 h-4" />
@@ -650,7 +663,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     </div>
     <%!-- Transcode job badges --%>
     <%= if @transcode_jobs != [] do %>
-      <div class="flex flex-wrap items-center gap-2 pl-6 mt-1">
+      <div class="flex flex-wrap items-center gap-2 pl-0 mt-1 @md/eprow:pl-6">
         <.transcode_badge
           :for={job <- @transcode_jobs}
           job={job}
@@ -721,7 +734,29 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     ~H"""
     <%= if @files != [] do %>
       <div id="media-files-section" class="card bg-base-200 shadow-lg mb-4 md:mb-6">
-        <div class="card-body p-4 md:p-6">
+        <%!-- The `mfrow` size container. Named, not bare: show.html.heex
+              declares an unnamed `@container` around the whole page grid, and
+              a bare `@lg:` here would query that instead. It measures 744px at
+              a 1024px viewport, where this card is 312px wide.
+
+              PR #616 fixed this card on a phone with `sm:`, which was right
+              about the phone and wrong about everything else: at 1024px the
+              app drawer and the page rail both open, the card drops to 312px,
+              and a 248px button strip left the filename 16px. That rendered
+              two characters of an 84-character name.
+
+              The threshold below is `@md` (28rem / 448px), lowered from `@lg`
+              (32rem / 512px) originally. A container query measures the
+              container's content box, so the padding on this element
+              (`p-4 md:p-6`) is not part of what the threshold compares
+              against -- content-box width runs well below the border-box
+              numbers measured above. At `@lg`, this card's content box was
+              only 509px at a 900px viewport, on the wrong side of 512px, so
+              a vertical scrollbar appearing was enough to flip the layout
+              between stacked and one-line. `@md`/448px clears that case by
+              61px and still leaves 768px 71px clear on the other side; 448
+              has no significance beyond that margin. --%>
+        <div class="@container/mfrow card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
           <%!-- DaisyUI list component.
 
@@ -758,9 +793,12 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           <ul class="menu w-full flex-nowrap bg-base-100 rounded-box p-0">
             <li :for={file <- @versions} id={"version-#{file.id}"} class="min-w-0 flex-nowrap">
               <div class="min-w-0 items-stretch flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
-                <div class="min-w-0 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div
+                  id={"version-row-#{file.id}"}
+                  class="min-w-0 flex flex-col gap-3 @md/mfrow:flex-row @md/mfrow:items-start @md/mfrow:justify-between @md/mfrow:gap-4"
+                >
                   <%!-- Left side: File info --%>
-                  <div class="min-w-0 sm:flex-1 flex flex-col gap-2">
+                  <div class="min-w-0 @md/mfrow:flex-1 flex flex-col gap-2">
                     <%!-- File name. The full path lives on the title attribute
                           and in the file details modal. Rendered here it left
                           about 90px of column beside the button strip on a
@@ -816,7 +854,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="open_subtitle_manage"
                       phx-value-media-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label="Manage subtitles"
                       title="Subtitles"
                     >
@@ -832,7 +870,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                         <div
                           tabindex="0"
                           role="button"
-                          class="btn btn-ghost btn-square sm:btn-sm"
+                          class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                           title="Pre-transcode"
                         >
                           <.icon name="hero-wrench" class="w-5 h-5" />
@@ -858,7 +896,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="show_file_details"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label="View file details"
                       title="View file details"
                     >
@@ -868,7 +906,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="mark_file_preferred"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label="Mark this file as preferred"
                       title="Mark as preferred"
                     >
@@ -883,7 +921,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="not_this_item"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label={
                         if @media_item.type == "movie",
                           do: "This file is not this movie",
@@ -902,7 +940,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="show_file_delete_confirm"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square sm:btn-sm text-error hover:bg-error hover:text-error-content"
+                      class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @md/mfrow:btn-sm"
                       aria-label="Delete this file"
                       title="Delete file"
                     >
@@ -914,7 +952,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     <button
                       id={"demote-#{file.id}"}
                       type="button"
-                      class="btn btn-ghost btn-square sm:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label="Move this file to extras"
                       title="This is an extra, not a version"
                       phx-click="demote_to_extra"
@@ -943,8 +981,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   width. --%>
             <ul class="menu w-full flex-nowrap bg-base-100 rounded-box p-0 mt-2">
               <li :for={file <- @extras} id={"extra-#{file.id}"} class="min-w-0 flex-nowrap">
-                <div class="min-w-0 items-stretch flex flex-col gap-2 p-4 rounded-none sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <div class="min-w-0 sm:flex-1 flex flex-col gap-1">
+                <div
+                  id={"extra-row-#{file.id}"}
+                  class="min-w-0 items-stretch flex flex-col gap-2 p-4 rounded-none @md/mfrow:flex-row @md/mfrow:items-center @md/mfrow:justify-between @md/mfrow:gap-4"
+                >
+                  <div class="min-w-0 @md/mfrow:flex-1 flex flex-col gap-1">
                     <p
                       id={"extra-name-#{file.id}"}
                       class="text-sm font-mono truncate"
@@ -963,7 +1004,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <button
                     id={"promote-#{file.id}"}
                     type="button"
-                    class="btn btn-ghost self-end sm:self-auto sm:btn-sm"
+                    class="btn btn-ghost self-end @md/mfrow:self-auto @md/mfrow:btn-sm"
                     title="This is a version, not an extra"
                     phx-click="promote_to_version"
                     phx-value-id={file.id}

@@ -401,16 +401,24 @@ defmodule MydiaWeb.Layouts do
             <div class="dropdown dropdown-top dropdown-end w-full">
               <label id="sidebar-user-menu" tabindex="0" class="btn btn-ghost w-full justify-start">
                 <div class="avatar placeholder">
-                  <div class="bg-neutral text-neutral-content rounded-full w-8">
-                    <span class="text-xs">
-                      <%= if @current_user do %>
-                        {String.upcase(
-                          String.slice(@current_user.username || @current_user.email || "U", 0..1)
-                        )}
-                      <% else %>
-                        U
-                      <% end %>
-                    </span>
+                  <div class="bg-neutral text-neutral-content rounded-full w-8 overflow-hidden">
+                    <%= if @current_user && @current_user.avatar_url do %>
+                      <img
+                        src={@current_user.avatar_url}
+                        alt="Avatar"
+                        class="w-full h-full object-cover"
+                      />
+                    <% else %>
+                      <span class="text-xs">
+                        <%= if @current_user do %>
+                          {String.upcase(
+                            String.slice(@current_user.username || @current_user.email || "U", 0..1)
+                          )}
+                        <% else %>
+                          U
+                        <% end %>
+                      </span>
+                    <% end %>
                   </div>
                 </div>
                 <div class="flex-1 text-left">

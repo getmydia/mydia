@@ -132,8 +132,34 @@ defmodule Mydia.Accounts.User do
   def profile_changeset(user, attrs) do
     user
     |> cast(attrs, [:display_name, :avatar_url])
+    |> normalize_empty_avatar_url()
     |> validate_length(:display_name, max: 100)
-    |> validate_format(:avatar_url, ~r/^https?:\/\//, message: "must be a valid URL")
+    |> validate_avatar_url()
+  end
+
+  defp normalize_empty_avatar_url(changeset) do
+    case get_change(changeset, :avatar_url) do
+      url when is_binary(url) ->
+        trimmed = String.trim(url)
+
+        if trimmed == "" do
+          put_change(changeset, :avatar_url, nil)
+        else
+          put_change(changeset, :avatar_url, trimmed)
+        end
+
+      _ ->
+        changeset
+    end
+  end
+
+  defp validate_avatar_url(changeset) do
+    validate_format(
+      changeset,
+      :avatar_url,
+      ~r/^(https?:\/\/[^\s\/]+|\/generated\/avatars\/.+)/,
+      message: "must be a valid URL or local avatar path"
+    )
   end
 
   # Validate password requirements

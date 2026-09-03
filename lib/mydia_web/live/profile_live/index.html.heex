@@ -86,9 +86,74 @@
                 label="Display Name"
                 placeholder="Your display name"
               />
+              <!-- Avatar Upload Section -->
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text font-medium">Avatar Image</span>
+                </label>
+
+                <div class="space-y-3">
+                  <!-- Staged Upload Preview -->
+                  <div
+                    :for={entry <- @uploads.avatar.entries}
+                    class="flex items-center gap-4 p-3 bg-base-200 rounded-lg"
+                  >
+                    <div class="avatar">
+                      <div class="w-16 h-16 rounded-full overflow-hidden bg-base-300">
+                        <.live_img_preview entry={entry} class="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium truncate">{entry.client_name}</p>
+                      <p class="text-xs text-base-content/60">{entry.client_size} bytes</p>
+                      <div
+                        :for={err <- upload_errors(@uploads.avatar, entry)}
+                        class="text-xs text-error mt-1"
+                      >
+                        {upload_error_to_string(err)}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-circle"
+                      phx-click="cancel_avatar_upload"
+                      phx-value-ref={entry.ref}
+                      title="Cancel upload"
+                    >
+                      <.icon name="hero-x-mark" class="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <!-- File Input -->
+                  <div class="flex items-center gap-2">
+                    <.live_file_input
+                      upload={@uploads.avatar}
+                      class="file-input file-input-bordered file-input-primary w-full"
+                    />
+                    <%= if @current_user.avatar_url do %>
+                      <button
+                        type="button"
+                        id="remove-avatar-btn"
+                        class="btn btn-outline btn-error shrink-0"
+                        phx-click="remove_avatar"
+                      >
+                        <.icon name="hero-trash" class="w-4 h-4" /> Remove Avatar
+                      </button>
+                    <% end %>
+                  </div>
+
+                  <div :for={err <- upload_errors(@uploads.avatar)} class="text-xs text-error">
+                    {upload_error_to_string(err)}
+                  </div>
+                </div>
+              </div>
+
+              <div class="divider text-xs text-base-content/50">OR PROVIDE AN IMAGE URL</div>
+
               <.input
                 field={@profile_form[:avatar_url]}
-                type="url"
+                type="text"
+                value={external_avatar_url(@profile_form[:avatar_url].value)}
                 label="Avatar URL"
                 placeholder="https://example.com/avatar.jpg"
               />
@@ -169,7 +234,7 @@
             <form
               id="profile-add-defaults-form"
               phx-change="update_add_defaults"
-              class="space-y-3"
+              class="space-y-4"
             >
               <.inherit_select
                 name="add_movie_library_path_id"
