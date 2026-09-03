@@ -115,7 +115,14 @@ defmodule Mydia.MediaRequests do
     ref = MediaRequest.external_ref(request)
     media_type = if request.media_type == "movie", do: :movie, else: :tv_show
 
-    case Add.resolve_attrs(ref, media_type, opts[:config], monitored: true) do
+    # `monitored` defaults to true when the caller says nothing, which is what
+    # approval did unconditionally before the config dialog existed.
+    attr_opts =
+      opts
+      |> Keyword.take([:monitored, :quality_profile_id, :library_path_id])
+      |> Keyword.put_new(:monitored, true)
+
+    case Add.resolve_attrs(ref, media_type, opts[:config], attr_opts) do
       {:ok, media_attrs} ->
         {:ok, media_attrs}
 
@@ -131,9 +138,11 @@ defmodule Mydia.MediaRequests do
   defp insert_approval(request, media_attrs, attrs, opts) do
     Multi.new()
     |> Multi.run(:media_item, fn _repo, _changes ->
-      case Add.from_attrs(media_attrs, opts[:config],
-             actor_type: :user,
-             actor_id: attrs[:approved_by_id]
+      case Add.from_attrs(
+             media_attrs,
+             opts[:config],
+             [actor_type: :user, actor_id: attrs[:approved_by_id]] ++
+               Keyword.take(opts, [:season_monitoring])
            ) do
         {:ok, media_item} ->
           {:ok, media_item}

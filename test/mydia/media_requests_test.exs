@@ -2,6 +2,7 @@ defmodule Mydia.MediaRequestsTest do
   use Mydia.DataCase, async: false
 
   import ExUnit.CaptureLog
+  import Mydia.SettingsFixtures
 
   alias Mydia.MediaRequests
   alias Mydia.{Accounts, Media, Repo}
@@ -305,6 +306,124 @@ defmodule Mydia.MediaRequestsTest do
 
       assert Repo.aggregate(MediaItem, :count) == before_count
       assert Media.get_media_item_by_tmdb(tmdb_id).id == movie.id
+    end
+  end
+
+  describe "approve_request/3 configuration" do
+    setup do
+      user = create_user()
+      admin = create_user(%{role: "admin"})
+      request = create_request(user)
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, request.tmdb_id, request.title, "/stub.jpg")
+      %{admin: admin, request: request, config: relay_config(bypass)}
+    end
+
+    test "applies the library, quality profile and monitored flag", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      library = library_path_fixture(%{type: "movies"})
+      profile = quality_profile_fixture()
+
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 library_path_id: library.id,
+                 quality_profile_id: profile.id,
+                 monitored: false
+               )
+
+      assert media_item.library_path_id == library.id
+      assert media_item.quality_profile_id == profile.id
+      assert media_item.monitored == false
+    end
+
+    test "still defaults to monitored when no flag is given", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id}, config: config)
+
+      assert media_item.monitored == true
+    end
+
+    test "does not reconfigure an item that is already in the library", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      incumbent_library = library_path_fixture(%{type: "movies"})
+
+      {:ok, incumbent} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: request.title,
+          year: request.year,
+          tmdb_id: request.tmdb_id,
+          library_path_id: incumbent_library.id,
+          monitored: true
+        })
+
+      other_library = library_path_fixture(%{type: "movies"})
+
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 library_path_id: other_library.id,
+                 monitored: false
+               )
+
+      # Linked, not reconfigured. Approving a request must not silently move or
+      # unmonitor a library item somebody else set up.
+      assert media_item.id == incumbent.id
+      assert Repo.get!(MediaItem, incumbent.id).library_path_id == incumbent_library.id
+      assert Repo.get!(MediaItem, incumbent.id).monitored == true
+    end
+  end
+
+  describe "approve_request/3 season monitoring" do
+    setup do
+      user = create_user()
+      admin = create_user(%{role: "admin"})
+
+      {:ok, request} =
+        MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "Beacons Over Ilmarry",
+          tmdb_id: 771_002,
+          requester_id: user.id
+        })
+
+      bypass = Bypass.open()
+      stub_tmdb_tv_show(bypass, request.tmdb_id, request.title)
+      # A TMDB-sourced show with no tvdb_id triggers maybe_discover_tvdb_id
+      # during the episode refresh; this stub keeps that lookup off the network.
+      stub_tvdb_search_empty(bypass)
+
+      %{admin: admin, request: request, config: relay_config(bypass)}
+    end
+
+    test "creates no episodes when season monitoring is none", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 season_monitoring: "none"
+               )
+
+      assert media_item.type == "tv_show"
+
+      assert Repo.aggregate(
+               from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id),
+               :count
+             ) == 0
     end
   end
 
