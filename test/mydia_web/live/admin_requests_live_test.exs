@@ -72,4 +72,60 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
       assert has_element?(view, "#approve-form button[type=submit][disabled]")
     end
   end
+
+  describe "approving with a configuration" do
+    test "the chosen library and profile land on the created item", %{
+      conn: conn,
+      request: request
+    } do
+      library = library_path_fixture(%{type: "movies"})
+      profile = quality_profile_fixture()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+      open_approve(view, request)
+
+      view
+      |> form("#approve-form", %{
+        "approve" => %{"admin_notes" => ""},
+        "config" => %{
+          "library_path_id" => library.id,
+          "quality_profile_id" => profile.id,
+          "monitored" => "true",
+          "search_on_add" => "false"
+        }
+      })
+      |> render_submit()
+
+      updated = MediaRequests.get_request!(request.id, preload: [:media_item])
+
+      assert updated.status == "approved"
+      assert updated.media_item.library_path_id == library.id
+      assert updated.media_item.quality_profile_id == profile.id
+    end
+
+    test "an unavailable library flashes and closes without approving", %{
+      conn: conn,
+      request: request
+    } do
+      library_path_fixture(%{type: "movies"})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+      open_approve(view, request)
+
+      # render_submit/3 (view + event name), not form/3: the scenario is a
+      # library removed server-side after the dialog rendered, so the admin's
+      # browser still holds a now-stale <option> the current DOM no longer
+      # offers. form/3 validates the submitted value against the live
+      # rendered <select> and would reject it before the event even reaches
+      # the server, defeating the point of the test.
+      html =
+        render_submit(view, "submit_approve", %{
+          "approve" => %{"admin_notes" => ""},
+          "config" => %{"library_path_id" => Ecto.UUID.generate()}
+        })
+
+      assert html =~ "no longer available"
+      assert MediaRequests.get_request!(request.id).status == "pending"
+    end
+  end
 end

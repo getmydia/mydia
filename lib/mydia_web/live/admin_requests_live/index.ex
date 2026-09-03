@@ -87,43 +87,27 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
     {:noreply, assign(socket, :approve_form, to_form(changeset, as: :approve))}
   end
 
-  def handle_event("submit_approve", %{"approve" => approve_params}, socket) do
+  def handle_event("submit_approve", %{"approve" => approve_params} = params, socket) do
     request = socket.assigns.selected_request
+    media_type = MediaRequest.media_type_atom(request)
 
-    attrs = %{
-      approved_by_id: socket.assigns.current_user.id,
-      admin_notes: approve_params["admin_notes"]
-    }
+    case MediaAddHelpers.resolve_add_defaults(
+           params["config"] || %{},
+           media_type,
+           socket.assigns.current_user
+         ) do
+      {:ok, defaults} ->
+        do_approve(socket, request, approve_params, defaults)
 
-    case MediaRequests.approve_request(request, attrs) do
-      {:ok, %{request: _updated_request, media_item: media_item}} ->
+      # Per #458, never silently substitute a different library. The admin
+      # picked a library that has since been removed or unmonitored, so say so.
+      {:error, :unknown_library} ->
         {:noreply,
          socket
          |> assign(:show_approve_modal, false)
          |> assign(:selected_request, nil)
-         |> put_flash(
-           :info,
-           "Request approved! #{media_item.title} has been added to the library."
-         )
-         |> load_requests()}
-
-      {:error, {:metadata, reason}} ->
-        Logger.warning("Approval blocked by metadata failure: #{inspect(reason)}")
-
-        {:noreply,
-         socket
-         |> assign(:show_approve_modal, false)
-         |> assign(:selected_request, nil)
-         |> put_flash(
-           :error,
-           "Could not reach the metadata service, so the request was not approved. Please try again."
-         )}
-
-      {:error, changeset} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Failed to approve request: #{inspect(changeset.errors)}")
-         |> assign(:approve_form, to_form(changeset, as: :approve))}
+         |> assign(:approve_config, nil)
+         |> put_flash(:error, "That library is no longer available. Please try again.")}
     end
   end
 
@@ -224,6 +208,50 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
   end
 
   ## Private Helpers
+
+  defp do_approve(socket, request, approve_params, defaults) do
+    attrs = %{
+      approved_by_id: socket.assigns.current_user.id,
+      admin_notes: approve_params["admin_notes"]
+    }
+
+    opts =
+      defaults
+      |> AddDefaults.to_add_opts()
+      |> Keyword.put(:search_on_add, defaults.search_on_add)
+
+    case MediaRequests.approve_request(request, attrs, opts) do
+      {:ok, %{request: _updated_request, media_item: media_item}} ->
+        {:noreply,
+         socket
+         |> assign(:show_approve_modal, false)
+         |> assign(:selected_request, nil)
+         |> assign(:approve_config, nil)
+         |> put_flash(
+           :info,
+           "Request approved! #{media_item.title} has been added to the library."
+         )
+         |> load_requests()}
+
+      {:error, {:metadata, reason}} ->
+        Logger.warning("Approval blocked by metadata failure: #{inspect(reason)}")
+
+        {:noreply,
+         socket
+         |> assign(:show_approve_modal, false)
+         |> assign(:selected_request, nil)
+         |> put_flash(
+           :error,
+           "Could not reach the metadata service, so the request was not approved. Please try again."
+         )}
+
+      {:error, changeset} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to approve request: #{inspect(changeset.errors)}")
+         |> assign(:approve_form, to_form(changeset, as: :approve))}
+    end
+  end
 
   defp apply_filters(socket, params) do
     status = params["status"] || "pending"
