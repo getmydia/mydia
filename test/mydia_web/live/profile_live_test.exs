@@ -353,5 +353,28 @@ defmodule MydiaWeb.ProfileLiveTest do
       reloaded = Accounts.get_user!(user.id)
       assert is_nil(reloaded.avatar_url)
     end
+
+    test "sidebar user menu renders avatar image when user has avatar_url", %{
+      conn: conn,
+      user: user
+    } do
+      avatar_url = "https://example.com/user-avatar.jpg"
+      {:ok, _user} = Accounts.update_profile(user, %{avatar_url: avatar_url})
+
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      assert has_element?(view, "#sidebar-user-menu img[src='#{avatar_url}']")
+    end
+
+    test "sidebar user menu falls back to initials when user has no avatar_url", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      refute has_element?(view, "#sidebar-user-menu img")
+      initials = String.upcase(String.slice(user.username || user.email, 0..1))
+      assert has_element?(view, "#sidebar-user-menu span", initials)
+    end
   end
 end
