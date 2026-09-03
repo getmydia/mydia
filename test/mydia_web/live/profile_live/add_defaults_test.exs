@@ -17,6 +17,17 @@ defmodule MydiaWeb.ProfileLive.AddDefaultsTest do
     {:ok, view, _html} = live(conn, ~p"/profile")
 
     assert has_element?(view, "#profile-add-defaults-form")
+    assert has_element?(view, "#profile-add-defaults-form.space-y-4")
+    assert has_element?(view, "#profile-add-defaults-form label.block")
+
+    assert has_element?(
+             view,
+             "#profile-add-defaults-form select.w-full[name='add_movie_library_path_id']"
+           )
+
+    assert has_element?(view, "#profile-add-defaults-form label span.label", "Movie library")
+    refute has_element?(view, "#profile-add-defaults-form .form-control")
+    refute has_element?(view, "#profile-add-defaults-form .label-text")
   end
 
   test "saving a season monitoring override persists it", %{conn: conn, user: user} do
