@@ -95,6 +95,20 @@ defmodule Mydia.Media.MediaRequest do
   end
 
   @doc """
+  Changeset for automatically approving a media request when its media is added.
+  Requires `:media_item_id`, while `:approved_by_id` remains optional (nil for system additions).
+  """
+  def auto_approve_changeset(media_request, attrs) do
+    media_request
+    |> cast(attrs, [:admin_notes, :approved_by_id, :media_item_id])
+    |> validate_required([:media_item_id])
+    |> put_change(:status, "approved")
+    |> put_change(:approved_at, DateTime.utc_now() |> DateTime.truncate(:second))
+    |> foreign_key_constraint(:approved_by_id)
+    |> foreign_key_constraint(:media_item_id)
+  end
+
+  @doc """
   Changeset for rejecting a media request.
   """
   def reject_changeset(media_request, attrs) do
