@@ -198,3 +198,17 @@ config :mydia, Mydia.MigrationTestRepo,
   pool_size: 1,
   foreign_keys: :on,
   priv: "priv/repo"
+
+# bcrypt and Argon2 default to production cost: ~170ms and ~64ms per hash on a
+# development machine, closer to 300ms and 120ms on a CI runner. 135 test files
+# create users, 122 of them inside a per-test `setup`, so the suite pays this
+# thousands of times over and it dominated the ~876s ExUnit run measured on
+# 2026-09-03. Both libraries read these from application env
+# (deps/bcrypt_elixir/lib/bcrypt.ex:94), so this block reaches every call site
+# with no change under lib/. log_rounds: 4 is the value bcrypt_elixir's own
+# documentation gives for tests.
+#
+# These values must not appear in any other config file.
+# test/mydia/accounts/hash_cost_config_test.exs enforces that.
+config :bcrypt_elixir, log_rounds: 4
+config :argon2_elixir, t_cost: 1, m_cost: 8
