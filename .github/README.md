@@ -283,7 +283,9 @@ master 2026-09-03: `876.4 seconds (59.1s async, 817.3s sync)`.
 
 To find *which* tests are slow, profile on demand rather than in CI:
 
-    devenv shell -- bash -c 'MIX_ENV=test mix test --slowest-modules 20'
+```bash
+devenv shell -- bash -c 'MIX_ENV=test mix test --slowest-modules 20'
+```
 
 Do not add `--slowest` or `--slowest-modules` to the CI invocations. Both
 automatically set `--trace`, and `--trace` forces `--max-cases 1` and sets the
