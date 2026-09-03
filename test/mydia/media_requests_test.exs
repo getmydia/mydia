@@ -851,6 +851,26 @@ defmodule Mydia.MediaRequestsTest do
       assert reloaded.status == "pending"
     end
 
+    test "rolls back earlier approvals when a later approval fails", %{user: user} do
+      first = create_request(user, %{tmdb_id: 77888, media_type: "movie"})
+
+      second =
+        create_request(user, %{tmdb_id: nil, tvdb_id: 77888, media_type: "movie"})
+
+      invalid_media_item = %Media.MediaItem{
+        id: Ecto.UUID.generate(),
+        type: "movie",
+        tmdb_id: 77888,
+        title: "Unavailable Media Item"
+      }
+
+      assert {:error, %Ecto.Changeset{}} =
+               MediaRequests.auto_approve_matching_requests(invalid_media_item)
+
+      assert MediaRequests.get_request!(first.id).status == "pending"
+      assert MediaRequests.get_request!(second.id).status == "pending"
+    end
+
     test "Media.create_media_item/2 triggers auto-approval of matching pending requests", %{
       user: user,
       admin: admin

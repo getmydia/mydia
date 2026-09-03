@@ -154,10 +154,11 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       # Not an error from here up: the show the user asked for is in the
       # library. Callers flash it as info and flip the card.
       {:error, {:already_in_library, media_item}} ->
-        MediaRequests.auto_approve_matching_requests(media_item, add_opts)
-
-        {:already_in_library, media_item,
-         update_library_status_map(library_status_map, media_item)}
+        with {:ok, _approved} <-
+               MediaRequests.auto_approve_matching_requests(media_item, add_opts) do
+          {:already_in_library, media_item,
+           update_library_status_map(library_status_map, media_item)}
+        end
 
       {:error, _} = error ->
         error

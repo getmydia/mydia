@@ -350,33 +350,43 @@ defmodule Mydia.Media do
       Events.media_item_added(media_item, actor_type, actor_id)
 
       # Auto-approve any pending media requests matching this item
-      MediaRequests.auto_approve_matching_requests(
-        media_item,
-        actor_type: actor_type,
-        actor_id: actor_id,
-        exclude_request_id: Keyword.get(opts, :exclude_request_id)
-      )
+      case MediaRequests.auto_approve_matching_requests(
+             media_item,
+             actor_type: actor_type,
+             actor_id: actor_id,
+             exclude_request_id: Keyword.get(opts, :exclude_request_id)
+           ) do
+        {:ok, _approved_requests} ->
+          # For TV shows, automatically fetch episodes unless explicitly skipped
+          if media_item.type == "tv_show" and not Keyword.get(opts, :skip_episode_refresh, false) do
+            season_monitoring = Keyword.get(opts, :season_monitoring, "all")
 
-      # For TV shows, automatically fetch episodes unless explicitly skipped
-      if media_item.type == "tv_show" and not Keyword.get(opts, :skip_episode_refresh, false) do
-        season_monitoring = Keyword.get(opts, :season_monitoring, "all")
+            refresh_opts =
+              [season_monitoring: season_monitoring]
+              |> maybe_put_refresh_config(Keyword.get(opts, :config))
 
-        refresh_opts =
-          [season_monitoring: season_monitoring]
-          |> maybe_put_refresh_config(Keyword.get(opts, :config))
+            case refresh_episodes_for_tv_show(media_item, refresh_opts) do
+              {:ok, count} ->
+                Logger.info("Created #{count} episodes for #{media_item.title}")
 
-        case refresh_episodes_for_tv_show(media_item, refresh_opts) do
-          {:ok, count} ->
-            Logger.info("Created #{count} episodes for #{media_item.title}")
+              {:error, reason} ->
+                # Log the error but don't fail the media item creation
+                # The show is still usable and episodes can be refreshed later
+                Logger.warning(
+                  "Failed to fetch episodes for #{media_item.title}: #{inspect(reason)}"
+                )
+            end
+          end
 
-          {:error, reason} ->
-            # Log the error but don't fail the media item creation
-            # The show is still usable and episodes can be refreshed later
-            Logger.warning("Failed to fetch episodes for #{media_item.title}: #{inspect(reason)}")
-        end
+          {:ok, media_item}
+
+        {:error, changeset} ->
+          Logger.error(
+            "Failed to auto-approve requests for media #{media_item.id}: #{inspect(changeset)}"
+          )
+
+          {:error, changeset}
       end
-
-      {:ok, media_item}
     end
   end
 

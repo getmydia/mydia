@@ -19,6 +19,7 @@ defmodule Mydia.MediaRequests do
   alias Mydia.Media.Add
   alias Mydia.Media.MediaItem
   alias Mydia.Media.MediaRequest
+  alias Mydia.DB
   alias Mydia.Search
   alias Ecto.Multi
 
@@ -317,9 +318,12 @@ defmodule Mydia.MediaRequests do
     default_notes =
       Keyword.get(opts, :admin_notes, "Automatically approved: title added to library")
 
-    approved_list =
-      Enum.reduce(requests, [], fn request, acc ->
-        case Repo.get(MediaRequest, request.id) do
+    Repo.transaction(fn ->
+      Enum.reduce_while(requests, [], fn request, acc ->
+        query = where(MediaRequest, [r], r.id == ^request.id)
+        query = if DB.postgres?(), do: lock(query, "FOR UPDATE"), else: query
+
+        case Repo.one(query) do
           %MediaRequest{status: "pending"} = fresh_request ->
             attrs = %{
               media_item_id: media_item.id,
@@ -335,22 +339,25 @@ defmodule Mydia.MediaRequests do
                   "Auto-approved request #{fresh_request.id} for media #{media_item.id} (#{media_item.title})"
                 )
 
-                [updated | acc]
+                {:cont, [updated | acc]}
 
               {:error, changeset} ->
                 Logger.error(
                   "Failed to auto-approve request #{fresh_request.id}: #{inspect(changeset.errors)}"
                 )
 
-                acc
+                Repo.rollback(changeset)
             end
 
           _other ->
-            acc
+            {:cont, acc}
         end
       end)
-
-    {:ok, Enum.reverse(approved_list)}
+    end)
+    |> case do
+      {:ok, approved_list} -> {:ok, Enum.reverse(approved_list)}
+      {:error, changeset} -> {:error, changeset}
+    end
   end
 
   @doc """
