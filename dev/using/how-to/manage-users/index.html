@@ -3149,7 +3149,11 @@ icon on their row.</p>
 <li><strong>Guest clicks Request</strong> on the search result</li>
 <li><strong>The request lands in the admin queue</strong> as pending</li>
 <li><strong>Admin reviews</strong> and approves or rejects</li>
-<li><strong>If approved</strong>, media is added to library and download begins</li>
+<li><strong>If approved</strong>, the admin chooses the library, quality profile and
+   monitoring for the item, and media is added to the library. If the title
+   is already in the library, the request is linked to that existing item
+   instead and no search is queued. Otherwise a search starts immediately
+   unless the admin turns off <strong>Search on Add</strong>.</li>
 <li><strong>The guest sees the outcome</strong> on their own requests page</li>
 </ol>
 <div class="admonition warning">
@@ -3165,6 +3169,13 @@ approved or rejected. Both sides find out by looking. Admins should check
 <li>Navigate to <strong>Admin &gt; Requests</strong></li>
 <li>View pending requests</li>
 <li>Approve or reject each request</li>
+<li>Approving opens a dialog for the root folder, quality profile, monitoring,
+   season monitoring (series only) and whether to search immediately. The
+   fields are prefilled from your own add defaults, so approving with no
+   changes is still two clicks, as long as at least one library path is
+   already configured. Without one, the root folder field has nothing to
+   offer and approval is blocked until a library path is added under
+   <strong>Admin &gt; Configuration</strong>, on the <strong>Library</strong> tab.</li>
 <li>A rejection requires a reason, which the requester can see</li>
 </ol>
 <h2 id="disabling-authentication">Disabling Authentication</h2>
