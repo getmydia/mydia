@@ -385,6 +385,37 @@ defmodule Mydia.MediaRequestsTest do
       assert Repo.get!(MediaItem, incumbent.id).monitored == true
     end
 
+    test "does not queue a search for an item that is already in the library", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      incumbent_library = library_path_fixture(%{type: "movies"})
+
+      {:ok, incumbent} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: request.title,
+          year: request.year,
+          tmdb_id: request.tmdb_id,
+          library_path_id: incumbent_library.id,
+          monitored: true
+        })
+
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 search_on_add: true
+               )
+
+      assert media_item.id == incumbent.id
+
+      # search_on_add is true, but the item was already in the library. No
+      # job may be queued against a row someone else set up.
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: incumbent.id})
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch, args: %{media_item_id: incumbent.id})
+    end
+
     test "queues an automatic search when search_on_add is set", %{
       request: request,
       admin: admin,
