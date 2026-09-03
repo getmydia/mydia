@@ -244,6 +244,21 @@ defmodule Mydia.Media.Add do
       monitored: Keyword.get(opts, :monitored, true)
     }
 
+    attrs =
+      cond do
+        Keyword.has_key?(opts, :monitor_new_seasons) ->
+          Map.put(attrs, :monitor_new_seasons, opts[:monitor_new_seasons])
+
+        opts[:season_monitoring] in ["first", "none"] ->
+          Map.put(attrs, :monitor_new_seasons, :none)
+
+        opts[:season_monitoring] in ["all", "future"] ->
+          Map.put(attrs, :monitor_new_seasons, :all)
+
+        true ->
+          attrs
+      end
+
     attrs = maybe_put_quality_profile(attrs, opts[:quality_profile_id])
     attrs = maybe_put_library_path(attrs, opts[:library_path_id])
 

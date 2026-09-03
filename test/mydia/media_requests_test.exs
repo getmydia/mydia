@@ -479,7 +479,7 @@ defmodule Mydia.MediaRequestsTest do
       %{admin: admin, request: request, config: relay_config(bypass)}
     end
 
-    test "creates no episodes when season monitoring is none", %{
+    test "creates all episodes unmonitored when season monitoring is none", %{
       request: request,
       admin: admin,
       config: config
@@ -491,11 +491,13 @@ defmodule Mydia.MediaRequestsTest do
                )
 
       assert media_item.type == "tv_show"
+      assert media_item.monitor_new_seasons == :none
 
-      assert Repo.aggregate(
-               from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id),
-               :count
-             ) == 0
+      episodes =
+        Repo.all(from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id))
+
+      assert length(episodes) == 5
+      assert Enum.all?(episodes, fn e -> not e.monitored end)
     end
 
     test "creates episodes for every season when season monitoring is all", %{
@@ -510,13 +512,15 @@ defmodule Mydia.MediaRequestsTest do
                )
 
       assert media_item.type == "tv_show"
+      assert media_item.monitor_new_seasons == :all
 
       # The stub offers 2 + 3 = 5 episodes across two seasons; "all" must
-      # fetch every one of them, in contrast to "none" fetching zero above.
-      assert Repo.aggregate(
-               from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id),
-               :count
-             ) == 5
+      # fetch every one of them and monitor them.
+      episodes =
+        Repo.all(from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id))
+
+      assert length(episodes) == 5
+      assert Enum.all?(episodes, fn e -> e.monitored end)
     end
   end
 
