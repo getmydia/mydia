@@ -57,6 +57,11 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
   # Retry budget for the whole fetch lifecycle (URL re-resolve + stream).
   @max_retries 3
 
+  # Base unit of the linear retry backoff: attempt N waits N * this. Injectable
+  # so tests exercising the failure path do not spend 30 real seconds asleep.
+  # Mirrors Mydia.Downloads.Seedbox.Fetcher, which already does this.
+  @retry_delay_base_ms 5_000
+
   ## ── Public API ───────────────────────────────────────────────────────
 
   @doc false
@@ -131,7 +136,9 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
       download_dir: Keyword.get(opts, :download_dir),
       req_options: Keyword.get(opts, :req_options, []),
       jitter_ms: Keyword.get(opts, :jitter_ms, :rand.uniform(@startup_jitter_max_ms)),
+      max_retries: Keyword.get(opts, :max_retries, @max_retries),
       retries_left: Keyword.get(opts, :max_retries, @max_retries),
+      retry_delay_base_ms: Keyword.get(opts, :retry_delay_base_ms, @retry_delay_base_ms),
       # Pre-resolved URLs passed from the dispatch adapter on the first
       # claim. On process restart these are nil and `resolve_urls/2` falls
       # back to calling the provider, since IP-bound URLs expire.
@@ -169,7 +176,7 @@ defmodule Mydia.Downloads.Client.Debrid.Fetcher do
             "(#{state.retries_left} retries left): #{inspect(reason)}"
         )
 
-        retry_ms = (@max_retries - state.retries_left + 1) * 5_000
+        retry_ms = (state.max_retries - state.retries_left + 1) * state.retry_delay_base_ms
         Process.send_after(self(), :begin, retry_ms)
         {:noreply, %{state | retries_left: state.retries_left - 1}}
 
