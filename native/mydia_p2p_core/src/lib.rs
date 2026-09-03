@@ -208,6 +208,14 @@ enum Command {
         peer_id: String,
         reply: oneshot::Sender<bool>,
     },
+    /// How many live connections one peer currently holds. `connected_peers`
+    /// counts peers, not connections, so nothing else can distinguish a peer
+    /// connected once from the same peer connected twice.
+    #[cfg(test)]
+    DebugConnectionCount {
+        peer_id: String,
+        reply: oneshot::Sender<usize>,
+    },
 }
 
 /// Events emitted by the Host
@@ -605,6 +613,25 @@ impl Host {
         rx.await.unwrap_or(false)
     }
 
+    /// Test-only: how many live connections this host holds for `peer_id`.
+    /// See the doc comment on `Command::DebugConnectionCount`.
+    #[cfg(test)]
+    async fn debug_connection_count(&self, peer_id: &str) -> usize {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(Command::DebugConnectionCount {
+                peer_id: peer_id.to_string(),
+                reply: tx,
+            })
+            .await
+            .is_err()
+        {
+            return 0;
+        }
+        rx.await.unwrap_or(0)
+    }
+
     /// Get this node's ID
     pub fn node_id(&self) -> &str {
         &self.node_id
@@ -835,7 +862,7 @@ async fn run_event_loop(
     tracing::info!("Iroh endpoint bound, endpoint_id: {}", endpoint_id);
 
     // Track state
-    let mut connected_peers: HashMap<String, Connection> = HashMap::new();
+    let mut connected_peers: HashMap<String, PeerConnections> = HashMap::new();
     let shared_state = Arc::new(Mutex::new(SharedState {
         pending_responses: HashMap::new(),
         #[cfg(feature = "host")]
@@ -850,7 +877,7 @@ async fn run_event_loop(
     // `stable_id` -- fixed for a connection's lifetime, per iroh's docs --
     // guards against a stale disconnect signal evicting a *fresh*
     // reconnection under the same peer_id that raced ahead of it.
-    let (disconnect_tx, mut disconnect_rx) = mpsc::channel::<(String, usize)>(64);
+    let (disconnect_tx, mut disconnect_rx) = mpsc::channel::<(String, ConnectionId)>(64);
 
     // Wait for endpoint to be online (relay connected + local IP available)
     // Use a timeout to avoid blocking indefinitely if relay is unreachable
@@ -962,43 +989,100 @@ async fn run_event_loop(
     tracing::info!("Endpoint closed");
 }
 
+/// Every live connection a peer currently holds, keyed by `ConnectionId`.
+///
+/// A peer is routinely connected more than once. Keying only by `peer_id`, as
+/// this did, meant a second connection evicted the first from the map while
+/// the first stayed live and served requests: the host then believed it had no
+/// route to a peer it was still talking to, and `handle_send_request` answered
+/// "Not connected to peer" for a connection that was working.
+type PeerConnections = HashMap<ConnectionId, Connection>;
+
+/// Identifies one connection instance, for the lifetime of the process.
+type ConnectionId = u64;
+
+static NEXT_CONNECTION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Hand out the next `ConnectionId`.
+///
+/// Deliberately not `Connection::stable_id()`. That is stable for a single
+/// connection's lifetime, which is all iroh promises: nothing says the value
+/// is not handed out again once the connection is dropped. Since a closing
+/// connection is matched against the map by this id, a reused one would let a
+/// dead connection evict a live one. A counter that only ever increments
+/// cannot collide.
+fn next_connection_id() -> ConnectionId {
+    NEXT_CONNECTION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The connection to use when talking to a peer: its most recent one.
+fn current_connection<'a>(
+    connected_peers: &'a HashMap<String, PeerConnections>,
+    peer_id: &str,
+) -> Option<&'a Connection> {
+    connected_peers
+        .get(peer_id)?
+        .iter()
+        .max_by_key(|(id, _)| *id)
+        .map(|(_, conn)| conn)
+}
+
+/// Record a newly established connection, and report whether the peer was
+/// already connected on another one.
+fn insert_connection(
+    connected_peers: &mut HashMap<String, PeerConnections>,
+    peer_id: &str,
+    conn_id: ConnectionId,
+    conn: Connection,
+) {
+    connected_peers
+        .entry(peer_id.to_string())
+        .or_default()
+        .insert(conn_id, conn);
+}
+
 /// Remove a `connected_peers` entry once its connection has closed, and
 /// announce the peer's departure if that was its last live connection.
 ///
-/// Only removes the entry if it still refers to the connection that just
-/// closed (matched by iroh's `stable_id`, fixed for a connection's
-/// lifetime). Without that guard, a disconnect signal for an old connection
-/// that arrives after the same `peer_id` has already reconnected would
-/// evict the new, live connection instead of the dead one.
+/// Removes just the connection that closed, and announces the peer only once
+/// nothing of its is left.
 ///
-/// `Event::Disconnected` is emitted from here, under that same guard, rather
-/// than from `handle_connection`. A peer routinely holds several connections
-/// at once -- production has seen one open eight inside 100ms -- and each is
-/// served by its own `handle_connection` task, which knows only that *its*
-/// connection ended, never whether a newer one has since taken over the
-/// `peer_id`. Announcing from there reported the peer gone every time any one
-/// of its stale connections timed out, while the peer was still connected and
-/// serving requests on another. Consumers act on that: the Elixir host drops
-/// the peer from `state.connected_peers`, and a player redials a link that
-/// never actually broke, which is what an operator sees as the connection
-/// dropping and coming back for no reason. Only the event loop owns
-/// `connected_peers`, so only the event loop can tell the difference.
+/// `Event::Disconnected` is emitted from here rather than from
+/// `handle_connection`. A peer routinely holds several connections at once,
+/// production has seen one open eight inside 100ms, and each is served by its
+/// own `handle_connection` task, which knows only that *its* connection ended.
+/// Announcing from there reported the peer gone every time any one of its
+/// connections closed, while the peer was still connected and serving requests
+/// on another. Consumers act on that: the Elixir host drops the peer from
+/// `state.connected_peers`, and a player redials a link that never actually
+/// broke, which is what an operator sees as the connection dropping and coming
+/// back for no reason. Only the event loop owns `connected_peers`, so only the
+/// event loop can tell the difference.
+///
+/// Answering that question is also why `connected_peers` holds every live
+/// connection per peer rather than only the newest. With one slot per peer, a
+/// second connection displaced the first, and whichever ordering the closes
+/// happened to arrive in decided whether the peer was wrongly announced gone:
+/// the displaced connection closing last was handled, the *current* one
+/// closing first was not.
 async fn prune_disconnected_peer(
-    connected_peers: &mut HashMap<String, Connection>,
+    connected_peers: &mut HashMap<String, PeerConnections>,
     event_tx: &mpsc::Sender<Event>,
     peer_id: &str,
-    stable_id: usize,
+    conn_id: ConnectionId,
 ) {
-    let std::collections::hash_map::Entry::Occupied(entry) =
+    let std::collections::hash_map::Entry::Occupied(mut entry) =
         connected_peers.entry(peer_id.to_string())
     else {
-        // Already pruned: whichever close removed it announced the peer then.
+        // Already pruned: whichever close emptied it announced the peer then.
         return;
     };
 
-    if entry.get().stable_id() != stable_id {
-        // A newer connection under this `peer_id` is live. The peer has not
-        // gone anywhere, so nothing is announced.
+    entry.get_mut().remove(&conn_id);
+
+    if !entry.get().is_empty() {
+        // The peer is still here on another connection, so nothing is
+        // announced.
         return;
     }
 
@@ -1015,10 +1099,10 @@ async fn prune_disconnected_peer(
 #[cfg(feature = "host")]
 async fn accept_inbound(
     incoming: Incoming,
-    connected_peers: &mut HashMap<String, Connection>,
+    connected_peers: &mut HashMap<String, PeerConnections>,
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
-    disconnect_tx: &mpsc::Sender<(String, usize)>,
+    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
 ) {
     let mut accepting = match incoming.accept() {
         Ok(accepting) => accepting,
@@ -1055,7 +1139,8 @@ async fn accept_inbound(
     let connection_type = PeerConnectionType::from_connection(&conn);
     tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
 
-    connected_peers.insert(peer_id.clone(), conn.clone());
+    let conn_id = next_connection_id();
+    insert_connection(connected_peers, &peer_id, conn_id, conn.clone());
     let _ = event_tx
         .send(Event::Connected {
             peer_id: peer_id.clone(),
@@ -1073,6 +1158,7 @@ async fn accept_inbound(
         handle_connection(
             conn_clone,
             peer_id_clone,
+            conn_id,
             event_tx_clone,
             shared_state_clone,
             disconnect_tx_clone,
@@ -1091,11 +1177,11 @@ async fn accept_inbound(
 async fn handle_command(
     cmd: Command,
     endpoint: &Endpoint,
-    connected_peers: &mut HashMap<String, Connection>,
+    connected_peers: &mut HashMap<String, PeerConnections>,
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
     relay_connected: bool,
-    disconnect_tx: &mpsc::Sender<(String, usize)>,
+    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
 ) {
     match cmd {
         Command::Dial {
@@ -1141,8 +1227,12 @@ async fn handle_command(
             let relay_url = addr.relay_urls().next().map(|u| u.to_string());
 
             // Get connection type for the first connected peer
-            let peer_connection_type = if let Some((peer_key, conn)) = connected_peers.iter().next()
-            {
+            let first_peer = connected_peers
+                .keys()
+                .next()
+                .and_then(|key| current_connection(connected_peers, key).map(|conn| (key, conn)));
+
+            let peer_connection_type = if let Some((peer_key, conn)) = first_peer {
                 let peer_id = conn.remote_id();
                 tracing::info!(
                     "GetNetworkStats: checking paths for peer {} (key={})",
@@ -1185,13 +1275,23 @@ async fn handle_command(
         }
         #[cfg(test)]
         Command::DebugCloseConnection { peer_id, reply } => {
-            let closed = if let Some(conn) = connected_peers.get(&peer_id) {
-                conn.close(0u32.into(), b"test");
-                true
-            } else {
-                false
+            // Closes every connection the peer holds, not just its newest, so
+            // "close this peer" means the peer really is gone afterwards.
+            let closed = match connected_peers.get(&peer_id) {
+                Some(conns) if !conns.is_empty() => {
+                    for conn in conns.values() {
+                        conn.close(0u32.into(), b"test");
+                    }
+                    true
+                }
+                _ => false,
             };
             let _ = reply.send(closed);
+        }
+        #[cfg(test)]
+        Command::DebugConnectionCount { peer_id, reply } => {
+            let count = connected_peers.get(&peer_id).map_or(0, |conns| conns.len());
+            let _ = reply.send(count);
         }
         #[cfg(feature = "host")]
         Command::SendHlsHeader {
@@ -1312,10 +1412,10 @@ async fn handle_command(
 async fn handle_dial(
     endpoint: &Endpoint,
     endpoint_addr_json: &str,
-    connected_peers: &mut HashMap<String, Connection>,
+    connected_peers: &mut HashMap<String, PeerConnections>,
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
-    disconnect_tx: &mpsc::Sender<(String, usize)>,
+    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
 ) -> Result<(), String> {
     let endpoint_addr = endpoint_addr_from_json(endpoint_addr_json)?;
     let endpoint_id: EndpointId = endpoint_addr.id;
@@ -1331,7 +1431,8 @@ async fn handle_dial(
     let connection_type = PeerConnectionType::from_connection(&conn);
     tracing::info!("Connected to peer: {} ({:?})", node_id, connection_type);
 
-    connected_peers.insert(node_id.clone(), conn.clone());
+    let conn_id = next_connection_id();
+    insert_connection(connected_peers, &node_id, conn_id, conn.clone());
     let _ = event_tx
         .send(Event::Connected {
             peer_id: node_id.clone(),
@@ -1349,6 +1450,7 @@ async fn handle_dial(
         handle_connection(
             conn_clone,
             node_id_clone,
+            conn_id,
             event_tx_clone,
             shared_state_clone,
             disconnect_tx_clone,
@@ -1588,9 +1690,10 @@ const RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(3
 async fn handle_connection(
     conn: Connection,
     peer_id: String,
+    conn_id: ConnectionId,
     event_tx: mpsc::Sender<Event>,
     shared_state: Arc<Mutex<SharedState>>,
-    disconnect_tx: mpsc::Sender<(String, usize)>,
+    disconnect_tx: mpsc::Sender<(String, ConnectionId)>,
 ) {
     loop {
         match conn.accept_bi().await {
@@ -1745,7 +1848,7 @@ async fn handle_connection(
                 // which case announcing a disconnect here would be a lie. See
                 // `prune_disconnected_peer`.
                 tracing::info!("Connection closed for peer {}: {}", peer_id, e);
-                let _ = disconnect_tx.send((peer_id, conn.stable_id())).await;
+                let _ = disconnect_tx.send((peer_id, conn_id)).await;
                 break;
             }
         }
@@ -1754,7 +1857,7 @@ async fn handle_connection(
 
 /// Send a request to a connected peer
 async fn handle_send_request(
-    connected_peers: &HashMap<String, Connection>,
+    connected_peers: &HashMap<String, PeerConnections>,
     node_id: &str,
     request: MydiaRequest,
 ) -> Result<MydiaResponse, String> {
@@ -1772,8 +1875,7 @@ async fn handle_send_request(
         node_id.to_string()
     };
 
-    let conn = connected_peers
-        .get(&actual_node_id)
+    let conn = current_connection(connected_peers, &actual_node_id)
         .ok_or_else(|| format!("Not connected to peer: {}", actual_node_id))?;
 
     // Open a bidirectional stream
@@ -1808,7 +1910,7 @@ async fn handle_send_request(
 /// Send an HLS streaming request to a connected peer (client-side).
 /// Returns a streaming response with header and channel for chunks.
 async fn handle_send_hls_request(
-    connected_peers: &HashMap<String, Connection>,
+    connected_peers: &HashMap<String, PeerConnections>,
     node_id: &str,
     request: HlsRequest,
 ) -> Result<HlsStreamResponse, String> {
@@ -1828,8 +1930,7 @@ async fn handle_send_hls_request(
         node_id.to_string()
     };
 
-    let conn = connected_peers
-        .get(&actual_node_id)
+    let conn = current_connection(connected_peers, &actual_node_id)
         .ok_or_else(|| format!("Not connected to peer: {}", actual_node_id))?;
 
     let connection_type = PeerConnectionType::from_connection(conn);
@@ -2420,6 +2521,19 @@ mod tests {
             .await
             .expect("second dial should succeed");
 
+        // `dial` returns once the *client* has connected; the server inserts
+        // the connection later, on its own event loop. Waiting for the server
+        // to hold both is what makes the assertions below mean anything: drop
+        // `client_one` too early and the server may still have only one
+        // connection, so the silence proves nothing. `connected_peers` counts
+        // peers, so it stays 1 throughout and cannot answer this.
+        wait_until(
+            || async { server.debug_connection_count(&client_id).await == 2 },
+            std::time::Duration::from_secs(10),
+            "the server to hold both connections for the peer",
+        )
+        .await;
+
         // Both connections are now live under one `peer_id`. Dropping the
         // first closes its connection; the server's task for it wakes up and
         // reports the close.
@@ -2451,6 +2565,71 @@ mod tests {
             "the peer's last connection closing to report it disconnected",
         )
         .await;
+    }
+
+    /// The same guarantee in the other ordering: the peer's *newest*
+    /// connection closes first while an older one is still live.
+    ///
+    /// This is the case the original `stable_id` guard could not see. With one
+    /// connection slot per peer, the newest connection was the one in the map,
+    /// so its close matched, the entry was removed, and the peer was announced
+    /// gone while it was still connected on the older one. Which of the two
+    /// orderings happened decided whether the bug fired, which is why the map
+    /// now holds every live connection per peer instead of only the newest.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_newest_connection_closing_does_not_report_a_live_peer_as_gone() {
+        let shared_key = [11u8; 32];
+        let client_config = || HostConfig {
+            keypair_bytes: Some(shared_key),
+            ..test_config()
+        };
+
+        let (server, _server_id) = Host::new(test_config());
+        let (client_one, client_id) = Host::new(client_config());
+        let (client_two, _) = Host::new(client_config());
+        spawn_event_drain(&client_one);
+        spawn_event_drain(&client_two);
+        let disconnects = spawn_disconnect_counter(&server, client_id.clone());
+
+        let server_addr = wait_for_addr(&server).await;
+        client_one
+            .dial(server_addr.clone())
+            .await
+            .expect("first dial should succeed");
+        client_two
+            .dial(server_addr)
+            .await
+            .expect("second dial should succeed");
+
+        wait_until(
+            || async { server.debug_connection_count(&client_id).await == 2 },
+            std::time::Duration::from_secs(10),
+            "the server to hold both connections for the peer",
+        )
+        .await;
+
+        // Drop the *second* client, whose connection is the newest and was the
+        // one the old single-slot map held.
+        drop(client_two);
+
+        wait_until(
+            || async { server.debug_connection_count(&client_id).await == 1 },
+            std::time::Duration::from_secs(30),
+            "the newest connection to be pruned",
+        )
+        .await;
+
+        assert_eq!(
+            disconnects.load(Ordering::SeqCst),
+            0,
+            "the newest connection closing must not report the peer gone while \
+             an older connection is still live"
+        );
+        assert_eq!(
+            server.get_network_stats().await.connected_peers,
+            1,
+            "the peer should still be counted on its remaining connection"
+        );
     }
 
     async fn wait_until<F, Fut>(mut check: F, timeout: std::time::Duration, what: &str)
