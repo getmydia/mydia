@@ -18,6 +18,7 @@ defmodule Mydia.MediaRequests do
   alias Mydia.Media
   alias Mydia.Media.Add
   alias Mydia.Media.MediaRequest
+  alias Mydia.Search
   alias Ecto.Multi
 
   @doc """
@@ -106,8 +107,14 @@ defmodule Mydia.MediaRequests do
       `Metadata.default_relay_config/0`. Inject a Bypass config in tests.
   """
   def approve_request(%MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
-    with {:ok, media_attrs} <- resolve_media_attrs(request, opts) do
-      insert_approval(request, media_attrs, attrs, opts)
+    with {:ok, media_attrs} <- resolve_media_attrs(request, opts),
+         {:ok, result} <- insert_approval(request, media_attrs, attrs, opts) do
+      # After the transaction, never inside it. Repo.transaction defers event
+      # broadcasts until commit, and a search queued against an uncommitted
+      # media item is a race.
+      Search.maybe_queue_search(result.media_item, Keyword.get(opts, :search_on_add, false))
+
+      {:ok, result}
     end
   end
 

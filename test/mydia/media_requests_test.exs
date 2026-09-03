@@ -1,5 +1,6 @@
 defmodule Mydia.MediaRequestsTest do
   use Mydia.DataCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
@@ -382,6 +383,34 @@ defmodule Mydia.MediaRequestsTest do
       assert media_item.id == incumbent.id
       assert Repo.get!(MediaItem, incumbent.id).library_path_id == incumbent_library.id
       assert Repo.get!(MediaItem, incumbent.id).monitored == true
+    end
+
+    test "queues an automatic search when search_on_add is set", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 search_on_add: true
+               )
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MovieSearch,
+        args: %{mode: "specific", media_item_id: media_item.id}
+      )
+    end
+
+    test "queues nothing when search_on_add is absent", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id}, config: config)
+
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: media_item.id})
     end
   end
 
