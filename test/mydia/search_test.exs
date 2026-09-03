@@ -84,5 +84,22 @@ defmodule Mydia.SearchTest do
 
       assert :ok = Search.maybe_queue_search(unsupported, true)
     end
+
+    test "reports success even when the queue insert genuinely fails" do
+      # A PID cannot be JSON-encoded, so Ecto's dump step raises
+      # Ecto.ChangeError rather than returning an invalid changeset.
+      # queue_auto_searches/1 catches it and returns a real {:error, reason}
+      # (not the {:ok, 0} "nothing to queue" case above), which this must
+      # still swallow: adding the title succeeded, the search is a
+      # convenience on top of it.
+      bad_item = %Mydia.Media.MediaItem{type: "movie", id: self()}
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = Search.maybe_queue_search(bad_item, true)
+        end)
+
+      assert log =~ "Failed to queue search on add"
+    end
   end
 end
