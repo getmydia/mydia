@@ -488,7 +488,7 @@ defmodule MydiaWeb.CoreComponents do
 
   def poster_figure(assigns) do
     ~H"""
-    <div class="hover-3d w-full">
+    <div class="hover-3d grid w-full">
       <figure class={["relative aspect-[2/3] overflow-hidden bg-base-300", @class]}>
         <img
           :if={@src}
