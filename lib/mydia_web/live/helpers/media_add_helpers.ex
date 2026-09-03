@@ -349,17 +349,15 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   default, because a stale profile still produces a usable add where a
   wrong-type library path does not.
 
-  `:search_on_add` is put back onto the list after `to_add_opts/1`, which omits
-  it because `Add` does not accept it.
+  `:search_on_add` is put back onto the list by
+  `AddDefaults.to_add_opts_with_search/1`, since `to_add_opts/1` omits it
+  because `Add` does not accept it.
   """
   @spec add_opts_from_config(map(), :movie | :tv_show, Mydia.Accounts.User.t() | nil) ::
           {:ok, keyword()} | {:error, :unknown_library}
   def add_opts_from_config(params, media_type, user) do
     with {:ok, defaults} <- resolve_add_defaults(params, media_type, user) do
-      {:ok,
-       defaults
-       |> AddDefaults.to_add_opts()
-       |> Keyword.put(:search_on_add, defaults.search_on_add)}
+      {:ok, AddDefaults.to_add_opts_with_search(defaults)}
     end
   end
 

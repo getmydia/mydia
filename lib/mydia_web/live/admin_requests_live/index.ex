@@ -215,10 +215,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
       admin_notes: approve_params["admin_notes"]
     }
 
-    opts =
-      defaults
-      |> AddDefaults.to_add_opts()
-      |> Keyword.put(:search_on_add, defaults.search_on_add)
+    opts = AddDefaults.to_add_opts_with_search(defaults)
 
     case MediaRequests.approve_request(request, attrs, opts) do
       {:ok, %{request: _updated_request, media_item: media_item}} ->
