@@ -745,7 +745,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               and a 248px button strip left the filename 16px. That rendered
               two characters of an 84-character name.
 
-              The threshold below is `@md` (28rem / 448px), raised from `@lg`
+              The threshold below is `@md` (28rem / 448px), lowered from `@lg`
               (32rem / 512px) originally. A container query measures the
               container's content box, so the padding on this element
               (`p-4 md:p-6`) is not part of what the threshold compares

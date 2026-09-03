@@ -154,7 +154,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             the query changes that panel's margin and a container whose own
             size depends on the query is not resolvable.
 
-            The threshold below is `@md` (28rem / 448px), raised from `@lg`
+            The threshold below is `@md` (28rem / 448px), lowered from `@lg`
             (32rem / 512px) originally. A container query measures the
             container's content box, so the `px-3` padding on this element is
             not part of what the threshold compares against -- content-box
