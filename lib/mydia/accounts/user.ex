@@ -140,10 +140,12 @@ defmodule Mydia.Accounts.User do
   defp normalize_empty_avatar_url(changeset) do
     case get_change(changeset, :avatar_url) do
       url when is_binary(url) ->
-        if String.trim(url) == "" do
+        trimmed = String.trim(url)
+
+        if trimmed == "" do
           put_change(changeset, :avatar_url, nil)
         else
-          changeset
+          put_change(changeset, :avatar_url, trimmed)
         end
 
       _ ->

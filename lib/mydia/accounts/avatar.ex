@@ -32,15 +32,14 @@ defmodule Mydia.Accounts.Avatar do
       dir = storage_dir()
       File.mkdir_p!(dir)
 
-      # Clean up any existing uploaded avatar for this user
-      delete_avatar_file(user.avatar_url)
-
       timestamp = System.system_time(:millisecond)
       filename = "avatar-#{user.id}-#{timestamp}#{ext}"
       target_path = Path.join(dir, filename)
 
       case File.copy(temp_path, target_path) do
         {:ok, _bytes} ->
+          # Clean up any existing uploaded avatar for this user after copy succeeds
+          delete_avatar_file(user.avatar_url)
           {:ok, "/generated/avatars/#{filename}"}
 
         {:error, reason} ->
@@ -63,12 +62,17 @@ defmodule Mydia.Accounts.Avatar do
   def delete_avatar_file("/generated/avatars/" <> filename) do
     # Prevent path traversal by extracting the basename only
     safe_filename = Path.basename(filename)
-    target_path = Path.join(storage_dir(), safe_filename)
 
-    case File.rm(target_path) do
-      :ok -> :ok
-      {:error, :enoent} -> :ok
-      {:error, _reason} -> :ok
+    if safe_filename not in ["", "."] do
+      target_path = Path.join(storage_dir(), safe_filename)
+
+      case File.rm(target_path) do
+        :ok -> :ok
+        {:error, :enoent} -> :ok
+        {:error, _reason} -> :ok
+      end
+    else
+      :ok
     end
   end
 
