@@ -152,7 +152,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
 
             It has to be this element and not the detail panel below, because
             the query changes that panel's margin and a container whose own
-            size depends on the query is not resolvable. --%>
+            size depends on the query is not resolvable.
+
+            The threshold below is `@md` (28rem / 448px), raised from `@lg`
+            (32rem / 512px) originally. A container query measures the
+            container's content box, so the `px-3` padding on this element is
+            not part of what the threshold compares against -- content-box
+            width runs well below the border-box numbers measured above. At
+            `@lg`, this row's content box was only 501px at a 900px viewport,
+            on the wrong side of 512px, so a vertical scrollbar appearing was
+            enough to flip the layout between stacked and one-line.
+            `@md`/448px clears that case by 53px and still leaves 768px 79px
+            clear on the other side; 448 has no significance beyond that
+            margin. --%>
       <div
         id={"episode-#{episode.id}-row"}
         class={[

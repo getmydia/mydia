@@ -743,7 +743,19 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               about the phone and wrong about everything else: at 1024px the
               app drawer and the page rail both open, the card drops to 312px,
               and a 248px button strip left the filename 16px. That rendered
-              two characters of an 84-character name. --%>
+              two characters of an 84-character name.
+
+              The threshold below is `@md` (28rem / 448px), raised from `@lg`
+              (32rem / 512px) originally. A container query measures the
+              container's content box, so the padding on this element
+              (`p-4 md:p-6`) is not part of what the threshold compares
+              against -- content-box width runs well below the border-box
+              numbers measured above. At `@lg`, this card's content box was
+              only 509px at a 900px viewport, on the wrong side of 512px, so
+              a vertical scrollbar appearing was enough to flip the layout
+              between stacked and one-line. `@md`/448px clears that case by
+              61px and still leaves 768px 71px clear on the other side; 448
+              has no significance beyond that margin. --%>
         <div class="@container/mfrow card-body p-4 md:p-6">
           <h2 class="card-title text-lg md:text-xl mb-3 md:mb-4">Media Files</h2>
           <%!-- DaisyUI list component.
