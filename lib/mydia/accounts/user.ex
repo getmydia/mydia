@@ -157,7 +157,7 @@ defmodule Mydia.Accounts.User do
     validate_format(
       changeset,
       :avatar_url,
-      ~r/^(https?:\/\/|\/generated\/avatars\/)/,
+      ~r/^(https?:\/\/[^\s\/]+|\/generated\/avatars\/.+)/,
       message: "must be a valid URL or local avatar path"
     )
   end

@@ -69,6 +69,23 @@ defmodule Mydia.Accounts.AvatarTest do
 
       assert {:error, :unsupported_format} = Avatar.store_avatar(@user, tmp_file, "script.sh")
     end
+
+    test "generates distinct filenames and URLs for concurrent uploads" do
+      tmp_file = Path.join(System.tmp_dir!(), "concurrent-avatar.png")
+      File.write!(tmp_file, "avatar-content")
+
+      tasks =
+        for _ <- 1..5 do
+          Task.async(fn ->
+            Avatar.store_avatar(@user, tmp_file, "avatar.png")
+          end)
+        end
+
+      results = Task.await_many(tasks)
+      urls = Enum.map(results, fn {:ok, url} -> url end)
+
+      assert length(Enum.uniq(urls)) == 5
+    end
   end
 
   describe "delete_avatar_file/1" do

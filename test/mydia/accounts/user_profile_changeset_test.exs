@@ -52,7 +52,10 @@ defmodule Mydia.Accounts.UserProfileChangesetTest do
             "ftp://example.com/avatar.png",
             "/etc/passwd",
             "javascript:alert(1)",
-            "not-a-url"
+            "not-a-url",
+            "http://",
+            "https://",
+            "/generated/avatars/"
           ] do
         changeset = User.profile_changeset(@user, %{avatar_url: invalid})
         refute changeset.valid?

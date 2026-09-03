@@ -32,8 +32,9 @@ defmodule Mydia.Accounts.Avatar do
       dir = storage_dir()
       File.mkdir_p!(dir)
 
+      suffix = :crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)
       timestamp = System.system_time(:millisecond)
-      filename = "avatar-#{user.id}-#{timestamp}#{ext}"
+      filename = "avatar-#{user.id}-#{timestamp}-#{suffix}#{ext}"
       target_path = Path.join(dir, filename)
 
       case File.copy(temp_path, target_path) do
