@@ -4,6 +4,7 @@ defmodule MydiaWeb.ProfileLive.Index do
   import MydiaWeb.ProfileLive.Components
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Avatar
   alias Mydia.Accounts.UserPreference
   alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
@@ -33,6 +34,11 @@ defmodule MydiaWeb.ProfileLive.Index do
 
     socket =
       socket
+      |> allow_upload(:avatar,
+        accept: ~w(.jpg .jpeg .png .webp .gif),
+        max_entries: 1,
+        max_file_size: 5_000_000
+      )
       |> assign(:is_oidc_user, is_oidc_user)
       |> assign(:profile_form, to_form(Accounts.change_profile(user)))
       |> assign(:password_form, to_form(password_changeset(), as: :password))
@@ -78,13 +84,54 @@ defmodule MydiaWeb.ProfileLive.Index do
   end
 
   @impl true
-  def handle_event("save_profile", %{"user" => params}, socket) do
-    case Accounts.update_profile(socket.assigns.current_user, params) do
-      {:ok, user} ->
+  def handle_event("cancel_avatar_upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :avatar, ref)}
+  end
+
+  @impl true
+  def handle_event("remove_avatar", _params, socket) do
+    user = socket.assigns.current_user
+    Accounts.delete_avatar_file(user)
+
+    case Accounts.update_profile(user, %{"avatar_url" => nil}) do
+      {:ok, updated_user} ->
         {:noreply,
          socket
-         |> assign(:current_user, user)
-         |> assign(:profile_form, to_form(Accounts.change_profile(user)))
+         |> assign(:current_user, updated_user)
+         |> assign(:profile_form, to_form(Accounts.change_profile(updated_user)))
+         |> put_flash(:info, "Avatar removed")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, :profile_form, to_form(changeset))}
+    end
+  end
+
+  @impl true
+  def handle_event("save_profile", %{"user" => params}, socket) do
+    user = socket.assigns.current_user
+
+    uploaded_avatar_url =
+      consume_uploaded_entries(socket, :avatar, fn %{path: path}, entry ->
+        case Avatar.store_avatar(user, path, entry.client_name) do
+          {:ok, url_path} -> {:ok, url_path}
+          {:error, reason} -> {:error, reason}
+        end
+      end)
+      |> List.first()
+
+    params =
+      if uploaded_avatar_url do
+        Map.put(params, "avatar_url", uploaded_avatar_url)
+      else
+        params
+      end
+
+    case Accounts.update_profile(user, params) do
+      {:ok, updated_user} ->
+        {:noreply,
+         socket
+         |> assign(:current_user, updated_user)
+         |> assign(:profile_form, to_form(Accounts.change_profile(updated_user)))
          |> put_flash(:info, "Profile updated successfully")}
 
       {:error, changeset} ->
@@ -251,4 +298,12 @@ defmodule MydiaWeb.ProfileLive.Index do
   defp format_datetime(datetime) do
     Calendar.strftime(datetime, "%b %d, %Y at %I:%M %p")
   end
+
+  defp upload_error_to_string(:too_large), do: "Image is too large (maximum 5MB)"
+  defp upload_error_to_string(:too_many_files), do: "Only one image can be uploaded at a time"
+
+  defp upload_error_to_string(:not_accepted),
+    do: "Unacceptable file type. Please upload a JPG, PNG, WebP, or GIF."
+
+  defp upload_error_to_string(other), do: "Upload error: #{inspect(other)}"
 end

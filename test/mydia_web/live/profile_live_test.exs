@@ -75,4 +75,177 @@ defmodule MydiaWeb.ProfileLiveTest do
     assert user |> Accounts.get_user_preference!() |> UserPreference.theme() == "dark"
     assert_push_event(view, "theme_changed", %{theme: "dark"})
   end
+
+  describe "avatar upload and management" do
+    test "renders avatar upload input and remove button when avatar exists", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, _user} =
+        Accounts.update_profile(user, %{avatar_url: "https://example.com/avatar.jpg"})
+
+      {:ok, view, html} = live(conn, ~p"/profile")
+
+      assert has_element?(view, "input[type='file'][name*='avatar']")
+      assert has_element?(view, "#remove-avatar-btn")
+      assert html =~ "Remove Avatar"
+    end
+
+    test "does not render remove avatar button when user has no avatar", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+      refute has_element?(view, "#remove-avatar-btn")
+    end
+
+    test "removes avatar when clicking Remove Avatar button", %{conn: conn, user: user} do
+      {:ok, _user} =
+        Accounts.update_profile(user, %{avatar_url: "https://example.com/avatar.jpg"})
+
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      view
+      |> element("#remove-avatar-btn")
+      |> render_click()
+
+      assert render(view) =~ "Avatar removed"
+      refute has_element?(view, "#remove-avatar-btn")
+
+      reloaded_user = Accounts.get_user!(user.id)
+      assert is_nil(reloaded_user.avatar_url)
+    end
+
+    test "removes local avatar file from disk when clicking Remove Avatar button", %{
+      conn: conn,
+      user: user
+    } do
+      dir = Mydia.Accounts.Avatar.storage_dir()
+      File.mkdir_p!(dir)
+      filename = "avatar-#{user.id}-12345.png"
+      file_path = Path.join(dir, filename)
+      File.write!(file_path, "fake png content")
+
+      {:ok, _user} =
+        Accounts.update_profile(user, %{avatar_url: "/generated/avatars/#{filename}"})
+
+      assert File.exists?(file_path)
+
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      view
+      |> element("#remove-avatar-btn")
+      |> render_click()
+
+      assert render(view) =~ "Avatar removed"
+      refute File.exists?(file_path)
+    end
+
+    test "uploads an avatar image file and updates profile", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      png_data =
+        <<137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8,
+          6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5,
+          0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130>>
+
+      avatar =
+        file_input(view, "#profile-form", :avatar, [
+          %{
+            name: "avatar.png",
+            content: png_data,
+            type: "image/png"
+          }
+        ])
+
+      render_upload(avatar, "avatar.png")
+
+      view
+      |> form("#profile-form", %{"user" => %{"display_name" => "Avatar Tester"}})
+      |> render_submit()
+
+      assert render(view) =~ "Profile updated successfully"
+
+      updated_user = Accounts.get_user!(user.id)
+      assert String.starts_with?(updated_user.avatar_url, "/generated/avatars/avatar-#{user.id}-")
+      assert String.ends_with?(updated_user.avatar_url, ".png")
+      assert updated_user.display_name == "Avatar Tester"
+    end
+
+    test "cancels an avatar upload in progress", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      png_data =
+        <<137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8,
+          6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5,
+          0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130>>
+
+      avatar =
+        file_input(view, "#profile-form", :avatar, [
+          %{
+            name: "avatar.png",
+            content: png_data,
+            type: "image/png"
+          }
+        ])
+
+      assert {:ok, _} = preflight_upload(avatar)
+      assert has_element?(view, "button[phx-click='cancel_avatar_upload']")
+
+      view
+      |> element("button[phx-click='cancel_avatar_upload']")
+      |> render_click()
+
+      refute has_element?(view, "button[phx-click='cancel_avatar_upload']")
+    end
+
+    test "cancelling an upload then saving profile does not change avatar", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      png_data =
+        <<137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8,
+          6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5,
+          0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130>>
+
+      avatar =
+        file_input(view, "#profile-form", :avatar, [
+          %{
+            name: "avatar.png",
+            content: png_data,
+            type: "image/png"
+          }
+        ])
+
+      assert {:ok, _} = preflight_upload(avatar)
+
+      view
+      |> element("button[phx-click='cancel_avatar_upload']")
+      |> render_click()
+
+      view
+      |> form("#profile-form", %{"user" => %{"display_name" => "No Upload Tester"}})
+      |> render_submit()
+
+      assert render(view) =~ "Profile updated successfully"
+      updated_user = Accounts.get_user!(user.id)
+      assert updated_user.display_name == "No Upload Tester"
+      assert is_nil(updated_user.avatar_url)
+    end
+
+    test "shows upload error for unacceptable file format", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      avatar =
+        file_input(view, "#profile-form", :avatar, [
+          %{
+            name: "malicious.exe",
+            content: "executable binary",
+            type: "application/x-msdownload"
+          }
+        ])
+
+      assert {:error, [[_, :not_accepted]]} = preflight_upload(avatar)
+      assert render(view) =~ "Unacceptable file type"
+    end
+  end
 end
