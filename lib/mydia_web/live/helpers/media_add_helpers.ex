@@ -7,8 +7,6 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   request approval shares.
   """
 
-  require Logger
-
   alias Mydia.Media.Add
   alias Mydia.Media.AddDefaults
   alias Mydia.Media.FranchiseEntry
@@ -148,7 +146,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
     case Add.from_provider(ref, media_type, config, add_opts) do
       {:ok, media_item} ->
-        maybe_queue_search(media_item, search_on_add)
+        Mydia.Search.maybe_queue_search(media_item, search_on_add)
 
         {:ok, media_item, update_library_status_map(library_status_map, media_item)}
 
@@ -160,32 +158,6 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
       {:error, _} = error ->
         error
-    end
-  end
-
-  # This is the shared home for auto-search-on-add. AddMediaLive used to carry
-  # a near-identical private maybe_queue_search/2, but that module was deleted
-  # once Discover absorbed one-click add, so this is the only copy now. Uses
-  # Search.queue_auto_searches/1 rather than enqueuing directly: it is already
-  # Oban-dedupe-safe (singular insert/1, not insert_all/1) and is what the
-  # media detail page uses.
-  #
-  # A failure leaves the item added. Adding the title is what the user asked
-  # for; the search is a convenience.
-  defp maybe_queue_search(_media_item, false), do: :ok
-
-  defp maybe_queue_search(media_item, true) do
-    case Mydia.Search.queue_auto_searches([media_item]) do
-      {:ok, _count} ->
-        :ok
-
-      {:error, reason} ->
-        Logger.warning("Failed to queue search on add",
-          media_item_id: media_item.id,
-          reason: inspect(reason)
-        )
-
-        :ok
     end
   end
 
