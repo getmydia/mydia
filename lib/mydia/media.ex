@@ -325,7 +325,7 @@ defmodule Mydia.Media do
   ## Options
     - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :system
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
-    - `:season_monitoring` - For TV shows, which seasons to fetch ("all", "first", "latest", "none") - defaults to "all"
+    - `:season_monitoring` - For TV shows, which seasons to monitor ("all", "future", "first", "latest", "none") - defaults to "all"
     - `:skip_episode_refresh` - Skip automatic episode fetching (for tests or special cases) - defaults to false
     - `:config` - Metadata relay config forwarded to `refresh_episodes_for_tv_show/2`.
       Callers that inject a Bypass (or any non-default relay) must pass it here;
@@ -333,6 +333,11 @@ defmodule Mydia.Media do
   """
   @spec create_media_item(map(), keyword()) :: {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
   def create_media_item(attrs \\ %{}, opts \\ []) do
+    attrs =
+      attrs
+      |> maybe_put_monitored_from_opts(opts)
+      |> maybe_apply_default_monitor_new_seasons(opts)
+
     with {:ok, media_item} <-
            %MediaItem{}
            |> MediaItem.changeset(attrs)
@@ -368,6 +373,7 @@ defmodule Mydia.Media do
             case refresh_episodes_for_tv_show(media_item, refresh_opts) do
               {:ok, count} ->
                 Logger.info("Created #{count} episodes for #{media_item.title}")
+                apply_initial_season_monitoring(media_item, season_monitoring)
 
               {:error, reason} ->
                 # Log the error but don't fail the media item creation
@@ -389,6 +395,73 @@ defmodule Mydia.Media do
       end
     end
   end
+
+  defp maybe_put_monitored_from_opts(attrs, opts) do
+    if not Map.has_key?(attrs, :monitored) and not Map.has_key?(attrs, "monitored") and
+         Keyword.has_key?(opts, :monitored) do
+      Map.put(attrs, :monitored, opts[:monitored])
+    else
+      attrs
+    end
+  end
+
+  defp maybe_apply_default_monitor_new_seasons(attrs, opts) do
+    type = Map.get(attrs, :type) || Map.get(attrs, "type")
+
+    if type == "tv_show" and not Map.has_key?(attrs, :monitor_new_seasons) and
+         not Map.has_key?(attrs, "monitor_new_seasons") do
+      case Keyword.get(opts, :season_monitoring) do
+        mode when mode in ["first", "none"] ->
+          Map.put(attrs, :monitor_new_seasons, :none)
+
+        mode when mode in ["all", "future", "latest"] ->
+          Map.put(attrs, :monitor_new_seasons, :all)
+
+        _ ->
+          attrs
+      end
+    else
+      attrs
+    end
+  end
+
+  defp apply_initial_season_monitoring(%MediaItem{monitored: false}, _season_monitoring), do: :ok
+
+  defp apply_initial_season_monitoring(%MediaItem{} = media_item, "future") do
+    apply_episode_monitoring(media_item, :future)
+  end
+
+  defp apply_initial_season_monitoring(%MediaItem{} = media_item, "none") do
+    apply_episode_monitoring(media_item, :none)
+  end
+
+  defp apply_initial_season_monitoring(%MediaItem{} = media_item, "first") do
+    episodes = list_episodes(media_item.id)
+    {to_monitor, to_unmonitor} = Enum.split_with(episodes, fn ep -> ep.season_number == 1 end)
+    set_episodes_monitored(to_monitor, true)
+    set_episodes_monitored(to_unmonitor, false)
+  end
+
+  defp apply_initial_season_monitoring(%MediaItem{} = media_item, "latest") do
+    episodes = list_episodes(media_item.id)
+
+    regular_seasons =
+      episodes
+      |> Enum.map(& &1.season_number)
+      |> Enum.filter(&(&1 > 0))
+
+    latest_season_number = if regular_seasons != [], do: Enum.max(regular_seasons), else: 0
+
+    {to_monitor, to_unmonitor} =
+      Enum.split_with(episodes, fn ep ->
+        ep.season_number == latest_season_number and ep.season_number > 0
+      end)
+
+    set_episodes_monitored(to_monitor, true)
+    set_episodes_monitored(to_unmonitor, false)
+  end
+
+  defp apply_initial_season_monitoring(%MediaItem{}, _all), do: :ok
 
   defp maybe_put_refresh_config(opts, nil), do: opts
   defp maybe_put_refresh_config(opts, config), do: Keyword.put(opts, :config, config)
@@ -1519,7 +1592,6 @@ defmodule Mydia.Media do
   ## Parameters
     - `media_item` - The TV show media item (must be type "tv_show")
     - `opts` - Options for episode creation
-      - `:season_monitoring` - Which seasons to fetch ("all", "first", "latest", "none")
       - `:config` - Metadata relay config. Defaults to `Metadata.default_relay_config/0`.
         Callers that inject a Bypass (or any non-default relay) must pass it;
         otherwise the refresh silently uses the global default.
@@ -1536,9 +1608,6 @@ defmodule Mydia.Media do
 
       iex> refresh_episodes_for_tv_show(media_item)
       {:ok, 236}
-
-      iex> refresh_episodes_for_tv_show(media_item, season_monitoring: "latest")
-      {:ok, 12}
   """
   @spec refresh_episodes_for_tv_show(MediaItem.t(), keyword()) ::
           {:ok, non_neg_integer()} | {:error, term()}
@@ -1547,7 +1616,6 @@ defmodule Mydia.Media do
   def refresh_episodes_for_tv_show(%MediaItem{type: "tv_show"} = media_item, opts) do
     alias Mydia.Metadata
 
-    season_monitoring = Keyword.get(opts, :season_monitoring, "all")
     # Honour an injected relay config (Bypass in tests, or a caller-specific
     # relay). Ignoring opts[:config] silently falls back to the global default
     # and was the root of the MediaAddHelpers CI timeout flake: the Bypass
@@ -1633,20 +1701,10 @@ defmodule Mydia.Media do
               "Fetching episodes for TV show: #{media_item.title}, found #{length(seasons)} seasons in metadata"
             )
 
-            # Filter seasons based on monitoring preference
-            seasons_to_fetch =
-              case season_monitoring do
-                "all" -> seasons
-                "first" -> Enum.take(seasons, 1)
-                "latest" -> Enum.take(seasons, -1)
-                "none" -> []
-                _ -> seasons
-              end
-
             # Invalidate season cache to ensure fresh data with translations
             has_tvdb = not is_nil(media_item.tvdb_id)
 
-            Enum.each(seasons_to_fetch, fn season ->
+            Enum.each(seasons, fn season ->
               tvdb_season_id =
                 if has_tvdb, do: Map.get(season, :tvdb_season_id), else: nil
 
@@ -1669,69 +1727,50 @@ defmodule Mydia.Media do
             # partial pass would hide the seasons that failed until the
             # threshold expires.
             {episode_count, failed_seasons} =
-              Enum.reduce_while(seasons_to_fetch, {0, 0}, fn season, {count, failed} ->
-                # Skip season 0 (specials) unless explicitly monitoring all
-                if season.season_number == 0 and season_monitoring != "all" do
-                  {:cont, {count, failed}}
-                else
-                  Logger.info("Processing episodes for season #{season.season_number}")
+              Enum.reduce_while(seasons, {0, 0}, fn season, {count, failed} ->
+                Logger.info("Processing episodes for season #{season.season_number}")
 
-                  case create_episodes_for_season(media_item, season, config) do
-                    {:ok, created} ->
-                      Logger.info(
-                        "Processed #{created} episodes for season #{season.season_number}"
-                      )
+                case create_episodes_for_season(media_item, season, config) do
+                  {:ok, created} ->
+                    Logger.info(
+                      "Processed #{created} episodes for season #{season.season_number}"
+                    )
 
-                      {:cont, {count + created, failed}}
+                    {:cont, {count + created, failed}}
 
-                    # An ordering switch or a provider switch landed while this
-                    # pass was fetching. Every season still to come was fetched
-                    # against the same now-stale show, so stop rather than log
-                    # one error per remaining season. Counting it as a failure
-                    # is what leaves `seasons_refreshed_at` unstamped, which is
-                    # what makes the next refresh re-fetch against the show as
-                    # it actually is now.
-                    {:error, :refresh_target_changed} ->
-                      Logger.warning(
-                        "Aborting season refresh: show changed mid-refresh",
-                        media_item_id: media_item.id
-                      )
+                  # An ordering switch or a provider switch landed while this
+                  # pass was fetching. Every season still to come was fetched
+                  # against the same now-stale show, so stop rather than log
+                  # one error per remaining season. Counting it as a failure
+                  # is what leaves `seasons_refreshed_at` unstamped, which is
+                  # what makes the next refresh re-fetch against the show as
+                  # it actually is now.
+                  {:error, :refresh_target_changed} ->
+                    Logger.warning(
+                      "Aborting season refresh: show changed mid-refresh",
+                      media_item_id: media_item.id
+                    )
 
-                      {:halt, {count, failed + 1}}
+                    {:halt, {count, failed + 1}}
 
-                    {:error, reason} ->
-                      Logger.error(
-                        "Failed to create episodes for season #{season.season_number}: #{inspect(reason)}"
-                      )
+                  {:error, reason} ->
+                    Logger.error(
+                      "Failed to create episodes for season #{season.season_number}: #{inspect(reason)}"
+                    )
 
-                      {:cont, {count, failed + 1}}
-                  end
+                    {:cont, {count, failed + 1}}
                 end
               end)
 
             Logger.info("Total episodes processed: #{episode_count}")
 
-            # The timestamp means "every season is current", so only a clean pass
-            # over the *full* season set may stamp it. "first"/"latest"/"none"
-            # come from the add-media UI and fetch a subset; stamping after one
-            # would throttle the next "all" pass and leave the seasons it never
-            # fetched stale until the threshold expired.
-            cond do
-              season_monitoring != "all" ->
-                Logger.info(
-                  "Not stamping seasons_refreshed_at: partial season selection " <>
-                    "(#{season_monitoring})",
-                  media_item_id: media_item.id
-                )
-
-              failed_seasons > 0 ->
-                Logger.warning(
-                  "Not stamping seasons_refreshed_at: #{failed_seasons} season(s) failed",
-                  media_item_id: media_item.id
-                )
-
-              true ->
-                stamp_seasons_refreshed(media_item)
+            if failed_seasons > 0 do
+              Logger.warning(
+                "Not stamping seasons_refreshed_at: #{failed_seasons} season(s) failed",
+                media_item_id: media_item.id
+              )
+            else
+              stamp_seasons_refreshed(media_item)
             end
 
             {:ok, episode_count}
