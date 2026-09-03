@@ -308,6 +308,35 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   end
 
   @doc """
+  Resolves the submitted config params into an `%AddDefaults{}` struct.
+
+  Split out of `add_opts_from_config/3` because a caller that has to re-render
+  the config dialog after a failure needs the struct itself: `config.defaults`
+  is an `%AddDefaults{}`, so assigning the resolved struct straight back is what
+  makes the dialog redisplay the user's own choices rather than reverting to
+  fresh defaults.
+
+  Propagates `{:error, :unknown_library}` from `library_path_opts/2` rather than
+  swallowing it. Per #458, silently substituting a different library is worse
+  than refusing.
+  """
+  @spec resolve_add_defaults(map(), :movie | :tv_show, Mydia.Accounts.User.t() | nil) ::
+          {:ok, AddDefaults.t()} | {:error, :unknown_library}
+  def resolve_add_defaults(params, media_type, user) do
+    with {:ok, library_opts} <-
+           library_path_opts(presence(params["library_path_id"]), media_type) do
+      {:ok,
+       AddDefaults.resolve(user, media_type,
+         library_path_id: library_opts[:library_path_id],
+         quality_profile_id: presence(params["quality_profile_id"]),
+         monitored: params["monitored"] == "true",
+         season_monitoring: presence(params["season_monitoring"]),
+         search_on_add: params["search_on_add"] == "true"
+       )}
+    end
+  end
+
+  @doc """
   Turns the dialog's submitted `config[...]` params into `Mydia.Media.Add` opts.
 
   `library_path_opts/2` runs first and its rejection is propagated rather than
@@ -326,17 +355,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   @spec add_opts_from_config(map(), :movie | :tv_show, Mydia.Accounts.User.t() | nil) ::
           {:ok, keyword()} | {:error, :unknown_library}
   def add_opts_from_config(params, media_type, user) do
-    with {:ok, library_opts} <-
-           library_path_opts(presence(params["library_path_id"]), media_type) do
-      defaults =
-        AddDefaults.resolve(user, media_type,
-          library_path_id: library_opts[:library_path_id],
-          quality_profile_id: presence(params["quality_profile_id"]),
-          monitored: params["monitored"] == "true",
-          season_monitoring: presence(params["season_monitoring"]),
-          search_on_add: params["search_on_add"] == "true"
-        )
-
+    with {:ok, defaults} <- resolve_add_defaults(params, media_type, user) do
       {:ok,
        defaults
        |> AddDefaults.to_add_opts()
