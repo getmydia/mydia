@@ -29,6 +29,12 @@ defmodule Mydia.P2p.Server do
   # the operator can see it and the peer cannot.
   @opaque_failure "Request failed"
 
+  # How long one peer request may run before its task is killed and its slot
+  # returned. Matches the Rust core's `RESPONSE_TIMEOUT`: past that the peer has
+  # already been handed a timeout error and stopped waiting, so anything still
+  # running is work whose result nothing will read.
+  @request_timeout :timer.seconds(30)
+
   @doc """
   Status information about the p2p host.
   """
@@ -552,25 +558,35 @@ defmodule Mydia.P2p.Server do
   # this process, so a task that dies despite the rescue below still cannot
   # take the host with it, and past `max_children` the peer is refused outright
   # rather than the host quietly accumulating work it will never finish.
-  defp serve_request(resource, request_id, describe, fun) do
+  #
+  # A bound is only worth having if slots come back, so the work runs in a
+  # second task the first one waits on with a deadline. Nothing else would end
+  # it: a handler blocked on an unresponsive filesystem never returns, and the
+  # Rust `RESPONSE_TIMEOUT` only abandons the peer's side of the exchange, it
+  # cannot reach into the BEAM and stop the task. Without this, requests that
+  # hang hold their slots for the life of the process and the host eventually
+  # answers nothing but "Server busy".
+  # Public, and taking `timeout`, only so the regression test can drive a
+  # handler that hangs without waiting out the real 30 seconds.
+  @doc false
+  def serve_request(resource, request_id, describe, fun, timeout \\ @request_timeout) do
     task = fn ->
-      response =
-        try do
-          fun.()
-        rescue
-          exception ->
-            Logger.error(
-              "P2P #{describe} crashed: " <>
-                Exception.format(:error, exception, __STACKTRACE__)
-            )
+      worker = Task.Supervisor.async_nolink(Mydia.P2p.RequestSupervisor, fun)
 
+      response =
+        case Task.yield(worker, timeout) || Task.shutdown(worker, :brutal_kill) do
+          {:ok, response} ->
+            response
+
+          {:exit, reason} ->
+            # `async_nolink` means a handler that raises exits the worker
+            # instead of propagating here. The exit reason still carries the
+            # exception and its stacktrace, so the operator loses nothing.
+            Logger.error("P2P #{describe} crashed: " <> Exception.format(:exit, reason))
             {:error, @opaque_failure}
-        catch
-          kind, reason ->
-            Logger.error(
-              "P2P #{describe} #{kind}: " <>
-                Exception.format(kind, reason, __STACKTRACE__)
-            )
+
+          nil ->
+            Logger.error("P2P #{describe} timed out after #{timeout}ms and was killed")
 
             {:error, @opaque_failure}
         end

@@ -230,12 +230,18 @@ defmodule Mydia.Application do
         # Must precede P2p.Server: it creates the instance identity the p2p node
         # and every pairing depend on, and seeds RemoteAccess.enabled?/0.
         Mydia.RemoteAccess.Provision,
-        # Serves peer requests off Mydia.P2p.Server, one task each. Bounded
-        # because iroh gates inbound connections on ALPN alone, so a peer needs
-        # no credential to make the host spawn these, and `max_children` is what
-        # keeps that from becoming the third memory-exhaustion hole in this
-        # subsystem. Over the limit the request is refused rather than queued.
-        {Task.Supervisor, name: Mydia.P2p.RequestSupervisor, max_children: 256},
+        # Serves peer requests off Mydia.P2p.Server. Bounded because iroh gates
+        # inbound connections on ALPN alone, so a peer needs no credential to
+        # make the host spawn these, and `max_children` is what keeps that from
+        # becoming the third memory-exhaustion hole in this subsystem. Over the
+        # limit the request is refused rather than queued.
+        #
+        # Two children per in-flight request, so this caps concurrency at 256:
+        # one runs the handler, the other waits on it with a deadline and kills
+        # it if it hangs. A handler blocked on an unresponsive filesystem
+        # returns on its own schedule or never, and a bound whose slots never
+        # come back just fails every later request instead.
+        {Task.Supervisor, name: Mydia.P2p.RequestSupervisor, max_children: 512},
         Mydia.P2p.Server,
         # Resume active pairing claims on startup
         Mydia.RemoteAccess.ResumeClaims
