@@ -272,6 +272,26 @@ Four gotchas around it:
   when a local dev-env compile is clean. Reproduce with
   `MIX_ENV=test mix compile --warnings-as-errors --force`.
 
+### Watching test-suite speed
+
+The regression signal is already free on every run: ExUnit's
+`Finished in Xs (Ys async, Zs sync)` line. Sync time is the number that matters
+here, because `test/test_helper.exs` pins `max_cases: 1` on SQLite and
+`Mydia.DataCase` forces database tests to `async: false`, so the suite is
+overwhelmingly serial and a slowdown shows up as sync time climbing. Measured on
+master 2026-09-03: `876.4 seconds (59.1s async, 817.3s sync)`.
+
+To find *which* tests are slow, profile on demand rather than in CI:
+
+    devenv shell -- bash -c 'MIX_ENV=test mix test --slowest-modules 20'
+
+Do not add `--slowest` or `--slowest-modules` to the CI invocations. Both
+automatically set `--trace`, and `--trace` forces `--max-cases 1` and sets the
+test timeout to `:infinity` (`mix help test`; ExUnit's `max_cases/1` checks
+`opts[:trace]` before any explicit `--max-cases`). On the PostgreSQL job that
+silently serializes the whole suite, and on both jobs it means a hung test runs
+until the GitHub job timeout instead of failing fast.
+
 ## Docker tags
 
 `ci-docker.yml` pushes `:master` and `:master-pg` on every master push, which is

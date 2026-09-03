@@ -24,6 +24,12 @@ defmodule Mydia.Accounts.HashCostConfigTest do
   # is checked alongside the compile-time files.
   @cost_keys ~w(log_rounds t_cost m_cost)
 
+  # Anchored like `Mydia.Repo.Migrations.NoVarcharColumnsTest`'s @declarations:
+  # the key must open a keyword pair (line start, or after a comma as in
+  # `config :bcrypt_elixir, log_rounds: 4`), so an unrelated `log_rounds:`
+  # inside a string literal or heredoc doesn't trip the guard.
+  @cost_key_patterns Enum.map(@cost_keys, &Regex.compile!("(?:^|,)\\s*#{Regex.escape(&1)}:"))
+
   describe "hashing cost configuration" do
     test "no config file outside config/test.exs sets a hashing cost" do
       offenders =
@@ -72,7 +78,7 @@ defmodule Mydia.Accounts.HashCostConfigTest do
     |> String.split("\n")
     |> Enum.with_index(1)
     |> Enum.reject(fn {line, _n} -> String.starts_with?(String.trim(line), "#") end)
-    |> Enum.filter(fn {line, _n} -> Enum.any?(@cost_keys, &String.contains?(line, "#{&1}:")) end)
+    |> Enum.filter(fn {line, _n} -> Enum.any?(@cost_key_patterns, &Regex.match?(&1, line)) end)
     |> Enum.map(fn {line, n} -> "#{Path.basename(path)}:#{n}: #{String.trim(line)}" end)
   end
 end

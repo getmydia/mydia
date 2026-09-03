@@ -283,13 +283,7 @@ jobs:
           fi
           mix ecto.create
           mix ecto.migrate
-          # --slowest-modules is the load-bearing one: `mix help test` notes it
-          # "Includes time spent in ExUnit.Callbacks.setup/1", which is where
-          # per-test fixture cost hides. Both flags exist on the pinned Elixir
-          # 1.19.5 (--slowest-modules since 1.17.0) and cost nothing to run.
-          # This is what makes the next slowdown visible before the suite
-          # doubles again.
-          mix test --cover --slowest 30 --slowest-modules 10
+          mix test --cover
           DEVENV
 
   rust:
@@ -441,8 +435,7 @@ jobs:
           mix ecto.create
           mix ecto.migrate
           mix ecto.migrations
-          # See the `test` job for why the slowest-test flags are on.
-          mix test --cover --slowest 30 --slowest-modules 10
+          mix test --cover
           DEVENV
 
   test-e2e:
