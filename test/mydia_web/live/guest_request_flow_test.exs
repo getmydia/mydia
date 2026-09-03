@@ -277,6 +277,11 @@ defmodule MydiaWeb.GuestRequestFlowTest do
 
       assert html =~ "Could not reach the metadata service"
 
+      # The dialog stays open: it now holds configuration (library, quality
+      # profile, monitoring) the admin picked, and a transient relay hiccup
+      # must not discard those choices and force the admin to redo them.
+      assert has_element?(admin_view, "#approve-form")
+
       untouched = Repo.get!(MediaRequest, request.id)
 
       assert untouched.status == "pending"

@@ -233,13 +233,16 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
          )
          |> load_requests()}
 
+      # The dialog stays open with the admin's own choices, not fresh defaults.
+      # config.defaults is an %AddDefaults{}, so assigning the resolved struct
+      # back is all it takes. Nothing was written: the metadata fetch happens
+      # before the Multi opens, so the request is still pending.
       {:error, {:metadata, reason}} ->
         Logger.warning("Approval blocked by metadata failure: #{inspect(reason)}")
 
         {:noreply,
          socket
-         |> assign(:show_approve_modal, false)
-         |> assign(:selected_request, nil)
+         |> keep_approve_choices(defaults)
          |> put_flash(
            :error,
            "Could not reach the metadata service, so the request was not approved. Please try again."
@@ -248,9 +251,14 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
       {:error, changeset} ->
         {:noreply,
          socket
+         |> keep_approve_choices(defaults)
          |> put_flash(:error, "Failed to approve request: #{inspect(changeset.errors)}")
          |> assign(:approve_form, to_form(changeset, as: :approve))}
     end
+  end
+
+  defp keep_approve_choices(socket, defaults) do
+    assign(socket, :approve_config, %{socket.assigns.approve_config | defaults: defaults})
   end
 
   defp apply_filters(socket, params) do

@@ -128,4 +128,48 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
       assert MediaRequests.get_request!(request.id).status == "pending"
     end
   end
+
+  describe "a failed approval keeps the dialog open" do
+    test "a metadata failure preserves the admin's choices", %{
+      conn: conn,
+      guest: guest
+    } do
+      library = library_path_fixture(%{type: "movies"})
+      profile = quality_profile_fixture()
+
+      # missing_id/0 is the stub provider's "this does not resolve" id, the
+      # same one guest_request_flow_test uses for its unreachable-provider case.
+      {:ok, unresolvable} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: "Unresolvable Movie",
+          tmdb_id: MetadataStubProvider.missing_id(),
+          requester_id: guest.id
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+      open_approve(view, unresolvable)
+
+      html =
+        view
+        |> form("#approve-form", %{
+          "approve" => %{"admin_notes" => "keep me"},
+          "config" => %{
+            "library_path_id" => library.id,
+            "quality_profile_id" => profile.id,
+            "monitored" => "false",
+            "search_on_add" => "false"
+          }
+        })
+        |> render_submit()
+
+      assert html =~ "Could not reach the metadata service"
+      assert MediaRequests.get_request!(unresolvable.id).status == "pending"
+
+      # The dialog is still open, still showing what was picked.
+      assert has_element?(view, "#approve-form")
+      assert has_element?(view, ~s(option[value="#{library.id}"][selected]))
+      assert has_element?(view, ~s(option[value="#{profile.id}"][selected]))
+    end
+  end
 end
