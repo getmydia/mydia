@@ -242,7 +242,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
     end
   end
 
-  # Matches the bare utility only, so "@lg/mfrow:btn-sm" does not count as
+  # Matches the bare utility only, so "@md/mfrow:btn-sm" does not count as
   # "btn-sm". Without this the refutes below pass on the broken markup.
   defp has_bare?(class, utility) do
     Regex.match?(~r/(^|\s)#{Regex.escape(utility)}(\s|$)/, class)
@@ -278,7 +278,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
       class = class_of(html, "#version-row-file-1")
 
       assert class =~ "flex-col"
-      assert class =~ "@lg/mfrow:flex-row"
+      assert class =~ "@md/mfrow:flex-row"
 
       refute class =~ "sm:",
              "at 1024px this column is 312px wide and sm: calls it wide"
@@ -287,7 +287,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
     test "action buttons stay full-size until the column is wide", %{html: html} do
       class = class_of(html, "#file-delete-file-1")
 
-      assert class =~ "@lg/mfrow:btn-sm"
+      assert class =~ "@md/mfrow:btn-sm"
       refute has_bare?(class, "btn-sm")
     end
 
@@ -309,11 +309,11 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
       html = section_html(media_item)
 
       row_class = class_of(html, "#extra-row-extra-1")
-      assert row_class =~ "@lg/mfrow:flex-row"
+      assert row_class =~ "@md/mfrow:flex-row"
       refute row_class =~ "sm:"
 
       button_class = class_of(html, "#promote-extra-1")
-      assert button_class =~ "@lg/mfrow:btn-sm"
+      assert button_class =~ "@md/mfrow:btn-sm"
       refute has_bare?(button_class, "btn-sm")
     end
   end

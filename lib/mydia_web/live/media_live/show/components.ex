@@ -546,10 +546,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           four lines. --%>
     <div
       id={"episode-file-row-#{@file.id}"}
-      class="flex flex-col gap-3 py-1 @lg/eprow:flex-row @lg/eprow:items-start @lg/eprow:justify-between @lg/eprow:gap-4"
+      class="flex flex-col gap-3 py-1 @md/eprow:flex-row @md/eprow:items-start @md/eprow:justify-between @md/eprow:gap-4"
     >
       <%!-- File info --%>
-      <div class="flex flex-col gap-1 min-w-0 @lg/eprow:flex-1">
+      <div class="flex flex-col gap-1 min-w-0 @md/eprow:flex-1">
         <%!-- Filename row --%>
         <div class="flex items-center gap-2 min-w-0">
           <.icon name="hero-document" class="w-4 h-4 text-base-content/50 flex-shrink-0" />
@@ -562,7 +562,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           </span>
         </div>
         <%!-- Technical details row --%>
-        <div class="flex flex-wrap items-center gap-1.5 pl-0 text-xs @lg/eprow:pl-6">
+        <div class="flex flex-wrap items-center gap-1.5 pl-0 text-xs @md/eprow:pl-6">
           <span class="badge badge-primary badge-xs">{@file.resolution || "?"}</span>
           <%= if @file.codec do %>
             <span class="text-base-content/60" title={@file.codec}>
@@ -591,7 +591,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           type="button"
           phx-click="open_subtitle_manage"
           phx-value-media-file-id={@file.id}
-          class="btn btn-ghost btn-square @lg/eprow:btn-xs"
+          class="btn btn-ghost btn-square @md/eprow:btn-xs"
           aria-label="Manage subtitles"
           title="Subtitles"
         >
@@ -607,7 +607,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <div
               tabindex="0"
               role="button"
-              class="btn btn-ghost btn-square @lg/eprow:btn-xs"
+              class="btn btn-ghost btn-square @md/eprow:btn-xs"
               title="Pre-transcode"
             >
               <.icon name="hero-wrench" class="w-4 h-4" />
@@ -634,7 +634,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             href={
               flutter_player_url("episode", @episode.id, file_id: @file.id, title: @episode.title)
             }
-            class="btn btn-ghost btn-square @lg/eprow:btn-xs"
+            class="btn btn-ghost btn-square @md/eprow:btn-xs"
             title="Play this file"
           >
             <.icon name="hero-play-solid" class="w-4 h-4" />
@@ -644,7 +644,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           type="button"
           phx-click="mark_file_preferred"
           phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-square @lg/eprow:btn-xs"
+          class="btn btn-ghost btn-square @md/eprow:btn-xs"
           title="Mark as preferred"
         >
           <.icon name="hero-star" class="w-4 h-4" />
@@ -654,7 +654,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           type="button"
           phx-click="show_file_delete_confirm"
           phx-value-file-id={@file.id}
-          class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @lg/eprow:btn-xs"
+          class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @md/eprow:btn-xs"
           title="Delete file"
         >
           <.icon name="hero-trash" class="w-4 h-4" />
@@ -663,7 +663,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
     </div>
     <%!-- Transcode job badges --%>
     <%= if @transcode_jobs != [] do %>
-      <div class="flex flex-wrap items-center gap-2 pl-0 mt-1 @lg/eprow:pl-6">
+      <div class="flex flex-wrap items-center gap-2 pl-0 mt-1 @md/eprow:pl-6">
         <.transcode_badge
           :for={job <- @transcode_jobs}
           job={job}
@@ -783,10 +783,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               <div class="min-w-0 items-stretch flex flex-col gap-3 p-4 hover:bg-base-200 rounded-none transition-colors">
                 <div
                   id={"version-row-#{file.id}"}
-                  class="min-w-0 flex flex-col gap-3 @lg/mfrow:flex-row @lg/mfrow:items-start @lg/mfrow:justify-between @lg/mfrow:gap-4"
+                  class="min-w-0 flex flex-col gap-3 @md/mfrow:flex-row @md/mfrow:items-start @md/mfrow:justify-between @md/mfrow:gap-4"
                 >
                   <%!-- Left side: File info --%>
-                  <div class="min-w-0 @lg/mfrow:flex-1 flex flex-col gap-2">
+                  <div class="min-w-0 @md/mfrow:flex-1 flex flex-col gap-2">
                     <%!-- File name. The full path lives on the title attribute
                           and in the file details modal. Rendered here it left
                           about 90px of column beside the button strip on a
@@ -842,7 +842,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="open_subtitle_manage"
                       phx-value-media-file-id={file.id}
-                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label="Manage subtitles"
                       title="Subtitles"
                     >
@@ -858,7 +858,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                         <div
                           tabindex="0"
                           role="button"
-                          class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
+                          class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                           title="Pre-transcode"
                         >
                           <.icon name="hero-wrench" class="w-5 h-5" />
@@ -884,7 +884,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="show_file_details"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label="View file details"
                       title="View file details"
                     >
@@ -894,7 +894,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="mark_file_preferred"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label="Mark this file as preferred"
                       title="Mark as preferred"
                     >
@@ -909,7 +909,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="not_this_item"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label={
                         if @media_item.type == "movie",
                           do: "This file is not this movie",
@@ -928,7 +928,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       type="button"
                       phx-click="show_file_delete_confirm"
                       phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @lg/mfrow:btn-sm"
+                      class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @md/mfrow:btn-sm"
                       aria-label="Delete this file"
                       title="Delete file"
                     >
@@ -940,7 +940,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                     <button
                       id={"demote-#{file.id}"}
                       type="button"
-                      class="btn btn-ghost btn-square @lg/mfrow:btn-sm"
+                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
                       aria-label="Move this file to extras"
                       title="This is an extra, not a version"
                       phx-click="demote_to_extra"
@@ -971,9 +971,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               <li :for={file <- @extras} id={"extra-#{file.id}"} class="min-w-0 flex-nowrap">
                 <div
                   id={"extra-row-#{file.id}"}
-                  class="min-w-0 items-stretch flex flex-col gap-2 p-4 rounded-none @lg/mfrow:flex-row @lg/mfrow:items-center @lg/mfrow:justify-between @lg/mfrow:gap-4"
+                  class="min-w-0 items-stretch flex flex-col gap-2 p-4 rounded-none @md/mfrow:flex-row @md/mfrow:items-center @md/mfrow:justify-between @md/mfrow:gap-4"
                 >
-                  <div class="min-w-0 @lg/mfrow:flex-1 flex flex-col gap-1">
+                  <div class="min-w-0 @md/mfrow:flex-1 flex flex-col gap-1">
                     <p
                       id={"extra-name-#{file.id}"}
                       class="text-sm font-mono truncate"
@@ -992,7 +992,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                   <button
                     id={"promote-#{file.id}"}
                     type="button"
-                    class="btn btn-ghost self-end @lg/mfrow:self-auto @lg/mfrow:btn-sm"
+                    class="btn btn-ghost self-end @md/mfrow:self-auto @md/mfrow:btn-sm"
                     title="This is a version, not an extra"
                     phx-click="promote_to_version"
                     phx-value-id={file.id}

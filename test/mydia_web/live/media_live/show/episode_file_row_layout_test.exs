@@ -77,7 +77,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFileRowLayoutTest do
     class
   end
 
-  # Matches the bare utility only, so "@lg/eprow:btn-xs" does not count as
+  # Matches the bare utility only, so "@md/eprow:btn-xs" does not count as
   # "btn-xs". Without this every assertion below passes on the broken markup.
   defp has_bare?(class, utility) do
     Regex.match?(~r/(^|\s)#{Regex.escape(utility)}(\s|$)/, class)
@@ -96,8 +96,8 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFileRowLayoutTest do
       class = class_of(render_expanded(), "#episode-file-row-file-1")
 
       assert class =~ "flex-col"
-      assert class =~ "@lg/eprow:flex-row"
-      assert class =~ "@lg/eprow:justify-between"
+      assert class =~ "@md/eprow:flex-row"
+      assert class =~ "@md/eprow:justify-between"
     end
 
     test "carries no viewport breakpoint, which is the whole point" do
@@ -112,7 +112,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFileRowLayoutTest do
     test "gives the action buttons a full-size tap target until the column is wide" do
       class = class_of(render_expanded(), "#subtitle-open-file-1")
 
-      assert class =~ "@lg/eprow:btn-xs"
+      assert class =~ "@md/eprow:btn-xs"
 
       refute has_bare?(class, "btn-xs"),
              "btn-xs unconditionally is a 24px target on a phone"
@@ -122,7 +122,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFileRowLayoutTest do
       class = class_of(render_expanded(), "#episode-ep-1-detail")
 
       assert class =~ "ml-2"
-      assert class =~ "@lg/eprow:ml-8"
+      assert class =~ "@md/eprow:ml-8"
 
       refute has_bare?(class, "ml-8"),
              "a 32px indent is 8.5% of a 375px screen"

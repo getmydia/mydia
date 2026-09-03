@@ -153,8 +153,8 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
       [class] =
         html |> query("#episode-ep-1-grid") |> LazyHTML.attribute("class")
 
-      assert class =~ "@lg/eprow:grid"
-      assert class =~ "@lg/eprow:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
+      assert class =~ "@md/eprow:grid"
+      assert class =~ "@md/eprow:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
 
       refute class =~ "sm:",
              "at 1024px the drawer and rail leave this column 328px wide, " <>

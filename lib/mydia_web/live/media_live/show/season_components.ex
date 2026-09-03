@@ -176,11 +176,11 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           id={"episode-#{episode.id}-grid"}
           class={[
             "flex flex-col gap-1",
-            "@lg/eprow:grid @lg/eprow:items-center @lg/eprow:gap-x-3 @lg/eprow:gap-y-0",
-            "@lg/eprow:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
+            "@md/eprow:grid @md/eprow:items-center @md/eprow:gap-x-3 @md/eprow:gap-y-0",
+            "@md/eprow:grid-cols-[2.75rem_minmax(0,1fr)_3.5rem_5.5rem_1.5rem_auto]"
           ]}
         >
-          <div class="flex items-center gap-1 flex-1 min-w-0 @lg/eprow:contents">
+          <div class="flex items-center gap-1 flex-1 min-w-0 @md/eprow:contents">
             <%!-- Chevron and number share one cell so they stay a single
                   toggle_episode_expanded target. ml-auto right-aligns the number,
                   which keeps two- and three-digit episodes in column: the chunk
@@ -193,7 +193,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   disclosure is reachable by keyboard. --%>
             <button
               type="button"
-              class="flex items-center gap-1 flex-shrink-0 @lg/eprow:w-full cursor-pointer hover:text-primary"
+              class="flex items-center gap-1 flex-shrink-0 @md/eprow:w-full cursor-pointer hover:text-primary"
               phx-click="toggle_episode_expanded"
               phx-value-episode-id={episode.id}
               aria-expanded={to_string(is_expanded)}
@@ -203,7 +203,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                 name={if is_expanded, do: "hero-chevron-down", else: "hero-chevron-right"}
                 class="w-3 h-3 text-base-content/40"
               />
-              <span class="font-mono text-sm font-medium text-base-content/70 tabular-nums @lg/eprow:ml-auto">
+              <span class="font-mono text-sm font-medium text-base-content/70 tabular-nums @md/eprow:ml-auto">
                 {episode.episode_number}
               </span>
             </button>
@@ -224,19 +224,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             </button>
           </div>
 
-          <div class="flex items-center justify-between gap-2 @lg/eprow:contents">
-            <div class="flex items-center gap-2 @lg/eprow:contents">
-              <div class="flex items-center @lg/eprow:justify-end">
+          <div class="flex items-center justify-between gap-2 @md/eprow:contents">
+            <div class="flex items-center gap-2 @md/eprow:contents">
+              <div class="flex items-center @md/eprow:justify-end">
                 <span :if={quality} class="badge badge-sm badge-ghost font-mono tabular-nums">
                   {quality}
                 </span>
               </div>
-              <div class="text-xs text-base-content/50 tabular-nums @lg/eprow:text-right">
+              <div class="text-xs text-base-content/50 tabular-nums @md/eprow:text-right">
                 {episode.air_date && format_date(episode.air_date)}
               </div>
             </div>
 
-            <div class="flex items-center gap-2 @lg/eprow:contents">
+            <div class="flex items-center gap-2 @md/eprow:contents">
               <%!-- A 16px dot of colour, at every width. A visible state label
                     repeated down 170 rows is noise, and the row already says it
                     twice: the left border is green when files exist, and the
@@ -247,7 +247,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     The tooltip wraps the chip from the outside, never a
                     join-item. --%>
               <div
-                class="tooltip tooltip-left @lg/eprow:justify-self-end"
+                class="tooltip tooltip-left @md/eprow:justify-self-end"
                 data-tip={episode_status_tooltip(episode)}
               >
                 <span
@@ -263,7 +263,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     the container because btn-ghost has no border of its own and
                     the first item varies: the play slot is absent whenever
                     playback is off. --%>
-              <div class="flex-shrink-0 @lg/eprow:justify-self-end @lg/eprow:border-l @lg/eprow:border-base-300 @lg/eprow:pl-3">
+              <div class="flex-shrink-0 @md/eprow:justify-self-end @md/eprow:border-l @md/eprow:border-base-300 @md/eprow:pl-3">
                 <div
                   id={"episode-#{episode.id}-actions"}
                   class="join border border-base-300 rounded-lg [&>*:not(:first-child)]:border-l [&>*:not(:first-child)]:border-base-300"
@@ -355,7 +355,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         </div>
 
         <%= if is_expanded do %>
-          <div id={"episode-#{episode.id}-detail"} class="mt-2 ml-2 @lg/eprow:ml-8 space-y-1">
+          <div id={"episode-#{episode.id}-detail"} class="mt-2 ml-2 @md/eprow:ml-8 space-y-1">
             <%= if has_files do %>
               <div :for={file <- episode.media_files} class="bg-base-200/50 rounded p-2">
                 <Components.episode_file_row
