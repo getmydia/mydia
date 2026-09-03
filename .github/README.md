@@ -250,11 +250,18 @@ opts-arity of a live `count_books/0` and cannot be deleted. Ignores are
 rule-shaped, as regexes or predicates, in `mix.exs`'s `unused_ignore/0`, including
 a behaviour-callback predicate `MydiaQuality.behaviour_callback?/1`.
 
-Three gotchas around it:
+Four gotchas around it:
 
 - The mix_unused `:unused` compiler must be prepended (`[:unused | base]`).
   Appending (`base ++ [:unused]`) produces no report in this version. It is gated
   to `Mix.env() in [:dev, :test]` and `UNUSED_CHECK=true`.
+- The report runs on master pushes only, not on pull requests. It recompiles all
+  765 files a second time and cost 199s of every run, measured 2026-09-03, for
+  output nothing is gated on. `ci.yml` gates it on `GITHUB_EVENT_NAME` inside the
+  `devenv shell` heredoc rather than with a step-level `if:`, because splitting
+  the heredoc evaluates the devenv environment twice and costs more than it
+  saves. Run it yourself with
+  `UNUSED_CHECK=true ./dev mix compile --force`.
 - Build-time helper modules referenced by `mix.exs` must be inlined in `mix.exs`
   rather than kept in a separate root file. The Docker build's
   `mix deps.get --only prod` layer copies only `mix.exs` and `mix.lock`, so a

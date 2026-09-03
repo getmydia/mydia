@@ -268,10 +268,28 @@ jobs:
           fi
           mix credo --strict
           # Advisory dead-code report (non-blocking; see CONTRIBUTING.md "Quality gates").
-          UNUSED_CHECK=true mix compile --force || true
+          #
+          # This recompiles all 765 files a second time and cost 199s of every
+          # run, measured 2026-09-03. Nothing is ever gated on its output --
+          # .github/README.md records that mix_unused is advisory by design and
+          # must not be promoted to blocking -- so pull requests skip it and
+          # master pushes still produce the report.
+          #
+          # The gate is here rather than a step-level `if:` because splitting
+          # this heredoc would evaluate the devenv environment a second time and
+          # cost more than the 199s it saves.
+          if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
+            UNUSED_CHECK=true mix compile --force || true
+          fi
           mix ecto.create
           mix ecto.migrate
-          mix test --cover
+          # --slowest-modules is the load-bearing one: `mix help test` notes it
+          # "Includes time spent in ExUnit.Callbacks.setup/1", which is where
+          # per-test fixture cost hides. Both flags exist on the pinned Elixir
+          # 1.19.5 (--slowest-modules since 1.17.0) and cost nothing to run.
+          # This is what makes the next slowdown visible before the suite
+          # doubles again.
+          mix test --cover --slowest 30 --slowest-modules 10
           DEVENV
 
   rust:
@@ -423,7 +441,8 @@ jobs:
           mix ecto.create
           mix ecto.migrate
           mix ecto.migrations
-          mix test --cover
+          # See the `test` job for why the slowest-test flags are on.
+          mix test --cover --slowest 30 --slowest-modules 10
           DEVENV
 
   test-e2e:
