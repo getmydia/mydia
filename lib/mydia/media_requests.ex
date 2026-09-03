@@ -17,6 +17,7 @@ defmodule Mydia.MediaRequests do
   alias Mydia.Repo
   alias Mydia.Media
   alias Mydia.Media.Add
+  alias Mydia.Media.MediaItem
   alias Mydia.Media.MediaRequest
   alias Mydia.Search
   alias Ecto.Multi
@@ -160,8 +161,11 @@ defmodule Mydia.MediaRequests do
       case Add.from_attrs(
              media_attrs,
              opts[:config],
-             [actor_type: :user, actor_id: attrs[:approved_by_id]] ++
-               Keyword.take(opts, [:season_monitoring])
+             [
+               actor_type: :user,
+               actor_id: attrs[:approved_by_id],
+               exclude_request_id: request.id
+             ] ++ Keyword.take(opts, [:season_monitoring])
            ) do
         {:ok, media_item} ->
           {:ok, %{item: media_item, created?: true}}
@@ -276,6 +280,120 @@ defmodule Mydia.MediaRequests do
   defp pending_tvdb_request_exists?(tvdb_id) do
     MediaRequest
     |> where([r], r.tvdb_id == ^tvdb_id and r.status == "pending")
+    |> Repo.exists?()
+  end
+
+  @doc """
+  Automatically approves any pending requests matching the given media item.
+
+  Finds pending requests matching the media item's type (`movie` or `tv_show`)
+  and any matching external IDs (`tmdb_id`, `tvdb_id`, or `imdb_id`).
+  Links each request to the media item, stamps approval time, and records
+  the approver if an actor user ID was provided.
+
+  ## Options
+    - `:actor_type` - `:user` or `:system`
+    - `:actor_id` - ID of the actor (if a valid user UUID, recorded as approved_by_id)
+    - `:approved_by_id` - Explicit user ID to attribute approval to
+    - `:exclude_request_id` - Optional request ID to skip (used during manual approval)
+    - `:admin_notes` - Optional admin notes (defaults to "Automatically approved: title added to library")
+  """
+  @spec auto_approve_matching_requests(MediaItem.t(), keyword()) ::
+          {:ok, [MediaRequest.t()]} | {:error, term()}
+  def auto_approve_matching_requests(%MediaItem{} = media_item, opts \\ []) do
+    requests = list_pending_matching_requests(media_item, opts)
+
+    approved_by_id = resolve_approved_by_id(opts)
+
+    default_notes =
+      Keyword.get(opts, :admin_notes, "Automatically approved: title added to library")
+
+    results =
+      Enum.reduce_while(requests, {:ok, []}, fn request, {:ok, acc} ->
+        attrs = %{
+          media_item_id: media_item.id,
+          approved_by_id: approved_by_id,
+          admin_notes: request.admin_notes || default_notes
+        }
+
+        case request
+             |> MediaRequest.auto_approve_changeset(attrs)
+             |> Repo.update() do
+          {:ok, updated} ->
+            Logger.info(
+              "Auto-approved request #{request.id} for media #{media_item.id} (#{media_item.title})"
+            )
+
+            {:cont, {:ok, [updated | acc]}}
+
+          {:error, changeset} ->
+            Logger.error(
+              "Failed to auto-approve request #{request.id}: #{inspect(changeset.errors)}"
+            )
+
+            {:halt, {:error, changeset}}
+        end
+      end)
+
+    case results do
+      {:ok, approved_list} -> {:ok, Enum.reverse(approved_list)}
+      error -> error
+    end
+  end
+
+  @doc """
+  Lists pending requests matching a media item's type and external IDs.
+  """
+  @spec list_pending_matching_requests(MediaItem.t(), keyword()) :: [MediaRequest.t()]
+  def list_pending_matching_requests(%MediaItem{} = media_item, opts \\ []) do
+    dynamic_cond =
+      false
+      |> maybe_or_match_id(:tmdb_id, media_item.tmdb_id)
+      |> maybe_or_match_id(:tvdb_id, media_item.tvdb_id)
+      |> maybe_or_match_id(:imdb_id, media_item.imdb_id)
+
+    if dynamic_cond == false do
+      []
+    else
+      query =
+        from r in MediaRequest,
+          where: r.status == "pending" and r.media_type == ^media_item.type,
+          where: ^dynamic_cond
+
+      query =
+        case opts[:exclude_request_id] do
+          nil -> query
+          exclude_id -> where(query, [r], r.id != ^exclude_id)
+        end
+
+      Repo.all(query)
+    end
+  end
+
+  defp maybe_or_match_id(dynamic, _field, nil), do: dynamic
+  defp maybe_or_match_id(false, :tmdb_id, val), do: dynamic([r], r.tmdb_id == ^val)
+  defp maybe_or_match_id(dynamic, :tmdb_id, val), do: dynamic([r], ^dynamic or r.tmdb_id == ^val)
+  defp maybe_or_match_id(false, :tvdb_id, val), do: dynamic([r], r.tvdb_id == ^val)
+  defp maybe_or_match_id(dynamic, :tvdb_id, val), do: dynamic([r], ^dynamic or r.tvdb_id == ^val)
+  defp maybe_or_match_id(false, :imdb_id, val), do: dynamic([r], r.imdb_id == ^val)
+  defp maybe_or_match_id(dynamic, :imdb_id, val), do: dynamic([r], ^dynamic or r.imdb_id == ^val)
+
+  defp resolve_approved_by_id(opts) do
+    cond do
+      is_binary(opts[:approved_by_id]) and user_exists?(opts[:approved_by_id]) ->
+        opts[:approved_by_id]
+
+      opts[:actor_type] == :user and is_binary(opts[:actor_id]) and user_exists?(opts[:actor_id]) ->
+        opts[:actor_id]
+
+      true ->
+        nil
+    end
+  end
+
+  defp user_exists?(user_id) do
+    Mydia.Accounts.User
+    |> where([u], u.id == ^user_id)
     |> Repo.exists?()
   end
 end

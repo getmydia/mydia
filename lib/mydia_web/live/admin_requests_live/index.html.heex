@@ -84,7 +84,11 @@
                 <.icon name="hero-check-circle" class="w-4 h-4 mt-0.5" />
                 <div>
                   <div>
-                    Approved by {request.approved_by.email} on {format_date(request.approved_at)}
+                    <%= if request.approved_by do %>
+                      Approved by {request.approved_by.email} on {format_date(request.approved_at)}
+                    <% else %>
+                      Approved automatically on {format_date(request.approved_at)}
+                    <% end %>
                   </div>
                   <div :if={request.admin_notes} class="text-xs mt-1">
                     Admin notes: {request.admin_notes}

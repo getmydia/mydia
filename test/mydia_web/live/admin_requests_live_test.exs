@@ -192,4 +192,42 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
       assert has_element?(view, ~s(option[value="#{profile.id}"][selected]))
     end
   end
+
+  describe "rendering auto-approved requests" do
+    test "renders approved request without approved_by user safely", %{
+      conn: conn,
+      guest: guest
+    } do
+      {:ok, req} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: "Auto-Approved Movie",
+          tmdb_id: 112_233,
+          requester_id: guest.id
+        })
+
+      library = library_path_fixture(%{type: "movies"})
+
+      media_item =
+        %Mydia.Media.MediaItem{}
+        |> Mydia.Media.MediaItem.changeset(%{
+          type: "movie",
+          title: "Auto-Approved Movie",
+          year: 2024,
+          tmdb_id: 112_233,
+          library_path_id: library.id,
+          monitored: true
+        })
+        |> Mydia.Repo.insert!()
+
+      {:ok, [approved]} = MediaRequests.auto_approve_matching_requests(media_item)
+      assert approved.id == req.id
+      assert approved.approved_by_id == nil
+
+      {:ok, view, _html} = live(conn, ~p"/admin/requests?status=approved")
+      rendered = render(view)
+      assert rendered =~ "Auto-Approved Movie"
+      assert rendered =~ "Approved automatically on"
+    end
+  end
 end

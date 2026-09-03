@@ -22,7 +22,13 @@ defmodule Mydia.Media.Add do
   alias Mydia.Settings
 
   # Options consumed by `Media.create_media_item/2` rather than by attrs building.
-  @create_opt_keys [:actor_type, :actor_id, :skip_episode_refresh, :season_monitoring]
+  @create_opt_keys [
+    :actor_type,
+    :actor_id,
+    :skip_episode_refresh,
+    :season_monitoring,
+    :exclude_request_id
+  ]
 
   @type error ::
           {:metadata, term()}

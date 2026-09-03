@@ -11,6 +11,7 @@ defmodule Mydia.Media do
   alias Mydia.Media.Structs.CalendarEntry
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Events
+  alias Mydia.MediaRequests
 
   ## Media Items
 
@@ -347,6 +348,14 @@ defmodule Mydia.Media do
       # (Mydia.Plugins.Dispatcher), which replaced the Luerl after_media_added
       # hook (U11). No explicit hook call is needed here.
       Events.media_item_added(media_item, actor_type, actor_id)
+
+      # Auto-approve any pending media requests matching this item
+      MediaRequests.auto_approve_matching_requests(
+        media_item,
+        actor_type: actor_type,
+        actor_id: actor_id,
+        exclude_request_id: Keyword.get(opts, :exclude_request_id)
+      )
 
       # For TV shows, automatically fetch episodes unless explicitly skipped
       if media_item.type == "tv_show" and not Keyword.get(opts, :skip_episode_refresh, false) do

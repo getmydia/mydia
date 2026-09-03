@@ -73,6 +73,23 @@ defmodule MydiaWeb.GuestRequestFlowTest do
     end
   end
 
+  defp wait_until_media_item(clause, retries \\ 200)
+
+  defp wait_until_media_item(clause, 0) do
+    flunk("no MediaItem matching #{inspect(clause)} was created in time")
+  end
+
+  defp wait_until_media_item(clause, retries) do
+    case Repo.get_by(Media.MediaItem, clause) do
+      nil ->
+        Process.sleep(10)
+        wait_until_media_item(clause, retries - 1)
+
+      media_item ->
+        media_item
+    end
+  end
+
   describe "movie request lifecycle" do
     test "guest submits a movie request and an admin approves it into the library",
          %{conn: conn, guest: guest, admin: admin} do
@@ -128,6 +145,57 @@ defmodule MydiaWeb.GuestRequestFlowTest do
       assert media_item.type == "movie"
       assert media_item.title == MetadataStubProvider.movie_title()
       assert media_item.tmdb_id == MetadataStubProvider.movie_tmdb_id()
+    end
+
+    test "guest submits a movie request and an admin adding it via Discover auto-approves it",
+         %{conn: conn, guest: guest, admin: admin} do
+      # --- Guest submits request ---
+      warm_genre_cache(:movie, [])
+      {:ok, view, _html} = live(guest_conn(conn, guest), ~p"/discover?type=movie&q=stub")
+
+      view
+      |> element(
+        ~s(button[phx-click="request_media"][phx-value-ref="tmdb:#{MetadataStubProvider.movie_tmdb_id()}"])
+      )
+      |> render_click()
+
+      request = wait_until_request(tmdb_id: MetadataStubProvider.movie_tmdb_id())
+      assert request.status == "pending"
+
+      # --- Admin adds movie via Discover ---
+      {:ok, admin_discover, _html} =
+        live(admin_conn(conn, admin), ~p"/discover?type=movie&q=stub")
+
+      admin_discover
+      |> element(
+        ~s(button[phx-click="add_to_library"][phx-value-ref="tmdb:#{MetadataStubProvider.movie_tmdb_id()}"])
+      )
+      |> render_click()
+
+      # Wait for media item creation
+      media_item =
+        wait_until_media_item(
+          type: "movie",
+          tmdb_id: MetadataStubProvider.movie_tmdb_id()
+        )
+
+      # Request should now be auto-approved and linked
+      approved = Repo.get!(MediaRequest, request.id)
+      assert approved.status == "approved"
+      assert approved.approved_by_id == admin.id
+      assert approved.media_item_id == media_item.id
+      refute is_nil(approved.approved_at)
+
+      # --- Admin requests page shows it under approved, not pending ---
+      {:ok, admin_requests, _html} = live(admin_conn(conn, admin), ~p"/admin/requests")
+      refute render(admin_requests) =~ "request-#{request.id}"
+
+      {:ok, approved_view, _html} =
+        live(admin_conn(conn, admin), ~p"/admin/requests?status=approved")
+
+      html = render(approved_view)
+      assert html =~ "request-#{request.id}"
+      assert html =~ admin.email
     end
   end
 

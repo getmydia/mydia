@@ -537,6 +537,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp presence(value), do: value
 
   defp add_with_opts(ref, media_type, opts, socket) do
+    opts =
+      opts
+      |> Keyword.put_new(:actor_type, :user)
+      |> Keyword.put_new(:actor_id, socket.assigns.current_user.id)
+
     case MediaAddHelpers.handle_add_media_to_library(
            ref,
            media_type,

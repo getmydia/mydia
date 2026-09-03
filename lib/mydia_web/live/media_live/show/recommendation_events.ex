@@ -133,6 +133,15 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
       media_item = socket.assigns.media_item
       config = socket.assigns.metadata_config
 
+      opts =
+        if socket.assigns[:current_user] do
+          opts
+          |> Keyword.put_new(:actor_type, :user)
+          |> Keyword.put_new(:actor_id, socket.assigns.current_user.id)
+        else
+          opts
+        end
+
       socket =
         socket
         |> mark_in_flight(tmdb_id)
