@@ -407,14 +407,7 @@ defmodule Mydia.P2p.Server do
       build_graphql_context(req.auth_token, :p2p, peer_connection_type, req.device_profile)
 
     # Execute the GraphQL query with logging
-    result =
-      GraphQLLogging.run(
-        req.query,
-        MydiaWeb.Schema,
-        variables: variables,
-        operation_name: req.operation_name,
-        context: context
-      )
+    result = run_graphql(req.query, variables, req.operation_name, context)
 
     response =
       case result do
@@ -450,6 +443,48 @@ defmodule Mydia.P2p.Server do
 
     P2p.send_response(state.resource, request_id, {:graphql, response})
     {:noreply, state}
+  end
+
+  @doc """
+  Runs a GraphQL document on behalf of a peer, turning a crashing resolver into
+  an error result.
+
+  Public, and taking `schema`, only so the regression test can drive it without
+  a live NIF resource and against resolvers that fail on purpose.
+
+  Absinthe lets an exception raised by a resolver escape to whoever called it,
+  and here that caller is the `Mydia.P2p.Server` process itself. An escaping
+  exception therefore did not fail one query, it killed the P2P host: the
+  supervisor rebuilt the endpoint, every paired player lost its connection and
+  had to redial, and the operator saw the node "reconnect" for no visible
+  reason. Production took three such restarts in a single week, from
+  `updateEpisodeProgress` and `updateMovieProgress` meeting
+  `Exqlite.Error: Database busy` under a concurrent write.
+
+  One peer's failing request is not a reason to disconnect every other peer, so
+  the failure is logged with its stacktrace, reported to the peer that caused
+  it, and the host stays up.
+  """
+  def run_graphql(query, variables, operation_name, context, schema \\ MydiaWeb.Schema) do
+    GraphQLLogging.run(
+      query,
+      schema,
+      variables: variables,
+      operation_name: operation_name,
+      context: context
+    )
+  rescue
+    exception ->
+      Logger.error(
+        "P2P GraphQL request crashed: " <>
+          Exception.format(:error, exception, __STACKTRACE__)
+      )
+
+      {:error, Exception.message(exception)}
+  catch
+    kind, reason ->
+      Logger.error("P2P GraphQL request #{kind}: #{inspect(reason)}")
+      {:error, "GraphQL execution #{kind}: #{inspect(reason)}"}
   end
 
   defp stream_hls_response(resource, stream_id, req) do
