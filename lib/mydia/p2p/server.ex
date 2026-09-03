@@ -507,7 +507,11 @@ defmodule Mydia.P2p.Server do
       {:error, Exception.message(exception)}
   catch
     kind, reason ->
-      Logger.error("P2P GraphQL request #{kind}: #{inspect(reason)}")
+      Logger.error(
+        "P2P GraphQL request #{kind}: " <>
+          Exception.format(kind, reason, __STACKTRACE__)
+      )
+
       {:error, "GraphQL execution #{kind}: #{inspect(reason)}"}
   end
 
@@ -549,7 +553,11 @@ defmodule Mydia.P2p.Server do
             {:error, "Request failed: #{Exception.message(exception)}"}
         catch
           kind, reason ->
-            Logger.error("P2P #{describe} #{kind}: #{inspect(reason)}")
+            Logger.error(
+              "P2P #{describe} #{kind}: " <>
+                Exception.format(kind, reason, __STACKTRACE__)
+            )
+
             {:error, "Request failed: #{inspect(reason)}"}
         end
 
