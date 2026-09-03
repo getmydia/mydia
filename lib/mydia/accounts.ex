@@ -13,7 +13,7 @@ defmodule Mydia.Accounts do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter}
+  alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter, Avatar}
 
   @changelog_key "last_seen_changelog_version"
   @anime_nudge_key "anime_nudge_dismissed"
@@ -370,6 +370,12 @@ defmodule Mydia.Accounts do
   def change_profile(%User{} = user, attrs \\ %{}) do
     User.profile_changeset(user, attrs)
   end
+
+  @doc """
+  Deletes the user's avatar image file from disk if it was an uploaded avatar.
+  """
+  def delete_avatar_file(%User{avatar_url: avatar_url}), do: delete_avatar_file(avatar_url)
+  def delete_avatar_file(avatar_url), do: Avatar.delete_avatar_file(avatar_url)
 
   @doc """
   Changes a user's password with current password verification.
