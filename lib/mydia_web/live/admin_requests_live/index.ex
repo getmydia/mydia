@@ -2,8 +2,13 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
   use MydiaWeb, :live_view
 
   import MydiaWeb.MediaRequestComponents
+  import MydiaWeb.AddMediaComponents
 
+  alias Mydia.Media.AddDefaults
+  alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
+  alias Mydia.Settings
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   require Logger
 
@@ -21,6 +26,8 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
      |> assign(:detail_item, nil)
      |> assign(:detail_metadata, nil)
      |> assign(:detail_loading, false)
+     |> assign(:approve_config, nil)
+     |> assign(:quality_profiles, Settings.list_quality_profiles())
      |> load_requests()}
   end
 
@@ -44,14 +51,16 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
      |> close_details()
      |> assign(:show_approve_modal, true)
      |> assign(:selected_request, request)
-     |> assign_approve_form()}
+     |> assign_approve_form()
+     |> assign_approve_config(request)}
   end
 
   def handle_event("close_approve_modal", _params, socket) do
     {:noreply,
      socket
      |> assign(:show_approve_modal, false)
-     |> assign(:selected_request, nil)}
+     |> assign(:selected_request, nil)
+     |> assign(:approve_config, nil)}
   end
 
   def handle_event("open_reject_modal", %{"id" => id}, socket) do
@@ -314,6 +323,21 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
       )
 
     assign(socket, :approve_form, to_form(changeset, as: :approve))
+  end
+
+  # Built at open time, not at mount: a library added or unmonitored since the
+  # admin loaded the page must not appear as a stale option, and one deleted
+  # since must not still be offered. Defaults come from the approving admin,
+  # not the requester -- the preference in play is which disk files land on,
+  # and that is the admin's server.
+  defp assign_approve_config(socket, request) do
+    media_type = MediaRequest.media_type_atom(request)
+
+    assign(socket, :approve_config, %{
+      media_type: media_type,
+      defaults: AddDefaults.resolve(socket.assigns.current_user, media_type),
+      libraries: MediaAddHelpers.candidate_libraries(media_type)
+    })
   end
 
   defp assign_reject_form(socket) do

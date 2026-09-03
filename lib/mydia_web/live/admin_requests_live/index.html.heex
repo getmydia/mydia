@@ -180,7 +180,7 @@
     <%!-- Approve Modal --%>
     <%= if @show_approve_modal and @selected_request do %>
       <div class="modal modal-open">
-        <div class="modal-box max-w-lg">
+        <div class="modal-box max-w-2xl">
           <h3 class="font-bold text-lg mb-4">Approve Request</h3>
           <div class="alert alert-success mb-4">
             <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -195,6 +195,11 @@
             phx-submit="submit_approve"
             id="approve-form"
           >
+            <.add_config_fields
+              :if={@approve_config}
+              config={@approve_config}
+              quality_profiles={@quality_profiles}
+            />
             <div class="form-control mb-4">
               <label class="label">
                 <span class="label-text font-semibold">Admin Notes (Optional)</span>
@@ -209,7 +214,11 @@
               <button type="button" class="btn btn-ghost" phx-click="close_approve_modal">
                 Cancel
               </button>
-              <button type="submit" class="btn btn-success">
+              <button
+                type="submit"
+                class="btn btn-success"
+                disabled={@approve_config && @approve_config.libraries == []}
+              >
                 <.icon name="hero-check" class="w-5 h-5" /> Approve & Add to Library
               </button>
             </div>
