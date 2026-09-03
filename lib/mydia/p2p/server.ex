@@ -249,22 +249,23 @@ defmodule Mydia.P2p.Server do
   def handle_info({:ok, "request_received", "pairing", request_id, req}, state) do
     Logger.info("P2P Request: Pairing from #{req.device_name}")
 
-    response =
-      if RemoteAccess.enabled?() do
-        handle_pairing_request(req)
-      else
-        Logger.info("P2P Request: Pairing refused, remote access is disabled")
+    serve_request(state.resource, request_id, "pairing", fn ->
+      response =
+        if RemoteAccess.enabled?() do
+          handle_pairing_request(req)
+        else
+          Logger.info("P2P Request: Pairing refused, remote access is disabled")
 
-        %P2p.PairingResponse{
-          success: false,
-          error: "Remote access is disabled on this server"
-        }
-      end
+          %P2p.PairingResponse{
+            success: false,
+            error: "Remote access is disabled on this server"
+          }
+        end
 
-    # Wrap in tagged enum tuple as expected by NIF
-    response_enum = {:pairing, response}
+      # Wrap in tagged enum tuple as expected by NIF
+      {:pairing, response}
+    end)
 
-    P2p.send_response(state.resource, request_id, response_enum)
     {:noreply, state}
   end
 
@@ -274,44 +275,48 @@ defmodule Mydia.P2p.Server do
   end
 
   def handle_info({:ok, "request_received", "read_media", request_id, req}, state) do
-    cond do
-      not RemoteAccess.enabled?() ->
-        P2p.send_response(state.resource, request_id, {:error, "Remote access is disabled"})
+    resource = state.resource
 
-      # Validate file path exists
-      # SECURITY: In production, verify path is within allowed directories!
-      File.exists?(req.file_path) ->
-        # Use the optimized NIF to read chunk and respond
-        P2p.respond_with_file_chunk(
-          state.resource,
-          request_id,
-          req.file_path,
-          req.offset,
-          req.length
-        )
+    serve_request(resource, request_id, "read_media", fn ->
+      cond do
+        not RemoteAccess.enabled?() ->
+          {:error, "Remote access is disabled"}
 
-      true ->
-        Logger.warning("Requested file not found: #{req.file_path}")
-        P2p.send_response(state.resource, request_id, {:error, "File not found"})
-    end
+        # Validate file path exists
+        # SECURITY: In production, verify path is within allowed directories!
+        File.exists?(req.file_path) ->
+          # Use the optimized NIF to read chunk and respond. It answers the
+          # peer itself, so there is no response left for `serve_request`
+          # to send.
+          P2p.respond_with_file_chunk(
+            resource,
+            request_id,
+            req.file_path,
+            req.offset,
+            req.length
+          )
+
+          :responded
+
+        true ->
+          Logger.warning("Requested file not found: #{req.file_path}")
+          {:error, "File not found"}
+      end
+    end)
 
     {:noreply, state}
   end
 
   def handle_info({:ok, "request_received", "graphql", request_id, req}, state) do
-    if RemoteAccess.enabled?() do
-      handle_graphql_request(request_id, req, state)
-    else
-      Logger.debug("P2P Request: GraphQL refused, remote access is disabled")
+    # Read what the request needs out of the GenServer's state here; the task
+    # below must not close over `state`.
+    peer_connection_type = infer_peer_connection_type(state.connected_peers)
 
-      response = %P2p.GraphQLResponse{
-        data: nil,
-        errors: encode_graphql_errors([%{message: "Remote access is disabled on this server"}])
-      }
+    serve_request(state.resource, request_id, "GraphQL request", fn ->
+      {:graphql, graphql_response(req, peer_connection_type)}
+    end)
 
-      P2p.send_response(state.resource, request_id, {:graphql, response})
-      {:noreply, state}
-    end
+    {:noreply, state}
   end
 
   def handle_info({:ok, "unknown_request"}, state) do
@@ -393,7 +398,28 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp handle_graphql_request(request_id, req, state) do
+  @doc """
+  Builds the response to one peer's GraphQL request, refusing it outright when
+  remote access is switched off.
+
+  Public for the same reason as `run_graphql/5`: this is the gate that keeps a
+  server with remote access disabled from answering peer queries at all, and it
+  is worth pinning without standing up a host and a NIF resource to reach it.
+  """
+  def graphql_response(req, peer_connection_type) do
+    if RemoteAccess.enabled?() do
+      run_graphql_request(req, peer_connection_type)
+    else
+      Logger.debug("P2P Request: GraphQL refused, remote access is disabled")
+
+      %P2p.GraphQLResponse{
+        data: nil,
+        errors: encode_graphql_errors([%{message: "Remote access is disabled on this server"}])
+      }
+    end
+  end
+
+  defp run_graphql_request(req, peer_connection_type) do
     Logger.debug("P2P Request: GraphQL query")
 
     # Parse variables from JSON
@@ -401,48 +427,46 @@ defmodule Mydia.P2p.Server do
 
     # Build context from auth token, marking source as p2p
     # Include peer connection type so resolvers can enforce relay caps
-    peer_connection_type = infer_peer_connection_type(state.connected_peers)
-
     context =
       build_graphql_context(req.auth_token, :p2p, peer_connection_type, req.device_profile)
 
     # Execute the GraphQL query with logging
     result = run_graphql(req.query, variables, req.operation_name, context)
 
-    response =
-      case result do
-        {:ok, %{data: data, errors: errors}} ->
-          %P2p.GraphQLResponse{
-            data: encode_json(data),
-            errors: encode_graphql_errors(errors)
-          }
+    build_graphql_response(result)
+  end
 
-        {:ok, %{data: data}} ->
-          %P2p.GraphQLResponse{
-            data: encode_json(data),
-            errors: nil
-          }
+  defp build_graphql_response(result) do
+    case result do
+      {:ok, %{data: data, errors: errors}} ->
+        %P2p.GraphQLResponse{
+          data: encode_json(data),
+          errors: encode_graphql_errors(errors)
+        }
 
-        # Query validation errors (no data key, only errors)
-        {:ok, %{errors: errors}} ->
-          Logger.warning("GraphQL validation error: #{inspect(errors)}")
+      {:ok, %{data: data}} ->
+        %P2p.GraphQLResponse{
+          data: encode_json(data),
+          errors: nil
+        }
 
-          %P2p.GraphQLResponse{
-            data: nil,
-            errors: encode_graphql_errors(errors)
-          }
+      # Query validation errors (no data key, only errors)
+      {:ok, %{errors: errors}} ->
+        Logger.warning("GraphQL validation error: #{inspect(errors)}")
 
-        {:error, reason} ->
-          Logger.warning("GraphQL execution failed: #{inspect(reason)}")
+        %P2p.GraphQLResponse{
+          data: nil,
+          errors: encode_graphql_errors(errors)
+        }
 
-          %P2p.GraphQLResponse{
-            data: nil,
-            errors: encode_json([%{message: inspect(reason)}])
-          }
-      end
+      {:error, reason} ->
+        Logger.warning("GraphQL execution failed: #{inspect(reason)}")
 
-    P2p.send_response(state.resource, request_id, {:graphql, response})
-    {:noreply, state}
+        %P2p.GraphQLResponse{
+          data: nil,
+          errors: encode_json([%{message: inspect(reason)}])
+        }
+    end
   end
 
   @doc """
@@ -485,6 +509,70 @@ defmodule Mydia.P2p.Server do
     kind, reason ->
       Logger.error("P2P GraphQL request #{kind}: #{inspect(reason)}")
       {:error, "GraphQL execution #{kind}: #{inspect(reason)}"}
+  end
+
+  # Serve one peer request off the GenServer, and answer it exactly once.
+  #
+  # `Mydia.P2p.Server` owns the NIF resource and every peer's connection
+  # state, so work it does inline in a callback is time the host spends
+  # answering nothing else: not another peer's query, not a `peer_connected`
+  # event. Worse, an exception raised inline does not fail that one request,
+  # it kills the host, and the supervisor's restart drops every paired player
+  # at once. Production took three such restarts in a week, all from GraphQL
+  # mutations. `stream_hls_response` has always spawned for the throughput
+  # half of this; the request handlers spawn for both halves.
+  #
+  # `fun` returns the tagged response tuple to send back, or `:responded` if
+  # it already answered the peer itself. Either way exactly one response goes
+  # out, including when `fun` raises: a peer that gets nothing back waits out
+  # the Rust core's 30s `RESPONSE_TIMEOUT` instead, which is a worse failure
+  # than an error it can act on immediately.
+  #
+  # The tasks run under `Mydia.P2p.RequestSupervisor`, which is bounded: iroh
+  # accepts an inbound connection on a matching ALPN alone, so a peer needs no
+  # credential to make the host spawn these. `start_child` is not linked to
+  # this process, so a task that dies despite the rescue below still cannot
+  # take the host with it, and past `max_children` the peer is refused outright
+  # rather than the host quietly accumulating work it will never finish.
+  defp serve_request(resource, request_id, describe, fun) do
+    task = fn ->
+      response =
+        try do
+          fun.()
+        rescue
+          exception ->
+            Logger.error(
+              "P2P #{describe} crashed: " <>
+                Exception.format(:error, exception, __STACKTRACE__)
+            )
+
+            {:error, "Request failed: #{Exception.message(exception)}"}
+        catch
+          kind, reason ->
+            Logger.error("P2P #{describe} #{kind}: #{inspect(reason)}")
+            {:error, "Request failed: #{inspect(reason)}"}
+        end
+
+      case response do
+        :responded -> :ok
+        response -> P2p.send_response(resource, request_id, response)
+      end
+    end
+
+    case Task.Supervisor.start_child(Mydia.P2p.RequestSupervisor, task) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, :max_children} ->
+        Logger.warning("P2P #{describe} refused: too many requests in flight")
+        P2p.send_response(resource, request_id, {:error, "Server busy, try again"})
+
+      {:error, reason} ->
+        Logger.error("P2P #{describe} could not be started: #{inspect(reason)}")
+        P2p.send_response(resource, request_id, {:error, "Request failed"})
+    end
+
+    :ok
   end
 
   defp stream_hls_response(resource, stream_id, req) do

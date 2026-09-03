@@ -10,9 +10,14 @@ defmodule Mydia.P2p.ServerGraphQLTest do
   These cover `run_graphql/4`, the seam that contains such a failure. Driving it
   directly keeps the test away from the NIF resource a running host would need.
   """
-  use ExUnit.Case, async: true
+  # `async: false`: the remote access flag lives in `:persistent_term`, which
+  # the sandbox does not roll back. See `Mydia.RemoteAccessHelpers`.
+  use Mydia.DataCase, async: false
+
+  import Mydia.RemoteAccessHelpers
 
   alias Mydia.P2p.CrashingSchema
+  alias Mydia.P2p.GraphQLRequest
   alias Mydia.P2p.Server
 
   @context %{source: :p2p, peer_connection_type: nil}
@@ -43,6 +48,33 @@ defmodule Mydia.P2p.ServerGraphQLTest do
 
     test "a query the schema rejects still comes back as a GraphQL error" do
       assert {:ok, %{errors: [_ | _]}} = run("query { noSuchField }")
+    end
+  end
+
+  describe "graphql_response/2" do
+    setup do
+      on_exit(&reset_remote_access/0)
+      :ok
+    end
+
+    test "a server with remote access switched off refuses the query" do
+      set_remote_access(false)
+
+      response =
+        Server.graphql_response(%GraphQLRequest{query: "query { __typename }"}, nil)
+
+      assert response.data == nil
+      assert response.errors =~ "Remote access is disabled"
+    end
+
+    test "a server with remote access on answers it" do
+      set_remote_access(true)
+
+      response =
+        Server.graphql_response(%GraphQLRequest{query: "query { __typename }"}, nil)
+
+      assert response.errors == nil
+      assert response.data =~ "RootQueryType"
     end
   end
 end
