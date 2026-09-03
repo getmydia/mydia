@@ -18,6 +18,127 @@ defmodule MydiaWeb.AddMediaComponents do
   use MydiaWeb, :html
 
   @doc """
+  Renders the five controls that decide how an item is added.
+
+  Shared by `add_config_modal/1` and the approve dialog on
+  `/admin/requests`, which is the whole point: the two dialogs disagree
+  about their shell, their preview, their submit button and their extra
+  fields, but must never disagree about these.
+
+  Reads `defaults`, `libraries` and `media_type` off `config`. The `ref` and
+  `preview` keys belong to the callers' shells, not here.
+
+  Input names are `config[...]` in both hosts, unprefixed, so
+  `MediaAddHelpers.add_opts_from_config/3` and `resolve_add_defaults/3` take
+  the params map verbatim.
+  """
+  attr :config, :map, required: true
+  attr :quality_profiles, :list, default: []
+
+  def add_config_fields(assigns) do
+    ~H"""
+    <%!-- Library Path --%>
+    <div class="form-control mb-4">
+      <label class="label">
+        <span class="label-text font-semibold">Root Folder</span>
+        <span class="label-text-alt text-error">*</span>
+      </label>
+      <%= if @config.libraries == [] do %>
+        <div class="alert alert-warning">
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          <span>No library paths configured. Please configure a library path first.</span>
+        </div>
+      <% else %>
+        <select name="config[library_path_id]" class="select select-bordered" required>
+          <option value="">Select a folder...</option>
+          <%= for path <- @config.libraries do %>
+            <option value={path.id} selected={@config.defaults.library_path_id == path.id}>
+              {Path.basename(path.path)} · {path.path}
+            </option>
+          <% end %>
+        </select>
+      <% end %>
+    </div>
+    <%!-- Quality Profile --%>
+    <div class="form-control mb-4">
+      <label class="label">
+        <span class="label-text font-semibold">Quality Profile</span>
+      </label>
+      <select name="config[quality_profile_id]" class="select select-bordered">
+        <option value="">Use server default</option>
+        <%= for profile <- @quality_profiles do %>
+          <option value={profile.id} selected={@config.defaults.quality_profile_id == profile.id}>
+            {profile.name}
+          </option>
+        <% end %>
+      </select>
+    </div>
+    <%!-- Monitoring --%>
+    <div class="form-control mb-4">
+      <label class="label cursor-pointer justify-start gap-4">
+        <input type="hidden" name="config[monitored]" value="false" />
+        <input
+          type="checkbox"
+          name="config[monitored]"
+          value="true"
+          class="toggle toggle-primary"
+          checked={@config.defaults.monitored}
+        />
+        <div>
+          <span class="label-text font-semibold">
+            Monitor this {(@config.media_type == :movie && "movie") || "series"}
+          </span>
+          <p class="text-xs text-base-content/60">
+            Automatically search for and download new releases
+          </p>
+        </div>
+      </label>
+    </div>
+    <%!-- Season Monitoring for TV --%>
+    <%= if @config.media_type == :tv_show do %>
+      <div class="form-control mb-4">
+        <label class="label">
+          <span class="label-text font-semibold">Season Monitoring</span>
+        </label>
+        <select name="config[season_monitoring]" class="select select-bordered">
+          <option value="all" selected={@config.defaults.season_monitoring == "all"}>
+            Monitor All Seasons
+          </option>
+          <option value="first" selected={@config.defaults.season_monitoring == "first"}>
+            Monitor First Season Only
+          </option>
+          <option value="future" selected={@config.defaults.season_monitoring == "future"}>
+            Monitor Future Seasons
+          </option>
+          <option value="none" selected={@config.defaults.season_monitoring == "none"}>
+            Don't Monitor Any Seasons
+          </option>
+        </select>
+      </div>
+    <% end %>
+    <%!-- Search on Add --%>
+    <div class="form-control mb-6">
+      <label class="label cursor-pointer justify-start gap-4">
+        <input type="hidden" name="config[search_on_add]" value="false" />
+        <input
+          type="checkbox"
+          name="config[search_on_add]"
+          value="true"
+          class="toggle toggle-primary"
+          checked={@config.defaults.search_on_add}
+        />
+        <div>
+          <span class="label-text font-semibold">Search on Add</span>
+          <p class="text-xs text-base-content/60">
+            Trigger an immediate search for this media after adding
+          </p>
+        </div>
+      </label>
+    </div>
+    """
+  end
+
+  @doc """
   Renders the dialog for the card in `config`, or nothing when `config` is nil.
 
   `config` is `%{ref:, media_type:, defaults:, preview:, libraries:}`,
@@ -71,110 +192,7 @@ defmodule MydiaWeb.AddMediaComponents do
         </div>
         <%!-- Configuration Form --%>
         <.form for={%{}} phx-submit="submit_add_config" id="add-config-form">
-          <%!-- Library Path --%>
-          <div class="form-control mb-4">
-            <label class="label">
-              <span class="label-text font-semibold">Root Folder</span>
-              <span class="label-text-alt text-error">*</span>
-            </label>
-            <%= if @config.libraries == [] do %>
-              <div class="alert alert-warning">
-                <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                <span>No library paths configured. Please configure a library path first.</span>
-              </div>
-            <% else %>
-              <select name="config[library_path_id]" class="select select-bordered" required>
-                <option value="">Select a folder...</option>
-                <%= for path <- @config.libraries do %>
-                  <option
-                    value={path.id}
-                    selected={@config.defaults.library_path_id == path.id}
-                  >
-                    {Path.basename(path.path)} · {path.path}
-                  </option>
-                <% end %>
-              </select>
-            <% end %>
-          </div>
-          <%!-- Quality Profile --%>
-          <div class="form-control mb-4">
-            <label class="label">
-              <span class="label-text font-semibold">Quality Profile</span>
-            </label>
-            <select name="config[quality_profile_id]" class="select select-bordered">
-              <option value="">Use server default</option>
-              <%= for profile <- @quality_profiles do %>
-                <option
-                  value={profile.id}
-                  selected={@config.defaults.quality_profile_id == profile.id}
-                >
-                  {profile.name}
-                </option>
-              <% end %>
-            </select>
-          </div>
-          <%!-- Monitoring --%>
-          <div class="form-control mb-4">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input type="hidden" name="config[monitored]" value="false" />
-              <input
-                type="checkbox"
-                name="config[monitored]"
-                value="true"
-                class="toggle toggle-primary"
-                checked={@config.defaults.monitored}
-              />
-              <div>
-                <span class="label-text font-semibold">
-                  Monitor this {(@config.media_type == :movie && "movie") || "series"}
-                </span>
-                <p class="text-xs text-base-content/60">
-                  Automatically search for and download new releases
-                </p>
-              </div>
-            </label>
-          </div>
-          <%!-- Season Monitoring for TV --%>
-          <%= if @config.media_type == :tv_show do %>
-            <div class="form-control mb-4">
-              <label class="label">
-                <span class="label-text font-semibold">Season Monitoring</span>
-              </label>
-              <select name="config[season_monitoring]" class="select select-bordered">
-                <option value="all" selected={@config.defaults.season_monitoring == "all"}>
-                  Monitor All Seasons
-                </option>
-                <option value="first" selected={@config.defaults.season_monitoring == "first"}>
-                  Monitor First Season Only
-                </option>
-                <option value="future" selected={@config.defaults.season_monitoring == "future"}>
-                  Monitor Future Seasons
-                </option>
-                <option value="none" selected={@config.defaults.season_monitoring == "none"}>
-                  Don't Monitor Any Seasons
-                </option>
-              </select>
-            </div>
-          <% end %>
-          <%!-- Search on Add --%>
-          <div class="form-control mb-6">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input type="hidden" name="config[search_on_add]" value="false" />
-              <input
-                type="checkbox"
-                name="config[search_on_add]"
-                value="true"
-                class="toggle toggle-primary"
-                checked={@config.defaults.search_on_add}
-              />
-              <div>
-                <span class="label-text font-semibold">Search on Add</span>
-                <p class="text-xs text-base-content/60">
-                  Trigger an immediate search for this media after adding
-                </p>
-              </div>
-            </label>
-          </div>
+          <.add_config_fields config={@config} quality_profiles={@quality_profiles} />
           <%!-- Modal Actions --%>
           <div class="modal-action">
             <button type="button" class="btn btn-ghost" phx-click="close_add_config">
