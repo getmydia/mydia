@@ -14,6 +14,7 @@ defmodule Mydia.P2p.ServerGraphQLTest do
   # the sandbox does not roll back. See `Mydia.RemoteAccessHelpers`.
   use Mydia.DataCase, async: false
 
+  import ExUnit.CaptureLog
   import Mydia.RemoteAccessHelpers
 
   alias Mydia.P2p.CrashingSchema
@@ -26,13 +27,18 @@ defmodule Mydia.P2p.ServerGraphQLTest do
 
   describe "run_graphql/5" do
     test "a resolver that raises is reported, not propagated" do
-      assert {:error, message} = run("query { boom }")
-      assert message =~ "resolver exploded"
+      log = capture_log(fn -> assert {:error, "Request failed"} = run("query { boom }") end)
+
+      # The peer is told nothing; the operator is told everything. A peer needs
+      # no credential to reach this, so the exception text stays in the log.
+      assert log =~ "resolver exploded"
+      assert log =~ "crashing_schema.ex"
     end
 
     test "a resolver that exits is reported, not propagated" do
-      assert {:error, message} = run("query { bail }")
-      assert message =~ "resolver_bailed"
+      log = capture_log(fn -> assert {:error, "Request failed"} = run("query { bail }") end)
+
+      assert log =~ "resolver_bailed"
     end
 
     test "the caller survives a failing resolver" do

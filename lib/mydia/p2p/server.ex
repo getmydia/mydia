@@ -19,6 +19,16 @@ defmodule Mydia.P2p.Server do
   alias Mydia.Streaming.SessionSubtitles
   alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
+  # What a peer is told when handling its request failed unexpectedly.
+  #
+  # Deliberately says nothing. `accept_inbound` admits a connection on a
+  # matching ALPN alone, so the peer reading this need not have authenticated,
+  # and the exception text behind it is written for an operator: adapter
+  # errors quoting SQL, struct and module names, filesystem paths. The full
+  # `Exception.format/3` output, stacktrace included, goes to the log, where
+  # the operator can see it and the peer cannot.
+  @opaque_failure "Request failed"
+
   @doc """
   Status information about the p2p host.
   """
@@ -462,9 +472,13 @@ defmodule Mydia.P2p.Server do
       {:error, reason} ->
         Logger.warning("GraphQL execution failed: #{inspect(reason)}")
 
+        # A reason that is already a sentence is sent as one. `inspect/1` on a
+        # binary wraps it in quotes, which the player would render verbatim.
+        message = if is_binary(reason), do: reason, else: inspect(reason)
+
         %P2p.GraphQLResponse{
           data: nil,
-          errors: encode_json([%{message: inspect(reason)}])
+          errors: encode_json([%{message: message}])
         }
     end
   end
@@ -504,7 +518,7 @@ defmodule Mydia.P2p.Server do
           Exception.format(:error, exception, __STACKTRACE__)
       )
 
-      {:error, Exception.message(exception)}
+      {:error, @opaque_failure}
   catch
     kind, reason ->
       Logger.error(
@@ -512,7 +526,7 @@ defmodule Mydia.P2p.Server do
           Exception.format(kind, reason, __STACKTRACE__)
       )
 
-      {:error, "GraphQL execution #{kind}: #{inspect(reason)}"}
+      {:error, @opaque_failure}
   end
 
   # Serve one peer request off the GenServer, and answer it exactly once.
@@ -550,7 +564,7 @@ defmodule Mydia.P2p.Server do
                 Exception.format(:error, exception, __STACKTRACE__)
             )
 
-            {:error, "Request failed: #{Exception.message(exception)}"}
+            {:error, @opaque_failure}
         catch
           kind, reason ->
             Logger.error(
@@ -558,7 +572,7 @@ defmodule Mydia.P2p.Server do
                 Exception.format(kind, reason, __STACKTRACE__)
             )
 
-            {:error, "Request failed: #{inspect(reason)}"}
+            {:error, @opaque_failure}
         end
 
       case response do
