@@ -158,6 +158,8 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
                MediaRequests.auto_approve_matching_requests(media_item, add_opts) do
           {:already_in_library, media_item,
            update_library_status_map(library_status_map, media_item)}
+        else
+          {:error, changeset} -> {:error, {:changeset, changeset}}
         end
 
       {:error, _} = error ->
