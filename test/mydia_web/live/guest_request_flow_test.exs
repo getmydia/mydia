@@ -180,7 +180,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
         )
 
       # Request should now be auto-approved and linked
-      approved = Repo.get!(MediaRequest, request.id)
+      approved = wait_until_request(id: request.id, status: "approved")
       assert approved.status == "approved"
       assert approved.approved_by_id == admin.id
       assert approved.media_item_id == media_item.id
