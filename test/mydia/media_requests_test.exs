@@ -753,6 +753,152 @@ defmodule Mydia.MediaRequestsTest do
     end)
   end
 
+  describe "auto_approve_matching_requests/2" do
+    setup do
+      user = create_user()
+      admin = create_user(%{role: "admin"})
+      %{user: user, admin: admin}
+    end
+
+    test "auto-approves pending request matching TMDB ID", %{user: user, admin: admin} do
+      request = create_request(user, %{tmdb_id: 12345, media_type: "movie", title: "Test Movie"})
+      media_item = create_media_item(%{type: "movie", tmdb_id: 12345, title: "Test Movie"})
+
+      assert {:ok, [approved]} =
+               MediaRequests.auto_approve_matching_requests(media_item,
+                 actor_type: :user,
+                 actor_id: admin.id
+               )
+
+      assert approved.id == request.id
+      assert approved.status == "approved"
+      assert approved.media_item_id == media_item.id
+      assert approved.approved_by_id == admin.id
+      assert approved.approved_at != nil
+      assert approved.admin_notes =~ "Automatically approved"
+
+      # Verify persisted in database
+      reloaded = MediaRequests.get_request!(request.id)
+      assert reloaded.status == "approved"
+      assert reloaded.media_item_id == media_item.id
+    end
+
+    test "auto-approves pending request matching TVDB ID", %{user: user} do
+      request =
+        create_request(user, %{
+          tvdb_id: 99999,
+          tmdb_id: nil,
+          media_type: "tv_show",
+          title: "Test Series"
+        })
+
+      media_item = create_media_item(%{type: "tv_show", tvdb_id: 99999, title: "Test Series"})
+
+      assert {:ok, [approved]} = MediaRequests.auto_approve_matching_requests(media_item)
+
+      assert approved.id == request.id
+      assert approved.status == "approved"
+      assert approved.media_item_id == media_item.id
+      assert approved.approved_by_id == nil
+      assert approved.approved_at != nil
+    end
+
+    test "does not auto-approve based on IMDB ID alone without TMDB or TVDB match", %{user: user} do
+      request =
+        create_request(user, %{
+          imdb_id: "tt1234567",
+          tmdb_id: 11111,
+          media_type: "movie",
+          title: "IMDB Movie"
+        })
+
+      # Item with same IMDB ID but different TMDB ID (e.g. shared remoteIds across spin-offs)
+      media_item =
+        create_media_item(%{
+          type: "movie",
+          tmdb_id: 22222,
+          imdb_id: "tt1234567",
+          title: "Other Movie"
+        })
+
+      assert {:ok, []} = MediaRequests.auto_approve_matching_requests(media_item)
+
+      reloaded = MediaRequests.get_request!(request.id)
+      assert reloaded.status == "pending"
+    end
+
+    test "honors exclude_request_id option", %{user: user} do
+      request1 = create_request(user, %{tmdb_id: 55555, media_type: "movie"})
+      media_item = create_media_item(%{type: "movie", tmdb_id: 55555, title: "Movie"})
+
+      assert {:ok, []} =
+               MediaRequests.auto_approve_matching_requests(media_item,
+                 exclude_request_id: request1.id
+               )
+
+      reloaded = MediaRequests.get_request!(request1.id)
+      assert reloaded.status == "pending"
+    end
+
+    test "ignores requests of different media type or already non-pending", %{user: user} do
+      # TV show request with same tmdb_id as a movie media item
+      request1 = create_request(user, %{tmdb_id: 77777, media_type: "tv_show"})
+      media_item = create_media_item(%{type: "movie", tmdb_id: 77777, title: "Movie"})
+
+      assert {:ok, []} = MediaRequests.auto_approve_matching_requests(media_item)
+
+      reloaded = MediaRequests.get_request!(request1.id)
+      assert reloaded.status == "pending"
+    end
+
+    test "rolls back earlier approvals when a later approval fails", %{user: user} do
+      first = create_request(user, %{tmdb_id: 77888, media_type: "movie"})
+
+      second =
+        create_request(user, %{tmdb_id: nil, tvdb_id: 77888, media_type: "movie"})
+
+      invalid_media_item = %Media.MediaItem{
+        id: Ecto.UUID.generate(),
+        type: "movie",
+        tmdb_id: 77888,
+        title: "Unavailable Media Item"
+      }
+
+      assert {:error, %Ecto.Changeset{}} =
+               MediaRequests.auto_approve_matching_requests(invalid_media_item)
+
+      assert MediaRequests.get_request!(first.id).status == "pending"
+      assert MediaRequests.get_request!(second.id).status == "pending"
+    end
+
+    test "Media.create_media_item/2 triggers auto-approval of matching pending requests", %{
+      user: user,
+      admin: admin
+    } do
+      request = create_request(user, %{tmdb_id: 88888, media_type: "movie", title: "Auto Movie"})
+      library = library_path_fixture(%{type: "movies"})
+
+      {:ok, media_item} =
+        Media.create_media_item(
+          %{
+            type: "movie",
+            title: "Auto Movie",
+            year: 2024,
+            tmdb_id: 88888,
+            library_path_id: library.id
+          },
+          actor_type: :user,
+          actor_id: admin.id,
+          skip_episode_refresh: true
+        )
+
+      reloaded = MediaRequests.get_request!(request.id)
+      assert reloaded.status == "approved"
+      assert reloaded.media_item_id == media_item.id
+      assert reloaded.approved_by_id == admin.id
+    end
+  end
+
   defp create_user(attrs \\ %{}) do
     unique_id = System.unique_integer([:positive])
 
@@ -786,5 +932,23 @@ defmodule Mydia.MediaRequestsTest do
       |> MediaRequests.create_request()
 
     request
+  end
+
+  defp create_media_item(attrs) do
+    type = Map.get(attrs, :type, "movie")
+    lib_type = if type == "movie", do: "movies", else: "series"
+    library = library_path_fixture(%{type: lib_type})
+
+    default_attrs = %{
+      type: type,
+      title: "Test Media Item",
+      year: 2023,
+      library_path_id: library.id,
+      monitored: true
+    }
+
+    %Media.MediaItem{}
+    |> Media.MediaItem.changeset(Map.merge(default_attrs, attrs))
+    |> Repo.insert!()
   end
 end
