@@ -96,6 +96,34 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
            media_type,
            socket.assigns.current_user
          ) do
+      # The template disables the submit button and marks the library select
+      # required only when @approve_config.libraries == [], but that
+      # handle_event clause is live on the socket regardless of what
+      # rendered, the same bug class #676 fixed twice already. With no
+      # candidate library for this media type, AddDefaults.resolve/3 has
+      # nothing left to fall back to and returns library_path_id: nil, so a
+      # crafted submit would otherwise approve the request with no library
+      # at all. Refuse here too.
+      #
+      # This is not a stale choice going bad between render and submit (the
+      # unknown-library branch below, whose admin picked a library that has
+      # since disappeared, so the dialog closes because there is nothing
+      # left worth showing). There was never a library to pick here, so
+      # nothing about a fresh render would change that. Keep the dialog open
+      # instead, the same as the other rejection branches in do_approve/4:
+      # closing it would only send the admin back to reopen the same modal
+      # and read the same warning.
+      {:ok, %AddDefaults{library_path_id: nil} = defaults} ->
+        Logger.warning("Approval blocked for #{request.id}: no library configured")
+
+        {:noreply,
+         socket
+         |> keep_approve_choices(defaults)
+         |> put_flash(
+           :error,
+           "No library path is configured. Please configure a library path before approving."
+         )}
+
       {:ok, defaults} ->
         do_approve(socket, request, approve_params, defaults)
 

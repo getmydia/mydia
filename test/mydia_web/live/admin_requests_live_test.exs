@@ -71,6 +71,26 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
       assert html =~ "No library paths configured"
       assert has_element?(view, "#approve-form button[type=submit][disabled]")
     end
+
+    test "the server refuses to approve when no library path exists, even bypassing the disabled button",
+         %{conn: conn, request: request} do
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+      open_approve(view, request)
+
+      # render_submit/3 (view + event name), not form/3: the disabled button
+      # would stop form/3 from ever sending the event, which is exactly the
+      # client-side-only guard this test exists to prove is not the only
+      # guard. See the "an unavailable library" test above for the same
+      # reasoning.
+      html =
+        render_submit(view, "submit_approve", %{
+          "approve" => %{"admin_notes" => ""},
+          "config" => %{}
+        })
+
+      assert html =~ "No library path is configured"
+      assert MediaRequests.get_request!(request.id).status == "pending"
+    end
   end
 
   describe "approving with a configuration" do
