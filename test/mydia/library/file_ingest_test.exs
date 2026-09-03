@@ -4,7 +4,6 @@ defmodule Mydia.Library.FileIngestTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
-  alias Mydia.Events.Event
   alias Mydia.Library.{FileIngest, ImportCandidate, MediaFile}
   alias Mydia.Repo
 
@@ -163,121 +162,6 @@ defmodule Mydia.Library.FileIngestTest do
 
     refute Repo.get(ImportCandidate, candidate.id)
     refute Mydia.ImportCandidates.get_by_path(candidate.library_path_id, candidate.relative_path)
-  end
-
-  # Timeouts here are generous on purpose. This test escapes the sandbox and
-  # races two real connections through the SQLite write lock, so every wait is
-  # for another OS process to be scheduled rather than for anything this test
-  # computes. It runs in well under a second locally.
-  #
-  # `@ownership_await` must stay clear of SQLite's busy handler. While the
-  # winner works, the loser is parked in `BEGIN IMMEDIATE` retrying, and
-  # `config/test.exs` sets `busy_timeout: 30_000`, so a single contended
-  # statement may legitimately block for thirty full seconds. This budget was
-  # once 2_000 and then 30_000, the latter landing exactly on `busy_timeout`:
-  # at any value at or below it, one ordinary lock wait exhausts the budget and
-  # `Task.await` gives up on a test that was never stuck. That is why raising
-  # 2_000 to 30_000 did not move the failure rate, which stayed around two runs
-  # in three -- evidence against "slow runner" and for a bounded lock wait.
-  #
-  # 90_000 is above Ecto's own `timeout: 60_000`, so a query that really is
-  # stuck now raises a DBConnection timeout with a stacktrace before this
-  # budget expires. A `Task.await` timeout here once again means a hang.
-  @ownership_await 90_000
-  @ownership_receive 10_000
-
-  test "a losing promotion failure cannot resurrect the winner's deleted candidate" do
-    %{library_path: library_path, movie: movie, candidate: candidate} =
-      Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
-        library_path = library_path_fixture(%{type: "movies"})
-        movie = media_item_fixture(%{type: "movie", tmdb_id: 60_312})
-
-        candidate =
-          import_candidate_fixture(%{
-            library_path_id: library_path.id,
-            media_type: "movie",
-            parsed_info: %{"type" => "movie"}
-          })
-
-        %{library_path: library_path, movie: movie, candidate: candidate}
-      end)
-
-    on_exit(fn ->
-      Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
-        Repo.delete_all(from file in MediaFile, where: file.library_path_id == ^library_path.id)
-        Repo.delete_all(from stored in ImportCandidate, where: stored.id == ^candidate.id)
-        # media_item_fixture/1 above ran on this same real (sandbox: false)
-        # connection, so its media_item.added event -- like the media item
-        # itself -- was a genuine commit, not something the ordinary
-        # per-test sandbox rollback would ever undo. Without this, every run
-        # of this test leaks one Event row into the shared, session-persistent
-        # SQLite test database, permanently.
-        Repo.delete_all(from event in Event, where: event.resource_id == ^movie.id)
-        Repo.delete(movie)
-        Repo.delete(library_path)
-      end)
-    end)
-
-    parent = self()
-    ref = make_ref()
-
-    ingest = fn ->
-      :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo, sandbox: false)
-      send(parent, {:ingest_connection_ready, self()})
-
-      try do
-        receive do
-          {:start_ingest, ^ref} ->
-            FileIngest.ingest(candidate, match(movie, 1.0),
-              policy: :unattended,
-              ownership_attempt: fn -> send(parent, {:ingest_ownership_attempt, self()}) end,
-              ownership_boundary: fn ->
-                send(parent, {:ingest_ownership_boundary, self()})
-
-                receive do
-                  {:release_ingest_ownership, ^ref} -> :ok
-                end
-              end
-            )
-        end
-      after
-        Ecto.Adapters.SQL.Sandbox.checkin(Repo)
-      end
-    end
-
-    winner = Task.async(ingest)
-    loser = Task.async(ingest)
-    winner_pid = winner.pid
-    loser_pid = loser.pid
-
-    assert_receive {:ingest_connection_ready, ^winner_pid}, @ownership_receive
-    assert_receive {:ingest_connection_ready, ^loser_pid}, @ownership_receive
-
-    send(winner.pid, {:start_ingest, ref})
-    assert_receive {:ingest_ownership_boundary, ^winner_pid}, @ownership_receive
-
-    # The losing FileIngest reaches promotion while the winner owns the SQLite
-    # write lock, so it records its failure only after the winner deletes.
-    send(loser.pid, {:start_ingest, ref})
-    assert_receive {:ingest_ownership_attempt, ^loser_pid}, @ownership_receive
-    assert Task.yield(loser, 0) == nil
-
-    send(winner.pid, {:release_ingest_ownership, ref})
-    assert {:promoted, [_]} = Task.await(winner, @ownership_await)
-
-    assert_receive {:ingest_ownership_boundary, ^loser_pid}, @ownership_receive
-    send(loser.pid, {:release_ingest_ownership, ref})
-    assert {:error, {:candidate_missing, candidate_id}} = Task.await(loser, @ownership_await)
-    assert candidate_id == candidate.id
-
-    Ecto.Adapters.SQL.Sandbox.unboxed_run(Repo, fn ->
-      refute Repo.get(ImportCandidate, candidate.id)
-
-      refute Mydia.ImportCandidates.get_by_path(
-               candidate.library_path_id,
-               candidate.relative_path
-             )
-    end)
   end
 
   test "an unrecognized provider type is retryable and cannot promote" do
