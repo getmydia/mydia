@@ -324,7 +324,7 @@ defmodule Mydia.Media do
   ## Options
     - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :system
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
-    - `:season_monitoring` - For TV shows, which seasons to fetch ("all", "first", "latest", "none") - defaults to "all"
+    - `:season_monitoring` - For TV shows, which seasons to monitor ("all", "future", "first", "latest", "none") - defaults to "all"
     - `:skip_episode_refresh` - Skip automatic episode fetching (for tests or special cases) - defaults to false
     - `:config` - Metadata relay config forwarded to `refresh_episodes_for_tv_show/2`.
       Callers that inject a Bypass (or any non-default relay) must pass it here;
@@ -395,7 +395,7 @@ defmodule Mydia.Media do
         mode when mode in ["first", "none"] ->
           Map.put(attrs, :monitor_new_seasons, :none)
 
-        mode when mode in ["all", "future"] ->
+        mode when mode in ["all", "future", "latest"] ->
           Map.put(attrs, :monitor_new_seasons, :all)
 
         _ ->
@@ -419,6 +419,25 @@ defmodule Mydia.Media do
   defp apply_initial_season_monitoring(%MediaItem{} = media_item, "first") do
     episodes = list_episodes(media_item.id)
     {to_monitor, to_unmonitor} = Enum.split_with(episodes, fn ep -> ep.season_number == 1 end)
+    set_episodes_monitored(to_monitor, true)
+    set_episodes_monitored(to_unmonitor, false)
+  end
+
+  defp apply_initial_season_monitoring(%MediaItem{} = media_item, "latest") do
+    episodes = list_episodes(media_item.id)
+
+    regular_seasons =
+      episodes
+      |> Enum.map(& &1.season_number)
+      |> Enum.filter(&(&1 > 0))
+
+    latest_season_number = if regular_seasons != [], do: Enum.max(regular_seasons), else: 0
+
+    {to_monitor, to_unmonitor} =
+      Enum.split_with(episodes, fn ep ->
+        ep.season_number == latest_season_number and ep.season_number > 0
+      end)
+
     set_episodes_monitored(to_monitor, true)
     set_episodes_monitored(to_unmonitor, false)
   end

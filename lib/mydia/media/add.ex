@@ -252,7 +252,7 @@ defmodule Mydia.Media.Add do
         opts[:season_monitoring] in ["first", "none"] ->
           Map.put(attrs, :monitor_new_seasons, :none)
 
-        opts[:season_monitoring] in ["all", "future"] ->
+        opts[:season_monitoring] in ["all", "future", "latest"] ->
           Map.put(attrs, :monitor_new_seasons, :all)
 
         true ->

@@ -170,6 +170,46 @@ defmodule Mydia.Media.CreateMediaItemSeasonMonitoringTest do
     end
   end
 
+  describe "season_monitoring: \"latest\"" do
+    test "fetches all seasons, sets monitor_new_seasons: :all, and monitors only the latest season",
+         %{config: config, tmdb_id: tmdb_id} do
+      assert {:ok, media_item} =
+               Media.create_media_item(
+                 %{
+                   title: "Monitoring Test Show",
+                   type: "tv_show",
+                   tmdb_id: tmdb_id,
+                   metadata_source: :tmdb
+                 },
+                 config: config,
+                 season_monitoring: "latest"
+               )
+
+      assert media_item.monitor_new_seasons == :all
+
+      episodes =
+        Repo.all(
+          from(e in Episode,
+            where: e.media_item_id == ^media_item.id,
+            order_by: [e.season_number, e.episode_number]
+          )
+        )
+
+      assert length(episodes) == 5
+
+      # Only Season 2 episodes are monitored
+      monitored_episodes = Enum.filter(episodes, & &1.monitored)
+      assert length(monitored_episodes) == 2
+      assert Enum.all?(monitored_episodes, &(&1.season_number == 2))
+
+      # Season 0 and Season 1 episodes are unmonitored
+      unmonitored = Enum.reject(episodes, & &1.monitored)
+      assert length(unmonitored) == 3
+      assert Enum.any?(unmonitored, &(&1.season_number == 0))
+      assert Enum.all?(Enum.filter(unmonitored, &(&1.season_number == 1)), &(not &1.monitored))
+    end
+  end
+
   describe "season_monitoring: \"all\"" do
     test "fetches all seasons, sets monitor_new_seasons: :all, and monitors all non-special episodes",
          %{config: config, tmdb_id: tmdb_id} do
