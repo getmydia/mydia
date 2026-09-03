@@ -919,7 +919,7 @@ async fn run_event_loop(
             }
 
             Some((peer_id, stable_id)) = disconnect_rx.recv() => {
-                prune_disconnected_peer(&mut connected_peers, &peer_id, stable_id);
+                prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
                 true
             }
         };
@@ -946,7 +946,7 @@ async fn run_event_loop(
             }
 
             Some((peer_id, stable_id)) = disconnect_rx.recv() => {
-                prune_disconnected_peer(&mut connected_peers, &peer_id, stable_id);
+                prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
                 true
             }
         };
@@ -962,25 +962,50 @@ async fn run_event_loop(
     tracing::info!("Endpoint closed");
 }
 
-/// Remove a `connected_peers` entry once its connection has closed.
+/// Remove a `connected_peers` entry once its connection has closed, and
+/// announce the peer's departure if that was its last live connection.
 ///
 /// Only removes the entry if it still refers to the connection that just
 /// closed (matched by iroh's `stable_id`, fixed for a connection's
 /// lifetime). Without that guard, a disconnect signal for an old connection
 /// that arrives after the same `peer_id` has already reconnected would
 /// evict the new, live connection instead of the dead one.
-fn prune_disconnected_peer(
+///
+/// `Event::Disconnected` is emitted from here, under that same guard, rather
+/// than from `handle_connection`. A peer routinely holds several connections
+/// at once -- production has seen one open eight inside 100ms -- and each is
+/// served by its own `handle_connection` task, which knows only that *its*
+/// connection ended, never whether a newer one has since taken over the
+/// `peer_id`. Announcing from there reported the peer gone every time any one
+/// of its stale connections timed out, while the peer was still connected and
+/// serving requests on another. Consumers act on that: the Elixir host drops
+/// the peer from `state.connected_peers`, and a player redials a link that
+/// never actually broke, which is what an operator sees as the connection
+/// dropping and coming back for no reason. Only the event loop owns
+/// `connected_peers`, so only the event loop can tell the difference.
+async fn prune_disconnected_peer(
     connected_peers: &mut HashMap<String, Connection>,
+    event_tx: &mpsc::Sender<Event>,
     peer_id: &str,
     stable_id: usize,
 ) {
-    if let std::collections::hash_map::Entry::Occupied(entry) =
+    let std::collections::hash_map::Entry::Occupied(entry) =
         connected_peers.entry(peer_id.to_string())
-    {
-        if entry.get().stable_id() == stable_id {
-            entry.remove();
-        }
+    else {
+        // Already pruned: whichever close removed it announced the peer then.
+        return;
+    };
+
+    if entry.get().stable_id() != stable_id {
+        // A newer connection under this `peer_id` is live. The peer has not
+        // gone anywhere, so nothing is announced.
+        return;
     }
+
+    entry.remove();
+    let _ = event_tx
+        .send(Event::Disconnected(peer_id.to_string()))
+        .await;
 }
 
 /// Accept one inbound connection and start serving it.
@@ -1714,8 +1739,12 @@ async fn handle_connection(
                 });
             }
             Err(e) => {
+                // Report the close and let the event loop decide whether it
+                // means the peer is gone. This task cannot tell: the same
+                // `peer_id` may already be served by a newer connection, in
+                // which case announcing a disconnect here would be a lie. See
+                // `prune_disconnected_peer`.
                 tracing::info!("Connection closed for peer {}: {}", peer_id, e);
-                let _ = event_tx.send(Event::Disconnected(peer_id.clone())).await;
                 let _ = disconnect_tx.send((peer_id, conn.stable_id())).await;
                 break;
             }
@@ -1932,6 +1961,7 @@ async fn handle_send_hls_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn test_request_serialization() {
@@ -2319,6 +2349,110 @@ mod tests {
     /// a map being pruned) happen inside its own event loop task, so tests
     /// observe them asynchronously rather than immediately after issuing a
     /// command.
+    /// Like `spawn_event_drain`, but keeps a count of the `Disconnected`
+    /// events seen for `peer_id`. It must still drain everything else for the
+    /// reason spelled out on `spawn_event_drain`.
+    fn spawn_disconnect_counter(host: &Host, peer_id: String) -> Arc<AtomicUsize> {
+        let seen = Arc::new(AtomicUsize::new(0));
+        let counter = seen.clone();
+        let event_rx = host.event_rx.clone();
+
+        tokio::spawn(async move {
+            let mut rx = event_rx.lock().await;
+            while let Some(event) = rx.recv().await {
+                if matches!(&event, Event::Disconnected(id) if *id == peer_id) {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        });
+
+        seen
+    }
+
+    /// A peer that holds more than one connection at a time must not be
+    /// reported as disconnected until its *last* one goes away.
+    ///
+    /// The player routinely opens several connections at once (production has
+    /// caught it opening eight inside 100ms), and `connected_peers` is keyed by
+    /// `peer_id`, so a second connection replaces the first in the map while
+    /// the first's `handle_connection` task keeps running. When that stale
+    /// connection eventually died, it announced `Disconnected` for a peer that
+    /// was still connected and still serving requests on the newer one. The
+    /// `stable_id` guard added for T-809 kept the *map* honest but the event
+    /// went out anyway, so every consumer downstream believed it.
+    ///
+    /// Two clients share one secret key here, which is what makes both
+    /// connections land under a single `peer_id` on the server.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_stale_connection_closing_does_not_report_a_live_peer_as_gone() {
+        let shared_key = [7u8; 32];
+        let client_config = || HostConfig {
+            keypair_bytes: Some(shared_key),
+            ..test_config()
+        };
+
+        let (server, _server_id) = Host::new(test_config());
+        let (client_one, client_id) = Host::new(client_config());
+        let (client_two, client_two_id) = Host::new(client_config());
+        assert_eq!(
+            client_id, client_two_id,
+            "both clients must present the same node id for this to exercise \
+             two connections under one peer_id"
+        );
+        spawn_event_drain(&client_one);
+        spawn_event_drain(&client_two);
+        let disconnects = spawn_disconnect_counter(&server, client_id.clone());
+
+        let server_addr = wait_for_addr(&server).await;
+        client_one
+            .dial(server_addr.clone())
+            .await
+            .expect("first dial should succeed");
+        wait_until(
+            || async { server.get_network_stats().await.connected_peers == 1 },
+            std::time::Duration::from_secs(10),
+            "the server to observe the first connection",
+        )
+        .await;
+
+        client_two
+            .dial(server_addr)
+            .await
+            .expect("second dial should succeed");
+
+        // Both connections are now live under one `peer_id`. Dropping the
+        // first closes its connection; the server's task for it wakes up and
+        // reports the close.
+        drop(client_one);
+
+        // The peer is still there on the surviving connection, so the count
+        // must stay at 1 and nothing may be announced. Before the fix the
+        // stale close emitted `Disconnected` here.
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        assert_eq!(
+            disconnects.load(Ordering::SeqCst),
+            0,
+            "a stale connection closing must not report the peer gone while it \
+             is still connected on another"
+        );
+        assert_eq!(
+            server.get_network_stats().await.connected_peers,
+            1,
+            "the surviving connection should still be counted"
+        );
+
+        // And the announcement must still happen when the peer really does
+        // leave, otherwise the assertion above would pass on a broken event
+        // path just as happily.
+        drop(client_two);
+        wait_until(
+            || async { disconnects.load(Ordering::SeqCst) == 1 },
+            std::time::Duration::from_secs(30),
+            "the peer's last connection closing to report it disconnected",
+        )
+        .await;
+    }
+
     async fn wait_until<F, Fut>(mut check: F, timeout: std::time::Duration, what: &str)
     where
         F: FnMut() -> Fut,
