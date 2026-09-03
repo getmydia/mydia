@@ -16,6 +16,7 @@ defmodule MydiaWeb.Features.GuestTest do
 
   import Mydia.MetadataStub
   import Mydia.MetadataCacheHelpers
+  import Mydia.SettingsFixtures
 
   alias Mydia.Media.MediaRequest
   alias Mydia.MetadataStubProvider
@@ -32,8 +33,14 @@ defmodule MydiaWeb.Features.GuestTest do
   # without a warm cache the run reaches the live relay and the network guard
   # fails the job even though every test passed. Warmed after the stub setup,
   # which clears the cache on its way in.
+  #
+  # A real install always has a library path before anyone can approve a
+  # request. Without one here, the approve dialog has no root folder to
+  # offer and the server-side guard in AdminRequestsLive.Index refuses the
+  # approval, which this test is not about.
   setup do
     warm_genre_cache(:movie, [])
+    library_path_fixture(%{type: "movies"})
     :ok
   end
 

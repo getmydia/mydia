@@ -18,6 +18,7 @@ defmodule Mydia.MediaRequests do
   alias Mydia.Media
   alias Mydia.Media.Add
   alias Mydia.Media.MediaRequest
+  alias Mydia.Search
   alias Ecto.Multi
 
   @doc """
@@ -106,8 +107,21 @@ defmodule Mydia.MediaRequests do
       `Metadata.default_relay_config/0`. Inject a Bypass config in tests.
   """
   def approve_request(%MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
-    with {:ok, media_attrs} <- resolve_media_attrs(request, opts) do
-      insert_approval(request, media_attrs, attrs, opts)
+    with {:ok, media_attrs} <- resolve_media_attrs(request, opts),
+         {:ok, result, created?} <- insert_approval(request, media_attrs, attrs, opts) do
+      # After the transaction, never inside it. Repo.transaction defers event
+      # broadcasts until commit, and a search queued against an uncommitted
+      # media item is a race.
+      #
+      # Only queued when the approval created a new media item. A request
+      # that linked to an already-in-library item must not enqueue a search
+      # for a row someone else set up; the Add flow makes the same
+      # distinction (see MediaAddHelpers.handle_add_media_to_library/5).
+      if created? do
+        Search.maybe_queue_search(result.media_item, Keyword.get(opts, :search_on_add, false))
+      end
+
+      {:ok, result}
     end
   end
 
@@ -115,7 +129,14 @@ defmodule Mydia.MediaRequests do
     ref = MediaRequest.external_ref(request)
     media_type = if request.media_type == "movie", do: :movie, else: :tv_show
 
-    case Add.resolve_attrs(ref, media_type, opts[:config], monitored: true) do
+    # `monitored` defaults to true when the caller says nothing, which is what
+    # approval did unconditionally before the config dialog existed.
+    attr_opts =
+      opts
+      |> Keyword.take([:monitored, :quality_profile_id, :library_path_id])
+      |> Keyword.put_new(:monitored, true)
+
+    case Add.resolve_attrs(ref, media_type, opts[:config], attr_opts) do
       {:ok, media_attrs} ->
         {:ok, media_attrs}
 
@@ -128,41 +149,48 @@ defmodule Mydia.MediaRequests do
     end
   end
 
+  # Returns `{:ok, %{request: _, media_item: _}, created?}` on success, where
+  # `created?` is false when the request linked to a pre-existing media item
+  # rather than creating a new one. `approve_request/3` uses that flag to
+  # decide whether to queue a search; a linked request must not queue one for
+  # a media item someone else already added.
   defp insert_approval(request, media_attrs, attrs, opts) do
     Multi.new()
     |> Multi.run(:media_item, fn _repo, _changes ->
-      case Add.from_attrs(media_attrs, opts[:config],
-             actor_type: :user,
-             actor_id: attrs[:approved_by_id]
+      case Add.from_attrs(
+             media_attrs,
+             opts[:config],
+             [actor_type: :user, actor_id: attrs[:approved_by_id]] ++
+               Keyword.take(opts, [:season_monitoring])
            ) do
         {:ok, media_item} ->
-          {:ok, media_item}
+          {:ok, %{item: media_item, created?: true}}
 
         # Not a failure: the request is asking for something already in the
         # library. Link the request to the existing row instead of bouncing
         # the approval off a unique constraint the admin can't act on.
         {:error, {:already_in_library, media_item}} ->
-          {:ok, media_item}
+          {:ok, %{item: media_item, created?: false}}
 
         {:error, {:changeset, changeset}} ->
           {:error, changeset}
       end
     end)
-    |> Multi.run(:request, fn _repo, %{media_item: media_item} ->
+    |> Multi.run(:request, fn _repo, %{media_item: %{item: media_item}} ->
       request
       |> MediaRequest.approve_changeset(Map.put(attrs, :media_item_id, media_item.id))
       |> Repo.update()
     end)
     |> Repo.transaction()
     |> case do
-      {:ok, %{request: updated_request, media_item: media_item}} ->
+      {:ok, %{request: updated_request, media_item: %{item: media_item, created?: created?}}} ->
         # "linked to", not "created": approval also lands here when the item
         # was already in the library and the request was pointed at it.
         Logger.info(
           "Request #{request.id} approved by user #{attrs[:approved_by_id]}, linked to media #{media_item.id}"
         )
 
-        {:ok, %{request: updated_request, media_item: media_item}}
+        {:ok, %{request: updated_request, media_item: media_item}, created?}
 
       {:error, :media_item, changeset, _changes} ->
         Logger.error("Failed to create media item for request #{request.id}")

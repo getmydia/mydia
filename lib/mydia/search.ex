@@ -291,6 +291,36 @@ defmodule Mydia.Search do
   end
 
   @doc """
+  Queues an automatic search for a freshly added item, when asked to.
+
+  This is the shared home for auto-search-on-add. It lives here rather than in
+  `MydiaWeb.Live.Helpers.MediaAddHelpers` because `Mydia.MediaRequests` needs it
+  too, and a context calling into the web layer is the wrong direction.
+
+  A failure leaves the item added and returns `:ok` anyway. Adding the title is
+  what the user asked for; the search is a convenience.
+  """
+  @spec maybe_queue_search(Mydia.Media.MediaItem.t(), boolean()) :: :ok
+  def maybe_queue_search(media_item, search?)
+
+  def maybe_queue_search(_media_item, false), do: :ok
+
+  def maybe_queue_search(media_item, true) do
+    case queue_auto_searches([media_item]) do
+      {:ok, _count} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to queue search on add",
+          media_item_id: media_item.id,
+          reason: inspect(reason)
+        )
+
+        :ok
+    end
+  end
+
+  @doc """
   Queues automatic release searches for the given media items.
 
   Movies queue `Mydia.Jobs.MovieSearch` in `"specific"` mode and TV shows queue

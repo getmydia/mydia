@@ -22,6 +22,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
   import Phoenix.LiveViewTest
   import Mydia.MetadataStub
   import Mydia.MetadataCacheHelpers
+  import Mydia.SettingsFixtures
 
   alias Mydia.Media
   alias Mydia.Media.MediaRequest
@@ -34,6 +35,16 @@ defmodule MydiaWeb.GuestRequestFlowTest do
   setup do
     guest = create_test_user(%{role: "guest"})
     admin = create_admin_user()
+
+    # Approving a request now requires a library path (AdminRequestsLive.Index
+    # refuses the approval otherwise), so any test in this file that approves
+    # needs one seeded. Do not delete this as unused-looking noise. Both types
+    # are seeded because this file approves both a movie and a tv_show request
+    # (see "movie request lifecycle" and "tv request lifecycle" below), and
+    # AddDefaults.resolve/3 only offers a library whose type matches the
+    # media being approved.
+    library_path_fixture(%{type: "movies"})
+    library_path_fixture(%{type: "series"})
 
     %{guest: guest, admin: admin}
   end
@@ -276,6 +287,11 @@ defmodule MydiaWeb.GuestRequestFlowTest do
         |> render_submit()
 
       assert html =~ "Could not reach the metadata service"
+
+      # The dialog stays open: it now holds configuration (library, quality
+      # profile, monitoring) the admin picked, and a transient relay hiccup
+      # must not discard those choices and force the admin to redo them.
+      assert has_element?(admin_view, "#approve-form")
 
       untouched = Repo.get!(MediaRequest, request.id)
 

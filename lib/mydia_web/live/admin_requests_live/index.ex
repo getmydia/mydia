@@ -2,8 +2,13 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
   use MydiaWeb, :live_view
 
   import MydiaWeb.MediaRequestComponents
+  import MydiaWeb.AddMediaComponents
 
+  alias Mydia.Media.AddDefaults
+  alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
+  alias Mydia.Settings
+  alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   require Logger
 
@@ -21,6 +26,8 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
      |> assign(:detail_item, nil)
      |> assign(:detail_metadata, nil)
      |> assign(:detail_loading, false)
+     |> assign(:approve_config, nil)
+     |> assign(:quality_profiles, Settings.list_quality_profiles())
      |> load_requests()}
   end
 
@@ -44,14 +51,16 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
      |> close_details()
      |> assign(:show_approve_modal, true)
      |> assign(:selected_request, request)
-     |> assign_approve_form()}
+     |> assign_approve_form()
+     |> assign_approve_config(request)}
   end
 
   def handle_event("close_approve_modal", _params, socket) do
     {:noreply,
      socket
      |> assign(:show_approve_modal, false)
-     |> assign(:selected_request, nil)}
+     |> assign(:selected_request, nil)
+     |> assign(:approve_config, nil)}
   end
 
   def handle_event("open_reject_modal", %{"id" => id}, socket) do
@@ -78,43 +87,55 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
     {:noreply, assign(socket, :approve_form, to_form(changeset, as: :approve))}
   end
 
-  def handle_event("submit_approve", %{"approve" => approve_params}, socket) do
+  def handle_event("submit_approve", %{"approve" => approve_params} = params, socket) do
     request = socket.assigns.selected_request
+    media_type = MediaRequest.media_type_atom(request)
 
-    attrs = %{
-      approved_by_id: socket.assigns.current_user.id,
-      admin_notes: approve_params["admin_notes"]
-    }
+    case MediaAddHelpers.resolve_add_defaults(
+           params["config"] || %{},
+           media_type,
+           socket.assigns.current_user
+         ) do
+      # The template disables the submit button and marks the library select
+      # required only when @approve_config.libraries == [], but that
+      # handle_event clause is live on the socket regardless of what
+      # rendered, the same bug class #676 fixed twice already. With no
+      # candidate library for this media type, AddDefaults.resolve/3 has
+      # nothing left to fall back to and returns library_path_id: nil, so a
+      # crafted submit would otherwise approve the request with no library
+      # at all. Refuse here too.
+      #
+      # This is not a stale choice going bad between render and submit (the
+      # unknown-library branch below, whose admin picked a library that has
+      # since disappeared, so the dialog closes because there is nothing
+      # left worth showing). There was never a library to pick here, so
+      # nothing about a fresh render would change that. Keep the dialog open
+      # instead, the same as the other rejection branches in do_approve/4:
+      # closing it would only send the admin back to reopen the same modal
+      # and read the same warning.
+      {:ok, %AddDefaults{library_path_id: nil} = defaults} ->
+        Logger.warning("Approval blocked for #{request.id}: no library configured")
 
-    case MediaRequests.approve_request(request, attrs) do
-      {:ok, %{request: _updated_request, media_item: media_item}} ->
         {:noreply,
          socket
-         |> assign(:show_approve_modal, false)
-         |> assign(:selected_request, nil)
-         |> put_flash(
-           :info,
-           "Request approved! #{media_item.title} has been added to the library."
-         )
-         |> load_requests()}
-
-      {:error, {:metadata, reason}} ->
-        Logger.warning("Approval blocked by metadata failure: #{inspect(reason)}")
-
-        {:noreply,
-         socket
-         |> assign(:show_approve_modal, false)
-         |> assign(:selected_request, nil)
+         |> keep_approve_choices(defaults)
          |> put_flash(
            :error,
-           "Could not reach the metadata service, so the request was not approved. Please try again."
+           "No library path is configured. Please configure a library path before approving."
          )}
 
-      {:error, changeset} ->
+      {:ok, defaults} ->
+        do_approve(socket, request, approve_params, defaults)
+
+      # Per #458, never silently substitute a different library. The admin
+      # picked a library that has since been removed or unmonitored, so say so.
+      {:error, :unknown_library} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to approve request: #{inspect(changeset.errors)}")
-         |> assign(:approve_form, to_form(changeset, as: :approve))}
+         |> assign(:show_approve_modal, false)
+         |> assign(:selected_request, nil)
+         |> assign(:approve_config, nil)
+         |> put_flash(:error, "That library is no longer available. Please try again.")}
     end
   end
 
@@ -216,6 +237,55 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
 
   ## Private Helpers
 
+  defp do_approve(socket, request, approve_params, defaults) do
+    attrs = %{
+      approved_by_id: socket.assigns.current_user.id,
+      admin_notes: approve_params["admin_notes"]
+    }
+
+    opts = AddDefaults.to_add_opts_with_search(defaults)
+
+    case MediaRequests.approve_request(request, attrs, opts) do
+      {:ok, %{request: _updated_request, media_item: media_item}} ->
+        {:noreply,
+         socket
+         |> assign(:show_approve_modal, false)
+         |> assign(:selected_request, nil)
+         |> assign(:approve_config, nil)
+         |> put_flash(
+           :info,
+           "Request approved! #{media_item.title} has been added to the library."
+         )
+         |> load_requests()}
+
+      # The dialog stays open with the admin's own choices, not fresh defaults.
+      # config.defaults is an %AddDefaults{}, so assigning the resolved struct
+      # back is all it takes. Nothing was written: the metadata fetch happens
+      # before the Multi opens, so the request is still pending.
+      {:error, {:metadata, reason}} ->
+        Logger.warning("Approval blocked by metadata failure: #{inspect(reason)}")
+
+        {:noreply,
+         socket
+         |> keep_approve_choices(defaults)
+         |> put_flash(
+           :error,
+           "Could not reach the metadata service, so the request was not approved. Please try again."
+         )}
+
+      {:error, changeset} ->
+        {:noreply,
+         socket
+         |> keep_approve_choices(defaults)
+         |> put_flash(:error, "Failed to approve request: #{inspect(changeset.errors)}")
+         |> assign(:approve_form, to_form(changeset, as: :approve))}
+    end
+  end
+
+  defp keep_approve_choices(socket, defaults) do
+    assign(socket, :approve_config, %{socket.assigns.approve_config | defaults: defaults})
+  end
+
   defp apply_filters(socket, params) do
     status = params["status"] || "pending"
 
@@ -314,6 +384,21 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
       )
 
     assign(socket, :approve_form, to_form(changeset, as: :approve))
+  end
+
+  # Built at open time, not at mount: a library added or unmonitored since the
+  # admin loaded the page must not appear as a stale option, and one deleted
+  # since must not still be offered. Defaults come from the approving admin,
+  # not the requester -- the preference in play is which disk files land on,
+  # and that is the admin's server.
+  defp assign_approve_config(socket, request) do
+    media_type = MediaRequest.media_type_atom(request)
+
+    assign(socket, :approve_config, %{
+      media_type: media_type,
+      defaults: AddDefaults.resolve(socket.assigns.current_user, media_type),
+      libraries: MediaAddHelpers.candidate_libraries(media_type)
+    })
   end
 
   defp assign_reject_form(socket) do

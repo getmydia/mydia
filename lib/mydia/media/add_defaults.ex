@@ -114,6 +114,21 @@ defmodule Mydia.Media.AddDefaults do
     ]
   end
 
+  @doc """
+  Same as `to_add_opts/1`, with `:search_on_add` put back on.
+
+  For the callers that queue the search themselves, or forward the opts to
+  one that will: `MediaAddHelpers.add_opts_from_config/3` pops it back off
+  before calling `Add`, and `AdminRequestsLive.Index.do_approve/4` passes it
+  straight through to `MediaRequests.approve_request/3`. Both used to build
+  this list inline with `to_add_opts(defaults) |> Keyword.put(:search_on_add,
+  defaults.search_on_add)`; kept here once so they cannot drift.
+  """
+  @spec to_add_opts_with_search(t()) :: keyword()
+  def to_add_opts_with_search(%__MODULE__{} = defaults) do
+    Keyword.put(to_add_opts(defaults), :search_on_add, defaults.search_on_add)
+  end
+
   defp preference_for(%User{} = user), do: Accounts.get_user_preference!(user)
   defp preference_for(_), do: nil
 

@@ -64,7 +64,11 @@ Guest users can request media:
 2. **Guest clicks Request** on the search result
 3. **The request lands in the admin queue** as pending
 4. **Admin reviews** and approves or rejects
-5. **If approved**, media is added to library and download begins
+5. **If approved**, the admin chooses the library, quality profile and
+   monitoring for the item, and media is added to the library. If the title
+   is already in the library, the request is linked to that existing item
+   instead and no search is queued. Otherwise a search starts immediately
+   unless the admin turns off **Search on Add**.
 6. **The guest sees the outcome** on their own requests page
 
 !!! warning "There are no notifications"
@@ -80,7 +84,14 @@ Admins can view and manage requests:
 1. Navigate to **Admin > Requests**
 2. View pending requests
 3. Approve or reject each request
-4. A rejection requires a reason, which the requester can see
+4. Approving opens a dialog for the root folder, quality profile, monitoring,
+   season monitoring (series only) and whether to search immediately. The
+   fields are prefilled from your own add defaults, so approving with no
+   changes is still two clicks, as long as at least one library path is
+   already configured. Without one, the root folder field has nothing to
+   offer and approval is blocked until a library path is added under
+   **Admin > Configuration**, on the **Library** tab.
+5. A rejection requires a reason, which the requester can see
 
 ## Disabling Authentication
 

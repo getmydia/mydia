@@ -571,6 +571,36 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
     end
   end
 
+  describe "resolve_add_defaults/3" do
+    test "returns the resolved struct with the submitted values folded in" do
+      library = library_path_fixture(%{type: "movies"})
+      profile = quality_profile_fixture()
+
+      params = %{
+        "library_path_id" => library.id,
+        "quality_profile_id" => profile.id,
+        "monitored" => "false",
+        "search_on_add" => "true"
+      }
+
+      assert {:ok, defaults} = MediaAddHelpers.resolve_add_defaults(params, :movie, nil)
+
+      assert defaults.library_path_id == library.id
+      assert defaults.quality_profile_id == profile.id
+      assert defaults.monitored == false
+      assert defaults.search_on_add == true
+    end
+
+    test "rejects a library that is not a candidate for the media type" do
+      assert {:error, :unknown_library} =
+               MediaAddHelpers.resolve_add_defaults(
+                 %{"library_path_id" => Ecto.UUID.generate()},
+                 :movie,
+                 nil
+               )
+    end
+  end
+
   describe "put_add_config/4 library freshness" do
     # candidate_libraries/1 is called from inside put_add_config/4 itself, at
     # OPEN time, rather than being threaded in from an earlier assign a host

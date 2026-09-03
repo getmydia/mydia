@@ -1,7 +1,9 @@
 defmodule Mydia.MediaRequestsTest do
   use Mydia.DataCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import ExUnit.CaptureLog
+  import Mydia.SettingsFixtures
 
   alias Mydia.MediaRequests
   alias Mydia.{Accounts, Media, Repo}
@@ -308,6 +310,216 @@ defmodule Mydia.MediaRequestsTest do
     end
   end
 
+  describe "approve_request/3 configuration" do
+    setup do
+      user = create_user()
+      admin = create_user(%{role: "admin"})
+      request = create_request(user)
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, request.tmdb_id, request.title, "/stub.jpg")
+      %{admin: admin, request: request, config: relay_config(bypass)}
+    end
+
+    test "applies the library, quality profile and monitored flag", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      library = library_path_fixture(%{type: "movies"})
+      profile = quality_profile_fixture()
+
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 library_path_id: library.id,
+                 quality_profile_id: profile.id,
+                 monitored: false
+               )
+
+      assert media_item.library_path_id == library.id
+      assert media_item.quality_profile_id == profile.id
+      assert media_item.monitored == false
+    end
+
+    test "still defaults to monitored when no flag is given", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id}, config: config)
+
+      assert media_item.monitored == true
+    end
+
+    test "does not reconfigure an item that is already in the library", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      incumbent_library = library_path_fixture(%{type: "movies"})
+
+      {:ok, incumbent} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: request.title,
+          year: request.year,
+          tmdb_id: request.tmdb_id,
+          library_path_id: incumbent_library.id,
+          monitored: true
+        })
+
+      other_library = library_path_fixture(%{type: "movies"})
+
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 library_path_id: other_library.id,
+                 monitored: false
+               )
+
+      # Linked, not reconfigured. Approving a request must not silently move or
+      # unmonitor a library item somebody else set up.
+      assert media_item.id == incumbent.id
+      assert Repo.get!(MediaItem, incumbent.id).library_path_id == incumbent_library.id
+      assert Repo.get!(MediaItem, incumbent.id).monitored == true
+    end
+
+    test "does not queue a search for an item that is already in the library", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      incumbent_library = library_path_fixture(%{type: "movies"})
+
+      {:ok, incumbent} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: request.title,
+          year: request.year,
+          tmdb_id: request.tmdb_id,
+          library_path_id: incumbent_library.id,
+          monitored: true
+        })
+
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 search_on_add: true
+               )
+
+      assert media_item.id == incumbent.id
+
+      # search_on_add is true, but the item was already in the library. No
+      # job may be queued against a row someone else set up.
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: incumbent.id})
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch, args: %{media_item_id: incumbent.id})
+    end
+
+    test "queues an automatic search when search_on_add is set", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 search_on_add: true
+               )
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MovieSearch,
+        args: %{mode: "specific", media_item_id: media_item.id}
+      )
+    end
+
+    test "queues nothing when search_on_add is absent", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id}, config: config)
+
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: media_item.id})
+    end
+  end
+
+  describe "approve_request/3 season monitoring" do
+    setup do
+      user = create_user()
+      admin = create_user(%{role: "admin"})
+
+      {:ok, request} =
+        MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "Beacons Over Ilmarry",
+          tmdb_id: 771_002,
+          requester_id: user.id
+        })
+
+      bypass = Bypass.open()
+
+      # Two real seasons, so "none" (fetch nothing) and "all" (fetch
+      # everything) actually diverge. `stub_tmdb_tv_show/4`'s seasons list
+      # only needs to name the seasons; the episodes themselves come from the
+      # per-season endpoint stubbed below.
+      stub_tmdb_tv_show(bypass, request.tmdb_id, request.title, [
+        %{"season_number" => 1, "episode_count" => 2},
+        %{"season_number" => 2, "episode_count" => 3}
+      ])
+
+      stub_tmdb_season(bypass, request.tmdb_id, 1, 2)
+      stub_tmdb_season(bypass, request.tmdb_id, 2, 3)
+
+      # A TMDB-sourced show with no tvdb_id triggers maybe_discover_tvdb_id
+      # during the episode refresh; this stub keeps that lookup off the network.
+      stub_tvdb_search_empty(bypass)
+
+      %{admin: admin, request: request, config: relay_config(bypass)}
+    end
+
+    test "creates no episodes when season monitoring is none", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 season_monitoring: "none"
+               )
+
+      assert media_item.type == "tv_show"
+
+      assert Repo.aggregate(
+               from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id),
+               :count
+             ) == 0
+    end
+
+    test "creates episodes for every season when season monitoring is all", %{
+      request: request,
+      admin: admin,
+      config: config
+    } do
+      assert {:ok, %{media_item: media_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: config,
+                 season_monitoring: "all"
+               )
+
+      assert media_item.type == "tv_show"
+
+      # The stub offers 2 + 3 = 5 episodes across two seasons; "all" must
+      # fetch every one of them, in contrast to "none" fetching zero above.
+      assert Repo.aggregate(
+               from(e in Mydia.Media.Episode, where: e.media_item_id == ^media_item.id),
+               :count
+             ) == 5
+    end
+  end
+
   describe "approve_request/3 metadata" do
     setup do
       user = create_user()
@@ -486,18 +698,45 @@ defmodule Mydia.MediaRequestsTest do
     end)
   end
 
-  defp stub_tmdb_tv_show(bypass, id, title) do
+  defp stub_tmdb_tv_show(bypass, id, title, seasons \\ []) do
     body = %{
       "id" => id,
       "name" => title,
       "first_air_date" => "2021-03-04",
       "overview" => "x",
       "credits" => %{"cast" => [], "crew" => []},
-      "seasons" => [],
+      "seasons" => seasons,
       "genres" => []
     }
 
     Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{id}", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+  end
+
+  # Backs the per-season fetch `refresh_episodes_for_tv_show/2` makes for a
+  # TMDB-sourced show (relay.ex's `fetch_season_tmdb/4`), independent of the
+  # season list on the show-level stub above. `episode_count` episodes are
+  # numbered 1.., which is all `EpisodeData.from_api_response/1` requires.
+  defp stub_tmdb_season(bypass, tmdb_id, season_number, episode_count) do
+    episodes =
+      for episode_number <- 1..episode_count do
+        %{
+          "season_number" => season_number,
+          "episode_number" => episode_number,
+          "name" => "Episode #{episode_number}"
+        }
+      end
+
+    body = %{
+      "season_number" => season_number,
+      "name" => "Season #{season_number}",
+      "episodes" => episodes
+    }
+
+    Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}/#{season_number}", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(body))

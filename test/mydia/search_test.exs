@@ -55,4 +55,51 @@ defmodule Mydia.SearchTest do
       refute_enqueued(worker: Mydia.Jobs.TVShowSearch, args: %{media_item_id: unsupported.id})
     end
   end
+
+  describe "maybe_queue_search/2" do
+    test "queues nothing when the flag is false" do
+      movie = insert(:media_item, type: "movie")
+
+      assert :ok = Search.maybe_queue_search(movie, false)
+
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch, args: %{media_item_id: movie.id})
+    end
+
+    test "queues the search when the flag is true" do
+      movie = insert(:media_item, type: "movie")
+
+      assert :ok = Search.maybe_queue_search(movie, true)
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MovieSearch,
+        args: %{mode: "specific", media_item_id: movie.id}
+      )
+    end
+
+    test "reports success even when nothing could be queued" do
+      # An unsupported type is skipped by queue_auto_searches/1, so this
+      # returns {:ok, 0} rather than an error. Either way the caller gets :ok:
+      # adding the title is what was asked for, the search is convenience.
+      unsupported = insert(:media_item, type: "documentary")
+
+      assert :ok = Search.maybe_queue_search(unsupported, true)
+    end
+
+    test "reports success even when the queue insert genuinely fails" do
+      # A PID cannot be JSON-encoded, so Ecto's dump step raises
+      # Ecto.ChangeError rather than returning an invalid changeset.
+      # queue_auto_searches/1 catches it and returns a real {:error, reason}
+      # (not the {:ok, 0} "nothing to queue" case above), which this must
+      # still swallow: adding the title succeeded, the search is a
+      # convenience on top of it.
+      bad_item = %Mydia.Media.MediaItem{type: "movie", id: self()}
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = Search.maybe_queue_search(bad_item, true)
+        end)
+
+      assert log =~ "Failed to queue search on add"
+    end
+  end
 end
