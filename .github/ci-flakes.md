@@ -115,7 +115,7 @@ loudly and nothing was listening. When triaging a merged-but-broken commit, chec
 the PR's full check list rather than whether it merged green.
 
 `--auto` is no longer used for dependabot. See the merge gate in
-`.github/README.md`.
+`.github/ci.md`.
 
 ## CI / Docker used to cancel its own master runs
 
