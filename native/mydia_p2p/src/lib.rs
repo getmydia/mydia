@@ -9,8 +9,6 @@ use mydia_p2p_core::{
 use rustler::{
     Binary, Encoder, Env, LocalPid, NifStruct, NifTaggedEnum, OwnedEnv, ResourceArc, Term,
 };
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
 use std::thread;
 
 mod atoms {
@@ -114,14 +112,6 @@ struct ElixirPairingResponse {
 }
 
 #[derive(NifStruct)]
-#[module = "Mydia.P2p.ReadMediaRequest"]
-struct ElixirReadMediaRequest {
-    pub file_path: String,
-    pub offset: u64,
-    pub length: u32,
-}
-
-#[derive(NifStruct)]
 #[module = "Mydia.P2p.GraphQLRequest"]
 struct ElixirGraphQLRequest {
     pub query: String,
@@ -194,43 +184,6 @@ fn send_response(
         Ok(_) => Ok("ok".to_string()),
         Err(e) => Err(rustler::Error::Term(Box::new(e))),
     }
-}
-
-/// Read a file chunk and send it as a response.
-/// This is done in a separate thread to avoid blocking the NIF.
-#[rustler::nif]
-fn respond_with_file_chunk(
-    resource: ResourceArc<HostResource>,
-    request_id: String,
-    file_path: String,
-    offset: u64,
-    length: u32,
-) -> Result<String, rustler::Error> {
-    let resource_clone = resource.clone();
-
-    thread::spawn(move || {
-        let response = match File::open(&file_path) {
-            Ok(mut file) => {
-                if file.seek(SeekFrom::Start(offset)).is_ok() {
-                    let mut buffer = vec![0; length as usize];
-                    match file.read(&mut buffer) {
-                        Ok(n) => {
-                            buffer.truncate(n);
-                            MydiaResponse::MediaChunk(buffer)
-                        }
-                        Err(e) => MydiaResponse::Error(format!("Read error: {}", e)),
-                    }
-                } else {
-                    MydiaResponse::Error("Seek error".to_string())
-                }
-            }
-            Err(e) => MydiaResponse::Error(format!("File open error: {}", e)),
-        };
-
-        let _ = blocking::send_response(&resource_clone.host, request_id, response);
-    });
-
-    Ok("ok".to_string())
 }
 
 /// Send an HLS response header for a streaming request.
@@ -403,21 +356,6 @@ fn start_listening(
                             )
                                 .encode(env)
                         }
-                        MydiaRequest::ReadMedia(req) => {
-                            let elixir_req = ElixirReadMediaRequest {
-                                file_path: req.file_path,
-                                offset: req.offset,
-                                length: req.length,
-                            };
-                            (
-                                atoms::ok(),
-                                "request_received",
-                                "read_media",
-                                request_id,
-                                elixir_req,
-                            )
-                                .encode(env)
-                        }
                         MydiaRequest::GraphQL(req) => {
                             let elixir_req = ElixirGraphQLRequest {
                                 query: req.query,
@@ -439,12 +377,13 @@ fn start_listening(
                             (atoms::ok(), "request_received", "ping", request_id).encode(env)
                         }
                         // `RemoteControl` and `Custom` are intercepted and rejected before
-                        // this match (see above), so in practice this only ever matches
-                        // `HlsStream` -- which never reaches `Event::RequestReceived` at
-                        // all, since the core routes it to `Event::HlsStreamRequest`
-                        // instead. Kept for exhaustiveness against future variants; a
-                        // message reaching here still carries no `request_id` for Elixir
-                        // to answer with.
+                        // this match (see above), and `ReadMedia` is refused by the core
+                        // before it ever becomes a `RequestReceived` event, so in practice
+                        // this only ever matches `HlsStream` -- which never reaches
+                        // `Event::RequestReceived` at all, since the core routes it to
+                        // `Event::HlsStreamRequest` instead. Kept for exhaustiveness
+                        // against future variants; a message reaching here still carries
+                        // no `request_id` for Elixir to answer with.
                         _ => (atoms::ok(), "unknown_request").encode(env),
                     },
                     Event::HlsStreamRequest {
