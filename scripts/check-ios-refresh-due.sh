@@ -22,7 +22,7 @@ readonly SCRIPT="scripts/ios-refresh-due.sh"
 # in the past would lose to the first real one and fail this suite on every run
 # from then on. 9999-12-31 wins forever.
 readonly MARKER_PROBE="ios-refresh/9999-12-31"
-trap 'git tag -d "$MARKER_PROBE" >/dev/null 2>&1 || true' EXIT
+trap 'git tag -d "$MARKER_PROBE" "v9.9.9-beta.1" >/dev/null 2>&1 || true' EXIT
 
 fail=0
 note_failure() { echo "FAIL: $*" >&2; fail=1; }
@@ -85,10 +85,32 @@ expect "the marker date is read from the tag name, not a git date" \
 
 git tag -d "$MARKER_PROBE" >/dev/null 2>&1 || true
 
+# newest_stable()'s prerelease exclusion, with a probe that cannot go stale.
+#
+# Every synthetic case above overrides IOS_REFRESH_STABLE and so never calls
+# newest_stable() at all. The real-repository case below cannot cover the
+# exclusion either: it only discriminates while some prerelease tag happens to
+# be newer than the newest stable one. That was true when this suite was
+# written and stopped being true the day v0.14.0 shipped, which is how long a
+# timing-dependent assertion survives.
+#
+# An ANNOTATED tag carries its tagger date as creatordate, unlike a lightweight
+# one, so a pinned future date puts this probe above every real tag forever. A
+# broken exclusion regex returns the probe; a working one skips it.
+readonly PRERELEASE_PROBE="v9.9.9-beta.1"
+GIT_COMMITTER_DATE="2099-01-01T00:00:00Z" \
+  git tag -a -m "check-ios-refresh-due probe" "$PRERELEASE_PROBE" HEAD >/dev/null 2>&1
+
+probe_result="$(IOS_REFRESH_TODAY=2026-09-04 "$SCRIPT" 2>/dev/null | sed -n 's/^tag=//p')"
+case "$probe_result" in
+  *-beta*|*-rc*|*-alpha*)
+    note_failure "prerelease exclusion: newest_stable() returned '${probe_result}', a prerelease" ;;
+esac
+
+git tag -d "$PRERELEASE_PROBE" >/dev/null 2>&1 || true
+
 # The real repository, with only today pinned. Proves the git queries work
-# against real refs rather than only against synthetic strings, and that the
-# prerelease exclusion holds: there are v0.14.0-beta.* tags newer than the
-# newest stable one, so a broken filter fails here.
+# against real refs rather than only against synthetic strings.
 out="$(IOS_REFRESH_TODAY=2026-09-04 "$SCRIPT" 2>/dev/null)"
 real_tag="$(sed -n 's/^tag=//p' <<<"$out")"
 real_sha="$(sed -n 's/^sha=//p' <<<"$out")"

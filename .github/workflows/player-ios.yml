@@ -71,10 +71,14 @@ jobs:
   build:
     name: Build and upload
     runs-on: macos-26
-    # Serialises a refresh against a release so a stale refresh cannot land
-    # after a fresh release. Distinct build numbers mean both uploads would
-    # succeed, but the resulting order in App Store Connect reads as a
-    # regression.
+    # Serialises the iOS build so a release and a refresh never upload at once.
+    #
+    # This prevents overlap, not staleness. A refresh queued behind a release
+    # still uploads the version it resolved before it queued, so a slightly
+    # older build can briefly become the newest one in App Store Connect. That
+    # window needs a release dispatched during the refresh's queue wait, and the
+    # next release corrects it, so the version is deliberately not re-resolved
+    # after the lock is acquired.
     concurrency:
       group: player-ios-testflight
       cancel-in-progress: false
