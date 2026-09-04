@@ -100,8 +100,11 @@ Two traps worth knowing if you add a page:
   the layout's own `<h1>Mydia</h1>` is present but hidden, so the default
   timed out on every page and left each shot racing the settle timer.
 - Library cards link to `/media/:id`, not `/movies/:id` or `/tv/:id`. A
-  `follow` selector written against the pretty URL matches nothing and the run
-  silently screenshots the listing again.
+  `follow` selector written against the pretty URL matches nothing. That used
+  to screenshot the listing a second time under the detail page's name, so a
+  `follow` that finds nothing now **fails the run**, and the click is followed
+  by a wait on `#main-column`, which only the detail page renders. Override
+  that with `follow_wait` if you add a shot that lands somewhere else.
 
 ## Viewport Size
 

@@ -30,7 +30,13 @@ fi
 # Playwright's bundled Chromium does not start on NixOS. Fall back to the
 # system browser when one is on PATH; elsewhere Playwright's own download wins.
 if [ -z "${CHROME_PATH:-}" ] && command -v chromium > /dev/null 2>&1; then
-    CHROME_PATH="$(readlink -f "$(command -v chromium)")"
+    CHROME_PATH="$(command -v chromium)"
+    # Resolve the symlink where the platform can. `readlink -f` is GNU-only,
+    # and under `set -e` the BSD/macOS failure would kill the script before
+    # Playwright ever starts. Playwright accepts either form.
+    if resolved="$(readlink -f "$CHROME_PATH" 2> /dev/null)"; then
+        CHROME_PATH="$resolved"
+    fi
     export CHROME_PATH
     echo -e "${YELLOW}Using system Chromium: ${CHROME_PATH}${NC}\n"
 fi

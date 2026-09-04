@@ -186,14 +186,28 @@ async function captureWebUi(browser) {
 
     // Some shots are of a detail page reached from a listing, so the id
     // comes from whatever is in the library rather than the config.
+    //
+    // This throws rather than warning. locator.count() does not auto-wait, so
+    // a listing that is still rendering reads as "no link" and the run
+    // cheerfully saves the listing under the detail page's name — the exact
+    // way series.png was wrong for a whole release.
     if (screenshot.follow) {
       const link = page.locator(screenshot.follow).first();
-      if (await link.count()) {
-        await link.click();
-        await page.waitForTimeout(3000);
-      } else {
-        console.log(`  ⚠ Warning: no link matched "${screenshot.follow}"`);
+      try {
+        await link.waitFor({ state: "visible", timeout: 15000 });
+      } catch {
+        throw new Error(
+          `No link matched "${screenshot.follow}" on ${screenshot.path} — ` +
+            `${screenshot.name} would have been a copy of the listing. ` +
+            `Is the library empty?`,
+        );
       }
+      await link.click();
+      await page.waitForSelector(screenshot.follow_wait || "#main-column", {
+        timeout: 15000,
+        state: "attached",
+      });
+      await page.waitForTimeout(2000);
     }
 
     const filename = `${config.outputDir}/${screenshot.name}.png`;
