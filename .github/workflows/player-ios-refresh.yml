@@ -143,8 +143,24 @@ jobs:
     permissions:
       contents: write
     steps:
+      # fetch-depth: 0 because this job tags the stable release's commit, and
+      # the workflow only fires 60 or more days after that release, by which
+      # time the default branch has moved well past it. checkout's default
+      # depth-1 clone of the branch tip does not contain that commit, and
+      # `git tag <name> <sha>` then dies with "trying to write ref ... with
+      # nonexistent object", exit 128.
+      #
+      # The failure is nastier than a plain red run: the upload has already
+      # succeeded by this point, so the build reaches TestFlight while the
+      # marker recording it never lands. The baseline never advances, and every
+      # following week re-refreshes and fails again.
+      #
+      # Verified in a scratch clone: depth-1 fails exactly as above, full
+      # history succeeds.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # scripts/ios-refresh-due.sh reads this tag back as the baseline. It uses
       # a tag rather than this workflow's run history because a run that decides
