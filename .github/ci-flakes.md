@@ -622,6 +622,30 @@ Three confirmations now, so treat this signature as flake-first. It and the
 `Mydia.MediaTest` tie-break can fire in the same run, so two reds on a PR are not
 evidence of a real break until you have read both signatures.
 
+**`MydiaWeb.Features.AddConfigFlowTest`**, "submitting the form with a chosen
+library adds the title and closes the dialog", fails alone (1 of 34) with
+`(Wallaby.ExpectationNotMetError) Expected not to find 1 visible element that
+matched the css '#add-config-modal[open]', but 1 visible element was found`, at
+`test/mydia_web/features/add_config_flow_test.exs:306`.
+
+Seen 2026-09-04 on PR #699, a changelog-only diff. The commit under it,
+`18cd5f999`, had passed the same job on master forty minutes earlier
+(run 33920124343), which is the cheapest way to separate this one from a real
+break: the test file is young (`d73dc07fd` wrote it for the merged dialog,
+`4a4b44695` moved it onto `visit_liveview`), so a genuine regression is
+plausible enough to be worth one check rather than an assumption.
+
+The assertion is a bare `refute_has` immediately after the submit click, resting
+on the comment above it that "the dialog closes synchronously on submit". Wallaby
+does poll a `refute_has`, so a slow runner alone should not produce this. Worth
+noting for anyone who sees it a second time: `#689` gave the failure branch a
+reason to keep the dialog open, since a metadata failure now re-renders it with
+the operator's choices instead of closing and flashing. A stubbed fetch that
+errors rather than merely lagging would produce exactly this message.
+
+One occurrence so far, so this is not yet flake-first. Check master at the same
+SHA before treating it as either.
+
 **`MydiaWeb.Features.MediaBackdropTest`**, "below the lg breakpoint the backdrop
 spans the full width", failing alone (1 of 34) with `(MatchError) no match of
 right hand side value: "no backdrop rendered"`. Fixed, not flaky any more, but
