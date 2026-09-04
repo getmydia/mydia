@@ -112,6 +112,13 @@ jobs:
       - name: Assert the store release notes hold their contract
         run: ./scripts/check-testflight-notes.sh
 
+      # The refresh workflow it feeds cannot be dispatched or scheduled until it
+      # is on the default branch, so this is the only place its decision is
+      # exercised before merge. Needs the same fetch-depth: 0 checkout, because
+      # it reads the tag list.
+      - name: Assert the TestFlight refresh decision holds its contract
+        run: ./scripts/check-ios-refresh-due.sh
+
   generated-freshness:
     name: Check / Generated Freshness
     runs-on: ubuntu-latest
