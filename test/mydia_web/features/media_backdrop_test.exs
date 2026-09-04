@@ -99,8 +99,7 @@ defmodule MydiaWeb.Features.MediaBackdropTest do
     session
     |> login_as_admin()
     |> resize_window(1700, 800)
-    |> visit("/media/#{show.id}")
-    |> wait_for_liveview()
+    |> visit_liveview("/media/#{show.id}")
 
     assert eval_js(session, @backdrop_position) == "fixed"
 
@@ -145,8 +144,7 @@ defmodule MydiaWeb.Features.MediaBackdropTest do
     session
     |> login_as_admin()
     |> resize_window(1000, 800)
-    |> visit("/media/#{show.id}")
-    |> wait_for_liveview()
+    |> visit_liveview("/media/#{show.id}")
 
     [top, left, _height, _viewport, _page] = eval_js(session, @backdrop_metrics)
 

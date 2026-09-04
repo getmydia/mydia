@@ -177,6 +177,35 @@ other LiveView test in the repo is already non-async for this reason.
 First hit was PR #172, the downloads sort feature, with 5 failures on
 `#downloads-sort` not rendering.
 
+## Navigating straight after login/3 used to lose the navigation
+
+`login/3` submits a real form. `POST /auth/local/login` answers 302 to `/`, and
+ChromeDriver's click command returns before that navigation commits: measured,
+the browser was still on `/auth/local/login` with `document.readyState` already
+`"complete"` in roughly 3 of 20 log-ins, so there was no pending-load signal for
+anyone to wait on. A `visit/2` issued into that window was discarded outright,
+and the test ran against `/` while every wait it performed was satisfied by that
+page's connected root. The symptom was a probe reporting a missing element on a
+page that renders it perfectly, three lines below the navigation that never
+happened.
+
+`login/3` now blocks until the pathname has left `/auth/local/login`, so this
+particular race is closed. Two habits keep the class of bug closed:
+
+- Navigate with `visit_liveview/3`, not `visit/2` plus `wait_for_liveview/2`.
+  It supplies `:at` from the same argument it navigates with, so a lost or
+  redirected navigation fails naming both paths instead of surfacing later as a
+  missing element. Use a bare `visit/2` only where a redirect is the thing under
+  test.
+- Do not wait on `[data-phx-main].phx-connected` alone to prove a page arrived.
+  It is true of the previous page too. That is why the older convention of
+  following `login/3` with a bare `wait_for_liveview()` worked on a first log-in,
+  where the log-in page is a controller view with no root at all, and did nothing
+  on a second log-in in the same session.
+
+Seen on CI run 33868003647, as `MydiaWeb.Features.MediaBackdropTest` raising
+`MatchError` on `"no backdrop rendered"`.
+
 ## Tests must not mutate global env
 
 Never `System.put_env("METADATA_RELAY_URL", ...)`, or write any other global env

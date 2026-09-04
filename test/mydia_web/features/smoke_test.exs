@@ -19,8 +19,7 @@ defmodule MydiaWeb.Features.SmokeTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       assert Wallaby.Browser.has_css?(session, "[data-phx-main].phx-connected")
     end

@@ -40,8 +40,7 @@ defmodule MydiaWeb.Features.UiHooksTest do
 
       session
       |> resize_window(1400, 1000)
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       before = document_theme(session)
 
@@ -72,8 +71,7 @@ defmodule MydiaWeb.Features.UiHooksTest do
       # `visit/2` is a full browser navigation (not a `<.link navigate>`
       # pushState), so there is no race to poll out here.
       session
-      |> visit("/movies")
-      |> wait_for_liveview()
+      |> visit_liveview("/movies")
 
       assert document_theme(session) == after_toggle
     end
@@ -107,8 +105,7 @@ defmodule MydiaWeb.Features.UiHooksTest do
       login_as_admin(session)
 
       session
-      |> visit("/import")
-      |> wait_for_liveview()
+      |> visit_liveview("/import")
 
       selector = "#auto-import-toggle"
 
@@ -130,10 +127,8 @@ defmodule MydiaWeb.Features.UiHooksTest do
       # `mounted()` re-reads localStorage on the way back rather than being
       # skipped as an already-mounted, `phx-update="ignore"`d node.
       session
-      |> visit("/movies")
-      |> wait_for_liveview()
-      |> visit("/import")
-      |> wait_for_liveview()
+      |> visit_liveview("/movies")
+      |> visit_liveview("/import")
 
       assert checkbox_checked?(session, selector) == toggled
     end

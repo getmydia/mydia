@@ -14,8 +14,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var el = document.createElement('div');
@@ -33,8 +32,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var under = document.createElement('div');
@@ -66,8 +64,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var on = document.createElement('div');
@@ -98,8 +95,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var box = document.createElement('div');
@@ -138,8 +134,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var a = document.createElement('div');
@@ -163,8 +158,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var a = document.createElement('div');
@@ -189,8 +183,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var a = document.createElement('div');
@@ -229,8 +222,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var a = document.createElement('div');
@@ -266,8 +258,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var b = document.createElement('div');
@@ -291,8 +282,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var a = document.createElement('div');
@@ -316,8 +306,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var a = document.createElement('div');
@@ -347,8 +336,7 @@ defmodule MydiaWeb.Features.GeometrySelfTest do
       login_as_admin(session)
 
       session
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       inject(session, """
         var a = document.createElement('div');

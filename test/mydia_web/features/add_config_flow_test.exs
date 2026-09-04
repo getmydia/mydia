@@ -190,8 +190,7 @@ defmodule MydiaWeb.Features.AddConfigFlowTest do
   # off the edge of the viewport.
   defp open_first_config(session) do
     session
-    |> visit("/discover")
-    |> wait_for_liveview()
+    |> visit_liveview("/discover")
     |> assert_has(Query.css(~s([data-test="add-config-caret"]), minimum: 1))
     # Tried a real click(Query.css(..., at: 0)) here first: it reaches the
     # caret and opens the dialog at the 1400x1000 desktop viewport, but at

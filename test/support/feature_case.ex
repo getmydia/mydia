@@ -154,15 +154,91 @@ defmodule MydiaWeb.FeatureCase do
     {:ok, session: session}
   end
 
+  @login_path "/auth/local/login"
+
+  # One redirect is one round trip. A longer budget would only slow a genuine
+  # breakage, and the only way to reach it is a log-in the form rejected.
+  @login_redirect_timeout 5_000
+
   @doc """
-  Visits the login page and fills in the login form with the given credentials.
+  Visits the login page, submits the credentials, and blocks until the
+  resulting redirect has landed.
+
+  The wait is the point. `POST #{@login_path}` answers 302 to `/`, a real
+  full-page navigation, and ChromeDriver's click command returns before that
+  navigation commits: measured, the browser is still on `#{@login_path}` with
+  `document.readyState` already `"complete"` in roughly 3 of 20 log-ins, so
+  there is no pending-load signal for Wallaby to wait on. Anything the test
+  does next races it, and a `visit/2` that loses is discarded outright. The
+  test then runs against `/` while every wait it performs is satisfied by that
+  page's connected root. That is CI run 33868003647.
+
+  Waiting on the pathname rather than on `[data-phx-main]` is deliberate.
+  `#{@login_path}` is a plain controller page, so a bare `wait_for_liveview/2`
+  after a first log-in does block until the redirect lands, by accident. It
+  does nothing at all on a second log-in in the same session, which runs from
+  an already-connected LiveView page whose root satisfies that poll instantly.
   """
   def login(session, username, password) do
     session
-    |> Wallaby.Browser.visit("/auth/local/login")
+    |> Wallaby.Browser.visit(@login_path)
     |> Wallaby.Browser.fill_in(Wallaby.Query.text_field("user[username]"), with: username)
     |> Wallaby.Browser.fill_in(Wallaby.Query.text_field("user[password]"), with: password)
     |> Wallaby.Browser.click(Wallaby.Query.button("Log In"))
+    |> wait_for_login_redirect()
+  end
+
+  defp wait_for_login_redirect(session) do
+    try do
+      eventually(
+        fn ->
+          [path, ready_state] =
+            session
+            |> eval_js("return window.location.pathname + '|' + document.readyState;")
+            |> String.split("|", parts: 2)
+
+          if path != @login_path and ready_state == "complete" do
+            {:ok, session}
+          else
+            :error
+          end
+        end,
+        timeout: @login_redirect_timeout,
+        interval: 50,
+        description: "the log-in redirect to land"
+      )
+    rescue
+      e in RuntimeError ->
+        if String.starts_with?(e.message, "eventually/2 timed out") do
+          reraise login_redirect_failure_message(@login_redirect_timeout), __STACKTRACE__
+        else
+          reraise e, __STACKTRACE__
+        end
+    end
+
+    session
+  end
+
+  @doc """
+  The message `login/3` raises when the log-in redirect never lands.
+
+  Public so it can be tested without a browser, like `liveview_failure_message/2`.
+  """
+  def login_redirect_failure_message(timeout_ms) do
+    """
+    The log-in form was submitted but the browser was still on #{@login_path}
+    after #{timeout_ms}ms.
+
+    `login/3` blocks until the POST's redirect has landed, because ChromeDriver's
+    click returns before that navigation commits and anything the test does next
+    races it. A `visit/2` that loses that race is discarded, and the test then
+    asserts against whatever page the redirect produced.
+
+    The usual cause is credentials the form rejected, which re-renders the form
+    at the same path. A browser test is not the place to assert a failed log-in;
+    those assertions live in
+    test/mydia_web/controllers/session_controller_test.exs.
+    """
   end
 
   @doc """
@@ -292,27 +368,33 @@ defmodule MydiaWeb.FeatureCase do
   turned into the diagnostic below; anything else is re-raised unchanged so a
   dead session is never reported as an ordinary unconnected socket.
 
-  Options: `:timeout` (ms, default 15_000).
+  Options: `:timeout` (ms, default 15_000), `:at` (the path the browser is
+  expected to be on, compared against `window.location.pathname`; a query
+  string is ignored). Prefer `visit_liveview/3`, which supplies `:at` from the
+  same argument it navigates with so the two cannot drift apart.
   """
   def wait_for_liveview(session, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 15_000)
+    expected = opts |> Keyword.get(:at) |> expected_pathname()
 
     try do
       eventually(
         fn ->
-          if root_connected?(session) do
+          [state, path] = session |> page_state() |> String.split("|", parts: 2)
+
+          if state == "connected" and (is_nil(expected) or path == expected) do
             {:ok, session}
           else
             :error
           end
         end,
         timeout: timeout,
-        description: "the root LiveView to connect its socket"
+        description: wait_description(expected)
       )
     rescue
       e in RuntimeError ->
         if String.starts_with?(e.message, "eventually/2 timed out") do
-          reraise liveview_failure_message(root_present?(session), timeout), __STACKTRACE__
+          reraise timeout_message(session, expected, timeout), __STACKTRACE__
         else
           reraise e, __STACKTRACE__
         end
@@ -321,8 +403,75 @@ defmodule MydiaWeb.FeatureCase do
     session
   end
 
-  defp root_connected?(session) do
-    eval_js(session, "return document.querySelector('[data-phx-main].phx-connected') !== null;")
+  @doc """
+  Navigates to `path` and blocks until that page's root LiveView has connected.
+
+  The path is given once, to the call that navigates, so the `:at` check cannot
+  drift from the navigation or be forgotten on a new test. Use a bare
+  `Wallaby.Browser.visit/2` only where the browser is expected to end up
+  somewhere else, as when asserting a redirect.
+
+  Options are passed through to `wait_for_liveview/2`.
+  """
+  def visit_liveview(session, path, opts \\ []) do
+    session
+    |> Wallaby.Browser.visit(path)
+    |> wait_for_liveview(Keyword.put(opts, :at, path))
+  end
+
+  # Both conditions in one WebDriver call, so `eventually/2`'s budget stays the
+  # thing that governs the wait. See the note in the doc above about `has?/2`.
+  defp page_state(session) do
+    eval_js(session, """
+    const root = document.querySelector('[data-phx-main].phx-connected');
+    return (root ? 'connected' : 'pending') + '|' + window.location.pathname;
+    """)
+  end
+
+  defp wait_description(nil), do: "the root LiveView to connect its socket"
+
+  defp wait_description(expected),
+    do: "the root LiveView at #{expected} to connect its socket"
+
+  defp timeout_message(session, nil, timeout),
+    do: liveview_failure_message(root_present?(session), timeout)
+
+  defp timeout_message(session, expected, timeout) do
+    [_state, actual] = session |> page_state() |> String.split("|", parts: 2)
+
+    if actual == expected do
+      liveview_failure_message(root_present?(session), timeout)
+    else
+      wrong_page_message(expected, actual, timeout)
+    end
+  end
+
+  @doc """
+  Normalises an `:at` path to what `window.location.pathname` will report.
+
+  Public so it is testable without a browser.
+  """
+  def expected_pathname(nil), do: nil
+  def expected_pathname(path), do: URI.parse(path).path
+
+  @doc """
+  The message `wait_for_liveview/2` raises when the browser is on the wrong page.
+
+  Public so it can be tested without a browser, like `liveview_failure_message/2`.
+  """
+  def wrong_page_message(expected_path, actual_path, timeout_ms) do
+    """
+    Expected the browser on #{expected_path}.
+    After #{timeout_ms}ms it is on #{actual_path}.
+
+    The navigation did not land. The usual causes are a redirect, from an auth
+    guard or from a LiveView that redirects on mount, and a navigation discarded
+    by another still in flight from the command before it.
+
+    Every assertion that follows would have run against the wrong page, so this
+    fails here rather than letting a later probe report a missing element and
+    send the reader looking at the wrong component.
+    """
   end
 
   defp root_present?(session) do

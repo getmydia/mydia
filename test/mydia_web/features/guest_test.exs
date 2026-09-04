@@ -54,11 +54,9 @@ defmodule MydiaWeb.Features.GuestTest do
 
       # --- Guest submits through Discover's one-click Request button ---
       login(session, guest.username, "password123")
-      session |> wait_for_liveview()
 
       session
-      |> visit("/discover?type=movie&q=stub")
-      |> wait_for_liveview()
+      |> visit_liveview("/discover?type=movie&q=stub")
       |> assert_has_text(MetadataStubProvider.movie_title())
 
       session
@@ -75,11 +73,9 @@ defmodule MydiaWeb.Features.GuestTest do
 
       # --- Admin approves through the modal ---
       login(session, admin.username, "password123")
-      session |> wait_for_liveview()
 
       session
-      |> visit("/admin/requests")
-      |> wait_for_liveview()
+      |> visit_liveview("/admin/requests")
       |> assert_has_text(MetadataStubProvider.movie_title())
 
       session

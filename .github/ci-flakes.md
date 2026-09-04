@@ -622,6 +622,24 @@ Three confirmations now, so treat this signature as flake-first. It and the
 `Mydia.MediaTest` tie-break can fire in the same run, so two reds on a PR are not
 evidence of a real break until you have read both signatures.
 
+**`MydiaWeb.Features.MediaBackdropTest`**, "below the lg breakpoint the backdrop
+spans the full width", failing alone (1 of 34) with `(MatchError) no match of
+right hand side value: "no backdrop rendered"`. Fixed, not flaky any more, but
+the signature is worth recognising because it generalises.
+
+Confirmed on CI run 33868003647, a PR that only renamed a documentation file, so
+it was already latent on master. The tell is in the log rather than the message:
+the failing test produced one server render and one LiveView mount, where every
+passing test in the same job produced two. The media page was never requested.
+`login/3` had returned with the browser still on `/auth/local/login`, the
+`visit/2` that followed was discarded by the log-in redirect still in flight, and
+`wait_for_liveview()` was then satisfied by the dashboard's connected root.
+
+Any E2E failure where a probe reports a missing element on a page you can see
+renders it is worth checking this way first: count the server renders for that
+test. Fixed by making `login/3` wait for its redirect and by moving the suite
+onto `visit_liveview/3`, which fails naming the page the browser is actually on.
+
 ## Getting the real output
 
 `gh run view --job <id> --log-failed` returns Postgres server log noise, where

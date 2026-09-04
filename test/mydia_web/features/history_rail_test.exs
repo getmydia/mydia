@@ -122,8 +122,7 @@ defmodule MydiaWeb.Features.HistoryRailTest do
     session
     |> login_as_admin()
     |> resize_window(1700, 1000)
-    |> visit("/media/#{show.id}")
-    |> wait_for_liveview()
+    |> visit_liveview("/media/#{show.id}")
 
     assert probe(session, @track_count) == 3
 
@@ -162,8 +161,7 @@ defmodule MydiaWeb.Features.HistoryRailTest do
     session
     |> login_as_admin()
     |> resize_window(1300, 1000)
-    |> visit("/media/#{show.id}")
-    |> wait_for_liveview()
+    |> visit_liveview("/media/#{show.id}")
 
     assert probe(session, @track_count) == 2
 
