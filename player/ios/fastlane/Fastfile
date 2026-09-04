@@ -1,21 +1,10 @@
+require_relative "release_metadata"
+
 default_platform(:ios)
-
-# What testers read in TestFlight. The release workflow writes the release's
-# `## Player` notes to a file and names it here. The literal fallback keeps a
-# local `fastlane beta` working with nothing set up, and degrades a failed write
-# to the old behaviour rather than to a rejected upload: Apple refuses an empty
-# "What to Test" for external distribution.
-def testflight_changelog
-  path = ENV["TESTFLIGHT_CHANGELOG_PATH"]
-  return "Automated beta build." if path.nil? || path.empty? || !File.readable?(path)
-
-  notes = File.read(path).strip
-  notes.empty? ? "Automated beta build." : notes
-end
 
 platform :ios do
   desc "Build and upload to TestFlight"
-  lane :beta do
+  lane :testflight do
     setup_ci if ENV['CI']
 
     # Install the App Store Connect API key
@@ -35,13 +24,14 @@ platform :ios do
       output_name: "Mydia Player.ipa"
     )
 
-    # Upload to TestFlight and distribute to the public "Beta" external group.
-    # External distribution requires the build to finish processing, so we can't
-    # skip waiting here. The first build of each new version goes through Apple's
-    # Beta App Review before public-link testers can install it.
+    # Upload to TestFlight and distribute to the external groups the workflow
+    # named. External distribution requires the build to finish processing, so
+    # we can't skip waiting here. The first build of each new version goes
+    # through Apple's Beta App Review; that is per version, not per group, so
+    # routing a stable release to a second group does not trigger another one.
     upload_to_testflight(
       distribute_external: true,
-      groups: ["Beta"],
+      groups: testflight_groups,
       changelog: testflight_changelog,
       notify_external_testers: false
     )
