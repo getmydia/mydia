@@ -77,9 +77,17 @@ A modern, self-hosted media management platform for tracking, organizing, and mo
 
     ![TV Shows](https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/tv-shows.png)
 
+-   **Series**
+
+    ![Series](https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/series.png)
+
 -   **Calendar**
 
     ![Calendar](https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/calendar.png)
+
+-   **Mydia Player**
+
+    ![Mydia Player](https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/player-desktop.png)
 
 </div>
 

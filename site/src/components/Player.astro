@@ -78,21 +78,37 @@ const features = [
         <div class="relative">
           <div class="w-[240px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
             <div class="w-full rounded-[1.5rem] overflow-hidden">
-              <img src="/img/player-2.png" alt="Mydia Player home screen" class="w-full" loading="lazy" />
+              <img src="/img/player-home.png" alt="Mydia Player home screen" class="w-full" loading="lazy" />
             </div>
           </div>
           <div class="absolute -inset-4 bg-primary/5 rounded-[3rem] -z-10 blur-2xl"></div>
         </div>
-        <!-- Phone mockup 2: Downloads screen -->
+        <!-- Phone mockup 2: Shows library -->
         <div class="relative hidden sm:block mt-12">
           <div class="w-[240px] rounded-[2rem] border-4 border-base-content/20 bg-base-300 p-1.5 shadow-2xl">
             <div class="w-full rounded-[1.5rem] overflow-hidden">
-              <img src="/img/player-1.png" alt="Mydia Player downloads screen" class="w-full" loading="lazy" />
+              <img src="/img/player-shows.png" alt="Mydia Player shows library" class="w-full" loading="lazy" />
             </div>
           </div>
           <div class="absolute -inset-4 bg-primary/5 rounded-[3rem] -z-10 blur-2xl"></div>
         </div>
       </div>
+    </div>
+
+    <!-- The same app on a big screen: desktop, and the web build your own
+         server hosts at /player. -->
+    <div class="mt-16">
+      <div class="rounded-xl overflow-hidden border border-base-300 shadow-2xl">
+        <img
+          src="/img/player-desktop.png"
+          alt="Mydia Player on a desktop, showing the library home screen"
+          class="w-full"
+          loading="lazy"
+        />
+      </div>
+      <p class="text-sm text-base-content/50 text-center mt-3">
+        On desktop, and in any browser at <code>/player</code> on your own server.
+      </p>
     </div>
   </div>
 </section>
