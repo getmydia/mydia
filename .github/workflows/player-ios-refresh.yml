@@ -1,0 +1,171 @@
+name: Player / iOS TestFlight Refresh
+
+# TestFlight deletes a build 90 days after upload, and the installed app then
+# refuses to launch. Both external groups are topped up only when a release
+# uploads one, and the gaps between stable releases have reached 73 days
+# (v0.9.0 to v0.10.0). This re-uploads the current stable release before that
+# happens.
+#
+# Weekly rather than monthly so a failed refresh retries in seven days instead
+# of thirty, with 60 days as the threshold: that leaves 30 days of margin.
+#
+# This file cannot be tested before it is merged. workflow_dispatch only
+# triggers for a file on the default branch, and schedules only run there. The
+# decision is therefore in scripts/ios-refresh-due.sh, covered by
+# scripts/check-ios-refresh-due.sh in ci-nix.yml, and the two inputs below exist
+# so the first runs on master can be staged.
+
+on:
+  schedule:
+    # Mondays, off the hour to avoid the top-of-hour scheduling crush.
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Refresh even when the newest build is younger than the threshold
+        type: boolean
+        default: false
+      dry_run:
+        description: Build and sign without uploading, and without pushing the marker tag
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  decide:
+    name: Decide
+    runs-on: ubuntu-latest
+    outputs:
+      due: ${{ steps.due.outputs.due }}
+      tag: ${{ steps.due.outputs.tag }}
+      version: ${{ steps.due.outputs.version }}
+      sha: ${{ steps.due.outputs.sha }}
+      version_code: ${{ steps.build_number.outputs.version_code }}
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      # fetch-depth: 0 because the decision reads the tag list and the notes
+      # fall back to walking a commit range.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether a refresh is due
+        id: due
+        run: ./scripts/ios-refresh-due.sh >> "$GITHUB_OUTPUT"
+
+      # release.yml derives its build number from `github.run_number + 10000`.
+      # This workflow has its own independent run_number, so reusing that
+      # formula would eventually mint a CFBundleVersion Apple already holds for
+      # the same marketing version and reject the upload. 900000 is disjoint by
+      # 890,000 release runs.
+      #
+      # Arithmetic is done here rather than in the `with:` block below because
+      # GitHub expressions have no arithmetic operators.
+      - name: Compute a build number that cannot collide with a release
+        id: build_number
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: echo "version_code=$(( RUN_NUMBER + 900000 ))" >> "$GITHUB_OUTPUT"
+
+      # The same notes testers already saw for this release. Computed here
+      # rather than in the build, for the same reason release.yml computes them
+      # in `prepare`: the iOS checkout is shallow and pinned to one commit.
+      - name: Compute store release notes
+        id: notes
+        if: steps.due.outputs.due == 'true' || inputs.force
+        env:
+          VERSION: ${{ steps.due.outputs.version }}
+          NOTES_SHA: ${{ steps.due.outputs.sha }}
+          TAG: ${{ steps.due.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          NOTES=$(./scripts/testflight-notes.sh "$VERSION" "$NOTES_SHA" "$TAG")
+
+          # A random delimiter: a fixed one appearing in the notes would
+          # terminate the value early.
+          DELIM="notes-$(openssl rand -hex 16)"
+          {
+            echo "notes<<${DELIM}"
+            echo "$NOTES"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Summarise the decision
+        env:
+          DUE: ${{ steps.due.outputs.due }}
+          AGE: ${{ steps.due.outputs.age_days }}
+          TAG: ${{ steps.due.outputs.tag }}
+          FORCED: ${{ inputs.force }}
+        run: |
+          {
+            echo "### iOS TestFlight refresh"
+            echo
+            echo "- Newest stable release: \`${TAG}\`"
+            echo "- Days since the groups were last topped up: ${AGE}"
+            echo "- Due: ${DUE}"
+            echo "- Forced: ${FORCED:-false}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  refresh:
+    name: Refresh
+    needs: decide
+    if: needs.decide.outputs.due == 'true' || inputs.force
+    uses: ./.github/workflows/player-ios.yml
+    with:
+      sha: ${{ needs.decide.outputs.sha }}
+      version: ${{ needs.decide.outputs.version }}
+      version_code: ${{ needs.decide.outputs.version_code }}
+      # Both groups. Refreshing only the stable group would leave the
+      # pre-release group's own 90-day clock running through the same drought.
+      groups: 'Beta,Pre-release'
+      notes: ${{ needs.decide.outputs.notes }}
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets:
+      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+
+  mark:
+    name: Mark refreshed
+    needs: [decide, refresh]
+    # Only after a real upload. A dry run must not move the baseline, or the
+    # next real refresh is deferred by 60 days on the strength of a build that
+    # never reached Apple.
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # scripts/ios-refresh-due.sh reads this tag back as the baseline. It uses
+      # a tag rather than this workflow's run history because a run that decides
+      # "not due" also succeeds, so run history would reset the baseline every
+      # week and the refresh would never fire.
+      #
+      # scripts/testflight-notes.sh excludes the ios-refresh/ prefix from its
+      # previous_tag() lookup. It is the only other code that walks the tag list.
+      - name: Push the marker tag
+        env:
+          SHA: ${{ needs.decide.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          TAG="ios-refresh/$(date -u +%Y-%m-%d)"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "${TAG} already exists, so today's refresh is already recorded."
+            exit 0
+          fi
+
+          git tag "$TAG" "$SHA"
+          git push origin "$TAG"
+          echo "Recorded this refresh as ${TAG}."
