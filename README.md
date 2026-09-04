@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/getmydia/mydia/actions/workflows/ci.yml/badge.svg)](https://github.com/getmydia/mydia/actions/workflows/ci.yml)
 [![Documentation](https://github.com/getmydia/mydia/actions/workflows/ci-docs.yml/badge.svg)](https://docs.mydia.dev)
-[![TestFlight](https://img.shields.io/badge/TestFlight-Join%20iOS%20Beta-0D96F6?logo=apple&logoColor=white)](https://testflight.apple.com/join/KFSYxaQP)
+[![TestFlight](https://img.shields.io/badge/TestFlight-Install%20on%20iOS-0D96F6?logo=apple&logoColor=white)](https://testflight.apple.com/join/KFSYxaQP)
 
 **Your personal media companion, built with Phoenix LiveView**
 
@@ -85,7 +85,7 @@ peer-to-peer connection. No port forwarding, no VPN.
 | Platform | Get it | Notes |
 |---|---|---|
 | Android | [Download APK](https://mydia.dev/download/android) | Allow installs from unknown sources |
-| iOS | [Join the TestFlight beta](https://testflight.apple.com/join/KFSYxaQP) | Needs the TestFlight app |
+| iOS | [Install via TestFlight](https://testflight.apple.com/join/KFSYxaQP) | Needs the TestFlight app |
 | macOS | [Download .dmg](https://mydia.dev/download/macos) | Notarized, updates itself |
 | Windows | [Download installer](https://mydia.dev/download/windows) | Per-user install, unsigned build |
 | Linux | [Flatpak](https://mydia.dev/download/flatpak) or [.tar.gz](https://mydia.dev/download/linux) | Flatpak recommended |

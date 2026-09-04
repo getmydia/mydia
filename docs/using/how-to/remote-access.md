@@ -2,11 +2,23 @@
 
 Remote access allows the Mydia mobile app to connect to your Mydia instance from anywhere, even when your server is behind NAT or a firewall.
 
-## Get the Mobile App (iOS Beta)
+## Get the Mobile App
 
-The Mydia player is in open beta on TestFlight. Install the [TestFlight app](https://apps.apple.com/app/testflight/id899247664) on your iPhone or iPad, then join the beta. New builds reach you automatically as they ship.
+The Mydia player is distributed through TestFlight. Install the [TestFlight app](https://apps.apple.com/app/testflight/id899247664) on your iPhone or iPad, then use the link below. Each new release reaches you automatically.
 
-[Join the iOS Beta](https://testflight.apple.com/join/KFSYxaQP){ .md-button .md-button--primary }
+[Install on iOS](https://testflight.apple.com/join/KFSYxaQP){ .md-button .md-button--primary }
+
+### Pre-release builds
+
+There is a second TestFlight track carrying release candidates and betas
+alongside every stable release, for anyone who wants to try changes early and
+report problems before they ship. It is the same opt-in as the Docker `:beta`
+tag and the Flatpak beta channel, and it moves faster and breaks more often.
+
+[Install pre-release builds](https://testflight.apple.com/join/XTvarNBK){ .md-button }
+
+Use one or the other, not both: a device can hold only one copy of the app, and
+whichever link you install from last is the track you are on.
 
 ## Configuration
 

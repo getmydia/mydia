@@ -302,6 +302,47 @@ private key breaks updates for every existing install. Recovery means shipping
 new repo files and asking users to re-add the remote. Keep a backup outside
 GitHub Actions.
 
+## iOS TestFlight tracks
+
+iOS ships through two App Store Connect external groups. The names are matched
+exactly by App Store Connect, and `Pre-release` carries a hyphen and a capital
+P:
+
+| Group | Public link | Receives |
+| --- | --- | --- |
+| `Beta` | `https://testflight.apple.com/join/KFSYxaQP` | stable releases, refresh builds |
+| `Pre-release` | `https://testflight.apple.com/join/XTvarNBK` | everything |
+
+The `Beta` group holds the link published in the README, on the site and in the
+user documentation, which is why it carries stable despite the name. The
+`Pre-release` group is a superset rather than prereleases alone, so a tester
+there receives a stable release as an ordinary update instead of sitting on a
+beta until the next cycle opens.
+
+`release.yml` picks the groups from `is_prerelease` and passes them to
+`player-ios.yml`, which both it and the refresh cron call.
+
+### The refresh cron
+
+TestFlight deletes a build 90 days after upload, and the installed app then
+refuses to launch. The `Beta` group is topped up only by stable releases, and
+the gap between v0.9.0 and v0.10.0 was 73 days.
+
+`player-ios-refresh.yml` runs weekly. When the newest build passes 60 days it
+rebuilds the current stable tag and uploads it to both groups, then records the
+refresh as an `ios-refresh/YYYY-MM-DD` tag. `scripts/ios-refresh-due.sh` makes
+that decision and `scripts/check-ios-refresh-due.sh` tests it, which is the only
+way it can be tested: a `workflow_dispatch` workflow only triggers for a file on
+the default branch, and schedules only run there, so nothing about this workflow
+is exercisable from a pull request.
+
+Refresh build numbers are `run_number + 900000`, disjoint from release.yml's
+`run_number + 10000`. Apple rejects a reused build number for a marketing
+version it already holds, and the two workflows have independent run counters.
+
+To force one: `gh workflow run player-ios-refresh.yml -f force=true`. Add
+`-f dry_run=true` to build without uploading or moving the marker tag.
+
 ## Release notes
 
 Notes are authored into `priv/changelog/<version>.md` and tracked in the
