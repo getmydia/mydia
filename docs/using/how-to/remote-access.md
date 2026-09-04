@@ -18,8 +18,8 @@ tag and the Flatpak beta channel, and it moves faster and breaks more often.
 [Install pre-release builds](https://testflight.apple.com/join/XTvarNBK){ .md-button }
 
 Pick one. Joining the pre-release track does not remove you from the stable one,
-so if you use both links you will keep getting pre-release builds until you
-leave that group from inside the TestFlight app.
+so opening both links leaves you a member of both. Leaving a track again is done
+from inside the TestFlight app, not from these links.
 
 ## Configuration
 
