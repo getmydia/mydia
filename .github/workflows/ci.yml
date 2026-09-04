@@ -268,7 +268,19 @@ jobs:
           fi
           mix credo --strict
           # Advisory dead-code report (non-blocking; see CONTRIBUTING.md "Quality gates").
-          UNUSED_CHECK=true mix compile --force || true
+          #
+          # This recompiles all 765 files a second time and cost 199s of every
+          # run, measured 2026-09-03. Nothing is ever gated on its output --
+          # .github/README.md records that mix_unused is advisory by design and
+          # must not be promoted to blocking -- so pull requests skip it and
+          # master pushes still produce the report.
+          #
+          # The gate is here rather than a step-level `if:` because splitting
+          # this heredoc would evaluate the devenv environment a second time and
+          # cost more than the 199s it saves.
+          if [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
+            UNUSED_CHECK=true mix compile --force || true
+          fi
           mix ecto.create
           mix ecto.migrate
           mix test --cover

@@ -192,7 +192,8 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
           provider_job: fake_provider_job(download.download_client_id),
           provider_module: StubProvider,
           jitter_ms: 0,
-          download_dir: staging
+          download_dir: staging,
+          retry_delay_base_ms: 10
         )
 
       :ok = wait_for_fetcher_exit(download.id)
@@ -229,7 +230,8 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
           provider_job: fake_provider_job(download.download_client_id),
           provider_module: StubProvider,
           jitter_ms: 0,
-          download_dir: staging
+          download_dir: staging,
+          retry_delay_base_ms: 10
         )
 
       :ok = wait_for_fetcher_exit(download.id)
@@ -239,6 +241,71 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
 
       assert reloaded.import_last_error =~ "rate-limited" or
                reloaded.import_last_error =~ "rate_limited"
+    end
+
+    test "honours an injected retry_delay_base_ms and the max_retries option",
+         %{staging: staging} do
+      download = insert_download()
+
+      # A key unique to this test, not the literal "backoff-key" the sibling
+      # test above uses: the assertion below counts RateLimiter slots for
+      # this key, and a shared key would pick up that test's acquire too.
+      api_key = "backoff-key-#{System.unique_integer([:positive])}"
+
+      # An ample budget (unlike the sibling test's saturated one) so every
+      # RateLimiter.acquire call the fetcher makes succeeds and records a
+      # slot. That gives us a direct, non-timing-based count of how many
+      # times run/1 actually attempted the fetch: each attempt calls
+      # resolve_urls/2, which acquires exactly one slot before failing.
+      budget = {100, 60}
+      StubProvider.set(:rate_limit_budget, budget)
+
+      StubProvider.set(
+        :get_download_urls,
+        {:error, Mydia.Downloads.Client.Error.unknown("stub: forced failure to drive retries")}
+      )
+
+      started = System.monotonic_time(:millisecond)
+
+      :ok =
+        Fetcher.claim(
+          download_id: download.id,
+          config: %{
+            type: :debrid,
+            api_key: api_key,
+            connection_settings: %{"provider" => "real_debrid"},
+            download_directory: staging
+          },
+          provider_job: fake_provider_job(download.download_client_id),
+          provider_module: StubProvider,
+          jitter_ms: 0,
+          download_dir: staging,
+          max_retries: 2,
+          retry_delay_base_ms: 10
+        )
+
+      # Two retries at a 10ms base means 10ms + 20ms of backoff. At the
+      # production 5_000ms base the same path would take 15 seconds. This
+      # ceiling proves the injected backoff base is used, but on its own
+      # can't distinguish 2 injected retries from the default 3 -- both
+      # finish well under 2s at a 10ms base. The attempt count below is
+      # what actually pins max_retries.
+      :ok = wait_for_fetcher_exit(download.id, 20)
+
+      elapsed = System.monotonic_time(:millisecond) - started
+      assert elapsed < 2_000, "fetcher took #{elapsed}ms; the injected backoff was ignored"
+
+      # One RateLimiter slot per attempt: the initial try plus each retry.
+      # max_retries: 2 means 3 total attempts; a regression that fell back
+      # to the default max_retries (3) would run 4.
+      attempts = Mydia.Downloads.Client.Debrid.RateLimiter.usage(:unknown, api_key, 60)
+
+      assert attempts == 3,
+             "expected 3 total attempts (1 initial + max_retries: 2) but observed #{attempts}; " <>
+               "the fetcher is not honouring the injected max_retries option"
+
+      reloaded = Repo.get!(Download, download.id)
+      assert reloaded.import_failed_at != nil
     end
   end
 
@@ -304,11 +371,12 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
     end
   end
 
-  # Polls the Fetcher's Registry entry until it's gone (or times out.)
-  # Default budget is 30s — the Fetcher's retry-with-exponential-backoff
-  # path (max_retries=3 with growing waits) needs more than the original
-  # 3s budget. Polling stays at 100ms so successful tests still exit fast.
-  defp wait_for_fetcher_exit(download_id, attempts \\ 300) do
+  # Polls the Fetcher's Registry entry until it's gone (or times out).
+  # Polling stays at 100ms so successful tests still exit fast. The retry paths
+  # inject `retry_delay_base_ms: 10` rather than sleeping the production 5s
+  # base, so a 3s budget covers a full exhausted retry budget with room to
+  # spare. Raising this back to 30s hides a regression rather than fixing one.
+  defp wait_for_fetcher_exit(download_id, attempts \\ 30) do
     if attempts == 0 do
       flunk("fetcher for #{download_id} did not exit in time")
     else

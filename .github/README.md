@@ -250,11 +250,18 @@ opts-arity of a live `count_books/0` and cannot be deleted. Ignores are
 rule-shaped, as regexes or predicates, in `mix.exs`'s `unused_ignore/0`, including
 a behaviour-callback predicate `MydiaQuality.behaviour_callback?/1`.
 
-Three gotchas around it:
+Four gotchas around it:
 
 - The mix_unused `:unused` compiler must be prepended (`[:unused | base]`).
   Appending (`base ++ [:unused]`) produces no report in this version. It is gated
   to `Mix.env() in [:dev, :test]` and `UNUSED_CHECK=true`.
+- The report runs on master pushes only, not on pull requests. It recompiles all
+  765 files a second time and cost 199s of every run, measured 2026-09-03, for
+  output nothing is gated on. `ci.yml` gates it on `GITHUB_EVENT_NAME` inside the
+  `devenv shell` heredoc rather than with a step-level `if:`, because splitting
+  the heredoc evaluates the devenv environment twice and costs more than it
+  saves. Run it yourself with
+  `UNUSED_CHECK=true ./dev mix compile --force`.
 - Build-time helper modules referenced by `mix.exs` must be inlined in `mix.exs`
   rather than kept in a separate root file. The Docker build's
   `mix deps.get --only prod` layer copies only `mix.exs` and `mix.lock`, so a
@@ -264,6 +271,28 @@ Three gotchas around it:
   test-only warnings such as a duplicate `@doc` in `test/support/` fail CI even
   when a local dev-env compile is clean. Reproduce with
   `MIX_ENV=test mix compile --warnings-as-errors --force`.
+
+### Watching test-suite speed
+
+The regression signal is already free on every run: ExUnit's
+`Finished in Xs (Ys async, Zs sync)` line. Sync time is the number that matters
+here, because `test/test_helper.exs` pins `max_cases: 1` on SQLite and
+`Mydia.DataCase` forces database tests to `async: false`, so the suite is
+overwhelmingly serial and a slowdown shows up as sync time climbing. Measured on
+master 2026-09-03: `876.4 seconds (59.1s async, 817.3s sync)`.
+
+To find *which* tests are slow, profile on demand rather than in CI:
+
+```bash
+devenv shell -- bash -c 'MIX_ENV=test mix test --slowest-modules 20'
+```
+
+Do not add `--slowest` or `--slowest-modules` to the CI invocations. Both
+automatically set `--trace`, and `--trace` forces `--max-cases 1` and sets the
+test timeout to `:infinity` (`mix help test`; ExUnit's `max_cases/1` checks
+`opts[:trace]` before any explicit `--max-cases`). On the PostgreSQL job that
+silently serializes the whole suite, and on both jobs it means a hung test runs
+until the GitHub job timeout instead of failing fast.
 
 ## Docker tags
 
