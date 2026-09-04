@@ -58,11 +58,33 @@ defmodule Mydia.Accounts.HashCostConfigTest do
     test "config/test.exs still sets both costs" do
       source = File.read!("config/test.exs")
 
-      assert source =~ "config :bcrypt_elixir, log_rounds:",
-             "config/test.exs no longer lowers bcrypt cost; the suite will spend minutes hashing"
+      # Presence checks alone pass if someone lowers the numbers back toward
+      # production cost (log_rounds: 12) or drops t_cost/m_cost entirely, so
+      # pin the exact values this suite relies on.
+      assert source =~ "config :bcrypt_elixir, log_rounds: 4",
+             "config/test.exs no longer pins bcrypt to log_rounds: 4; the suite will spend " <>
+               "minutes hashing at production cost"
 
-      assert source =~ "config :argon2_elixir,",
-             "config/test.exs no longer lowers Argon2 cost; the suite will spend minutes hashing"
+      assert source =~ "config :argon2_elixir, t_cost: 1, m_cost: 8",
+             "config/test.exs no longer pins Argon2 to t_cost: 1, m_cost: 8; the suite will " <>
+               "spend minutes hashing at production cost"
+
+      # The source-text asserts above only catch an edit to this file. They
+      # cannot catch an override applied from somewhere else (loaded after
+      # this file, or set at runtime) that changes the *effective* cost
+      # without ever touching config/test.exs, so assert what's actually
+      # loaded into application env for the running test suite too.
+      assert Application.get_env(:bcrypt_elixir, :log_rounds) == 4,
+             "bcrypt_elixir's effective log_rounds is not 4; something outside " <>
+               "config/test.exs is overriding it and the suite will spend minutes hashing"
+
+      assert Application.get_env(:argon2_elixir, :t_cost) == 1,
+             "argon2_elixir's effective t_cost is not 1; something outside " <>
+               "config/test.exs is overriding it and the suite will spend minutes hashing"
+
+      assert Application.get_env(:argon2_elixir, :m_cost) == 8,
+             "argon2_elixir's effective m_cost is not 8; something outside " <>
+               "config/test.exs is overriding it and the suite will spend minutes hashing"
     end
 
     test "the config glob actually matches files" do

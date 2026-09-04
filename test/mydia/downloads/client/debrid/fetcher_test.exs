@@ -247,12 +247,23 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
          %{staging: staging} do
       download = insert_download()
 
-      budget = {1, 60}
-      Mydia.Downloads.Client.Debrid.RateLimiter.clear(:unknown, "backoff-key")
-      Mydia.Downloads.Client.Debrid.RateLimiter.acquire(:unknown, "backoff-key", budget)
+      # A key unique to this test, not the literal "backoff-key" the sibling
+      # test above uses: the assertion below counts RateLimiter slots for
+      # this key, and a shared key would pick up that test's acquire too.
+      api_key = "backoff-key-#{System.unique_integer([:positive])}"
 
+      # An ample budget (unlike the sibling test's saturated one) so every
+      # RateLimiter.acquire call the fetcher makes succeeds and records a
+      # slot. That gives us a direct, non-timing-based count of how many
+      # times run/1 actually attempted the fetch: each attempt calls
+      # resolve_urls/2, which acquires exactly one slot before failing.
+      budget = {100, 60}
       StubProvider.set(:rate_limit_budget, budget)
-      StubProvider.set(:get_download_urls, {:ok, ["https://example.com/x"]})
+
+      StubProvider.set(
+        :get_download_urls,
+        {:error, Mydia.Downloads.Client.Error.unknown("stub: forced failure to drive retries")}
+      )
 
       started = System.monotonic_time(:millisecond)
 
@@ -261,7 +272,7 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
           download_id: download.id,
           config: %{
             type: :debrid,
-            api_key: "backoff-key",
+            api_key: api_key,
             connection_settings: %{"provider" => "real_debrid"},
             download_directory: staging
           },
@@ -274,13 +285,24 @@ defmodule Mydia.Downloads.Client.Debrid.FetcherTest do
         )
 
       # Two retries at a 10ms base means 10ms + 20ms of backoff. At the
-      # production 5_000ms base the same path would take 15 seconds, and at the
-      # pre-fix behaviour (which read @max_retries = 3 instead of the injected
-      # 2) it would take longer still. A 2s ceiling distinguishes all three.
+      # production 5_000ms base the same path would take 15 seconds. This
+      # ceiling proves the injected backoff base is used, but on its own
+      # can't distinguish 2 injected retries from the default 3 -- both
+      # finish well under 2s at a 10ms base. The attempt count below is
+      # what actually pins max_retries.
       :ok = wait_for_fetcher_exit(download.id, 20)
 
       elapsed = System.monotonic_time(:millisecond) - started
       assert elapsed < 2_000, "fetcher took #{elapsed}ms; the injected backoff was ignored"
+
+      # One RateLimiter slot per attempt: the initial try plus each retry.
+      # max_retries: 2 means 3 total attempts; a regression that fell back
+      # to the default max_retries (3) would run 4.
+      attempts = Mydia.Downloads.Client.Debrid.RateLimiter.usage(:unknown, api_key, 60)
+
+      assert attempts == 3,
+             "expected 3 total attempts (1 initial + max_retries: 2) but observed #{attempts}; " <>
+               "the fetcher is not honouring the injected max_retries option"
 
       reloaded = Repo.get!(Download, download.id)
       assert reloaded.import_failed_at != nil
