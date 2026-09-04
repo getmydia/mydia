@@ -1738,6 +1738,25 @@ async fn handle_connection(
                     continue;
                 }
 
+                // `ReadMedia` is legacy dead surface. No client has ever
+                // constructed one: mydia-rs answers it with an error of its
+                // own, and the Flutter player has never referenced it. The
+                // Phoenix handler behind it read whatever path the peer named,
+                // with no auth token at all, so refuse it here before it can
+                // reach a host. The variant deliberately stays in
+                // `MydiaRequest` so this answers with an error rather than
+                // failing to decode, which would drop the stream and leave the
+                // caller waiting out a timeout. See getmydia/mydia#687.
+                if matches!(request, MydiaRequest::ReadMedia(_)) {
+                    let mut send = send;
+                    let response = MydiaResponse::Error("unsupported_request_type".to_string());
+                    if let Ok(response_data) = serde_cbor::to_vec(&response) {
+                        let _ = send.write_all(&response_data).await;
+                        let _ = send.finish();
+                    }
+                    continue;
+                }
+
                 // For HLS streaming requests, store the send stream and emit
                 // event. Host role only: answering an HLS request means
                 // holding the send half open until the four HLS commands

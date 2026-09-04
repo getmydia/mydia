@@ -290,39 +290,6 @@ defmodule Mydia.P2p.Server do
     {:noreply, state}
   end
 
-  def handle_info({:ok, "request_received", "read_media", request_id, req}, state) do
-    resource = state.resource
-
-    serve_request(resource, request_id, "read_media", fn ->
-      cond do
-        not RemoteAccess.enabled?() ->
-          {:error, "Remote access is disabled"}
-
-        # Validate file path exists
-        # SECURITY: In production, verify path is within allowed directories!
-        File.exists?(req.file_path) ->
-          # Use the optimized NIF to read chunk and respond. It answers the
-          # peer itself, so there is no response left for `serve_request`
-          # to send.
-          P2p.respond_with_file_chunk(
-            resource,
-            request_id,
-            req.file_path,
-            req.offset,
-            req.length
-          )
-
-          :responded
-
-        true ->
-          Logger.warning("Requested file not found: #{req.file_path}")
-          {:error, "File not found"}
-      end
-    end)
-
-    {:noreply, state}
-  end
-
   def handle_info({:ok, "request_received", "graphql", request_id, req}, state) do
     # Read what the request needs out of the GenServer's state here; the task
     # below must not close over `state`.
