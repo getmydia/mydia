@@ -12,8 +12,13 @@ const config = {
   },
   credentials: {
     username: process.env.USERNAME || "admin",
-    password: process.env.PASSWORD || "admin",
+    // priv/repo/seeds.exs creates admin with this password. "adminadmin" is a
+    // stale value that silently bounces back to the login form.
+    password: process.env.PASSWORD || "adminpass",
   },
+  // Playwright's bundled Chromium cannot start on NixOS. Point at the system
+  // browser there: CHROME_PATH=$(readlink -f $(which chromium)).
+  executablePath: process.env.CHROME_PATH || undefined,
 };
 
 /**
@@ -40,16 +45,19 @@ const screenshots = [
     waitFor: "h1, h2, main",
   },
   {
+    // Resolved at capture time: the first card on /tv. Hardcoding an id would
+    // break on every fresh library.
+    name: "series",
+    path: "/tv",
+    follow: 'main a[href^="/tv/"]',
+    description: "Series detail (seasons and episodes)",
+    waitFor: "h1, h2, main",
+  },
+  {
     name: "calendar",
     path: "/calendar",
     description: "Calendar view",
     waitFor: "h1, h2, main",
-  },
-  {
-    name: "search",
-    path: "/search",
-    description: "Search page",
-    waitFor: 'h1, input[type="search"], form, main',
   },
 ];
 
@@ -61,6 +69,7 @@ async function takeScreenshots() {
 
   const browser = await chromium.launch({
     headless: true,
+    executablePath: config.executablePath,
   });
 
   const context = await browser.newContext({
@@ -118,7 +127,19 @@ async function takeScreenshots() {
       }
 
       // Additional wait for LiveView to settle
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(2000);
+
+      // Some shots are of a detail page reached from a listing, so the id
+      // comes from whatever is in the library rather than the config.
+      if (screenshot.follow) {
+        const link = page.locator(screenshot.follow).first();
+        if (await link.count()) {
+          await link.click();
+          await page.waitForTimeout(3000);
+        } else {
+          console.log(`  ⚠ Warning: no link matched "${screenshot.follow}"`);
+        }
+      }
 
       // Take screenshot
       const filename = `${config.outputDir}/${screenshot.name}.png`;

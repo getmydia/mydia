@@ -94,9 +94,9 @@ Full documentation available at **[docs.mydia.dev](https://docs.mydia.dev)**
 
 ## Screenshots
 
-| Movies | TV Shows | Calendar |
-|:------:|:--------:|:--------:|
-| ![Movies](screenshots/movies.png) | ![TV Shows](screenshots/tv-shows.png) | ![Calendar](screenshots/calendar.png) |
+| Movies | TV Shows | Series | Calendar |
+|:------:|:--------:|:------:|:--------:|
+| ![Movies](screenshots/movies.png) | ![TV Shows](screenshots/tv-shows.png) | ![Series](screenshots/series.png) | ![Calendar](screenshots/calendar.png) |
 
 ## Contributing
 

@@ -1,31 +1,51 @@
 #!/usr/bin/env bash
 
 # Screenshot helper script for Mydia
-# Captures automated screenshots using Playwright
+# Captures the README and website screenshots using Playwright.
+#
+# The dev stack is native devenv, not Docker, so this drives the app over HTTP
+# rather than shelling into a container. Point BASE_URL at the worktree's
+# Phoenix (devenv derives a port per worktree; `./dev ps` and `ss -ltn` show it).
 
 set -e
 
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${GREEN}📸 Mydia Screenshot Tool${NC}\n"
+BASE_URL="${BASE_URL:-http://localhost:4000}"
 
-# Check if service is running
-if ! docker compose ps --services --filter "status=running" | grep -q "^app$"; then
-    echo -e "${YELLOW}Starting services...${NC}"
-    ./dev up -d
-    sleep 3
+echo -e "${GREEN}📸 Mydia Screenshot Tool${NC}\n"
+echo -e "Target: ${BASE_URL}\n"
+
+if ! curl -fsS -o /dev/null --max-time 5 "${BASE_URL}/auth/login"; then
+    echo -e "${YELLOW}App is not answering at ${BASE_URL}.${NC}"
+    echo -e "Start it with ${GREEN}./dev up -d${NC}, then re-run with"
+    echo -e "${GREEN}BASE_URL=http://localhost:<port> ./take-screenshots${NC}"
+    exit 1
 fi
 
-# Install Playwright and dependencies
-echo -e "${GREEN}Installing Playwright...${NC}\n"
-./dev exec app sh -c "cd assets && npx playwright install chromium --with-deps" > /dev/null 2>&1
+# Playwright's bundled Chromium does not start on NixOS. Fall back to the
+# system browser when one is on PATH; elsewhere Playwright's own download wins.
+if [ -z "${CHROME_PATH:-}" ] && command -v chromium > /dev/null 2>&1; then
+    CHROME_PATH="$(readlink -f "$(command -v chromium)")"
+    export CHROME_PATH
+    echo -e "${YELLOW}Using system Chromium: ${CHROME_PATH}${NC}\n"
+fi
 
-# Run screenshots
+if [ -z "${CHROME_PATH:-}" ]; then
+    echo -e "${GREEN}Installing Playwright Chromium...${NC}\n"
+    (cd assets && npx playwright install chromium) || {
+        echo -e "${RED}Playwright could not install a browser. Set CHROME_PATH instead.${NC}"
+        exit 1
+    }
+fi
+
 echo -e "${GREEN}Capturing screenshots...${NC}\n"
-./dev exec app sh -c "cd assets && npm run screenshots"
+(cd assets && BASE_URL="$BASE_URL" npm run screenshots)
 
 echo ""
 echo -e "${GREEN}✅ Done! Screenshots saved to screenshots/${NC}"
+echo -e "Copy the ones the site uses into ${GREEN}site/public/img/${NC} as well."
