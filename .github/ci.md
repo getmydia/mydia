@@ -4,6 +4,12 @@ How the workflows in this directory actually behave, including the parts that le
 breakage sit unnoticed. For the catalogue of known flakes and how to read a red
 check, see `ci-flakes.md` next to this file.
 
+This file is deliberately **not** called `README.md`. GitHub picks the repository
+landing page from `.github/README.md` before the root `README.md`, so a README
+here silently replaces the project's front page with this document. It did, from
+46cbdfdb0 until it was noticed. Any new doc in this directory needs a name other
+than `README.md`.
+
 ## The Nix jobs never run on pull requests
 
 Both jobs in `ci-nix.yml` carry `if: github.event_name != 'pull_request'`:

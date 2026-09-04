@@ -365,7 +365,7 @@ Read the relevant one before working in that area:
 | `lib/mydia/config/README.md` | layered config lifecycle |
 | `lib/mydia/downloads/README.md`, `lib/mydia/indexers/README.md` | trackerless releases, Torznab categories |
 | `native/README.md`, `plugins/README.md` | NIF crates, p2p, wasip2 guests |
-| `.github/README.md`, `.github/ci-flakes.md` | CI mechanics, releases, the flake catalogue |
+| `.github/ci.md`, `.github/ci-flakes.md` | CI mechanics, releases, the flake catalogue |
 | `player/docs/` | player workflow, testing, Riverpod, packaging |
 
 ### Phoenix v1.8 guidelines
