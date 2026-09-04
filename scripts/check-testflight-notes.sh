@@ -43,38 +43,55 @@ for f in priv/changelog/*.md; do
   fi
 done
 
-# Plain-text conversion, asserted against a release known to exercise every rule.
-out="$("$SCRIPT" 0.14.0 HEAD v0.14.0 2>/dev/null)"
+# Plain-text conversion, asserted against one release that exercises every rule.
+#
+# The fixture must be a SHIPPED version. This block was pinned to 0.14.0 while
+# 0.14.0 was still in beta, and naming a subheading inside notes that were always
+# going to be rewritten before the stable release meant the rewrite failed CI on
+# an assertion about the fixture rather than anything about the script. Point it
+# at the newest released version, never the one in flight.
+readonly FIXTURE=0.13.0
+readonly FIXTURE_FILE="priv/changelog/${FIXTURE}.md"
+
+extract_player() { awk '/^## Player$/ { i = 1; next } /^## / { i = 0 } i' "$1"; }
+
+# The fixture has to keep carrying the constructs, or every "did not survive"
+# case below passes by vacuum. Decided here by grep against the file, the same
+# way section membership is decided above.
+extract_player "$FIXTURE_FILE" | grep -q '^### ' ||
+  note_failure "${FIXTURE}: no '### ' under '## Player', so the subheading assertions prove nothing"
+extract_player "$FIXTURE_FILE" | grep -qF '`' ||
+  note_failure "${FIXTURE}: no backticks under '## Player', so the backtick assertion proves nothing"
+extract_player "$FIXTURE_FILE" | grep -qF '(#' ||
+  note_failure "${FIXTURE}: no PR references under '## Player', so the PR-ref assertion proves nothing"
+
+out="$("$SCRIPT" "$FIXTURE" HEAD "v${FIXTURE}" 2>/dev/null)"
 
 case "$out" in
-  *'`'*)   note_failure "0.14.0: backticks survived the plain-text conversion" ;;
+  *'`'*)   note_failure "${FIXTURE}: backticks survived the plain-text conversion" ;;
 esac
 case "$out" in
-  *'**'*)  note_failure "0.14.0: bold markers survived the plain-text conversion" ;;
+  *'**'*)  note_failure "${FIXTURE}: bold markers survived the plain-text conversion" ;;
+esac
+# Bullets here carry more than one parenthetical PR-ref group per line (a
+# mid-sentence group plus a trailing one), which a stripping pattern anchored to
+# end of line only catches the last of.
+case "$out" in
+  *'(#'*)  note_failure "${FIXTURE}: a PR reference survived the plain-text conversion" ;;
 esac
 case "$out" in
-  *'(#'*)  note_failure "0.14.0: a PR reference survived the plain-text conversion" ;;
+  *'### '*) note_failure "${FIXTURE}: a subheading kept its hashes" ;;
 esac
+# The first subheading, so this cannot fail merely because the 4000-character
+# budget cut the section short.
 case "$out" in
-  *'### '*) note_failure "0.14.0: a subheading kept its hashes" ;;
+  *'Detail pages and chrome'*) : ;;
+  *) note_failure "${FIXTURE}: the subheading text itself was dropped" ;;
 esac
-case "$out" in
-  *'Remote control between players'*) : ;;
-  *) note_failure "0.14.0: the subheading text itself was dropped" ;;
-esac
-
 # A trailing sentence period must survive its PR reference being stripped.
-out="$("$SCRIPT" 0.13.0 HEAD v0.13.0 2>/dev/null)"
 case "$out" in
   *'rendered identically.'*) : ;;
-  *) note_failure "0.13.0: stripping '(#332).' also ate the sentence period" ;;
-esac
-
-# 0.13.0 has bullets with more than one parenthetical PR-ref group per line
-# (a mid-sentence group plus a trailing one), which a stripping pattern
-# anchored to end of line only catches the last of.
-case "$out" in
-  *'(#'*) note_failure "0.13.0: a PR reference survived the plain-text conversion" ;;
+  *) note_failure "${FIXTURE}: stripping '(#332).' also ate the sentence period" ;;
 esac
 
 # The commit-log fallback, for a version with no bundled file. The previous tag
