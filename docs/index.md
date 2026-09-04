@@ -85,6 +85,10 @@ A modern, self-hosted media management platform for tracking, organizing, and mo
 
     ![Calendar](https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/calendar.png)
 
+-   **Mydia Player**
+
+    ![Mydia Player](https://raw.githubusercontent.com/getmydia/mydia/master/screenshots/player-desktop.png)
+
 </div>
 
 ## Getting Help

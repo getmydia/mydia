@@ -11,7 +11,10 @@ A modern, self-hosted media management platform for tracking, organizing, and mo
 > **Warning:** Mydia is in early development (0.x.x). Expect breaking changes. [Report issues](https://github.com/getmydia/mydia/issues) or [request features](https://github.com/getmydia/mydia/issues/new).
 
 <p align="center">
-  <img src="screenshots/homepage.png" alt="Mydia Dashboard" width="800" />
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="screenshots/homepage-light.png" />
+    <img src="screenshots/homepage.png" alt="Mydia Dashboard" width="800" />
+  </picture>
 </p>
 
 ## Quick Start
@@ -71,6 +74,14 @@ Open http://localhost:4000 and create your admin account.
 A cross-platform app that streams your library from anywhere over an encrypted
 peer-to-peer connection. No port forwarding, no VPN.
 
+<p align="center">
+  <img src="screenshots/player-desktop.png" alt="Mydia Player on the desktop" width="800" />
+</p>
+
+| Home | Shows |
+|:----:|:-----:|
+| ![Mydia Player home](screenshots/player-home.png) | ![Mydia Player shows library](screenshots/player-shows.png) |
+
 | Platform | Get it | Notes |
 |---|---|---|
 | Android | [Download APK](https://mydia.dev/download/android) | Allow installs from unknown sources |
@@ -93,6 +104,9 @@ Full documentation available at **[docs.mydia.dev](https://docs.mydia.dev)**
 - [Contributing](https://docs.mydia.dev/latest/contributing/setup/) - development setup
 
 ## Screenshots
+
+Shown in the dark theme. Mydia ships light, dark and follow-your-system, and the
+dashboard above switches with your GitHub theme.
 
 | Movies | TV Shows | Series | Calendar |
 |:------:|:--------:|:------:|:--------:|

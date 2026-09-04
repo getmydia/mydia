@@ -19,10 +19,32 @@ Screenshots are written to `screenshots/` in the project root. The site serves
 its own copies from `site/public/img/`, so copy the updated files across:
 
 ```bash
-for n in homepage movies tv-shows series calendar; do
+for n in homepage movies tv-shows series calendar \
+         player-desktop player-home player-shows; do
   cp "screenshots/$n.png" "site/public/img/$n.png"
 done
 ```
+
+`homepage-light.png` is deliberately not copied: mydia.dev is a dark-only site,
+and the light dashboard exists only so the README can swap on the reader's own
+colour scheme.
+
+## What gets captured
+
+| File | What it is |
+| --- | --- |
+| `homepage.png` | Dashboard, dark theme. README hero and site featured image. |
+| `homepage-light.png` | The same page in the light theme, for the README `<picture>` swap. |
+| `movies.png`, `tv-shows.png` | Library grids, dark. |
+| `series.png` | Series detail, reached by clicking the first card on `/tv`. |
+| `calendar.png` | Release calendar, dark. |
+| `player-desktop.png` | Mydia Player at 1920 wide. |
+| `player-home.png`, `player-shows.png` | Mydia Player at phone width, for the site's phone mockups. |
+
+The player shots come from the Flutter **web** build the server hosts at
+`/player`, which is the same app as the native builds, so they stay current
+without a device or a simulator. Set `SKIP_PLAYER=1` to skip them; they cost
+about 40 seconds of canvaskit start-up.
 
 ## Configuration
 
@@ -63,12 +85,23 @@ const screenshots = [
     name: "my-page",
     path: "/my-page",
     description: "My custom page",
-    waitFor: "h1, .main-content", // CSS selector to wait for
-    follow: 'main a[href^="/tv/"]', // optional: click into a detail page first
+    waitFor: "h1, h2, main", // CSS selector to wait for (matched as attached)
+    follow: 'main a[href^="/media/"]', // optional: click into a detail page first
+    theme: "DARK", // DARK, LIGHT or SYSTEM
     fullPage: false, // Capture full page scroll
   },
 ];
 ```
+
+Two traps worth knowing if you add a page:
+
+- `waitFor` is matched with `state: "attached"`, not Playwright's default
+  `"visible"`. A comma-separated selector resolves to the **first** match, and
+  the layout's own `<h1>Mydia</h1>` is present but hidden, so the default
+  timed out on every page and left each shot racing the settle timer.
+- Library cards link to `/media/:id`, not `/movies/:id` or `/tv/:id`. A
+  `follow` selector written against the pretty URL matches nothing and the run
+  silently screenshots the listing again.
 
 ## Viewport Size
 
