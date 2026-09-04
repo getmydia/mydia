@@ -43,10 +43,9 @@ fn every_request_variant_name_is_frozen() {
     // but don't remove either as dead code. The core now refuses ReadMedia
     // (see tests/read_media_refused.rs, which covers the refusal end to end),
     // and it does that by decoding the request and rejecting it. Delete the
-    // variant and the request fails to decode instead; the decode-failure
-    // path in handle_connection hits `continue` and drops the stream with no
-    // response, so the peer sits out a 30-second timeout instead of getting
-    // a clean refusal.
+    // variant and the request fails to decode instead: the server drops the
+    // stream with no response at all, and the peer gets an opaque decode
+    // error off an empty read instead of a named refusal it can act on.
     let get_state =
         serde_cbor::to_vec(&MydiaRequest::RemoteControl(RemoteControlRequest::GetState)).unwrap();
 
