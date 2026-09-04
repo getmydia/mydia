@@ -154,15 +154,91 @@ defmodule MydiaWeb.FeatureCase do
     {:ok, session: session}
   end
 
+  @login_path "/auth/local/login"
+
+  # One redirect is one round trip. A longer budget would only slow a genuine
+  # breakage, and the only way to reach it is a log-in the form rejected.
+  @login_redirect_timeout 5_000
+
   @doc """
-  Visits the login page and fills in the login form with the given credentials.
+  Visits the login page, submits the credentials, and blocks until the
+  resulting redirect has landed.
+
+  The wait is the point. `POST #{@login_path}` answers 302 to `/`, a real
+  full-page navigation, and ChromeDriver's click command returns before that
+  navigation commits: measured, the browser is still on `#{@login_path}` with
+  `document.readyState` already `"complete"` in roughly 3 of 20 log-ins, so
+  there is no pending-load signal for Wallaby to wait on. Anything the test
+  does next races it, and a `visit/2` that loses is discarded outright. The
+  test then runs against `/` while every wait it performs is satisfied by that
+  page's connected root. That is CI run 33868003647.
+
+  Waiting on the pathname rather than on `[data-phx-main]` is deliberate.
+  `#{@login_path}` is a plain controller page, so a bare `wait_for_liveview/2`
+  after a first log-in does block until the redirect lands, by accident. It
+  does nothing at all on a second log-in in the same session, which runs from
+  an already-connected LiveView page whose root satisfies that poll instantly.
   """
   def login(session, username, password) do
     session
-    |> Wallaby.Browser.visit("/auth/local/login")
+    |> Wallaby.Browser.visit(@login_path)
     |> Wallaby.Browser.fill_in(Wallaby.Query.text_field("user[username]"), with: username)
     |> Wallaby.Browser.fill_in(Wallaby.Query.text_field("user[password]"), with: password)
     |> Wallaby.Browser.click(Wallaby.Query.button("Log In"))
+    |> wait_for_login_redirect()
+  end
+
+  defp wait_for_login_redirect(session) do
+    try do
+      eventually(
+        fn ->
+          [path, ready_state] =
+            session
+            |> eval_js("return window.location.pathname + '|' + document.readyState;")
+            |> String.split("|", parts: 2)
+
+          if path != @login_path and ready_state == "complete" do
+            {:ok, session}
+          else
+            :error
+          end
+        end,
+        timeout: @login_redirect_timeout,
+        interval: 50,
+        description: "the log-in redirect to land"
+      )
+    rescue
+      e in RuntimeError ->
+        if String.starts_with?(e.message, "eventually/2 timed out") do
+          reraise login_redirect_failure_message(@login_redirect_timeout), __STACKTRACE__
+        else
+          reraise e, __STACKTRACE__
+        end
+    end
+
+    session
+  end
+
+  @doc """
+  The message `login/3` raises when the log-in redirect never lands.
+
+  Public so it can be tested without a browser, like `liveview_failure_message/2`.
+  """
+  def login_redirect_failure_message(timeout_ms) do
+    """
+    The log-in form was submitted but the browser was still on #{@login_path}
+    after #{timeout_ms}ms.
+
+    `login/3` blocks until the POST's redirect has landed, because ChromeDriver's
+    click returns before that navigation commits and anything the test does next
+    races it. A `visit/2` that loses that race is discarded, and the test then
+    asserts against whatever page the redirect produced.
+
+    The usual cause is credentials the form rejected, which re-renders the form
+    at the same path. A browser test is not the place to assert a failed log-in;
+    those assertions live in
+    test/mydia_web/controllers/session_controller_test.exs.
+    """
   end
 
   @doc """

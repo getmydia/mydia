@@ -28,4 +28,18 @@ defmodule MydiaWeb.FeatureCaseMessageTest do
       refute message =~ "mix assets.build"
     end
   end
+
+  describe "login_redirect_failure_message/1" do
+    test "names the path the browser is stuck on and the budget" do
+      message = FeatureCase.login_redirect_failure_message(5_000)
+
+      assert message =~ "/auth/local/login"
+      assert message =~ "5000ms"
+      # The only way a real test reaches this message is credentials the form
+      # rejected, so the message has to say that rather than leave it to be
+      # rediscovered.
+      assert message =~ "credentials"
+      assert message =~ "session_controller_test.exs"
+    end
+  end
 end
