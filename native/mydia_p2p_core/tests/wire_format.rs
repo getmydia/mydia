@@ -39,6 +39,11 @@ fn pong_encoding_is_stable() {
 fn every_request_variant_name_is_frozen() {
     // Decoding a hand-written encoding proves the name, not just that our own
     // round trip agrees with itself.
+    // `ReadMedia` is in this set on purpose even though the core now refuses
+    // it (see tests/read_media_refused.rs). Removing the variant would make
+    // the request fail to decode, and the decode-failure path drops the
+    // stream without a response, so a peer would hang instead of being told
+    // no. Keep it.
     let get_state =
         serde_cbor::to_vec(&MydiaRequest::RemoteControl(RemoteControlRequest::GetState)).unwrap();
 
