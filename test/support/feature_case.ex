@@ -368,27 +368,33 @@ defmodule MydiaWeb.FeatureCase do
   turned into the diagnostic below; anything else is re-raised unchanged so a
   dead session is never reported as an ordinary unconnected socket.
 
-  Options: `:timeout` (ms, default 15_000).
+  Options: `:timeout` (ms, default 15_000), `:at` (the path the browser is
+  expected to be on, compared against `window.location.pathname`; a query
+  string is ignored). Prefer `visit_liveview/3`, which supplies `:at` from the
+  same argument it navigates with so the two cannot drift apart.
   """
   def wait_for_liveview(session, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 15_000)
+    expected = opts |> Keyword.get(:at) |> expected_pathname()
 
     try do
       eventually(
         fn ->
-          if root_connected?(session) do
+          [state, path] = session |> page_state() |> String.split("|", parts: 2)
+
+          if state == "connected" and (is_nil(expected) or path == expected) do
             {:ok, session}
           else
             :error
           end
         end,
         timeout: timeout,
-        description: "the root LiveView to connect its socket"
+        description: wait_description(expected)
       )
     rescue
       e in RuntimeError ->
         if String.starts_with?(e.message, "eventually/2 timed out") do
-          reraise liveview_failure_message(root_present?(session), timeout), __STACKTRACE__
+          reraise timeout_message(session, expected, timeout), __STACKTRACE__
         else
           reraise e, __STACKTRACE__
         end
@@ -397,8 +403,75 @@ defmodule MydiaWeb.FeatureCase do
     session
   end
 
-  defp root_connected?(session) do
-    eval_js(session, "return document.querySelector('[data-phx-main].phx-connected') !== null;")
+  @doc """
+  Navigates to `path` and blocks until that page's root LiveView has connected.
+
+  The path is given once, to the call that navigates, so the `:at` check cannot
+  drift from the navigation or be forgotten on a new test. Use a bare
+  `Wallaby.Browser.visit/2` only where the browser is expected to end up
+  somewhere else, as when asserting a redirect.
+
+  Options are passed through to `wait_for_liveview/2`.
+  """
+  def visit_liveview(session, path, opts \\ []) do
+    session
+    |> Wallaby.Browser.visit(path)
+    |> wait_for_liveview(Keyword.put(opts, :at, path))
+  end
+
+  # Both conditions in one WebDriver call, so `eventually/2`'s budget stays the
+  # thing that governs the wait. See the note in the doc above about `has?/2`.
+  defp page_state(session) do
+    eval_js(session, """
+    const root = document.querySelector('[data-phx-main].phx-connected');
+    return (root ? 'connected' : 'pending') + '|' + window.location.pathname;
+    """)
+  end
+
+  defp wait_description(nil), do: "the root LiveView to connect its socket"
+
+  defp wait_description(expected),
+    do: "the root LiveView at #{expected} to connect its socket"
+
+  defp timeout_message(session, nil, timeout),
+    do: liveview_failure_message(root_present?(session), timeout)
+
+  defp timeout_message(session, expected, timeout) do
+    [_state, actual] = session |> page_state() |> String.split("|", parts: 2)
+
+    if actual == expected do
+      liveview_failure_message(root_present?(session), timeout)
+    else
+      wrong_page_message(expected, actual, timeout)
+    end
+  end
+
+  @doc """
+  Normalises an `:at` path to what `window.location.pathname` will report.
+
+  Public so it is testable without a browser.
+  """
+  def expected_pathname(nil), do: nil
+  def expected_pathname(path), do: URI.parse(path).path
+
+  @doc """
+  The message `wait_for_liveview/2` raises when the browser is on the wrong page.
+
+  Public so it can be tested without a browser, like `liveview_failure_message/2`.
+  """
+  def wrong_page_message(expected_path, actual_path, timeout_ms) do
+    """
+    Expected the browser on #{expected_path}.
+    After #{timeout_ms}ms it is on #{actual_path}.
+
+    The navigation did not land. The usual causes are a redirect, from an auth
+    guard or from a LiveView that redirects on mount, and a navigation discarded
+    by another still in flight from the command before it.
+
+    Every assertion that follows would have run against the wrong page, so this
+    fails here rather than letting a later probe report a missing element and
+    send the reader looking at the wrong component.
+    """
   end
 
   defp root_present?(session) do
