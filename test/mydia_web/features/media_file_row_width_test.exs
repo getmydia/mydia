@@ -96,8 +96,7 @@ defmodule MydiaWeb.Features.MediaFileRowWidthTest do
           ] do
         session
         |> resize_window(w, h)
-        |> visit("/media/#{show.id}")
-        |> wait_for_liveview()
+        |> visit_liveview("/media/#{show.id}")
 
         js_click(session, ~s([aria-controls="episode-#{episode.id}-detail"]))
 
@@ -131,8 +130,7 @@ defmodule MydiaWeb.Features.MediaFileRowWidthTest do
           ] do
         session
         |> resize_window(w, h)
-        |> visit("/media/#{show.id}")
-        |> wait_for_liveview()
+        |> visit_liveview("/media/#{show.id}")
 
         assert Wallaby.Browser.has_css?(session, "#version-#{show_file.id}")
 
@@ -154,8 +152,7 @@ defmodule MydiaWeb.Features.MediaFileRowWidthTest do
 
       session
       |> resize_window(1024, 768)
-      |> visit("/media/#{show.id}")
-      |> wait_for_liveview()
+      |> visit_liveview("/media/#{show.id}")
 
       assert Wallaby.Browser.has_css?(session, "[id^='episode-'][id$='-row']")
 

@@ -79,8 +79,7 @@ defmodule MydiaWeb.Features.DiscoverSkeletonHeightParityTest do
        %{session: session} do
     session
     |> login_as_admin()
-    |> visit("/discover")
-    |> wait_for_liveview()
+    |> visit_liveview("/discover")
 
     wait_for_real_card(session)
 
@@ -93,8 +92,7 @@ defmodule MydiaWeb.Features.DiscoverSkeletonHeightParityTest do
   test "the guard actually fails when the skeleton card falls short", %{session: session} do
     session
     |> login_as_admin()
-    |> visit("/discover")
-    |> wait_for_liveview()
+    |> visit_liveview("/discover")
 
     wait_for_real_card(session)
 

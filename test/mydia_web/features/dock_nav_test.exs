@@ -26,8 +26,7 @@ defmodule MydiaWeb.Features.DockNavTest do
 
       session
       |> resize_window(390, 844)
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       assert Wallaby.Browser.has_css?(session, ~s([phx-hook="DockNav"]))
 
@@ -43,8 +42,7 @@ defmodule MydiaWeb.Features.DockNavTest do
 
       session
       |> resize_window(390, 844)
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       # The dock item is `<.link navigate="/movies" data-dock-link>`
       # (layouts.ex), and `<.link navigate>` compiles to a real
@@ -84,8 +82,7 @@ defmodule MydiaWeb.Features.DockNavTest do
 
       session
       |> resize_window(390, 844)
-      |> visit("/")
-      |> wait_for_liveview()
+      |> visit_liveview("/")
 
       # The hamburger is `<label for="main-drawer">` (layouts.ex). A real click
       # on a label toggles its associated checkbox, which is the only thing
