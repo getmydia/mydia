@@ -180,11 +180,12 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
       assert link.user_id == user.id
     end
 
-    test "a nameless Plex profile is not linked to a blank Mydia username",
+    test "a nameless Plex profile is skipped rather than matched",
          %{bypass: bypass, config: config, base: base} do
-      # The read side used to look up `""` for a profile with no name. A Mydia
-      # user keyed under `""` would have matched it, binding two strangers'
-      # watch history together.
+      # UsernameIndex.get/2 normalizes a nil-or-blank name to `nil` instead of
+      # looking up `""`, so a profile with no name matches nobody and no link
+      # is created. Blank-username-side coverage (a Mydia user keyed under a
+      # blank username) lives in test/mydia/accounts/username_index_test.exs.
       Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")

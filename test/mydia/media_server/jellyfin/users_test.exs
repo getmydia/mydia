@@ -78,10 +78,14 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
     assert link.user_id == user.id
   end
 
-  test "a nameless Jellyfin account is not linked to a blank Mydia username", %{
+  test "a nameless Jellyfin account is skipped rather than matched", %{
     bypass: bypass,
     config: config
   } do
+    # UsernameIndex.get/2 normalizes a nil-or-blank name to `nil` instead of
+    # looking up `""`, so an account with no name matches nobody and no link
+    # is created. Blank-username-side coverage (a Mydia user keyed under a
+    # blank username) lives in test/mydia/accounts/username_index_test.exs.
     Bypass.expect_once(bypass, "GET", "/Users", fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
