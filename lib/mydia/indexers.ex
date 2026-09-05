@@ -31,6 +31,7 @@ defmodule Mydia.Indexers do
   alias Mydia.Indexers.CardigannAuth
   alias Mydia.Indexers.CardigannDownload
   alias Mydia.Indexers.CardigannParser
+  alias Mydia.Indexers.Cardigann.CredentialScope
   alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Settings
   alias Mydia.Repo
@@ -898,6 +899,40 @@ defmodule Mydia.Indexers do
   end
 
   def resolve_cardigann_download(_indexer_name, _download_url), do: :not_applicable
+
+  @doc """
+  True when `download_url` may receive the named indexer's session cookies,
+  per `Cardigann.CredentialScope`: the URL's origin must be one of the
+  definition's own hosts, and the URL must not be cleartext to a
+  non-loopback host.
+
+  `download_url` is a release's download link, chosen by the indexer's own
+  search results (or a redirect from them) rather than by the operator, so
+  this is the same scope check the search and auth paths already apply
+  before attaching a session cookie. Callers on the download path (see
+  `Mydia.Downloads.Queue`) consult it per request - including once per
+  redirect hop, since a hop can move the request off the indexer's origin.
+
+  Returns `false` for an unknown or unparseable indexer, which withholds
+  the credential rather than leaking it.
+  """
+  @spec cardigann_download_credential_allowed?(binary() | nil, binary()) :: boolean()
+  def cardigann_download_credential_allowed?(nil, _download_url), do: false
+
+  def cardigann_download_credential_allowed?(indexer_name, download_url)
+      when is_binary(indexer_name) do
+    with %CardigannDefinition{} = definition <- get_cardigann_definition_by_name(indexer_name),
+         {:ok, parsed} <- CardigannParser.parse_definition(definition.definition) do
+      trusted_origins = CredentialScope.trusted_origins(parsed, definition.config || %{})
+
+      not CredentialScope.cleartext?(download_url) and
+        CredentialScope.allows?(trusted_origins, download_url)
+    else
+      _ -> false
+    end
+  end
+
+  def cardigann_download_credential_allowed?(_indexer_name, _download_url), do: false
 
   @doc """
   Enables a Cardigann indexer definition.
