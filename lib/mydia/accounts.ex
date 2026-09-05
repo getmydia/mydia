@@ -13,7 +13,7 @@ defmodule Mydia.Accounts do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter, Avatar}
+  alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter, Avatar, UsernameSource}
 
   @changelog_key "last_seen_changelog_version"
   @anime_nudge_key "anime_nudge_dismissed"
@@ -142,6 +142,56 @@ defmodule Mydia.Accounts do
         |> User.oidc_changeset(attrs_without_role)
         |> Repo.update()
     end
+  end
+
+  @username_attempt_limit 50
+
+  @doc """
+  Writes a derived username onto a user, suffixing past collisions.
+
+  Attempt 1 is the bare slug, attempt N is `slug-N`. The unique index is the
+  arbiter rather than a `SELECT` beforehand, because two people signing in for
+  the first time at once would race a pre-check and one of them would crash on
+  the constraint anyway.
+
+  Returns `:none` when every attempt is taken, or when the write fails for a
+  reason other than the constraint. It never raises: a login must not fail
+  because two people's IdP names collided.
+  """
+  @spec claim_username(User.t(), {UsernameSource.tier(), String.t()}) :: {:ok, User.t()} | :none
+  def claim_username(%User{} = user, {tier, slug}) do
+    do_claim(user, tier, slug, 1)
+  end
+
+  defp do_claim(_user, _tier, _slug, attempt) when attempt > @username_attempt_limit, do: :none
+
+  defp do_claim(user, tier, slug, attempt) do
+    attrs = %{
+      username: UsernameSource.suffixed(slug, attempt),
+      username_source: Atom.to_string(tier)
+    }
+
+    user
+    |> User.username_changeset(attrs)
+    |> Repo.update()
+    |> case do
+      {:ok, updated} ->
+        {:ok, updated}
+
+      {:error, changeset} ->
+        if username_taken?(changeset) do
+          do_claim(user, tier, slug, attempt + 1)
+        else
+          :none
+        end
+    end
+  end
+
+  defp username_taken?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn
+      {:username, {_message, opts}} -> Keyword.get(opts, :constraint) == :unique
+      _other -> false
+    end)
   end
 
   @doc """
