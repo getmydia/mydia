@@ -12,17 +12,44 @@ import '../platform_updater.dart';
 /// Falls back to opening the download URL in the browser if the install
 /// directory is not writable.
 class LinuxUpdater extends PlatformUpdater {
-  @override
-  bool get canUpdateInPlace => _isInstallDirWritable();
+  /// Both seams exist for tests. Production uses the defaults, which resolve
+  /// the running binary and hand the URL to xdg-open.
+  LinuxUpdater({
+    String Function()? resolveInstallDir,
+    Future<void> Function(String url)? openInBrowser,
+  })  : _resolveInstallDir = resolveInstallDir ??
+            (() => File(Platform.resolvedExecutable).parent.path),
+        _openInBrowser =
+            openInBrowser ?? ((url) async => Process.run('xdg-open', [url]));
 
-  bool _isInstallDirWritable() {
+  final String Function() _resolveInstallDir;
+  final Future<void> Function(String url) _openInBrowser;
+
+  @override
+  bool get canUpdateInPlace => installDirWritable(path: _resolveInstallDir());
+
+  /// Whether files can actually be created in [path].
+  ///
+  /// The permission bits are not the answer. Inside the Flatpak sandbox
+  /// /app/lib/mydia-player is 0755 and owned by the running user, so the
+  /// owner write bit is set, while the mount itself is read-only. The old
+  /// check read that bit, returned true, and the updater committed to an
+  /// update it could not perform. Only a write tells the truth.
+  static bool installDirWritable({required String path}) {
+    final probe = File(
+      '$path/.mydia-update-probe-${DateTime.now().microsecondsSinceEpoch}',
+    );
     try {
-      final execPath = Platform.resolvedExecutable;
-      final installDir = File(execPath).parent;
-      return FileSystemEntity.isDirectorySync(installDir.path) &&
-          installDir.statSync().mode & 0x80 != 0; // owner write bit
+      probe.createSync(exclusive: true);
+      return true;
     } catch (_) {
       return false;
+    } finally {
+      try {
+        if (probe.existsSync()) probe.deleteSync();
+      } catch (_) {
+        // A probe we could not remove is not worth failing an update over.
+      }
     }
   }
 
@@ -31,6 +58,16 @@ class LinuxUpdater extends PlatformUpdater {
     AppUpdate update, {
     void Function(double progress)? onProgress,
   }) async {
+    final installDir = _resolveInstallDir();
+
+    // Before the download, not after it. The old order fetched roughly 60 MB
+    // and only then discovered it had nowhere to put it.
+    if (!installDirWritable(path: installDir)) {
+      debugPrint('[LinuxUpdater] Install dir not writable, opening browser');
+      await _openInBrowser(update.releaseNotesUrl);
+      return;
+    }
+
     final tempDir = await getTemporaryDirectory();
     final archivePath = '${tempDir.path}/mydia-update.tar.gz';
     final extractDir = '${tempDir.path}/mydia-update-extract';
@@ -59,21 +96,10 @@ class LinuxUpdater extends PlatformUpdater {
     final extractResult =
         await Process.run('tar', ['-xzf', archivePath, '-C', extractDir]);
     if (extractResult.exitCode != 0) {
-      throw Exception(
-          'Failed to extract update: ${extractResult.stderr}');
+      throw Exception('Failed to extract update: ${extractResult.stderr}');
     }
 
     final execPath = Platform.resolvedExecutable;
-    final installDir = File(execPath).parent.path;
-
-    // Check if we can write to the install directory
-    if (!_isInstallDirWritable()) {
-      // Fall back: open download URL in default browser
-      debugPrint(
-          '[LinuxUpdater] Install dir not writable, opening browser fallback');
-      await Process.run('xdg-open', [update.releaseNotesUrl]);
-      return;
-    }
 
     // Copy extracted files over current installation
     debugPrint('[LinuxUpdater] Copying files to $installDir');
