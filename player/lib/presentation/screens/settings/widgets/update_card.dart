@@ -6,6 +6,7 @@ import '../../../../core/player/platform_features.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/update/platform_updater.dart';
 import '../../../../core/update/update_provider.dart';
+import '../../../../presentation/widgets/update_action.dart';
 import 'settings_section.dart';
 
 /// The available-update card, shown above the settings sections.
@@ -97,7 +98,7 @@ class UpdateCard extends ConsumerWidget {
                   Row(
                     children: [
                       FilledButton.icon(
-                        onPressed: () => _handleUpdateTap(context, ref),
+                        onPressed: () => startUpdate(context, ref),
                         icon: const Icon(Icons.download, size: 18),
                         label: const Text('Update Now'),
                       ),
@@ -121,39 +122,6 @@ class UpdateCard extends ConsumerWidget {
                 ],
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _handleUpdateTap(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(updateProvider.notifier);
-
-    if (!notifier.canUpdateInPlace) {
-      notifier.applyUpdate();
-      return;
-    }
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Update Mydia'),
-        content: Text(
-          'Mydia will close and update to '
-          'v${ref.read(updateProvider).availableUpdate?.version}. Continue?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              notifier.applyUpdate();
-            },
-            child: const Text('Update'),
           ),
         ],
       ),
