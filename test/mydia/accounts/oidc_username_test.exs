@@ -70,6 +70,15 @@ defmodule Mydia.Accounts.OidcUsernameTest do
     assert user.username_source == "idp"
   end
 
+  test "an SSO login never lands on a case-variant of an existing local username" do
+    local = user_fixture(%{username: "Tonix"})
+
+    sso = upsert(%{email: "robin@example.test", preferred_username: "tonix", role: "user"})
+
+    assert sso.username == "tonix-2"
+    refute String.downcase(sso.username) == String.downcase(local.username)
+  end
+
   test "a locally chosen name is never overwritten by a login" do
     sub = "sub-local"
     first = upsert(%{email: "robin@example.test", role: "user"}, sub)

@@ -77,5 +77,34 @@ defmodule Mydia.Accounts.ClaimUsernameTest do
 
       assert Accounts.claim_username(user, {:idp, "robin"}) == :none
     end
+
+    test "a derived lowercase name does not shadow an existing mixed-case username" do
+      _taken = user_fixture(%{username: "Tonix"})
+      user = user_fixture(%{username: "someone-else"})
+
+      assert {:ok, claimed} = Accounts.claim_username(user, {:idp, "tonix"})
+      assert claimed.username == "tonix-2"
+    end
+
+    test "the suffix walk is also case-insensitive" do
+      _taken = user_fixture(%{username: "Tonix"})
+      _taken_2 = user_fixture(%{username: "Tonix-2"})
+      user = user_fixture(%{username: "someone-else"})
+
+      assert {:ok, claimed} = Accounts.claim_username(user, {:idp, "tonix"})
+      assert claimed.username == "tonix-3"
+    end
+
+    test "reclaiming a name against one's own differently-cased current name does not suffix" do
+      # The user's stored username is mixed-case while the candidate is the
+      # lowercase slug `slugify/1` always produces, so a case-insensitive
+      # lookup that did NOT exclude this user's own row would find it as a
+      # "collision" and wrongly suffix to "tonix-2". Only the self-exclusion
+      # clause lets attempt 1 land on the bare "tonix".
+      user = user_fixture(%{username: "Tonix"})
+
+      assert {:ok, claimed} = Accounts.claim_username(user, {:idp, "tonix"})
+      assert claimed.username == "tonix"
+    end
   end
 end

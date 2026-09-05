@@ -172,17 +172,30 @@ defmodule Mydia.Accounts do
   @doc """
   Writes a derived username onto a user, suffixing past collisions.
 
-  Attempt 1 is the bare slug, attempt N is `slug-N`. The unique index is the
-  arbiter rather than a `SELECT` beforehand, because two people signing in for
-  the first time at once would race a pre-check and one of them would crash on
-  the constraint anyway.
+  Attempt 1 is the bare slug, attempt N is `slug-N`. The unique index on
+  `:username` is case-sensitive, so it alone is not enough: `slugify/1`
+  always downcases, so it would happily write "tonix" next to an existing
+  "Tonix" without ever tripping the constraint, silently shadowing the other
+  account for anything (like media-server profile matching) that compares
+  names case-insensitively. Each attempt therefore also runs a
+  case-insensitive `SELECT`, excluding this user's own row so that an account
+  re-claiming the name it already holds is never suffixed against itself.
+
+  This still leaves a narrow race: two people signing in for the very first
+  time, in the same instant, with names that only differ by case, could both
+  pass the pre-check before either write lands, and end up as case-variant
+  siblings after all. That window is far narrower than doing no check at all,
+  and closing it fully would need a case-insensitive unique index, which is
+  out of scope here. The case-sensitive unique constraint is kept as a second
+  line of defense for the exact-match version of that same race.
 
   Returns `:none` when every attempt is taken, when the write fails for a
-  reason other than the constraint, or when the write itself raises (a
-  dropped database connection, or a constraint other than the declared
-  unique one on `:username`). It never raises: a login must not fail, and a
-  migration that calls this must not crash the boot supervision tree,
-  because two people's IdP names collided or the database briefly misbehaved.
+  reason other than the constraint, or when either the pre-check or the write
+  itself raises (a dropped database connection, or a constraint other than
+  the declared unique one on `:username`). It never raises: a login must not
+  fail, and a migration that calls this must not crash the boot supervision
+  tree, because two people's IdP names collided or the database briefly
+  misbehaved.
   """
   @spec claim_username(User.t(), {UsernameSource.tier(), String.t()}) :: {:ok, User.t()} | :none
   def claim_username(%User{} = user, {tier, slug}) do
@@ -192,20 +205,23 @@ defmodule Mydia.Accounts do
   defp do_claim(_user, _tier, _slug, attempt) when attempt > @username_attempt_limit, do: :none
 
   defp do_claim(user, tier, slug, attempt) do
-    attrs = %{
-      username: UsernameSource.suffixed(slug, attempt),
-      username_source: Atom.to_string(tier)
-    }
-
-    changeset = User.username_changeset(user, attrs)
+    candidate = UsernameSource.suffixed(slug, attempt)
 
     result =
       try do
-        Repo.update(changeset)
+        if case_insensitive_username_taken?(candidate, user.id) do
+          {:error, :case_insensitive_collision}
+        else
+          attrs = %{username: candidate, username_source: Atom.to_string(tier)}
+
+          user
+          |> User.username_changeset(attrs)
+          |> Repo.update()
+        end
       rescue
         error ->
           Logger.warning(
-            "claim_username: Repo.update raised for user #{user.id}: #{Exception.message(error)}"
+            "claim_username: attempt for user #{user.id} raised: #{Exception.message(error)}"
           )
 
           :none
@@ -214,6 +230,9 @@ defmodule Mydia.Accounts do
     case result do
       {:ok, updated} ->
         {:ok, updated}
+
+      {:error, :case_insensitive_collision} ->
+        do_claim(user, tier, slug, attempt + 1)
 
       {:error, changeset} ->
         if username_taken?(changeset) do
@@ -225,6 +244,19 @@ defmodule Mydia.Accounts do
       :none ->
         :none
     end
+  end
+
+  # `lower(?) = lower(?)` works unchanged on SQLite and PostgreSQL, unlike
+  # ILIKE (Postgres-only) or a citext column (a schema change out of scope
+  # here). Excluding `user.id` matters even though `user` may already carry
+  # this exact candidate as its current username: without it, an account
+  # re-claiming its own name on every login would collide with itself and
+  # suffix forever instead of ever landing on the bare slug.
+  defp case_insensitive_username_taken?(candidate, user_id) do
+    User
+    |> where([u], u.id != ^user_id)
+    |> where([u], fragment("lower(?) = lower(?)", u.username, ^candidate))
+    |> Repo.exists?()
   end
 
   defp username_taken?(%Ecto.Changeset{errors: errors}) do
