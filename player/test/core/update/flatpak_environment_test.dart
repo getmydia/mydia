@@ -5,7 +5,9 @@ import 'package:player/core/update/flatpak_environment.dart';
 
 /// A trimmed copy of the real /.flatpak-info from an installed
 /// dev.mydia.player, keeping only the keys the parser reads plus enough
-/// noise to prove section handling works.
+/// noise to prove section handling works. Also carries the two hardest lines
+/// a real file contains: a value with more than one "=" in it, and a section
+/// header with a space in its name.
 const _stableInfo = '''
 [Application]
 name=dev.mydia.player
@@ -17,9 +19,13 @@ app-commit=14c05ae630f829be49770831541c3777fad915ba3ce304c4d46eff016b442ec6
 branch=stable
 arch=x86_64
 flatpak-version=1.18.1
+runtime-extensions=org.gnome.Platform.Locale=b985d62;org.freedesktop.Platform.GL.default=bcfd828
 
 [Context]
 shared=ipc;network;
+
+[Session Bus Policy]
+org.freedesktop.ScreenSaver=talk
 ''';
 
 void main() {
@@ -75,5 +81,17 @@ void main() {
     );
 
     expect(env.appId, isNull);
+  });
+
+  test('parses a file carrying multi-equals values and a spaced section header',
+      () {
+    // runtime-extensions in [Instance] has more than one "=" in its value,
+    // and [Session Bus Policy] has a space in its section name. A naive
+    // line.split('=') or a section match that stops at the first space would
+    // break either of these with no other test noticing.
+    final env = FlatpakEnvironment(infoPath: write(_stableInfo));
+
+    expect(env.appId, 'dev.mydia.player');
+    expect(env.branch, 'stable');
   });
 }

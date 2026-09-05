@@ -11,6 +11,12 @@ class FlatpakEnvironment {
   /// Injectable for tests. Production always reads the real path.
   final String infoPath;
 
+  /// Existence, not parseability. If a future runtime changes the file's
+  /// format and [appId] or [branch] come back null, this must still be true:
+  /// the sandbox is real regardless of whether this parser understands it.
+  /// Falling back to `appId != null` here would route a Flatpak install back
+  /// to LinuxUpdater the moment the format drifted, which is the exact
+  /// failure this whole plan exists to remove.
   bool get isFlatpak => File(infoPath).existsSync();
 
   /// The Flatpak application id, for example dev.mydia.player.
