@@ -9,6 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Media
   alias Mydia.Media.Add
+  alias Mydia.Media.MediaItem
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata.Ref
   alias MydiaWeb.Live.Authorization
@@ -193,6 +194,15 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
            socket.assigns.current_user.id
          ) do
       {:ok, request, status_updates} ->
+        # Merged onto a full map, not applied alone. `handle_request_media/3`
+        # returns a single-entry map for the row just requested, and enriching
+        # with that alone sets :request_status to nil on every *other* card,
+        # clearing statuses the rail had already resolved. DashboardLive and
+        # DiscoverLive merge it into the map they hold in an assign; this module
+        # keeps no such assign, so it re-reads one, which already contains the
+        # request just written.
+        status_map = Map.merge(MediaRequestHelpers.request_status_map(), status_updates)
+
         socket =
           socket
           |> assign(:requesting_recommendation_id, nil)
@@ -200,14 +210,14 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
             :recommendations,
             MediaRequestHelpers.enrich_with_request_status(
               socket.assigns.recommendations,
-              status_updates
+              status_map
             )
           )
           |> assign(
             :selected_recommendations,
             MediaRequestHelpers.enrich_with_request_status(
               socket.assigns[:selected_recommendations] || [],
-              status_updates
+              status_map
             )
           )
 
@@ -321,6 +331,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     status = Media.library_status_for_tmdb_ids(tmdb_ids, media_item.type)
 
     results
+    |> stamp_media_type(media_item.type)
     |> MediaAddHelpers.enrich_with_library_status(status)
     |> maybe_enrich_with_request_status(current_user)
     |> Enum.map(fn item ->
@@ -342,6 +353,24 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     else
       results
     end
+  end
+
+  @doc """
+  Stamps each recommendation with the media type it was fetched for.
+
+  TMDB's recommendation payload carries no media type of its own: a show's
+  recommendations are shows and a movie's are movies, and the provider leaves
+  that implicit in which endpoint was called. The status maps are keyed by
+  `Mydia.Media.ProviderKey`, which needs the type, so it is stamped here at the
+  one place that still knows it. Without it every recommendation card reads as
+  having no library or request status at all.
+
+  Public because the detail dialog's own rail decorates the same results.
+  """
+  @spec stamp_media_type([map()], String.t()) :: [map()]
+  def stamp_media_type(results, type) do
+    media_type = MediaItem.type_atom(type)
+    Enum.map(results, &Map.put(&1, :media_type, media_type))
   end
 
   @doc """

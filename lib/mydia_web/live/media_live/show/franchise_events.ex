@@ -7,6 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Media.FranchiseEntry
   alias Mydia.Media.Franchises
+  alias Mydia.Media.ProviderKey
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.Live.Authorization
@@ -241,7 +242,10 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
 
       entries =
         Enum.map(franchise.entries, fn entry ->
-          %{entry | request_status: Map.get(status_map, entry.tmdb_id)}
+          # A franchise is a TMDB movie collection, so both halves of the key
+          # are fixed; only the id varies per entry.
+          key = ProviderKey.new(:movie, :tmdb, entry.tmdb_id)
+          %{entry | request_status: key && Map.get(status_map, key)}
         end)
 
       %{franchise | entries: entries}
