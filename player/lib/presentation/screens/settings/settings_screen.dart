@@ -11,9 +11,9 @@ import '../../../core/remote/node_registration_providers.dart';
 import '../../../core/remote/registration_status.dart';
 import '../../../core/remote/remote_control_settings.dart';
 import '../../../core/theme/colors.dart';
-import '../../../core/update/platform_updater.dart';
+import '../../../core/update/update_backend.dart';
 import '../../../core/update/update_provider.dart';
-import '../../../core/update/updaters/macos_updater.dart';
+import '../../../domain/models/available_update.dart';
 import '../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/user_settings.dart';
@@ -267,14 +267,17 @@ class _ManageSection extends ConsumerWidget {
         // Flatpak branch, chosen at install time rather than in-app, and
         // Windows has no channel support at all.
         if (PlatformFeatures.isMacOS) const BetaChannelRow(),
-        if (PlatformUpdater.supportedOnCurrentPlatform)
+        if (updateState.manualCheck != ManualCheckBehaviour.unavailable)
           SettingsRow.action(
             key: const Key('check-for-updates-row'),
             icon: Icons.refresh,
-            title: 'Check for updates',
+            title: updateState.manualCheck ==
+                    ManualCheckBehaviour.checksAndInstalls
+                ? 'Check and install updates'
+                : 'Check for updates',
             subtitle: updateCheckSubtitle(
-              isMacOS: PlatformFeatures.isMacOS,
-              availableVersion: updateState.availableUpdate?.version,
+              behaviour: updateState.manualCheck,
+              update: updateState.availableUpdate,
             ),
             trailing: updateState.isChecking
                 ? const SizedBox(
@@ -283,7 +286,7 @@ class _ManageSection extends ConsumerWidget {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : null,
-            onTap: updateState.isChecking ? null : () => _check(ref),
+            onTap: updateState.isChecking ? null : () => _check(context, ref),
           ),
       ],
     );
@@ -313,34 +316,58 @@ class _ManageSection extends ConsumerWidget {
     ref.invalidate(remoteControlEnabledProvider);
   }
 
-  void _check(WidgetRef ref) {
-    // On macOS, Sparkle manages its own UI, so trigger it directly.
-    if (PlatformFeatures.isMacOS) {
-      MacOSUpdater.checkForUpdates();
-      return;
+  /// A press on a check-and-install row installs, so it asks first. There is
+  /// no version to preview, because the portal reports commits, so the dialog
+  /// says what the press does rather than what it will fetch.
+  Future<void> _check(BuildContext context, WidgetRef ref) async {
+    final state = ref.read(updateProvider);
+
+    if (state.manualCheck == ManualCheckBehaviour.checksAndInstalls) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Check for updates'),
+          content: const Text(
+            'Check for an update and install it if one is found?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
     }
-    ref.read(updateProvider.notifier).checkForUpdate();
+
+    await ref.read(updateProvider.notifier).checkForUpdate();
   }
 }
 
 /// Subtitle for the check-for-updates row.
 ///
-/// macOS needs its own string. `UpdateNotifier._initAndCheck` returns early
-/// there because Sparkle owns update checking, so `availableUpdate` stays null
-/// and the generic wording would claim a clean bill of health from a check that
-/// never ran. The old `_CheckForUpdatesTile` said "Opens Sparkle update dialog"
-/// for exactly this reason.
-///
-/// Pure, and takes the platform as an argument, so every branch is reachable
-/// from a test host that is none of these platforms.
-@visibleForTesting
+/// Sparkle needs its own string, and the Flatpak row cannot promise a version
+/// because the portal reports commits rather than versions.
 String updateCheckSubtitle({
-  required bool isMacOS,
-  required String? availableVersion,
+  required ManualCheckBehaviour behaviour,
+  required AvailableUpdate? update,
 }) {
-  if (isMacOS) return 'Opens the Sparkle update dialog';
-  if (availableVersion != null) return 'v$availableVersion available';
-  return "You're up to date";
+  if (behaviour == ManualCheckBehaviour.delegatesToSparkle) {
+    return 'Opens the Sparkle update dialog';
+  }
+
+  final version = update?.version;
+  if (version != null) return 'v$version available';
+  if (update != null) return 'An update is available';
+
+  return behaviour == ManualCheckBehaviour.checksAndInstalls
+      ? 'Checks and installs the newest build'
+      : "You're up to date";
 }
 
 /// Sign out, kept away from the read-only facts above it.

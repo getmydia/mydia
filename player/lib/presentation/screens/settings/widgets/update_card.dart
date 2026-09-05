@@ -2,50 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/player/platform_features.dart';
 import '../../../../core/theme/colors.dart';
-import '../../../../core/update/platform_updater.dart';
 import '../../../../core/update/update_provider.dart';
 import '../../../../domain/models/available_update.dart';
 import 'settings_section.dart';
 
 /// The available-update card, shown above the settings sections.
 ///
-/// Gated on three conditions, all of which matter:
-///
-/// * [PlatformUpdater.supportedOnCurrentPlatform] is `!isWeb && !isAndroid &&
-///   !isIOS`. `UpdateNotifier._initAndCheck` only returns early on web and
-///   macOS, so an update check *does* run on iOS and Android and
-///   `availableUpdate` can be non-null there. Without this check the card would
-///   offer an Update Now button on a platform that updates through a store.
-/// * Not macOS, where Sparkle owns update notification natively.
-/// * An update actually being available.
-///
-/// The old `UpdateTile` got the first condition from the enclosing `if` in the
-/// settings screen. Moving it in here means the screen cannot forget it.
+/// It renders nothing unless there is something to say. The platform gate it
+/// used to carry moved into createUpdateBackend, which returns null on
+/// platforms that update through a store, so a dead card is unrepresentable
+/// rather than merely guarded against.
 class UpdateCard extends ConsumerWidget {
-  /// Overrides the platform-support check. Tests only: a `flutter test` host on
-  /// Linux always reports a supported platform, so the unsupported branch is
-  /// otherwise unreachable. Mirrors `LocalNetworkSettingsButton.available`.
-  final bool? supportedOverride;
-
-  const UpdateCard({super.key, this.supportedOverride});
+  const UpdateCard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final supported =
-        supportedOverride ?? PlatformUpdater.supportedOnCurrentPlatform;
-    if (!supported || PlatformFeatures.isMacOS) return const SizedBox.shrink();
+    final state = ref.watch(updateProvider);
+    final update = state.availableUpdate;
 
-    final updateState = ref.watch(updateProvider);
-    final update = updateState.availableUpdate;
-    if (update == null) return const SizedBox.shrink();
+    final awaitingRestart = state.restartRequired ||
+        (update is FlatpakRemoteUpdate && update.installedAwaitingRestart);
 
-    // The Flatpak portal knows only that the remote carries a newer commit,
-    // not what version it is, so `version` is null there. Interpolating a
-    // null String prints the literal word "null", so branch instead of
-    // reaching for `v${update.version}` unconditionally.
-    final version = update.version;
+    if (update == null && !awaitingRestart && state.notice == null) {
+      return const SizedBox.shrink();
+    }
+
+    if (update == null && !awaitingRestart) {
+      // Only a notice to show, such as confirming there was nothing to
+      // install. One line, no actions.
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 18),
+        child: SettingsCard(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                state.notice!,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     // The card owns the space below it rather than the screen owning the space
     // above it. Both early returns above contribute nothing, so the screen
@@ -61,22 +64,17 @@ class UpdateCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  version != null
-                      ? 'Update available: v$version'
-                      : 'A new version of Mydia Player is available',
+                  _heading(update: update, awaitingRestart: awaitingRestart),
                   style: const TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                // Only a GitHub release names one. The Flatpak portal knows
-                // only that the remote carries a newer commit, so there is
-                // nothing to show here for a FlatpakRemoteUpdate.
-                if (update case AppUpdate(:final releaseTitle)) ...[
+                if (update is AppUpdate) ...[
                   const SizedBox(height: 2),
                   Text(
-                    releaseTitle,
+                    update.releaseTitle,
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: AppColors.textSecondary,
@@ -84,30 +82,16 @@ class UpdateCard extends ConsumerWidget {
                   ),
                 ],
                 const SizedBox(height: 14),
-                if (updateState.isApplying)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      LinearProgressIndicator(
-                        value: updateState.downloadProgress > 0
-                            ? updateState.downloadProgress
-                            : null,
-                      ),
-                      const SizedBox(height: 6),
-                      // At zero the bar is indeterminate, so a "0%" label would
-                      // claim a precision the bar itself is not showing.
-                      Text(
-                        updateState.downloadProgress > 0
-                            ? 'Downloading ${(updateState.downloadProgress * 100).toInt()}%'
-                            : 'Downloading',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
+                if (state.isApplying)
+                  _Progress(progress: state.downloadProgress)
+                else if (awaitingRestart)
+                  FilledButton.icon(
+                    onPressed: () =>
+                        ref.read(updateProvider.notifier).restart(),
+                    icon: const Icon(Icons.restart_alt, size: 18),
+                    label: const Text('Restart'),
                   )
-                else
+                else if (update != null)
                   Row(
                     children: [
                       FilledButton.icon(
@@ -123,10 +107,10 @@ class UpdateCard extends ConsumerWidget {
                       ),
                     ],
                   ),
-                if (updateState.error != null) ...[
+                if (state.error != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    updateState.error!,
+                    state.error!,
                     style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.error,
@@ -141,6 +125,20 @@ class UpdateCard extends ConsumerWidget {
     );
   }
 
+  /// The one line at the top. A Flatpak update cannot name a version, because
+  /// the portal reports commits, so it says so plainly rather than inventing
+  /// one.
+  String _heading({
+    required AvailableUpdate? update,
+    required bool awaitingRestart,
+  }) {
+    if (awaitingRestart) return 'Restart to finish updating';
+    final version = update?.version;
+    if (version != null) return 'Update available: v$version';
+    if (update != null) return 'A new version of Mydia Player is available';
+    return 'Updates';
+  }
+
   void _handleUpdateTap(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(updateProvider.notifier);
 
@@ -149,17 +147,13 @@ class UpdateCard extends ConsumerWidget {
       return;
     }
 
-    final version = ref.read(updateProvider).availableUpdate?.version;
-
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Update Mydia'),
-        content: Text(
-          version != null
-              ? 'Mydia will close and update to v$version. Continue?'
-              : 'Mydia will download and install the newest build, then '
-                  'offer to restart. Continue?',
+        content: const Text(
+          'Mydia will download and install the newest build, then offer to '
+          'restart. Continue?',
         ),
         actions: [
           TextButton(
@@ -183,5 +177,35 @@ class UpdateCard extends ConsumerWidget {
     if (uri != null) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+}
+
+/// The download bar and its label.
+///
+/// At zero the bar is indeterminate, so a "0%" label would claim a precision
+/// the bar itself is not showing.
+class _Progress extends StatelessWidget {
+  const _Progress({required this.progress});
+
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LinearProgressIndicator(value: progress > 0 ? progress : null),
+        const SizedBox(height: 6),
+        Text(
+          progress > 0
+              ? 'Downloading ${(progress * 100).toInt()}%'
+              : 'Downloading',
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
   }
 }
