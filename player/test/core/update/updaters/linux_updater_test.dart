@@ -25,12 +25,24 @@ void main() {
     test(
         'a directory with the write bit set but no write permission reports '
         'not writable', () {
-      // 0555 is the shape that fooled the old owner-write-bit test: the
-      // directory looks ordinary and is owned by us, but nothing can be
-      // created inside it. This stands in for the read-only /app mount.
+      // 0555 clears the owner write bit entirely, so this is not the shape
+      // that fooled the old check. It covers a different case: a directory
+      // that exists and is readable but refuses writes, so the probe fails
+      // cleanly (returns false) instead of throwing.
       Process.runSync('chmod', ['0555', temp.path]);
       expect(LinuxUpdater.installDirWritable(path: temp.path), isFalse);
     });
+
+    test('a directory we do not own reports not writable', () {
+      // The shape that actually fooled the old check: /etc is 0755, so the
+      // owner write bit is set, but root owns it and we do not. mode & 0x80
+      // said writable here. A real probe does not.
+      if (LinuxUpdater.installDirWritable(path: '/etc')) {
+        markTestSkipped('running as root, DAC checks bypassed');
+        return;
+      }
+      expect(LinuxUpdater.installDirWritable(path: '/etc'), isFalse);
+    }, skip: !Platform.isLinux);
 
     test('a directory that does not exist reports not writable', () {
       expect(
