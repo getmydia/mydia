@@ -319,8 +319,10 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     tmdb_ids = Enum.map(results, &safe_provider_id/1)
 
     status = Media.library_status_for_tmdb_ids(tmdb_ids, media_item.type)
+    media_type = if media_item.type == "tv_show", do: :tv_show, else: :movie
 
     results
+    |> Enum.map(&Map.put(&1, :media_type, media_type))
     |> MediaAddHelpers.enrich_with_library_status(status)
     |> maybe_enrich_with_request_status(current_user)
     |> Enum.map(fn item ->
