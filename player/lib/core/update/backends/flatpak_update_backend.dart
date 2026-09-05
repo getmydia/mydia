@@ -24,7 +24,9 @@ class FlatpakUpdateBackend implements UpdateBackend {
 
   bool _monitoring = false;
   bool _awaitingRestart = false;
+  bool _updateReady = false;
   StreamSubscription<FlatpakCommits>? _sub;
+  Future<UpdateOutcome>? _inFlight;
 
   /// Creates the monitor. A portal that refuses leaves the backend alive but
   /// reporting no in-place update, which is what makes the settings row
@@ -46,14 +48,20 @@ class FlatpakUpdateBackend implements UpdateBackend {
     }
 
     _sub = _portal.updatesAvailable.listen((commits) {
+      // Independent booleans over the same three commits, not exclusive
+      // states. Both are true when a newer remote lands while a previous
+      // install is still waiting for a restart. Downloading first gets the
+      // user to the newest build with one restart instead of two.
       _awaitingRestart = commits.awaitingRestart;
-      if (commits.awaitingRestart) {
+      _updateReady = commits.updateReady;
+
+      if (commits.updateReady) {
+        _publish(FlatpakRemoteUpdate(releaseNotesUrl: _releaseNotesUrl));
+      } else if (commits.awaitingRestart) {
         _publish(FlatpakRemoteUpdate(
           releaseNotesUrl: _releaseNotesUrl,
           installedAwaitingRestart: true,
         ));
-      } else if (commits.updateReady) {
-        _publish(FlatpakRemoteUpdate(releaseNotesUrl: _releaseNotesUrl));
       } else {
         _publish(null);
       }
@@ -88,6 +96,18 @@ class FlatpakUpdateBackend implements UpdateBackend {
   @override
   Future<UpdateOutcome> requestUpdate({
     void Function(double progress)? onProgress,
+  }) {
+    // Two overlapping presses would open two transactions against one monitor
+    // object, and Progress is broadcast per monitor rather than per call, so
+    // each would see the other's signals. The second caller gets the first
+    // call's result. Its onProgress is deliberately dropped: there is one
+    // transaction, and it already has a reporter.
+    return _inFlight ??=
+        _runUpdate(onProgress: onProgress).whenComplete(() => _inFlight = null);
+  }
+
+  Future<UpdateOutcome> _runUpdate({
+    void Function(double progress)? onProgress,
   }) async {
     if (!_monitoring) {
       return const UpdateFailed(
@@ -95,10 +115,13 @@ class FlatpakUpdateBackend implements UpdateBackend {
       );
     }
 
-    // Already deployed underneath us. There is nothing to pull, and asking
-    // the portal would report an empty transaction and read as "up to date"
-    // while the user is still running the old build.
-    if (_awaitingRestart) {
+    // Already deployed underneath us, and nothing newer waiting on the
+    // remote. There is nothing to pull, and asking the portal would report an
+    // empty transaction and read as "up to date" while the user is still
+    // running the old build. When a newer remote has also landed,
+    // _updateReady wins here so the transaction runs and the user reaches the
+    // newest build with one restart instead of two.
+    if (_awaitingRestart && !_updateReady) {
       return const UpdateInstalled(restartRequired: true);
     }
 
@@ -112,6 +135,7 @@ class FlatpakUpdateBackend implements UpdateBackend {
           case FlatpakProgressStatus.done:
             onProgress?.call(1.0);
             _awaitingRestart = true;
+            _updateReady = false;
             return const UpdateInstalled(restartRequired: true);
           case FlatpakProgressStatus.failed:
             // A permissions rejection can arrive on this signal rather than as

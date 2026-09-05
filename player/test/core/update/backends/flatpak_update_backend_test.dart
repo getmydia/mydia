@@ -91,6 +91,40 @@ void main() {
         (seen.single as FlatpakRemoteUpdate).installedAwaitingRestart, isTrue);
   });
 
+  test(
+      'a newer remote landing while a previous install awaits restart '
+      'downloads first', () async {
+    // awaitingRestart and updateReady are independent booleans over the same
+    // three commits, not exclusive states: both are true here. Downloading
+    // first gets the user to the newest build with one restart instead of
+    // two, so the card must not claim a restart is all that is needed, and
+    // requestUpdate must not short-circuit past the transaction.
+    final portal = _FakePortal(progress: const [
+      FlatpakProgress(progress: 100, status: FlatpakProgressStatus.done),
+    ]);
+    final backend =
+        FlatpakUpdateBackend(portal: portal, releaseNotesUrl: _notes);
+    await backend.start();
+    addTearDown(backend.dispose);
+
+    final seen = <AvailableUpdate?>[];
+    backend.availability.listen(seen.add);
+    portal.available.add(const FlatpakCommits(
+      running: 'aaa',
+      local: 'bbb',
+      remote: 'ccc',
+    ));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+        (seen.single as FlatpakRemoteUpdate).installedAwaitingRestart, isFalse);
+
+    final outcome = await backend.requestUpdate();
+
+    expect(portal.updateCalls, 1);
+    expect(outcome, isA<UpdateInstalled>());
+  });
+
   test('nothing newer publishes null', () async {
     final portal = _FakePortal();
     final backend =
@@ -160,6 +194,23 @@ void main() {
     expect((outcome as UpdateFailed).message, contains('connection reset'));
   });
 
+  test('a stream that ends without a terminal status is not success', () async {
+    // Reporting this as done would send the user to restart into a build
+    // that was never installed.
+    final portal = _FakePortal(progress: const [
+      FlatpakProgress(progress: 50, status: FlatpakProgressStatus.running),
+    ]);
+    final backend =
+        FlatpakUpdateBackend(portal: portal, releaseNotesUrl: _notes);
+    await backend.start();
+    addTearDown(backend.dispose);
+
+    final outcome = await backend.requestUpdate();
+
+    expect(outcome, isA<UpdateFailed>());
+    expect((outcome as UpdateFailed).message, contains('without reporting'));
+  });
+
   test('a refusal arriving on the Progress signal also reports unsupported',
       () async {
     // The portal can reject on permissions asynchronously rather than as a
@@ -218,6 +269,28 @@ void main() {
     expect(portal.updateCalls, 0);
     expect(outcome, isA<UpdateInstalled>());
     expect((outcome as UpdateInstalled).restartRequired, isTrue);
+  });
+
+  test('two overlapping presses only open one transaction', () async {
+    // Progress is broadcast per monitor, not per call. Two open transactions
+    // against the same monitor would each observe the other's signals, so
+    // the second caller must ride the first call's transaction rather than
+    // starting its own.
+    final portal = _FakePortal(progress: const [
+      FlatpakProgress(progress: 100, status: FlatpakProgressStatus.done),
+    ]);
+    final backend =
+        FlatpakUpdateBackend(portal: portal, releaseNotesUrl: _notes);
+    await backend.start();
+    addTearDown(backend.dispose);
+
+    final first = backend.requestUpdate();
+    final second = backend.requestUpdate();
+    final results = await Future.wait([first, second]);
+
+    expect(portal.updateCalls, 1);
+    expect(results[0], isA<UpdateInstalled>());
+    expect(results[1], same(results[0]));
   });
 
   test('restart asks the portal for the newest commit', () async {
