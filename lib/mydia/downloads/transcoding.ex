@@ -10,6 +10,14 @@ defmodule Mydia.Downloads.Transcoding do
   alias Phoenix.PubSub
   require Logger
 
+  # A transcode job row can be deleted while its ffmpeg progress task is still
+  # running: session teardown, the stale-job sweeper, or a user cancelling the
+  # stream. `Repo.update/2` filters by primary key unconditionally and raises
+  # `Ecto.StaleEntryError` when that filter matches zero rows, which crashes
+  # the unsupervised progress task instead of just ending the update. This
+  # mirrors the fix applied to `Downloads.History` in issue #281/#285.
+  @stale_opts [stale_error_field: :id, stale_error_message: "no longer exists"]
+
   ## Public Functions
 
   def get_or_create_job(media_file_id, resolution) do
@@ -91,7 +99,7 @@ defmodule Mydia.Downloads.Transcoding do
 
     case job
          |> TranscodeJob.changeset(attrs)
-         |> Repo.update() do
+         |> Repo.update(@stale_opts) do
       {:ok, updated_job} ->
         broadcast_job_update(updated_job.id)
         {:ok, updated_job}
@@ -111,7 +119,7 @@ defmodule Mydia.Downloads.Transcoding do
            completed_at: DateTime.utc_now(),
            last_accessed_at: DateTime.utc_now()
          })
-         |> Repo.update() do
+         |> Repo.update(@stale_opts) do
       {:ok, updated_job} ->
         broadcast_job_update(updated_job.id)
         {:ok, updated_job}
