@@ -131,10 +131,10 @@ defmodule Mydia.Library.MetadataEnricher do
          match_result,
          config
        ) do
+    provider_key = if provider_type == :tvdb, do: :tvdb, else: :tmdb
+
     existing_item =
-      if provider_type == :tvdb,
-        do: Media.get_media_item_by_tvdb(id),
-        else: Media.get_media_item_by_tmdb(id)
+      Media.find_by_external_ids(%{provider_key => id}, type: media_type_to_string(media_type))
 
     case existing_item do
       nil ->

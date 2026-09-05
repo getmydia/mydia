@@ -1372,14 +1372,20 @@ defmodule MydiaWeb.SearchLive.Index do
   end
 
   defp create_media_item_from_metadata(parsed, metadata, user) do
-    # Check if media already exists by provider ID
-    # For TV shows from TVDB, check tvdb_id; otherwise check tmdb_id
-    existing =
+    # Check if media already exists by provider ID, scoped by type: TMDB numbers
+    # movies and series independently, so a movie's tmdb_id is not this show's.
+    # For TV shows from TVDB, check tvdb_id; otherwise check tmdb_id.
+    provider_key =
       if parsed.type == :tv_show and Map.get(metadata, :provider) == :tvdb do
-        Media.get_media_item_by_tvdb(metadata.provider_id)
+        :tvdb
       else
-        Media.get_media_item_by_tmdb(metadata.provider_id)
+        :tmdb
       end
+
+    existing =
+      Media.find_by_external_ids(%{provider_key => metadata.provider_id},
+        type: to_string(parsed.type)
+      )
 
     case existing do
       nil ->

@@ -90,8 +90,8 @@ defmodule Mydia.Media.AddTest do
       assert {:error, {:metadata, _reason}} =
                Add.resolve_attrs({:tvdb, tvdb_id}, :movie, relay_config(bypass))
 
-      refute Mydia.Media.get_media_item_by_tmdb(tvdb_id)
-      refute Mydia.Media.get_media_item_by_tvdb(tvdb_id)
+      refute Mydia.Media.find_by_external_ids(%{tmdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(%{tvdb: tvdb_id})
     end
   end
 
@@ -116,7 +116,7 @@ defmodule Mydia.Media.AddTest do
       assert {:error, {:metadata, _reason}} =
                Add.from_provider({:tmdb, id}, :movie, relay_config(bypass))
 
-      refute Mydia.Media.get_media_item_by_tmdb(id)
+      refute Mydia.Media.find_by_external_ids(%{tmdb: id})
     end
 
     test "creates nothing when a TVDB ref is sent down the movie path" do
@@ -126,8 +126,8 @@ defmodule Mydia.Media.AddTest do
       assert {:error, {:metadata, :tvdb_ref_for_movie}} =
                Add.from_provider({:tvdb, tvdb_id}, :movie, relay_config(bypass))
 
-      refute Mydia.Media.get_media_item_by_tmdb(tvdb_id)
-      refute Mydia.Media.get_media_item_by_tvdb(tvdb_id)
+      refute Mydia.Media.find_by_external_ids(%{tmdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(%{tvdb: tvdb_id})
     end
   end
 

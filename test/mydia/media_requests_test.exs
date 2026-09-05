@@ -193,6 +193,31 @@ defmodule Mydia.MediaRequestsTest do
 
       assert {:error, :duplicate_media} = MediaRequests.create_request(attrs)
     end
+
+    test "accepts a tv request whose tmdb_id belongs to a movie already in the library", %{
+      user: user
+    } do
+      tmdb_id = System.unique_integer([:positive])
+
+      {:ok, _movie} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Crossed Type",
+          year: 2023,
+          tmdb_id: tmdb_id
+        })
+
+      assert {:ok, request} =
+               MediaRequests.create_request(%{
+                 media_type: "tv_show",
+                 title: "Crossed Type",
+                 tmdb_id: tmdb_id,
+                 requester_id: user.id
+               })
+
+      assert request.media_type == "tv_show"
+      assert request.tmdb_id == tmdb_id
+    end
   end
 
   describe "approve_request/2" do
@@ -555,7 +580,7 @@ defmodule Mydia.MediaRequestsTest do
                )
 
       assert Repo.get!(MediaRequest, request.id).status == "pending"
-      refute Media.get_media_item_by_tmdb(request.tmdb_id)
+      refute Media.find_by_external_ids(%{tmdb: request.tmdb_id})
     end
 
     test "reports a request with no TMDB or TVDB id rather than creating a shell", %{
