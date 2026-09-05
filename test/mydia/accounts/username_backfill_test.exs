@@ -61,4 +61,19 @@ defmodule Mydia.Accounts.UsernameBackfillTest do
 
     assert Repo.reload(user).username == "robin"
   end
+
+  test "returns :ok even when the read that finds nameless rows fails" do
+    # Renaming the table out from under the query is the cleanest way to make
+    # Repo.all/1 raise inside a sandboxed test: both SQLite and PostgreSQL
+    # support this DDL, and the sandbox transaction rolls it back regardless.
+    # The rename-back also happens explicitly in `after`, so a failing
+    # assertion here cannot leave the schema broken for the rest of the file.
+    Repo.query!("ALTER TABLE users RENAME TO users_backfill_test_tmp")
+
+    try do
+      assert UsernameBackfill.run() == :ok
+    after
+      Repo.query!("ALTER TABLE users_backfill_test_tmp RENAME TO users")
+    end
+  end
 end

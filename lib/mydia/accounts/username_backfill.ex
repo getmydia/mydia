@@ -13,7 +13,10 @@ defmodule Mydia.Accounts.UsernameBackfill do
   `run/0` always returns `:ok`. It is called from a migration, and
   `lib/mydia/application.ex` starts `{Ecto.Migrator, ...}` in the supervision
   tree, so a raise here would be a boot failure on every install rather than a
-  failed deploy step. A row it cannot name keeps `username: nil`, which is why
+  failed deploy step. Both the read that finds nameless rows and the per-row
+  work are guarded: a dropped connection or a decode error while listing the
+  rows is caught here, and an exception naming one particular row is caught in
+  `name_one/2`. A row it cannot name keeps `username: nil`, which is why
   `User.label/1` and `UsernameIndex` stay in place as guards.
   """
 
@@ -27,19 +30,40 @@ defmodule Mydia.Accounts.UsernameBackfill do
 
   @spec run() :: :ok
   def run do
-    stats = Enum.reduce(nameless_users(), %{named: 0, skipped: 0}, &name_one/2)
+    case fetch_nameless_users() do
+      {:ok, users} ->
+        users
+        |> Enum.reduce(%{named: 0, skipped: 0}, &name_one/2)
+        |> log_stats()
 
+        :ok
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp fetch_nameless_users do
+    {:ok, Repo.all(nameless_users_query())}
+  rescue
+    error ->
+      Logger.warning(
+        "Username backfill could not read the user list: #{Exception.message(error)}"
+      )
+
+      :error
+  end
+
+  defp nameless_users_query do
+    where(User, [u], is_nil(u.username) or fragment("trim(?)", u.username) == "")
+  end
+
+  defp log_stats(stats) do
     if stats.named > 0 or stats.skipped > 0 do
       Logger.info("Username backfill: named #{stats.named}, skipped #{stats.skipped}")
     end
 
-    :ok
-  end
-
-  defp nameless_users do
-    User
-    |> where([u], is_nil(u.username) or fragment("trim(?)", u.username) == "")
-    |> Repo.all()
+    stats
   end
 
   defp name_one(%User{} = user, stats) do
