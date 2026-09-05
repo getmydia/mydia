@@ -171,11 +171,14 @@ defmodule Mydia.Media.ExternalIds do
   # the one the database happened to report. Anything still nil after that
   # re-check was never a candidate and is left alone.
   #
-  # The owner found here may have vanished by the time this runs, or may not
-  # be who the original write collided with -- either is fine, since the id
-  # cannot be proven free and dropping it is always safe.
-  # `Mydia.Jobs.MetadataBackfill` refreshes the row from its own provider
-  # later.
+  # The live re-read decides each remaining id on its own: finding an owner
+  # means the id is still taken, so it is reported and dropped, and the row
+  # left without one is picked up later by `Mydia.Jobs.MetadataBackfill`,
+  # which refreshes it from its own provider. Finding no owner means nothing
+  # currently holds the id, so it is kept and the retry carries it as-is. A
+  # third write claiming the id in the gap between this read and the retry is
+  # the residual race the module accepts: the retry then fails and `write/3`
+  # returns that changeset, the same outcome as any other second collision.
   defp drop_taken(attrs, type, opts) do
     Enum.reduce(@providers, attrs, fn provider, acc ->
       key = attrs_key(provider)
