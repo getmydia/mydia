@@ -97,24 +97,40 @@ jobs:
           # Turns a broken Pages project, a wrong production branch, or a missing
           # DNS record into a failed job instead of a green one over a stale feed.
           #
+          # The newest sparkle:version is the discriminator, not the item count.
+          # buildItems caps the feed at MAX_ITEMS, so once enough releases carry
+          # a DMG every feed has exactly that many items and a count comparison
+          # is satisfied by any feed at all, including the stale one a preview
+          # deployment leaves in place. The build number is what actually moves
+          # on every release, and it is what Sparkle compares.
+          #
           # Retries because Cloudflare propagation timing is not guaranteed, and a
           # release going red over ordinary propagation variance would train
           # everyone to ignore this check.
+          newest() { grep -o '<sparkle:version>[0-9]*' "$1" | head -1 | grep -o '[0-9]*'; }
+
           local_count=$(grep -c '<item>' dist/appcast.xml)
+          local_newest=$(newest dist/appcast.xml)
+          echo "Expecting $local_count item(s), newest build $local_newest."
 
           for attempt in 1 2 3 4 5 6; do
-            served=$(curl -fsSL --max-time 20 https://updates.mydia.dev/appcast.xml || true)
-            served_count=$(printf '%s' "$served" | grep -c '<item>' || true)
+            if curl -fsSL --max-time 20 https://updates.mydia.dev/appcast.xml -o served.xml; then
+              served_count=$(grep -c '<item>' served.xml || true)
+              served_newest=$(newest served.xml)
 
-            if [ -n "$served" ] && [ "$served_count" -eq "$local_count" ]; then
-              echo "updates.mydia.dev is serving $served_count item(s) after $attempt attempt(s)."
-              exit 0
+              if [ "$served_count" -eq "$local_count" ] && [ "$served_newest" = "$local_newest" ]; then
+                echo "updates.mydia.dev is serving $served_count item(s), newest build $served_newest, after $attempt attempt(s)."
+                exit 0
+              fi
+
+              echo "Attempt $attempt: served $served_count item(s), newest build ${served_newest:-none}. Retrying."
+            else
+              echo "Attempt $attempt: could not fetch the feed. Retrying."
             fi
 
-            echo "Attempt $attempt: served $served_count item(s), expected $local_count. Retrying."
             sleep 15
           done
 
-          echo "::error::updates.mydia.dev did not serve the expected $local_count item(s) after 6 attempts."
+          echo "::error::updates.mydia.dev did not serve $local_count item(s) with newest build $local_newest after 6 attempts."
           echo "::error::Check the mydia-appcast Pages project, its production branch, and the updates.mydia.dev DNS record."
           exit 1
