@@ -39,6 +39,8 @@ defmodule Mydia.Media.ExternalIds do
 
     * `:exclude_id` - id of the media item being updated. A row writing its own
       id back is not a conflict.
+    * `:type` - media type used to scope provider id conflict lookups.
+      Defaults to `attrs[:type]`.
     * `:title` - title used in the warning when a conflict is reported.
       Defaults to `attrs[:title]`.
   """
@@ -55,11 +57,12 @@ defmodule Mydia.Media.ExternalIds do
 
   defp put_free_id(attrs, _provider, nil, _opts), do: attrs
 
-  defp put_free_id(attrs, provider, id, opts) do
+  defp put_free_id(attrs, provider, id, opts) when is_integer(id) do
     key = attrs_key(provider)
+    type = Map.get(attrs, :type) || Map.get(attrs, "type") || opts[:type]
 
     if is_nil(Map.get(attrs, key)) do
-      case conflicting_item(provider, id, opts[:exclude_id]) do
+      case conflicting_item(provider, id, type, opts[:exclude_id]) do
         nil -> Map.put(attrs, key, id)
         other -> report_conflict(attrs, provider, id, other, opts)
       end
@@ -68,19 +71,23 @@ defmodule Mydia.Media.ExternalIds do
     end
   end
 
+  defp put_free_id(attrs, _provider, _id, _opts), do: attrs
+
   defp attrs_key(:tmdb), do: :tmdb_id
   defp attrs_key(:tvdb), do: :tvdb_id
 
-  defp conflicting_item(provider, id, exclude_id) do
-    case lookup(provider, id) do
+  defp conflicting_item(provider, id, type, exclude_id) do
+    case lookup(provider, id, type) do
       nil -> nil
       %{id: ^exclude_id} -> nil
       item -> item
     end
   end
 
-  defp lookup(:tmdb, id), do: Media.get_media_item_by_tmdb(id)
-  defp lookup(:tvdb, id), do: Media.get_media_item_by_tvdb(id)
+  defp lookup(:tmdb, id, nil), do: Media.get_media_item_by_tmdb(id)
+  defp lookup(:tmdb, id, type), do: Media.get_media_item_by_tmdb(type, id)
+  defp lookup(:tvdb, id, nil), do: Media.get_media_item_by_tvdb(id)
+  defp lookup(:tvdb, id, type), do: Media.get_media_item_by_tvdb(type, id)
 
   defp report_conflict(attrs, provider, id, other, opts) do
     title = opts[:title] || Map.get(attrs, :title)

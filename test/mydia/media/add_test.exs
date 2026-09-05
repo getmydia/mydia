@@ -4,6 +4,7 @@ defmodule Mydia.Media.AddTest do
   import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
 
+  alias Mydia.Media
   alias Mydia.Media.Add
   alias Mydia.Media.MediaItem
 
@@ -474,6 +475,52 @@ defmodule Mydia.Media.AddTest do
 
       assert found.id == existing.id
       assert found.tvdb_id == exact_tvdb_id
+    end
+
+    test "from_attrs/3 resolves unique constraint collision to already_in_library" do
+      shared_id = System.unique_integer([:positive])
+
+      attrs = %{
+        type: "movie",
+        title: "Concurrent Movie",
+        year: 2024,
+        tmdb_id: shared_id
+      }
+
+      # Insert incumbent directly to simulate race after pre-flight check
+      {:ok, incumbent} = Media.create_media_item(attrs)
+
+      # Attempting from_attrs with same attrs returns {:error, {:already_in_library, ...}}
+      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs)
+      assert found.id == incumbent.id
+    end
+
+    test "from_attrs/3 handles concurrent inserts gracefully" do
+      shared_id = System.unique_integer([:positive])
+
+      attrs = %{
+        type: "movie",
+        title: "Concurrent Race Movie",
+        year: 2024,
+        tmdb_id: shared_id
+      }
+
+      tasks =
+        for _ <- 1..2 do
+          Task.async(fn -> Add.from_attrs(attrs) end)
+        end
+
+      results = Task.await_many(tasks)
+
+      assert Enum.count(results, &match?({:ok, _}, &1)) == 1
+      assert Enum.count(results, &match?({:error, {:already_in_library, _}}, &1)) == 1
+
+      {:ok, item} = Enum.find(results, &match?({:ok, _}, &1))
+
+      {:error, {:already_in_library, found}} =
+        Enum.find(results, &match?({:error, {:already_in_library, _}}, &1))
+
+      assert found.id == item.id
     end
   end
 end
