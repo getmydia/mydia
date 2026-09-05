@@ -30,4 +30,26 @@ defmodule Mydia.AccountsFixtures do
   def admin_user_fixture(attrs \\ %{}) do
     user_fixture(Map.merge(%{role: "admin"}, attrs))
   end
+
+  @doc """
+  Generate an OIDC-provisioned user, which has no username.
+
+  `Accounts.upsert_user_from_oidc/3` is the only path that creates one:
+  `create_user/1` runs `User.changeset/2`, which requires a username, so it
+  cannot build the account shape that SSO installs actually have.
+  """
+  def oidc_user_fixture(attrs \\ %{}) do
+    n = System.unique_integer([:positive])
+
+    attrs =
+      Map.merge(
+        %{email: "sso#{n}@example.test", display_name: "SSO User #{n}", role: "user"},
+        attrs
+      )
+
+    {:ok, user} =
+      Accounts.upsert_user_from_oidc("oidc-sub-#{n}", "https://issuer.example.test", attrs)
+
+    user
+  end
 end
