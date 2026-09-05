@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/updaters/linux_updater.dart';
-import 'package:player/domain/models/app_update.dart';
+import 'package:player/domain/models/available_update.dart';
 
 void main() {
   String? opened;

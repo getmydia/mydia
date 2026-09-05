@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../../domain/models/app_update.dart';
+import '../../domain/models/available_update.dart';
 import 'platform_updater.dart';
 import 'update_service.dart';
 import 'updaters/macos_updater.dart';

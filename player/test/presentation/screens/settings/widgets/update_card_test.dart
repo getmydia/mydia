@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/update_provider.dart';
-import 'package:player/domain/models/app_update.dart';
+import 'package:player/domain/models/available_update.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_section.dart';
 import 'package:player/presentation/screens/settings/widgets/update_card.dart';
 

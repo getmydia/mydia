@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../../domain/models/app_update.dart';
+import '../../domain/models/available_update.dart';
 import '../storage/secure_storage_options.dart';
 import 'github_release_client.dart';
 import 'version_comparator.dart';

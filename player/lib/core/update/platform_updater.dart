@@ -2,7 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 
-import '../../domain/models/app_update.dart';
+import '../../domain/models/available_update.dart';
 import '../player/platform_features.dart';
 import 'updaters/linux_updater.dart';
 import 'updaters/macos_updater.dart';

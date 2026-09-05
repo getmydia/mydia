@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 
-import '../../../domain/models/app_update.dart';
+import '../../../domain/models/available_update.dart';
 import '../platform_updater.dart';
 
 /// Method channel to the Sparkle host in AppDelegate.swift.
