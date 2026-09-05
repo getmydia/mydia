@@ -2,7 +2,6 @@ defmodule Mydia.MediaRequestsTest do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
-  import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
 
   alias Mydia.MediaRequests
@@ -260,13 +259,7 @@ defmodule Mydia.MediaRequestsTest do
       assert %{approved_by_id: ["can't be blank"]} = errors_on(changeset)
     end
 
-    # `Add.from_attrs/3`'s pre-flight is scoped to the request's own media type,
-    # while the unique index on tmdb_id is global. A movie holding the id is
-    # therefore invisible to the lookup and only the index catches it, which is
-    # the one path left that reaches insert_approval/4's media_item rollback.
-    # Pinning the behaviour here: closing the cross-type gap needs a composite
-    # (type, tmdb_id) index and so a migration.
-    test "rolls back and leaves the request pending when the other media type owns the tmdb_id",
+    test "approves a tv request whose tmdb_id matches an existing movie",
          %{user: user, admin: admin} do
       bypass = Bypass.open()
       tmdb_id = System.unique_integer([:positive])
@@ -289,24 +282,23 @@ defmodule Mydia.MediaRequestsTest do
 
       before_count = Repo.aggregate(MediaItem, :count)
 
-      log =
-        capture_log(fn ->
-          assert {:error, %Ecto.Changeset{} = changeset} =
-                   MediaRequests.approve_request(request, %{approved_by_id: admin.id},
-                     config: relay_config(bypass)
-                   )
+      # approve_request/3 returns {:ok, %{request: _, media_item: _}}
+      # (lib/mydia/media_requests.ex:111-128).
+      assert {:ok, %{request: approved, media_item: show}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
 
-          assert %{tmdb_id: ["has already been taken"]} = errors_on(changeset)
-        end)
+      # TMDB numbers movies and series independently, so the show and the movie
+      # hold the same tmdb_id without conflicting.
+      assert Repo.aggregate(MediaItem, :count) == before_count + 1
 
-      assert log =~ "Failed to create media item for request #{request.id}"
+      assert approved.status == "approved"
+      assert approved.media_item_id == show.id
 
-      reloaded = Repo.get!(MediaRequest, request.id)
-      assert reloaded.status == "pending"
-      assert is_nil(reloaded.media_item_id)
-
-      assert Repo.aggregate(MediaItem, :count) == before_count
-      assert Media.get_media_item_by_tmdb(tmdb_id).id == movie.id
+      assert show.type == "tv_show"
+      assert show.tmdb_id == tmdb_id
+      refute show.id == movie.id
     end
   end
 
