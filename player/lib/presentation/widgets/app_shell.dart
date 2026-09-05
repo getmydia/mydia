@@ -19,6 +19,7 @@ import 'nav/bottom_nav.dart';
 import 'nav/desktop_sidebar.dart';
 import 'nav/mobile_drawer.dart';
 import 'offline_banner.dart';
+import 'update_banner.dart';
 
 /// Modern app shell with adaptive navigation.
 /// Shows sidebar on desktop (≥900px) and bottom nav on mobile.
@@ -347,6 +348,7 @@ class _AppShellState extends ConsumerState<AppShell>
                       children: [
                         if (isOffline) const OfflineBanner(),
                         const CompatibilityBanner(),
+                        const UpdateBanner(),
                         Expanded(child: widget.child),
                       ],
                     ),
@@ -386,6 +388,7 @@ class _AppShellState extends ConsumerState<AppShell>
               children: [
                 if (isOffline) const OfflineBanner(),
                 const CompatibilityBanner(),
+                const UpdateBanner(),
                 Expanded(child: widget.child),
               ],
             ),
