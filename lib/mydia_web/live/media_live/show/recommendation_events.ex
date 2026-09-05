@@ -198,16 +198,20 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
           |> assign(:requesting_recommendation_id, nil)
           |> assign(
             :recommendations,
-            MediaRequestHelpers.enrich_with_request_status(
+            mark_requested(
               socket.assigns.recommendations,
-              status_updates
+              status_updates,
+              tmdb_id,
+              request.status
             )
           )
           |> assign(
             :selected_recommendations,
-            MediaRequestHelpers.enrich_with_request_status(
+            mark_requested(
               socket.assigns[:selected_recommendations] || [],
-              status_updates
+              status_updates,
+              tmdb_id,
+              request.status
             )
           )
 
@@ -357,6 +361,25 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     Add.parse_provider_id(result.provider_id)
   rescue
     ArgumentError -> nil
+  end
+
+  defp mark_requested(items, status_updates, tmdb_id, status) do
+    Enum.map(items, fn item ->
+      type = if Map.get(item, :media_type) in [:tv_show, "tv_show"], do: :tv_show, else: :movie
+      provider = if Map.get(item, :provider) == :tvdb, do: :tvdb, else: :tmdb
+      id = safe_provider_id(item)
+
+      cond do
+        Map.has_key?(status_updates, {type, provider, id}) ->
+          Map.put(item, :request_status, Map.get(status_updates, {type, provider, id}))
+
+        to_string(Map.get(item, :provider_id)) == to_string(tmdb_id) ->
+          Map.put(item, :request_status, status)
+
+        true ->
+          item
+      end
+    end)
   end
 
   defp mark_in_flight(socket, tmdb_id) do

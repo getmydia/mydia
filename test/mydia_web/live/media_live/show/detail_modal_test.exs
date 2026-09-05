@@ -428,4 +428,43 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalTest do
     refute has_element?(view, ~s(#media-detail-modal button[phx-click="add_selected_item"]))
     assert has_element?(view, "#trending-detail-modal-actions a", "Go to Movie")
   end
+
+  describe "DetailModalEvents.handle_recommendations_result/2" do
+    test "stamps media_type matching media_item.type on modal recommendations" do
+      current =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Current TV",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      rec_id = System.unique_integer([:positive])
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          media_item: current,
+          selected_recommendations: []
+        }
+      }
+
+      raw_results = [
+        %Mydia.Metadata.Structs.SearchResult{
+          provider_id: to_string(rec_id),
+          provider: :tmdb,
+          media_type: nil,
+          title: "Modal TV Rec"
+        }
+      ]
+
+      {:noreply, updated} =
+        MydiaWeb.MediaLive.Show.DetailModalEvents.handle_recommendations_result(
+          {:ok, {:ok, raw_results}},
+          socket
+        )
+
+      [rec] = updated.assigns.selected_recommendations
+      assert rec.media_type == :tv_show
+    end
+  end
 end

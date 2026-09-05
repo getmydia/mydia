@@ -323,6 +323,59 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       assert updated_rec.request_status == "pending"
       refute updated.assigns.flash["error"]
     end
+
+    test "requesting a recommendation preserves request_status on previously requested recommendations" do
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Current Movie",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      already_requested_id = System.unique_integer([:positive])
+      newly_requested_id = System.unique_integer([:positive])
+
+      item1 =
+        result(%{
+          provider_id: to_string(already_requested_id),
+          title: "Already Requested"
+        })
+        |> Map.put(:request_status, "pending")
+
+      item2 =
+        result(%{
+          provider_id: to_string(newly_requested_id),
+          title: "Newly Requested"
+        })
+
+      socket =
+        stub_socket(%{
+          media_item: current,
+          recommendations: [item1, item2],
+          current_user: user_fixture(%{role: "guest"})
+        })
+
+      {:noreply, updated} =
+        RecommendationEvents.request_recommendation(
+          %{"ref" => "tmdb:#{newly_requested_id}"},
+          socket
+        )
+
+      rec1 =
+        Enum.find(
+          updated.assigns.recommendations,
+          &(&1.provider_id == to_string(already_requested_id))
+        )
+
+      rec2 =
+        Enum.find(
+          updated.assigns.recommendations,
+          &(&1.provider_id == to_string(newly_requested_id))
+        )
+
+      assert rec1.request_status == "pending"
+      assert rec2.request_status == "pending"
+    end
   end
 
   describe "handle_add_result/3" do
