@@ -16,10 +16,10 @@ runtime=runtime/org.gnome.Platform/x86_64/50
 [Instance]
 instance-id=114688807
 app-commit=14c05ae630f829be49770831541c3777fad915ba3ce304c4d46eff016b442ec6
+runtime-extensions=org.gnome.Platform.Locale=b985d62;org.freedesktop.Platform.GL.default=bcfd828
 branch=stable
 arch=x86_64
 flatpak-version=1.18.1
-runtime-extensions=org.gnome.Platform.Locale=b985d62;org.freedesktop.Platform.GL.default=bcfd828
 
 [Context]
 shared=ipc;network;
@@ -83,12 +83,11 @@ void main() {
     expect(env.appId, isNull);
   });
 
-  test('parses a file carrying multi-equals values and a spaced section header',
-      () {
-    // runtime-extensions in [Instance] has more than one "=" in its value,
-    // and [Session Bus Policy] has a space in its section name. A naive
-    // line.split('=') or a section match that stops at the first space would
-    // break either of these with no other test noticing.
+  test('reads the right values out of a realistic full-shape file', () {
+    // _stableInfo carries a value with an embedded "=" and a section header
+    // with a space in it, both present in a real /.flatpak-info. This proves
+    // the lookup still finds the right values in that fuller shape, not only
+    // in the trimmed fixture the other tests use.
     final env = FlatpakEnvironment(infoPath: write(_stableInfo));
 
     expect(env.appId, 'dev.mydia.player');
