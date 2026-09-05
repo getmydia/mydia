@@ -11,13 +11,13 @@ defmodule Mydia.Media.LibraryStatusTest do
 
     status = Media.library_status_for_tmdb_ids([671, 999_001], "movie")
 
-    assert %{671 => entry} = status
+    assert %{{:movie, :tmdb, 671} => entry} = status
     assert entry.in_library == true
     assert entry.monitored == owned.monitored
     assert entry.type == "movie"
     assert entry.id == owned.id
-    refute Map.has_key?(status, 999_001)
-    refute Map.has_key?(status, 672)
+    refute Map.has_key?(status, {:movie, :tmdb, 999_001})
+    refute Map.has_key?(status, {:movie, :tmdb, 672})
   end
 
   test "returns an empty map for an empty id list" do
@@ -45,9 +45,20 @@ defmodule Mydia.Media.LibraryStatusTest do
         monitored: false
       })
 
-    assert %{673 => %{monitored: false, id: id}} =
+    assert %{{:movie, :tmdb, 673} => %{monitored: false, id: id}} =
              Media.library_status_for_tmdb_ids([673], "movie")
 
     assert id == unmonitored.id
+  end
+
+  test "keys a tv show under its own type, not a same-numbered movie's" do
+    show =
+      media_item_fixture(%{type: "tv_show", title: "Harbour Lights", tmdb_id: 674, year: 2011})
+
+    status = Media.library_status_for_tmdb_ids([674], "tv_show")
+
+    assert %{{:tv_show, :tmdb, 674} => %{id: id}} = status
+    assert id == show.id
+    refute Map.has_key?(status, {:movie, :tmdb, 674})
   end
 end
