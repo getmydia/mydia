@@ -3143,9 +3143,11 @@ defmodule Mydia.MediaTest do
 
       status = Media.library_status_for_tmdb_ids([603, 999], "movie")
 
-      assert %{in_library: true, monitored: true, type: "movie", id: id} = status[603]
+      assert %{in_library: true, monitored: true, type: "movie", id: id} =
+               status[{:movie, :tmdb, 603}]
+
       assert id == movie.id
-      refute Map.has_key?(status, 999)
+      refute Map.has_key?(status, {:movie, :tmdb, 999})
     end
 
     test "does not match a tv show when asked for movies" do
@@ -3153,7 +3155,8 @@ defmodule Mydia.MediaTest do
 
       status = Media.library_status_for_tmdb_ids([603], "movie")
 
-      refute Map.has_key?(status, 603)
+      refute Map.has_key?(status, {:movie, :tmdb, 603})
+      refute Map.has_key?(status, {:tv_show, :tmdb, 603})
     end
 
     test "matches tv shows when asked for tv_show" do
@@ -3161,7 +3164,7 @@ defmodule Mydia.MediaTest do
 
       status = Media.library_status_for_tmdb_ids([1396], "tv_show")
 
-      assert status[1396].id == show.id
+      assert status[{:tv_show, :tmdb, 1396}].id == show.id
     end
 
     test "returns an empty map for an empty id list" do
