@@ -226,6 +226,14 @@ defmodule Mydia.Downloads.TranscodeJobTest do
 
       assert DateTime.compare(updated_job.started_at, started_at) == :eq
     end
+
+    test "returns an error instead of raising when the job row was deleted mid-transcode", %{
+      job: job
+    } do
+      Repo.delete!(job)
+
+      assert {:error, %Ecto.Changeset{}} = Downloads.update_job_progress(job, 0.5)
+    end
   end
 
   describe "Downloads.complete_job/3" do
@@ -258,6 +266,15 @@ defmodule Mydia.Downloads.TranscodeJobTest do
       assert completed_job.file_size == file_size
       assert completed_job.completed_at != nil
       assert completed_job.last_accessed_at != nil
+    end
+
+    test "returns an error instead of raising when the job row was deleted mid-transcode", %{
+      job: job
+    } do
+      Repo.delete!(job)
+
+      assert {:error, %Ecto.Changeset{}} =
+               Downloads.complete_job(job, "/path/to/output.mp4", 500_000_000)
     end
   end
 
