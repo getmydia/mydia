@@ -373,6 +373,22 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       assert Mydia.Settings.list_media_server_user_links(server.id) == []
     end
 
+    test "the modal still opens and suggests a match when an SSO account exists",
+         %{conn: conn, bypass: bypass} do
+      # initial_mapping/3 built its own unguarded username index, so opening
+      # the modal on an install with SSO crashed the LiveView outright.
+      user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
+      _sso = Mydia.AccountsFixtures.oidc_user_fixture(%{display_name: "Robin Vega"})
+      server = sync_enabled_server(bypass)
+
+      stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "Tonix"}])
+
+      view = open_account_mapping(conn, server)
+
+      assert has_element?(view, ~s{#account-select-guid-1 option[value="#{user.id}"][selected]})
+      assert render(view) =~ "Robin Vega"
+    end
+
     test "saving a Jellyfin mapping stores the account GUID and no token",
          %{conn: conn, bypass: bypass} do
       user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})

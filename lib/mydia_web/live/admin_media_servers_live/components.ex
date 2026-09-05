@@ -2,6 +2,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias Mydia.Accounts.User
   alias Mydia.MediaServer.RemoteAccount
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
@@ -928,7 +929,11 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   # a present-but-blank param rather than vanishing from the form payload, which
   # is what lets the save path tell "unlink this" apart from "never asked".
   defp user_options(users) do
-    [{"Don't sync", ""} | Enum.map(users, &{&1.username, &1.id})]
+    # `User.label/1` rather than the raw username: an OIDC-provisioned account
+    # has none, and rendered as a blank option the operator could not tell
+    # which account they were selecting. SSO accounts cannot be name-matched,
+    # so hand-mapping here is the only way they are ever linked at all.
+    [{"Don't sync", ""} | Enum.map(users, &{User.label(&1), &1.id})]
   end
 
   # Each server calls these something different, and a modal that says "Plex
