@@ -1431,9 +1431,9 @@ defmodule Mydia.Downloads.Queue do
 
     if download_config.flaresolverr_enabled do
       Logger.info("Using FlareSolverr for download from: #{indexer_name}")
-      download_via_flaresolverr(url, download_config.cookies)
+      download_via_flaresolverr(url, indexer_name, download_config.cookies)
     else
-      download_direct(url, download_config.cookie_header)
+      download_direct(url, indexer_name, download_config.cookie_header)
     end
   end
 
@@ -1464,7 +1464,7 @@ defmodule Mydia.Downloads.Queue do
   end
 
   # Download directly with cookies
-  defp download_direct(url, cookie_header) do
+  defp download_direct(url, indexer_name, cookie_header) do
     if cookie_header != "" do
       Logger.debug("Using auth cookies for download")
     end
@@ -1474,14 +1474,21 @@ defmodule Mydia.Downloads.Queue do
 
     # First check if the URL redirects to a magnet link
     # by manually following redirects (Req can't handle magnet: scheme)
-    case follow_to_final_url(encoded_url, cookie_header) do
+    case follow_to_final_url(encoded_url, indexer_name, cookie_header) do
       {:ok, {:magnet, magnet_url}} ->
         Logger.debug("URL redirected to magnet link")
         {:ok, {:magnet, magnet_url}}
 
       {:ok, {:http, final_url}} ->
-        # Download the actual torrent file with auth cookies
-        req_opts = if cookie_header != "", do: [headers: [{"cookie", cookie_header}]], else: []
+        # Download the actual torrent file with auth cookies, scoped to this
+        # indexer's own hosts (the final URL may be a different host than the
+        # one the request started at).
+        scoped_cookie_header = scoped_cookie_header(final_url, indexer_name, cookie_header)
+
+        req_opts =
+          if scoped_cookie_header != "",
+            do: [headers: [{"cookie", scoped_cookie_header}]],
+            else: []
 
         case Req.get(final_url, req_opts) do
           {:ok, %{status: 200, body: body}} when is_binary(body) ->
@@ -1536,11 +1543,25 @@ defmodule Mydia.Downloads.Queue do
   end
 
   # Download via FlareSolverr for Cloudflare-protected sites
-  defp download_via_flaresolverr(url, cookies) do
+  defp download_via_flaresolverr(url, indexer_name, cookies) do
     alias Mydia.Indexers.FlareSolverr
 
     if FlareSolverr.enabled?() do
-      # Pass cookies to FlareSolverr request
+      # Pass cookies to FlareSolverr request, scoped to this indexer's own
+      # hosts. FlareSolverr used to receive the session unconditionally for
+      # any url at all; it now consults the same scope the direct path does.
+      cookies =
+        if cookies != [] and
+             not Indexers.cardigann_download_credential_allowed?(indexer_name, url) do
+          Logger.warning(
+            "Withholding indexer session cookies from #{url}: not a trusted origin for #{indexer_name}"
+          )
+
+          []
+        else
+          cookies
+        end
+
       flaresolverr_opts =
         if cookies != [] do
           [cookies: cookies]
@@ -1570,14 +1591,18 @@ defmodule Mydia.Downloads.Queue do
     end
   end
 
-  defp follow_to_final_url(url, cookie_header, redirects_remaining \\ 10)
-  defp follow_to_final_url(_url, _cookie_header, 0), do: {:error, :too_many_redirects}
+  defp follow_to_final_url(url, indexer_name, cookie_header, redirects_remaining \\ 10)
 
-  defp follow_to_final_url(url, cookie_header, redirects_remaining) do
-    # Build request options with cookies if available
+  defp follow_to_final_url(_url, _indexer_name, _cookie_header, 0),
+    do: {:error, :too_many_redirects}
+
+  defp follow_to_final_url(url, indexer_name, cookie_header, redirects_remaining) do
+    # Build request options with cookies scoped to this hop's own host - a
+    # cookie trusted at the previous hop must not follow a redirect off the
+    # indexer's origin.
     req_opts =
       [redirect: false] ++
-        if(cookie_header != "", do: [headers: [{"cookie", cookie_header}]], else: [])
+        cookie_header_opt(scoped_cookie_header(url, indexer_name, cookie_header))
 
     # Try HEAD request first - use redirect: false to get redirect responses directly
     # instead of following them, which avoids exception handling
@@ -1594,7 +1619,12 @@ defmodule Mydia.Downloads.Queue do
               {:ok, {:magnet, location}}
             else
               # Follow the redirect, encoding the location URL to handle special characters
-              follow_to_final_url(encode_url(location), cookie_header, redirects_remaining - 1)
+              follow_to_final_url(
+                encode_url(location),
+                indexer_name,
+                cookie_header,
+                redirects_remaining - 1
+              )
             end
         end
 
@@ -1604,7 +1634,7 @@ defmodule Mydia.Downloads.Queue do
 
       {:ok, %{status: 405}} ->
         # HEAD not allowed, try GET as fallback
-        follow_to_final_url_with_get(url, cookie_header, redirects_remaining)
+        follow_to_final_url_with_get(url, indexer_name, cookie_header, redirects_remaining)
 
       {:ok, %{status: status, body: body}} ->
         body_preview =
@@ -1629,12 +1659,12 @@ defmodule Mydia.Downloads.Queue do
     end
   end
 
-  defp follow_to_final_url_with_get(url, cookie_header, redirects_remaining) do
+  defp follow_to_final_url_with_get(url, indexer_name, cookie_header, redirects_remaining) do
     # Fallback to GET when HEAD is not allowed
-    # Build request options with cookies if available
+    # Build request options with cookies scoped to this hop's own host
     req_opts =
       [redirect: false] ++
-        if(cookie_header != "", do: [headers: [{"cookie", cookie_header}]], else: [])
+        cookie_header_opt(scoped_cookie_header(url, indexer_name, cookie_header))
 
     case Req.get(url, req_opts) do
       {:ok, %{status: status} = response} when status in 301..308 ->
@@ -1649,7 +1679,12 @@ defmodule Mydia.Downloads.Queue do
               {:ok, {:magnet, location}}
             else
               # Follow the redirect, encoding the location URL to handle special characters
-              follow_to_final_url(encode_url(location), cookie_header, redirects_remaining - 1)
+              follow_to_final_url(
+                encode_url(location),
+                indexer_name,
+                cookie_header,
+                redirects_remaining - 1
+              )
             end
         end
 
@@ -1680,6 +1715,31 @@ defmodule Mydia.Downloads.Queue do
         {:error, {:http_error, exception}}
     end
   end
+
+  # Withholds the indexer's session cookie header from a request whose target
+  # is not one of the indexer's own hosts, per
+  # Indexers.cardigann_download_credential_allowed?/2. `download_url` is
+  # remote content chosen by the indexer's own search results (or a redirect
+  # from them), so this is consulted before every request that would carry
+  # the cookie - including once per redirect hop, since a hop can move the
+  # request off the indexer's origin. The request still goes out; withhold
+  # and continue rather than failing the download.
+  defp scoped_cookie_header(_url, _indexer_name, ""), do: ""
+
+  defp scoped_cookie_header(url, indexer_name, cookie_header) do
+    if Indexers.cardigann_download_credential_allowed?(indexer_name, url) do
+      cookie_header
+    else
+      Logger.warning(
+        "Withholding indexer session cookie from #{url}: not a trusted origin for #{indexer_name}"
+      )
+
+      ""
+    end
+  end
+
+  defp cookie_header_opt(""), do: []
+  defp cookie_header_opt(cookie_header), do: [headers: [{"cookie", cookie_header}]]
 
   defp get_location_header(headers) do
     Enum.find_value(headers, fn
