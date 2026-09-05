@@ -219,6 +219,87 @@ defmodule Mydia.MediaRequestsTest do
       assert request.media_type == "tv_show"
       assert request.tmdb_id == tmdb_id
     end
+
+    test "accepts a tv request whose tmdb_id matches a pending movie request", %{user: user} do
+      tmdb_id = System.unique_integer([:positive])
+
+      assert {:ok, _movie_request} =
+               MediaRequests.create_request(%{
+                 media_type: "movie",
+                 title: "Harbour Lights",
+                 tmdb_id: tmdb_id,
+                 requester_id: user.id
+               })
+
+      assert {:ok, show_request} =
+               MediaRequests.create_request(%{
+                 media_type: "tv_show",
+                 title: "Harbour Lights: The Series",
+                 tmdb_id: tmdb_id,
+                 requester_id: user.id
+               })
+
+      assert show_request.media_type == "tv_show"
+      assert show_request.tmdb_id == tmdb_id
+    end
+
+    test "accepts a movie request whose tvdb_id matches a pending tv request", %{user: user} do
+      tvdb_id = System.unique_integer([:positive])
+
+      assert {:ok, _show_request} =
+               MediaRequests.create_request(%{
+                 media_type: "tv_show",
+                 title: "Signal Hill",
+                 tvdb_id: tvdb_id,
+                 requester_id: user.id
+               })
+
+      assert {:ok, movie_request} =
+               MediaRequests.create_request(%{
+                 media_type: "movie",
+                 title: "Signal Hill",
+                 tvdb_id: tvdb_id,
+                 requester_id: user.id
+               })
+
+      assert movie_request.media_type == "movie"
+    end
+
+    test "still rejects a second request of the same type and tmdb id", %{user: user} do
+      tmdb_id = System.unique_integer([:positive])
+
+      attrs = %{
+        media_type: "tv_show",
+        title: "Signal Hill",
+        tmdb_id: tmdb_id,
+        requester_id: user.id
+      }
+
+      assert {:ok, _request} = MediaRequests.create_request(attrs)
+      assert {:error, :duplicate_request} = MediaRequests.create_request(attrs)
+    end
+
+    test "surfaces the validation error when media_type is missing", %{user: user} do
+      # The duplicate checks run before the changeset is validated, so an
+      # absent media_type must fall through to the real error rather than
+      # short-circuiting as a false duplicate.
+      assert {:ok, _first} =
+               MediaRequests.create_request(%{
+                 media_type: "movie",
+                 title: "Harbour Lights",
+                 tmdb_id: 778_811,
+                 requester_id: user.id
+               })
+
+      assert {:error, changeset} =
+               MediaRequests.create_request(%{
+                 title: "Harbour Lights",
+                 tmdb_id: 778_811,
+                 requester_id: user.id
+               })
+
+      assert %{media_type: _} = errors_on(changeset)
+    end
   end
 
   describe "approve_request/2" do
@@ -762,7 +843,7 @@ defmodule Mydia.MediaRequestsTest do
     end
   end
 
-  describe "pending_request_exists?/1" do
+  describe "pending_request_exists?/2" do
     setup do
       user = create_user()
       %{user: user}
@@ -771,13 +852,29 @@ defmodule Mydia.MediaRequestsTest do
     test "returns true if pending request exists with TMDB ID", %{user: user} do
       _request = create_request(user, %{tmdb_id: 12345})
 
-      assert MediaRequests.pending_request_exists?(12345) == true
-      assert MediaRequests.pending_request_exists?(99999) == false
+      assert MediaRequests.pending_request_exists?("movie", 12345) == true
+      assert MediaRequests.pending_request_exists?("movie", 99999) == false
+    end
+
+    test "does not see a request of the other media type", %{user: user} do
+      _request =
+        create_request(user, %{media_type: "tv_show", title: "Harbour Lights", tmdb_id: 550})
+
+      assert MediaRequests.pending_request_exists?("tv_show", 550) == true
+      assert MediaRequests.pending_request_exists?("movie", 550) == false
+    end
+
+    test "accepts the media type as an atom", %{user: user} do
+      _request = create_request(user, %{tmdb_id: 4242})
+
+      assert MediaRequests.pending_request_exists?(:movie, 4242) == true
     end
 
     test "returns false for nil or invalid input" do
-      assert MediaRequests.pending_request_exists?(nil) == false
-      assert MediaRequests.pending_request_exists?("invalid") == false
+      assert MediaRequests.pending_request_exists?("movie", nil) == false
+      assert MediaRequests.pending_request_exists?("movie", "invalid") == false
+      assert MediaRequests.pending_request_exists?(nil, 12345) == false
+      assert MediaRequests.pending_request_exists?("nonsense", 12345) == false
     end
   end
 

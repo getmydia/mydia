@@ -7,8 +7,8 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   DiscoverLive so the request button behaves identically on both.
   """
 
-  alias Mydia.Media.Add
   alias Mydia.Media.MediaRequest
+  alias Mydia.Media.ProviderKey
   alias Mydia.MediaRequests
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
@@ -25,16 +25,17 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   @backfill_timeout 30_000
 
   @doc """
-  Maps a provider id to request status for every outstanding request.
+  Maps a `Mydia.Media.ProviderKey` to request status for every outstanding
+  request.
 
-  TMDB and TVDB ids are both plain integers and can collide (a movie and a
-  show sharing the same numeric id on their respective providers), so a TVDB
-  entry is keyed under a tagged `{:tvdb, id}` tuple, mirroring
-  `MediaAddHelpers.update_library_status_map/3`. A TMDB entry keeps the bare
-  integer key. `enrich_with_request_status/2` looks up the same tagged shape.
+  The media type is part of the key because TMDB numbers movies and series
+  independently: keyed on the bare id, a pending TV request for 550 rendered a
+  movie with tmdb_id 550 as already "Requested". `enrich_with_request_status/2`
+  looks up the same shape, and so does the library status map, so the Request
+  and Add buttons on one card agree about which title they are describing.
 
   Deliberately not scoped to a requester. `MediaRequests.create_request/1`
-  rejects duplicates globally via `pending_request_exists?/1`, so a per-user map
+  rejects duplicates globally via `pending_request_exists?/2`, so a per-user map
   would show a second guest an enabled button that errors on click.
   """
   @spec request_status_map() :: map()
@@ -54,33 +55,23 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   """
   def enrich_with_request_status(items, request_status_map) do
     Enum.map(items, fn item ->
-      status = Map.get(request_status_map, item_status_key(item))
+      status =
+        case ProviderKey.from_card(item) do
+          nil -> nil
+          key -> Map.get(request_status_map, key)
+        end
+
       Map.put(item, :request_status, status)
     end)
   end
 
-  # A request stores exactly one of tmdb_id/tvdb_id (see
-  # handle_request_media/3). TMDB keeps the plain integer key; TVDB is tagged
-  # so it cannot collide with a same-numbered TMDB id.
+  # A request stores exactly one of tmdb_id/tvdb_id (see handle_request_media/3),
+  # and `external_ref/1` reports which, so the provider half of the key is never
+  # a guess here.
   defp status_map_key(request) do
     case MediaRequest.external_ref(request) do
-      {:tmdb, id} -> id
-      {:tvdb, id} -> {:tvdb, id}
+      {provider, id} -> ProviderKey.new(MediaRequest.media_type_atom(request), provider, id)
       nil -> nil
-    end
-  end
-
-  # Mirrors the write path in handle_request_media/3: only a TV show sourced
-  # from TVDB is stored (and therefore looked up) under the tagged key; every
-  # other case, movies always and TV shows sourced from TMDB, uses the bare
-  # provider id.
-  defp item_status_key(item) do
-    provider_id = Add.parse_provider_id(item.provider_id)
-
-    if Map.get(item, :media_type) == :tv_show and Map.get(item, :provider) == :tvdb do
-      {:tvdb, provider_id}
-    else
-      provider_id
     end
   end
 
