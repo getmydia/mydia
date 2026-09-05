@@ -52,10 +52,21 @@ class FlatpakProgress {
   final FlatpakProgressStatus status;
   final String? errorMessage;
 
+  /// The D-Bus error name, e.g. 'org.freedesktop.DBus.Error.NotSupported'.
+  ///
+  /// A permissions rejection can arrive here instead of as a synchronous
+  /// call failure (confirmed against the live portal: a NotSupported update
+  /// was reported through this signal, not thrown from Update()). A caller
+  /// that needs to classify the failure should match on this stable
+  /// identifier rather than parsing [errorMessage], which is prose meant for
+  /// a person and carries no compatibility guarantee.
+  final String? errorName;
+
   const FlatpakProgress({
     required this.progress,
     required this.status,
     this.errorMessage,
+    this.errorName,
   });
 
   factory FlatpakProgress.fromDict(Map<String, DBusValue> info) =>
@@ -70,6 +81,7 @@ class FlatpakProgress {
           _ => FlatpakProgressStatus.failed,
         },
         errorMessage: info['error_message']?.asString(),
+        errorName: info['error']?.asString(),
       );
 }
 
@@ -162,24 +174,43 @@ class DBusFlatpakPortal implements FlatpakPortal {
     }
 
     final controller = StreamController<FlatpakProgress>();
-    late StreamSubscription<DBusSignal> progressSub;
+    StreamSubscription<DBusSignal>? progressSub;
+
+    // Every failure path has to reach here. An error that escapes instead
+    // leaves the controller open, so the caller's await never returns and the
+    // progress bar on this stream spins forever. Closing the controller is
+    // also what cancels progressSub, by way of onCancel.
+    Future<void> fail(Object error) async {
+      if (controller.isClosed) return;
+      controller.addError(error);
+      await controller.close();
+    }
 
     controller.onListen = () async {
-      progressSub = DBusRemoteObjectSignalStream(
-        object: monitor,
-        interface: _monitorInterface,
-        name: 'Progress',
-      ).listen((signal) {
-        final progress = FlatpakProgress.fromDict(
-          signal.values[0].asStringVariantDict(),
-        );
-        controller.add(progress);
-        if (progress.status != FlatpakProgressStatus.running) {
-          controller.close();
-        }
-      });
-
       try {
+        progressSub = DBusRemoteObjectSignalStream(
+          object: monitor,
+          interface: _monitorInterface,
+          name: 'Progress',
+        ).listen(
+          (signal) {
+            try {
+              final progress = FlatpakProgress.fromDict(
+                signal.values[0].asStringVariantDict(),
+              );
+              controller.add(progress);
+              if (progress.status != FlatpakProgressStatus.running) {
+                controller.close();
+              }
+            } catch (e) {
+              // A malformed signal must not escape to the zone. Unhandled
+              // there it would leave this stream running forever.
+              fail(e);
+            }
+          },
+          onError: fail,
+        );
+
         await monitor.callMethod(
           _monitorInterface,
           'Update',
@@ -187,21 +218,20 @@ class DBusFlatpakPortal implements FlatpakPortal {
           replySignature: DBusSignature(''),
         );
       } on DBusMethodResponseException catch (e) {
-        // Some refusals are synchronous (validation failures on the call
-        // itself); a pull-time failure such as a rejected permission
-        // upgrade instead arrives later as a Progress signal with status
-        // failed, which the listener above already forwards. This branch
-        // only covers the call failing outright.
-        if (e.response.errorName == 'org.freedesktop.DBus.Error.NotSupported') {
-          controller.addError(FlatpakUpdateNotPermitted());
-        } else {
-          controller.addError(e);
-        }
-        await controller.close();
+        await fail(
+          e.response.errorName == 'org.freedesktop.DBus.Error.NotSupported'
+              ? FlatpakUpdateNotPermitted()
+              : e,
+        );
+      } catch (e) {
+        // A dropped connection, a bad reply signature, anything at all.
+        // Without this the throw escapes the async onListen closure and the
+        // stream never terminates.
+        await fail(e);
       }
     };
 
-    controller.onCancel = () => progressSub.cancel();
+    controller.onCancel = () => progressSub?.cancel();
     return controller.stream;
   }
 
@@ -241,6 +271,9 @@ class DBusFlatpakPortal implements FlatpakPortal {
       }
     }
     await _available.close();
+    // Also tears down progressSub from an in-flight update(), if any: closing
+    // the client ends its signal stream, which the listen() callback above
+    // never explicitly cancels on this path.
     await _client.close();
   }
 }

@@ -75,7 +75,7 @@ void main() {
       expect(progress.status, FlatpakProgressStatus.done);
     });
 
-    test('decodes a failure and keeps its message', () {
+    test('decodes a failure and keeps its message and error name', () {
       final progress = FlatpakProgress.fromDict({
         'status': const DBusUint32(3),
         'error': const DBusString('org.freedesktop.Flatpak.Error'),
@@ -84,6 +84,7 @@ void main() {
 
       expect(progress.status, FlatpakProgressStatus.failed);
       expect(progress.errorMessage, 'While pulling: connection reset');
+      expect(progress.errorName, 'org.freedesktop.Flatpak.Error');
     });
 
     test('an unknown status is treated as a failure rather than success', () {
