@@ -99,6 +99,30 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
     assert Settings.list_media_server_user_links(config.id) == []
   end
 
+  test "an SSO account is matched by its derived username", %{bypass: bypass, config: config} do
+    # The point of naming SSO accounts. Before, an SSO-only install got no
+    # automatic links at all and the operator mapped every profile by hand.
+    admin_user_fixture(%{username: "installer"})
+
+    {:ok, sso} =
+      Mydia.Accounts.upsert_user_from_oidc(
+        "sub-jellyfin-match",
+        "https://issuer.example.test",
+        %{email: "robin@example.test", preferred_username: "tonix", role: "user"}
+      )
+
+    assert sso.username == "tonix"
+
+    Bypass.expect_once(bypass, "GET", "/Users", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, ~s([{"Id":"jf1","Name":"Tonix"}]))
+    end)
+
+    assert {:ok, %SeedResult{linked: [link]}} = Users.seed_links(config)
+    assert link.user_id == sso.id
+  end
+
   test "does not create a link that carries an access token", %{
     bypass: bypass,
     config: config

@@ -12,10 +12,11 @@ defmodule Mydia.Accounts.UsernameIndex do
   remote profile against a blank Mydia username.
 
   Users with no usable username are absent from the index rather than keyed
-  under `""`. An OIDC account has `username: nil` because
-  `Mydia.Accounts.User.oidc_changeset/2` never casts the field and the column
-  is nullable, so such an account can never be name-matched. The operator maps
-  it by hand in the account-mapping modal instead.
+  under `""`. That is now an edge case rather than the norm: OIDC accounts are
+  named at login by `Mydia.Accounts.UsernameSource`, and existing ones were
+  named by the backfill migration. What is left is the rows the backfill could
+  not name, which stay `nil` on purpose so a migration never fails a boot. The
+  operator maps those by hand in the account-mapping modal.
   """
 
   alias Mydia.Accounts.User
