@@ -6,6 +6,7 @@ import '../../../../core/player/platform_features.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/update/platform_updater.dart';
 import '../../../../core/update/update_provider.dart';
+import '../../../../domain/models/available_update.dart';
 import 'settings_section.dart';
 
 /// The available-update card, shown above the settings sections.
@@ -61,14 +62,19 @@ class UpdateCard extends ConsumerWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  update.releaseTitle,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textSecondary,
+                // Only a GitHub release names one. The Flatpak portal knows
+                // only that the remote carries a newer commit, so there is
+                // nothing to show here for a FlatpakRemoteUpdate.
+                if (update case AppUpdate(:final releaseTitle)) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    releaseTitle,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 14),
                 if (updateState.isApplying)
                   Column(
@@ -131,7 +137,7 @@ class UpdateCard extends ConsumerWidget {
     final notifier = ref.read(updateProvider.notifier);
 
     if (!notifier.canUpdateInPlace) {
-      notifier.applyUpdate();
+      notifier.requestUpdate();
       return;
     }
 
@@ -151,7 +157,7 @@ class UpdateCard extends ConsumerWidget {
           FilledButton(
             onPressed: () {
               Navigator.of(ctx).pop();
-              notifier.applyUpdate();
+              notifier.requestUpdate();
             },
             child: const Text('Update'),
           ),
