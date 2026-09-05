@@ -90,12 +90,10 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   """
   def enrich_with_library_status(items, library_status_map) do
     Enum.map(items, fn item ->
-      provider_id_int = Add.parse_provider_id(item.provider_id)
+      key = item_library_key(item)
 
       library_status =
-        Map.get(library_status_map, provider_id_int) ||
-          Map.get(library_status_map, {:tvdb, provider_id_int}) ||
-          %{in_library: false}
+        Map.get(library_status_map, key) || fallback_library_status(item, library_status_map)
 
       Map.merge(item, %{
         in_library: library_status[:in_library] || false,
@@ -104,6 +102,61 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       })
     end)
   end
+
+  defp item_library_key(item) do
+    type = normalize_type(Map.get(item, :media_type))
+    provider = normalize_provider(Map.get(item, :provider))
+    provider_id = safe_parse_id(item)
+    {type, provider, provider_id}
+  end
+
+  defp fallback_library_status(item, library_status_map) do
+    type = normalize_type(Map.get(item, :media_type))
+    provider_id = safe_parse_id(item)
+    tmdb_id = Map.get(item, :tmdb_id)
+    tvdb_id = Map.get(item, :tvdb_id)
+
+    cond do
+      tmdb_id && Map.has_key?(library_status_map, {type, :tmdb, tmdb_id}) ->
+        Map.get(library_status_map, {type, :tmdb, tmdb_id})
+
+      tvdb_id && Map.has_key?(library_status_map, {type, :tvdb, tvdb_id}) ->
+        Map.get(library_status_map, {type, :tvdb, tvdb_id})
+
+      tmdb_id && Map.has_key?(library_status_map, tmdb_id) ->
+        Map.get(library_status_map, tmdb_id)
+
+      tvdb_id && Map.has_key?(library_status_map, {:tvdb, tvdb_id}) ->
+        Map.get(library_status_map, {:tvdb, tvdb_id})
+
+      provider_id && Map.has_key?(library_status_map, provider_id) ->
+        Map.get(library_status_map, provider_id)
+
+      provider_id && Map.has_key?(library_status_map, {:tvdb, provider_id}) ->
+        Map.get(library_status_map, {:tvdb, provider_id})
+
+      true ->
+        %{in_library: false}
+    end
+  end
+
+  defp safe_parse_id(item) do
+    case Map.get(item, :provider_id) do
+      nil -> nil
+      id -> Add.parse_provider_id(id)
+    end
+  rescue
+    ArgumentError -> nil
+  end
+
+  defp normalize_type(:movie), do: :movie
+  defp normalize_type("movie"), do: :movie
+  defp normalize_type(:tv_show), do: :tv_show
+  defp normalize_type("tv_show"), do: :tv_show
+  defp normalize_type(_), do: :movie
+
+  defp normalize_provider(:tvdb), do: :tvdb
+  defp normalize_provider(_), do: :tmdb
 
   @doc """
   Builds media item attrs from metadata. See `Mydia.Media.Add.build_media_item_attrs/3`.
@@ -504,6 +557,8 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   # unless the add resolved a cross-reference), so a TVDB-only add no longer
   # writes anything into this slot.
   defp update_library_status_map(library_status_map, media_item) do
+    type_atom = if media_item.type == "movie", do: :movie, else: :tv_show
+
     entry = %{
       in_library: true,
       monitored: media_item.monitored,
@@ -513,13 +568,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
     map =
       if media_item.tmdb_id do
-        Map.put(library_status_map, media_item.tmdb_id, entry)
+        Map.put(library_status_map, {type_atom, :tmdb, media_item.tmdb_id}, entry)
       else
         library_status_map
       end
 
     if media_item.tvdb_id do
-      Map.put(map, {:tvdb, media_item.tvdb_id}, entry)
+      Map.put(map, {type_atom, :tvdb, media_item.tvdb_id}, entry)
     else
       map
     end

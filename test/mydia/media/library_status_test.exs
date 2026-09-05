@@ -50,4 +50,56 @@ defmodule Mydia.Media.LibraryStatusTest do
 
     assert id == unmonitored.id
   end
+
+  describe "get_library_status_map/0" do
+    test "keys movie entries by {:movie, :tmdb, tmdb_id}" do
+      movie = media_item_fixture(%{type: "movie", title: "Movie Status", tmdb_id: 12345})
+
+      status = Media.get_library_status_map()
+
+      assert %{in_library: true, monitored: true, type: "movie", id: id} =
+               status[{:movie, :tmdb, 12345}]
+
+      assert id == movie.id
+    end
+
+    test "keys tv show entries with tmdb_id and tvdb_id" do
+      series =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Series Status",
+          tmdb_id: 67890,
+          tvdb_id: 54321
+        })
+
+      status = Media.get_library_status_map()
+
+      assert %{in_library: true, type: "tv_show", id: id} = status[{:tv_show, :tmdb, 67890}]
+      assert id == series.id
+      assert %{in_library: true, type: "tv_show", id: ^id} = status[{:tv_show, :tvdb, 54321}]
+    end
+
+    test "differentiates movie and tv show with identical numeric tmdb_id" do
+      shared_id = System.unique_integer([:positive])
+
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Shared Movie",
+          tmdb_id: shared_id
+        })
+
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Shared Show",
+          tmdb_id: shared_id
+        })
+
+      status = Media.get_library_status_map()
+
+      assert status[{:movie, :tmdb, shared_id}].id == movie.id
+      assert status[{:tv_show, :tmdb, shared_id}].id == show.id
+    end
+  end
 end

@@ -134,6 +134,89 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
 
       assert Map.get(requested, :request_status) == nil
     end
+
+    test "stamps request_status for TV show recommendations and ensures media_type is :tv_show" do
+      requester = user_fixture(%{role: "guest"})
+
+      current =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Current TV Show",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      requested_tmdb_id = System.unique_integer([:positive])
+      untouched_tmdb_id = System.unique_integer([:positive])
+
+      {:ok, _request} =
+        MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "Requested TV Rec",
+          tmdb_id: requested_tmdb_id,
+          requester_id: requester.id
+        })
+
+      results = [
+        result(%{provider_id: to_string(requested_tmdb_id), title: "Requested TV Rec"}),
+        result(%{provider_id: to_string(untouched_tmdb_id), title: "Untouched TV Rec"})
+      ]
+
+      socket = stub_socket(%{media_item: current, current_user: user_fixture(%{role: "guest"})})
+
+      {:noreply, socket} = RecommendationEvents.handle_load_result({:ok, {:ok, results}}, socket)
+
+      requested =
+        Enum.find(
+          socket.assigns.recommendations,
+          &(&1.provider_id == to_string(requested_tmdb_id))
+        )
+
+      untouched =
+        Enum.find(
+          socket.assigns.recommendations,
+          &(&1.provider_id == to_string(untouched_tmdb_id))
+        )
+
+      assert requested.media_type == :tv_show
+      assert requested.request_status == "pending"
+      assert untouched.media_type == :tv_show
+      assert untouched.request_status == nil
+    end
+
+    test "does not stamp request_status when a request of a different media type shares tmdb_id" do
+      requester = user_fixture(%{role: "guest"})
+      shared_id = System.unique_integer([:positive])
+
+      current =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Current TV Show",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      {:ok, _request} =
+        MediaRequests.create_request(%{
+          media_type: "movie",
+          title: "Movie Request",
+          tmdb_id: shared_id,
+          requester_id: requester.id
+        })
+
+      results = [result(%{provider_id: to_string(shared_id), title: "TV Recommendation"})]
+
+      socket = stub_socket(%{media_item: current, current_user: user_fixture(%{role: "guest"})})
+
+      {:noreply, socket} = RecommendationEvents.handle_load_result({:ok, {:ok, results}}, socket)
+
+      item =
+        Enum.find(
+          socket.assigns.recommendations,
+          &(&1.provider_id == to_string(shared_id))
+        )
+
+      assert item.media_type == :tv_show
+      assert item.request_status == nil
+    end
   end
 
   describe "request_recommendation/2" do
@@ -202,6 +285,96 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       assert request.tmdb_id == tmdb_id
 
       refute updated.assigns.flash["error"]
+    end
+
+    test "a guest requesting a TV show recommendation creates a tv_show request and updates status" do
+      current =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Current Series",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      tmdb_id = System.unique_integer([:positive])
+
+      item =
+        result(%{
+          provider_id: to_string(tmdb_id),
+          title: "Recommended Series",
+          media_type: :tv_show
+        })
+
+      socket =
+        stub_socket(%{
+          media_item: current,
+          recommendations: [item],
+          current_user: user_fixture(%{role: "guest"})
+        })
+
+      {:noreply, updated} =
+        RecommendationEvents.request_recommendation(%{"ref" => "tmdb:#{tmdb_id}"}, socket)
+
+      assert [request] = MediaRequests.list_requests(status: "pending")
+      assert request.title == "Recommended Series"
+      assert request.media_type == "tv_show"
+      assert request.tmdb_id == tmdb_id
+
+      [updated_rec] = updated.assigns.recommendations
+      assert updated_rec.request_status == "pending"
+      refute updated.assigns.flash["error"]
+    end
+
+    test "requesting a recommendation preserves request_status on previously requested recommendations" do
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Current Movie",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      already_requested_id = System.unique_integer([:positive])
+      newly_requested_id = System.unique_integer([:positive])
+
+      item1 =
+        result(%{
+          provider_id: to_string(already_requested_id),
+          title: "Already Requested"
+        })
+        |> Map.put(:request_status, "pending")
+
+      item2 =
+        result(%{
+          provider_id: to_string(newly_requested_id),
+          title: "Newly Requested"
+        })
+
+      socket =
+        stub_socket(%{
+          media_item: current,
+          recommendations: [item1, item2],
+          current_user: user_fixture(%{role: "guest"})
+        })
+
+      {:noreply, updated} =
+        RecommendationEvents.request_recommendation(
+          %{"ref" => "tmdb:#{newly_requested_id}"},
+          socket
+        )
+
+      rec1 =
+        Enum.find(
+          updated.assigns.recommendations,
+          &(&1.provider_id == to_string(already_requested_id))
+        )
+
+      rec2 =
+        Enum.find(
+          updated.assigns.recommendations,
+          &(&1.provider_id == to_string(newly_requested_id))
+        )
+
+      assert rec1.request_status == "pending"
+      assert rec2.request_status == "pending"
     end
   end
 

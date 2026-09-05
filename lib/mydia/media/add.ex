@@ -95,9 +95,36 @@ defmodule Mydia.Media.Add do
       |> Keyword.put(:config, config)
 
     case Media.create_media_item(attrs, create_opts) do
-      {:ok, media_item} -> {:ok, media_item}
-      {:error, changeset} -> {:error, {:changeset, changeset}}
+      {:ok, media_item} ->
+        {:ok, media_item}
+
+      {:error, changeset} ->
+        if provider_constraint_violation?(changeset) do
+          case existing_item(attrs) do
+            nil ->
+              {:error, {:changeset, changeset}}
+
+            incumbent ->
+              title = Map.get(attrs, :title) || Map.get(attrs, "title")
+
+              Logger.warning(
+                "[Add] Concurrent add detected for #{inspect(title)}, resolving to existing library item #{incumbent.id}"
+              )
+
+              {:error, {:already_in_library, backfill_ids(incumbent, attrs)}}
+          end
+        else
+          {:error, {:changeset, changeset}}
+        end
     end
+  end
+
+  defp provider_constraint_violation?(changeset) do
+    Enum.any?(changeset.errors, fn
+      {:tmdb_id, {_, opts}} -> opts[:constraint] == :unique
+      {:tvdb_id, {_, opts}} -> opts[:constraint] == :unique
+      _ -> false
+    end)
   end
 
   # The unique indexes on tmdb_id and tvdb_id turn "you already have this" into
@@ -123,13 +150,19 @@ defmodule Mydia.Media.Add do
   # declining the imdb leg here costs no coverage.
   defp existing_item(attrs) do
     xrefs = metadata_external_ids(attrs)
+    type = Map.get(attrs, :type) || Map.get(attrs, "type")
+    tmdb_id = Map.get(attrs, :tmdb_id) || Map.get(attrs, "tmdb_id")
+    tvdb_id = Map.get(attrs, :tvdb_id) || Map.get(attrs, "tvdb_id")
 
     Enum.find_value(
       [
-        %{tmdb: attrs[:tmdb_id], tvdb: attrs[:tvdb_id]},
-        %{tmdb: xrefs[:tmdb], tvdb: xrefs[:tvdb]}
+        %{tmdb: tmdb_id, tvdb: tvdb_id},
+        %{
+          tmdb: xrefs[:tmdb] || xrefs["tmdb"],
+          tvdb: xrefs[:tvdb] || xrefs["tvdb"]
+        }
       ],
-      &find_by_ids(&1, attrs[:type])
+      &find_by_ids(&1, type)
     )
   end
 
@@ -146,8 +179,9 @@ defmodule Mydia.Media.Add do
   # the attrs. `external_ids` itself is nil on metadata written before
   # cross-provider ids were stored.
   defp metadata_external_ids(attrs) do
-    case attrs[:metadata] do
+    case Map.get(attrs, :metadata) || Map.get(attrs, "metadata") do
       %{external_ids: ids} when is_map(ids) -> ids
+      %{"external_ids" => ids} when is_map(ids) -> ids
       _ -> %{}
     end
   end
@@ -168,12 +202,15 @@ defmodule Mydia.Media.Add do
   # `Mydia.Jobs.MetadataBackfill`, which refreshes it from its own provider.
   defp backfill_ids(item, attrs) do
     xrefs = metadata_external_ids(attrs)
+    tmdb_id = Map.get(attrs, :tmdb_id) || Map.get(attrs, "tmdb_id")
+    tvdb_id = xrefs[:tvdb] || xrefs["tvdb"]
 
     merged =
       %{tmdb_id: item.tmdb_id, tvdb_id: item.tvdb_id}
-      |> ExternalIds.put_free_ids(%{tmdb: attrs[:tmdb_id], tvdb: xrefs[:tvdb]},
+      |> ExternalIds.put_free_ids(%{tmdb: tmdb_id, tvdb: tvdb_id},
         exclude_id: item.id,
-        title: item.title
+        title: item.title,
+        type: item.type
       )
 
     changes =

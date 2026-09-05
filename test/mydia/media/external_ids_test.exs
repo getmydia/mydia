@@ -5,7 +5,26 @@ defmodule Mydia.Media.ExternalIdsTest do
   import Mydia.MediaFixtures
 
   alias Mydia.Events
+  alias Mydia.Media
   alias Mydia.Media.ExternalIds
+
+  test "does not conflict with an existing item of a different media type" do
+    shared_id = System.unique_integer([:positive])
+
+    {:ok, _movie} =
+      Media.create_media_item(%{
+        type: "movie",
+        title: "Existing Movie",
+        year: 2024,
+        tmdb_id: shared_id
+      })
+
+    attrs = %{type: "tv_show", title: "Incoming Series"}
+    external_ids = %{tmdb: shared_id}
+
+    result = ExternalIds.put_free_ids(attrs, external_ids)
+    assert result[:tmdb_id] == shared_id
+  end
 
   test "adds ids that no other row owns" do
     attrs = %{type: "tv_show", title: "New Show", tmdb_id: 1399}

@@ -147,25 +147,160 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Gets a single media item by TMDB ID.
+  Gets a single media item by media type and TMDB ID.
   """
-  @spec get_media_item_by_tmdb(integer(), keyword()) :: MediaItem.t() | nil
-  def get_media_item_by_tmdb(tmdb_id, opts \\ []) do
+  @spec get_media_item_by_tmdb(String.t() | atom(), integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tmdb(type, tmdb_id, opts)
+      when (is_binary(type) or is_atom(type)) and not is_nil(type) and is_integer(tmdb_id) do
+    type_str = to_string(type)
+
     MediaItem
-    |> where([m], m.tmdb_id == ^tmdb_id)
+    |> where([m], m.type == ^type_str and m.tmdb_id == ^tmdb_id)
     |> maybe_preload(opts[:preload])
     |> Repo.one()
   end
 
+  def get_media_item_by_tmdb(_, _, _), do: nil
+
+  @doc """
+  Gets a single media item by media type and TMDB ID, or by TMDB ID with options.
+  """
+  @spec get_media_item_by_tmdb(String.t() | atom(), integer()) :: MediaItem.t() | nil
+  @spec get_media_item_by_tmdb(integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tmdb(type, tmdb_id)
+      when (is_binary(type) or is_atom(type)) and not is_nil(type) and is_integer(tmdb_id) do
+    get_media_item_by_tmdb(type, tmdb_id, [])
+  end
+
+  def get_media_item_by_tmdb(tmdb_id, opts) when is_integer(tmdb_id) do
+    query =
+      MediaItem
+      |> where([m], m.tmdb_id == ^tmdb_id)
+      |> maybe_filter_type(opts[:type])
+      |> maybe_preload(opts[:preload])
+
+    case Repo.all(query) do
+      [item] ->
+        item
+
+      [] ->
+        nil
+
+      _items ->
+        Logger.warning(
+          "Ambiguous unscoped TMDB lookup for #{tmdb_id}: multiple media items exist across types"
+        )
+
+        nil
+    end
+  end
+
+  def get_media_item_by_tmdb(tmdb_id, opts) when is_binary(tmdb_id) and is_list(opts) do
+    case Integer.parse(tmdb_id) do
+      {id, ""} -> get_media_item_by_tmdb(id, opts)
+      _ -> nil
+    end
+  end
+
+  def get_media_item_by_tmdb(_, _), do: nil
+
+  @doc """
+  Gets a single media item by TMDB ID.
+  """
+  @spec get_media_item_by_tmdb(integer() | String.t()) :: MediaItem.t() | nil
+  def get_media_item_by_tmdb(tmdb_id) when is_integer(tmdb_id) do
+    get_media_item_by_tmdb(tmdb_id, [])
+  end
+
+  def get_media_item_by_tmdb(tmdb_id) when is_binary(tmdb_id) do
+    case Integer.parse(tmdb_id) do
+      {id, ""} -> get_media_item_by_tmdb(id, [])
+      _ -> nil
+    end
+  end
+
+  def get_media_item_by_tmdb(_), do: nil
+
+  @doc """
+  Gets a single media item by media type and TVDB ID.
+  """
+  @spec get_media_item_by_tvdb(String.t() | atom(), integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tvdb(type, tvdb_id, opts)
+      when (is_binary(type) or is_atom(type)) and not is_nil(type) and is_integer(tvdb_id) do
+    type_str = to_string(type)
+
+    MediaItem
+    |> where([m], m.type == ^type_str and m.tvdb_id == ^tvdb_id)
+    |> maybe_preload(opts[:preload])
+    |> Repo.one()
+  end
+
+  def get_media_item_by_tvdb(_, _, _), do: nil
+
+  @doc """
+  Gets a single media item by TVDB ID, optionally filtered by type option.
+  """
+  @spec get_media_item_by_tvdb(String.t() | atom(), integer()) :: MediaItem.t() | nil
+  @spec get_media_item_by_tvdb(integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tvdb(type, tvdb_id)
+      when (is_binary(type) or is_atom(type)) and not is_nil(type) and is_integer(tvdb_id) do
+    get_media_item_by_tvdb(type, tvdb_id, [])
+  end
+
+  def get_media_item_by_tvdb(tvdb_id, opts) when is_integer(tvdb_id) do
+    query =
+      MediaItem
+      |> where([m], m.tvdb_id == ^tvdb_id)
+      |> maybe_filter_type(opts[:type])
+      |> maybe_preload(opts[:preload])
+
+    case Repo.all(query) do
+      [item] ->
+        item
+
+      [] ->
+        nil
+
+      _items ->
+        Logger.warning(
+          "Ambiguous unscoped TVDB lookup for #{tvdb_id}: multiple media items exist across types"
+        )
+
+        nil
+    end
+  end
+
+  def get_media_item_by_tvdb(tvdb_id, opts) when is_binary(tvdb_id) and is_list(opts) do
+    case Integer.parse(tvdb_id) do
+      {id, ""} -> get_media_item_by_tvdb(id, opts)
+      _ -> nil
+    end
+  end
+
+  def get_media_item_by_tvdb(_, _), do: nil
+
   @doc """
   Gets a single media item by TVDB ID.
   """
-  @spec get_media_item_by_tvdb(integer(), keyword()) :: MediaItem.t() | nil
-  def get_media_item_by_tvdb(tvdb_id, opts \\ []) do
-    MediaItem
-    |> where([m], m.tvdb_id == ^tvdb_id)
-    |> maybe_preload(opts[:preload])
-    |> Repo.one()
+  @spec get_media_item_by_tvdb(integer() | String.t()) :: MediaItem.t() | nil
+  def get_media_item_by_tvdb(tvdb_id) when is_integer(tvdb_id) do
+    get_media_item_by_tvdb(tvdb_id, [])
+  end
+
+  def get_media_item_by_tvdb(tvdb_id) when is_binary(tvdb_id) do
+    case Integer.parse(tvdb_id) do
+      {id, ""} -> get_media_item_by_tvdb(id, [])
+      _ -> nil
+    end
+  end
+
+  def get_media_item_by_tvdb(_), do: nil
+
+  defp maybe_filter_type(query, nil), do: query
+
+  defp maybe_filter_type(query, type) do
+    type_str = to_string(type)
+    where(query, [m], m.type == ^type_str)
   end
 
   @doc """
@@ -1011,11 +1146,11 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Returns a map of provider IDs to library status for efficient lookup.
+  Returns a map of `{media_type, provider, provider_id}` to library status for efficient lookup.
 
-  Returns a map where:
-  - TMDB IDs are integer keys: `12345 => %{...}`
-  - TVDB IDs are tuple keys: `{:tvdb, 67890} => %{...}`
+  Returns a map where keys are 3-tuples:
+  - `{:movie, :tmdb, 12345} => %{...}`
+  - `{:tv_show, :tvdb, 67890} => %{...}`
 
   Values are maps with:
   - `:in_library` - boolean
@@ -1027,8 +1162,8 @@ defmodule Mydia.Media do
 
       iex> get_library_status_map()
       %{
-        12345 => %{in_library: true, monitored: true, type: "movie", id: 1},
-        {:tvdb, 67890} => %{in_library: true, monitored: false, type: "tv_show", id: 2}
+        {:movie, :tmdb, 12345} => %{in_library: true, monitored: true, type: "movie", id: 1},
+        {:tv_show, :tvdb, 67890} => %{in_library: true, monitored: false, type: "tv_show", id: 2}
       }
   """
   @spec get_library_status_map() :: map()
@@ -1038,12 +1173,13 @@ defmodule Mydia.Media do
     |> select([m], {m.tmdb_id, m.tvdb_id, m.monitored, m.type, m.id})
     |> Repo.all()
     |> Enum.reduce(%{}, fn {tmdb_id, tvdb_id, monitored, type, id}, acc ->
+      type_atom = if type == "movie", do: :movie, else: :tv_show
       entry = %{in_library: true, monitored: monitored, type: type, id: id}
 
       acc =
-        if tmdb_id, do: Map.put(acc, tmdb_id, entry), else: acc
+        if tmdb_id, do: Map.put(acc, {type_atom, :tmdb, tmdb_id}, entry), else: acc
 
-      if tvdb_id, do: Map.put(acc, {:tvdb, tvdb_id}, entry), else: acc
+      if tvdb_id, do: Map.put(acc, {type_atom, :tvdb, tvdb_id}, entry), else: acc
     end)
   end
 

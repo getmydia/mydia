@@ -542,6 +542,45 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEventsTest do
       assert untouched.request_status == nil
     end
 
+    test "does not stamp request_status when an outstanding request for another media type shares tmdb_id",
+         %{config: config} do
+      requester = user_fixture(%{role: "guest"})
+
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "First",
+          year: 2001,
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      shared_tmdb_id = System.unique_integer([:positive])
+      franchise = franchise_with_missing(current, shared_tmdb_id)
+      [_current_entry, _missing_entry] = franchise.entries
+
+      {:ok, _request} =
+        Mydia.MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "TV Show with same ID",
+          tmdb_id: shared_tmdb_id,
+          requester_id: requester.id
+        })
+
+      socket =
+        stub_socket(%{
+          media_item: current,
+          metadata_config: config,
+          current_user: user_fixture(%{role: "guest"})
+        })
+
+      {:noreply, socket} = FranchiseEvents.handle_load_result({:ok, {:ok, franchise}}, socket)
+
+      entries = socket.assigns.franchise.entries
+      entry = Enum.find(entries, &(&1.tmdb_id == shared_tmdb_id))
+
+      assert entry.request_status == nil
+    end
+
     # Regression: request_status_map/0 issued two unfiltered list_requests/1
     # queries and PR #461 ran them on every franchise load, though the value
     # only ever affects the Request button that only a guest sees. A non-guest
