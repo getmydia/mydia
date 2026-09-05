@@ -311,7 +311,7 @@ defmodule MydiaWeb.Features.AddConfigFlowTest do
     added =
       eventually(
         fn ->
-          case Mydia.Media.find_by_external_ids(%{tmdb: 900_001}) do
+          case Mydia.Media.find_by_external_ids(%{tmdb: 900_001}, type: "movie") do
             nil -> :error
             item -> {:ok, item}
           end
