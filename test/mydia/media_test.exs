@@ -83,6 +83,7 @@ defmodule Mydia.MediaTest do
       assert Media.get_media_item_by_tmdb("movie", System.unique_integer([:positive])) == nil
       assert Media.get_media_item_by_tmdb(nil) == nil
       assert Media.get_media_item_by_tmdb(nil, 550) == nil
+      assert Media.get_media_item_by_tmdb(shared_id) == nil
     end
 
     test "get_media_item_by_tvdb/2 and /3 filters by type" do
@@ -116,6 +117,7 @@ defmodule Mydia.MediaTest do
       assert Media.get_media_item_by_tvdb("movie", System.unique_integer([:positive])) == nil
       assert Media.get_media_item_by_tvdb(nil) == nil
       assert Media.get_media_item_by_tvdb(nil, 550) == nil
+      assert Media.get_media_item_by_tvdb(shared_id) == nil
     end
 
     test "get_media_item_by_tmdb and get_media_item_by_tvdb return nil immediately when type is nil" do

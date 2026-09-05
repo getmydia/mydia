@@ -173,11 +173,26 @@ defmodule Mydia.Media do
   end
 
   def get_media_item_by_tmdb(tmdb_id, opts) when is_integer(tmdb_id) do
-    MediaItem
-    |> where([m], m.tmdb_id == ^tmdb_id)
-    |> maybe_filter_type(opts[:type])
-    |> maybe_preload(opts[:preload])
-    |> Repo.one()
+    query =
+      MediaItem
+      |> where([m], m.tmdb_id == ^tmdb_id)
+      |> maybe_filter_type(opts[:type])
+      |> maybe_preload(opts[:preload])
+
+    case Repo.all(query) do
+      [item] ->
+        item
+
+      [] ->
+        nil
+
+      _items ->
+        Logger.warning(
+          "Ambiguous unscoped TMDB lookup for #{tmdb_id}: multiple media items exist across types"
+        )
+
+        nil
+    end
   end
 
   def get_media_item_by_tmdb(tmdb_id, opts) when is_binary(tmdb_id) and is_list(opts) do
@@ -233,11 +248,26 @@ defmodule Mydia.Media do
   end
 
   def get_media_item_by_tvdb(tvdb_id, opts) when is_integer(tvdb_id) do
-    MediaItem
-    |> where([m], m.tvdb_id == ^tvdb_id)
-    |> maybe_filter_type(opts[:type])
-    |> maybe_preload(opts[:preload])
-    |> Repo.one()
+    query =
+      MediaItem
+      |> where([m], m.tvdb_id == ^tvdb_id)
+      |> maybe_filter_type(opts[:type])
+      |> maybe_preload(opts[:preload])
+
+    case Repo.all(query) do
+      [item] ->
+        item
+
+      [] ->
+        nil
+
+      _items ->
+        Logger.warning(
+          "Ambiguous unscoped TVDB lookup for #{tvdb_id}: multiple media items exist across types"
+        )
+
+        nil
+    end
   end
 
   def get_media_item_by_tvdb(tvdb_id, opts) when is_binary(tvdb_id) and is_list(opts) do

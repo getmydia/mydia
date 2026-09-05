@@ -281,6 +281,7 @@ defmodule Mydia.MediaRequests do
     tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
 
     cond do
+      is_nil(media_type) -> :ok
       tmdb_id && Media.get_media_item_by_tmdb(media_type, tmdb_id) -> {:error, :duplicate_media}
       tvdb_id && Media.get_media_item_by_tvdb(media_type, tvdb_id) -> {:error, :duplicate_media}
       true -> :ok
@@ -293,6 +294,7 @@ defmodule Mydia.MediaRequests do
     tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
 
     cond do
+      is_nil(media_type) -> :ok
       tmdb_id && pending_request_exists?(media_type, tmdb_id) -> {:error, :duplicate_request}
       tvdb_id && pending_tvdb_request_exists?(media_type, tvdb_id) -> {:error, :duplicate_request}
       true -> :ok

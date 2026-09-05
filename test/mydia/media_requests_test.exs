@@ -298,6 +298,28 @@ defmodule Mydia.MediaRequestsTest do
       assert request.media_type == "movie"
       assert request.tvdb_id == shared_id
     end
+
+    test "returns changeset error when media_type is omitted with tmdb_id or tvdb_id" do
+      user = create_user()
+
+      assert {:error, changeset} =
+               MediaRequests.create_request(%{
+                 title: "Missing Type TMDB",
+                 tmdb_id: 12345,
+                 requester_id: user.id
+               })
+
+      assert "can't be blank" in errors_on(changeset).media_type
+
+      assert {:error, changeset} =
+               MediaRequests.create_request(%{
+                 title: "Missing Type TVDB",
+                 tvdb_id: 67890,
+                 requester_id: user.id
+               })
+
+      assert "can't be blank" in errors_on(changeset).media_type
+    end
   end
 
   describe "approve_request/2" do
