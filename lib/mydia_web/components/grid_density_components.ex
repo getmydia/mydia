@@ -27,10 +27,15 @@ defmodule MydiaWeb.GridDensityComponents do
 
   @default "comfortable"
 
+  # The unprefixed (phone-width) count is floored to 2 for every density.
+  # Compact and Dense only diverge from Comfortable at sm: and up: the poster
+  # card body was never designed to hold its content at a quarter of a
+  # phone's width, so a desktop-chosen density (an account-wide preference)
+  # cannot force 3 or 4 columns onto a phone. See issue #700.
   @classes %{
     "comfortable" => "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
-    "compact" => "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8",
-    "dense" => "grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
+    "compact" => "grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8",
+    "dense" => "grid-cols-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
   }
 
   # A 1 → 3 → many progression. The labels used to carry the meaning; once
