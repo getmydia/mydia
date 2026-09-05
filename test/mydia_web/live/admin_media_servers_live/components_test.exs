@@ -6,6 +6,7 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
   import Phoenix.LiveViewTest, except: [render: 1]
   import Phoenix.Component, only: [to_form: 1]
 
+  alias Mydia.Accounts.User
   alias Mydia.Settings.MediaServerConfig
   alias MydiaWeb.AdminMediaServersLive.Components
 
@@ -315,7 +316,12 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       %Mydia.MediaServer.RemoteAccount{id: id, name: name, admin?: admin?}
     end
 
-    defp users, do: [%{id: "u-admin", username: "admin"}, %{id: "u-alex", username: "alex"}]
+    defp users do
+      [
+        %User{id: "u-admin", username: "admin"},
+        %User{id: "u-alex", username: "alex"}
+      ]
+    end
 
     defp jellyfin, do: %MediaServerConfig{name: "Jellyfin", type: :jellyfin}
 
@@ -426,6 +432,18 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       empty = render_mapping(config: jellyfin(), state: :ready, accounts: [])
       assert empty =~ ~s(id="account-mapping-empty")
       refute empty =~ "Plex"
+    end
+
+    test "labels an SSO account by its display name rather than a blank option" do
+      # An OIDC-provisioned account has no username, so the option used to
+      # render with an empty label and the operator could not tell which
+      # account they were picking.
+      sso = %User{id: "u-sso", username: nil, display_name: "Robin Vega", email: "r@example.test"}
+
+      html = render_mapping(accounts: [account("1", "Camille")], users: users() ++ [sso])
+
+      assert html =~ "Robin Vega"
+      assert html =~ ~s(value="u-sso")
     end
   end
 end

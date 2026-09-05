@@ -145,6 +145,66 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
     end
   end
 
+  describe "seed_links/2 with an SSO account present" do
+    test "links the local account instead of crashing on a user with no username",
+         %{bypass: bypass, config: config, base: base} do
+      # Regression for #705. Every OIDC-provisioned account has username: nil,
+      # and the index was built with an unguarded String.downcase/1, so a
+      # single SSO user took the whole seed job down on every scheduled run.
+      Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "users" => [
+              %{"id" => 2, "uuid" => "uuid-kid", "username" => "kid", "admin" => false}
+            ]
+          })
+        )
+      end)
+
+      Bypass.stub(bypass, "POST", "/api/v2/home/users/uuid-kid/switch", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "kid-token"}))
+      end)
+
+      # Created first so an admin exists and the OIDC upsert does not
+      # auto-promote the SSO account.
+      user = Mydia.AccountsFixtures.admin_user_fixture(%{username: "kid"})
+      _sso = Mydia.AccountsFixtures.oidc_user_fixture(%{})
+      {:ok, saved} = Mydia.Settings.create_media_server_config(persistable(config))
+
+      assert {:ok, %SeedResult{linked: [link]}} = Home.seed_links(saved, plex_tv_base: base)
+      assert link.user_id == user.id
+    end
+
+    test "a nameless Plex profile is skipped rather than matched",
+         %{bypass: bypass, config: config, base: base} do
+      # UsernameIndex.get/2 normalizes a nil-or-blank name to `nil` instead of
+      # looking up `""`, so a profile with no name matches nobody and no link
+      # is created. Blank-username-side coverage (a Mydia user keyed under a
+      # blank username) lives in test/mydia/accounts/username_index_test.exs.
+      Bypass.stub(bypass, "GET", "/api/v2/home/users", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{
+            "users" => [
+              %{"id" => 3, "uuid" => "uuid-ghost", "username" => nil, "title" => nil}
+            ]
+          })
+        )
+      end)
+
+      {:ok, saved} = Mydia.Settings.create_media_server_config(persistable(config))
+
+      assert {:ok, %SeedResult{linked: []}} = Home.seed_links(saved, plex_tv_base: base)
+    end
+  end
+
   describe "seed_links/2 owner fallback" do
     test "leaves an existing mapping alone instead of reverting it to the owner",
          %{bypass: bypass, config: config, base: base} do

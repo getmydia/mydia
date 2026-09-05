@@ -14,6 +14,7 @@ defmodule Mydia.MediaServer.Jellyfin.Users do
   """
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.UsernameIndex
   alias Mydia.MediaServer.Client.Jellyfin, as: JellyfinClient
   alias Mydia.MediaServer.SeedResult
   alias Mydia.Settings
@@ -37,14 +38,11 @@ defmodule Mydia.MediaServer.Jellyfin.Users do
   end
 
   defp seed_matched_links(config, remote_users, opts) do
-    by_username =
-      Map.new(Accounts.list_users(), fn user -> {String.downcase(user.username), user} end)
+    by_username = UsernameIndex.build(Accounts.list_users())
 
     remote_users
     |> Enum.reduce_while({:ok, %SeedResult{}}, fn remote_user, {:ok, result} ->
-      name = remote_user.name || ""
-
-      case Map.get(by_username, String.downcase(name)) do
+      case UsernameIndex.get(by_username, remote_user.name) do
         nil -> {:cont, {:ok, result}}
         user -> link_account(config, user, remote_user, result, opts)
       end

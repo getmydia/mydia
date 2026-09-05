@@ -2,6 +2,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   use MydiaWeb, :live_view
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.User
+  alias Mydia.Accounts.UsernameIndex
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
   alias Mydia.MediaServer.Client, as: MediaServerClient
@@ -689,7 +691,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   # a form that cannot be submitted without them working out why.
   defp initial_mapping(accounts, links, users) do
     by_account = Map.new(links, &{&1.remote_user_id, &1.user_id})
-    by_username = Map.new(users, &{String.downcase(&1.username), &1.id})
+    by_username = UsernameIndex.build(users)
 
     {mapping, _taken} =
       Enum.reduce(accounts, {%{}, MapSet.new(Map.values(by_account))}, fn account, {acc, taken} ->
@@ -707,12 +709,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   end
 
   defp suggestion_for(by_username, account, taken) do
-    case Map.get(by_username, String.downcase(account.name || "")) do
-      suggestion when is_binary(suggestion) ->
-        if MapSet.member?(taken, suggestion), do: nil, else: suggestion
-
-      _ ->
-        nil
+    case UsernameIndex.get(by_username, account.name) do
+      %User{id: id} -> if MapSet.member?(taken, id), do: nil, else: id
+      nil -> nil
     end
   end
 

@@ -18,6 +18,7 @@ defmodule Mydia.MediaServer.Plex.Home do
   require Logger
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.UsernameIndex
   alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.PlexOAuth
   alias Mydia.MediaServer.SeedResult
@@ -141,16 +142,11 @@ defmodule Mydia.MediaServer.Plex.Home do
   end
 
   defp seed_matched_links(config, home_users, opts) do
-    by_username =
-      Map.new(Accounts.list_users(), fn user ->
-        {String.downcase(user.username), user}
-      end)
+    by_username = UsernameIndex.build(Accounts.list_users())
 
     home_users
     |> Enum.reduce_while({:ok, %SeedResult{}}, fn home_user, {:ok, result} ->
-      username = home_user.username || ""
-
-      case Map.get(by_username, String.downcase(username)) do
+      case UsernameIndex.get(by_username, home_user.username) do
         nil -> {:cont, {:ok, result}}
         user -> link_home_user(config, user, home_user, result, opts)
       end

@@ -122,6 +122,34 @@ defmodule Mydia.Accounts.User do
   end
 
   @doc """
+  The name to show for a user.
+
+  Username comes first because it is what media-server account matching keys
+  on, so a local account reads exactly as it always has and the fallbacks
+  engage only where the label would otherwise be blank. An OIDC-provisioned
+  account has no username at all: `oidc_changeset/2` never casts the field.
+
+  Email and display name are optional too, since OIDC requires only
+  `oidc_sub`, so the last resort is an id prefix. It is ugly, but two
+  otherwise-identical accounts have to be distinguishable in the
+  account-mapping picker.
+  """
+  @spec label(t()) :: String.t()
+  def label(%__MODULE__{} = user) do
+    [user.username, user.display_name, user.email]
+    |> Enum.find(&present?/1)
+    |> case do
+      nil -> id_label(user)
+      value -> String.trim(value)
+    end
+  end
+
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
+
+  defp id_label(%__MODULE__{id: id}) when is_binary(id), do: "user " <> String.slice(id, 0, 8)
+  defp id_label(%__MODULE__{}), do: "unknown user"
+
+  @doc """
   Returns the list of valid role values.
   """
   def valid_roles, do: @role_values
