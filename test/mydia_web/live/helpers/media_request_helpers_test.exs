@@ -247,5 +247,19 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       assert is_nil(enriched_movie.request_status)
       assert enriched_series.request_status == "pending"
     end
+
+    test "handles items with missing, nil, or invalid provider_id without crashing" do
+      items = [
+        %{title: "Missing Provider ID"},
+        %{title: "Nil Provider ID", provider_id: nil},
+        %{title: "Invalid Provider ID", provider_id: "not-an-integer"}
+      ]
+
+      map = %{{:movie, :tmdb, 123} => "pending"}
+
+      enriched = MediaRequestHelpers.enrich_with_request_status(items, map)
+      assert length(enriched) == 3
+      assert Enum.all?(enriched, &is_nil(&1.request_status))
+    end
   end
 end

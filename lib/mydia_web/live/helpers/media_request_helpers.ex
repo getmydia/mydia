@@ -71,8 +71,20 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   defp item_status_key(item) do
     type = normalize_type(Map.get(item, :media_type))
     provider = normalize_provider(Map.get(item, :provider))
-    provider_id = Add.parse_provider_id(item.provider_id)
-    {type, provider, provider_id}
+
+    case safe_parse_id(item) do
+      nil -> nil
+      provider_id -> {type, provider, provider_id}
+    end
+  end
+
+  defp safe_parse_id(item) do
+    case Map.get(item, :provider_id) do
+      nil -> nil
+      id -> Add.parse_provider_id(id)
+    end
+  rescue
+    ArgumentError -> nil
   end
 
   defp normalize_type(:movie), do: :movie

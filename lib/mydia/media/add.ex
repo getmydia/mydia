@@ -157,7 +157,10 @@ defmodule Mydia.Media.Add do
     Enum.find_value(
       [
         %{tmdb: tmdb_id, tvdb: tvdb_id},
-        %{tmdb: xrefs[:tmdb], tvdb: xrefs[:tvdb]}
+        %{
+          tmdb: xrefs[:tmdb] || xrefs["tmdb"],
+          tvdb: xrefs[:tvdb] || xrefs["tvdb"]
+        }
       ],
       &find_by_ids(&1, type)
     )
@@ -176,8 +179,9 @@ defmodule Mydia.Media.Add do
   # the attrs. `external_ids` itself is nil on metadata written before
   # cross-provider ids were stored.
   defp metadata_external_ids(attrs) do
-    case attrs[:metadata] do
+    case Map.get(attrs, :metadata) || Map.get(attrs, "metadata") do
       %{external_ids: ids} when is_map(ids) -> ids
+      %{"external_ids" => ids} when is_map(ids) -> ids
       _ -> %{}
     end
   end
@@ -198,10 +202,12 @@ defmodule Mydia.Media.Add do
   # `Mydia.Jobs.MetadataBackfill`, which refreshes it from its own provider.
   defp backfill_ids(item, attrs) do
     xrefs = metadata_external_ids(attrs)
+    tmdb_id = Map.get(attrs, :tmdb_id) || Map.get(attrs, "tmdb_id")
+    tvdb_id = xrefs[:tvdb] || xrefs["tvdb"]
 
     merged =
       %{tmdb_id: item.tmdb_id, tvdb_id: item.tvdb_id}
-      |> ExternalIds.put_free_ids(%{tmdb: attrs[:tmdb_id], tvdb: xrefs[:tvdb]},
+      |> ExternalIds.put_free_ids(%{tmdb: tmdb_id, tvdb: tvdb_id},
         exclude_id: item.id,
         title: item.title,
         type: item.type

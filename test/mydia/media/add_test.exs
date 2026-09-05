@@ -477,6 +477,58 @@ defmodule Mydia.Media.AddTest do
       assert found.tvdb_id == exact_tvdb_id
     end
 
+    test "backfills ids when attrs contain string keys" do
+      tmdb_id = System.unique_integer([:positive])
+      exact_tvdb_id = System.unique_integer([:positive])
+
+      existing_series =
+        Mydia.MediaFixtures.media_item_fixture(%{
+          type: "tv_show",
+          title: "String Key Series",
+          tmdb_id: tmdb_id,
+          tvdb_id: nil
+        })
+
+      attrs = %{
+        "type" => "tv_show",
+        "title" => "String Key Series",
+        "tmdb_id" => tmdb_id,
+        "metadata" => %{
+          external_ids: %{tvdb: exact_tvdb_id}
+        }
+      }
+
+      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs)
+      assert found.id == existing_series.id
+      assert found.tvdb_id == exact_tvdb_id
+      assert Mydia.Media.get_media_item!(existing_series.id).tvdb_id == exact_tvdb_id
+
+      other_tmdb_id = System.unique_integer([:positive])
+      other_tvdb_id = System.unique_integer([:positive])
+
+      existing_with_tvdb =
+        Mydia.MediaFixtures.media_item_fixture(%{
+          type: "tv_show",
+          title: "Another String Key Series",
+          tmdb_id: nil,
+          tvdb_id: other_tvdb_id
+        })
+
+      attrs_tvdb = %{
+        "type" => "tv_show",
+        "title" => "Another String Key Series",
+        "tmdb_id" => other_tmdb_id,
+        "metadata" => %{
+          external_ids: %{"tvdb" => other_tvdb_id}
+        }
+      }
+
+      assert {:error, {:already_in_library, found_tvdb}} = Add.from_attrs(attrs_tvdb)
+      assert found_tvdb.id == existing_with_tvdb.id
+      assert found_tvdb.tmdb_id == other_tmdb_id
+      assert Mydia.Media.get_media_item!(existing_with_tvdb.id).tmdb_id == other_tmdb_id
+    end
+
     test "from_attrs/3 resolves unique constraint collision to already_in_library" do
       shared_id = System.unique_integer([:positive])
 

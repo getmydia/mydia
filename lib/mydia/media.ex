@@ -151,7 +151,7 @@ defmodule Mydia.Media do
   """
   @spec get_media_item_by_tmdb(String.t() | atom(), integer(), keyword()) :: MediaItem.t() | nil
   def get_media_item_by_tmdb(type, tmdb_id, opts)
-      when (is_binary(type) or is_atom(type)) and is_integer(tmdb_id) do
+      when (is_binary(type) or is_atom(type)) and not is_nil(type) and is_integer(tmdb_id) do
     type_str = to_string(type)
 
     MediaItem
@@ -168,7 +168,7 @@ defmodule Mydia.Media do
   @spec get_media_item_by_tmdb(String.t() | atom(), integer()) :: MediaItem.t() | nil
   @spec get_media_item_by_tmdb(integer(), keyword()) :: MediaItem.t() | nil
   def get_media_item_by_tmdb(type, tmdb_id)
-      when (is_binary(type) or is_atom(type)) and is_integer(tmdb_id) do
+      when (is_binary(type) or is_atom(type)) and not is_nil(type) and is_integer(tmdb_id) do
     get_media_item_by_tmdb(type, tmdb_id, [])
   end
 
@@ -211,7 +211,7 @@ defmodule Mydia.Media do
   """
   @spec get_media_item_by_tvdb(String.t() | atom(), integer(), keyword()) :: MediaItem.t() | nil
   def get_media_item_by_tvdb(type, tvdb_id, opts)
-      when (is_binary(type) or is_atom(type)) and is_integer(tvdb_id) do
+      when (is_binary(type) or is_atom(type)) and not is_nil(type) and is_integer(tvdb_id) do
     type_str = to_string(type)
 
     MediaItem
@@ -228,7 +228,7 @@ defmodule Mydia.Media do
   @spec get_media_item_by_tvdb(String.t() | atom(), integer()) :: MediaItem.t() | nil
   @spec get_media_item_by_tvdb(integer(), keyword()) :: MediaItem.t() | nil
   def get_media_item_by_tvdb(type, tvdb_id)
-      when (is_binary(type) or is_atom(type)) and is_integer(tvdb_id) do
+      when (is_binary(type) or is_atom(type)) and not is_nil(type) and is_integer(tvdb_id) do
     get_media_item_by_tvdb(type, tvdb_id, [])
   end
 
