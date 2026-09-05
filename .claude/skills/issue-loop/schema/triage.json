@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdict",
+    "confidence",
+    "reason",
+    "root_cause",
+    "files_to_change",
+    "test_plan",
+    "risk"
+  ],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["take", "skip"],
+      "description": "take only if this is a real defect with a located cause and a bounded fix"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "how sure you are that the root cause below is the actual cause"
+    },
+    "reason": {
+      "type": "string",
+      "description": "one sentence justifying the verdict"
+    },
+    "root_cause": {
+      "type": "string",
+      "description": "file:line plus the mechanism, or an explanation of why you could not find one"
+    },
+    "files_to_change": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "repo-relative paths the fix would touch, excluding new test files"
+    },
+    "test_plan": {
+      "type": "string",
+      "description": "the specific test that would fail before the fix and pass after"
+    },
+    "risk": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "low means the blast radius is one module and the behaviour change is local"
+    }
+  }
+}

@@ -133,6 +133,8 @@ terraform.rc
 
 
 .claude/worktrees/
+# Run state for the issue-loop skill: per-issue JSON, rendered prompts, agent logs.
+.claude/issue-loop/
 .opencode/
 .worktrees
 /.devenv/
