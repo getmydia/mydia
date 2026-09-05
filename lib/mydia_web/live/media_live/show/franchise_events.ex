@@ -241,7 +241,11 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseEvents do
 
       entries =
         Enum.map(franchise.entries, fn entry ->
-          %{entry | request_status: Map.get(status_map, entry.tmdb_id)}
+          status =
+            Map.get(status_map, {:movie, :tmdb, entry.tmdb_id}) ||
+              Map.get(status_map, entry.tmdb_id)
+
+          %{entry | request_status: status}
         end)
 
       %{franchise | entries: entries}

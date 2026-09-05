@@ -25,13 +25,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
   @backfill_timeout 30_000
 
   @doc """
-  Maps a provider id to request status for every outstanding request.
+  Maps a `{media_type, provider, provider_id}` tuple to request status for every
+  outstanding request.
 
-  TMDB and TVDB ids are both plain integers and can collide (a movie and a
-  show sharing the same numeric id on their respective providers), so a TVDB
-  entry is keyed under a tagged `{:tvdb, id}` tuple, mirroring
-  `MediaAddHelpers.update_library_status_map/3`. A TMDB entry keeps the bare
-  integer key. `enrich_with_request_status/2` looks up the same tagged shape.
+  Canonical 3-tuple keys prevent collisions between movies and TV shows sharing
+  the same numeric ID on TMDB, and between TMDB and TVDB catalog IDs.
+  `enrich_with_request_status/2` looks up the same 3-tuple shape.
 
   Deliberately not scoped to a requester. `MediaRequests.create_request/1`
   rejects duplicates globally via `pending_request_exists?/1`, so a per-user map
@@ -59,30 +58,31 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpers do
     end)
   end
 
-  # A request stores exactly one of tmdb_id/tvdb_id (see
-  # handle_request_media/3). TMDB keeps the plain integer key; TVDB is tagged
-  # so it cannot collide with a same-numbered TMDB id.
   defp status_map_key(request) do
+    type = MediaRequest.media_type_atom(request)
+
     case MediaRequest.external_ref(request) do
-      {:tmdb, id} -> id
-      {:tvdb, id} -> {:tvdb, id}
+      {:tmdb, id} -> {type, :tmdb, id}
+      {:tvdb, id} -> {type, :tvdb, id}
       nil -> nil
     end
   end
 
-  # Mirrors the write path in handle_request_media/3: only a TV show sourced
-  # from TVDB is stored (and therefore looked up) under the tagged key; every
-  # other case, movies always and TV shows sourced from TMDB, uses the bare
-  # provider id.
   defp item_status_key(item) do
+    type = normalize_type(Map.get(item, :media_type))
+    provider = normalize_provider(Map.get(item, :provider))
     provider_id = Add.parse_provider_id(item.provider_id)
-
-    if Map.get(item, :media_type) == :tv_show and Map.get(item, :provider) == :tvdb do
-      {:tvdb, provider_id}
-    else
-      provider_id
-    end
+    {type, provider, provider_id}
   end
+
+  defp normalize_type(:movie), do: :movie
+  defp normalize_type("movie"), do: :movie
+  defp normalize_type(:tv_show), do: :tv_show
+  defp normalize_type("tv_show"), do: :tv_show
+  defp normalize_type(_), do: :movie
+
+  defp normalize_provider(:tvdb), do: :tvdb
+  defp normalize_provider(_), do: :tmdb
 
   @doc """
   Submits a request for a trending card item.

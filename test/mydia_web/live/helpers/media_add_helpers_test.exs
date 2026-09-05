@@ -225,8 +225,9 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert item.tvdb_id == tvdb_id
       assert item.tmdb_id == nil
-      assert updated_map[{:tvdb, tvdb_id}][:in_library] == true
+      assert updated_map[{:tv_show, :tvdb, tvdb_id}][:in_library] == true
       refute Map.has_key?(updated_map, tvdb_id)
+      refute Map.has_key?(updated_map, {:movie, :tmdb, tvdb_id})
     end
   end
 
@@ -264,7 +265,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
                MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :movie, %{}, config)
 
       assert item.id == existing.id
-      assert updated_map[id][:in_library] == true
+      assert updated_map[{:movie, :tmdb, id}][:in_library] == true
     end
   end
 
@@ -754,6 +755,113 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       refute_received {:add, "551"}
       assert MapSet.to_list(socket.assigns.adding_item_ids) == ["551"]
+    end
+  end
+
+  describe "enrich_with_library_status/2" do
+    test "enriches items matching canonical 3-tuple keys" do
+      movie_id = System.unique_integer([:positive])
+      series_id = System.unique_integer([:positive])
+
+      library_status_map = %{
+        {:movie, :tmdb, movie_id} => %{in_library: true, monitored: true, type: "movie", id: 101},
+        {:tv_show, :tvdb, series_id} => %{
+          in_library: true,
+          monitored: false,
+          type: "tv_show",
+          id: 102
+        }
+      }
+
+      movie_item = %{
+        provider_id: to_string(movie_id),
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Movie"
+      }
+
+      series_item = %{
+        provider_id: to_string(series_id),
+        provider: :tvdb,
+        media_type: :tv_show,
+        title: "Series"
+      }
+
+      unowned_item = %{
+        provider_id: "999999",
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Unowned"
+      }
+
+      [enriched_movie, enriched_series, enriched_unowned] =
+        MediaAddHelpers.enrich_with_library_status(
+          [movie_item, series_item, unowned_item],
+          library_status_map
+        )
+
+      assert enriched_movie.in_library == true
+      assert enriched_movie.monitored == true
+      assert enriched_movie.id == 101
+
+      assert enriched_series.in_library == true
+      assert enriched_series.monitored == false
+      assert enriched_series.id == 102
+
+      assert enriched_unowned.in_library == false
+      assert enriched_unowned.monitored == false
+      assert is_nil(enriched_unowned.id)
+    end
+
+    test "differentiates TMDB TV show from TMDB movie with identical numeric id" do
+      shared_id = System.unique_integer([:positive])
+
+      library_status_map = %{
+        {:tv_show, :tmdb, shared_id} => %{
+          in_library: true,
+          monitored: true,
+          type: "tv_show",
+          id: 201
+        }
+      }
+
+      movie_item = %{
+        provider_id: to_string(shared_id),
+        provider: :tmdb,
+        media_type: :movie,
+        title: "Shared Movie"
+      }
+
+      series_item = %{
+        provider_id: to_string(shared_id),
+        provider: :tmdb,
+        media_type: :tv_show,
+        title: "Shared Show"
+      }
+
+      [enriched_movie, enriched_series] =
+        MediaAddHelpers.enrich_with_library_status(
+          [movie_item, series_item],
+          library_status_map
+        )
+
+      assert enriched_movie.in_library == false
+      assert is_nil(enriched_movie.id)
+
+      assert enriched_series.in_library == true
+      assert enriched_series.id == 201
+    end
+
+    test "falls back to bare integer keys in library_status_map" do
+      id = System.unique_integer([:positive])
+      library_status_map = %{id => %{in_library: true, monitored: true, type: "movie", id: 301}}
+
+      item = %{provider_id: to_string(id), provider: :tmdb, media_type: :movie}
+
+      [enriched] = MediaAddHelpers.enrich_with_library_status([item], library_status_map)
+
+      assert enriched.in_library == true
+      assert enriched.id == 301
     end
   end
 end
