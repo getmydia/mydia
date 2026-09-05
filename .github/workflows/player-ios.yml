@@ -63,6 +63,15 @@ on:
         required: false
       APP_STORE_CONNECT_API_KEY_CONTENT:
         required: false
+    outputs:
+      uploaded:
+        description: >-
+          "true" only when a build actually reached TestFlight. Empty on a dry
+          run, and empty when the App Store Connect credentials are absent,
+          because the upload steps below skip on either and the job still
+          succeeds. A caller that records the upload as having happened must
+          gate on this rather than on the job's own success.
+        value: ${{ jobs.build.outputs.uploaded }}
 
 permissions:
   contents: read
@@ -71,6 +80,8 @@ jobs:
   build:
     name: Build and upload
     runs-on: macos-26
+    outputs:
+      uploaded: ${{ steps.upload.outputs.uploaded }}
     # Serialises the iOS build so a release and a refresh never upload at once.
     #
     # This prevents overlap, not staleness. A refresh queued behind a release
@@ -211,7 +222,12 @@ jobs:
           NOTES: ${{ inputs.notes }}
         run: printf '%s' "$NOTES" > "$RUNNER_TEMP/testflight-notes.txt"
 
+      # `uploaded` is written only after fastlane returns successfully, and the
+      # step is skipped entirely when this condition is false, so an empty value
+      # means "no build reached TestFlight" for either reason. player-ios-refresh
+      # gates its marker tag on it.
       - name: Upload to TestFlight
+        id: upload
         if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
@@ -221,7 +237,9 @@ jobs:
           # Group names, matched exactly by App Store Connect.
           TESTFLIGHT_GROUPS: ${{ inputs.groups }}
         working-directory: ${{ env.PLAYER_PATH }}/ios
-        run: bundle exec fastlane testflight
+        run: |
+          bundle exec fastlane testflight
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
 
       - name: Cleanup keychain
         if: always()
