@@ -5,32 +5,44 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../domain/models/app_update.dart';
+import '../install_environment.dart';
 import '../platform_updater.dart';
 
 /// Linux updater: downloads tar.gz, extracts, and replaces the running binary.
 ///
-/// Falls back to opening the download URL in the browser if the install
-/// directory is not writable.
+/// Refuses an install it cannot write, before downloading anything. Deciding
+/// afterwards is what made a Flatpak user pay for a full download to reach a
+/// browser tab. `startUpdate` routes Flatpak and read-only installs to their
+/// own affordances, so reaching [applyUpdate] on one of them is a programming
+/// error rather than a user-facing state.
 class LinuxUpdater extends PlatformUpdater {
-  @override
-  bool get canUpdateInPlace => _isInstallDirWritable();
+  /// Overrides the detected install environment. Tests only: a `flutter test`
+  /// host reports whatever the runner's own directory happens to be, so the
+  /// Flatpak and read-only branches are otherwise unreachable.
+  final InstallEnvironment? _environmentOverride;
 
-  bool _isInstallDirWritable() {
-    try {
-      final execPath = Platform.resolvedExecutable;
-      final installDir = File(execPath).parent;
-      return FileSystemEntity.isDirectorySync(installDir.path) &&
-          installDir.statSync().mode & 0x80 != 0; // owner write bit
-    } catch (_) {
-      return false;
-    }
-  }
+  LinuxUpdater({InstallEnvironment? environment})
+      : _environmentOverride = environment;
+
+  InstallEnvironment get _environment =>
+      _environmentOverride ?? InstallEnvironment.detect();
+
+  @override
+  bool get canUpdateInPlace => _environment == InstallEnvironment.inPlace;
 
   @override
   Future<void> applyUpdate(
     AppUpdate update, {
     void Function(double progress)? onProgress,
   }) async {
+    final environment = _environment;
+    if (environment != InstallEnvironment.inPlace) {
+      throw StateError(
+        'Cannot replace a ${environment.name} install in place. '
+        'startUpdate should have routed this elsewhere.',
+      );
+    }
+
     final tempDir = await getTemporaryDirectory();
     final archivePath = '${tempDir.path}/mydia-update.tar.gz';
     final extractDir = '${tempDir.path}/mydia-update-extract';
@@ -48,7 +60,6 @@ class LinuxUpdater extends PlatformUpdater {
       },
     );
 
-    // Create extraction directory
     final extractDirObj = Directory(extractDir);
     if (extractDirObj.existsSync()) {
       extractDirObj.deleteSync(recursive: true);
@@ -59,23 +70,12 @@ class LinuxUpdater extends PlatformUpdater {
     final extractResult =
         await Process.run('tar', ['-xzf', archivePath, '-C', extractDir]);
     if (extractResult.exitCode != 0) {
-      throw Exception(
-          'Failed to extract update: ${extractResult.stderr}');
+      throw Exception('Failed to extract update: ${extractResult.stderr}');
     }
 
     final execPath = Platform.resolvedExecutable;
     final installDir = File(execPath).parent.path;
 
-    // Check if we can write to the install directory
-    if (!_isInstallDirWritable()) {
-      // Fall back: open download URL in default browser
-      debugPrint(
-          '[LinuxUpdater] Install dir not writable, opening browser fallback');
-      await Process.run('xdg-open', [update.releaseNotesUrl]);
-      return;
-    }
-
-    // Copy extracted files over current installation
     debugPrint('[LinuxUpdater] Copying files to $installDir');
     final copyResult = await Process.run(
       'cp',
@@ -85,16 +85,10 @@ class LinuxUpdater extends PlatformUpdater {
       throw Exception('Failed to copy update files: ${copyResult.stderr}');
     }
 
-    // Ensure binary is executable
     await Process.run('chmod', ['+x', execPath]);
 
-    // Relaunch
     debugPrint('[LinuxUpdater] Relaunching');
-    await Process.start(
-      execPath,
-      [],
-      mode: ProcessStartMode.detached,
-    );
+    await Process.start(execPath, [], mode: ProcessStartMode.detached);
 
     exit(0);
   }

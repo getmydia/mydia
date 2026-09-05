@@ -1,9 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/player/platform_features.dart';
+import '../../../core/update/platform_updater.dart';
+import '../../../core/update/update_provider.dart';
 import '../connection_status_dot.dart';
 import 'bottom_nav.dart';
 import 'sidebar_row.dart';
+
+/// The badge on the Settings nav item.
+///
+/// Carries two independent signals on one 14px mark: connection tone as
+/// colour, and a waiting update as an arrow glyph. It deliberately ignores
+/// the dismissal box, the compatibility verdict and offline mode, so
+/// dismissing the banner leaves this lit as the lingering reminder that makes
+/// per-version dismissal safe to offer.
+class SettingsBadge extends ConsumerWidget {
+  /// Overrides the platform-support check. Tests only, as in [UpdateBanner].
+  final bool? supportedOverride;
+
+  const SettingsBadge({super.key, this.supportedOverride});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final supported =
+        supportedOverride ?? PlatformUpdater.supportedOnCurrentPlatform;
+    final updatePending = supported &&
+        !PlatformFeatures.isMacOS &&
+        ref.watch(updateProvider).availableUpdate != null;
+
+    return ConnectionStatusDot(updatePending: updatePending);
+  }
+}
 
 /// Settings sidebar item with connection status badge.
 class SettingsSidebarRow extends ConsumerWidget {
@@ -35,7 +63,7 @@ class SettingsSidebarRow extends ConsumerWidget {
       isSelected: isSelected,
       isDisabled: isDisabled,
       onTap: onTap,
-      badge: const ConnectionStatusDot(),
+      badge: const SettingsBadge(),
       isEditing: isEditing,
       isHidden: isHidden,
       editingTrailing: editingTrailing,
@@ -65,7 +93,7 @@ class SettingsNavItem extends ConsumerWidget {
       isSelected: isSelected,
       isDisabled: isDisabled,
       onTap: onTap,
-      badge: const ConnectionStatusDot(),
+      badge: const SettingsBadge(),
     );
   }
 }

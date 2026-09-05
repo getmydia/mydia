@@ -13,7 +13,13 @@ import 'connection_tone_color.dart';
 /// Extracted from `app_shell.dart`, where it was private and therefore
 /// untestable, and where it carried a third copy of the transport switch.
 class ConnectionStatusDot extends ConsumerWidget {
-  const ConnectionStatusDot({super.key});
+  /// Whether an app update is waiting.
+  ///
+  /// Carried on shape rather than colour, because colour already means
+  /// connection tone here and two meanings on one channel is one meaning.
+  final bool updatePending;
+
+  const ConnectionStatusDot({super.key, this.updatePending = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,30 +32,42 @@ class ConnectionStatusDot extends ConsumerWidget {
       isInitialized: status.isInitialized,
     );
     final color = connectionToneColor(summary.tone);
+    final tooltip =
+        updatePending ? 'Update available - ${summary.label}' : summary.label;
 
     // Pulse only while re-establishing a link that was previously up. A first
     // connection is pending too, but a pulsing dot at launch reads as a fault.
     if (summary.tone == ConnectionTone.pending && status.isInitialized) {
-      return _PulsingDot(color: color, tooltip: summary.label);
+      return _PulsingDot(
+        color: color,
+        tooltip: tooltip,
+        updatePending: updatePending,
+      );
     }
 
-    return _Dot(color: color, tooltip: summary.label);
+    return _Dot(color: color, tooltip: tooltip, updatePending: updatePending);
   }
 }
 
 class _Dot extends StatelessWidget {
-  const _Dot({required this.color, required this.tooltip});
+  const _Dot({
+    required this.color,
+    required this.tooltip,
+    required this.updatePending,
+  });
 
   final Color color;
   final String tooltip;
+  final bool updatePending;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
       child: Container(
-        width: 10,
-        height: 10,
+        width: updatePending ? 14 : 10,
+        height: updatePending ? 14 : 10,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: color,
@@ -62,6 +80,9 @@ class _Dot extends StatelessWidget {
             ),
           ],
         ),
+        child: updatePending
+            ? const Icon(Icons.arrow_upward, size: 9, color: AppColors.surface)
+            : null,
       ),
     );
   }
@@ -79,8 +100,13 @@ class _Dot extends StatelessWidget {
 class _PulsingDot extends StatefulWidget {
   final Color color;
   final String tooltip;
+  final bool updatePending;
 
-  const _PulsingDot({required this.color, required this.tooltip});
+  const _PulsingDot({
+    required this.color,
+    required this.tooltip,
+    required this.updatePending,
+  });
 
   @override
   State<_PulsingDot> createState() => _PulsingDotState();
@@ -116,8 +142,9 @@ class _PulsingDotState extends State<_PulsingDot>
           return Opacity(
             opacity: opacity,
             child: Container(
-              width: 10,
-              height: 10,
+              width: widget.updatePending ? 14 : 10,
+              height: widget.updatePending ? 14 : 10,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: widget.color,
@@ -133,6 +160,13 @@ class _PulsingDotState extends State<_PulsingDot>
                   ),
                 ],
               ),
+              child: widget.updatePending
+                  ? const Icon(
+                      Icons.arrow_upward,
+                      size: 9,
+                      color: AppColors.surface,
+                    )
+                  : null,
             ),
           );
         },

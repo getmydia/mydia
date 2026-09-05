@@ -182,9 +182,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
       );
     }
   }
-
-  /// Whether the current platform supports in-place updates.
-  bool get canUpdateInPlace => _platformUpdater?.canUpdateInPlace ?? false;
 }
 
 /// Global provider for the update system.
