@@ -98,6 +98,17 @@ fit_to_budget() {
 # publishes the draft. So the newest existing tag is the previous release. The
 # grep -vFx is defensive against a re-dispatch where it somehow already does.
 #
+# player-ios-refresh.yml pushes `ios-refresh/<date>` tags to record a TestFlight
+# refresh. They are not releases and must never be selected here: the range one
+# implies has nothing to do with what changed since a release.
+#
+# The current prefix is already safe by accident. `-version:refname` orders a
+# non-version name lexicographically against the version tags, so `ios-` sorts
+# below `v0-` and a marker lands at the bottom of the list, out of head -n1's
+# reach. A prefix sorting after `v`, `zzz-refresh` for instance, lands at
+# position 1 instead. This grep is what stops the prefix choice from being
+# load-bearing on release notes.
+#
 # TESTFLIGHT_PREV_TAG exists for check-testflight-notes.sh, which needs a
 # deterministic commit range. Production never sets it.
 previous_tag() {
@@ -112,7 +123,11 @@ previous_tag() {
   # before Source 3's placeholder fallback is ever reached. The trailing
   # `|| true` keeps this a clean empty result so the `if [ -n "$prev" ]` guard
   # at the call site can handle it. Do not remove this as dead code.
-  git tag --sort=-version:refname | grep -v metadata-relay | grep -vFx "$TAG" | head -n1 || true
+  git tag --sort=-version:refname \
+    | grep -v metadata-relay \
+    | grep -v '^ios-refresh/' \
+    | grep -vFx "$TAG" \
+    | head -n1 || true
 }
 
 notes=""
@@ -133,6 +148,10 @@ fi
 # a normal subject here, and backticks in a subject are not unusual either.
 if [ -z "$notes" ]; then
   prev="$(previous_tag)"
+  # Reported so check-testflight-notes.sh can assert which tag was chosen. The
+  # commit range is often empty even when the choice is correct, so the notes
+  # themselves cannot distinguish a good previous tag from a bad one.
+  echo "testflight-notes: prev=${prev}" >&2
   if [ -n "$prev" ]; then
     notes="$(git log --format='- %s' "${prev}..${SHA}" -- player/ | to_plain_text || true)"
     [ -n "$notes" ] && source_label="gitlog"

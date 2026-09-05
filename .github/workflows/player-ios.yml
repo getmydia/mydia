@@ -1,0 +1,229 @@
+name: Player / iOS
+
+# The iOS build, extracted from release.yml so player-ios-refresh.yml can run
+# exactly the same one. release.yml calls it on every release; the refresh cron
+# calls it when a stable build is approaching TestFlight's 90-day expiry.
+#
+# PLAYER_PATH is declared on the job below rather than inherited. A caller's
+# workflow-level `env` is NOT propagated into a called workflow, and `env:` is
+# not permitted alongside `uses:`, so leaning on release.yml's copy resolves
+# every path to `/ios` and fails immediately.
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit SHA to build. Every release job checks out the same one.
+        type: string
+        required: true
+      version:
+        description: Version with the leading `v` already stripped. A prerelease suffix is removed below.
+        type: string
+        required: true
+      version_code:
+        description: CFBundleVersion. Apple rejects a reused one for the same marketing version.
+        type: string
+        required: true
+      groups:
+        description: >-
+          Comma-separated App Store Connect external group names, matched
+          exactly. "Beta,Pre-release" for a stable release, "Pre-release" for a
+          prerelease.
+        type: string
+        required: true
+      notes:
+        description: TestFlight "What to Test". At most 4000 characters, never empty.
+        type: string
+        required: true
+      dry_run:
+        description: >-
+          Build and sign without uploading. MUST stay `boolean`: as a string,
+          "false" is truthy and the dry-run condition inverts.
+        type: boolean
+        required: false
+        default: false
+    # Named one by one rather than left to `secrets: inherit` at the call site,
+    # for the reason already written down in deploy-web-player.yml: inherit
+    # would hand an iOS workflow the Android keystore, the Flatpak GPG key and
+    # the R2 credentials. These same names resolve to the repository secrets on
+    # a bare dispatch, so the steps below read `secrets.*` either way.
+    #
+    # The signing secrets are optional because the unsigned path below is what
+    # runs when they are absent.
+    secrets:
+      IOS_CERTIFICATE_BASE64:
+        required: false
+      IOS_CERTIFICATE_PASSWORD:
+        required: false
+      IOS_PROVISIONING_PROFILE_BASE64:
+        required: false
+      APP_STORE_CONNECT_API_KEY_ID:
+        required: false
+      APP_STORE_CONNECT_ISSUER_ID:
+        required: false
+      APP_STORE_CONNECT_API_KEY_CONTENT:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and upload
+    runs-on: macos-26
+    # Serialises the iOS build so a release and a refresh never upload at once.
+    #
+    # This prevents overlap, not staleness. A refresh queued behind a release
+    # still uploads the version it resolved before it queued, so a slightly
+    # older build can briefly become the newest one in App Store Connect. That
+    # window needs a release dispatched during the refresh's queue wait, and the
+    # next release corrects it, so the version is deliberately not re-resolved
+    # after the lock is acquired.
+    concurrency:
+      group: player-ios-testflight
+      cancel-in-progress: false
+    # `upload_to_testflight` uses `distribute_external: true`, which cannot skip
+    # waiting for Apple to finish processing the build, so a slow processing
+    # queue parks this job in a poll loop with no upper bound of its own. On
+    # v0.13.0 that ran 5h49m before the 6h default killed it, on a runner billed
+    # at 10x. The job normally finishes in 17-20 minutes; this bounds the wait
+    # while leaving generous headroom. Hitting it fails the publish gate, which
+    # is the correct outcome: re-dispatch with `allow_missing=ios` to ship
+    # without it, since the IPA reaches TestFlight whenever Apple is done
+    # regardless of what this job reports.
+    timeout-minutes: 45
+    env:
+      PLAYER_PATH: 'player'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+          cache: true
+
+      - name: Update version
+        working-directory: ${{ env.PLAYER_PATH }}
+        env:
+          VERSION: ${{ inputs.version }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          # Apple's CFBundleShortVersionString must be at most three
+          # period-separated integers, so strip any prerelease suffix
+          # (e.g. 0.12.0-beta.2 -> 0.12.0). The unique build number is
+          # carried by VERSION_CODE (CFBundleVersion).
+          MARKETING_VERSION="${VERSION%%-*}"
+          sed -i '' "s/^version: .*/version: ${MARKETING_VERSION}+${VERSION_CODE}/" pubspec.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub get
+
+      - name: Run code generation
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub run build_runner build
+
+      - name: Install certificate and provisioning profile
+        if: env.IOS_CERTIFICATE_BASE64 != ''
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          echo -n "$IOS_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+
+      - name: Configure manual signing for CI
+        if: env.IOS_CERTIFICATE_BASE64 != ''
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+        working-directory: ${{ env.PLAYER_PATH }}/ios
+        run: |
+          # Extract provisioning profile name
+          PP_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -1)
+          security cms -D -i "$PP_PATH" > $RUNNER_TEMP/pp.plist
+          PP_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" $RUNNER_TEMP/pp.plist)
+          echo "Using provisioning profile: $PP_NAME"
+
+          # Remove CODE_SIGN_STYLE from project so xcconfig takes over
+          sed -i '' '/CODE_SIGN_STYLE = Automatic;/d' Runner.xcodeproj/project.pbxproj
+
+          # Inject signing overrides into Release.xcconfig
+          cat >> Flutter/Release.xcconfig << EOF
+          // CI Signing Overrides
+          CODE_SIGN_STYLE=Manual
+          CODE_SIGN_IDENTITY=Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER=$PP_NAME
+          EOF
+
+      - name: Build iOS (unsigned)
+        if: env.IOS_CERTIFICATE_BASE64 == ''
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter build ios --release --no-codesign
+
+      - name: Build iOS (signed)
+        if: env.IOS_CERTIFICATE_BASE64 != ''
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter build ios --release
+
+      - name: Setup Ruby for Fastlane
+        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: ${{ env.PLAYER_PATH }}/ios
+
+      # The notes reach the shell through env, never through ${{ }} substitution
+      # into this body: changelog text contains backticks and $, which would be
+      # both an injection risk and a corruption bug.
+      - name: Write TestFlight notes
+        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          NOTES: ${{ inputs.notes }}
+        run: printf '%s' "$NOTES" > "$RUNNER_TEMP/testflight-notes.txt"
+
+      - name: Upload to TestFlight
+        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          TESTFLIGHT_CHANGELOG_PATH: ${{ runner.temp }}/testflight-notes.txt
+          # Group names, matched exactly by App Store Connect.
+          TESTFLIGHT_GROUPS: ${{ inputs.groups }}
+        working-directory: ${{ env.PLAYER_PATH }}/ios
+        run: bundle exec fastlane testflight
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true

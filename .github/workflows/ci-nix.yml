@@ -112,6 +112,19 @@ jobs:
       - name: Assert the store release notes hold their contract
         run: ./scripts/check-testflight-notes.sh
 
+      # The refresh workflow it feeds cannot be dispatched or scheduled until it
+      # is on the default branch, so this is the only place its decision is
+      # exercised before merge. Needs the same fetch-depth: 0 checkout, because
+      # it reads the tag list.
+      - name: Assert the TestFlight refresh decision holds its contract
+        run: ./scripts/check-ios-refresh-due.sh
+
+      # ci-fastlane.yml proves the Fastfile parses and that release_metadata.rb
+      # is reachable through require_relative. This proves what the helpers in
+      # it actually return, which a lane listing cannot see.
+      - name: Assert the iOS fastlane metadata helpers behave
+        run: ./scripts/check-ios-fastlane-metadata.sh
+
   generated-freshness:
     name: Check / Generated Freshness
     runs-on: ubuntu-latest

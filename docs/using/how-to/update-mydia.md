@@ -63,7 +63,7 @@ The `:master` tag:
 If you want pre-release builds on arm64, use `:beta` (or `:beta-pg`), which is
 published from tagged pre-releases and is multi-arch.
 
-Looking for the mobile app's beta programme instead? See [Remote Access](remote-access.md) for the iOS TestFlight beta.
+Looking for the mobile app instead? See [Remote Access](remote-access.md) for the iOS TestFlight links, stable and pre-release.
 
 ## Version Pinning
 

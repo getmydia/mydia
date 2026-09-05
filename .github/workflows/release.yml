@@ -528,147 +528,28 @@ jobs:
   player-ios:
     name: Player / iOS
     needs: prepare
-    runs-on: macos-26
-    # `upload_to_testflight` uses `distribute_external: true`, which cannot skip
-    # waiting for Apple to finish processing the build, so a slow processing
-    # queue parks this job in a poll loop with no upper bound of its own. On
-    # v0.13.0 that ran 5h49m before the 6h default killed it, on a runner billed
-    # at 10x. The job normally finishes in 17-20 minutes; this bounds the wait
-    # while leaving generous headroom. Hitting it fails the publish gate, which
-    # is the correct outcome: re-dispatch with `allow_missing=ios` to ship
-    # without it, since the IPA reaches TestFlight whenever Apple is done
-    # regardless of what this job reports.
-    timeout-minutes: 45
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
-          cache: true
-
-      - name: Update version
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          VERSION_CODE="${{ needs.prepare.outputs.version_code }}"
-          # Apple's CFBundleShortVersionString must be at most three
-          # period-separated integers, so strip any prerelease suffix
-          # (e.g. 0.12.0-beta.2 -> 0.12.0). The unique build number is
-          # carried by VERSION_CODE (CFBundleVersion).
-          MARKETING_VERSION="${VERSION%%-*}"
-          sed -i '' "s/^version: .*/version: ${MARKETING_VERSION}+${VERSION_CODE}/" pubspec.yaml
-
-      - name: Install dependencies
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get
-
-      - name: Run code generation
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build
-
-      - name: Install certificate and provisioning profile
-        if: env.IOS_CERTIFICATE_BASE64 != ''
-        env:
-          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-        run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
-
-          echo -n "$IOS_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-          echo -n "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          security import $CERTIFICATE_PATH -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-
-      - name: Configure manual signing for CI
-        if: env.IOS_CERTIFICATE_BASE64 != ''
-        env:
-          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-        working-directory: ${{ env.PLAYER_PATH }}/ios
-        run: |
-          # Extract provisioning profile name
-          PP_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -1)
-          security cms -D -i "$PP_PATH" > $RUNNER_TEMP/pp.plist
-          PP_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" $RUNNER_TEMP/pp.plist)
-          echo "Using provisioning profile: $PP_NAME"
-
-          # Remove CODE_SIGN_STYLE from project so xcconfig takes over
-          sed -i '' '/CODE_SIGN_STYLE = Automatic;/d' Runner.xcodeproj/project.pbxproj
-
-          # Inject signing overrides into Release.xcconfig
-          cat >> Flutter/Release.xcconfig << EOF
-          // CI Signing Overrides
-          CODE_SIGN_STYLE=Manual
-          CODE_SIGN_IDENTITY=Apple Distribution
-          PROVISIONING_PROFILE_SPECIFIER=$PP_NAME
-          EOF
-
-      - name: Build iOS (unsigned)
-        if: env.IOS_CERTIFICATE_BASE64 == ''
-        env:
-          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build ios --release --no-codesign
-
-      - name: Build iOS (signed)
-        if: env.IOS_CERTIFICATE_BASE64 != ''
-        env:
-          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build ios --release
-
-      - name: Setup Ruby for Fastlane
-        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-          working-directory: ${{ env.PLAYER_PATH }}/ios
-
-      # The notes reach the shell through env, never through ${{ }} substitution
-      # into this body: changelog text contains backticks and $, which would be
-      # both an injection risk and a corruption bug.
-      - name: Write TestFlight notes
-        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          NOTES: ${{ needs.prepare.outputs.testflight_notes }}
-        run: printf '%s' "$NOTES" > "$RUNNER_TEMP/testflight-notes.txt"
-
-      - name: Upload to TestFlight
-        if: ${{ !inputs.dry_run && env.APP_STORE_CONNECT_API_KEY_ID != '' }}
-        env:
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
-          TESTFLIGHT_CHANGELOG_PATH: ${{ runner.temp }}/testflight-notes.txt
-        working-directory: ${{ env.PLAYER_PATH }}/ios
-        run: bundle exec fastlane beta
-
-      - name: Cleanup keychain
-        if: always()
-        run: |
-          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
+    # The build itself lives in its own workflow so player-ios-refresh.yml can
+    # run the same one. The job id stays `player-ios` because the publish gate
+    # below reads `needs.player-ios.result`.
+    uses: ./.github/workflows/player-ios.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      # A prerelease reaches only the pre-release group. A stable release
+      # reaches both, so a pre-release tester receives it as an ordinary update
+      # instead of sitting on a beta until the next cycle opens. The names are
+      # matched exactly: "Pre-release" carries a hyphen and a capital P.
+      groups: ${{ needs.prepare.outputs.is_prerelease == 'true' && 'Pre-release' || 'Beta,Pre-release' }}
+      notes: ${{ needs.prepare.outputs.testflight_notes }}
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
 
   player-macos:
     name: Player / macOS

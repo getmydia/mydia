@@ -14,7 +14,10 @@ readonly MAX_CHARS=4000
 
 fail=0
 err="$(mktemp)"
-trap 'rm -f "$err"' EXIT
+# The marker-tag case below creates a real tag, so cleanup has to cover it even
+# when an assertion fails partway through.
+readonly PROBE_TAG="ios-refresh/9999-12-31"
+trap 'git tag -d "$PROBE_TAG" >/dev/null 2>&1 || true; rm -f "$err"' EXIT
 
 note_failure() { echo "FAIL: $*" >&2; fail=1; }
 
@@ -133,6 +136,32 @@ if out="$(TESTFLIGHT_PREV_TAG=v0.13.2 "$SCRIPT" 9.9.9 7f080ff3714f91b186eaa052cf
 else
   note_failure "fallback markup: script exited non-zero"
 fi
+
+# player-ios-refresh.yml pushes `ios-refresh/<date>` tags to record a TestFlight
+# refresh. previous_tag() must never return one: it is not a release, and the
+# commit range it implies has nothing to do with what changed since one.
+#
+# This passes today even without the grep guard in previous_tag(), because
+# `-version:refname` orders a non-version name lexicographically against the
+# version tags and `ios-` sorts below `v0-`: a marker lands at the bottom of the
+# list, where head -n1 never reaches it. That is a property of the prefix, not of
+# the code. A prefix sorting after `v` goes straight to position 1. This case
+# exists to catch that, so it asserts the invariant that matters rather than
+# pretending to exercise the guard.
+git tag -f "$PROBE_TAG" HEAD >/dev/null 2>&1
+
+if "$SCRIPT" 9.9.9 HEAD v9.9.9 >/dev/null 2>"$err"; then
+  prev="$(sed -n 's/^testflight-notes: prev=//p' "$err")"
+  case "$prev" in
+    "")   note_failure "marker tag: no previous tag was reported, so this assertion proves nothing" ;;
+    v*)   : ;;
+    *)    note_failure "marker tag: previous_tag() returned '${prev}', which is not a release tag" ;;
+  esac
+else
+  note_failure "marker tag: script exited non-zero: $(cat "$err")"
+fi
+
+git tag -d "$PROBE_TAG" >/dev/null 2>&1 || true
 
 [ "$fail" -eq 0 ] || exit 1
 echo "testflight notes: all $(find priv/changelog -name '*.md' | wc -l | tr -d ' ') bundled changelogs pass"
