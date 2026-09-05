@@ -94,7 +94,12 @@ defmodule Mydia.Media.Add do
       |> Keyword.take(@create_opt_keys)
       |> Keyword.put(:config, config)
 
-    case Media.create_media_item(attrs, create_opts) do
+    result =
+      ExternalIds.write(attrs, [type: attrs[:type], title: attrs[:title]], fn attrs ->
+        Media.create_media_item(attrs, create_opts)
+      end)
+
+    case result do
       {:ok, media_item} -> {:ok, media_item}
       {:error, changeset} -> {:error, {:changeset, changeset}}
     end
@@ -182,13 +187,21 @@ defmodule Mydia.Media.Add do
       |> Enum.reject(fn {key, value} -> Map.get(item, key) == value end)
       |> Map.new()
 
-    if changes == %{} do
-      item
-    else
-      case Media.update_media_item(item, changes, reason: "Cross-referenced provider id") do
-        {:ok, updated} -> updated
-        {:error, _reason} -> item
-      end
+    # The guard lives inside the closure, not before the call: `write/3` can drop
+    # the only remaining key on a retry, and an empty update still emits a
+    # content-free "Cross-referenced provider id" event.
+    result =
+      ExternalIds.write(changes, [type: item.type, exclude_id: item.id, title: item.title], fn
+        changes when changes == %{} ->
+          {:ok, item}
+
+        changes ->
+          Media.update_media_item(item, changes, reason: "Cross-referenced provider id")
+      end)
+
+    case result do
+      {:ok, updated} -> updated
+      {:error, _reason} -> item
     end
   end
 

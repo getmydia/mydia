@@ -106,6 +106,97 @@ defmodule Mydia.Media.ExternalIds do
     end
   end
 
+  @doc """
+  Runs a write that may still collide on a provider id, and degrades a
+  collision into the same warning flow `put_free_ids/3` produces.
+
+  `put_free_ids/3` reads ownership and the caller writes afterwards. Two writers
+  can both see an id as free and the loser fails on the unique index with a raw
+  constraint error rather than the controlled duplicate-provider result.
+
+  A transaction does not close that. At PostgreSQL's default `READ COMMITTED`
+  both writers still read the id as free and one still fails at write time, and
+  SQLite's deferred transactions behave the same. Catching the constraint error
+  and re-reading is what does the work, and it covers stale reads seconds old
+  rather than only the instant.
+
+  On a provider-id unique-constraint error, every provider id present in
+  `attrs` is re-checked live and the ones still taken are looked up, reported
+  and dropped in a single pass, then `fun` runs once more. The database only
+  ever reports the first index it aborts on, never a second one from the same
+  attempt, so dropping only that one id and retrying could still collide on
+  another; checking every present id in the same pass instead means one retry
+  always suffices, because after the pass no provider index can collide. A
+  second collision on the retry needs a third writer claiming the other id
+  between the two attempts, and returns the changeset unchanged.
+
+  Anything that is not a provider-id unique-constraint error, including ordinary
+  validation failures, passes straight through.
+
+  ## Options
+
+  The same `:type` (required), `:exclude_id` and `:title` as `put_free_ids/3`.
+  """
+  @spec write(map(), keyword(), (map() -> {:ok, term()} | {:error, Ecto.Changeset.t()})) ::
+          {:ok, term()} | {:error, Ecto.Changeset.t()}
+  def write(attrs, opts, fun) when is_function(fun, 1) do
+    type = fetch_type!(opts)
+
+    case fun.(attrs) do
+      {:error, %Ecto.Changeset{} = changeset} = error ->
+        if provider_id_conflict?(changeset) do
+          fun.(drop_taken(attrs, type, opts))
+        else
+          error
+        end
+
+      other ->
+        other
+    end
+  end
+
+  defp provider_id_conflict?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(@providers, fn provider ->
+      key = attrs_key(provider)
+
+      Enum.any?(errors, fn
+        {^key, {_message, meta}} -> Keyword.get(meta, :constraint) == :unique
+        _ -> false
+      end)
+    end)
+  end
+
+  # A failed write only ever names one violated index, never both at once, so
+  # the retry re-checks every provider id present in `attrs` rather than only
+  # the one the database happened to report. Anything still nil after that
+  # re-check was never a candidate and is left alone.
+  #
+  # The owner found here may have vanished by the time this runs, or may not
+  # be who the original write collided with -- either is fine, since the id
+  # cannot be proven free and dropping it is always safe.
+  # `Mydia.Jobs.MetadataBackfill` refreshes the row from its own provider
+  # later.
+  defp drop_taken(attrs, type, opts) do
+    Enum.reduce(@providers, attrs, fn provider, acc ->
+      key = attrs_key(provider)
+
+      case Map.get(acc, key) do
+        nil ->
+          acc
+
+        id ->
+          case conflicting_item(provider, id, type, opts[:exclude_id]) do
+            nil ->
+              acc
+
+            other ->
+              report_conflict(acc, provider, id, other, opts)
+              Map.delete(acc, key)
+          end
+      end
+    end)
+  end
+
   defp report_conflict(attrs, provider, id, other, opts) do
     title = opts[:title] || Map.get(attrs, :title)
 

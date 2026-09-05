@@ -123,4 +123,142 @@ defmodule Mydia.Media.ExternalIdsTest do
       ExternalIds.put_free_ids(%{type: "tv_show", title: "New Show"}, nil)
     end
   end
+
+  describe "write/3" do
+    test "retries once without the taken id, and reports the owner" do
+      incumbent =
+        media_item_fixture(%{type: "tv_show", title: "Incumbent", tvdb_id: 121_361})
+
+      # The pre-flight read saw the id as free; by write time it is not. That is
+      # the race, reproduced deterministically by skipping put_free_ids/3.
+      attrs = %{type: "tv_show", title: "Challenger", tvdb_id: 121_361, tmdb_id: 1399}
+
+      {result, log} =
+        with_log(fn ->
+          ExternalIds.write(attrs, [type: "tv_show"], fn attrs ->
+            Mydia.Media.create_media_item(attrs, skip_episode_refresh: true)
+          end)
+        end)
+
+      assert {:ok, created} = result
+      assert log =~ "[ExternalIds] tvdb_id 121361 is already owned by another media item"
+
+      assert is_nil(created.tvdb_id)
+      assert created.tmdb_id == 1399
+      assert created.title == "Challenger"
+
+      assert [event] = Events.list_events(type: "media_item.duplicate_provider_id")
+      assert event.resource_id == incumbent.id
+      assert event.metadata["provider"] == "tvdb"
+      assert event.metadata["provider_id"] == 121_361
+    end
+
+    test "drops both provider ids in one pass when both collide" do
+      media_item_fixture(%{type: "tv_show", title: "Owner A", tvdb_id: 121_361})
+      media_item_fixture(%{type: "tv_show", title: "Owner B", tmdb_id: 1399})
+
+      attrs = %{type: "tv_show", title: "Challenger", tvdb_id: 121_361, tmdb_id: 1399}
+
+      {result, _log} =
+        with_log(fn ->
+          ExternalIds.write(attrs, [type: "tv_show"], fn attrs ->
+            Mydia.Media.create_media_item(attrs, skip_episode_refresh: true)
+          end)
+        end)
+
+      assert {:ok, created} = result
+      assert is_nil(created.tvdb_id)
+      assert is_nil(created.tmdb_id)
+
+      assert length(Events.list_events(type: "media_item.duplicate_provider_id")) == 2
+    end
+
+    test "passes an ordinary validation error through untouched" do
+      # A movie with no year fails validate_year_for_movies/1, which is not a
+      # constraint error and must not trigger a retry or an event.
+      attrs = %{type: "movie", title: "No Year"}
+
+      assert {:error, changeset} =
+               ExternalIds.write(attrs, [type: "movie"], fn attrs ->
+                 Mydia.Media.create_media_item(attrs)
+               end)
+
+      refute changeset.valid?
+      assert Events.list_events(type: "media_item.duplicate_provider_id") == []
+    end
+
+    test "does not treat the row's own id as a conflict" do
+      item = media_item_fixture(%{type: "tv_show", title: "Self", tvdb_id: 121_361})
+
+      assert {:ok, updated} =
+               ExternalIds.write(
+                 %{title: "Self Renamed"},
+                 [type: "tv_show", exclude_id: item.id],
+                 fn attrs ->
+                   Mydia.Media.update_media_item(item, attrs, reason: "test")
+                 end
+               )
+
+      assert updated.title == "Self Renamed"
+      assert updated.tvdb_id == 121_361
+    end
+
+    test "returns the changeset when the retry collides again" do
+      # A third writer claiming the other id between the two attempts. Simulated
+      # by a closure that fails on tvdb first and on tmdb second, which is what
+      # that interleaving looks like from write/3's side.
+      media_item_fixture(%{type: "tv_show", title: "Owner A", tvdb_id: 121_361})
+      media_item_fixture(%{type: "tv_show", title: "Owner B", tmdb_id: 1399})
+
+      attrs = %{type: "tv_show", title: "Challenger", tvdb_id: 121_361}
+
+      {result, _log} =
+        with_log(fn ->
+          ExternalIds.write(attrs, [type: "tv_show"], fn attrs ->
+            # After the first pass drops :tvdb_id, put a taken :tmdb_id back, so
+            # the retry hits a constraint the pre-pass could not have seen.
+            attrs
+            |> Map.put_new(:tmdb_id, 1399)
+            |> Mydia.Media.create_media_item(skip_episode_refresh: true)
+          end)
+        end)
+
+      assert {:error, %Ecto.Changeset{} = changeset} = result
+      assert %{tmdb_id: ["has already been taken"]} = errors_on(changeset)
+    end
+
+    test "an empty changes map after the drop writes nothing and emits no update event" do
+      # Add.backfill_ids/2's shape: a changes map holding only provider ids. The
+      # guard lives in the closure so the retry passes through it, otherwise
+      # Media.update_media_item/3 emits a content-free media_item.updated event.
+      item = media_item_fixture(%{type: "tv_show", title: "Incumbent"})
+      media_item_fixture(%{type: "tv_show", title: "Owner", tvdb_id: 121_361})
+
+      {result, _log} =
+        with_log(fn ->
+          ExternalIds.write(%{tvdb_id: 121_361}, [type: "tv_show", exclude_id: item.id], fn
+            changes when changes == %{} -> {:ok, item}
+            changes -> Mydia.Media.update_media_item(item, changes, reason: "test")
+          end)
+        end)
+
+      assert {:ok, unchanged} = result
+      assert unchanged.id == item.id
+      assert is_nil(unchanged.tvdb_id)
+
+      # `resource_id` is only honoured alongside `resource_type`
+      # (Events.filter_by_resource/3 at lib/mydia/events.ex:320). Both are given.
+      assert Events.list_events(
+               type: "media_item.updated",
+               resource_type: "media_item",
+               resource_id: item.id
+             ) == []
+    end
+
+    test "raises without a :type option" do
+      assert_raise ArgumentError, ~r/requires a :type option/, fn ->
+        ExternalIds.write(%{type: "movie", title: "X"}, [], fn attrs -> {:ok, attrs} end)
+      end
+    end
+  end
 end
