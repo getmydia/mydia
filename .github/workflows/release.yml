@@ -1563,6 +1563,12 @@ jobs:
     needs:
       - prepare
       - publish
+    # A reusable workflow gets the calling job's token scopes, so the callee's
+    # own permissions block cannot widen this. Reading the release list and
+    # checking out the generator is all it does; the Cloudflare deploy
+    # authenticates with CLOUDFLARE_API_TOKEN, not GITHUB_TOKEN.
+    permissions:
+      contents: read
     uses: ./.github/workflows/deploy-appcast.yml
     with:
       ref: ${{ needs.prepare.outputs.sha }}

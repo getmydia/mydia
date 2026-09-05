@@ -23,6 +23,12 @@ concurrency:
   group: appcast
   cancel-in-progress: false
 
+# Reads the release list and checks out the generator; writes nothing back to
+# the repository. The Cloudflare deploy authenticates with CLOUDFLARE_API_TOKEN,
+# not GITHUB_TOKEN, so no write scope is needed anywhere in this workflow.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Build and deploy appcast
