@@ -135,10 +135,16 @@ jobs:
   mark:
     name: Mark refreshed
     needs: [decide, refresh]
-    # Only after a real upload. A dry run must not move the baseline, or the
-    # next real refresh is deferred by 60 days on the strength of a build that
-    # never reached Apple.
-    if: ${{ !inputs.dry_run }}
+    # Only after a real upload, proven by the called workflow's own output
+    # rather than inferred from its success.
+    #
+    # `!inputs.dry_run` alone is not enough. The upload steps in player-ios.yml
+    # also skip when the App Store Connect credentials are absent, and the job
+    # still succeeds, so a credentials outage would have written a marker for a
+    # build that never reached Apple and deferred the next real refresh by 60
+    # days. That is the failure this whole workflow exists to prevent, arriving
+    # silently through the mechanism meant to prevent it.
+    if: ${{ !inputs.dry_run && needs.refresh.outputs.uploaded == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
