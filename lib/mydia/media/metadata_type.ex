@@ -247,7 +247,7 @@ defmodule Mydia.Media.MetadataType do
   # through the database exactly as it was written, nil or not.
   #
   # The coercions mirror `Mydia.Metadata.Structs.MediaMetadata`'s own parser:
-  # these ids are handed straight to `Media.get_media_item_by_tmdb/1` and
+  # these ids are handed straight to `Media.find_by_external_ids/2` and
   # friends, which query :integer columns and raise `Ecto.Query.CastError` on a
   # string rather than returning nil. Nothing writes string ids here today, but
   # a metadata map built by hand would, and the two parsers staying identical

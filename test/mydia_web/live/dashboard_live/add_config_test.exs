@@ -205,7 +205,7 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
     refute MapSet.member?(assigns.adding_item_ids, {:tmdb, String.to_integer(provider_id)})
 
     # Belt-and-braces: the add never dispatched, so it can never persist.
-    assert Mydia.Media.get_media_item_by_tmdb(provider_id) == nil
+    assert Mydia.Media.find_by_external_ids(%{tmdb: provider_id}) == nil
   end
 
   # Configure is also reachable from a caret inside the detail modal's own
@@ -308,7 +308,7 @@ defmodule MydiaWeb.DashboardLive.AddConfigTest do
   end
 
   defp wait_until_media_item(provider_id, retries) do
-    case Mydia.Media.get_media_item_by_tmdb(provider_id) do
+    case Mydia.Media.find_by_external_ids(%{tmdb: provider_id}) do
       nil ->
         Process.sleep(10)
         wait_until_media_item(provider_id, retries - 1)

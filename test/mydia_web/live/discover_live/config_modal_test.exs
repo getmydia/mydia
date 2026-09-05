@@ -350,7 +350,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
   end
 
   defp wait_until_media_item(provider_id, retries) do
-    case Mydia.Media.get_media_item_by_tmdb(provider_id) do
+    case Mydia.Media.find_by_external_ids(%{tmdb: provider_id}) do
       nil ->
         Process.sleep(10)
         wait_until_media_item(provider_id, retries - 1)

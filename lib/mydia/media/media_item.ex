@@ -114,8 +114,13 @@ defmodule Mydia.Media.MediaItem do
     |> validate_inclusion(:type, @type_values)
     |> validate_number(:year, greater_than: 1800, less_than: 2200)
     |> validate_year_for_movies()
-    |> unique_constraint(:tmdb_id)
-    |> unique_constraint(:tvdb_id)
+    # Named after the partial composite indexes in
+    # `20260905143012_scope_provider_id_uniqueness_by_type.exs`. A bare
+    # `unique_constraint/2` expects `media_items_tmdb_id_index`, which no longer
+    # exists, and an unmatched constraint raises `Ecto.ConstraintError` instead
+    # of returning a changeset.
+    |> unique_constraint(:tmdb_id, name: :media_items_type_tmdb_id_index)
+    |> unique_constraint(:tvdb_id, name: :media_items_type_tvdb_id_index)
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
   end
