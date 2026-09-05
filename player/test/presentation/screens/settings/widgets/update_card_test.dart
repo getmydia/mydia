@@ -192,4 +192,27 @@ void main() {
 
     expect(outer - card, 18);
   });
+
+  testWidgets(
+      'a Flatpak update, which names no version, never renders the '
+      'literal word null', (tester) async {
+    // FlatpakRemoteUpdate.version is null by construction: the portal knows
+    // only that the remote carries a newer commit. Interpolating that
+    // straight into 'v${update.version}' would print "vnull" once the
+    // Flatpak backend is monitoring, which is the common case.
+    await _pump(
+      tester,
+      state: const UpdateState(
+        currentVersion: '0.14.2',
+        availableUpdate: FlatpakRemoteUpdate(
+          releaseNotesUrl: 'https://example.invalid/releases',
+        ),
+      ),
+      supportedOverride: true,
+    );
+
+    expect(find.textContaining('null'), findsNothing);
+    expect(find.text('A new version of Mydia Player is available'),
+        findsOneWidget);
+  });
 }

@@ -179,6 +179,9 @@ class UpdateNotifier extends Notifier<UpdateState> {
   }
 
   Future<void> _refresh() async {
+    // Before the `try`, so the guards inside it do not cover this read and
+    // write. Reached unawaited from `checkForUpdate`, which can resume
+    // after disposal.
     final backend = _backend;
     if (backend == null || !ref.mounted || state.isChecking) return;
 
@@ -202,6 +205,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// The update affordance was pressed.
   Future<void> requestUpdate() async {
+    // Reached unawaited from checkForUpdate's switch and directly from the
+    // UI, either of which can resume after disposal. Unlike _refresh, there
+    // is no try/catch here to lean on: backend.requestUpdate() is contracted
+    // not to throw, so this one guard has to cover every state write below
+    // rather than just the one before a try block.
     final backend = _backend;
     if (backend == null || !ref.mounted || state.isApplying) return;
 

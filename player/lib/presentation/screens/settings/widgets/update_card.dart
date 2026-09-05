@@ -41,6 +41,12 @@ class UpdateCard extends ConsumerWidget {
     final update = updateState.availableUpdate;
     if (update == null) return const SizedBox.shrink();
 
+    // The Flatpak portal knows only that the remote carries a newer commit,
+    // not what version it is, so `version` is null there. Interpolating a
+    // null String prints the literal word "null", so branch instead of
+    // reaching for `v${update.version}` unconditionally.
+    final version = update.version;
+
     // The card owns the space below it rather than the screen owning the space
     // above it. Both early returns above contribute nothing, so the screen
     // needs no spacer either way and an available update cannot butt up against
@@ -55,7 +61,9 @@ class UpdateCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Update available: v${update.version}',
+                  version != null
+                      ? 'Update available: v$version'
+                      : 'A new version of Mydia Player is available',
                   style: const TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
@@ -141,13 +149,17 @@ class UpdateCard extends ConsumerWidget {
       return;
     }
 
+    final version = ref.read(updateProvider).availableUpdate?.version;
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Update Mydia'),
         content: Text(
-          'Mydia will close and update to '
-          'v${ref.read(updateProvider).availableUpdate?.version}. Continue?',
+          version != null
+              ? 'Mydia will close and update to v$version. Continue?'
+              : 'Mydia will download and install the newest build, then '
+                  'offer to restart. Continue?',
         ),
         actions: [
           TextButton(
