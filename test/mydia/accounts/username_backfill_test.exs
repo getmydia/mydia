@@ -1,5 +1,10 @@
 defmodule Mydia.Accounts.UsernameBackfillTest do
-  use Mydia.DataCase, async: true
+  # Not async. "returns :ok when the user list cannot be read" renames the
+  # users table inside its sandbox transaction, and on PostgreSQL that rename
+  # holds an ACCESS EXCLUSIVE lock until the transaction ends. Any other async
+  # test touching users would block on it and eventually time out, which is the
+  # flake class .github/ci-flakes.md already catalogues.
+  use Mydia.DataCase, async: false
 
   import Mydia.AccountsFixtures
 
