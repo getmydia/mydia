@@ -5,8 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/compatibility/compatibility_verdict.dart';
 import '../../core/theme/colors.dart';
+import '../../core/update/install_environment.dart';
+import '../../core/update/update_provider.dart';
 import 'banner_button.dart';
 import 'compatibility_details_dialog.dart';
+import 'update_action.dart';
 
 /// Warns that this player and the connected server are on incompatible
 /// versions.
@@ -14,12 +17,17 @@ import 'compatibility_details_dialog.dart';
 /// Renders nothing unless there is something actionable to say, so it can sit
 /// unconditionally in the shell next to [OfflineBanner].
 ///
-/// The update action navigates to Settings rather than starting a download.
-/// Settings already hosts UpdateCard, which resolves the right update path per
-/// platform. Duplicating that here would give us two places to get the
-/// GitHub-versus-app-store question wrong.
+/// The update action calls [startUpdate], the one implementation of beginning
+/// an update, and falls back to Settings only when there is no update in hand.
+/// This used to navigate unconditionally, to avoid a second place that could
+/// get the GitHub-versus-app-store question wrong; a shared action answers
+/// that instead of working around it.
 class CompatibilityBanner extends ConsumerWidget {
-  const CompatibilityBanner({super.key});
+  /// Overrides the detected install environment, forwarded to [startUpdate].
+  /// Tests only.
+  final InstallEnvironment? environmentOverride;
+
+  const CompatibilityBanner({super.key, this.environmentOverride});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -67,7 +75,20 @@ class CompatibilityBanner extends ConsumerWidget {
               BannerButton(
                 label: 'Update',
                 color: color,
-                onPressed: () => context.go('/settings'),
+                onPressed: () {
+                  // Settings is the fallback, not the destination. It covers
+                  // macOS, where Sparkle owns checking and availableUpdate
+                  // stays null, and the window before the first check lands.
+                  if (ref.read(updateProvider).availableUpdate == null) {
+                    context.go('/settings');
+                    return;
+                  }
+                  startUpdate(
+                    context,
+                    ref,
+                    environmentOverride: environmentOverride,
+                  );
+                },
               ),
             ],
             if (state.verdict.isDismissible) ...[
