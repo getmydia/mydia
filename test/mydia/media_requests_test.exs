@@ -2,7 +2,6 @@ defmodule Mydia.MediaRequestsTest do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
-  import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
 
   alias Mydia.MediaRequests
@@ -194,6 +193,111 @@ defmodule Mydia.MediaRequestsTest do
 
       assert {:error, :duplicate_media} = MediaRequests.create_request(attrs)
     end
+
+    test "allows requesting a movie when a TV show with the same tmdb_id is in the library" do
+      user = create_user()
+      shared_id = System.unique_integer([:positive])
+
+      {:ok, _show} =
+        Media.create_media_item(
+          %{
+            type: "tv_show",
+            title: "Existing Show",
+            year: 2024,
+            tmdb_id: shared_id
+          },
+          skip_episode_refresh: true
+        )
+
+      assert {:ok, request} =
+               MediaRequests.create_request(%{
+                 media_type: "movie",
+                 title: "Fight Club",
+                 year: 1999,
+                 tmdb_id: shared_id,
+                 requester_id: user.id
+               })
+
+      assert request.media_type == "movie"
+      assert request.tmdb_id == shared_id
+    end
+
+    test "allows requesting a movie when a TV show request with the same tmdb_id is pending" do
+      user = create_user()
+      shared_id = System.unique_integer([:positive])
+
+      {:ok, _req} =
+        MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "Existing TV Show Request",
+          tmdb_id: shared_id,
+          requester_id: user.id
+        })
+
+      assert {:ok, request} =
+               MediaRequests.create_request(%{
+                 media_type: "movie",
+                 title: "Fight Club",
+                 year: 1999,
+                 tmdb_id: shared_id,
+                 requester_id: user.id
+               })
+
+      assert request.media_type == "movie"
+      assert request.tmdb_id == shared_id
+    end
+
+    test "allows requesting a movie when a TV show with the same tvdb_id is in the library" do
+      user = create_user()
+      shared_id = System.unique_integer([:positive])
+
+      {:ok, _show} =
+        Media.create_media_item(
+          %{
+            type: "tv_show",
+            title: "Existing Show",
+            tvdb_id: shared_id
+          },
+          skip_episode_refresh: true
+        )
+
+      assert {:ok, request} =
+               MediaRequests.create_request(%{
+                 media_type: "movie",
+                 title: "Fight Club",
+                 year: 1999,
+                 tvdb_id: shared_id,
+                 requester_id: user.id
+               })
+
+      assert request.media_type == "movie"
+      assert request.tvdb_id == shared_id
+    end
+
+    test "allows requesting a movie when a TV show with the same tvdb_id is pending" do
+      user = create_user()
+      shared_id = System.unique_integer([:positive])
+
+      {:ok, _req} =
+        MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "Existing TV Show Request",
+          tvdb_id: shared_id,
+          requester_id: user.id
+        })
+
+      assert {:ok, request} =
+               MediaRequests.create_request(%{
+                 media_type: "movie",
+                 title: "Fight Club",
+                 year: 1999,
+                 tvdb_id: shared_id,
+                 requester_id: user.id
+               })
+
+      assert request.media_type == "movie"
+      assert request.tvdb_id == shared_id
+    end
   end
 
   describe "approve_request/2" do
@@ -260,53 +364,39 @@ defmodule Mydia.MediaRequestsTest do
       assert %{approved_by_id: ["can't be blank"]} = errors_on(changeset)
     end
 
-    # `Add.from_attrs/3`'s pre-flight is scoped to the request's own media type,
-    # while the unique index on tmdb_id is global. A movie holding the id is
-    # therefore invisible to the lookup and only the index catches it, which is
-    # the one path left that reaches insert_approval/4's media_item rollback.
-    # Pinning the behaviour here: closing the cross-type gap needs a composite
-    # (type, tmdb_id) index and so a migration.
-    test "rolls back and leaves the request pending when the other media type owns the tmdb_id",
-         %{user: user, admin: admin} do
+    test "approving a request for a TV show succeeds when a movie with same tmdb_id exists in library",
+         %{admin: admin, user: user} do
       bypass = Bypass.open()
-      tmdb_id = System.unique_integer([:positive])
+      shared_id = System.unique_integer([:positive])
 
-      request =
-        create_request(user, %{media_type: "tv_show", title: "Crossed Type", tmdb_id: tmdb_id})
-
-      # Filed first, so create_request/1's own duplicate check does not fire:
-      # the movie lands in the library while the request sits pending.
-      {:ok, movie} =
+      {:ok, _movie} =
         Media.create_media_item(%{
           type: "movie",
-          title: "Crossed Type",
-          year: 2023,
-          tmdb_id: tmdb_id
+          title: "Existing Movie",
+          year: 2024,
+          tmdb_id: shared_id
         })
 
-      stub_tmdb_tv_show(bypass, tmdb_id, "Crossed Type")
+      request =
+        create_request(user, %{
+          media_type: "tv_show",
+          title: "Crossed Type Show",
+          tmdb_id: shared_id
+        })
+
+      stub_tmdb_tv_show(bypass, shared_id, "Crossed Type Show")
       stub_tvdb_search_empty(bypass)
 
-      before_count = Repo.aggregate(MediaItem, :count)
+      assert {:ok, %{request: approved, media_item: created_item}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
 
-      log =
-        capture_log(fn ->
-          assert {:error, %Ecto.Changeset{} = changeset} =
-                   MediaRequests.approve_request(request, %{approved_by_id: admin.id},
-                     config: relay_config(bypass)
-                   )
-
-          assert %{tmdb_id: ["has already been taken"]} = errors_on(changeset)
-        end)
-
-      assert log =~ "Failed to create media item for request #{request.id}"
-
-      reloaded = Repo.get!(MediaRequest, request.id)
-      assert reloaded.status == "pending"
-      assert is_nil(reloaded.media_item_id)
-
-      assert Repo.aggregate(MediaItem, :count) == before_count
-      assert Media.get_media_item_by_tmdb(tmdb_id).id == movie.id
+      assert approved.status == "approved"
+      assert approved.media_item_id != nil
+      assert created_item.id == approved.media_item_id
+      assert created_item.type == "tv_show"
+      assert created_item.tmdb_id == shared_id
     end
   end
 
@@ -655,7 +745,7 @@ defmodule Mydia.MediaRequestsTest do
     end
   end
 
-  describe "pending_request_exists?/1" do
+  describe "pending_request_exists?" do
     setup do
       user = create_user()
       %{user: user}
@@ -666,6 +756,26 @@ defmodule Mydia.MediaRequestsTest do
 
       assert MediaRequests.pending_request_exists?(12345) == true
       assert MediaRequests.pending_request_exists?(99999) == false
+    end
+
+    test "pending_request_exists?/2 differentiates by media_type" do
+      user = create_user()
+      shared_id = System.unique_integer([:positive])
+
+      {:ok, _req} =
+        MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "Wheel of Fortune",
+          tmdb_id: shared_id,
+          requester_id: user.id
+        })
+
+      assert MediaRequests.pending_request_exists?(:tv_show, shared_id) == true
+      assert MediaRequests.pending_request_exists?("tv_show", shared_id) == true
+      assert MediaRequests.pending_request_exists?(:movie, shared_id) == false
+      assert MediaRequests.pending_request_exists?("movie", shared_id) == false
+      assert MediaRequests.pending_request_exists?(nil, shared_id) == false
+      assert MediaRequests.pending_request_exists?(:tv_show, nil) == false
     end
 
     test "returns false for nil or invalid input" do

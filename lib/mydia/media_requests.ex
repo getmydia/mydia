@@ -250,8 +250,21 @@ defmodule Mydia.MediaRequests do
   end
 
   @doc """
-  Checks if a request with the given TMDB ID is pending.
+  Checks if a request with the given media type and TMDB ID is pending.
   """
+  def pending_request_exists?(media_type, tmdb_id)
+      when (is_binary(media_type) or is_atom(media_type)) and not is_nil(media_type) and
+             is_integer(tmdb_id) do
+    type_str = to_string(media_type)
+
+    MediaRequest
+    |> where([r], r.media_type == ^type_str and r.tmdb_id == ^tmdb_id and r.status == "pending")
+    |> Repo.exists?()
+  end
+
+  def pending_request_exists?(_, _), do: false
+
+  # Backward compatibility clause
   def pending_request_exists?(tmdb_id) when is_integer(tmdb_id) do
     MediaRequest
     |> where([r], r.tmdb_id == ^tmdb_id and r.status == "pending")
@@ -263,35 +276,40 @@ defmodule Mydia.MediaRequests do
   # Private functions
 
   defp check_duplicate_media(changeset) do
+    media_type = Ecto.Changeset.get_field(changeset, :media_type)
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
     tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
 
     cond do
-      tmdb_id && Media.get_media_item_by_tmdb(tmdb_id) -> {:error, :duplicate_media}
-      tvdb_id && Media.get_media_item_by_tvdb(tvdb_id) -> {:error, :duplicate_media}
+      tmdb_id && Media.get_media_item_by_tmdb(media_type, tmdb_id) -> {:error, :duplicate_media}
+      tvdb_id && Media.get_media_item_by_tvdb(media_type, tvdb_id) -> {:error, :duplicate_media}
       true -> :ok
     end
   end
 
   defp check_duplicate_request(changeset) do
+    media_type = Ecto.Changeset.get_field(changeset, :media_type)
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
     tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
 
     cond do
-      tmdb_id && pending_request_exists?(tmdb_id) -> {:error, :duplicate_request}
-      tvdb_id && pending_tvdb_request_exists?(tvdb_id) -> {:error, :duplicate_request}
+      tmdb_id && pending_request_exists?(media_type, tmdb_id) -> {:error, :duplicate_request}
+      tvdb_id && pending_tvdb_request_exists?(media_type, tvdb_id) -> {:error, :duplicate_request}
       true -> :ok
     end
   end
 
-  # A TVDB-sourced request has no tmdb_id, so pending_request_exists?/1 (which
-  # is documented and tested as TMDB-only) never sees it. Kept private and
-  # separate rather than widening that public function's contract.
-  defp pending_tvdb_request_exists?(tvdb_id) do
+  defp pending_tvdb_request_exists?(media_type, tvdb_id)
+       when (is_binary(media_type) or is_atom(media_type)) and not is_nil(media_type) and
+              is_integer(tvdb_id) do
+    type_str = to_string(media_type)
+
     MediaRequest
-    |> where([r], r.tvdb_id == ^tvdb_id and r.status == "pending")
+    |> where([r], r.media_type == ^type_str and r.tvdb_id == ^tvdb_id and r.status == "pending")
     |> Repo.exists?()
   end
+
+  defp pending_tvdb_request_exists?(_, _), do: false
 
   @doc """
   Automatically approves any pending requests matching the given media item.
