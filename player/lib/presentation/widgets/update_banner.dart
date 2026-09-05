@@ -24,6 +24,7 @@ bool shouldShowUpdateBanner({
   required String? availableVersion,
   required Set<String>? dismissedVersions,
   required bool compatibilityBannerShowing,
+  required bool compatibilityUnresolved,
   required bool isOffline,
 }) {
   // iOS, Android and web update through a store or the Mydia server. macOS
@@ -40,6 +41,14 @@ bool shouldShowUpdateBanner({
   // The compatibility banner names the server version that forced the issue,
   // which is more use than "a new version exists".
   if (compatibilityBannerShowing) return false;
+
+  // The compatibility check has not resolved yet, so it is unknown whether it
+  // is about to claim this slot. Unknown is not the same as "nothing to
+  // say": showing here risks a flash that vanishes the instant the
+  // compatibility check lands as player-behind. A check that resolved to an
+  // error is not unresolved: it has nothing to say and must not suppress a
+  // real update forever.
+  if (compatibilityUnresolved) return false;
 
   // Nothing can be downloaded, and OfflineBanner already owns this slot.
   if (isOffline) return false;
@@ -75,7 +84,13 @@ class UpdateBanner extends ConsumerWidget {
 
     // `.value` and not `.valueOrNull`: riverpod 3.2.1 has no valueOrNull, and
     // `.value` returns null on AsyncError rather than rethrowing.
-    final compatibility = ref.watch(compatibilityProvider).value;
+    final compatibilityAsync = ref.watch(compatibilityProvider);
+    final compatibility = compatibilityAsync.value;
+    // Null means loading OR error. Only the loading case is "unknown"; a
+    // failed compatibility check must not suppress a real update
+    // notification.
+    final compatibilityUnresolved =
+        compatibility == null && !compatibilityAsync.hasError;
 
     final visible = shouldShowUpdateBanner(
       supported:
@@ -86,6 +101,7 @@ class UpdateBanner extends ConsumerWidget {
       compatibilityBannerShowing: compatibility != null &&
           compatibility.showBanner &&
           compatibility.verdict.isPlayerBehind,
+      compatibilityUnresolved: compatibilityUnresolved,
       isOffline: ref.watch(authStateProvider).value == AuthStatus.offlineMode,
     );
 

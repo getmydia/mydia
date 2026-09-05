@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +43,23 @@ class _FakeCompatibilityNotifier extends CompatibilityNotifier {
   Future<CompatibilityState> build() async => _state;
 }
 
+/// Never resolves, so `compatibilityProvider` stays in its loading state for
+/// the life of the test.
+class _UnresolvedCompatibilityNotifier extends CompatibilityNotifier {
+  @override
+  Future<CompatibilityState> build() => Completer<CompatibilityState>().future;
+}
+
+/// Resolves to an `AsyncError`, the way a broken `PackageInfo` read or an
+/// unexpected exception outside `CompatibilityService.fetch()`'s own
+/// try/catch would.
+class _ErrorCompatibilityNotifier extends CompatibilityNotifier {
+  @override
+  Future<CompatibilityState> build() async {
+    throw Exception('compatibility check failed');
+  }
+}
+
 class _FakeAuthNotifier extends AuthStateNotifier {
   _FakeAuthNotifier(this._status);
   final AuthStatus _status;
@@ -68,6 +87,7 @@ Future<_FakeDismissalNotifier> _pump(
   required UpdateState state,
   Set<String> dismissed = const <String>{},
   CompatibilityState compatibility = _compatible,
+  CompatibilityNotifier Function()? compatibilityOverride,
   AuthStatus auth = AuthStatus.authenticated,
   bool supported = true,
   List<Uri>? launched,
@@ -79,8 +99,10 @@ Future<_FakeDismissalNotifier> _pump(
       overrides: [
         updateProvider.overrideWith(() => _FakeUpdateNotifier(state)),
         updateDismissalProvider.overrideWith(() => dismissal),
-        compatibilityProvider
-            .overrideWith(() => _FakeCompatibilityNotifier(compatibility)),
+        compatibilityProvider.overrideWith(
+          compatibilityOverride ??
+              () => _FakeCompatibilityNotifier(compatibility),
+        ),
         authStateProvider.overrideWith(() => _FakeAuthNotifier(auth)),
       ],
       child: MaterialApp(
@@ -112,6 +134,7 @@ void main() {
       String? availableVersion = '0.15.0',
       Set<String>? dismissedVersions = const <String>{},
       bool compatibilityBannerShowing = false,
+      bool compatibilityUnresolved = false,
       bool isOffline = false,
     }) =>
         shouldShowUpdateBanner(
@@ -120,6 +143,7 @@ void main() {
           availableVersion: availableVersion,
           dismissedVersions: dismissedVersions,
           compatibilityBannerShowing: compatibilityBannerShowing,
+          compatibilityUnresolved: compatibilityUnresolved,
           isOffline: isOffline,
         );
 
@@ -155,6 +179,18 @@ void main() {
 
     test('a compatibility banner already saying this wins', () {
       expect(show(compatibilityBannerShowing: true), isFalse);
+    });
+
+    test('an unresolved compatibility check hides the banner', () {
+      // Unknown is not the same as "nothing to say": showing here would risk
+      // a flash that vanishes the moment the compatibility check lands.
+      expect(show(compatibilityUnresolved: true), isFalse);
+    });
+
+    test('a resolved compatibility check with nothing to say still shows', () {
+      // Guards against inverting the flag: false must not itself suppress
+      // the banner.
+      expect(show(compatibilityUnresolved: false), isTrue);
     });
 
     test('offline shows nothing, since nothing can be downloaded', () {
@@ -213,6 +249,37 @@ void main() {
 
       expect(find.byType(Text), findsNothing);
       expect(find.byType(Icon), findsNothing);
+    });
+
+    testWidgets(
+        'renders nothing while the compatibility check is still loading',
+        (tester) async {
+      await _pump(
+        tester,
+        state:
+            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        compatibilityOverride: () => _UnresolvedCompatibilityNotifier(),
+      );
+
+      expect(find.byType(Text), findsNothing);
+      expect(find.byType(Icon), findsNothing);
+    });
+
+    testWidgets('shows the update when the compatibility check itself fails',
+        (tester) async {
+      // Regression guard: treating a null compatibility value as "hide"
+      // regardless of why would silently kill the update banner every time
+      // the server is unreachable, which is a normal condition for a
+      // self-hosted app and precisely when a user wants to know about
+      // updates.
+      await _pump(
+        tester,
+        state:
+            UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+        compatibilityOverride: () => _ErrorCompatibilityNotifier(),
+      );
+
+      expect(find.textContaining('0.15.0'), findsOneWidget);
     });
 
     testWidgets('shows when a player-behind nudge was already dismissed',
