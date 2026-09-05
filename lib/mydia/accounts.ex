@@ -111,6 +111,12 @@ defmodule Mydia.Accounts do
   This ensures that production deployments with OIDC-only auth have an initial admin.
   """
   def upsert_user_from_oidc(oidc_sub, oidc_issuer, attrs) do
+    with {:ok, user} <- do_upsert_user_from_oidc(oidc_sub, oidc_issuer, attrs) do
+      {:ok, apply_derived_username(user, Map.put(attrs, :oidc_sub, oidc_sub))}
+    end
+  end
+
+  defp do_upsert_user_from_oidc(oidc_sub, oidc_issuer, attrs) do
     case get_user_by_oidc(oidc_sub, oidc_issuer) do
       nil ->
         # New user - check if we need to auto-promote to admin
@@ -141,6 +147,23 @@ defmodule Mydia.Accounts do
         user
         |> User.oidc_changeset(attrs_without_role)
         |> Repo.update()
+    end
+  end
+
+  # A name is nice to have, never worth failing a sign-in over. Every failure
+  # here leaves the account exactly as the upsert left it.
+  defp apply_derived_username(%User{} = user, attrs) do
+    with {tier, slug} <- UsernameSource.derive(attrs),
+         true <- UsernameSource.upgrade?(user.username, user.username_source, tier),
+         {:ok, named} <- claim_username(user, {tier, slug}) do
+      named
+    else
+      :none ->
+        Logger.warning("Could not derive or claim a username for user #{user.id}")
+        user
+
+      false ->
+        user
     end
   end
 

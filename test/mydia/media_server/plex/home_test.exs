@@ -170,10 +170,12 @@ defmodule Mydia.MediaServer.Plex.HomeTest do
         |> Plug.Conn.resp(200, Jason.encode!(%{"authToken" => "kid-token"}))
       end)
 
-      # Created first so an admin exists and the OIDC upsert does not
-      # auto-promote the SSO account.
+      # The nameless account models an install from before the username
+      # backfill (or one that skipped it): a real account with username: nil,
+      # inserted directly rather than through the OIDC upsert path, which
+      # would derive and claim a name of its own.
       user = Mydia.AccountsFixtures.admin_user_fixture(%{username: "kid"})
-      _sso = Mydia.AccountsFixtures.oidc_user_fixture(%{})
+      _sso = Mydia.AccountsFixtures.nameless_user_fixture(%{})
       {:ok, saved} = Mydia.Settings.create_media_server_config(persistable(config))
 
       assert {:ok, %SeedResult{linked: [link]}} = Home.seed_links(saved, plex_tv_base: base)

@@ -64,9 +64,12 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
     config: config
   } do
     # Same defect as #705 on the Plex side, in code copied from it. Unreported
-    # only because fewer operators pair Jellyfin with SSO.
+    # only because fewer operators pair Jellyfin with SSO. The nameless
+    # account models an install from before the username backfill (or one
+    # that skipped it), inserted directly rather than through the OIDC
+    # upsert path, which would derive and claim a name of its own.
     user = admin_user_fixture(%{username: "tonix"})
-    _sso = oidc_user_fixture(%{})
+    _sso = nameless_user_fixture(%{})
 
     Bypass.expect_once(bypass, "GET", "/Users", fn conn ->
       conn
