@@ -13,6 +13,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
+  alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Settings
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.DetailModal
@@ -139,10 +140,22 @@ defmodule MydiaWeb.DiscoverLive.Index do
       # Load library status map
       library_status_map = Media.get_library_status_map()
 
+      # request_status only ever affects the Request button, which only a
+      # guest sees (Authorization.can_submit_request?/1), so a viewer who
+      # cannot submit a request skips the two unfiltered list_requests/1
+      # scans entirely rather than paying for a result they can never act on.
+      # Mirrors FranchiseEvents/RecommendationEvents (#461).
+      request_status_map =
+        if AccountsAuthorization.can_submit_request?(socket.assigns.current_user) do
+          MediaRequestHelpers.request_status_map()
+        else
+          %{}
+        end
+
       socket =
         socket
         |> assign(:library_status_map, library_status_map)
-        |> assign(:request_status_map, MediaRequestHelpers.request_status_map())
+        |> assign(:request_status_map, request_status_map)
 
       send(self(), :load_data)
 
