@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/compatibility/compatibility_verdict.dart';
 import '../../core/theme/colors.dart';
+import 'banner_button.dart';
 import 'compatibility_details_dialog.dart';
 
 /// Warns that this player and the connected server are on incompatible
@@ -56,14 +57,14 @@ class CompatibilityBanner extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 12),
-            _BannerButton(
+            BannerButton(
               label: 'Details',
               color: color,
               onPressed: () => showCompatibilityDetailsDialog(context, state),
             ),
             if (state.verdict.isPlayerBehind) ...[
               const SizedBox(width: 8),
-              _BannerButton(
+              BannerButton(
                 label: 'Update',
                 color: color,
                 onPressed: () => context.go('/settings'),
@@ -103,39 +104,5 @@ class CompatibilityBanner extends ConsumerWidget {
       case CompatibilityVerdict.unknown:
         return '';
     }
-  }
-}
-
-/// A compact action styled to sit inside the banner, matching OfflineBanner.
-class _BannerButton extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback onPressed;
-
-  const _BannerButton({
-    required this.label,
-    required this.color,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor: color.withValues(alpha: 0.2),
-        foregroundColor: color,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-        ),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-    );
   }
 }

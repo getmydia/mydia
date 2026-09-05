@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/theme/colors.dart';
+import 'banner_button.dart';
 
 /// Banner displayed at the top of the screen when the app is in offline mode.
 ///
@@ -64,57 +65,15 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner> {
               ),
             ),
             const SizedBox(width: 12),
-            _RetryButton(
+            BannerButton(
+              label: 'Retry',
+              color: AppColors.warning,
               isLoading: _isRetrying,
               onPressed: _retryConnection,
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Retry connection button with loading state.
-class _RetryButton extends StatelessWidget {
-  final bool isLoading;
-  final VoidCallback onPressed;
-
-  const _RetryButton({
-    required this.isLoading,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: isLoading ? null : onPressed,
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor: AppColors.warning.withValues(alpha: 0.2),
-        foregroundColor: AppColors.warning,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-        ),
-      ),
-      child: isLoading
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.warning,
-              ),
-            )
-          : const Text(
-              'Retry',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
     );
   }
 }
