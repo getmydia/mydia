@@ -97,9 +97,17 @@ git tag -d "$MARKER_PROBE" >/dev/null 2>&1 || true
 # An ANNOTATED tag carries its tagger date as creatordate, unlike a lightweight
 # one, so a pinned future date puts this probe above every real tag forever. A
 # broken exclusion regex returns the probe; a working one skips it.
+#
+# The tagger identity is supplied inline because an annotated tag needs one and
+# a CI runner has no git identity configured: `git tag -a` there dies with
+# "Committer identity unknown", exit 128, which is a green suite locally and a
+# red one in CI. The marker probe above uses a lightweight tag and needs none.
+# `-f` so a run killed before its EXIT trap fires cannot wedge the next one.
 readonly PRERELEASE_PROBE="v9.9.9-beta.1"
 GIT_COMMITTER_DATE="2099-01-01T00:00:00Z" \
-  git tag -a -m "check-ios-refresh-due probe" "$PRERELEASE_PROBE" HEAD >/dev/null 2>&1
+GIT_COMMITTER_NAME="mydia-ci" \
+GIT_COMMITTER_EMAIL="ci@mydia.invalid" \
+  git tag -af -m "check-ios-refresh-due probe" "$PRERELEASE_PROBE" HEAD >/dev/null 2>&1
 
 probe_result="$(IOS_REFRESH_TODAY=2026-09-04 "$SCRIPT" 2>/dev/null | sed -n 's/^tag=//p')"
 case "$probe_result" in
