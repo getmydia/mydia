@@ -70,7 +70,10 @@ abstract interface class UpdateBackend {
   /// backends whose platform owns the polling.
   Future<void> refresh({bool force = false});
 
-  /// The user pressed the update affordance.
+  /// The user pressed the update affordance. Must not throw: a backend that
+  /// fails reports that through [UpdateFailed] or [UpdateUnsupported]
+  /// instead, mirroring [start]. [UpdateNotifier.requestUpdate] awaits this
+  /// with no try/catch of its own, relying on the contract to hold.
   Future<UpdateOutcome> requestUpdate({
     void Function(double progress)? onProgress,
   });
