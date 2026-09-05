@@ -107,6 +107,8 @@ void main() {
 
     expect(find.text('Update Now'), findsOneWidget);
     expect(find.text('Release Notes'), findsOneWidget);
+    expect(find.text('Update available: v0.15.0'), findsOneWidget);
+    expect(find.text('Faster library scans'), findsOneWidget);
   });
 
   testWidgets('shows progress instead of buttons while applying',
@@ -299,6 +301,19 @@ void main() {
         updateCheckSubtitle(
           behaviour: ManualCheckBehaviour.delegatesToSparkle,
           update: null,
+        ),
+        'Opens the Sparkle update dialog',
+      );
+    });
+
+    test('Sparkle wording wins even when a version is known', () {
+      // An ordering property, not a formatting one. If a later edit checked
+      // the version before the behaviour, macOS would start advertising a
+      // version in a row that only ever opens Sparkle's own dialog.
+      expect(
+        updateCheckSubtitle(
+          behaviour: ManualCheckBehaviour.delegatesToSparkle,
+          update: _update(),
         ),
         'Opens the Sparkle update dialog',
       );
