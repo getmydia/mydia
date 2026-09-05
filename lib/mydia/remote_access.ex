@@ -981,7 +981,7 @@ defmodule Mydia.RemoteAccess do
       event: event_type
     }
 
-    Absinthe.Subscription.publish(
+    MydiaWeb.Schema.Publish.publish(
       MydiaWeb.Endpoint,
       event_payload,
       device_status_changed: "device_status:#{device.user_id}"
