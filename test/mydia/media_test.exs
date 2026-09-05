@@ -52,6 +52,70 @@ defmodule Mydia.MediaTest do
       assert Media.get_media_item!(media_item.id) == media_item
     end
 
+    test "get_media_item_by_tmdb/2 and /3 filters by type" do
+      shared_id = System.unique_integer([:positive])
+
+      {:ok, movie} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Movie Title",
+          year: 2024,
+          tmdb_id: shared_id
+        })
+
+      {:ok, series} =
+        Media.create_media_item(
+          %{
+            type: "tv_show",
+            title: "Series Title",
+            year: 2024,
+            tmdb_id: shared_id
+          },
+          skip_episode_refresh: true
+        )
+
+      assert Media.get_media_item_by_tmdb("movie", shared_id).id == movie.id
+      assert Media.get_media_item_by_tmdb(:movie, shared_id).id == movie.id
+      assert Media.get_media_item_by_tmdb("tv_show", shared_id).id == series.id
+      assert Media.get_media_item_by_tmdb(:tv_show, shared_id).id == series.id
+      assert Media.get_media_item_by_tmdb(shared_id, type: "movie").id == movie.id
+      assert Media.get_media_item_by_tmdb(shared_id, type: :tv_show).id == series.id
+      assert Media.get_media_item_by_tmdb("movie", System.unique_integer([:positive])) == nil
+      assert Media.get_media_item_by_tmdb(nil) == nil
+    end
+
+    test "get_media_item_by_tvdb/2 and /3 filters by type" do
+      shared_id = System.unique_integer([:positive])
+
+      {:ok, movie} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Movie Title",
+          year: 2024,
+          tvdb_id: shared_id
+        })
+
+      {:ok, series} =
+        Media.create_media_item(
+          %{
+            type: "tv_show",
+            title: "Series Title",
+            year: 2024,
+            tvdb_id: shared_id
+          },
+          skip_episode_refresh: true
+        )
+
+      assert Media.get_media_item_by_tvdb("movie", shared_id).id == movie.id
+      assert Media.get_media_item_by_tvdb(:movie, shared_id).id == movie.id
+      assert Media.get_media_item_by_tvdb("tv_show", shared_id).id == series.id
+      assert Media.get_media_item_by_tvdb(:tv_show, shared_id).id == series.id
+      assert Media.get_media_item_by_tvdb(shared_id, type: "movie").id == movie.id
+      assert Media.get_media_item_by_tvdb(shared_id, type: :tv_show).id == series.id
+      assert Media.get_media_item_by_tvdb("movie", System.unique_integer([:positive])) == nil
+      assert Media.get_media_item_by_tvdb(nil) == nil
+    end
+
     test "create_media_item/1 with valid data creates a media item" do
       valid_attrs = %{
         type: "movie",

@@ -147,25 +147,102 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Gets a single media item by TMDB ID.
+  Gets a single media item by media type and TMDB ID.
   """
-  @spec get_media_item_by_tmdb(integer(), keyword()) :: MediaItem.t() | nil
-  def get_media_item_by_tmdb(tmdb_id, opts \\ []) do
+  @spec get_media_item_by_tmdb(String.t() | atom(), integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tmdb(type, tmdb_id, opts)
+      when (is_binary(type) or is_atom(type)) and is_integer(tmdb_id) do
+    type_str = to_string(type)
+
     MediaItem
-    |> where([m], m.tmdb_id == ^tmdb_id)
+    |> where([m], m.type == ^type_str and m.tmdb_id == ^tmdb_id)
     |> maybe_preload(opts[:preload])
     |> Repo.one()
   end
 
+  def get_media_item_by_tmdb(_, _, _), do: nil
+
+  @doc """
+  Gets a single media item by media type and TMDB ID, or by TMDB ID with options.
+  """
+  @spec get_media_item_by_tmdb(String.t() | atom(), integer()) :: MediaItem.t() | nil
+  @spec get_media_item_by_tmdb(integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tmdb(type, tmdb_id)
+      when (is_binary(type) or is_atom(type)) and is_integer(tmdb_id) do
+    get_media_item_by_tmdb(type, tmdb_id, [])
+  end
+
+  def get_media_item_by_tmdb(tmdb_id, opts) when is_integer(tmdb_id) do
+    MediaItem
+    |> where([m], m.tmdb_id == ^tmdb_id)
+    |> maybe_filter_type(opts[:type])
+    |> maybe_preload(opts[:preload])
+    |> Repo.one()
+  end
+
+  def get_media_item_by_tmdb(_, _), do: nil
+
+  @doc """
+  Gets a single media item by TMDB ID.
+  """
+  @spec get_media_item_by_tmdb(integer()) :: MediaItem.t() | nil
+  def get_media_item_by_tmdb(tmdb_id) when is_integer(tmdb_id) do
+    get_media_item_by_tmdb(tmdb_id, [])
+  end
+
+  def get_media_item_by_tmdb(_), do: nil
+
+  @doc """
+  Gets a single media item by media type and TVDB ID.
+  """
+  @spec get_media_item_by_tvdb(String.t() | atom(), integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tvdb(type, tvdb_id, opts)
+      when (is_binary(type) or is_atom(type)) and is_integer(tvdb_id) do
+    type_str = to_string(type)
+
+    MediaItem
+    |> where([m], m.type == ^type_str and m.tvdb_id == ^tvdb_id)
+    |> maybe_preload(opts[:preload])
+    |> Repo.one()
+  end
+
+  def get_media_item_by_tvdb(_, _, _), do: nil
+
+  @doc """
+  Gets a single media item by TVDB ID, optionally filtered by type option.
+  """
+  @spec get_media_item_by_tvdb(String.t() | atom(), integer()) :: MediaItem.t() | nil
+  @spec get_media_item_by_tvdb(integer(), keyword()) :: MediaItem.t() | nil
+  def get_media_item_by_tvdb(type, tvdb_id)
+      when (is_binary(type) or is_atom(type)) and is_integer(tvdb_id) do
+    get_media_item_by_tvdb(type, tvdb_id, [])
+  end
+
+  def get_media_item_by_tvdb(tvdb_id, opts) when is_integer(tvdb_id) do
+    MediaItem
+    |> where([m], m.tvdb_id == ^tvdb_id)
+    |> maybe_filter_type(opts[:type])
+    |> maybe_preload(opts[:preload])
+    |> Repo.one()
+  end
+
+  def get_media_item_by_tvdb(_, _), do: nil
+
   @doc """
   Gets a single media item by TVDB ID.
   """
-  @spec get_media_item_by_tvdb(integer(), keyword()) :: MediaItem.t() | nil
-  def get_media_item_by_tvdb(tvdb_id, opts \\ []) do
-    MediaItem
-    |> where([m], m.tvdb_id == ^tvdb_id)
-    |> maybe_preload(opts[:preload])
-    |> Repo.one()
+  @spec get_media_item_by_tvdb(integer()) :: MediaItem.t() | nil
+  def get_media_item_by_tvdb(tvdb_id) when is_integer(tvdb_id) do
+    get_media_item_by_tvdb(tvdb_id, [])
+  end
+
+  def get_media_item_by_tvdb(_), do: nil
+
+  defp maybe_filter_type(query, nil), do: query
+
+  defp maybe_filter_type(query, type) do
+    type_str = to_string(type)
+    where(query, [m], m.type == ^type_str)
   end
 
   @doc """
