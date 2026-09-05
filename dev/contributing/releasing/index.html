@@ -2932,6 +2932,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#ios-testflight-tracks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        iOS TestFlight tracks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="iOS TestFlight tracks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-refresh-cron" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The refresh cron
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#release-notes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3139,6 +3167,34 @@
     <span class="md-ellipsis">
       
         If the signing key is lost
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ios-testflight-tracks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        iOS TestFlight tracks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="iOS TestFlight tracks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-refresh-cron" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The refresh cron
       
     </span>
   </a>
@@ -3483,6 +3539,54 @@ with the signing key and R2 credentials:</p>
 private key breaks updates for every existing install. Recovery means shipping
 new repo files and asking users to re-add the remote. Keep a backup outside
 GitHub Actions.</p>
+<h2 id="ios-testflight-tracks">iOS TestFlight tracks</h2>
+<p>iOS ships through two App Store Connect external groups. The names are matched
+exactly by App Store Connect, and <code>Pre-release</code> carries a hyphen and a capital
+P:</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Public link</th>
+<th>Receives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Beta</code></td>
+<td><code>https://testflight.apple.com/join/KFSYxaQP</code></td>
+<td>stable releases, refresh builds</td>
+</tr>
+<tr>
+<td><code>Pre-release</code></td>
+<td><code>https://testflight.apple.com/join/XTvarNBK</code></td>
+<td>everything</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>Beta</code> group holds the link published in the README, on the site and in the
+user documentation, which is why it carries stable despite the name. The
+<code>Pre-release</code> group is a superset rather than prereleases alone, so a tester
+there receives a stable release as an ordinary update instead of sitting on a
+beta until the next cycle opens.</p>
+<p><code>release.yml</code> picks the groups from <code>is_prerelease</code> and passes them to
+<code>player-ios.yml</code>, which both it and the refresh cron call.</p>
+<h3 id="the-refresh-cron">The refresh cron</h3>
+<p>TestFlight deletes a build 90 days after upload, and the installed app then
+refuses to launch. The <code>Beta</code> group is topped up only by stable releases, and
+the gap between v0.9.0 and v0.10.0 was 73 days.</p>
+<p><code>player-ios-refresh.yml</code> runs weekly. When the newest build passes 60 days it
+rebuilds the current stable tag and uploads it to both groups, then records the
+refresh as an <code>ios-refresh/YYYY-MM-DD</code> tag. <code>scripts/ios-refresh-due.sh</code> makes
+that decision and <code>scripts/check-ios-refresh-due.sh</code> tests it, which is the only
+way it can be tested: a <code>workflow_dispatch</code> workflow only triggers for a file on
+the default branch, and schedules only run there, so nothing about this workflow
+is exercisable from a pull request.</p>
+<p>Refresh build numbers are <code>run_number + 900000</code>, disjoint from release.yml's
+<code>run_number + 10000</code>. Apple rejects a reused build number for a marketing
+version it already holds, and the two workflows have independent run counters.</p>
+<p>To force one: <code>gh workflow run player-ios-refresh.yml -f force=true</code>. Add
+<code>-f dry_run=true</code> to build without uploading or moving the marker tag.</p>
 <h2 id="release-notes">Release notes</h2>
 <p>Notes are authored into <code>priv/changelog/&lt;version&gt;.md</code> and tracked in the
 repository. The app compiles that file into the image, and the draft's
