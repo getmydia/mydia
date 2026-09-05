@@ -2,11 +2,14 @@ defmodule Mydia.Media.ExternalIds do
   @moduledoc """
   Decides which provider ids an attrs map may safely take.
 
-  `media_items` carries a unique index on `tmdb_id` and another on `tvdb_id`,
-  so writing a cross-referenced id blindly turns an ordinary metadata refresh
-  into a constraint error. Every path that learns a second provider id for an
-  item goes through `put_free_ids/3`, which adds only the ids no other row
-  already owns and reports the ones it skipped.
+  `media_items` carries a unique index on `(type, tmdb_id)` and another on
+  `(type, tvdb_id)`, so writing a provider id another row of the same type
+  already holds turns an ordinary metadata refresh into a constraint error.
+  TMDB and TVDB number movies and series independently, so a movie and a show
+  may hold the same number without conflicting, and every lookup here is scoped
+  by `:type` for that reason. Every path that learns a second provider id for an
+  item goes through `put_free_ids/3`, which adds only the ids no other row of
+  the same type already owns and reports the ones it skipped.
 
   A skipped id means the library holds two rows for one title. That is worth
   telling the operator about, so it becomes a warning event on the activity
@@ -18,6 +21,7 @@ defmodule Mydia.Media.ExternalIds do
 
   alias Mydia.Events
   alias Mydia.Media
+  alias Mydia.Media.MediaItem
 
   @type t :: %{
           tmdb: integer() | nil,
@@ -37,6 +41,12 @@ defmodule Mydia.Media.ExternalIds do
 
   ## Options
 
+    * `:type` - required. `"movie"` or `"tv_show"`. Provider ids are unique
+      per type, so an unscoped lookup reports a movie as the owner of a show's
+      id. It is an explicit option rather than a read of `attrs[:type]` because
+      two call sites pass a bare changes map that has no `:type` key, and both
+      write to rows that already exist, where a silent fallback does the most
+      damage.
     * `:exclude_id` - id of the media item being updated. A row writing its own
       id back is not a conflict.
     * `:title` - title used in the warning when a conflict is reported.
@@ -45,21 +55,26 @@ defmodule Mydia.Media.ExternalIds do
   @spec put_free_ids(map(), t() | nil, keyword()) :: map()
   def put_free_ids(attrs, external_ids, opts \\ [])
 
-  def put_free_ids(attrs, nil, _opts), do: attrs
+  def put_free_ids(attrs, nil, opts) do
+    _type = fetch_type!(opts)
+    attrs
+  end
 
   def put_free_ids(attrs, external_ids, opts) when is_map(external_ids) do
+    type = fetch_type!(opts)
+
     Enum.reduce(@providers, attrs, fn provider, acc ->
-      put_free_id(acc, provider, Map.get(external_ids, provider), opts)
+      put_free_id(acc, provider, Map.get(external_ids, provider), type, opts)
     end)
   end
 
-  defp put_free_id(attrs, _provider, nil, _opts), do: attrs
+  defp put_free_id(attrs, _provider, nil, _type, _opts), do: attrs
 
-  defp put_free_id(attrs, provider, id, opts) do
+  defp put_free_id(attrs, provider, id, type, opts) do
     key = attrs_key(provider)
 
     if is_nil(Map.get(attrs, key)) do
-      case conflicting_item(provider, id, opts[:exclude_id]) do
+      case conflicting_item(provider, id, type, opts[:exclude_id]) do
         nil -> Map.put(attrs, key, id)
         other -> report_conflict(attrs, provider, id, other, opts)
       end
@@ -71,16 +86,25 @@ defmodule Mydia.Media.ExternalIds do
   defp attrs_key(:tmdb), do: :tmdb_id
   defp attrs_key(:tvdb), do: :tvdb_id
 
-  defp conflicting_item(provider, id, exclude_id) do
-    case lookup(provider, id) do
+  defp fetch_type!(opts) do
+    type = Keyword.get(opts, :type)
+
+    if type in MediaItem.valid_types() do
+      type
+    else
+      raise ArgumentError,
+            "Mydia.Media.ExternalIds requires a :type option, one of " <>
+              "#{inspect(MediaItem.valid_types())}, got: #{inspect(type)}"
+    end
+  end
+
+  defp conflicting_item(provider, id, type, exclude_id) do
+    case Media.find_by_external_ids(%{provider => id}, type: type) do
       nil -> nil
       %{id: ^exclude_id} -> nil
       item -> item
     end
   end
-
-  defp lookup(:tmdb, id), do: Media.get_media_item_by_tmdb(id)
-  defp lookup(:tvdb, id), do: Media.get_media_item_by_tvdb(id)
 
   defp report_conflict(attrs, provider, id, other, opts) do
     title = opts[:title] || Map.get(attrs, :title)

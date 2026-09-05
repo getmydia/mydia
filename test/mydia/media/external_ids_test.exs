@@ -10,7 +10,10 @@ defmodule Mydia.Media.ExternalIdsTest do
   test "adds ids that no other row owns" do
     attrs = %{type: "tv_show", title: "New Show", tmdb_id: 1399}
 
-    result = ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: "tt0944947"})
+    result =
+      ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: "tt0944947"},
+        type: "tv_show"
+      )
 
     assert result.tmdb_id == 1399
     assert result.tvdb_id == 121_361
@@ -19,7 +22,7 @@ defmodule Mydia.Media.ExternalIdsTest do
   test "never overwrites an id the caller already set" do
     attrs = %{type: "tv_show", title: "New Show", tvdb_id: 111}
 
-    result = ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 222, imdb: nil})
+    result = ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 222, imdb: nil}, type: "tv_show")
 
     assert result.tvdb_id == 111
   end
@@ -27,7 +30,8 @@ defmodule Mydia.Media.ExternalIdsTest do
   test "fills a key present but nil" do
     attrs = %{type: "tv_show", title: "New Show", tmdb_id: 1399, tvdb_id: nil}
 
-    result = ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: nil})
+    result =
+      ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: nil}, type: "tv_show")
 
     assert result.tvdb_id == 121_361
   end
@@ -40,6 +44,7 @@ defmodule Mydia.Media.ExternalIdsTest do
     {result, log} =
       with_log(fn ->
         ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: nil},
+          type: "tv_show",
           title: "Override Title"
         )
       end)
@@ -68,7 +73,10 @@ defmodule Mydia.Media.ExternalIdsTest do
     attrs = %{type: "tv_show", title: "Self"}
 
     result =
-      ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: nil}, exclude_id: item.id)
+      ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: nil},
+        type: "tv_show",
+        exclude_id: item.id
+      )
 
     assert result.tvdb_id == 121_361
   end
@@ -76,6 +84,43 @@ defmodule Mydia.Media.ExternalIdsTest do
   test "ignores nil external ids" do
     attrs = %{type: "tv_show", title: "New Show", tmdb_id: 1399}
 
-    assert ExternalIds.put_free_ids(attrs, nil) == attrs
+    assert ExternalIds.put_free_ids(attrs, nil, type: "tv_show") == attrs
+  end
+
+  test "a cross-type owner is not a conflict" do
+    media_item_fixture(%{type: "movie", title: "Incumbent Movie", year: 2014, tvdb_id: 121_361})
+
+    attrs = %{type: "tv_show", title: "Challenger Show"}
+
+    result =
+      ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: nil}, type: "tv_show")
+
+    assert result.tvdb_id == 121_361
+    assert Events.list_events(type: "media_item.duplicate_provider_id") == []
+  end
+
+  test "raises without a :type option" do
+    attrs = %{type: "tv_show", title: "New Show"}
+
+    assert_raise ArgumentError, ~r/requires a :type option/, fn ->
+      ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: nil})
+    end
+  end
+
+  test "raises on an unrecognised :type option" do
+    attrs = %{type: "tv_show", title: "New Show"}
+
+    assert_raise ArgumentError, ~r/requires a :type option/, fn ->
+      ExternalIds.put_free_ids(attrs, %{tmdb: nil, tvdb: 121_361, imdb: nil}, type: "tvshow")
+    end
+  end
+
+  test "raises without a :type option even when there are no external ids" do
+    # The nil-external_ids clause validates too. A caller that forgot :type has
+    # the same bug either way; letting it pass here hides it until the day a
+    # provider actually cross-references something.
+    assert_raise ArgumentError, ~r/requires a :type option/, fn ->
+      ExternalIds.put_free_ids(%{type: "tv_show", title: "New Show"}, nil)
+    end
   end
 end

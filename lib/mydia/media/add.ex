@@ -172,6 +172,7 @@ defmodule Mydia.Media.Add do
     merged =
       %{tmdb_id: item.tmdb_id, tvdb_id: item.tvdb_id}
       |> ExternalIds.put_free_ids(%{tmdb: attrs[:tmdb_id], tvdb: xrefs[:tvdb]},
+        type: item.type,
         exclude_id: item.id,
         title: item.title
       )
@@ -276,7 +277,7 @@ defmodule Mydia.Media.Add do
         Map.put(attrs, :metadata_source, opts[:metadata_source])
       end
 
-    ExternalIds.put_free_ids(attrs, metadata.external_ids)
+    ExternalIds.put_free_ids(attrs, metadata.external_ids, type: type_string)
   end
 
   @doc """

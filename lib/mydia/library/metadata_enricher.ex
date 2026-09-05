@@ -383,6 +383,7 @@ defmodule Mydia.Library.MetadataEnricher do
     # every owner found really is a different item.
     attrs =
       ExternalIds.put_free_ids(attrs, metadata.external_ids,
+        type: media_type_to_string(media_type),
         exclude_id: Map.get(match_result, :exclude_id)
       )
 
