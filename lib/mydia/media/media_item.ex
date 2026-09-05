@@ -114,8 +114,13 @@ defmodule Mydia.Media.MediaItem do
     |> validate_inclusion(:type, @type_values)
     |> validate_number(:year, greater_than: 1800, less_than: 2200)
     |> validate_year_for_movies()
-    |> unique_constraint(:tmdb_id)
-    |> unique_constraint(:tvdb_id)
+    # Two names for one guarantee: Postgres reports the real index name
+    # (:media_items_type_*_unique_index). SQLite only gets column names
+    # and ecto_sqlite3 guesses :media_items_type_*_index.
+    |> unique_constraint(:tmdb_id, name: :media_items_type_tmdb_id_unique_index)
+    |> unique_constraint(:tmdb_id, name: :media_items_type_tmdb_id_index)
+    |> unique_constraint(:tvdb_id, name: :media_items_type_tvdb_id_unique_index)
+    |> unique_constraint(:tvdb_id, name: :media_items_type_tvdb_id_index)
     |> foreign_key_constraint(:quality_profile_id)
     |> foreign_key_constraint(:library_path_id)
   end
