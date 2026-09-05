@@ -64,9 +64,12 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
     config: config
   } do
     # Same defect as #705 on the Plex side, in code copied from it. Unreported
-    # only because fewer operators pair Jellyfin with SSO.
+    # only because fewer operators pair Jellyfin with SSO. The nameless
+    # account models an install from before the username backfill (or one
+    # that skipped it), inserted directly rather than through the OIDC
+    # upsert path, which would derive and claim a name of its own.
     user = admin_user_fixture(%{username: "tonix"})
-    _sso = oidc_user_fixture(%{})
+    _sso = nameless_user_fixture(%{})
 
     Bypass.expect_once(bypass, "GET", "/Users", fn conn ->
       conn
@@ -94,6 +97,30 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
 
     assert {:ok, %SeedResult{linked: []}} = Users.seed_links(config)
     assert Settings.list_media_server_user_links(config.id) == []
+  end
+
+  test "an SSO account is matched by its derived username", %{bypass: bypass, config: config} do
+    # The point of naming SSO accounts. Before, an SSO-only install got no
+    # automatic links at all and the operator mapped every profile by hand.
+    admin_user_fixture(%{username: "installer"})
+
+    {:ok, sso} =
+      Mydia.Accounts.upsert_user_from_oidc(
+        "sub-jellyfin-match",
+        "https://issuer.example.test",
+        %{email: "robin@example.test", preferred_username: "tonix", role: "user"}
+      )
+
+    assert sso.username == "tonix"
+
+    Bypass.expect_once(bypass, "GET", "/Users", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, ~s([{"Id":"jf1","Name":"Tonix"}]))
+    end)
+
+    assert {:ok, %SeedResult{linked: [link]}} = Users.seed_links(config)
+    assert link.user_id == sso.id
   end
 
   test "does not create a link that carries an access token", %{
