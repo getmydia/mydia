@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:io' show exit;
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -8,6 +9,12 @@ import '../../domain/models/available_update.dart';
 import 'backends/flatpak_update_backend.dart';
 import 'update_backend.dart';
 import 'update_host.dart';
+
+/// Terminates the process, mirroring Flutter's own `debugPrint`: a mutable
+/// top-level seam rather than a direct `exit()` call, so a test can prove
+/// [UpdateNotifier.restart] reaches it without ending the test runner.
+@visibleForTesting
+void Function(int code) debugExitProcess = exit;
 
 /// Builds the backend for this installation. Overridden in tests.
 typedef UpdateBackendFactory = UpdateBackend? Function({
@@ -267,7 +274,18 @@ class UpdateNotifier extends Notifier<UpdateState> {
         notice: 'Update installed. Reopen Mydia to finish.',
         restartRequired: false,
       );
+      return;
     }
+
+    // backend.restart() issues the portal's Spawn, which STARTS a new
+    // process rather than replacing this one: Flatpak's Spawn has no
+    // exec-style "replace the caller" semantics. Without exiting here, the
+    // freshly spawned process and this one both keep running, both loading
+    // the same on-disk p2p Ed25519 identity. Only reached once backend.
+    // restart() has actually succeeded; the catch above already returned for
+    // a failed one, so its "reopen" notice still gets seen instead of the
+    // process disappearing out from under it.
+    debugExitProcess(0);
   }
 
   /// Whether the current platform supports in-place updates.

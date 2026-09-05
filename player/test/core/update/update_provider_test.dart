@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show exit;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,6 +77,25 @@ class _RestartFailingPortal implements FlatpakPortal {
   Future<void> close() async {}
 }
 
+/// A portal whose Spawn succeeds, which is the shape of a restart that
+/// actually needs this process to end.
+class _RestartSucceedingPortal implements FlatpakPortal {
+  @override
+  Stream<FlatpakCommits> get updatesAvailable => const Stream.empty();
+
+  @override
+  Future<void> startMonitoring() async {}
+
+  @override
+  Stream<FlatpakProgress> update() => const Stream.empty();
+
+  @override
+  Future<void> restartIntoLatest() async {}
+
+  @override
+  Future<void> close() async {}
+}
+
 ProviderContainer _container(_FakeBackend backend) {
   final container = ProviderContainer(
     overrides: [
@@ -109,6 +129,7 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_packageInfoChannel, null);
+    debugExitProcess = exit;
   });
 
   test('an update published by the backend reaches the state', () async {
@@ -191,6 +212,9 @@ void main() {
   test('a restart that fails still says the update is installed', () async {
     // The new build is deployed either way, so a failed Spawn must not read
     // as a failed update.
+    final exitCalls = <int>[];
+    debugExitProcess = exitCalls.add;
+
     final portal = _RestartFailingPortal();
     final backend = FlatpakUpdateBackend(
       portal: portal,
@@ -212,6 +236,39 @@ void main() {
     final state = container.read(updateProvider);
     expect(state.notice, 'Update installed. Reopen Mydia to finish.');
     expect(state.error, isNull);
+    // A failed Spawn leaves this process on the stale build. Exiting it
+    // anyway would strand the user with no running Mydia Player at all.
+    expect(exitCalls, isEmpty);
+  });
+
+  test('a successful restart exits this process', () async {
+    // Spawn starts a new process rather than replacing this one, so a
+    // successful restart has to end this process itself or the user is left
+    // running two copies of Mydia Player, one on the stale build.
+    final exitCalls = <int>[];
+    debugExitProcess = exitCalls.add;
+
+    final portal = _RestartSucceedingPortal();
+    final backend = FlatpakUpdateBackend(
+      portal: portal,
+      releaseNotesUrl: 'https://example.invalid/releases',
+    );
+    final container = ProviderContainer(
+      overrides: [
+        updateBackendFactoryProvider.overrideWithValue(
+          ({required String currentVersion}) => backend,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).restart();
+
+    expect(exitCalls, [0]);
+    final state = container.read(updateProvider);
+    expect(state.notice, isNull);
   });
 
   test('checkForUpdate on a check-and-install backend installs', () async {
