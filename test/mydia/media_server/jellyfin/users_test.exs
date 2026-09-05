@@ -59,6 +59,39 @@ defmodule Mydia.MediaServer.Jellyfin.UsersTest do
     assert Settings.list_media_server_user_links(config.id) == []
   end
 
+  test "links the local account instead of crashing on a user with no username", %{
+    bypass: bypass,
+    config: config
+  } do
+    # Same defect as #705 on the Plex side, in code copied from it. Unreported
+    # only because fewer operators pair Jellyfin with SSO.
+    user = admin_user_fixture(%{username: "tonix"})
+    _sso = oidc_user_fixture(%{})
+
+    Bypass.expect_once(bypass, "GET", "/Users", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, ~s([{"Id":"jf1","Name":"Tonix"}]))
+    end)
+
+    assert {:ok, %SeedResult{linked: [link]}} = Users.seed_links(config)
+    assert link.user_id == user.id
+  end
+
+  test "a nameless Jellyfin account is not linked to a blank Mydia username", %{
+    bypass: bypass,
+    config: config
+  } do
+    Bypass.expect_once(bypass, "GET", "/Users", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, ~s([{"Id":"jf1","Name":null}]))
+    end)
+
+    assert {:ok, %SeedResult{linked: []}} = Users.seed_links(config)
+    assert Settings.list_media_server_user_links(config.id) == []
+  end
+
   test "does not create a link that carries an access token", %{
     bypass: bypass,
     config: config
