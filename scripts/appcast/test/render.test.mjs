@@ -1,0 +1,85 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { XMLParser } from 'fast-xml-parser'
+import { escapeXml, wrapCdata, renderItem, renderFeed } from '../lib/render.mjs'
+
+function item(overrides = {}) {
+  return {
+    title: 'Version 1.5.0',
+    version: '10123',
+    shortVersionString: '1.5.0',
+    channel: null,
+    minimumSystemVersion: '14.0',
+    pubDate: 'Mon, 04 Aug 2026 12:00:00 +0000',
+    descriptionHtml: '<p>Hello</p>',
+    enclosure: {
+      url: 'https://example.test/a.dmg',
+      signature: 'AAAA',
+      length: '123',
+    },
+    ...overrides,
+  }
+}
+
+test('escapes the five XML metacharacters', () => {
+  assert.equal(escapeXml(`a&b<c>d"e'f`), 'a&amp;b&lt;c&gt;d&quot;e&apos;f')
+})
+
+test('splits a CDATA terminator inside release notes', () => {
+  // A CDATA section ends at the first ]]>. Left alone, notes containing one
+  // truncate the document mid-item and Sparkle rejects the whole feed. The
+  // fix ends the section and reopens it, so the ]]> straddles the boundary
+  // and neither section terminates early.
+  const wrapped = wrapCdata('before ]]> after')
+
+  assert.equal(wrapped, '<![CDATA[before ]]]]><![CDATA[> after]]>')
+})
+
+test('a CDATA terminator survives an XML round trip', () => {
+  // The property that actually matters, and the one a string comparison
+  // cannot show: a parser hands back exactly what went in.
+  const notes = 'before ]]> after'
+  const parsed = new XMLParser({ parseTagValue: false }).parse(
+    `<d>${wrapCdata(notes)}</d>`,
+  )
+
+  assert.equal(parsed.d, notes)
+})
+
+test('omits the channel element for a stable item', () => {
+  assert.ok(!renderItem(item()).includes('sparkle:channel'))
+})
+
+test('emits the beta channel element for a prerelease item', () => {
+  assert.match(renderItem(item({ channel: 'beta' })), /<sparkle:channel>beta<\/sparkle:channel>/)
+})
+
+test('emits the minimumSystemVersion element when known', () => {
+  assert.match(
+    renderItem(item({ minimumSystemVersion: '14.0' })),
+    /<sparkle:minimumSystemVersion>14\.0<\/sparkle:minimumSystemVersion>/,
+  )
+})
+
+test('omits the minimumSystemVersion element for a historical item with no known value', () => {
+  // Releases published before this field existed have no true answer, and
+  // omitting the element (rather than stamping today's deployment target on
+  // them) is what keeps the claim honest.
+  assert.ok(!renderItem(item({ minimumSystemVersion: null })).includes('minimumSystemVersion'))
+})
+
+test('escapes an ampersand in the enclosure url', () => {
+  const xml = renderItem(item({ enclosure: { url: 'https://x.test/a.dmg?a=1&b=2', signature: 'AAAA', length: '123' } }))
+
+  assert.ok(xml.includes('a=1&amp;b=2'))
+  assert.ok(!xml.includes('a=1&b=2'))
+})
+
+test('renders a feed with the sparkle namespace and every item', () => {
+  const xml = renderFeed([item(), item({ title: 'Version 1.4.9', version: '10100' })])
+
+  assert.match(xml, /^<\?xml version="1\.0" encoding="utf-8"\?>/)
+  assert.ok(xml.includes('xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"'))
+  assert.equal(xml.match(/<item>/g).length, 2)
+  assert.ok(xml.includes('<title>Mydia Player</title>'))
+})

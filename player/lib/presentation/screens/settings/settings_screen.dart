@@ -23,6 +23,7 @@ import '../../widgets/cast_button.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
 import 'settings_controller.dart';
+import 'widgets/beta_channel_row.dart';
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
@@ -262,6 +263,10 @@ class _ManageSection extends ConsumerWidget {
             subtitle: 'Try to make this device discoverable again',
             onTap: () => ref.read(nodeRegistrationProvider.notifier).retry(),
           ),
+        // Sparkle channels are macOS-only. Linux beta ships as a separate
+        // Flatpak branch, chosen at install time rather than in-app, and
+        // Windows has no channel support at all.
+        if (PlatformFeatures.isMacOS) const BetaChannelRow(),
         if (PlatformUpdater.supportedOnCurrentPlatform)
           SettingsRow.action(
             key: const Key('check-for-updates-row'),

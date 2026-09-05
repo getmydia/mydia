@@ -115,6 +115,57 @@ The rehearsal does not exercise TestFlight or Play Store credentials, since it
 stops before those calls. Credential expiry still surfaces for the first time
 during a real release.
 
+### The macOS update feeds
+
+Two Sparkle feeds exist, and they serve different populations.
+
+| Feed | Contents | Who reads it |
+| --- | --- | --- |
+| `releases/latest/download/appcast.xml` | One item, the newest stable | Apps installed before the beta channel shipped |
+| `updates.mydia.dev/appcast.xml` | Up to 20 items across both channels | Every app installed since |
+
+The first is the per-release `appcast.xml` asset the `player-macos` job signs and
+uploads. It must keep shipping on every release. It is the only route by which
+an older install reaches a build that points at the new feed, and it is the
+input the merged feed is built from. Its two validation steps in `release.yml`
+assume a single item and must not be rewritten.
+
+The second is rebuilt by `deploy-appcast.yml`, which `release.yml` calls after a
+successful publish. It is regenerated from scratch each time, so re-running it is
+always safe:
+
+```bash
+gh workflow run deploy-appcast.yml --repo getmydia/mydia
+```
+
+Run that after any release where the appcast job failed, and after manually
+editing or deleting a release.
+
+The Pages project must be created with `master` as its production branch,
+for example `wrangler pages project create mydia-appcast --production-branch master`.
+The deploy passes `--branch master` explicitly because the workflow checks
+out a pinned commit and cannot infer a branch name. If the project's
+production branch is anything else, every deploy lands on a preview URL and
+`updates.mydia.dev` keeps serving the previous feed.
+
+Because `releases/latest/download/` never resolves to a prerelease, a change to
+`SUFeedURL` only reaches users through a **stable** release. Shipping such a
+change in a prerelease migrates nobody.
+
+**Backfill before the first release, not after.** Before cutting the first
+release that ships an `SUFeedURL` pointing at `updates.mydia.dev`, dispatch
+`deploy-appcast.yml` manually and confirm `https://updates.mydia.dev/appcast.xml`
+serves a feed:
+
+```bash
+gh workflow run deploy-appcast.yml --repo getmydia/mydia
+curl -fsSL https://updates.mydia.dev/appcast.xml
+```
+
+Doing this after that release ships instead of before it means every app that
+updates in the meantime starts polling a URL serving nothing, and has no
+recovery path until the feed exists.
+
 ### When the workflow refuses
 
 **"Draft targets 'master', which is a branch, not a commit."**

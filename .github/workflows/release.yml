@@ -699,6 +699,11 @@ jobs:
             exit 1
           fi
 
+          # The built app's Info.plist has LSMinimumSystemVersion resolved from
+          # MACOSX_DEPLOYMENT_TARGET, so this can never drift from the binary it
+          # describes the way a hardcoded constant in the appcast generator would.
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "Mydia Player.app/Contents/Info.plist")
+
           # sparkle:version must be the integer CFBundleVersion (VERSION_CODE) that
           # `flutter build macos` writes into the bundle — Sparkle compares
           # <sparkle:version> against the installed app's CFBundleVersion. The
@@ -712,6 +717,7 @@ jobs:
                 <title>Version ${VERSION}</title>
                 <sparkle:version>${VERSION_CODE}</sparkle:version>
                 <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>${MIN_OS}</sparkle:minimumSystemVersion>
                 <pubDate>$(date -R)</pubDate>
                 <enclosure url="${DMG_URL}"
                            ${SIGNATURE}
@@ -1431,3 +1437,20 @@ jobs:
           flatpak install --user -y "$REMOTE" dev.mydia.player
           flatpak info --user dev.mydia.player
           echo "Verified: dev.mydia.player installs from $REPOFILE"
+
+  appcast:
+    name: Deploy Appcast
+    if: ${{ !inputs.dry_run }}
+    needs:
+      - prepare
+      - publish
+    # A reusable workflow gets the calling job's token scopes, so the callee's
+    # own permissions block cannot widen this. Reading the release list and
+    # checking out the generator is all it does; the Cloudflare deploy
+    # authenticates with CLOUDFLARE_API_TOKEN, not GITHUB_TOKEN.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-appcast.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+    secrets: inherit

@@ -1,0 +1,142 @@
+name: Deploy Appcast
+
+# Rebuilds the merged Sparkle feed served at updates.mydia.dev.
+#
+# The feed is a pure function of the published releases, so this is safe to run
+# at any time. release.yml calls it after publishing; the dispatch entry point
+# is the manual rebuild, and the way to backfill the feed for the first time.
+#
+# The per-release appcast.xml asset that release.yml uploads is untouched by
+# this workflow. That asset remains the feed for every app installed before the
+# SUFeedURL change, and it is also this generator's input.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Commit to check out for the generator source'
+        required: false
+        type: string
+  workflow_dispatch:
+
+concurrency:
+  group: appcast
+  cancel-in-progress: false
+
+# Reads the release list and checks out the generator; writes nothing back to
+# the repository. The Cloudflare deploy authenticates with CLOUDFLARE_API_TOKEN,
+# not GITHUB_TOKEN, so no write scope is needed anywhere in this workflow.
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and deploy appcast
+    runs-on: ubuntu-latest
+    # Declared at job level so the step-level `if` below can read it. A secret
+    # referenced only in a step's own `env` is not reliably visible to that
+    # step's `if`.
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: scripts/appcast/package-lock.json
+
+      - name: Install generator dependencies
+        working-directory: scripts/appcast
+        run: npm ci
+
+      - name: Generate merged appcast
+        working-directory: scripts/appcast
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node generate.mjs dist/appcast.xml
+
+      # ubuntu-latest does not ship xmllint. release.yml's publish job installs
+      # it the same way; without this, validate.sh exits 1 on every run.
+      - name: Install xmllint
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+
+      - name: Validate merged appcast
+        working-directory: scripts/appcast
+        run: ./validate.sh dist/appcast.xml
+
+      - name: Summarise
+        working-directory: scripts/appcast
+        run: |
+          {
+            echo "### Merged appcast"
+            echo
+            echo "Items: $(grep -c '<item>' dist/appcast.xml)"
+            echo "Beta items: $(grep -c '<sparkle:channel>beta</sparkle:channel>' dist/appcast.xml || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require the Cloudflare token
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not set, so the feed cannot be deployed."
+            echo "::error::Failing loudly: a silent skip would leave updates.mydia.dev serving a stale feed while the release reports success."
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        working-directory: scripts/appcast
+        # --branch is required, not optional. The checkout above pins a commit
+        # SHA, so the runner is in detached HEAD and wrangler cannot infer the
+        # branch. Without it the upload can land as a preview deployment, which
+        # succeeds loudly while updates.mydia.dev serves nothing new.
+        run: npx wrangler pages deploy dist/ --project-name=mydia-appcast --branch master
+
+      - name: Verify the deployed feed
+        working-directory: scripts/appcast
+        run: |
+          # Turns a broken Pages project, a wrong production branch, or a missing
+          # DNS record into a failed job instead of a green one over a stale feed.
+          #
+          # The newest sparkle:version is the discriminator, not the item count.
+          # buildItems caps the feed at MAX_ITEMS, so once enough releases carry
+          # a DMG every feed has exactly that many items and a count comparison
+          # is satisfied by any feed at all, including the stale one a preview
+          # deployment leaves in place. The build number is what actually moves
+          # on every release, and it is what Sparkle compares.
+          #
+          # Retries because Cloudflare propagation timing is not guaranteed, and a
+          # release going red over ordinary propagation variance would train
+          # everyone to ignore this check.
+          newest() { grep -o '<sparkle:version>[0-9]*' "$1" | head -1 | grep -o '[0-9]*'; }
+
+          local_count=$(grep -c '<item>' dist/appcast.xml)
+          local_newest=$(newest dist/appcast.xml)
+          echo "Expecting $local_count item(s), newest build $local_newest."
+
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSL --max-time 20 https://updates.mydia.dev/appcast.xml -o served.xml; then
+              served_count=$(grep -c '<item>' served.xml || true)
+              served_newest=$(newest served.xml)
+
+              if [ "$served_count" -eq "$local_count" ] && [ "$served_newest" = "$local_newest" ]; then
+                echo "updates.mydia.dev is serving $served_count item(s), newest build $served_newest, after $attempt attempt(s)."
+                exit 0
+              fi
+
+              echo "Attempt $attempt: served $served_count item(s), newest build ${served_newest:-none}. Retrying."
+            else
+              echo "Attempt $attempt: could not fetch the feed. Retrying."
+            fi
+
+            sleep 15
+          done
+
+          echo "::error::updates.mydia.dev did not serve $local_count item(s) with newest build $local_newest after 6 attempts."
+          echo "::error::Check the mydia-appcast Pages project, its production branch, and the updates.mydia.dev DNS record."
+          exit 1

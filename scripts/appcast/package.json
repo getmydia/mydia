@@ -1,0 +1,17 @@
+{
+  "name": "mydia-appcast",
+  "private": true,
+  "type": "module",
+  "description": "Generates the merged Sparkle appcast served at updates.mydia.dev",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "generate": "node generate.mjs"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.10.1",
+    "marked": "^18.0.9"
+  }
+}
