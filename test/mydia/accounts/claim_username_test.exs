@@ -71,5 +71,11 @@ defmodule Mydia.Accounts.ClaimUsernameTest do
       assert Accounts.claim_username(user, {:idp, "ab"}) == :none
       assert Mydia.Repo.reload(user).username == "someone-else"
     end
+
+    test "returns :none rather than raising when the write itself raises" do
+      user = %User{id: Ecto.UUID.generate(), username: "gone", role: "user"}
+
+      assert Accounts.claim_username(user, {:idp, "robin"}) == :none
+    end
   end
 end

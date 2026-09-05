@@ -154,9 +154,12 @@ defmodule Mydia.Accounts do
   the first time at once would race a pre-check and one of them would crash on
   the constraint anyway.
 
-  Returns `:none` when every attempt is taken, or when the write fails for a
-  reason other than the constraint. It never raises: a login must not fail
-  because two people's IdP names collided.
+  Returns `:none` when every attempt is taken, when the write fails for a
+  reason other than the constraint, or when the write itself raises (a
+  dropped database connection, or a constraint other than the declared
+  unique one on `:username`). It never raises: a login must not fail, and a
+  migration that calls this must not crash the boot supervision tree,
+  because two people's IdP names collided or the database briefly misbehaved.
   """
   @spec claim_username(User.t(), {UsernameSource.tier(), String.t()}) :: {:ok, User.t()} | :none
   def claim_username(%User{} = user, {tier, slug}) do
@@ -171,10 +174,21 @@ defmodule Mydia.Accounts do
       username_source: Atom.to_string(tier)
     }
 
-    user
-    |> User.username_changeset(attrs)
-    |> Repo.update()
-    |> case do
+    changeset = User.username_changeset(user, attrs)
+
+    result =
+      try do
+        Repo.update(changeset)
+      rescue
+        error ->
+          Logger.warning(
+            "claim_username: Repo.update raised for user #{user.id}: #{Exception.message(error)}"
+          )
+
+          :none
+      end
+
+    case result do
       {:ok, updated} ->
         {:ok, updated}
 
@@ -184,6 +198,9 @@ defmodule Mydia.Accounts do
         else
           :none
         end
+
+      :none ->
+        :none
     end
   end
 
