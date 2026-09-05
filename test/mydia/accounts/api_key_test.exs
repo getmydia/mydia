@@ -153,6 +153,20 @@ defmodule Mydia.Accounts.ApiKeyTest do
 
       assert {:error, :invalid_key} = Accounts.verify_api_key(plain_key)
     end
+
+    test "rejects a key whose stored prefix is NULL", %{plain_key: plain_key, api_key: api_key} do
+      Mydia.Repo.update_all(
+        from(k in Mydia.Accounts.ApiKey, where: k.id == ^api_key.id),
+        set: [key_prefix: nil]
+      )
+
+      assert {:error, :invalid_key} = Accounts.verify_api_key(plain_key)
+    end
+
+    test "rejects a well-formed key whose prefix matches no row" do
+      unknown = "mydia_ak_" <> String.duplicate("Z", 32)
+      assert {:error, :invalid_key} = Accounts.verify_api_key(unknown)
+    end
   end
 
   describe "revoke_api_key/1" do
@@ -183,6 +197,54 @@ defmodule Mydia.Accounts.ApiKeyTest do
     test "deletes an API key", %{api_key: api_key, user: user} do
       assert {:ok, _} = Accounts.delete_api_key(api_key)
       assert Accounts.list_api_keys(user.id) == []
+    end
+  end
+
+  describe "prefix-less key revocation statement" do
+    setup do
+      user = AccountsFixtures.user_fixture()
+      %{user: user}
+    end
+
+    test "revokes a prefix-less key and leaves a prefixed key alone", %{user: user} do
+      {:ok, legacy, _} = Accounts.create_api_key(user.id, %{name: "Legacy Key"})
+      {:ok, modern, _} = Accounts.create_api_key(user.id, %{name: "Modern Key"})
+
+      # Simulate a row created before the key_prefix column existed.
+      Mydia.Repo.update_all(
+        from(k in Mydia.Accounts.ApiKey, where: k.id == ^legacy.id),
+        set: [key_prefix: nil]
+      )
+
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      Mydia.Repo.query!("""
+      UPDATE api_keys SET revoked_at = '#{now}'
+      WHERE key_prefix IS NULL AND revoked_at IS NULL
+      """)
+
+      assert Accounts.get_api_key!(legacy.id).revoked_at != nil
+      assert Accounts.get_api_key!(modern.id).revoked_at == nil
+    end
+
+    test "does not overwrite an existing revocation timestamp", %{user: user} do
+      {:ok, legacy, _} = Accounts.create_api_key(user.id, %{name: "Already Revoked"})
+      {:ok, revoked} = Accounts.revoke_api_key(legacy)
+      original_revoked_at = revoked.revoked_at
+
+      Mydia.Repo.update_all(
+        from(k in Mydia.Accounts.ApiKey, where: k.id == ^legacy.id),
+        set: [key_prefix: nil]
+      )
+
+      later = DateTime.utc_now() |> DateTime.add(3600, :second) |> DateTime.truncate(:second)
+
+      Mydia.Repo.query!("""
+      UPDATE api_keys SET revoked_at = '#{later}'
+      WHERE key_prefix IS NULL AND revoked_at IS NULL
+      """)
+
+      assert Accounts.get_api_key!(legacy.id).revoked_at == original_revoked_at
     end
   end
 end
