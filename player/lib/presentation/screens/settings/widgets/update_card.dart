@@ -24,13 +24,20 @@ class UpdateCard extends ConsumerWidget {
     final awaitingRestart = state.restartRequired ||
         (update is FlatpakRemoteUpdate && update.installedAwaitingRestart);
 
-    if (update == null && !awaitingRestart && state.notice == null) {
-      return const SizedBox.shrink();
-    }
-
     if (update == null && !awaitingRestart) {
-      // Only a notice to show, such as confirming there was nothing to
-      // install. One line, no actions.
+      // Either a notice (confirming there was nothing to install) or an
+      // error. An error belongs here too: a check that fails before any
+      // update was ever held, such as a Flatpak whose portal is
+      // unreachable, never populates availableUpdate, so state.error is the
+      // only signal that anything happened at all. Without it here the row
+      // presses, waits, and reports nothing, which reads as the check doing
+      // nothing rather than failing.
+      final message = state.notice ?? state.error;
+      if (message == null) {
+        return const SizedBox.shrink();
+      }
+
+      // One line, no actions, either way.
       return Padding(
         padding: const EdgeInsets.only(bottom: 18),
         child: SettingsCard(
@@ -38,10 +45,12 @@ class UpdateCard extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                state.notice!,
-                style: const TextStyle(
+                message,
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.textSecondary,
+                  color: state.error != null
+                      ? Theme.of(context).colorScheme.error
+                      : AppColors.textSecondary,
                 ),
               ),
             ),

@@ -293,6 +293,30 @@ void main() {
 
       expect(find.text("You're up to date"), findsOneWidget);
     });
+
+    testWidgets('an error alone renders, with no update ever having been held',
+        (tester) async {
+      // The ordinary shape of "the portal is unreachable": the very first
+      // press ever, so availableUpdate has never been anything but null.
+      // Gating the card on availableUpdate/notice alone rendered nothing at
+      // all here, which is indistinguishable from a healthy install.
+      await _pump(
+        tester,
+        state: const UpdateState(
+          error: 'Could not reach the Flatpak portal. Update from your '
+              'software centre.',
+          manualCheck: ManualCheckBehaviour.checksAndInstalls,
+        ),
+      );
+
+      expect(
+        find.text(
+          'Could not reach the Flatpak portal. Update from your software '
+          'centre.',
+        ),
+        findsOneWidget,
+      );
+    });
   });
 
   group('updateCheckSubtitle', () {

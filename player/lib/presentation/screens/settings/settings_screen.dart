@@ -279,14 +279,21 @@ class _ManageSection extends ConsumerWidget {
               behaviour: updateState.manualCheck,
               update: updateState.availableUpdate,
             ),
-            trailing: updateState.isChecking
+            // isChecking covers the checksOnly/unavailable path (_refresh);
+            // isApplying covers checksAndInstalls (requestUpdate). The
+            // Flatpak row's press goes straight to requestUpdate, so without
+            // isApplying here a multi-second check-and-install transaction
+            // shows no feedback at all.
+            trailing: (updateState.isChecking || updateState.isApplying)
                 ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : null,
-            onTap: updateState.isChecking ? null : () => _check(context, ref),
+            onTap: (updateState.isChecking || updateState.isApplying)
+                ? null
+                : () => _check(context, ref),
           ),
       ],
     );
@@ -353,6 +360,7 @@ class _ManageSection extends ConsumerWidget {
 ///
 /// Sparkle needs its own string, and the Flatpak row cannot promise a version
 /// because the portal reports commits rather than versions.
+@visibleForTesting
 String updateCheckSubtitle({
   required ManualCheckBehaviour behaviour,
   required AvailableUpdate? update,

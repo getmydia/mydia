@@ -20,6 +20,7 @@ import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
+import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
 /// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
 /// `Box`, and the settings screen's row is the thing under test here, not a
@@ -154,6 +155,7 @@ Future<void> _pump(
   String version = '',
   Size size = const Size(1000, 1400),
   RegistrationStatus registration = const RegistrationIdle(),
+  UpdateState? updateState,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -174,13 +176,15 @@ Future<void> _pump(
         ),
         updateProvider.overrideWith(
           () => _FakeUpdateNotifier(
-            UpdateState(
-              currentVersion: version,
-              // A generic supported desktop platform, matching what this
-              // suite's Linux test host reported before the row's gate moved
-              // from PlatformUpdater.supportedOnCurrentPlatform onto this.
-              manualCheck: ManualCheckBehaviour.checksOnly,
-            ),
+            updateState ??
+                UpdateState(
+                  currentVersion: version,
+                  // A generic supported desktop platform, matching what this
+                  // suite's Linux test host reported before the row's gate
+                  // moved from PlatformUpdater.supportedOnCurrentPlatform
+                  // onto this.
+                  manualCheck: ManualCheckBehaviour.checksOnly,
+                ),
           ),
         ),
         authStateProvider.overrideWith(_RecordingAuthNotifier.new),
@@ -452,6 +456,30 @@ void main() {
     await _pump(tester);
 
     expect(find.byKey(const Key('check-for-updates-row')), findsOneWidget);
+  });
+
+  testWidgets(
+      'the check-for-updates row shows a spinner and disables while a '
+      'Flatpak check-and-install is in flight', (tester) async {
+    // The row's spinner used to key off isChecking alone, which only the
+    // checksOnly path (_refresh) ever sets. A Flatpak press goes straight to
+    // requestUpdate, which sets isApplying instead, so a multi-second
+    // check-and-install transaction showed no feedback at all.
+    await _pump(
+      tester,
+      updateState: const UpdateState(
+        manualCheck: ManualCheckBehaviour.checksAndInstalls,
+        isApplying: true,
+      ),
+    );
+
+    final row = find.byKey(const Key('check-for-updates-row'));
+    expect(
+      find.descendant(
+          of: row, matching: find.byType(CircularProgressIndicator)),
+      findsOneWidget,
+    );
+    expect(tester.widget<SettingsRow>(row).onTap, isNull);
   });
 
   testWidgets('no row shows a raw relay url or peer count', (tester) async {
