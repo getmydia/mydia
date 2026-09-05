@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 
 import '../../domain/models/available_update.dart';
 import 'backends/flatpak_update_backend.dart';
@@ -34,7 +34,10 @@ class UpdateHost {
     required this.isLinux,
     this.isFlatpak = false,
     this.flatpakBranch,
-  });
+  }) : assert(
+          !isFlatpak || isLinux,
+          'Flatpak is a Linux packaging format; isFlatpak implies isLinux.',
+        );
 
   factory UpdateHost.current({
     FlatpakEnvironment flatpak = const FlatpakEnvironment(),
@@ -50,16 +53,41 @@ class UpdateHost {
       );
     }
 
-    final linux = Platform.isLinux;
-    final inFlatpak = linux && flatpak.isFlatpak;
-
-    return UpdateHost(
+    return UpdateHost.from(
       isWeb: false,
       isAndroid: Platform.isAndroid,
       isIOS: Platform.isIOS,
       isMacOS: Platform.isMacOS,
       isWindows: Platform.isWindows,
-      isLinux: linux,
+      isLinux: Platform.isLinux,
+      flatpak: flatpak,
+    );
+  }
+
+  /// The host decision itself, separated from the platform lookups so every
+  /// combination can be exercised on one machine. Mirrors
+  /// PlatformUpdater.supportedOnPlatform, which exists for the same reason.
+  @visibleForTesting
+  factory UpdateHost.from({
+    required bool isWeb,
+    required bool isAndroid,
+    required bool isIOS,
+    required bool isMacOS,
+    required bool isWindows,
+    required bool isLinux,
+    required FlatpakEnvironment flatpak,
+  }) {
+    // Flatpak is a Linux packaging format. A /.flatpak-info anywhere else is
+    // nonsense, and carrying its branch would let a caller build a Flatpak
+    // backend on a host that cannot run one.
+    final inFlatpak = isLinux && flatpak.isFlatpak;
+    return UpdateHost(
+      isWeb: isWeb,
+      isAndroid: isAndroid,
+      isIOS: isIOS,
+      isMacOS: isMacOS,
+      isWindows: isWindows,
+      isLinux: isLinux,
       isFlatpak: inFlatpak,
       flatpakBranch: inFlatpak ? flatpak.branch : null,
     );
@@ -80,7 +108,7 @@ UpdateBackend? createUpdateBackend(
   UpdateHost host, {
   required String currentVersion,
   FlatpakPortal Function()? portalFactory,
-  PlatformUpdater? archiveUpdater,
+  PlatformUpdater? Function()? archiveUpdater,
 }) {
   if (!host.supportsInAppUpdates) return null;
 
@@ -94,7 +122,10 @@ UpdateBackend? createUpdateBackend(
     );
   }
 
-  final updater = archiveUpdater ?? PlatformUpdater.forCurrentPlatform();
+  // A factory rather than a value, so a test can force the null path below
+  // without also having to fake the running machine: the one decision this
+  // function makes that host.isX does not already cover.
+  final updater = (archiveUpdater ?? PlatformUpdater.forCurrentPlatform)();
   if (updater == null) return null;
 
   return ReleaseUpdateBackend(

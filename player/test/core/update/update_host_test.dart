@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/backends/flatpak_update_backend.dart';
 import 'package:player/core/update/backends/release_update_backend.dart';
 import 'package:player/core/update/backends/sparkle_update_backend.dart';
+import 'package:player/core/update/flatpak_environment.dart';
 import 'package:player/core/update/flatpak_portal.dart';
 import 'package:player/core/update/platform_updater.dart';
 import 'package:player/core/update/update_host.dart';
@@ -99,10 +102,22 @@ void main() {
       final backend = createUpdateBackend(
         _linux,
         currentVersion: '0.15.0',
-        archiveUpdater: _NoopUpdater(),
+        archiveUpdater: _NoopUpdater.new,
       );
 
       expect(backend, isA<ReleaseUpdateBackend>());
+    });
+
+    test(
+        'a desktop platform with no concrete updater produces no backend, '
+        'so no dead update row can appear', () {
+      final backend = createUpdateBackend(
+        _linux,
+        currentVersion: '0.15.0',
+        archiveUpdater: () => null,
+      );
+
+      expect(backend, isNull);
     });
 
     test('a Flatpak install gets the portal backend', () {
@@ -136,6 +151,83 @@ void main() {
       );
 
       expect(backend, isA<SparkleUpdateBackend>());
+    });
+  });
+
+  group('UpdateHost construction', () {
+    test('a host cannot claim Flatpak without claiming Linux', () {
+      expect(
+        () => UpdateHost(
+          isWeb: false,
+          isAndroid: false,
+          isIOS: false,
+          isMacOS: false,
+          isWindows: true,
+          isLinux: false,
+          isFlatpak: true,
+        ),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+  });
+
+  group('UpdateHost.from', () {
+    late Directory temp;
+
+    setUp(
+        () => temp = Directory.systemTemp.createTempSync('mydia-update-host'));
+    tearDown(() => temp.deleteSync(recursive: true));
+
+    String writeInfo() {
+      final file = File('${temp.path}/flatpak-info');
+      file.writeAsStringSync('[Instance]\nbranch=stable\n');
+      return file.path;
+    }
+
+    test('Linux plus a Flatpak environment carries isFlatpak and the branch',
+        () {
+      final host = UpdateHost.from(
+        isWeb: false,
+        isAndroid: false,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: false,
+        isLinux: true,
+        flatpak: FlatpakEnvironment(infoPath: writeInfo()),
+      );
+
+      expect(host.isFlatpak, isTrue);
+      expect(host.flatpakBranch, 'stable');
+    });
+
+    test('Windows plus the same Flatpak environment reports neither', () {
+      final host = UpdateHost.from(
+        isWeb: false,
+        isAndroid: false,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: true,
+        isLinux: false,
+        flatpak: FlatpakEnvironment(infoPath: writeInfo()),
+      );
+
+      expect(host.isFlatpak, isFalse);
+      expect(host.flatpakBranch, isNull);
+    });
+
+    test('Linux plus a non-Flatpak environment reports neither', () {
+      final host = UpdateHost.from(
+        isWeb: false,
+        isAndroid: false,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: false,
+        isLinux: true,
+        flatpak: FlatpakEnvironment(infoPath: '${temp.path}/absent'),
+      );
+
+      expect(host.isFlatpak, isFalse);
+      expect(host.flatpakBranch, isNull);
     });
   });
 }
