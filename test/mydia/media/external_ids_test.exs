@@ -188,19 +188,39 @@ defmodule Mydia.Media.ExternalIdsTest do
     end
 
     test "does not treat the row's own id as a conflict" do
+      # tmdb_id is the id that actually collides (with "Owner", a different
+      # row), so the first attempt genuinely hits the unique index and
+      # write/3 genuinely retries. tvdb_id is item's own current value,
+      # carried in the same attrs map: drop_taken/3 re-checks every present
+      # provider id, not just the one the database reported, so without
+      # exclude_id its live re-read of tvdb_id would find item itself and
+      # wrongly report and drop the row's own id as a conflict with itself.
       item = media_item_fixture(%{type: "tv_show", title: "Self", tvdb_id: 121_361})
+      owner = media_item_fixture(%{type: "tv_show", title: "Owner", tmdb_id: 1399})
 
-      assert {:ok, updated} =
-               ExternalIds.write(
-                 %{title: "Self Renamed"},
-                 [type: "tv_show", exclude_id: item.id],
-                 fn attrs ->
-                   Mydia.Media.update_media_item(item, attrs, reason: "test")
-                 end
-               )
+      attrs = %{title: "Self Renamed", tmdb_id: 1399, tvdb_id: 121_361}
 
+      {result, _log} =
+        with_log(fn ->
+          ExternalIds.write(attrs, [type: "tv_show", exclude_id: item.id], fn attrs ->
+            Mydia.Media.update_media_item(item, attrs, reason: "test")
+          end)
+        end)
+
+      assert {:ok, updated} = result
+      assert updated.id == item.id
       assert updated.title == "Self Renamed"
+      # tmdb_id lost the race to "Owner" and was dropped by the retry.
+      assert is_nil(updated.tmdb_id)
+      # tvdb_id is item's own id. exclude_id kept the live re-read from
+      # treating item as its own conflict, so it survives untouched.
       assert updated.tvdb_id == 121_361
+
+      # Only the genuine tmdb collision with "Owner" is reported; item's own
+      # tvdb_id must not also show up as a bogus self-conflict.
+      assert [event] = Events.list_events(type: "media_item.duplicate_provider_id")
+      assert event.resource_id == owner.id
+      assert event.metadata["provider"] == "tmdb"
     end
 
     test "returns the changeset when the retry collides again" do

@@ -22,6 +22,7 @@ defmodule Mydia.Media.ExternalIds do
   alias Mydia.Events
   alias Mydia.Media
   alias Mydia.Media.MediaItem
+  alias Mydia.Repo
 
   @type t :: %{
           tmdb: integer() | nil,
@@ -56,6 +57,9 @@ defmodule Mydia.Media.ExternalIds do
   def put_free_ids(attrs, external_ids, opts \\ [])
 
   def put_free_ids(attrs, nil, opts) do
+    # No ids to place, so the binding is unused. `fetch_type!/1` is still
+    # called for its raising side effect: a caller with no external_ids must
+    # still be required to pass a valid :type, the same as every other clause.
     _type = fetch_type!(opts)
     attrs
   end
@@ -133,6 +137,25 @@ defmodule Mydia.Media.ExternalIds do
   Anything that is not a provider-id unique-constraint error, including ordinary
   validation failures, passes straight through.
 
+  ## Ambient transactions
+
+  `fun` may run inside a transaction the caller already opened (the enricher's
+  `persist_in_transaction/1`, or `MediaRequests.insert_approval/4`'s
+  `Multi.run` + `Repo.transaction`). On PostgreSQL, a statement that fails a
+  constraint check aborts the whole transaction at the database level
+  (SQLSTATE `25P02`, `in_failed_sql_transaction`): Ecto still returns
+  `{:error, changeset}` for that call, but every later query on the same
+  connection then raises until an explicit rollback. The re-read this function
+  does right after a collision is exactly such a later query, so every attempt
+  of `fun` runs inside its own savepoint, released on success and rolled back
+  to (not just released) on error -- releasing a savepoint whose statement
+  already failed does not clear the aborted state, only `ROLLBACK TO SAVEPOINT`
+  does. SQLite has no equivalent whole-transaction abort, so this only matters
+  on PostgreSQL, and the savepoint dance is a harmless no-op there. This is a
+  savepoint for error recovery around one write attempt, a different concern
+  from the "no transaction" note above about not using a transaction to close
+  the check-then-write race, and does not reintroduce it.
+
   ## Options
 
   The same `:type` (required), `:exclude_id` and `:title` as `put_free_ids/3`.
@@ -142,16 +165,66 @@ defmodule Mydia.Media.ExternalIds do
   def write(attrs, opts, fun) when is_function(fun, 1) do
     type = fetch_type!(opts)
 
-    case fun.(attrs) do
+    case attempt(fun, attrs) do
       {:error, %Ecto.Changeset{} = changeset} = error ->
         if provider_id_conflict?(changeset) do
-          fun.(drop_taken(attrs, type, opts))
+          attempt(fun, drop_taken(attrs, type, opts))
         else
           error
         end
 
       other ->
         other
+    end
+  end
+
+  # Outside an ambient transaction this is exactly `fun.(attrs)`. Inside one,
+  # wraps the attempt in a savepoint so a constraint failure unwinds only to
+  # the savepoint rather than aborting the whole ambient transaction.
+  #
+  # `Repo.transaction(fn -> fun.(attrs) end, mode: :savepoint)` looks like the
+  # idiomatic way to ask Ecto for that savepoint, but it is not: when already
+  # inside a transaction in the same process, `Ecto.Adapters.SQL` hands
+  # `DBConnection.transaction/3` the same connection struct the outer
+  # transaction stored, already tagged `conn_mode: :transaction`, and
+  # `DBConnection.transaction/3` special-cases that by running the function
+  # directly and discarding `opts` entirely -- no SAVEPOINT is ever issued.
+  # Calling `Repo.rollback/1` inside that nested call is worse than doing
+  # nothing: verified empirically against PostgreSQL, it throws past the
+  # nested call, matches nothing that would catch it there, and disconnects
+  # the connection outright (`DBConnection.ConnectionError: transaction rolling
+  # back`). Ecto's own `mode: :savepoint` option is for a single
+  # `Repo.insert/update/delete` call, not for wrapping an enclosing
+  # `Repo.transaction`, and `fun` here is an opaque closure this module does
+  # not control the internals of, so that option has nowhere to attach.
+  # Issuing the SAVEPOINT / ROLLBACK TO SAVEPOINT / RELEASE SAVEPOINT
+  # statements directly, as below, is what actually works, verified the same
+  # way (`ROLLBACK TO SAVEPOINT` genuinely clears the aborted state, and the
+  # ambient transaction still holds every earlier write in the same test run).
+  defp attempt(fun, attrs) do
+    if Repo.in_transaction?() do
+      attempt_with_savepoint(fun, attrs)
+    else
+      fun.(attrs)
+    end
+  end
+
+  defp attempt_with_savepoint(fun, attrs) do
+    Repo.query!("SAVEPOINT external_ids_write")
+
+    case fun.(attrs) do
+      {:error, _} = error ->
+        Repo.query!("ROLLBACK TO SAVEPOINT external_ids_write")
+        Repo.query!("RELEASE SAVEPOINT external_ids_write")
+        error
+
+      ok ->
+        # RELEASE only merges the savepoint's writes back into the still-open
+        # ambient transaction; it commits nothing on its own. The ambient
+        # transaction commits or rolls back as a whole, same as if this
+        # savepoint had never existed.
+        Repo.query!("RELEASE SAVEPOINT external_ids_write")
+        ok
     end
   end
 
