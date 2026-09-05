@@ -13,6 +13,7 @@ defmodule Mydia.Accounts.User do
   @type t :: %__MODULE__{
           id: binary(),
           username: String.t() | nil,
+          username_source: String.t() | nil,
           email: String.t() | nil,
           password_hash: String.t() | nil,
           password: String.t() | nil,
@@ -33,6 +34,7 @@ defmodule Mydia.Accounts.User do
 
   schema "users" do
     field :username, :string
+    field :username_source, :string
     field :email, :string
     field :password_hash, :string
     field :password, :string, virtual: true
@@ -119,6 +121,25 @@ defmodule Mydia.Accounts.User do
     |> cast(attrs, [:role])
     |> validate_required([:role])
     |> validate_inclusion(:role, @role_values)
+  end
+
+  @doc """
+  Changeset for writing a derived username and its provenance.
+
+  Narrow on purpose, like `role_changeset/2`. `oidc_changeset/2` would reject
+  a local account with a blank username for having no `oidc_sub`, and
+  `changeset/2` would demand an email and re-run password validation, so
+  neither can be used to name an arbitrary account.
+
+  The length bounds match `changeset/2` so a derived name is indistinguishable
+  from a chosen one.
+  """
+  def username_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:username, :username_source])
+    |> validate_required([:username])
+    |> validate_length(:username, min: 3, max: 50)
+    |> unique_constraint(:username)
   end
 
   @doc """
