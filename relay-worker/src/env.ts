@@ -12,6 +12,7 @@ export interface Env {
 
   // Bindings
   CACHE_KV: KVNamespace;
+  DB: D1Database;
   PROXY_LIMITER: RateLimit;
   PAIRING_CREATE_LIMITER: RateLimit;
   PAIRING_READ_LIMITER: RateLimit;

@@ -4,6 +4,7 @@ import { registerTmdbRoutes } from "./proxy/tmdb";
 import { registerTvdbRoutes } from "./proxy/tvdb";
 import { registerSubdlRoutes, subdlApiKey } from "./proxy/subdl";
 import { registerPassthroughRoutes } from "./proxy/passthrough";
+import { registerPairingRoutes } from "./pairing/routes";
 import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
 
@@ -60,6 +61,7 @@ registerTmdbRoutes(app);
 registerTvdbRoutes(app);
 registerSubdlRoutes(app);
 registerPassthroughRoutes(app);
+registerPairingRoutes(app);
 
 // 404 catch-all, matching the Elixir router's behaviour.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));

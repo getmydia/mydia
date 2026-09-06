@@ -17,6 +17,19 @@
   "kv_namespaces": [
     { "binding": "CACHE_KV", "id": "placeholder_local_dev_only" }
   ],
+  // Same placeholder pattern as CACHE_KV above: the real database is
+  // provisioned at deploy time with `npx wrangler d1 create mydia-relay`,
+  // which needs Cloudflare credentials this environment does not have.
+  // Miniflare/vitest-pool-workers back DB with a working local D1 regardless
+  // of the id below, and apply migrations/ automatically for tests.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mydia-relay",
+      "database_id": "placeholder_local_dev_only",
+      "migrations_dir": "migrations"
+    }
+  ],
   // namespace_id values are arbitrary identifiers for this binding, not
   // provisioned cloud resources -- nothing to create in the dashboard.
   "ratelimits": [
