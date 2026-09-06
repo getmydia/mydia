@@ -9,4 +9,7 @@ export interface Env {
   RELAY_VERSION: string;
   FEEDBACK_FROM: string;
   FEEDBACK_TO: string;
+
+  // Bindings
+  CACHE_KV: KVNamespace;
 }

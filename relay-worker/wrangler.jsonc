@@ -9,5 +9,12 @@
     "RELAY_VERSION": "1.0.0",
     "FEEDBACK_FROM": "metadata-relay@mydia.dev",
     "FEEDBACK_TO": "arsfeld@gmail.com"
-  }
+  },
+  // The real namespace is provisioned at deploy time with
+  // `npx wrangler kv namespace create CACHE_KV`; this id is a placeholder for
+  // local dev only. Miniflare/vitest-pool-workers back CACHE_KV with a working
+  // local namespace regardless of the id below.
+  "kv_namespaces": [
+    { "binding": "CACHE_KV", "id": "placeholder_local_dev_only" }
+  ]
 }
