@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "./env";
 import { registerTmdbRoutes } from "./proxy/tmdb";
+import { registerTvdbRoutes } from "./proxy/tvdb";
 
 export const app = new Hono<{ Bindings: Env }>();
 
@@ -26,6 +27,7 @@ app.get("/stats", (c) =>
 );
 
 registerTmdbRoutes(app);
+registerTvdbRoutes(app);
 
 // 404 catch-all, matching the Elixir router's behaviour.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));

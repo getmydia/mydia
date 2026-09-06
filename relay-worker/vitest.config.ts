@@ -10,7 +10,10 @@ export default defineWorkersConfig({
         // 503. Production keys are set with `wrangler secret put` and never
         // live in source.
         miniflare: {
-          bindings: { TMDB_API_KEY: "test-tmdb-key" },
+          bindings: {
+            TMDB_API_KEY: "test-tmdb-key",
+            TVDB_API_KEY: "test-tvdb-key",
+          },
         },
       },
     },
