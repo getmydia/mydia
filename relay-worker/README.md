@@ -13,7 +13,7 @@ that plan for the full route-by-route parity work and the cutover sequence.
 
 ## What this migration changed
 
-Four things an operator who knew the Elixir relay would not expect:
+Things an operator who knew the Elixir relay would not expect:
 
 - **Responses are actually cached at Cloudflare's edge now.** The Elixir
   relay sent `cache-control: max-age=0, private, must-revalidate` on every
@@ -42,6 +42,19 @@ Four things an operator who knew the Elixir relay would not expect:
   that touches `relay-worker/**`, straight to `wrangler deploy` — no tag, no
   version bump, no image, no poll delay. `git log` on `relay-worker/` is now
   effectively the release history.
+- **A bulk metadata refresh can now consume rate-limit budget it never used
+  to.** `src/obs/ratelimit.ts`'s proxy limiter used to check the budget
+  *after* running the request, specifically so it could look at
+  `x-relay-cache` and skip charging a cache hit. That shape ran the real
+  upstream `fetch()` before the check could ever stop it — a final review
+  found a throttled request still made its real TMDB/TVDB/SubDL/MusicBrainz/
+  OpenLibrary call every time, which defeats the limiter's actual purpose
+  (protecting upstream quota, worst for SubDL's shared 2000/day key). The fix
+  moves the check ahead of the request, which means it now also charges cache
+  hits: a "refresh every show's metadata" pass that used to be served
+  entirely from cache, for free, can now spend rate-limit budget on hits it
+  didn't touch before. Accepted deliberately as the stricter, fail-closed
+  direction — see the comment above `rateLimitMiddleware` in that file.
 
 ## Bindings
 
@@ -61,9 +74,10 @@ production; a missing secret degrades a route to a 503/502, not a crash.
 | `DB` | D1 database | `wrangler d1 create mydia-relay` | Pairing claims, crash reports/occurrences, feedback submissions, the two rate-limit bucket tables |
 | `PROXY_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Shared per-edge-IP budget across the metadata/music/openlibrary/subtitle proxy routes |
 | `PAIRING_CREATE_LIMITER` / `PAIRING_READ_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Remote-access pairing claim creation/lookup |
+| `CRASH_INGEST_LIMITER` / `FEEDBACK_INGEST_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Atomic, D1-free burst guards in front of crash ingest's and feedback ingest's D1-backed hourly budgets — see those files' comments for why the D1 accounting alone isn't safe under concurrency |
 | Cron Trigger `0 * * * *` | scheduled | `wrangler.jsonc` (`triggers.crons`) | Hourly sweep (`src/obs/sweep.ts`): evicts stale `feedback_rate_limits` rows and expired `pairing_claims` |
 
-`ratelimits[].namespace_id` values (`1001`-`1003`) are arbitrary identifiers
+`ratelimits[].namespace_id` values (`1001`-`1005`) are arbitrary identifiers
 for the binding, not provisioned cloud resources — there is nothing to create
 for them in the dashboard, unlike `CACHE_KV` and `DB`.
 

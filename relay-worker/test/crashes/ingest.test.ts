@@ -397,4 +397,71 @@ describe("POST /crashes/report", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  // Final-review CRITICAL: every test above drives requests sequentially,
+  // which is structurally blind to a defect that only appears under
+  // concurrency. The original read-then-separate-write shape (SELECT the
+  // bucket, decide in JS, then issue independent INSERT ... ON CONFLICT DO
+  // UPDATE statements) is not a transaction -- D1 only guarantees ordering
+  // within one statement or a .batch(), not across two independent
+  // .prepare()/.run() calls -- so concurrent identical requests could all
+  // read the same pre-increment state and all decide to admit. Measured
+  // against the pre-fix code: 20 concurrent identical crash reports produced
+  // 142 total D1 writes and an occurrence_count nowhere near the 3-per-hour
+  // cap. Promise.all (not a for loop) is what actually exercises the race;
+  // a for loop with awaited iterations is sequential in disguise.
+  it("bounds occurrence_count and total writes under REAL concurrency (Promise.all), not just sequentially", async () => {
+    const kind = "ConcurrentStorm";
+    const ip = "198.51.100.201";
+    const payload = {
+      error_type: kind,
+      error_message: "concurrent boom",
+      stacktrace: [{ module: "M", function: "f/0", file: "m.ex", line: 5 }],
+    };
+
+    const responses = await Promise.all(
+      Array.from({ length: 20 }, () =>
+        SELF.fetch(REPORT_URL, {
+          method: "POST",
+          headers: { ...json, "cf-connecting-ip": ip },
+          body: JSON.stringify(payload),
+        }),
+      ),
+    );
+
+    // The producer contract holds regardless of admission: every one of the
+    // 20 concurrent requests still gets 201 (Sender only retries on a
+    // non-201 status), whether or not this particular request's crash was
+    // actually counted.
+    for (const res of responses) {
+      expect(res.status).toBe(201);
+    }
+
+    const error = await env.DB.prepare(
+      "SELECT fingerprint, occurrence_count FROM errors WHERE kind = ?",
+    )
+      .bind(kind)
+      .first<{ fingerprint: string; occurrence_count: number }>();
+
+    // The atomic admission decision (a single INSERT ... ON CONFLICT DO
+    // UPDATE ... RETURNING per request) guarantees the SAME exact cap holds
+    // under concurrency as under the sequential test above -- not merely "a
+    // smaller number than before".
+    expect(error!.occurrence_count).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET);
+
+    const occurrences = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM occurrences WHERE fingerprint = ?",
+    )
+      .bind(error!.fingerprint)
+      .first<{ n: number }>();
+    expect(occurrences!.n).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET);
+
+    const bucket = await env.DB.prepare(
+      "SELECT written, saturated FROM ingest_buckets WHERE fingerprint = ? AND instance_key = ?",
+    )
+      .bind(error!.fingerprint, ip)
+      .first<{ written: number; saturated: number }>();
+    expect(bucket!.written).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET);
+    expect(bucket!.saturated).toBe(1);
+  });
 });

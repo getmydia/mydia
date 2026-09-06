@@ -94,7 +94,13 @@ registerFeedbackRoutes(app);
 // exists (runbook, relay-worker/README.md) would expose maintainer data.
 registerFeedbackDashboard(app);
 
-// 404 catch-all, matching the Elixir router's behaviour.
+// 404 catch-all. Deliberately NOT a match for the Elixir router's own
+// behaviour here: router.ex's fallback returns a plain-text 404 body, this
+// returns JSON -- a considered divergence, not an oversight, kept because
+// every other error path in this Worker (validation failures, rate limits,
+// crash/feedback ingest) already answers JSON, and a mixed-format 404 would
+// be the odd one out for no benefit. Do not "fix" this to match the Elixir;
+// that would be introducing a regression, not correcting one.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));
 
 export default {

@@ -503,4 +503,59 @@ describe("POST /feedback rate limiting", () => {
     });
     expect(res.status).toBe(201);
   });
+
+  // Final-review CRITICAL: every test above drives requests sequentially,
+  // which is structurally blind to a defect that only appears under
+  // concurrency. The original checkAndIncrementBucket read the bucket,
+  // decided in JS, then issued a SEPARATE INSERT ... ON CONFLICT DO UPDATE --
+  // not a transaction, so D1 only guaranteed ordering within one statement,
+  // not across those two independent calls. Measured against the pre-fix
+  // code: 20 concurrent identical-IP submissions were ALL 20 admitted
+  // against the 5/hour cap -- a complete bypass, each firing a real outbound
+  // Resend call. Promise.all (not a for loop) is what actually exercises the
+  // race; a for loop with awaited iterations is sequential in disguise.
+  it("bounds admissions under REAL concurrency (Promise.all) to FEEDBACK_RATE_LIMIT, not all of them", async () => {
+    const ip = freshIp();
+
+    // Distinct instance_id per request, same as the sequential IP-cap test
+    // above, so it's the IP bucket alone that's under test here -- exactly
+    // the identity the demonstrated race exploited. Up to FEEDBACK_RATE_LIMIT
+    // requests can legitimately be admitted; register exactly that many
+    // notify() mocks so afterEach's assertNoPendingInterceptors both proves
+    // no MORE than that were admitted (an unconsumed interceptor would be
+    // silent) and, combined with the assertion below, that no FEWER were
+    // either.
+    for (let i = 0; i < FEEDBACK_RATE_LIMIT; i++) {
+      mockResendSuccess();
+    }
+
+    const responses = await Promise.all(
+      Array.from({ length: 20 }, (_, i) =>
+        SELF.fetch(FEEDBACK_URL, {
+          method: "POST",
+          headers: { ...json, "cf-connecting-ip": ip },
+          body: JSON.stringify({
+            type: "bug",
+            message: `Concurrent ${i}`,
+            instance_id: `concurrent-inst-${i}`,
+          }),
+        }),
+      ),
+    );
+
+    const created = responses.filter((r) => r.status === 201).length;
+    const throttled = responses.filter((r) => r.status === 429).length;
+
+    // The atomic admission decision (a single INSERT ... ON CONFLICT DO
+    // UPDATE ... RETURNING per request) guarantees the SAME exact cap holds
+    // under concurrency as under the sequential test above -- not merely "a
+    // smaller number than before".
+    expect(created).toBe(FEEDBACK_RATE_LIMIT);
+    expect(throttled).toBe(20 - FEEDBACK_RATE_LIMIT);
+
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM feedback_submissions WHERE message LIKE 'Concurrent %'",
+    ).first<{ n: number }>();
+    expect(row!.n).toBe(FEEDBACK_RATE_LIMIT);
+  });
 });

@@ -154,6 +154,61 @@ describe("rate limiting", () => {
     });
     expect(res.status).not.toBe(429);
   });
+
+  // Final-review CRITICAL: the middleware used to call `await next()` --
+  // running the real handler and its real upstream fetch() -- BEFORE
+  // checking the limiter, only swapping in a 429 afterward. That shape
+  // cannot prevent the thing this limiter exists to prevent: probed at 320
+  // cache-busted requests from one IP, all 320 (including the 20 that got a
+  // 429 back) still produced a real upstream call. Worst for
+  // /api/v1/subtitles/search, whose SubDL key carries a shared 2000/day
+  // allowance a sustained flood could exhaust in minutes.
+  //
+  // Registers exactly one interceptor for a path this specific throttled
+  // request would hit if (and only if) the handler ran, with a path matcher
+  // that flags whether it was ever even evaluated -- a real outbound fetch
+  // attempt is the only thing that causes undici's MockAgent to consult a
+  // registered interceptor for that origin at all. Deliberately does NOT use
+  // fetchMock.assertNoPendingInterceptors() here: that assertion is designed
+  // to catch an interceptor nobody used (useful in afterEach elsewhere in
+  // this codebase), which is exactly what a CORRECT fix produces in this
+  // specific test -- calling it here would assert the wrong direction.
+  //
+  // Exhausts the budget by calling env.PROXY_LIMITER directly, with the same
+  // key the middleware itself derives, rather than looping real HTTP
+  // requests through the Worker -- the latter would need up to
+  // PROXY_LIMIT_ITERATION_CAP real, unmocked upstream fetch attempts (each
+  // one hitting the exact "check runs after next()" hole this test exists to
+  // close, pre-fix) just to reach the interesting part of this test, which
+  // both defeats the point and reintroduces this file's own documented
+  // wall-clock flake risk for no reason -- this test only needs the budget
+  // to already read as spent, not to reach that state through the route.
+  it("performs NO upstream fetch for a request the limiter throttles, because the check now runs before next()", async () => {
+    const ip = "203.0.113.30";
+
+    for (let i = 0; i < PROXY_LIMIT; i++) {
+      await env.PROXY_LIMITER.limit({ key: `proxy:${ip}` });
+    }
+
+    let upstreamFetchAttempted = false;
+    fetchMock
+      .get("https://api.themoviedb.org")
+      .intercept({
+        method: "GET",
+        path: (p) => {
+          upstreamFetchAttempted = true;
+          return p.startsWith("/3/genre/tv");
+        },
+      })
+      .reply(200, { genres: [] });
+
+    const throttled = await SELF.fetch("https://relay.mydia.dev/tmdb/genre/tv", {
+      headers: { "cf-connecting-ip": ip },
+    });
+
+    expect(throttled.status).toBe(429);
+    expect(upstreamFetchAttempted).toBe(false);
+  });
 });
 
 // Regression coverage for the maintainer dashboards' move from bare /errors

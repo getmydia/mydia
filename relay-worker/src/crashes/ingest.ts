@@ -202,6 +202,108 @@ interface BucketRow {
   saturated: number;
 }
 
+interface AtomicBucketRow {
+  hits: number;
+  written: number;
+  saturated: number;
+  writes: number;
+}
+
+const ALREADY_HANDLED = {
+  status: "created",
+  message: "Crash report received",
+} as const;
+
+// Final-review fix round: the burst guard in front of the D1 accounting
+// below. See wrangler.jsonc's CRASH_INGEST_LIMITER comment for the numbers
+// and rationale. This binding is atomic and costs no D1 access at all, so a
+// flood that never gets past it never touches the racy path below -- but its
+// 10s window is a genuine behaviour divergence from the original design: a
+// request rejected here still returns 201 with zero writes, identical to the
+// "already saturated" response below, so the producer (which only retries on
+// a non-201 status) is never told anything went wrong.
+async function admittedByBurstGuard(
+  env: Env,
+  fingerprint: string,
+  instanceKey: string,
+): Promise<boolean> {
+  const { success } = await env.CRASH_INGEST_LIMITER.limit({
+    key: `crash:${fingerprint}:${instanceKey}`,
+  });
+  return success;
+}
+
+// Final-review fix round: replaces the old read-then-separate-write shape
+// that let concurrent requests race. THE key fix is one atomic
+// `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` statement per request --
+// D1 only guarantees ordering within a single statement (or a .batch()), not
+// across two independent .prepare()/.run() calls, so a SELECT followed later
+// by a separate write left a window where N concurrent requests could all
+// read the pre-increment state and all decide to write. Measured, before this
+// fix: 20 concurrent identical crash reports produced 142 D1 writes against a
+// cap the sequential-only test suite asserted was always 23.
+//
+// `hits` is an UNCAPPED, monotonic-within-the-hour counter advanced by this
+// one statement; SQLite serialises writers to the same row even without an
+// explicit transaction wrapper, so the Nth request to actually commit is
+// guaranteed a unique `hits = N` -- "admitted" is simply `hits <= cap`,
+// decided from the RETURNED value, with no stale read involved. `written`
+// (MIN(hits, cap)) and `saturated` are still maintained for the existing
+// dashboard-facing meaning of those columns (an exact write BUDGET, capped),
+// computed from the same CASE expression as `hits` inside this one
+// statement -- not from a separate read.
+//
+// A cheap read-only pre-check still runs BEFORE this (see registerCrashRoutes
+// below) purely to skip the write entirely once a bucket is already solidly
+// saturated for the hour -- the same optimisation the original design relied
+// on to keep a saturating storm's total write cost roughly constant instead
+// of scaling with request count. That pre-check is never the source of truth
+// for admission; a stale read there can only cause a few extra calls to
+// reach this statement, never let more than `cap` actually get admitted.
+async function incrementBucketAtomically(
+  db: D1Database,
+  fingerprint: string,
+  instanceKey: string,
+  hourBucket: number,
+  cap: number,
+): Promise<AtomicBucketRow> {
+  const result = await db
+    .prepare(
+      `INSERT INTO ingest_buckets (fingerprint, instance_key, hour_bucket, hits, written, saturated)
+       VALUES (?, ?, ?, 1, 1, 0)
+       ON CONFLICT(fingerprint, instance_key) DO UPDATE SET
+         hits = CASE
+           WHEN ingest_buckets.hour_bucket != excluded.hour_bucket THEN 1
+           ELSE ingest_buckets.hits + 1
+         END,
+         hour_bucket = excluded.hour_bucket,
+         written = MIN(
+           CASE
+             WHEN ingest_buckets.hour_bucket != excluded.hour_bucket THEN 1
+             ELSE ingest_buckets.hits + 1
+           END,
+           ?
+         ),
+         saturated = CASE
+           WHEN ingest_buckets.hour_bucket != excluded.hour_bucket THEN 0
+           WHEN (ingest_buckets.hits + 1) >= ? THEN 1
+           ELSE ingest_buckets.saturated
+         END
+       RETURNING hits, written, saturated`,
+    )
+    .bind(fingerprint, instanceKey, hourBucket, cap, cap)
+    .run<Pick<AtomicBucketRow, "hits" | "written" | "saturated">>();
+
+  const row = result.results[0];
+  if (!row) {
+    // RETURNING always yields exactly one row for a single-row upsert; this
+    // is unreachable in practice and exists only so the return type doesn't
+    // need a nullable escape hatch at every call site.
+    throw new Error("ingest_buckets upsert returned no row");
+  }
+  return { ...row, writes: result.meta.rows_written };
+}
+
 export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post("/crashes/report", async (c) => {
     const body = (await c.req.json().catch(() => null)) as Record<
@@ -226,77 +328,89 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
       c.req.header("cf-connecting-ip") ?? crash.version ?? "unknown";
     const hourBucket = Math.floor(crash.occurredAt / 3600);
 
-    // READ the bucket first. This is the fix for fix round 1's critical
-    // finding: the original version upserted `errors` and `ingest_buckets`
-    // UNCONDITIONALLY on every request, before ever checking the cap -- only
-    // the `occurrences` insert was actually throttled. D1 counts an
-    // `INSERT ... ON CONFLICT DO UPDATE` as a write on every call whether it
-    // inserts or updates, so a storm of N requests performed ~2N writes
-    // regardless of the cap: the install that could exhaust the daily
-    // budget before this fix could still exhaust it after, needing only the
-    // same order of magnitude of requests.
-    //
-    // A read is roughly a fiftieth the cost of a write on D1's free tier (5M
-    // row reads/day vs. 100k row writes/day), so paying for one read per
-    // request to decide whether to write at all is the trade that actually
-    // bounds writes: once a bucket is saturated, this request performs NO
-    // further D1 access at all -- no errors upsert, no bucket write, no
-    // occurrence insert.
+    // Layer 1: the atomic, D1-free burst guard. A rejection here means this
+    // exact (fingerprint, instance) pair has already sent CRASH_INGEST_LIMITER's
+    // worth of requests in the last 10 seconds -- far more than the client-side
+    // throttle (Mydia.CrashReporter.Throttle, 10/min per instance across ALL
+    // fingerprints) could produce legitimately. No D1 access happens at all.
+    if (!(await admittedByBurstGuard(c.env, fingerprint, instanceKey))) {
+      return c.json({ ...ALREADY_HANDLED, id: fingerprint }, 201, {
+        "x-relay-d1-writes": "0",
+      });
+    }
+
+    // Layer 2: a cheap, non-authoritative pre-check. Once a bucket is
+    // solidly saturated for the current hour, this skips the atomic write
+    // entirely (0 further D1 access) -- the same trade fix round 1 made,
+    // preserved here so a long-running storm's total write cost still stays
+    // roughly constant instead of growing with however many requests the
+    // burst guard admits over the storm's full duration. A stale read here
+    // is harmless: it can only let a few extra requests reach layer 3, never
+    // let more than the cap actually get admitted, since layer 3 is what
+    // makes the real decision.
     const existing = await c.env.DB.prepare(
       "SELECT hour_bucket, written, saturated FROM ingest_buckets WHERE fingerprint = ? AND instance_key = ?",
     )
       .bind(fingerprint, instanceKey)
       .first<BucketRow>();
 
-    // A stored hour_bucket different from the current one (including no row
-    // at all) means this is a fresh budget window: reset to a clean count
-    // rather than carrying the previous hour's total forward. This is also
-    // what keeps ingest_buckets bounded by distinct (fingerprint,
-    // instance_key) pairs instead of growing by one row per pair for every
-    // hour that has ever elapsed -- the table's primary key no longer
-    // includes hour_bucket at all (migrations/0002_crash_reports.sql).
-    const isFreshWindow = !existing || existing.hour_bucket !== hourBucket;
-    const priorWritten = isFreshWindow ? 0 : existing!.written;
+    const solidlySaturated =
+      existing &&
+      existing.hour_bucket === hourBucket &&
+      existing.written >= MAX_OCCURRENCE_ROWS_PER_BUCKET;
 
-    if (!isFreshWindow && priorWritten >= MAX_OCCURRENCE_ROWS_PER_BUCKET) {
-      // Already saturated for this hour: perform no writes at all. The
-      // producer still gets the 201 it expects (Sender only retries on a
-      // non-201 status); the crash is simply not reflected in
-      // occurrence_count or a new occurrences row. ingest_buckets.saturated
-      // (set below, on the write that reached the cap) is what tells a
-      // reader this count is a floor, not an exact total, for the rest of
-      // this hour.
-      return c.json(
-        { status: "created", message: "Crash report received", id: fingerprint },
-        201,
-        { "x-relay-d1-writes": "0" },
-      );
+    if (solidlySaturated) {
+      return c.json({ ...ALREADY_HANDLED, id: fingerprint }, 201, {
+        "x-relay-d1-writes": "0",
+      });
     }
 
-    const written = priorWritten + 1;
-    const saturated = written >= MAX_OCCURRENCE_ROWS_PER_BUCKET ? 1 : 0;
-    let writes = 0;
+    // Layer 3: the atomic admission decision. See incrementBucketAtomically's
+    // own comment for why this -- not the read above -- is what actually
+    // bounds occurrence_count exactly, even under real concurrency.
+    const bucket = await incrementBucketAtomically(
+      c.env.DB,
+      fingerprint,
+      instanceKey,
+      hourBucket,
+      MAX_OCCURRENCE_ROWS_PER_BUCKET,
+    );
+    const admitted = bucket.hits <= MAX_OCCURRENCE_ROWS_PER_BUCKET;
 
-    // count_is_floor is bound to the SAME `saturated` value computed above
-    // for THIS write's bucket -- the moment this write is the one that pushes
-    // the bucket to the cap. ON CONFLICT's `MAX(errors.count_is_floor,
-    // excluded.count_is_floor)` is what makes it sticky: once a prior write
-    // has set it to 1, a later write binding 0 (an ordinary, unsaturated
-    // crash from a *different* hour or instance) can never flip it back.
-    // Unlike ingest_buckets.saturated, this column is never told to reset --
-    // see 0002_crash_reports.sql for why that distinction is load-bearing.
-    const errorsResult = await c.env.DB.prepare(
-      `INSERT INTO errors (fingerprint, kind, message, source_file, source_line,
-                           status, first_seen_at, last_seen_at, occurrence_count,
-                           count_is_floor)
-       VALUES (?, ?, ?, ?, ?, 'unresolved', ?, ?, 1, ?)
-       ON CONFLICT(fingerprint) DO UPDATE SET
-         last_seen_at = excluded.last_seen_at,
-         occurrence_count = errors.occurrence_count + 1,
-         message = excluded.message,
-         count_is_floor = MAX(errors.count_is_floor, excluded.count_is_floor)`,
-    )
-      .bind(
+    if (!admitted) {
+      return c.json({ ...ALREADY_HANDLED, id: fingerprint }, 201, {
+        "x-relay-d1-writes": String(bucket.writes),
+      });
+    }
+
+    // count_is_floor is bound to the SAME `saturated` value the atomic
+    // upsert above just computed for THIS bucket -- the moment this write is
+    // the one that pushes the bucket to the cap. ON CONFLICT's
+    // `MAX(errors.count_is_floor, excluded.count_is_floor)` is what makes it
+    // sticky: once a prior write has set it to 1, a later write binding 0
+    // (an ordinary, unsaturated crash from a *different* hour or instance)
+    // can never flip it back. Unlike ingest_buckets.saturated, this column
+    // is never told to reset -- see 0002_crash_reports.sql for why that
+    // distinction is load-bearing.
+    //
+    // Batched together (not two separate .run() calls) so the error-group
+    // upsert and the occurrence row it describes always land as one unit --
+    // each statement is individually safe under concurrency on its own
+    // (both are plain atomic upserts/inserts), but batching removes any
+    // possibility of another concurrent request's statements interleaving
+    // between these two specifically.
+    const [errorsResult, occurrenceResult] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO errors (fingerprint, kind, message, source_file, source_line,
+                             status, first_seen_at, last_seen_at, occurrence_count,
+                             count_is_floor)
+         VALUES (?, ?, ?, ?, ?, 'unresolved', ?, ?, 1, ?)
+         ON CONFLICT(fingerprint) DO UPDATE SET
+           last_seen_at = excluded.last_seen_at,
+           occurrence_count = errors.occurrence_count + 1,
+           message = excluded.message,
+           count_is_floor = MAX(errors.count_is_floor, excluded.count_is_floor)`,
+      ).bind(
         fingerprint,
         crash.kind,
         crash.message,
@@ -304,29 +418,13 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
         crash.sourceLine,
         crash.occurredAt,
         crash.occurredAt,
-        saturated,
-      )
-      .run();
-    writes += errorsResult.meta.rows_written;
-
-    const bucketResult = await c.env.DB.prepare(
-      `INSERT INTO ingest_buckets (fingerprint, instance_key, hour_bucket, written, saturated)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(fingerprint, instance_key) DO UPDATE SET
-         hour_bucket = excluded.hour_bucket,
-         written = excluded.written,
-         saturated = excluded.saturated`,
-    )
-      .bind(fingerprint, instanceKey, hourBucket, written, saturated)
-      .run();
-    writes += bucketResult.meta.rows_written;
-
-    const occurrenceResult = await c.env.DB.prepare(
-      `INSERT INTO occurrences
-         (id, fingerprint, occurred_at, version, environment, instance_key, context, stacktrace)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(
+        bucket.saturated,
+      ),
+      c.env.DB.prepare(
+        `INSERT INTO occurrences
+           (id, fingerprint, occurred_at, version, environment, instance_key, context, stacktrace)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
         crypto.randomUUID(),
         fingerprint,
         crash.occurredAt,
@@ -335,9 +433,9 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
         instanceKey,
         JSON.stringify(crash.context),
         JSON.stringify(crash.stacktrace),
-      )
-      .run();
-    writes += occurrenceResult.meta.rows_written;
+      ),
+    ]);
+    const writes = bucket.writes + errorsResult.meta.rows_written + occurrenceResult.meta.rows_written;
 
     // Mydia.CrashReporter.Sender.send_http_request/2 pattern-matches on
     // exactly {status: 201, body: response} as its only success case (see

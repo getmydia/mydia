@@ -304,6 +304,34 @@ describe("pairing v2 sealed claims", () => {
     });
   });
 
+  // Regression guard: every case above is ASCII, where UTF-8 byte length and
+  // JS UTF-16 string length are numerically identical, so none of them can
+  // tell a correct byte-length check apart from an accidental `.length`
+  // check (a reviewer previously had to hand-probe this distinction). "é" is
+  // 1 UTF-16 code unit but 2 UTF-8 bytes: 4200 repeats is a JS string of
+  // length 4200 -- comfortably under 8192 -- but 8400 UTF-8 bytes, over the
+  // cap. A `.length`-based implementation would wrongly ACCEPT this payload
+  // (letting a caller store roughly double the intended byte budget per
+  // key); validateSealed's real `new TextEncoder().encode(sealed).length`
+  // check must reject it.
+  it("rejects an oversized sealed blob using multi-byte UTF-8 characters, where byte length and string length diverge", async () => {
+    const MAX_SEALED_BYTES = 8192; // mirrors the unexported cap in src/pairing/routes.ts
+    const nonAsciiSealed = "é".repeat(4200);
+    expect(nonAsciiSealed.length).toBeLessThan(MAX_SEALED_BYTES);
+    expect(new TextEncoder().encode(nonAsciiSealed).length).toBeGreaterThan(MAX_SEALED_BYTES);
+
+    const res = await SELF.fetch("https://relay.mydia.dev/pairing/v2/claim", {
+      method: "POST",
+      headers: { ...json, "cf-connecting-ip": freshIp() },
+      body: JSON.stringify({ lookup_key: "e".repeat(64), sealed: nonAsciiSealed }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json<{ error: string; message: string }>()).toMatchObject({
+      error: "Validation error",
+      message: "sealed exceeds 8192 bytes",
+    });
+  });
+
   it("returns 404 for an unknown lookup key", async () => {
     const res = await SELF.fetch(
       `https://relay.mydia.dev/pairing/v2/claim/${"c".repeat(64)}`,

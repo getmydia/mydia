@@ -32,10 +32,38 @@
   ],
   // namespace_id values are arbitrary identifiers for this binding, not
   // provisioned cloud resources -- nothing to create in the dashboard.
+  //
+  // CRASH_INGEST_LIMITER / FEEDBACK_INGEST_LIMITER (final review fix round):
+  // burst guards in front of the two D1-backed hourly budgets in
+  // src/crashes/ingest.ts and src/feedback/ingest.ts. Those budgets are read
+  // a bucket row, decide in JS, then issue separate D1 writes -- D1 only
+  // guarantees ordering within one statement or a .batch(), not across two
+  // independent .prepare()/.run() calls, so concurrent requests can all read
+  // the same pre-increment state and all decide to admit, defeating the cap
+  // (measured: 20 concurrent identical crash reports produced 142 writes
+  // against a cap the sequential test suite asserted was always 23; 20
+  // concurrent identical-IP feedback submissions were all 20 admitted
+  // against a 5/hour cap). `period` here only supports 10 or 60 seconds, so
+  // this can't replace either hourly budget -- it only bounds how many
+  // requests per window can even reach the D1 read-then-write path at all.
+  // 10/10s (=60/min) for crash ingest is well above the client-side
+  // throttle's 10/min per-instance cap ACROSS ALL fingerprints combined
+  // (Mydia.CrashReporter.Throttle), so a single exact (fingerprint,
+  // instance) pair -- this binding's key granularity -- sees far less than
+  // that legitimately, while still bounding a concurrent flood down from
+  // "unlimited" to a small, fixed number reaching the D1 path per window.
+  // 10/10s for feedback (user-initiated, not automated) gives comparable
+  // headroom above any plausible shared-IP burst. The D1-side accounting
+  // itself was also made atomic (a single
+  // INSERT ... ON CONFLICT DO UPDATE ... RETURNING per request, not a
+  // separate SELECT-then-write) -- see the ingest files' comments for what
+  // that closes outright versus what these bindings merely bound.
   "ratelimits": [
     { "name": "PROXY_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } },
     { "name": "PAIRING_CREATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
-    { "name": "PAIRING_READ_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
+    { "name": "PAIRING_READ_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } },
+    { "name": "CRASH_INGEST_LIMITER", "namespace_id": "1004", "simple": { "limit": 10, "period": 10 } },
+    { "name": "FEEDBACK_INGEST_LIMITER", "namespace_id": "1005", "simple": { "limit": 10, "period": 10 } }
   ],
   // Drives src/index.ts's scheduled() handler (src/obs/sweep.ts), which
   // deletes stale feedback_rate_limits rows and expired pairing_claims

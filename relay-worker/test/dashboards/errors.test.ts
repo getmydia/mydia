@@ -138,6 +138,20 @@ describe("GET /admin/errors", () => {
     const html = await (await SELF.fetch("https://relay.mydia.dev/admin/errors")).text();
     expect(html).toContain(`href="/admin/errors/${FP1}"`);
   });
+
+  // Mirrors dashboards/feedback.test.ts's identical regression guard: GET
+  // /errors must not be a second, unauthenticated way to reach maintainer
+  // crash data now that the real dashboard lives at /admin/errors --
+  // whatever this returns, it must not be the dashboard.
+  // registerErrorDashboard only registers routes under /admin/errors, so
+  // this falls through to the app-wide 404 catch-all in src/index.ts.
+  it("no longer serves the dashboard at the old /errors path", async () => {
+    const res = await SELF.fetch("https://relay.mydia.dev/errors");
+    expect(res.status).toBe(404);
+    const body = await res.text();
+    expect(body).not.toContain("RuntimeError");
+    expect(body).not.toContain("<table");
+  });
 });
 
 // IMPORTANT-1 fix-round-1 finding: `Number(c.req.query("page") ?? "0")` fed

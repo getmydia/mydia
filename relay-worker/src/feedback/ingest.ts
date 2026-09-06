@@ -244,16 +244,23 @@ export interface FeedbackRateLimitResult {
   writes: number;
 }
 
-// Read-before-write, the exact trade crashes/ingest.ts's fix round mandated
-// for ingest_buckets: an INSERT ... ON CONFLICT DO UPDATE bills a write on
-// every call whether it inserts or updates, so a storm of requests against
-// an already-saturated bucket would otherwise cost a write per request
-// regardless of the cap. Reading first means a saturated bucket costs
-// exactly one read and zero writes; the write only happens on the branch
-// that actually admits the request. hour_bucket is a resettable column
-// (not part of the key), same as ingest_buckets, so this table is bounded
-// by distinct bucket_key values rather than growing by one row per key for
-// every hour that has ever elapsed.
+// Final-review fix round: the two-statement read-then-write shape this
+// function used to have (a SELECT, decide in JS, then a SEPARATE INSERT) is
+// exactly what let 20 concurrent identical-IP submissions all get admitted
+// against this table's 5/hour cap in a real reproduction -- D1 only
+// guarantees ordering within a single statement (or a .batch()), not across
+// two independent .prepare()/.run() calls, so concurrent requests could all
+// read the same pre-increment state and all decide to admit.
+//
+// The fix keeps the cheap read as a non-authoritative pre-check (once a
+// bucket is solidly saturated for the hour, this still costs exactly one
+// read and zero writes, same as before), but the actual admission decision
+// now comes from ONE atomic `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`
+// statement: `count` is an uncapped, monotonic-within-the-hour counter, and
+// SQLite serialises writers to the same row even without an explicit
+// transaction wrapper, so the Nth request to actually commit is guaranteed a
+// unique `count = N` -- "admitted" is simply `count <= FEEDBACK_RATE_LIMIT`,
+// decided from the RETURNED value, with no stale read in the decision path.
 async function checkAndIncrementBucket(
   db: D1Database,
   bucketKey: string,
@@ -264,25 +271,27 @@ async function checkAndIncrementBucket(
     .bind(bucketKey)
     .first<RateLimitBucketRow>();
 
-  const isFreshWindow = !existing || existing.hour_bucket !== hourBucket;
-  const priorCount = isFreshWindow ? 0 : existing!.count;
-
-  if (priorCount >= FEEDBACK_RATE_LIMIT) {
+  if (existing && existing.hour_bucket === hourBucket && existing.count >= FEEDBACK_RATE_LIMIT) {
     return { allowed: false, writes: 0 };
   }
 
   const result = await db
     .prepare(
       `INSERT INTO feedback_rate_limits (bucket_key, hour_bucket, count)
-       VALUES (?, ?, ?)
+       VALUES (?, ?, 1)
        ON CONFLICT(bucket_key) DO UPDATE SET
-         hour_bucket = excluded.hour_bucket,
-         count = excluded.count`,
+         count = CASE
+           WHEN feedback_rate_limits.hour_bucket != excluded.hour_bucket THEN 1
+           ELSE feedback_rate_limits.count + 1
+         END,
+         hour_bucket = excluded.hour_bucket
+       RETURNING count`,
     )
-    .bind(bucketKey, hourBucket, priorCount + 1)
-    .run();
+    .bind(bucketKey, hourBucket)
+    .run<{ count: number }>();
 
-  return { allowed: true, writes: result.meta.rows_written };
+  const count = result.results[0]?.count ?? 0;
+  return { allowed: count <= FEEDBACK_RATE_LIMIT, writes: result.meta.rows_written };
 }
 
 // Mirrors router.ex's `with {:ok, _} <- check(ip), {:ok, _} <- check(instance)
@@ -341,6 +350,24 @@ export function registerFeedbackRoutes(app: Hono<{ Bindings: Env }>): void {
 
     const ip = c.req.header("cf-connecting-ip") ?? "unknown";
     const hourBucket = Math.floor(Date.now() / 3_600_000);
+
+    // Final-review fix round: the atomic, D1-free burst guard in front of
+    // checkFeedbackRateLimit below. See wrangler.jsonc's
+    // FEEDBACK_INGEST_LIMITER comment for the numbers and rationale. Keyed
+    // on IP -- the identity the demonstrated race actually exploited (20
+    // concurrent identical-IP submissions, all 20 admitted against the
+    // 5/hour cap) -- and checked before D1 is touched at all, same ordering
+    // as the D1-backed check it guards (both run before validation, matching
+    // router.ex's handle_feedback/1).
+    const { success: burstOk } = await c.env.FEEDBACK_INGEST_LIMITER.limit({
+      key: `feedback:${ip}`,
+    });
+    if (!burstOk) {
+      return c.json(RATE_LIMITED_BODY, 429, {
+        "retry-after": "10",
+        "x-relay-d1-writes": "0",
+      });
+    }
 
     // router.ex checks both rate limits BEFORE process_feedback/2 runs at
     // all -- before it even checks whether the body decoded to a proper

@@ -47,17 +47,36 @@ export function isExemptFromProxyLimit(path: string): boolean {
   return EXEMPT_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
-// Applied on a cache miss only, matching ProxyRateLimit's placement after the
-// cache plug. A cache hit costs no upstream quota, so throttling one buys
-// nothing and hurts a legitimate "refresh all metadata" pass.
+// Final-review fix round: checked BEFORE `next()`, not after. The original
+// shape here called `await next()` first -- running the real handler and its
+// real upstream `fetch()` to TMDB/TVDB/SubDL/MusicBrainz/OpenLibrary -- and
+// only THEN checked the limiter, swapping in a 429 after the fact. That is a
+// halting-Plug-pipeline shape (the Elixir this ports is Cache then
+// ProxyRateLimit then the handler, so a throttled request never reaches the
+// code that calls upstream) that the check-after shape cannot actually
+// replicate: probed at 320 cache-busted requests from one IP, all 320 -
+// including the 20 that got a 429 back - still produced a real upstream
+// call. That defeated the limiter's entire purpose, worst for
+// /api/v1/subtitles/search, whose SubDL key carries a shared 2000/day
+// allowance a sustained flood could exhaust in minutes.
+//
+// Checking first means a cache HIT is now also charged against the budget --
+// this endpoint used to inspect x-relay-cache after the fact specifically to
+// exempt hits, on the theory that a cache hit costs no upstream quota and
+// throttling one buys nothing. That's still true in isolation, but knowing a
+// request will hit cache requires either running it (defeating the point) or
+// probing the cache a second time from inside this middleware (a duplicate
+// lookup on every single request, to save nothing on the common path). Given
+// that choice, this accepts the stricter, fail-closed direction: a bulk
+// "refresh all metadata" pass that would previously have been served
+// entirely from cache can now consume rate-limit budget it didn't before
+// (recorded in README.md's "what this migration changed"). Protecting
+// upstream quota -- this limiter's actual purpose -- only works if the check
+// runs before the fetch that spends that quota, not after.
 export function rateLimitMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
     const path = new URL(c.req.url).pathname;
     if (isExemptFromProxyLimit(path)) return next();
-
-    await next();
-
-    if (c.res.headers.get("x-relay-cache") === "HIT") return;
 
     const ip = c.req.header("cf-connecting-ip") ?? "unknown";
     const { success } = await c.env.PROXY_LIMITER.limit({ key: `proxy:${ip}` });
@@ -84,6 +103,9 @@ export function rateLimitMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
           },
         },
       );
+      return;
     }
+
+    await next();
   };
 }

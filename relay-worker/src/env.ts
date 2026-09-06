@@ -16,4 +16,10 @@ export interface Env {
   PROXY_LIMITER: RateLimit;
   PAIRING_CREATE_LIMITER: RateLimit;
   PAIRING_READ_LIMITER: RateLimit;
+  // Burst guards in front of the two D1-backed hourly budgets (crash ingest,
+  // feedback ingest). See src/crashes/ingest.ts and src/feedback/ingest.ts
+  // for why a D1 read-then-write sequence needs an atomic gate ahead of it
+  // that a `ratelimit` binding's 10s/60s period can't itself replace.
+  CRASH_INGEST_LIMITER: RateLimit;
+  FEEDBACK_INGEST_LIMITER: RateLimit;
 }

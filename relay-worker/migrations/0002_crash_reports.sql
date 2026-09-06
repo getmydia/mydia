@@ -80,10 +80,30 @@ CREATE INDEX occurrences_fingerprint_time_idx
 -- fingerprint ever saturates. Keep using `saturated` for what it's
 -- correctly used for (the live per-hour admission decision in
 -- src/crashes/ingest.ts); read `count_is_floor` for "is the total exact?".
+-- `hits` (final review fix round): an UNCAPPED count of requests admitted
+-- past the burst-guard rate limiter for this (fingerprint, instance_key) in
+-- the current hour_bucket, advanced by ONE atomic
+-- `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` statement
+-- (src/crashes/ingest.ts) rather than by a separate SELECT-then-decide-then-
+-- write sequence. That collapse is what actually closes the concurrency
+-- race the original two-statement design had: D1 only guarantees ordering
+-- within a single statement (or a .batch()), not across two independent
+-- .prepare()/.run() calls, so a SELECT followed later by a separate INSERT
+-- left a window where N concurrent requests could all read the
+-- pre-increment state and all decide to write, defeating the cap entirely
+-- (measured: 20 concurrent identical crash reports produced 142 writes
+-- against a cap the sequential-only test suite asserted was always 23).
+-- `hits` being uncapped and monotonic within the hour is what makes the
+-- admission decision unambiguous from the RETURNED value alone: the Nth
+-- concurrent request to actually commit is guaranteed a unique hits = N
+-- (SQLite serialises writers to the same row even without an explicit
+-- transaction wrapper), so "admitted" is simply `hits <= cap`, no stale
+-- read involved.
 CREATE TABLE ingest_buckets (
   fingerprint TEXT NOT NULL,
   instance_key TEXT NOT NULL,
   hour_bucket INTEGER NOT NULL,
+  hits INTEGER NOT NULL DEFAULT 0,
   written INTEGER NOT NULL DEFAULT 0,
   saturated INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (fingerprint, instance_key)

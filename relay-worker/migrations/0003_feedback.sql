@@ -37,6 +37,23 @@ CREATE INDEX feedback_state_inserted_idx
 -- whose hour_bucket has fallen behind the current one -- the D1 equivalent
 -- of the periodic cleaner Elixir's ETS-backed RateLimiter already has built
 -- in.
+--
+-- `count` (final review fix round): advanced by ONE atomic
+-- `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` per request
+-- (checkAndIncrementBucket), not by a separate SELECT-then-decide-then-write
+-- sequence -- that two-statement shape is exactly what let 20 concurrent
+-- identical-IP submissions all get admitted against this table's 5/hour cap
+-- in a real reproduction (D1 only guarantees ordering within one statement
+-- or a .batch(), not across two independent .prepare()/.run() calls). `count`
+-- is uncapped and monotonic within the hour so the admission decision is
+-- unambiguous from the RETURNED value alone (admitted iff `count <= 5`):
+-- SQLite serialises writers to the same row even without an explicit
+-- transaction wrapper, so the Nth request to actually commit is guaranteed a
+-- unique `count = N`, with no stale read in the decision path. A cheap
+-- read-only pre-check still runs first purely to avoid paying a write once a
+-- bucket is already solidly saturated for the hour (same optimisation the
+-- original design relied on) -- it is never the source of truth for whether
+-- a request is admitted.
 CREATE TABLE feedback_rate_limits (
   bucket_key TEXT PRIMARY KEY,
   hour_bucket INTEGER NOT NULL,
