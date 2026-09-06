@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { Env } from "../env";
 import { buildKey } from "../cache/key";
-import { forwardParams, proxyJson } from "./forward";
+import { forwardParams, pathSegment, proxyJson } from "./forward";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
@@ -23,13 +23,20 @@ const ROUTES: Array<[string, (p: Record<string, string>) => string]> = [
   ["/tmdb/tv/discover", () => "/discover/tv"],
   ["/tmdb/genre/movie", () => "/genre/movie/list"],
   ["/tmdb/genre/tv", () => "/genre/tv/list"],
-  ["/tmdb/list/:id", (p) => `/list/${p.id}`],
-  ["/tmdb/collections/:id", (p) => `/collection/${p.id}`],
-  ["/tmdb/movies/:id", (p) => `/movie/${p.id}`],
-  ["/tmdb/tv/shows/:id", (p) => `/tv/${p.id}`],
-  ["/tmdb/movies/:id/images", (p) => `/movie/${p.id}/images`],
-  ["/tmdb/tv/shows/:id/images", (p) => `/tv/${p.id}/images`],
-  ["/tmdb/tv/shows/:id/:season", (p) => `/tv/${p.id}/season/${p.season}`],
+  // Every `:id`/`:season` below goes through pathSegment (see forward.ts for
+  // why): these values are caller-controlled and Hono percent-decodes them,
+  // so interpolating one raw lets the caller pick which TMDB endpoint the
+  // relay's own API key gets spent on.
+  ["/tmdb/list/:id", (p) => `/list/${pathSegment(p.id)}`],
+  ["/tmdb/collections/:id", (p) => `/collection/${pathSegment(p.id)}`],
+  ["/tmdb/movies/:id", (p) => `/movie/${pathSegment(p.id)}`],
+  ["/tmdb/tv/shows/:id", (p) => `/tv/${pathSegment(p.id)}`],
+  ["/tmdb/movies/:id/images", (p) => `/movie/${pathSegment(p.id)}/images`],
+  ["/tmdb/tv/shows/:id/images", (p) => `/tv/${pathSegment(p.id)}/images`],
+  [
+    "/tmdb/tv/shows/:id/:season",
+    (p) => `/tv/${pathSegment(p.id)}/season/${pathSegment(p.season)}`,
+  ],
 ];
 
 export function registerTmdbRoutes(app: Hono<{ Bindings: Env }>): void {

@@ -169,10 +169,23 @@ function registerCoverArt(app: Hono<{ Bindings: Env }>): void {
     try {
       upstream = await fetchCoverArt(id);
     } catch (err) {
-      // Mirrors router.ex's `{:error, reason} -> send_resp(conn, 500, inspect(reason))`.
-      return new Response(err instanceof Error ? err.message : String(err), {
-        status: 500,
-      });
+      // router.ex answered this with `send_resp(conn, 500, inspect(reason))`,
+      // and this deliberately does NOT port that verbatim. `reason` here is a
+      // workerd fetch failure against coverartarchive.org, and its text
+      // describes the relay's own outbound network state -- resolved
+      // addresses, connection and TLS failures, internal subrequest limits --
+      // to an anonymous caller who supplied only a release id. CodeQL flags
+      // the same line (alert 250, "Information exposure through a stack
+      // trace"). Nothing on the client side reads this body: mydia's music
+      // client checks the status, and the contract suite compares bodies
+      // between the two relays only for JSON routes, so a fixed string is
+      // both safer and contract-neutral.
+      //
+      // The detail is not discarded, it moves to where it is useful: the
+      // Worker's own logs (Workers Logs / `wrangler tail`), which every
+      // uncaught throw already reaches and which the maintainer can read.
+      console.error("cover art upstream fetch failed", err);
+      return new Response("Upstream error", { status: 500 });
     }
 
     if (upstream.status === 404) {

@@ -25,7 +25,33 @@ export async function sweepStaleFeedbackRateLimits(env: Env): Promise<number> {
   return result.meta.changes;
 }
 
-// Runs both sweeps under one Cron Trigger. pairing/store.ts's
+// The third table with no eviction path, missed when the other two were
+// wired up. It is the worst of the three, because its primary key is
+// (fingerprint, instance_key) rather than anything time-derived: rolling into
+// a new hour RESETS an existing row (see incrementBucketAtomically's
+// ON CONFLICT in src/crashes/ingest.ts), so a row is only ever abandoned,
+// never superseded by a newer one that a later sweep would catch. Every
+// install that ever reported a given crash and then stopped leaves its row
+// behind forever, and the request path cannot reclaim any of them because it
+// only ever touches the exact key it was handed.
+//
+// Same cutoff and the same reasoning as sweepStaleFeedbackRateLimits above:
+// incrementBucketAtomically resets hits/written/saturated outright the moment
+// hour_bucket doesn't match the current hour, so a row older than that
+// carries no state any live request can read, and the extra hour of margin
+// keeps a sweep landing on an hour boundary from racing a request rolling
+// into it.
+export async function sweepStaleIngestBuckets(env: Env): Promise<number> {
+  const currentHour = Math.floor(Date.now() / 3_600_000);
+  const result = await env.DB.prepare(
+    "DELETE FROM ingest_buckets WHERE hour_bucket < ?",
+  )
+    .bind(currentHour - 1)
+    .run();
+  return result.meta.changes;
+}
+
+// Runs all three sweeps under one Cron Trigger. pairing/store.ts's
 // purgeExpiredClaims was written when pairing landed and then never wired to
 // anything -- the identical defect (a table with no eviction path) in a
 // different table, closed here in the same commit rather than left to be
@@ -34,5 +60,9 @@ export async function sweepStaleFeedbackRateLimits(env: Env): Promise<number> {
 // feedback sweep above, is housekeeping (bounding table growth), not a
 // correctness fix.
 export async function runScheduledSweep(env: Env): Promise<void> {
-  await Promise.all([sweepStaleFeedbackRateLimits(env), purgeExpiredClaims(env)]);
+  await Promise.all([
+    sweepStaleFeedbackRateLimits(env),
+    sweepStaleIngestBuckets(env),
+    purgeExpiredClaims(env),
+  ]);
 }

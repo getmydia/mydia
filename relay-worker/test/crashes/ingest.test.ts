@@ -111,6 +111,112 @@ describe("normalizeCrashReport", () => {
 
     expect(out.occurredAt).toBe(Math.floor(Date.parse("2026-01-15T10:30:00.000000Z") / 1000));
   });
+
+  // Number.isFinite alone let `occurred_at: 1e300` through: finite, so stored
+  // verbatim, and then `when()` (src/dashboards/layout.ts) throws
+  // `RangeError: Invalid time value` while BUILDING /admin/errors -- one
+  // unauthenticated POST leaving the maintainer's dashboard at a 500 until
+  // someone deletes the row by hand.
+  it("substitutes ingestion time for a finite but out-of-Date-range occurred_at", () => {
+    const before = Math.floor(Date.now() / 1000);
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      occurred_at: 1e300,
+    });
+
+    expect(out.occurredAt).toBeGreaterThanOrEqual(before);
+    expect(new Date(out.occurredAt * 1000).toISOString()).toBeTypeOf("string");
+  });
+
+  it("keeps an in-range negative occurred_at rather than clamping it", () => {
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      occurred_at: -86_400,
+    });
+
+    expect(out.occurredAt).toBe(-86_400);
+  });
+
+  // D1 rejects an oversized bound value, so an unbounded message made
+  // `.batch()` throw and the route answer 500 -- which
+  // Mydia.CrashReporter.Sender then retries, because it retries every non-201
+  // status, on a request that can never succeed.
+  it("truncates an oversized error_message instead of binding it whole", () => {
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "x".repeat(5_000_000),
+      stacktrace: [],
+    });
+
+    expect(out.message.length).toBeLessThan(5_000);
+    expect(out.message.endsWith("...[truncated]")).toBe(true);
+  });
+
+  it("caps the number of stacktrace frames it keeps", () => {
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace: Array.from({ length: 5_000 }, (_, i) => ({
+        module: "Elixir.Fake",
+        function: "run/0",
+        file: `lib/fake_${i}.ex`,
+        line: i,
+      })),
+    });
+
+    expect(out.stacktrace.length).toBe(64);
+    // The top frame decides the fingerprint, so truncation must keep the head
+    // of the trace or a truncated report would group somewhere else entirely.
+    expect(out.stacktrace[0]?.file).toBe("lib/fake_0.ex");
+  });
+
+  it("truncates oversized strings inside a frame", () => {
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace: [
+        {
+          module: "m".repeat(100_000),
+          function: "run/0",
+          file: "f".repeat(100_000),
+          line: 1,
+        },
+      ],
+    });
+
+    expect(out.stacktrace[0]?.module?.length).toBeLessThan(2_000);
+    expect(out.stacktrace[0]?.file?.length).toBeLessThan(2_000);
+  });
+
+  // `context` persists as one JSON string, so cutting the text would store
+  // something that no longer parses and break the dashboard on read. The
+  // over-budget map is replaced wholesale by a marker that is valid JSON.
+  it("replaces an oversized metadata map with a marker that still parses", () => {
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace: [],
+      metadata: { blob: "y".repeat(2_000_000) },
+    });
+
+    expect(out.context.blob).toBeUndefined();
+    expect(out.context._truncated).toBe(true);
+    expect(() => JSON.parse(JSON.stringify(out.context))).not.toThrow();
+  });
+
+  it("leaves a normal-sized metadata map exactly as it was", () => {
+    const metadata = { file: "lib/fake.ex", line: 12, request_id: "abc123" };
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace: [],
+      metadata,
+    });
+
+    expect(out.context).toEqual(metadata);
+  });
 });
 
 describe("POST /crashes/report", () => {

@@ -15,15 +15,44 @@ const MAX_SEALED_BYTES = 8192;
 // Matches Pairing.generate_code/1's alphabet exactly: excludes 0, O, I, 1 AND
 // L (easy to misread as 1) so a code read aloud or typed by hand is
 // unambiguous. Length 6, also matching the Elixir default.
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
 
 type PairingContext = Context<{ Bindings: Env }>;
 type ErrorBody = { error: string; message: string };
 
-function generateCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
-  return [...bytes].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+// Rejection sampling, not `byte % 31`. 256 is not a multiple of the
+// alphabet's 31 characters: taking the modulo of a uniform byte maps nine
+// byte values onto each of the first eight characters and eight onto each of
+// the remaining twenty-three, so those eight are 12.5% likelier per position
+// than the rest. Over a 6-character code that is a measurable skew in the
+// search space an attacker guessing a live claim has to cover, which is the
+// only property this code has -- it is the whole secret protecting a pairing
+// claim for its 300-second TTL. CodeQL flags the modulo form directly (alert
+// 249, "Creating biased random numbers from a cryptographically secure
+// source").
+//
+// 248 is the largest multiple of 31 that fits in a byte, so discarding
+// 248-255 leaves exactly 8 uniform values per character. Rejection is drawn
+// from a fresh block rather than a single fixed-size draw: ~3.1% of bytes are
+// rejected, so a 6-character code almost always completes on the first block,
+// and the loop is what makes "almost always" irrelevant to correctness.
+// Exported so test/pairing/routes.test.ts can sample it directly. Going
+// through POST /pairing/claim instead would mean paying PAIRING_CREATE_LIMITER
+// and a D1 write per sample, and a uniformity check needs thousands.
+export const REJECTION_THRESHOLD = 248; // floor(256 / 31) * 31
+
+export function generateCode(): string {
+  const chars: string[] = [];
+  while (chars.length < CODE_LENGTH) {
+    const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
+    for (const b of bytes) {
+      if (b >= REJECTION_THRESHOLD) continue;
+      chars.push(CODE_ALPHABET[b % CODE_ALPHABET.length]);
+      if (chars.length === CODE_LENGTH) break;
+    }
+  }
+  return chars.join("");
 }
 
 // Mirrors Pairing.normalize_code/1, applied by the Elixir context to every
