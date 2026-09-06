@@ -1,27 +1,40 @@
 name: Deploy / Relay
 
-# Two independent release rituals share this file until the Elixir relay is
+# Three independent release rituals share this file until the Elixir relay is
 # decommissioned, at which point its job goes away and this file becomes
 # deploy-relay-worker.yml:
 #
-# - `docker` (metadata-relay/, the Elixir service): tag-triggered, unchanged.
-# - `deploy-worker` (relay-worker/, the Cloudflare Worker): triggered by a
-#   push to master/main that touches relay-worker/**, since `wrangler deploy`
-#   is now that ritual rather than a version tag.
+# - `docker` (metadata-relay/, the Elixir service): `metadata-relay-v*` tag.
+# - `deploy-staging` (relay-worker/): every push to master/main that touches
+#   relay-worker/**. Deploys `mydia-relay-staging`.
+# - `deploy-production` (relay-worker/): `relay-worker-v*` tag. Deploys
+#   `mydia-relay`.
+#
+# The two Worker jobs are near-identical and deliberately NOT collapsed into
+# one job that derives `--env` from the ref. That conditional is the single
+# point where a bug ships master's code to production, and it would be
+# invisible in the Actions UI -- two jobs cost ~20 duplicated lines and make
+# the target obvious from the job name alone. Keep them in sync by hand.
 #
 # `paths` filters are never evaluated for tag pushes (only for branch
-# pushes), so adding one here does not gate the tag-triggered `docker` job.
-# It DOES mean this workflow now also runs on a plain branch push, which is
-# new -- hence the `if:` guard on each job below. Without it, a
-# relay-worker-only commit to master would also invoke `docker`, which
-# parses a semver out of `${GITHUB_REF#refs/tags/metadata-relay-v}`; fed a
-# branch ref instead of a tag, that expansion doesn't strip anything and the
-# job would fail trying to build a Docker tag from a literal
-# "refs/heads/master".
+# pushes), so the filter below does not gate either tag-triggered job.
+# It DOES mean this workflow also runs on a plain branch push -- hence the
+# `if:` guard on every job. Without it, a relay-worker-only commit to master
+# would also invoke `docker`, which parses a semver out of
+# `${GITHUB_REF#refs/tags/metadata-relay-v}`; fed a branch ref instead of a
+# tag, that expansion doesn't strip anything and the job would fail trying to
+# build a Docker tag from a literal "refs/heads/master".
+#
+# Note that `docker`'s guard matches the metadata-relay prefix specifically,
+# not a bare `refs/tags/`. Now that a second tag pattern lands in this same
+# workflow, a bare prefix check would fire the Elixir Docker build on every
+# `relay-worker-v*` tag too, and it would fail in exactly the way described
+# above.
 on:
   push:
     tags:
       - "metadata-relay-v*"
+      - "relay-worker-v*"
     branches:
       - master
       - main
@@ -36,7 +49,7 @@ env:
 jobs:
   docker:
     name: Docker / Build and Push
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/metadata-relay-v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -98,8 +111,12 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-  deploy-worker:
-    name: Deploy relay Worker
+  # Every push to master/main touching relay-worker/**. Deploys
+  # `mydia-relay-staging` against the `mydia-relay-staging` D1 database, so
+  # each migration is applied for real -- against a database with the same
+  # schema history as production -- before any tag ships it to production.
+  deploy-staging:
+    name: Deploy relay Worker / staging
     if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     # Cloudflare auth is a bearer token in CLOUDFLARE_API_TOKEN, not the
@@ -110,8 +127,11 @@ jobs:
     # queue instead of overlapping, but don't cancel a deploy already in
     # flight (unlike a CI job, a cancelled `wrangler deploy` can leave D1
     # migrations applied against code that never actually shipped).
+    #
+    # Keyed per environment so a staging push never queues behind, or delays,
+    # a production tag deploy.
     concurrency:
-      group: deploy-relay-worker
+      group: deploy-relay-worker-staging
       cancel-in-progress: false
     steps:
       - name: Checkout
@@ -139,20 +159,75 @@ jobs:
       # Runs before `wrangler deploy` so a new binding never reaches a
       # database without its table. `--remote` targets the real D1 database
       # (see relay-worker/README.md); omitting it would silently touch a
-      # local-only DB instead. Requires the D1 database and KV namespace in
-      # wrangler.jsonc to already be real Cloudflare resources, not the
-      # `placeholder_local_dev_only` ids checked in for local dev/test --
-      # see relay-worker/README.md's "One-time cloud setup" section.
+      # local-only DB instead.
+      #
+      # `--env staging` is load-bearing on BOTH commands. Without it wrangler
+      # reads the top-level environment, whose binding ids are the
+      # `placeholder_local_dev_only` values kept for vitest and `wrangler dev`.
       - name: Apply D1 migrations
         working-directory: relay-worker
-        run: npx wrangler d1 migrations apply mydia-relay --remote
+        run: npx wrangler d1 migrations apply mydia-relay-staging --env staging --remote
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy
         working-directory: relay-worker
-        run: npx wrangler deploy
+        run: npx wrangler deploy --env staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  # `relay-worker-v*` tag only. Deploys `mydia-relay`, the script the
+  # relay.mydia.dev route will eventually attach to.
+  #
+  # Steps are a copy of deploy-staging's with the environment swapped; see the
+  # note at the top of this file for why that duplication is deliberate.
+  deploy-production:
+    name: Deploy relay Worker / production
+    if: startsWith(github.ref, 'refs/tags/relay-worker-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-relay-worker-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: relay-worker/package-lock.json
+
+      - name: Install
+        working-directory: relay-worker
+        run: npm ci
+
+      # The tag is cut from a commit that already went through deploy-staging,
+      # but the suite runs again here rather than trusting that: a tag can be
+      # placed on any commit, including one that never landed on master.
+      - name: Test
+        working-directory: relay-worker
+        run: npm test
+
+      - name: Typecheck
+        working-directory: relay-worker
+        run: npm run typecheck
+
+      - name: Apply D1 migrations
+        working-directory: relay-worker
+        run: npx wrangler d1 migrations apply mydia-relay --env production --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy
+        working-directory: relay-worker
+        run: npx wrangler deploy --env production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

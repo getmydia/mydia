@@ -7,7 +7,8 @@
     "test:watch": "vitest",
     "test:contract": "vitest run test/contract",
     "typecheck": "tsc --noEmit",
-    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
     "dev": "wrangler dev"
   },
   "dependencies": {
