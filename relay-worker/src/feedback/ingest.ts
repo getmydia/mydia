@@ -317,9 +317,15 @@ const RATE_LIMITED_BODY = {
 } as const;
 
 export function registerFeedbackRoutes(app: Hono<{ Bindings: Env }>): void {
-  // A method-specific route (app.post, not app.all) so the Task 14 dashboard
-  // can later register app.get("/feedback", ...) without either route
-  // swallowing the other -- Hono matches on path AND method.
+  // This is the public ingest endpoint every mydia install calls -- a wire
+  // contract that must never move. It stays at bare /feedback; the
+  // maintainer dashboard (src/dashboards/feedback.ts) lives at the separate
+  // /admin/feedback path specifically so the two can be governed
+  // independently by Cloudflare Access, which -- like Hono's router --
+  // matches on path only and cannot gate one HTTP method on a shared path
+  // while leaving another method on that same path alone. Keeping this an
+  // app.post (not app.all) is still correct in its own right: nothing else
+  // should ever answer other methods at this exact path.
   app.post("/feedback", async (c) => {
     // undefined here means the body wasn't parseable JSON *at all* -- this
     // is the one case that never reaches Elixir's controller action, since

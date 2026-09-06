@@ -14,7 +14,38 @@ const EXEMPT = new Set(["/health", "/stats"]);
 // write-bounding. Charging any of these against the proxy budget too would
 // let a normal flow exhaust that budget for the same IP and break metadata
 // for that install.
-const EXEMPT_PREFIXES = ["/pairing/", "/crashes/", "/feedback", "/errors"];
+//
+// "/feedback" here is deliberately the bare public POST ingest path only --
+// it does NOT match "/admin/feedback" (a prefix check is a literal string
+// match; "/admin/feedback" does not start with "/feedback"), so it has no
+// bearing on the dashboard below.
+//
+// "/admin/" covers both maintainer dashboards (dashboards/errors.ts,
+// dashboards/feedback.ts, and any future /admin/* route by construction --
+// see dashboards/layout.ts). These proxy nothing upstream -- they only read
+// or write D1 -- so charging them against a budget that exists to protect
+// shared upstream provider quota (TMDB/TVDB/etc.) wouldn't serve this
+// limiter's purpose even before considering that they're Access-gated,
+// low-volume maintainer traffic. This is a relocation of the exemption that
+// used to be spelled out as "/errors" (bare) before both dashboards moved
+// under /admin/*, not new behaviour.
+const EXEMPT_PREFIXES = ["/pairing/", "/crashes/", "/feedback", "/admin/"];
+
+// Exported so this decision is unit-testable directly, on bare path strings,
+// rather than only observable by driving several hundred real requests
+// through SELF.fetch() to approach PROXY_LIMITER's actual 300/min threshold
+// -- test/obs/ratelimit.test.ts's other tests already need PROXY_LIMIT
+// _ITERATION_CAP-sized loops for THAT limiter's own behaviour, and that
+// file's own extensive comments document a real, wall-clock-dependent flake
+// in miniflare's rate-limit simulator. A prefix-matching predicate needs
+// none of that: it is pure, and testing it directly costs microseconds
+// instead of a few hundred HTTP+D1 round trips, without weakening coverage
+// of the actual regression this guards (an exempt path silently falling out
+// of this list, e.g. when a dashboard's route moves).
+export function isExemptFromProxyLimit(path: string): boolean {
+  if (EXEMPT.has(path)) return true;
+  return EXEMPT_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
 
 // Applied on a cache miss only, matching ProxyRateLimit's placement after the
 // cache plug. A cache hit costs no upstream quota, so throttling one buys
@@ -22,8 +53,7 @@ const EXEMPT_PREFIXES = ["/pairing/", "/crashes/", "/feedback", "/errors"];
 export function rateLimitMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
     const path = new URL(c.req.url).pathname;
-    if (EXEMPT.has(path)) return next();
-    if (EXEMPT_PREFIXES.some((prefix) => path.startsWith(prefix))) return next();
+    if (isExemptFromProxyLimit(path)) return next();
 
     await next();
 

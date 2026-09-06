@@ -32,9 +32,9 @@ describe("escapeHtml", () => {
   });
 });
 
-describe("GET /errors", () => {
+describe("GET /admin/errors", () => {
   it("lists error groups with their occurrence counts", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/errors");
+    const res = await SELF.fetch("https://relay.mydia.dev/admin/errors");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
 
@@ -45,13 +45,13 @@ describe("GET /errors", () => {
   });
 
   it("shows a single error group with its occurrences", async () => {
-    const res = await SELF.fetch(`https://relay.mydia.dev/errors/${FP1}`);
+    const res = await SELF.fetch(`https://relay.mydia.dev/admin/errors/${FP1}`);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("RuntimeError");
   });
 
   it("returns 404 for an unknown fingerprint", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/errors/nosuchfp");
+    const res = await SELF.fetch("https://relay.mydia.dev/admin/errors/nosuchfp");
     expect(res.status).toBe(404);
   });
 
@@ -59,7 +59,7 @@ describe("GET /errors", () => {
     // fetch()'s default `redirect: "follow"` would otherwise chase the 303
     // and hand back the followed page's 200, hiding the redirect status this
     // assertion cares about.
-    const res = await SELF.fetch(`https://relay.mydia.dev/errors/${FP1}/resolve`, {
+    const res = await SELF.fetch(`https://relay.mydia.dev/admin/errors/${FP1}/resolve`, {
       method: "POST",
       redirect: "manual",
     });
@@ -76,14 +76,14 @@ describe("GET /errors", () => {
   // MINOR fix-round-1 gap: only resolve had a test; unresolve is the other
   // half of the same write-mutating pair and got none.
   it("unresolves a group and reflects the new status", async () => {
-    const resolveRes = await SELF.fetch(`https://relay.mydia.dev/errors/${FP1}/resolve`, {
+    const resolveRes = await SELF.fetch(`https://relay.mydia.dev/admin/errors/${FP1}/resolve`, {
       method: "POST",
       redirect: "manual",
     });
     expect(resolveRes.status).toBe(303);
 
     const unresolveRes = await SELF.fetch(
-      `https://relay.mydia.dev/errors/${FP1}/unresolve`,
+      `https://relay.mydia.dev/admin/errors/${FP1}/unresolve`,
       { method: "POST", redirect: "manual" },
     );
     expect(unresolveRes.status).toBe(303);
@@ -106,7 +106,7 @@ describe("GET /errors", () => {
       .bind(now, now)
       .run();
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/errors")).text();
     expect(html).not.toContain("<script>alert(1)</script>");
   });
 
@@ -125,7 +125,7 @@ describe("GET /errors", () => {
       .bind(now, now)
       .run();
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/errors")).text();
     expect(html).not.toContain('"><svg onload=alert(1)>');
     expect(html).not.toContain("<svg onload=alert(1)>");
   });
@@ -135,8 +135,8 @@ describe("GET /errors", () => {
   // be escaped defensively rather than trusted because "the input happens to
   // be safe today".
   it("escapes the fingerprint used to build occurrence links", async () => {
-    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
-    expect(html).toContain(`href="/errors/${FP1}"`);
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/errors")).text();
+    expect(html).toContain(`href="/admin/errors/${FP1}"`);
   });
 });
 
@@ -144,23 +144,23 @@ describe("GET /errors", () => {
 // straight into a D1 OFFSET with no guard. Each of these five inputs was
 // confirmed to throw `D1_ERROR: datatype mismatch`, surfaced as an unhandled
 // Hono 500, before the fix -- on an endpoint that is unauthenticated today.
-describe("GET /errors?page= guards against hostile input", () => {
+describe("GET /admin/errors?page= guards against hostile input", () => {
   const hostileValues = ["abc", "NaN", "Infinity", "1e300", "99999999999999999999"];
 
   it.each(hostileValues)("does not 500 for page=%s", async (value) => {
     const res = await SELF.fetch(
-      `https://relay.mydia.dev/errors?page=${encodeURIComponent(value)}`,
+      `https://relay.mydia.dev/admin/errors?page=${encodeURIComponent(value)}`,
     );
     expect(res.status).toBe(200);
   });
 
   it("still paginates normally for an ordinary page number", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/errors?page=1");
+    const res = await SELF.fetch("https://relay.mydia.dev/admin/errors?page=1");
     expect(res.status).toBe(200);
   });
 
   it("clamps a negative page to the first page instead of erroring", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/errors?page=-5");
+    const res = await SELF.fetch("https://relay.mydia.dev/admin/errors?page=-5");
     expect(res.status).toBe(200);
   });
 });
@@ -169,13 +169,13 @@ describe("GET /errors?page= guards against hostile input", () => {
 // from the raw, decoded :fingerprint param. A value containing a CRLF
 // sequence made the underlying Headers implementation throw -- fails safe
 // (no header injection actually lands; the runtime itself rejects the
-// control characters, and the fixed "/errors/" prefix rules out an open
+// control characters, and the fixed "/admin/errors/" prefix rules out an open
 // redirect either way) but still surfaced as an unhandled 500 rather than a
 // clean 404, on an endpoint that is unauthenticated today.
-describe("POST /errors/:fingerprint/resolve validates the fingerprint shape first", () => {
+describe("POST /admin/errors/:fingerprint/resolve validates the fingerprint shape first", () => {
   it("returns 404, not a 500, for a CRLF-injected fingerprint segment", async () => {
     const res = await SELF.fetch(
-      "https://relay.mydia.dev/errors/abc%0D%0AInjected/resolve",
+      "https://relay.mydia.dev/admin/errors/abc%0D%0AInjected/resolve",
       { method: "POST", redirect: "manual" },
     );
     expect(res.status).toBe(404);
@@ -183,7 +183,7 @@ describe("POST /errors/:fingerprint/resolve validates the fingerprint shape firs
 
   it("returns 404 for a non-hex fingerprint", async () => {
     const res = await SELF.fetch(
-      "https://relay.mydia.dev/errors/not-a-real-fingerprint/resolve",
+      "https://relay.mydia.dev/admin/errors/not-a-real-fingerprint/resolve",
       { method: "POST", redirect: "manual" },
     );
     expect(res.status).toBe(404);
@@ -191,7 +191,7 @@ describe("POST /errors/:fingerprint/resolve validates the fingerprint shape firs
 
   it("also validates on the unresolve route", async () => {
     const res = await SELF.fetch(
-      "https://relay.mydia.dev/errors/abc%0D%0AInjected/unresolve",
+      "https://relay.mydia.dev/admin/errors/abc%0D%0AInjected/unresolve",
       { method: "POST", redirect: "manual" },
     );
     expect(res.status).toBe(404);
@@ -203,7 +203,7 @@ describe("POST /errors/:fingerprint/resolve validates the fingerprint shape firs
 // (fix-round-1) is the durable record of that, distinct from
 // ingest_buckets.saturated, which resets the moment a fresh hour's write
 // lands for the same fingerprint/instance -- see 0002_crash_reports.sql.
-describe("GET /errors occurrence count vs. ingest throttling", () => {
+describe("GET /admin/errors occurrence count vs. ingest throttling", () => {
   const SATURATED_FP = "fpsaturated";
 
   beforeAll(async () => {
@@ -218,7 +218,7 @@ describe("GET /errors occurrence count vs. ingest throttling", () => {
   });
 
   it("marks a saturated fingerprint's count as a floor on the list page", async () => {
-    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/errors")).text();
     // The saturated row's count must be visually distinguishable from an
     // exact count -- rendered as "at least" rather than a bare number.
     const rowStart = html.indexOf("StormError");
@@ -228,10 +228,10 @@ describe("GET /errors occurrence count vs. ingest throttling", () => {
   });
 
   it("does not mark an unsaturated fingerprint's count as a floor", async () => {
-    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/errors")).text();
     // FP1's own row (found via its detail link), bounded to just that <tr>
     // so a neighbouring saturated row's markup can't leak into the slice.
-    const linkIndex = html.indexOf(`href="/errors/${FP1}"`);
+    const linkIndex = html.indexOf(`href="/admin/errors/${FP1}"`);
     expect(linkIndex).toBeGreaterThan(-1);
     const rowEnd = html.indexOf("</tr>", linkIndex);
     const rowSlice = html.slice(linkIndex, rowEnd);
@@ -240,7 +240,7 @@ describe("GET /errors occurrence count vs. ingest throttling", () => {
 
   it("marks the floor on the single error group's detail page too", async () => {
     const html = await (
-      await SELF.fetch(`https://relay.mydia.dev/errors/${SATURATED_FP}`)
+      await SELF.fetch(`https://relay.mydia.dev/admin/errors/${SATURATED_FP}`)
     ).text();
     expect(html).toMatch(/&ge;|≥|throttled|at least/i);
   });
@@ -317,7 +317,7 @@ describe("the floor marker survives an hour rollover", () => {
     expect(afterRollover!.count_is_floor).toBe(1);
     expect(afterRollover!.occurrence_count).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET + 1);
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/errors")).text();
     const rowStart = html.indexOf(kind);
     expect(rowStart).toBeGreaterThan(-1);
     const rowEnd = html.indexOf("</tr>", rowStart);
@@ -343,7 +343,7 @@ describe("the floor marker survives an hour rollover", () => {
     expect(row!.count_is_floor).toBe(0);
     expect(row!.occurrence_count).toBe(5);
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/errors")).text();
     const rowStart = html.indexOf(kind);
     expect(rowStart).toBeGreaterThan(-1);
     const rowEnd = html.indexOf("</tr>", rowStart);
@@ -368,7 +368,7 @@ describe("the floor marker survives an hour rollover", () => {
 
     const hasFloorMarker = async (): Promise<boolean> => {
       const html = await (
-        await SELF.fetch(`https://relay.mydia.dev/errors/${fingerprint}`)
+        await SELF.fetch(`https://relay.mydia.dev/admin/errors/${fingerprint}`)
       ).text();
       return /&ge;|≥|throttled|at least/i.test(html);
     };
@@ -376,14 +376,14 @@ describe("the floor marker survives an hour rollover", () => {
     expect(await hasFloorMarker()).toBe(true);
 
     const resolveRes = await SELF.fetch(
-      `https://relay.mydia.dev/errors/${fingerprint}/resolve`,
+      `https://relay.mydia.dev/admin/errors/${fingerprint}/resolve`,
       { method: "POST", redirect: "manual" },
     );
     expect(resolveRes.status).toBe(303);
     expect(await hasFloorMarker()).toBe(true);
 
     const unresolveRes = await SELF.fetch(
-      `https://relay.mydia.dev/errors/${fingerprint}/unresolve`,
+      `https://relay.mydia.dev/admin/errors/${fingerprint}/unresolve`,
       { method: "POST", redirect: "manual" },
     );
     expect(unresolveRes.status).toBe(303);

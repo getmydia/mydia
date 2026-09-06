@@ -1,8 +1,13 @@
-// Shared chrome for the maintainer dashboards (errors, feedback). This
-// dashboard is UNAUTHENTICATED until Task 15 puts Cloudflare Access in front
-// of it -- do not add ad-hoc auth here, but also do not add anything (an
-// inline API key, a bypassable query param, etc.) that would make it harder
-// for Task 15 to gate this route entirely at the edge.
+// Shared chrome for the maintainer dashboards (errors, feedback). Both live
+// under the /admin/* prefix specifically so a single Cloudflare Access
+// application scoped to /admin* covers both today and any future
+// maintainer-only route by construction, without a per-route decision. The
+// Worker holds no in-code auth for these routes -- Access enforces at the
+// edge before a request ever reaches the Worker -- so do not add ad-hoc auth
+// here (an inline API key, a bypassable query param, etc.); that would
+// duplicate or conflict with the edge gate. Do not move a route out of
+// /admin/* without also updating the Access application's path scope --
+// see relay-worker/README.md's runbook.
 
 // Every value rendered into one of these pages can originate from an
 // unauthenticated remote install (POST /crashes/report, POST /feedback are
@@ -74,7 +79,7 @@ export function layout(title: string, body: string): string {
 </style>
 </head>
 <body>
-<nav><a href="/errors">Errors</a><a href="/feedback">Feedback</a></nav>
+<nav><a href="/admin/errors">Errors</a><a href="/admin/feedback">Feedback</a></nav>
 <h1>${escapeHtml(title)}</h1>
 ${body}
 </body>

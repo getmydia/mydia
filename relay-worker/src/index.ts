@@ -68,19 +68,30 @@ registerSubdlRoutes(app);
 registerPassthroughRoutes(app);
 registerPairingRoutes(app);
 registerCrashRoutes(app);
-// GET/POST /errors and /errors/:fingerprint -- the maintainer dashboard
-// replacing error_tracker's LiveView UI. Unauthenticated until Task 15 puts
-// Cloudflare Access in front of it; do not deploy this to a public hostname
-// before that lands.
+// GET/POST /admin/errors and /admin/errors/:fingerprint -- the maintainer
+// dashboard replacing error_tracker's LiveView UI. Deliberately under
+// /admin/* (not the bare /errors a naive port would use) so one Cloudflare
+// Access application scoped to /admin* covers this AND the feedback
+// dashboard below with no per-route decision -- see
+// relay-worker/README.md's runbook for why that matters: Access, like a
+// Worker route, matches on path only, with no HTTP-method dimension, so a
+// dashboard sharing a path with a public endpoint could never be gated
+// without also gating the public one. Creating that Access application is
+// still a manual step; until it exists, this route has no auth at all.
 registerErrorDashboard(app);
-// POST only -- registerFeedbackDashboard below adds GET /feedback (the
-// maintainer dashboard replacing FeedbackLive.Index) as a separate route
-// registration, and Hono matches by path AND method, so the two coexist
-// without either swallowing the other.
+// POST /feedback is the public ingest endpoint every mydia install calls --
+// a wire contract that must never move. registerFeedbackDashboard below
+// registers the maintainer dashboard's GET at the entirely separate
+// /admin/feedback path, not at /feedback, precisely so the two can be
+// governed independently: Access can cover /admin/feedback without ever
+// seeing a POST /feedback request, since Access (like Hono's router) has no
+// way to gate one HTTP method on a path while leaving another method on
+// that same path alone.
 registerFeedbackRoutes(app);
-// GET /feedback plus the state/github mutation routes. Unauthenticated
-// until Task 15 puts Cloudflare Access in front of it; do not deploy this
-// to a public hostname before that lands.
+// GET /admin/feedback plus the state/github mutation routes. See the
+// registerErrorDashboard comment above: /admin/* is deliberate, and
+// deploying this to a public hostname before the /admin* Access application
+// exists (runbook, relay-worker/README.md) would expose maintainer data.
 registerFeedbackDashboard(app);
 
 // 404 catch-all, matching the Elixir router's behaviour.

@@ -24,9 +24,9 @@ beforeAll(async () => {
     .run();
 });
 
-describe("GET /feedback dashboard", () => {
+describe("GET /admin/feedback dashboard", () => {
   it("lists submissions", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/feedback");
+    const res = await SELF.fetch("https://relay.mydia.dev/admin/feedback");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
 
@@ -40,7 +40,7 @@ describe("GET /feedback dashboard", () => {
   // submissions is one person), and the dashboard dropped it without
   // disclosing the omission.
   it("shows the source IP column, an anti-abuse signal the Elixir dashboard also surfaces", async () => {
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback")).text();
     expect(html).toContain("Source IP");
     expect(html).toContain("203.0.113.42");
   });
@@ -58,13 +58,17 @@ describe("GET /feedback dashboard", () => {
       .bind(now, now)
       .run();
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback")).text();
     expect(html).toContain("Line one\nLine two");
     const cellStart = html.indexOf('<td class="wrap">Line one');
     expect(cellStart).toBeGreaterThan(-1);
   });
 
-  it("does not shadow the public POST ingest route", async () => {
+  it("does not share a path with the public POST ingest route", async () => {
+    // The whole point of moving this dashboard to /admin/feedback: the
+    // public ingest endpoint stays at bare /feedback, completely unaffected
+    // by anything (including a future Cloudflare Access application) scoped
+    // to /admin/*.
     const res = await SELF.fetch("https://relay.mydia.dev/feedback", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -73,12 +77,25 @@ describe("GET /feedback dashboard", () => {
     expect(res.status).toBe(201);
   });
 
+  it("no longer serves the dashboard at the old /feedback path", async () => {
+    // GET /feedback must not be a second, unauthenticated way to reach
+    // maintainer data now that the real dashboard lives at
+    // /admin/feedback -- whatever this returns, it must not be the
+    // dashboard. registerFeedbackRoutes only registers POST /feedback, so
+    // this falls through to the app-wide 404 catch-all in src/index.ts.
+    const res = await SELF.fetch("https://relay.mydia.dev/feedback");
+    expect(res.status).toBe(404);
+    const body = await res.text();
+    expect(body).not.toContain("Scanner missed a file");
+    expect(body).not.toContain("<table");
+  });
+
   it("marks a submission read", async () => {
     // fetch()'s default `redirect: "follow"` would otherwise chase the 303
     // and hand back the followed page's 200, hiding the redirect status this
     // assertion actually cares about (the same gap the dashboards/errors.ts
     // tests were fixed for).
-    const res = await SELF.fetch(`https://relay.mydia.dev/feedback/${FB1}/state`, {
+    const res = await SELF.fetch(`https://relay.mydia.dev/admin/feedback/${FB1}/state`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: "state=read",
@@ -95,7 +112,7 @@ describe("GET /feedback dashboard", () => {
   });
 
   it("rejects a state outside the allowed set", async () => {
-    const res = await SELF.fetch(`https://relay.mydia.dev/feedback/${FB1}/state`, {
+    const res = await SELF.fetch(`https://relay.mydia.dev/admin/feedback/${FB1}/state`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: "state=deleted",
@@ -105,7 +122,7 @@ describe("GET /feedback dashboard", () => {
   });
 
   it("attaches a github ref", async () => {
-    const res = await SELF.fetch(`https://relay.mydia.dev/feedback/${FB1}/github`, {
+    const res = await SELF.fetch(`https://relay.mydia.dev/admin/feedback/${FB1}/github`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: "github_ref=getmydia/mydia%23123",
@@ -131,7 +148,7 @@ describe("GET /feedback dashboard", () => {
   // mismatch (NULL vs. "") that was invisible in the UI because both
   // templates render null and "" identically.
   it("accepts a blank github ref, clearing any previous one to NULL (not empty string)", async () => {
-    const res = await SELF.fetch(`https://relay.mydia.dev/feedback/${FB1}/github`, {
+    const res = await SELF.fetch(`https://relay.mydia.dev/admin/feedback/${FB1}/github`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: "github_ref=",
@@ -148,7 +165,7 @@ describe("GET /feedback dashboard", () => {
   });
 
   it("treats a whitespace-only github ref the same as blank", async () => {
-    const res = await SELF.fetch(`https://relay.mydia.dev/feedback/${FB1}/github`, {
+    const res = await SELF.fetch(`https://relay.mydia.dev/admin/feedback/${FB1}/github`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: `github_ref=${encodeURIComponent("   ")}`,
@@ -173,7 +190,7 @@ describe("GET /feedback dashboard", () => {
       .bind(now, now)
       .run();
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback?state=all")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback?state=all")).text();
     expect(html).not.toContain("<script>alert(1)</script>");
   });
 
@@ -194,7 +211,7 @@ describe("GET /feedback dashboard", () => {
       .bind(now, now)
       .run();
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback?state=all")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback?state=all")).text();
     expect(html).not.toContain("<svg onload=alert(1)>");
     expect(html).not.toContain("<svg onload=alert(2)>");
     expect(html).not.toContain("<svg onload=alert(3)>");
@@ -214,7 +231,7 @@ describe("GET /feedback dashboard", () => {
       .bind(now, now)
       .run();
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback?state=all")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback?state=all")).text();
     expect(html).not.toContain('"><script>alert(4)</script>');
     expect(html).not.toContain("<script>alert(4)</script>");
   });
@@ -233,7 +250,7 @@ describe("GET /feedback dashboard", () => {
       .bind(now, now)
       .run();
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback?state=all")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback?state=all")).text();
     expect(html).not.toContain('"><script>alert(5)</script>');
     expect(html).not.toContain("<script>alert(5)</script>");
   });
@@ -242,23 +259,23 @@ describe("GET /feedback dashboard", () => {
 // IMPORTANT fix-round finding, mirrored from dashboards/errors.ts: `Number(...)`
 // fed straight into a D1 OFFSET with no guard throws `D1_ERROR: datatype
 // mismatch`, surfaced as an unhandled Hono 500, for each of these inputs.
-describe("GET /feedback?page= guards against hostile input", () => {
+describe("GET /admin/feedback?page= guards against hostile input", () => {
   const hostileValues = ["abc", "NaN", "Infinity", "1e300", "99999999999999999999"];
 
   it.each(hostileValues)("does not 500 for page=%s", async (value) => {
     const res = await SELF.fetch(
-      `https://relay.mydia.dev/feedback?page=${encodeURIComponent(value)}`,
+      `https://relay.mydia.dev/admin/feedback?page=${encodeURIComponent(value)}`,
     );
     expect(res.status).toBe(200);
   });
 
   it("still paginates normally for an ordinary page number", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/feedback?page=1");
+    const res = await SELF.fetch("https://relay.mydia.dev/admin/feedback?page=1");
     expect(res.status).toBe(200);
   });
 
   it("clamps a negative page to the first page instead of erroring", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/feedback?page=-5");
+    const res = await SELF.fetch("https://relay.mydia.dev/admin/feedback?page=-5");
     expect(res.status).toBe(200);
   });
 });
@@ -267,9 +284,9 @@ describe("GET /feedback?page= guards against hostile input", () => {
 // "all" both mean "no filter". Task 12 already fixed listFeedback for this;
 // this confirms the dashboard's own filter links actually produce values
 // that exercise it, including "all".
-describe("GET /feedback?state= filtering", () => {
+describe("GET /admin/feedback?state= filtering", () => {
   it("defaults to the unread queue when no state is given, matching mount/3", async () => {
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback")).text();
     // fbxss/fbfields/fbref/the escaped-id row were all inserted as 'unread'
     // in the tests above, so the default (unread) view still contains them,
     // while FB1 (moved to 'read' earlier in this file) is state-dependent --
@@ -278,7 +295,7 @@ describe("GET /feedback?state= filtering", () => {
   });
 
   it("state=all returns every state, not zero rows", async () => {
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback?state=all")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback?state=all")).text();
     expect(html).toContain("Scanner missed a file");
   });
 
@@ -287,18 +304,18 @@ describe("GET /feedback?state= filtering", () => {
     // state right after beforeAll, so FB1's "read" transition from an
     // earlier test in this file does not carry over here -- do the
     // transition again within this test rather than relying on it.
-    await SELF.fetch(`https://relay.mydia.dev/feedback/${FB1}/state`, {
+    await SELF.fetch(`https://relay.mydia.dev/admin/feedback/${FB1}/state`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: "state=read",
       redirect: "manual",
     });
 
-    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback?state=read")).text();
+    const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback?state=read")).text();
     expect(html).toContain("Scanner missed a file");
 
     const unreadOnly = await (
-      await SELF.fetch("https://relay.mydia.dev/feedback")
+      await SELF.fetch("https://relay.mydia.dev/admin/feedback")
     ).text();
     expect(unreadOnly).not.toContain("Scanner missed a file");
   });
@@ -309,12 +326,12 @@ describe("GET /feedback?state= filtering", () => {
 // redirect() builds the Location header directly from the decoded param,
 // and a CRLF sequence (delivered URL-encoded, e.g. %0D%0A) makes the
 // underlying Headers implementation throw -- fails safe, but as an
-// unhandled 500 rather than a clean 404, on an endpoint unauthenticated
-// until Task 15.
-describe("POST /feedback/:id/state and /github validate the id shape first", () => {
+// unhandled 500 rather than a clean 404, on a route with no in-code auth
+// (Cloudflare Access guards /admin/* at the edge; see the README runbook).
+describe("POST /admin/feedback/:id/state and /github validate the id shape first", () => {
   it("returns 404, not a 500, for a CRLF-injected id segment on /state", async () => {
     const res = await SELF.fetch(
-      "https://relay.mydia.dev/feedback/abc%0D%0AInjected/state",
+      "https://relay.mydia.dev/admin/feedback/abc%0D%0AInjected/state",
       {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -327,7 +344,7 @@ describe("POST /feedback/:id/state and /github validate the id shape first", () 
 
   it("returns 404, not a 500, for a CRLF-injected id segment on /github", async () => {
     const res = await SELF.fetch(
-      "https://relay.mydia.dev/feedback/abc%0D%0AInjected/github",
+      "https://relay.mydia.dev/admin/feedback/abc%0D%0AInjected/github",
       {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -340,7 +357,7 @@ describe("POST /feedback/:id/state and /github validate the id shape first", () 
 
   it("returns 404 for a non-UUID id on /state", async () => {
     const res = await SELF.fetch(
-      "https://relay.mydia.dev/feedback/not-a-real-id/state",
+      "https://relay.mydia.dev/admin/feedback/not-a-real-id/state",
       {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -353,7 +370,7 @@ describe("POST /feedback/:id/state and /github validate the id shape first", () 
 
   it("returns 404 for a non-UUID id on /github", async () => {
     const res = await SELF.fetch(
-      "https://relay.mydia.dev/feedback/not-a-real-id/github",
+      "https://relay.mydia.dev/admin/feedback/not-a-real-id/github",
       {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },

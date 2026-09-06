@@ -120,13 +120,22 @@ both jobs keep a relay-worker-only commit from also invoking the Docker job
 
 ### Dashboards
 
-`GET /errors` and `GET /feedback` are maintainer dashboards, replacing the
-Elixir's ErrorTracker page and `FeedbackLive.Index`. **Cloudflare Access
-guards them, not code.** The Worker holds no dashboard credentials at all —
-no `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD` equivalent exists in `Env`, and
-none should ever be added; that pattern is exactly what Access retires (see
-the runbook below for the operational trap it closes). Setting up Access is a
-manual, one-time dashboard step — see the runbook.
+`GET /admin/errors` and `GET /admin/feedback` are maintainer dashboards,
+replacing the Elixir's ErrorTracker page and `FeedbackLive.Index`. Both live
+under a shared `/admin/*` prefix **on purpose**: it lets one Cloudflare
+Access application, scoped to `/admin*`, cover every maintainer-only route by
+construction, so adding a third dashboard later inherits the gate instead of
+needing its own conscious Access decision. Neither dashboard shares a path
+with a public endpoint — the public ingest routes (`POST /feedback`,
+`POST /crashes/report`) stay exactly where every mydia install already calls
+them.
+
+**Cloudflare Access guards `/admin/*`, not code.** The Worker holds no
+dashboard credentials at all — no `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`
+equivalent exists in `Env`, and none should ever be added; that pattern is
+exactly what Access retires (see the runbook below for the operational trap
+it closes). Setting up the Access application is a manual, one-time step —
+see the runbook.
 
 ## Project structure
 
@@ -140,7 +149,7 @@ relay-worker/
 │   ├── pairing/            # remote-access pairing claims
 │   ├── crashes/            # crash report ingest
 │   ├── feedback/           # feedback ingest (public POST) + email notification
-│   ├── dashboards/         # errors + feedback maintainer dashboards (GET)
+│   ├── dashboards/         # errors + feedback maintainer dashboards, under /admin/*
 │   ├── archive/             # SubDL zip extraction with size caps
 │   └── obs/                # rate limiting, request logging, scheduled sweep
 ├── migrations/              # D1 migrations, applied by wrangler + vitest-pool-workers
@@ -216,82 +225,64 @@ having deployed anything broken (the failure is expected and safe).
 
 ### Step 1: Cloudflare Access — hard ordering constraint
 
-**The dashboards are currently unauthenticated.** `GET /errors` and
-`GET /feedback` expose crash reports and user-submitted feedback, including
-instance identifiers. **Nothing may be routed to a public hostname before the
-Access application below exists.** This is not a recommendation to configure
-Access soon after cutover — it is a precondition of cutover. (Today, before
-Task 16, this Worker has no production route yet, so the constraint is not
-yet live — but it must be satisfied before Task 16 adds
-`relay.mydia.dev/*` routes to `wrangler.jsonc`.)
+**The dashboards are currently unauthenticated.** `GET /admin/errors` and
+`GET /admin/feedback` expose crash reports and user-submitted feedback,
+including instance identifiers. **Nothing may be routed to a public hostname
+before the Access application below exists.** This is not a recommendation to
+configure Access soon after cutover — it is a precondition of cutover.
+(Today, before Task 16, this Worker has no production route yet, so the
+constraint is not yet live — but it must be satisfied before Task 16 adds
+`relay.mydia.dev/*` routes to `wrangler.jsonc`. Task 16's own plan text now
+carries this same precondition on its Step 4 — see
+`docs/superpowers/plans/2026-09-05-metadata-relay-on-cloudflare-workers.md`
+— so it's enforced at the point someone would otherwise miss it.)
 
-**`/errors` can be protected exactly as the brief describes. `/feedback`
-cannot, as written** — this is the most consequential finding in this
-runbook; read it before touching the Access dashboard.
-
-Cloudflare Access self-hosted applications match on **hostname + path only**.
-There is no HTTP-method selector in Access's own policy engine — Access
-policy selectors are identity/context attributes (email, country, IP range,
-device posture, service token, login method); "HTTP Method" exists only as a
-selector for Gateway HTTP policies, a different product that inspects
+**Why both dashboards live under `/admin/*` instead of their naive
+`/errors`/`/feedback` paths:** the brief's original Step 1 asked for an
+Access application covering literal `/errors` and `/feedback`. That doesn't
+work. Cloudflare Access self-hosted applications match on **hostname + path
+only** — there is no HTTP-method selector in Access's own policy engine
+(Access policy selectors are identity/context attributes: email, country, IP
+range, device posture, service token, login method; "HTTP Method" exists only
+as a selector for Gateway HTTP policies, a different product inspecting
 WARP-proxied client-side traffic, not inbound requests to a self-hosted
-Access application. (Verified against Cloudflare's current documentation for
-Access policy selectors and for Gateway HTTP policy selectors, which lists
-HTTP Method only in the latter.)
+Access application — verified against Cloudflare's current documentation for
+each). `POST /feedback` (public ingest, called by every install) used to
+share a literal path with `GET /feedback` (the maintainer dashboard); an
+Access application scoped to that path would have gated **both** methods,
+since Access cannot tell them apart, breaking feedback submission fleet-wide
+the moment Access was configured.
 
-`POST /feedback` (public ingest, called by every install) and
-`GET /feedback` (the maintainer dashboard) are **the same path**
-(`src/index.ts` registers `registerFeedbackRoutes` — POST only — and
-`registerFeedbackDashboard` — GET only — as separate Hono route
-registrations on the identical `/feedback` string). An Access application
-scoped to `/feedback` gates **both methods**, because Access cannot tell them
-apart. Adding `/feedback` to the Access application as the brief's Step 1
-describes would put the public ingest endpoint behind an SSO login page,
-breaking feedback submission fleet-wide the moment Access is configured —
-before any dashboard is even used.
+**The fix, now shipped in code:** the maintainer dashboards moved to
+`/admin/errors` and `/admin/feedback` — entirely separate paths from any
+public endpoint. `POST /feedback` and `POST /crashes/report` did **not**
+move; they are wire contracts every deployed mydia instance already calls.
+One Access application scoped to `/admin*` now cleanly covers both
+dashboards, present and future, with no per-route decision and no path
+collision with anything public.
 
-**What to actually configure, today:**
+**What to configure:**
 
 1. Create one self-hosted Access application:
    - Application domain: `relay.mydia.dev`
-   - Path: `/errors*` (covers `/errors`, `/errors/:fingerprint`, and the two
-     mutation routes `/errors/:fingerprint/resolve` and
-     `/errors/:fingerprint/unresolve` — all maintainer-only, no public
-     consumer ever calls anything under `/errors`)
+   - Path: `/admin*` (covers `/admin/errors`, `/admin/errors/:fingerprint`,
+     `/admin/errors/:fingerprint/resolve`, `/admin/errors/:fingerprint/unresolve`,
+     `/admin/feedback`, `/admin/feedback/:id/state`, and
+     `/admin/feedback/:id/github` — every maintainer-only route in the
+     Worker, and any future one added under the same prefix)
    - Policy: Allow, Include → Emails → the maintainer address
-2. **Do not add `/feedback` to this application, or any application, in a
-   way that covers the whole path.** Leave it out entirely for now.
 
-**The feedback dashboard is left with no safe Access configuration until a
-small Worker code change lands** (out of scope for this task — Task 15 was
-authorized to touch CI, README, and this runbook, not `src/dashboards/` or
-`src/feedback/`). The fix is straightforward and should be a fast follow
-before cutover reaches `/feedback`: move the maintainer dashboard's `GET`
-handler off the shared path — for example to `/feedback/dashboard` or a
-shared `/admin/*` prefix alongside `/errors` — so Access can scope to the new
-path while the public `POST /feedback` ingest endpoint (which must never
-move; it's a wire contract every deployed mydia instance already calls)
-stays completely outside any Access application. Until that ships, treat the
-feedback dashboard as **not safely exposable** on the production hostname —
-it is not covered by the Access application above and has no other guard.
+That's it — one application, one path pattern, no exclusion list to maintain.
 
-(A Cloudflare WAF custom rule can match on `http.request.method`, unlike
-Access, and in principle could complement Access here — e.g. challenging bare
-GETs to `/feedback` while leaving POST alone. This was not verified: there is
-no dashboard access in this environment to confirm the phase ordering between
-a zone-level WAF custom rule and a Workers-backed self-hosted Access
-application, and getting that ordering wrong could just as easily reopen the
-hole it's meant to close. Prefer the path-split code fix; treat WAF-layering
-as an unverified fallback only if that fix is delayed.)
-
-**Verify both halves after configuring Access** (the two curls the brief
-specifies remain the correct verification for `/errors`; the `/feedback`
-curl should be read as confirming the *current* state, not a target state,
-until the path split above ships):
+**Verify both halves after configuring Access:**
 
 ```bash
-# /errors: must now require login
-curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/errors
+# GET /admin/errors: must require login
+curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/admin/errors
+# expect: 302 (redirect to the Access login)
+
+# GET /admin/feedback: must also require login
+curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/admin/feedback
 # expect: 302 (redirect to the Access login)
 
 # POST /feedback: must NOT require login — this is every install's ingest path
@@ -300,16 +291,17 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://relay.mydia.dev/feedba
   -d '{"type":"idea","message":"access check"}'
 # expect: 201
 
-# GET /feedback: today this is still open (see above) — confirm it is NOT
-# accidentally 302'd by an application scoped too broadly, and treat a bare
-# 200 here as the known, tracked gap, not a surprise
+# GET /feedback (the OLD path): must be a plain 404, never the dashboard —
+# regression-tested in test/dashboards/feedback.test.ts, but worth confirming
+# against the real deploy too, since Access config is exactly the kind of
+# thing that regresses independently of the code.
 curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/feedback
+# expect: 404
 ```
 
-If the `/errors` curl ever comes back 200 instead of 302, or the `POST
-/feedback` curl ever comes back anything but 201, stop and re-check the
-Access application's path scope before proceeding with cutover — one of the
-two halves has regressed.
+If either `/admin/*` curl ever comes back 200 instead of 302, or the `POST
+/feedback` curl comes back anything but 201, stop and re-check the Access
+application's path scope before proceeding with cutover.
 
 ### Step 2: contract diff — not wired into CI, on purpose
 
@@ -391,10 +383,12 @@ This task's brief (`task-15-brief.md`) assumed several things that don't
 match this repository as it stands. Recorded here so the next person doesn't
 re-discover them the hard way:
 
-- **The Access path split as specified doesn't work.** See Step 1 above —
-  Access matches by path only, not method, and `/feedback` serves both the
-  public POST and the dashboard GET on the identical path. This is the
-  biggest gap; everything else below is comparatively minor.
+- **The Access path split as specified (`/errors` and `/feedback`) doesn't
+  work.** See Step 1 above — Access matches by path only, not method, and
+  `/feedback` used to serve both the public POST and the dashboard GET on the
+  identical path. Fixed by moving both dashboards under `/admin/*`, a path no
+  public endpoint shares. This was the biggest gap found in this task;
+  everything else below is comparatively minor.
 - **"The Cloudflare API token and zone id already exist in
   `infra/config.yaml`; add them as repository secrets if they are not there
   yet"** conflates three different things:

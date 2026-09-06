@@ -1,6 +1,7 @@
 import { env, SELF, fetchMock, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { serviceFromPath } from "../../src/obs/log";
+import { isExemptFromProxyLimit } from "../../src/obs/ratelimit";
 
 describe("serviceFromPath", () => {
   it("labels each proxied upstream", () => {
@@ -152,5 +153,65 @@ describe("rate limiting", () => {
       headers: { "cf-connecting-ip": "203.0.113.11" },
     });
     expect(res.status).not.toBe(429);
+  });
+});
+
+// Regression coverage for the maintainer dashboards' move from bare /errors
+// and /feedback to /admin/errors and /admin/feedback: isExemptFromProxyLimit
+// has to be updated in lockstep with any dashboard path change, or dashboard
+// reads silently start counting against the shared 300/min proxy budget
+// meant to protect upstream provider quota. Deliberately a direct unit test
+// of the pure predicate, not an integration test driving ~300+ real
+// SELF.fetch() calls to approach PROXY_LIMITER's actual threshold: an
+// earlier version of this test did exactly that (320 iterations against
+// /admin/errors), and empirically made the wall-clock-dependent flake this
+// file's other tests already document (see PROXY_LIMIT_ITERATION_CAP's
+// comment above) measurably worse -- 2 of 2 runs with that loop present
+// failed on an unrelated heavy-loop test in this same file, versus 0 of 3
+// immediately before/after with it removed. Testing the decision function
+// directly gets equivalent coverage of the actual regression (a path falling
+// out of the exempt list) in microseconds, with no shared mutable rate-limit
+// state and no wall-clock dependency at all.
+describe("isExemptFromProxyLimit", () => {
+  it("exempts both maintainer dashboards under /admin/*", () => {
+    expect(isExemptFromProxyLimit("/admin/errors")).toBe(true);
+    expect(isExemptFromProxyLimit("/admin/errors/somefingerprint")).toBe(true);
+    expect(isExemptFromProxyLimit("/admin/feedback")).toBe(true);
+    expect(isExemptFromProxyLimit("/admin/feedback/some-id/state")).toBe(true);
+  });
+
+  it("exempts the public feedback ingest path, but not by prefix collision with /admin/feedback", () => {
+    expect(isExemptFromProxyLimit("/feedback")).toBe(true);
+    // A prefix check on "/feedback" must never accidentally match
+    // "/admin/feedback" -- confirmed here by the fact that /admin/feedback
+    // is exempt via the SEPARATE "/admin/" prefix in the test above, not
+    // this one; this test only asserts the bare ingest path itself.
+  });
+
+  it("exempts pairing and crash ingest", () => {
+    expect(isExemptFromProxyLimit("/pairing/claim")).toBe(true);
+    expect(isExemptFromProxyLimit("/crashes/report")).toBe(true);
+  });
+
+  it("exempts /health and /stats exactly, not by prefix", () => {
+    expect(isExemptFromProxyLimit("/health")).toBe(true);
+    expect(isExemptFromProxyLimit("/stats")).toBe(true);
+    // /health and /stats are EXACT matches (a Set), not prefixes -- a path
+    // that merely starts with one must still be charged against the budget.
+    expect(isExemptFromProxyLimit("/healthcheck")).toBe(false);
+  });
+
+  it("does not exempt real proxy/metadata routes", () => {
+    expect(isExemptFromProxyLimit("/tmdb/genre/movie")).toBe(false);
+    expect(isExemptFromProxyLimit("/tvdb/search")).toBe(false);
+    expect(isExemptFromProxyLimit("/music/search")).toBe(false);
+    expect(isExemptFromProxyLimit("/api/v1/subtitles/search")).toBe(false);
+  });
+
+  // The literal regression this whole test exists to catch: before the
+  // dashboards moved, this list read "/errors" (bare), which is what a
+  // revert -- accidental or otherwise -- would reintroduce.
+  it("does not exempt the old, pre-move dashboard paths", () => {
+    expect(isExemptFromProxyLimit("/errors")).toBe(false);
   });
 });

@@ -38,7 +38,7 @@ function isValidIdShape(value: string): boolean {
 const NOT_FOUND_BODY = "<p>No such feedback submission.</p>";
 
 export function registerFeedbackDashboard(app: Hono<{ Bindings: Env }>): void {
-  app.get("/feedback", async (c) => {
+  app.get("/admin/feedback", async (c) => {
     const rawState = c.req.query("state");
     // Mirrors normalize_state_filter/1: no param at all defaults to
     // "unread"; a recognised value (including the literal "all") is used
@@ -60,10 +60,10 @@ export function registerFeedbackDashboard(app: Hono<{ Bindings: Env }>): void {
 
     const body = `
 <p class="muted">
-  <a href="/feedback">unread</a>
-  <a href="/feedback?state=read">read</a>
-  <a href="/feedback?state=archived">archived</a>
-  <a href="/feedback?state=all">all</a>
+  <a href="/admin/feedback">unread</a>
+  <a href="/admin/feedback?state=read">read</a>
+  <a href="/admin/feedback?state=archived">archived</a>
+  <a href="/admin/feedback?state=all">all</a>
 </p>
 <table>
   <thead><tr><th>When</th><th>Type</th><th>Message</th><th>Version</th><th>Contact</th><th>Instance</th><th>Source IP</th><th>State</th><th>GitHub</th></tr></thead>
@@ -74,11 +74,11 @@ export function registerFeedbackDashboard(app: Hono<{ Bindings: Env }>): void {
         // shows for an unread row, "Archive" only for a not-yet-archived
         // row -- neither the Elixir dashboard nor this one exposes a
         // generic "switch to any other state" control per row.
-        const markReadForm = `<form method="post" action="/feedback/${escapeHtml(r.id)}/state">
+        const markReadForm = `<form method="post" action="/admin/feedback/${escapeHtml(r.id)}/state">
               <input type="hidden" name="state" value="read">
               <button type="submit">mark read</button>
             </form>`;
-        const archiveForm = `<form method="post" action="/feedback/${escapeHtml(r.id)}/state">
+        const archiveForm = `<form method="post" action="/admin/feedback/${escapeHtml(r.id)}/state">
               <input type="hidden" name="state" value="archived">
               <button type="submit">archive</button>
             </form>`;
@@ -97,7 +97,7 @@ export function registerFeedbackDashboard(app: Hono<{ Bindings: Env }>): void {
         ${r.state !== "archived" ? archiveForm : ""}
       </td>
       <td>
-        <form method="post" action="/feedback/${escapeHtml(r.id)}/github">
+        <form method="post" action="/admin/feedback/${escapeHtml(r.id)}/github">
           <input name="github_ref" placeholder="owner/repo#123" value="${escapeHtml(r.github_ref ?? "")}" size="16">
           <button type="submit">save</button>
         </form>
@@ -107,12 +107,12 @@ export function registerFeedbackDashboard(app: Hono<{ Bindings: Env }>): void {
       .join("")}
   </tbody>
 </table>
-${rows.length === PAGE_SIZE ? `<p><a href="/feedback?page=${page + 1}&state=${escapeHtml(state)}">Next</a></p>` : ""}`;
+${rows.length === PAGE_SIZE ? `<p><a href="/admin/feedback?page=${page + 1}&state=${escapeHtml(state)}">Next</a></p>` : ""}`;
 
     return c.html(layout("Feedback", body));
   });
 
-  app.post("/feedback/:id/state", async (c) => {
+  app.post("/admin/feedback/:id/state", async (c) => {
     const id = c.req.param("id");
     if (!isValidIdShape(id)) {
       return c.html(layout("Not found", NOT_FOUND_BODY), 404);
@@ -125,10 +125,10 @@ ${rows.length === PAGE_SIZE ? `<p><a href="/feedback?page=${page + 1}&state=${es
     }
 
     await setFeedbackState(c.env, id, rawState);
-    return c.redirect("/feedback", 303);
+    return c.redirect("/admin/feedback", 303);
   });
 
-  app.post("/feedback/:id/github", async (c) => {
+  app.post("/admin/feedback/:id/github", async (c) => {
     const id = c.req.param("id");
     if (!isValidIdShape(id)) {
       return c.html(layout("Not found", NOT_FOUND_BODY), 404);
@@ -142,6 +142,6 @@ ${rows.length === PAGE_SIZE ? `<p><a href="/feedback?page=${page + 1}&state=${es
     // Ecto.Changeset.cast/4's default empty_values does on the Elixir side.
     const ref = String(form.get("github_ref") ?? "");
     await setGithubRef(c.env, id, ref);
-    return c.redirect("/feedback", 303);
+    return c.redirect("/admin/feedback", 303);
   });
 }

@@ -37,7 +37,7 @@ function renderCount(count: number, isFloor: boolean): string {
 }
 
 export function registerErrorDashboard(app: Hono<{ Bindings: Env }>): void {
-  app.get("/errors", async (c) => {
+  app.get("/admin/errors", async (c) => {
     const status = c.req.query("status") ?? undefined;
     const page = parsePage(c.req.query("page"));
     const rows = await listErrors(c.env, {
@@ -48,9 +48,9 @@ export function registerErrorDashboard(app: Hono<{ Bindings: Env }>): void {
 
     const body = `
 <p class="muted">
-  <a href="/errors">all</a>
-  <a href="/errors?status=unresolved">unresolved</a>
-  <a href="/errors?status=resolved">resolved</a>
+  <a href="/admin/errors">all</a>
+  <a href="/admin/errors?status=unresolved">unresolved</a>
+  <a href="/admin/errors?status=resolved">resolved</a>
 </p>
 <table>
   <thead><tr><th>Kind</th><th>Message</th><th>Source</th><th>Count</th><th>Last seen</th><th>Status</th></tr></thead>
@@ -60,14 +60,14 @@ export function registerErrorDashboard(app: Hono<{ Bindings: Env }>): void {
       // depth, NOT what makes that href safe -- escapeHtml only neutralises
       // HTML metacharacters, not URL-structural ones (a slash, "?", "#", a
       // raw CRLF). What actually makes it safe is that the surrounding path
-      // is the fixed literal "/errors/" and fingerprintOf's output is
+      // is the fixed literal "/admin/errors/" and fingerprintOf's output is
       // constrained to 32 lowercase hex characters. If fingerprint
       // generation ever allows arbitrary bytes, this href needs its own
       // encodeURIComponent, not just escapeHtml.
       rows
         .map(
           (r) => `<tr>
-      <td><a href="/errors/${escapeHtml(r.fingerprint)}">${escapeHtml(r.kind)}</a></td>
+      <td><a href="/admin/errors/${escapeHtml(r.fingerprint)}">${escapeHtml(r.kind)}</a></td>
       <td>${escapeHtml(r.message)}</td>
       <td class="muted">${escapeHtml(r.source_file ?? "")}${r.source_line ? `:${escapeHtml(r.source_line)}` : ""}</td>
       <td>${renderCount(r.occurrence_count, r.count_is_floor === 1)}</td>
@@ -78,12 +78,12 @@ export function registerErrorDashboard(app: Hono<{ Bindings: Env }>): void {
       .join("")}
   </tbody>
 </table>
-${rows.length === PAGE_SIZE ? `<p><a href="/errors?page=${page + 1}${status ? `&status=${escapeHtml(status)}` : ""}">Next</a></p>` : ""}`;
+${rows.length === PAGE_SIZE ? `<p><a href="/admin/errors?page=${page + 1}${status ? `&status=${escapeHtml(status)}` : ""}">Next</a></p>` : ""}`;
 
     return c.html(layout("Errors", body));
   });
 
-  app.get("/errors/:fingerprint", async (c) => {
+  app.get("/admin/errors/:fingerprint", async (c) => {
     const found = await getError(c.env, c.req.param("fingerprint"));
     if (!found) return c.html(layout("Not found", "<p>No such error group.</p>"), 404);
 
@@ -91,14 +91,14 @@ ${rows.length === PAGE_SIZE ? `<p><a href="/errors?page=${page + 1}${status ? `&
 
     // escapeHtml(error.fingerprint) in the <form action> below is the same
     // defense-in-depth as the list page's <a href> (see the comment there);
-    // the fixed "/errors/" prefix plus fingerprintOf's 32-hex-char output is
+    // the fixed "/admin/errors/" prefix plus fingerprintOf's 32-hex-char output is
     // what actually makes it safe, not the escaping itself.
     const body = `
 <p>
   <strong>${escapeHtml(error.kind)}</strong>: ${escapeHtml(error.message)}<br>
   <span class="muted">${renderCount(error.occurrence_count, error.count_is_floor === 1)} occurrences, first ${escapeHtml(when(error.first_seen_at))}, last ${escapeHtml(when(error.last_seen_at))}</span>
 </p>
-<form method="post" action="/errors/${escapeHtml(error.fingerprint)}/${error.status === "resolved" ? "unresolve" : "resolve"}">
+<form method="post" action="/admin/errors/${escapeHtml(error.fingerprint)}/${error.status === "resolved" ? "unresolve" : "resolve"}">
   <button type="submit">${error.status === "resolved" ? "Reopen" : "Resolve"}</button>
 </form>
 <h2>Recent occurrences</h2>
@@ -124,21 +124,21 @@ ${occurrences
   // 500, not a clean 404, on an unauthenticated route. Rejecting anything
   // that isn't a real fingerprint's shape up front avoids both the wasted D1
   // round trip for garbage input and the 500.
-  app.post("/errors/:fingerprint/resolve", async (c) => {
+  app.post("/admin/errors/:fingerprint/resolve", async (c) => {
     const fingerprint = c.req.param("fingerprint");
     if (!isValidFingerprintShape(fingerprint)) {
       return c.html(layout("Not found", "<p>No such error group.</p>"), 404);
     }
     await setErrorStatus(c.env, fingerprint, "resolved");
-    return c.redirect(`/errors/${fingerprint}`, 303);
+    return c.redirect(`/admin/errors/${fingerprint}`, 303);
   });
 
-  app.post("/errors/:fingerprint/unresolve", async (c) => {
+  app.post("/admin/errors/:fingerprint/unresolve", async (c) => {
     const fingerprint = c.req.param("fingerprint");
     if (!isValidFingerprintShape(fingerprint)) {
       return c.html(layout("Not found", "<p>No such error group.</p>"), 404);
     }
     await setErrorStatus(c.env, fingerprint, "unresolved");
-    return c.redirect(`/errors/${fingerprint}`, 303);
+    return c.redirect(`/admin/errors/${fingerprint}`, 303);
   });
 }
