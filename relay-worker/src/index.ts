@@ -6,6 +6,7 @@ import { registerSubdlRoutes, subdlApiKey } from "./proxy/subdl";
 import { registerPassthroughRoutes } from "./proxy/passthrough";
 import { registerPairingRoutes } from "./pairing/routes";
 import { registerCrashRoutes } from "./crashes/ingest";
+import { registerErrorDashboard } from "./dashboards/errors";
 import { registerFeedbackRoutes } from "./feedback/ingest";
 import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
@@ -66,6 +67,11 @@ registerSubdlRoutes(app);
 registerPassthroughRoutes(app);
 registerPairingRoutes(app);
 registerCrashRoutes(app);
+// GET/POST /errors and /errors/:fingerprint -- the maintainer dashboard
+// replacing error_tracker's LiveView UI. Unauthenticated until Task 15 puts
+// Cloudflare Access in front of it; do not deploy this to a public hostname
+// before that lands.
+registerErrorDashboard(app);
 // POST only -- Task 14 adds GET /feedback (the maintainer dashboard) as a
 // separate route registration, and Hono matches by path AND method, so the
 // two coexist without either swallowing the other.
