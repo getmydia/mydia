@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { Env } from "../env";
 import {
   bodyFingerprint,
@@ -6,7 +6,12 @@ import {
   EMPTY_SUBTITLE_TTL_SECONDS,
 } from "../cache/key";
 import { cacheGet, cachePut } from "../cache/store";
-import { encodeFileId, decodeFileId, extractSubtitle } from "../archive/zip";
+import {
+  encodeFileId,
+  decodeFileId,
+  extractSubtitle,
+  MAX_ARCHIVE_BYTES,
+} from "../archive/zip";
 
 const SEARCH_URL = "https://api.subdl.com/api/v1/subtitles";
 const DOWNLOAD_HOST = "https://dl.subdl.com";
@@ -206,6 +211,19 @@ export function subdlApiKey(env: Env): string | null {
   return key.trim() === "" ? null : key;
 }
 
+// Shared by every branch of the download route that must not echo an
+// upstream detail: a fixed body regardless of why the fetch, size check, or
+// extraction failed.
+function subtitleUnavailable(c: Context<{ Bindings: Env }>): Response {
+  return c.json(
+    {
+      error: "Subtitle unavailable",
+      message: "The subtitle could not be retrieved from the provider.",
+    },
+    502,
+  );
+}
+
 export function registerSubdlRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post("/api/v1/subtitles/search", async (c) => {
     const apiKey = subdlApiKey(c.env);
@@ -350,25 +368,25 @@ export function registerSubdlRoutes(app: Hono<{ Bindings: Env }>): void {
       // No upstream body is forwarded here, ever. dl.subdl.com is fetched
       // unauthenticated, but its error body is still never this relay's to
       // hand back verbatim.
-      return c.json(
-        {
-          error: "Subtitle unavailable",
-          message: "The subtitle could not be retrieved from the provider.",
-        },
-        502,
-      );
+      return subtitleUnavailable(c);
+    }
+
+    // Defence in depth, ahead of extractSubtitle's own declared-size cap: the
+    // compressed body itself is unbounded before any ZIP parsing happens at
+    // all, so a huge Content-Length is rejected before `.arrayBuffer()` ever
+    // buffers it into memory. Same ceiling as the expanded-content cap
+    // (MAX_ARCHIVE_BYTES) -- nothing legitimate needs a compressed subtitle
+    // archive anywhere near as large as the most we'd ever accept expanded,
+    // and real archives are tens of KB, three orders of magnitude under this.
+    const contentLength = Number(upstream.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength >= MAX_ARCHIVE_BYTES) {
+      return subtitleUnavailable(c);
     }
 
     const bytes = new Uint8Array(await upstream.arrayBuffer());
     const subtitle = extractSubtitle(bytes);
     if (!subtitle) {
-      return c.json(
-        {
-          error: "Subtitle unavailable",
-          message: "The subtitle could not be retrieved from the provider.",
-        },
-        502,
-      );
+      return subtitleUnavailable(c);
     }
 
     return new Response(subtitle, {

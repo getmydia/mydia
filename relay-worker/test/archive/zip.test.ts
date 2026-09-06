@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { zipSync, strToU8 } from "fflate";
-import { extractSubtitle, encodeFileId, decodeFileId } from "../../src/archive/zip";
+import {
+  extractSubtitle,
+  encodeFileId,
+  decodeFileId,
+  MAX_ARCHIVE_BYTES,
+} from "../../src/archive/zip";
 
 describe("extractSubtitle", () => {
   it("returns the subtitle bytes from a single-entry archive", () => {
@@ -37,6 +42,39 @@ describe("extractSubtitle", () => {
 
   it("returns null for bytes that are not a zip at all", () => {
     expect(extractSubtitle(strToU8("<html>captcha</html>"))).toBeNull();
+  });
+
+  // Mirrors archive.ex's check_declared_size/1 + check_total_size/1: a small
+  // download must not be allowed to expand into an unbounded write. These
+  // three tests were run against the pre-fix, uncapped extractSubtitle before
+  // this cap existed; see task-6-report.md's fix round 1 section for that
+  // "before" output. The zip-bomb test in particular is written so it fails
+  // against an implementation that fully decompresses before checking size.
+  describe("size cap", () => {
+    it("rejects an archive whose declared size is exactly at the cap", () => {
+      const zip = zipSync({ "big.srt": new Uint8Array(MAX_ARCHIVE_BYTES) });
+      expect(extractSubtitle(zip)).toBeNull();
+    });
+
+    it("accepts an archive whose declared size is just under the cap", () => {
+      const payload = new Uint8Array(MAX_ARCHIVE_BYTES - 1000).fill(1);
+      const zip = zipSync({ "big.srt": payload });
+      const out = extractSubtitle(zip);
+      expect(out).not.toBeNull();
+      expect(out!.length).toBe(payload.length);
+    });
+
+    it("rejects a zip-bomb shape (tiny on the wire, huge declared size) without materialising it", () => {
+      // 30MB of zeros compresses to well under 1KB via deflate: small
+      // compressed size, huge originalSize -- exactly the shape
+      // check_declared_size/1 exists to catch before any bytes are produced.
+      const bomb = new Uint8Array(30_000_000);
+      const zip = zipSync({ "bomb.srt": bomb });
+      // ~1000x compression ratio: comfortably "tiny on the wire" relative to
+      // the 30MB declared size, without pinning an exact byte count.
+      expect(zip.length).toBeLessThan(50_000);
+      expect(extractSubtitle(zip)).toBeNull();
+    });
   });
 });
 

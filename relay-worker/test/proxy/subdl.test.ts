@@ -341,4 +341,24 @@ describe("GET /api/v1/subtitles/download/:id", () => {
 
     expect(res.status).toBe(502);
   });
+
+  it("rejects a response whose declared Content-Length is at the archive cap, before buffering it", async () => {
+    // Defence in depth ahead of extractSubtitle's own cap: the compressed
+    // body is unbounded before any ZIP parsing happens, so this is rejected
+    // on the header alone. The body here is tiny -- if the route buffered it
+    // first and only rejected afterward, this would still incidentally pass,
+    // so the point is that a real 20MB body is never required to prove it.
+    fetchMock
+      .get("https://dl.subdl.com")
+      .intercept({ method: "GET", path: "/subtitle/huge.zip" })
+      .reply(200, Buffer.from("short body"), {
+        headers: { "content-length": "20000000" },
+      });
+
+    const id = btoa("/subtitle/huge.zip").replace(/=+$/, "");
+    const res = await SELF.fetch(`https://relay.mydia.dev/api/v1/subtitles/download/${id}`);
+
+    expect(res.status).toBe(502);
+    expect(await res.text()).not.toContain("short body");
+  });
 });
