@@ -18,6 +18,32 @@ describe("serviceFromPath", () => {
   });
 });
 
+// PROXY_LIMITER is limit: 300, period: 60 (wrangler.jsonc). Miniflare's own
+// rate-limit simulator resets its whole counter on wall-clock time, not on
+// consumption -- node_modules/miniflare/dist/src/workers/ratelimit/ratelimit.worker.js:
+//   let epoch = Math.floor(Date.now() / (period * 1e3));
+//   epoch != this.epoch && (this.epoch = epoch, this.buckets.clear());
+// If a real 60s boundary falls in the middle of one of the loops below, the
+// in-flight count is wiped to zero and up to another full `limit` requests
+// are needed to trip the 429 again -- observed as "expected 500 to be 429"
+// (the loop exhausts with the route's own, unthrottled response) at roughly
+// once in four to six full-suite runs, in two independent review sessions.
+// It's a property of the local simulator, not the Worker: production rate
+// limiting is Cloudflare's real service, not this fixed-window-per-process
+// approximation.
+//
+// The cap below (2 * limit + margin) survives exactly one such reset,
+// wherever in the loop it lands: up to `limit - 1` requests before the
+// reset, then a full `limit + 1` after it. `if (last.status === 429) break`
+// means an ordinary run (no reset) still exits after ~301 iterations, same
+// as before -- only a run that hits the reset pays the extra iterations.
+// This does not eliminate the flake (two resets in one loop would still
+// lose), it makes the common single-reset case survivable by construction.
+// Do not shrink this back toward `limit` because "305 was fine before" --
+// that reasoning is exactly what shipped the flake.
+const PROXY_LIMIT = 300;
+const PROXY_LIMIT_ITERATION_CAP = 2 * PROXY_LIMIT + 10;
+
 describe("rate limiting", () => {
   beforeAll(async () => {
     fetchMock.activate();
@@ -32,31 +58,39 @@ describe("rate limiting", () => {
     await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
   });
 
-  it("returns 429 with a Retry-After header once the budget is spent", async () => {
-    let last: Response | undefined;
-    for (let i = 0; i < 305; i++) {
-      last = await SELF.fetch("https://relay.mydia.dev/tmdb/genre/movie", {
-        headers: { "cf-connecting-ip": "203.0.113.9" },
-      });
-      if (last.status === 429) break;
-    }
+  it(
+    "returns 429 with a Retry-After header once the budget is spent",
+    async () => {
+      // Explicit timeout below (not Vitest's 5000ms default): the rare
+      // mid-loop reset case runs up to PROXY_LIMIT_ITERATION_CAP iterations
+      // rather than the usual ~301, and needs the room.
+      let last: Response | undefined;
+      for (let i = 0; i < PROXY_LIMIT_ITERATION_CAP; i++) {
+        last = await SELF.fetch("https://relay.mydia.dev/tmdb/genre/movie", {
+          headers: { "cf-connecting-ip": "203.0.113.9" },
+        });
+        if (last.status === 429) break;
+      }
 
-    expect(last!.status).toBe(429);
-    expect(last!.headers.get("retry-after")).toBe("60");
-    // Exact parity with metadata-relay/lib/metadata_relay/plug/proxy_rate_limit.ex's
-    // send_resp(429, Jason.encode!(%{error: "Too many requests", message: "..."})) --
-    // NOT router.ex's separate send_rate_limited/2 helper, which uses a
-    // differently-cased "rate_limited" error string for pairing/feedback/crash
-    // routes. This is the one the proxy limiter itself uses.
-    const body = await last!.json<{ error: string; message: string }>();
-    expect(body).toMatchObject({
-      error: "Too many requests",
-      message: "Rate limit exceeded. Please try again later.",
-    });
-  });
+      expect(last!.status).toBe(429);
+      expect(last!.headers.get("retry-after")).toBe("60");
+      // Exact parity with metadata-relay/lib/metadata_relay/plug/proxy_rate_limit.ex's
+      // send_resp(429, Jason.encode!(%{error: "Too many requests", message: "..."})) --
+      // NOT router.ex's separate send_rate_limited/2 helper, which uses a
+      // differently-cased "rate_limited" error string for pairing/feedback/crash
+      // routes. This is the one the proxy limiter itself uses.
+      const body = await last!.json<{ error: string; message: string }>();
+      expect(body).toMatchObject({
+        error: "Too many requests",
+        message: "Rate limit exceeded. Please try again later.",
+      });
+    },
+    30000,
+  );
 
   it("logs the final 429 status, not whatever status the route produced before the throttle overwrote it", async () => {
-    // 305 iterations against a real fetchMock and a spied console.log run
+    // Up to PROXY_LIMIT_ITERATION_CAP iterations (see that constant's
+    // comment above) against a real fetchMock and a spied console.log run
     // noticeably slower once other heavy loops in this same file have
     // already run in the same worker instance -- comfortably under a second
     // alone, but into double digits back-to-back with its siblings. Not a
@@ -75,7 +109,7 @@ describe("rate limiting", () => {
     const logSpy = vi.spyOn(console, "log");
 
     let last: Response | undefined;
-    for (let i = 0; i < 305; i++) {
+    for (let i = 0; i < PROXY_LIMIT_ITERATION_CAP; i++) {
       last = await SELF.fetch("https://relay.mydia.dev/tmdb/genre/movie", {
         headers: { "cf-connecting-ip": "203.0.113.20" },
       });
