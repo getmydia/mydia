@@ -39,7 +39,11 @@
   { "method": "GET", "path": "/openlibrary/works/OL2618680W" },
   { "method": "GET", "path": "/openlibrary/authors/OL381465A" },
   { "method": "GET", "path": "/openlibrary/isbn/9780140328721" },
-  { "method": "GET", "path": "/music/search?query=Nebula%20Wraithcoil&type=artist" },
+  {
+    "method": "GET",
+    "path": "/music/search?query=Nebula%20Wraithcoil&type=artist",
+    "note": "Fuzzy-ranked full-text search over MusicBrainz's live index, not an exact-id lookup. Result order, per-entry `score`, and the top-level `count` can all differ between two near-simultaneous identical requests -- observed directly: one live contract run failed here with a shifted `count` and reordered/rescored artist entries, then passed 552ms later in isolation and 42/42 on the next full run. A single failure on this route is not by itself evidence the Worker's music port regressed -- retry it alone before concluding that. See task-9-report.md's non-determinism section."
+  },
   { "method": "GET", "path": "/music/artist/5b11f4ce-a62d-471e-81fc-a69a8278c7da" },
   { "method": "GET", "path": "/music/release/eccae410-7577-4daa-b602-92d305828331" },
   {
