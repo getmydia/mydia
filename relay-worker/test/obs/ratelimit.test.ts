@@ -1,5 +1,5 @@
 import { SELF, fetchMock } from "cloudflare:test";
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import { serviceFromPath } from "../../src/obs/log";
 
 describe("serviceFromPath", () => {
@@ -46,6 +46,47 @@ describe("rate limiting", () => {
       message: "Rate limit exceeded. Please try again later.",
     });
   });
+
+  it("logs the final 429 status, not whatever status the route produced before the throttle overwrote it", async () => {
+    // 305 iterations against a real fetchMock and a spied console.log run
+    // noticeably slower once other heavy loops in this same file have
+    // already run in the same worker instance -- comfortably under a second
+    // alone, but into double digits back-to-back with its siblings. Not a
+    // hang: bumping the timeout is enough (see the isolated per-test timing
+    // versus the full-file timing checked while writing this test).
+    //
+    // Hono composes middleware as an onion: whichever of rateLimitMiddleware
+    // and the logging middleware is registered SECOND runs as the INNER
+    // layer, closer to the route. If the logging middleware is inner, its
+    // `await next()` returns -- and it reads c.res.status -- before control
+    // unwinds back out to rateLimitMiddleware, which only then overwrites
+    // c.res with the 429. That logs the route's pre-throttle status instead
+    // of what the client actually received. Spying on console.log (rather
+    // than matching a substring) and parsing the JSON line guards against a
+    // regression that happens to still contain "429" somewhere.
+    const logSpy = vi.spyOn(console, "log");
+
+    let last: Response | undefined;
+    for (let i = 0; i < 305; i++) {
+      last = await SELF.fetch("https://relay.mydia.dev/tmdb/genre/movie", {
+        headers: { "cf-connecting-ip": "203.0.113.20" },
+      });
+      if (last.status === 429) break;
+    }
+    expect(last!.status).toBe(429);
+
+    const lastCall = logSpy.mock.calls.at(-1);
+    expect(lastCall).toBeDefined();
+    const logged = JSON.parse(lastCall![0] as string) as {
+      service: string;
+      path: string;
+      status: number;
+      cache: string;
+    };
+    expect(logged.status).toBe(429);
+
+    logSpy.mockRestore();
+  }, 30000);
 
   it("does not throttle /health, which monitoring polls", async () => {
     for (let i = 0; i < 50; i++) {
