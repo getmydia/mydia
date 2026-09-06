@@ -8,6 +8,21 @@ beforeAll(() => {
   fetchMock.disableNetConnect();
 });
 
+// Genuinely incompressible filler: deflate cannot shrink random bytes, so a
+// zip built from this stays close to `size` on the wire. Needed so the
+// "oversized body" tests below prove the streaming cap specifically --
+// a same-byte-repeated buffer would compress to near nothing and, wrapped in
+// a real .srt entry, get rejected by extractSubtitle's own unrelated checks
+// either way, masking whether the download route's byte cap ever ran.
+function randomBytes(size: number): Uint8Array {
+  const out = new Uint8Array(size);
+  const chunk = 65536;
+  for (let offset = 0; offset < size; offset += chunk) {
+    crypto.getRandomValues(out.subarray(offset, Math.min(offset + chunk, size)));
+  }
+  return out;
+}
+
 interface SearchResponseBody {
   subtitles: Array<Record<string, unknown>>;
 }
@@ -342,17 +357,16 @@ describe("GET /api/v1/subtitles/download/:id", () => {
     expect(res.status).toBe(502);
   });
 
-  it("rejects a response whose declared Content-Length is at the archive cap, before buffering it", async () => {
-    // Defence in depth ahead of extractSubtitle's own cap: the compressed
-    // body is unbounded before any ZIP parsing happens, so this is rejected
-    // on the header alone. The body here is tiny -- if the route buffered it
-    // first and only rejected afterward, this would still incidentally pass,
-    // so the point is that a real 20MB body is never required to prove it.
+  it("rejects a response whose declared Content-Length is at the download cap, before buffering it", async () => {
+    // Cheap early-out ahead of the real streaming cap: the body here is tiny
+    // -- if the route buffered it first and only rejected afterward, this
+    // would still incidentally pass, so the point is that a real oversized
+    // body is never required to prove the header check alone fires.
     fetchMock
       .get("https://dl.subdl.com")
       .intercept({ method: "GET", path: "/subtitle/huge.zip" })
       .reply(200, Buffer.from("short body"), {
-        headers: { "content-length": "20000000" },
+        headers: { "content-length": "2000000" },
       });
 
     const id = btoa("/subtitle/huge.zip").replace(/=+$/, "");
@@ -360,5 +374,60 @@ describe("GET /api/v1/subtitles/download/:id", () => {
 
     expect(res.status).toBe(502);
     expect(await res.text()).not.toContain("short body");
+  });
+
+  // The Content-Length check above is only a cheap early-out for an honest
+  // server. These three prove the real bound: a streaming read that counts
+  // actual bytes and does not trust the header at all, since it can be
+  // absent, non-numeric, or simply a lie -- and dl.subdl.com serves content
+  // uploaded by arbitrary third parties, not a cooperating host.
+  describe("streaming byte cap (Content-Length is not trusted)", () => {
+    it("rejects an oversized body with no Content-Length header at all", async () => {
+      // A real (if pointless) zip around 3MB of incompressible content --
+      // under the old 20MB expansion cap, so the ONLY thing that can reject
+      // this is the download route's own byte cap on the transfer itself.
+      const big = Buffer.from(zipSync({ "big.srt": randomBytes(3_000_000) }));
+      // undici's mock does not auto-set content-length unless told to
+      // (verified: a bare .reply(200, buffer) yields no headers at all), so
+      // this reproduces a real "absent header" upstream with no extra work.
+      fetchMock
+        .get("https://dl.subdl.com")
+        .intercept({ method: "GET", path: "/subtitle/nolen.zip" })
+        .reply(200, big);
+
+      const id = btoa("/subtitle/nolen.zip").replace(/=+$/, "");
+      const res = await SELF.fetch(`https://relay.mydia.dev/api/v1/subtitles/download/${id}`);
+
+      expect(res.status).toBe(502);
+    });
+
+    it("rejects an oversized body behind a lying, small Content-Length", async () => {
+      const big = Buffer.from(zipSync({ "big.srt": randomBytes(3_000_000) }));
+      fetchMock
+        .get("https://dl.subdl.com")
+        .intercept({ method: "GET", path: "/subtitle/lying.zip" })
+        .reply(200, big, { headers: { "content-length": "10" } });
+
+      const id = btoa("/subtitle/lying.zip").replace(/=+$/, "");
+      const res = await SELF.fetch(`https://relay.mydia.dev/api/v1/subtitles/download/${id}`);
+
+      expect(res.status).toBe(502);
+    });
+
+    it("still succeeds for a normal small archive with no Content-Length header", async () => {
+      const zip = zipSync({
+        "sub.srt": strToU8("1\n00:00:01,000 --> 00:00:02,000\nno header\n"),
+      });
+      fetchMock
+        .get("https://dl.subdl.com")
+        .intercept({ method: "GET", path: "/subtitle/plain.zip" })
+        .reply(200, Buffer.from(zip));
+
+      const id = btoa("/subtitle/plain.zip").replace(/=+$/, "");
+      const res = await SELF.fetch(`https://relay.mydia.dev/api/v1/subtitles/download/${id}`);
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("00:00:01,000");
+    });
   });
 });

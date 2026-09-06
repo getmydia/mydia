@@ -6,16 +6,21 @@ import {
   EMPTY_SUBTITLE_TTL_SECONDS,
 } from "../cache/key";
 import { cacheGet, cachePut } from "../cache/store";
-import {
-  encodeFileId,
-  decodeFileId,
-  extractSubtitle,
-  MAX_ARCHIVE_BYTES,
-} from "../archive/zip";
+import { encodeFileId, decodeFileId, extractSubtitle } from "../archive/zip";
 
 const SEARCH_URL = "https://api.subdl.com/api/v1/subtitles";
 const DOWNLOAD_HOST = "https://dl.subdl.com";
 const SUBS_PER_PAGE = "30";
+
+// Bounds the compressed transfer, a different concern from
+// extractSubtitle's MAX_ARCHIVE_BYTES (the expanded-content cap). This one
+// exists purely to stop an HTTP body from being buffered at all before ZIP
+// parsing ever gets a chance to run. Real SubDL archives are tens of KB;
+// 2,000,000 bytes (2MB) is already two orders of magnitude of slack for
+// anything legitimate, deliberately far tighter than the 20MB expansion cap
+// -- a compressed subtitle archive should never need to approach the size of
+// the most content this relay would ever accept expanded.
+const MAX_DOWNLOAD_BYTES = 2_000_000;
 
 // -- Search query construction ------------------------------------------
 //
@@ -224,6 +229,64 @@ function subtitleUnavailable(c: Context<{ Bindings: Env }>): Response {
   );
 }
 
+// Content-Length is a cheap early-out for an honest server that has already
+// declared a body too large to bother reading -- it is NOT a bound. It can be
+// absent, non-numeric, or simply a lie (workerd does not enforce it against
+// the real byte count), so the actual limit is enforced by readCapped below
+// regardless of what this header claims.
+function declaredContentLengthExceeds(
+  response: Response,
+  maxBytes: number,
+): boolean {
+  const raw = response.headers.get("content-length");
+  if (raw === null) return false;
+  const declared = Number(raw);
+  return Number.isFinite(declared) && declared >= maxBytes;
+}
+
+// Reads a response body up to maxBytes, streaming chunk by chunk and
+// rejecting (null) the instant the running total would reach or exceed the
+// cap -- discarding whatever was buffered so far and cancelling the stream so
+// the underlying connection isn't left draining. Unlike a Content-Length
+// check this does not trust the server: it counts real bytes as they arrive,
+// so an absent, wrong, or lying header changes nothing about the outcome.
+async function readCapped(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array | null> {
+  const body = response.body;
+  if (!body) return new Uint8Array(0);
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    total += value.length;
+    if (total >= maxBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Already closed or errored; nothing more to clean up.
+      }
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
 export function registerSubdlRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post("/api/v1/subtitles/search", async (c) => {
     const apiKey = subdlApiKey(c.env);
@@ -371,19 +434,19 @@ export function registerSubdlRoutes(app: Hono<{ Bindings: Env }>): void {
       return subtitleUnavailable(c);
     }
 
-    // Defence in depth, ahead of extractSubtitle's own declared-size cap: the
-    // compressed body itself is unbounded before any ZIP parsing happens at
-    // all, so a huge Content-Length is rejected before `.arrayBuffer()` ever
-    // buffers it into memory. Same ceiling as the expanded-content cap
-    // (MAX_ARCHIVE_BYTES) -- nothing legitimate needs a compressed subtitle
-    // archive anywhere near as large as the most we'd ever accept expanded,
-    // and real archives are tens of KB, three orders of magnitude under this.
-    const contentLength = Number(upstream.headers.get("content-length"));
-    if (Number.isFinite(contentLength) && contentLength >= MAX_ARCHIVE_BYTES) {
+    // Cheap early-out for an honest server that already declared its body
+    // too large -- saves the read below, but is not itself the bound: see
+    // readCapped, which enforces the real limit against actual bytes
+    // regardless of what (or whether) this header says.
+    if (declaredContentLengthExceeds(upstream, MAX_DOWNLOAD_BYTES)) {
       return subtitleUnavailable(c);
     }
 
-    const bytes = new Uint8Array(await upstream.arrayBuffer());
+    const bytes = await readCapped(upstream, MAX_DOWNLOAD_BYTES);
+    if (!bytes) {
+      return subtitleUnavailable(c);
+    }
+
     const subtitle = extractSubtitle(bytes);
     if (!subtitle) {
       return subtitleUnavailable(c);
