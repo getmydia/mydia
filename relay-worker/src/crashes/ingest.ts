@@ -75,6 +75,39 @@ const MAX_FRAME_STRING_CHARS = 1_024;
 const MAX_STACK_FRAMES = 64;
 const MAX_CONTEXT_BYTES = 16_384;
 
+// How many RAW array entries are even looked at, as distinct from how many
+// parsed frames are kept. Both limits are needed and neither implies the
+// other.
+//
+// A first pass here kept only MAX_STACK_FRAMES but applied it with
+// `.map(...).filter(...).slice(...)`, which allocates a parsed object for
+// every one of an attacker's entries before discarding all but 64.
+// POST /crashes/report is unauthenticated and exempt from the proxy limiter
+// (EXEMPT_PREFIXES in src/obs/ratelimit.ts, because it carries its own
+// per-hour write budget instead), and normalization runs before
+// admittedByBurstGuard, so that work happens on every request that reaches
+// the route -- a million-entry array is a million allocations against the
+// Workers CPU budget, whatever the eventual 64-frame result.
+//
+// 256 is comfortably above any real BEAM stacktrace while keeping the scan
+// bounded, and scanning raw entries in order (rather than truncating the
+// array up front) preserves the property the first version had: entries that
+// parseStacktraceEntry drops do not consume frame slots, so padding the array
+// with junk cannot push real frames out of the kept window. The top frame
+// decides the fingerprint, and this keeps the top of the trace, so a
+// truncated report still groups where an untruncated one would have.
+const MAX_RAW_STACK_ENTRIES = 256;
+
+function parseStackFrames(raw: unknown[]): CrashFrame[] {
+  const frames: CrashFrame[] = [];
+  const scanLimit = Math.min(raw.length, MAX_RAW_STACK_ENTRIES);
+  for (let i = 0; i < scanLimit && frames.length < MAX_STACK_FRAMES; i++) {
+    const parsed = parseStacktraceEntry(raw[i]);
+    if (parsed !== null) frames.push(parsed);
+  }
+  return frames;
+}
+
 // The marker is appended after the cut, so the result is bounded by
 // max + marker length rather than exactly max. Being able to see that a value
 // was cut is worth more than the handful of characters.
@@ -224,17 +257,8 @@ export function normalizeCrashReport(
       ? truncate(body.error_message, MAX_MESSAGE_CHARS)
       : "Unknown error";
 
-  // Sliced AFTER parsing rather than before, so MAX_STACK_FRAMES counts
-  // frames that survived parseStacktraceEntry's drop rule, not raw array
-  // entries -- a caller padding the array with junk entries can't push real
-  // frames out of the window that way. The top frame is what the fingerprint
-  // is derived from, and this keeps the top of the trace, so the grouping a
-  // truncated report lands in is the same one it would have had.
   const rawStack = Array.isArray(body.stacktrace) ? body.stacktrace : [];
-  let stacktrace = rawStack
-    .map(parseStacktraceEntry)
-    .filter((f): f is CrashFrame => f !== null)
-    .slice(0, MAX_STACK_FRAMES);
+  let stacktrace = parseStackFrames(rawStack);
 
   // Without any source info every report derives the same fingerprint and
   // collapses into one useless group, so metadata stands in for a frame.

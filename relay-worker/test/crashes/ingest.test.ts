@@ -172,6 +172,90 @@ describe("normalizeCrashReport", () => {
     expect(out.stacktrace[0]?.file).toBe("lib/fake_0.ex");
   });
 
+  // Entries parseStacktraceEntry drops must not consume frame slots, or a
+  // caller could pad the head of the array with junk and push the real frames
+  // -- including the one the fingerprint is derived from -- out of the window.
+  it("does not let unparseable entries push real frames out of the kept window", () => {
+    const junk = Array.from({ length: 40 }, () => ({ module: "Elixir.NoFileNoLine" }));
+    const real = Array.from({ length: 10 }, (_, i) => ({
+      module: "Elixir.Fake",
+      function: "run/0",
+      file: `lib/real_${i}.ex`,
+      line: i,
+    }));
+
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace: [...junk, ...real],
+    });
+
+    expect(out.stacktrace.length).toBe(10);
+    expect(out.stacktrace[0]?.file).toBe("lib/real_0.ex");
+  });
+
+  // The frame cap alone does not bound the WORK: mapping then slicing still
+  // allocates one parsed object per attacker-supplied entry first. This route
+  // is unauthenticated and exempt from the proxy limiter, and normalization
+  // runs before the burst guard, so the scan itself has to be bounded too.
+  //
+  // The input shape is the whole point, and getting it wrong makes this test
+  // worthless rather than merely weak. A first version passed a large array of
+  // entries that were ALL unparseable and asserted an empty result -- which the
+  // eager `map().filter().slice()` version produces too, so it held equally
+  // under the implementation it was written to rule out.
+  //
+  // Putting a valid frame at index MAX_RAW_STACK_ENTRIES is what separates
+  // them: the bounded scan never reaches it and returns nothing, while any
+  // implementation that walks the whole array finds it and keeps it. Every
+  // entry before it is unparseable so the 64-frame early exit can never fire,
+  // leaving the raw scan bound as the only thing that can stop the walk.
+  it("stops scanning raw entries at the cap rather than parsing the whole array", () => {
+    const beyondTheBound = {
+      module: "Elixir.Fake",
+      function: "run/0",
+      file: "lib/beyond_raw_limit.ex",
+      line: 1,
+    };
+    const stacktrace = [
+      ...Array.from({ length: 256 }, () => ({ module: "Elixir.Junk" })),
+      beyondTheBound,
+    ];
+
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace,
+    });
+
+    expect(out.stacktrace).toEqual([]);
+    expect(out.stacktrace.map((f) => f.file)).not.toContain("lib/beyond_raw_limit.ex");
+  });
+
+  // The complement of the test above: one entry earlier and the same frame IS
+  // kept, which is what shows the bound is at the documented place rather than
+  // the scan simply being broken.
+  it("still reaches a valid frame that sits just inside the raw scan bound", () => {
+    const stacktrace = [
+      ...Array.from({ length: 255 }, () => ({ module: "Elixir.Junk" })),
+      {
+        module: "Elixir.Fake",
+        function: "run/0",
+        file: "lib/last_scanned.ex",
+        line: 1,
+      },
+    ];
+
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace,
+    });
+
+    expect(out.stacktrace.length).toBe(1);
+    expect(out.stacktrace[0]?.file).toBe("lib/last_scanned.ex");
+  });
+
   it("truncates oversized strings inside a frame", () => {
     const out = normalizeCrashReport({
       error_type: "RuntimeError",
