@@ -16,11 +16,11 @@
     "hono": "^4.6.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.12.0",
-    "@cloudflare/workers-types": "^4.20260310.1",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.0",
-    "vitest": "~3.2.7",
-    "wrangler": "4.72.0"
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260903.1",
+    "@types/node": "^26.4.1",
+    "typescript": "^7.0.2",
+    "vitest": "~5.0.0",
+    "wrangler": "4.129.0"
   }
 }
