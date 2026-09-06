@@ -25,6 +25,13 @@ export default defineWorkersConfig({
             TVDB_API_KEY: "test-tvdb-key",
             SUBDL_API_KEY: "test-subdl-key",
             RESEND_API_KEY: "test-resend-key",
+            // The one workers.dev hostname /admin/* is served on. Real value
+            // lives in wrangler.jsonc's env.staging; this stand-in follows the
+            // `someacct` convention the hostname tests already use. Note the
+            // `-staging` in the worker name: the pre-existing cases in
+            // test/dashboards/hostname.test.ts use `mydia-relay.someacct...`
+            // and must keep 404ing against this.
+            ADMIN_ACCESS_HOSTNAME: "mydia-relay-staging.someacct.workers.dev",
             TEST_MIGRATIONS: migrations,
           },
           // Overrides wrangler.jsonc's PROXY_LIMITER (300/60s) for tests only.

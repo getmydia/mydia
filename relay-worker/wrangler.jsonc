@@ -132,7 +132,14 @@
         // is the only way to tell them apart once both answer on workers.dev.
         "RELAY_VERSION": "1.0.0-staging",
         "FEEDBACK_FROM": "metadata-relay@mydia.dev",
-        "FEEDBACK_TO": "arsfeld@gmail.com"
+        "FEEDBACK_TO": "arsfeld@gmail.com",
+        // The one workers.dev hostname where /admin/* is served, matching the
+        // Cloudflare Access application scoped to
+        // `mydia-relay-staging.arsfeld.workers.dev/admin*`. Absent from
+        // env.production on purpose: production's dashboards wait for the
+        // relay.mydia.dev Access application at cutover, and its workers.dev
+        // host must stay dark until then. See src/dashboards/hostname-guard.ts.
+        "ADMIN_ACCESS_HOSTNAME": "mydia-relay-staging.arsfeld.workers.dev"
       },
       "kv_namespaces": [
         { "binding": "CACHE_KV", "id": "19d00e7cf9524ebe809786d6b96e1951" }

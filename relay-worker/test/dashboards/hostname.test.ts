@@ -18,6 +18,12 @@ beforeAll(async () => {
 describe("/admin/* on a workers.dev hostname", () => {
   const ADMIN_PATHS = ["/admin/errors", "/admin/feedback"];
 
+  // Mirrors vitest.config.ts's miniflare binding. The deliberately different
+  // worker name (`-staging`) is what keeps every pre-existing case in this
+  // file valid: they all use `mydia-relay.someacct.workers.dev`, which is not
+  // this hostname and must still 404.
+  const ACCESS_HOSTNAME = "mydia-relay-staging.someacct.workers.dev";
+
   for (const path of ADMIN_PATHS) {
     it(`answers 404 for ${path} on the deploy subdomain`, async () => {
       const res = await SELF.fetch(`https://mydia-relay.someacct.workers.dev${path}`);
@@ -39,6 +45,22 @@ describe("/admin/* on a workers.dev hostname", () => {
       const res = await SELF.fetch(`https://relay.mydia.dev${path}`);
 
       expect(res.status).toBe(200);
+    });
+
+    it(`serves ${path} on the Access-guarded staging hostname`, async () => {
+      const res = await SELF.fetch(`https://${ACCESS_HOSTNAME}${path}`);
+
+      expect(res.status).toBe(200);
+    });
+
+    // The case that matters most. A per-hostname Access application does not
+    // cover the versioned preview URLs Cloudflare mints alongside every
+    // deploy, so they must keep 404ing even though their suffix matches the
+    // hostname that is allowed.
+    it(`still answers 404 for ${path} on a preview URL of that hostname`, async () => {
+      const res = await SELF.fetch(`https://a1b2c3-${ACCESS_HOSTNAME}${path}`);
+
+      expect(res.status).toBe(404);
     });
   }
 

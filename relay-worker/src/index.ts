@@ -9,6 +9,7 @@ import { registerCrashRoutes } from "./crashes/ingest";
 import { registerErrorDashboard } from "./dashboards/errors";
 import { registerFeedbackRoutes } from "./feedback/ingest";
 import { registerFeedbackDashboard } from "./dashboards/feedback";
+import { adminHostnameBlocked } from "./dashboards/hostname-guard";
 import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
 import { runScheduledSweep } from "./obs/sweep";
@@ -91,7 +92,8 @@ app.get("/stats", (c) =>
 // routes registered after it (same composition rule as the two middlewares
 // above).
 app.use("/admin/*", async (c, next) => {
-  if (new URL(c.req.url).hostname.endsWith(".workers.dev")) {
+  const hostname = new URL(c.req.url).hostname;
+  if (adminHostnameBlocked(hostname, c.env.ADMIN_ACCESS_HOSTNAME)) {
     return c.json({ error: "Not found" }, 404);
   }
   await next();

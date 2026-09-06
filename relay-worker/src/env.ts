@@ -10,6 +10,14 @@ export interface Env {
   FEEDBACK_FROM: string;
   FEEDBACK_TO: string;
 
+  // The single `*.workers.dev` hostname where a Cloudflare Access application
+  // is known to cover `/admin*`. Set on `env.staging` only (wrangler.jsonc),
+  // so the maintainer dashboards are reachable on the staging deploy
+  // subdomain and nowhere else under workers.dev. Optional on purpose: an
+  // absent value makes src/dashboards/hostname-guard.ts fail closed, which is
+  // exactly the behaviour production and local dev want.
+  ADMIN_ACCESS_HOSTNAME?: string;
+
   // Bindings
   CACHE_KV: KVNamespace;
   DB: D1Database;
