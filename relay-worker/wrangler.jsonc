@@ -1,27 +1,61 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mydia-relay",
+
+  // THE TOP-LEVEL ENVIRONMENT IS NEVER DEPLOYED.
+  //
+  // Two named environments below are the only deploy targets:
+  //
+  //   staging     -> `mydia-relay-staging`, on every push to master/main
+  //   production  -> `mydia-relay`, on a `relay-worker-v*` tag
+  //
+  // Everything at this level exists for `wrangler dev` and the vitest suite,
+  // which read this file with no `--env` and would find no bindings at all if
+  // the real ones lived only under `env.*` (vitest.config.ts points
+  // `poolOptions.workers.wrangler.configPath` here). The ids here are
+  // deliberately fake -- Miniflare/vitest-pool-workers back KV and D1 with
+  // working local implementations regardless of the id, and apply migrations/
+  // automatically.
+  //
+  // The name here is `mydia-relay-dev`, and both environments below override
+  // it, so all three names are distinct. That is defensive: a bare
+  // `wrangler deploy` with no `--env` is then a no-op against a throwaway
+  // script rather than an overwrite of production with placeholder-bound
+  // code. (It would still fail on the fake binding ids -- but it would fail
+  // AFTER pointing the production name at a broken version.) Use
+  // `npm run deploy:staging` / `npm run deploy:production`, which pass
+  // `--env`; CI always does.
+  "name": "mydia-relay-dev",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+
+  // Inheritable, so both environments get the hourly sweep without repeating
+  // it. Drives src/index.ts's scheduled() handler (src/obs/sweep.ts), which
+  // deletes stale feedback_rate_limits rows and expired pairing_claims
+  // rows. Hourly matches the rate-limit bucket's own granularity: at most
+  // two hours of feedback_rate_limits rows (current + previous) are ever
+  // resident between sweeps, and pairing claims are short-lived (minutes),
+  // so hourly is frequent enough that its own table growth stays bounded
+  // between runs without needing sub-hourly scheduling. Cron Triggers cost
+  // nothing on Workers.
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+
+  // ---------------------------------------------------------------------
+  // Local dev / test bindings. Not deployed. See the header comment above.
+  // ---------------------------------------------------------------------
   "vars": {
-    "RELAY_VERSION": "1.0.0",
+    "RELAY_VERSION": "1.0.0-dev",
     "FEEDBACK_FROM": "metadata-relay@mydia.dev",
     "FEEDBACK_TO": "arsfeld@gmail.com"
   },
-  // The real namespace is provisioned at deploy time with
-  // `npx wrangler kv namespace create CACHE_KV`; this id is a placeholder for
-  // local dev only. Miniflare/vitest-pool-workers back CACHE_KV with a working
-  // local namespace regardless of the id below.
+
   "kv_namespaces": [
     { "binding": "CACHE_KV", "id": "placeholder_local_dev_only" }
   ],
-  // Same placeholder pattern as CACHE_KV above: the real database is
-  // provisioned at deploy time with `npx wrangler d1 create mydia-relay`,
-  // which needs Cloudflare credentials this environment does not have.
-  // Miniflare/vitest-pool-workers back DB with a working local D1 regardless
-  // of the id below, and apply migrations/ automatically for tests.
+
   "d1_databases": [
     {
       "binding": "DB",
@@ -30,9 +64,7 @@
       "migrations_dir": "migrations"
     }
   ],
-  // namespace_id values are arbitrary identifiers for this binding, not
-  // provisioned cloud resources -- nothing to create in the dashboard.
-  //
+
   // CRASH_INGEST_LIMITER / FEEDBACK_INGEST_LIMITER (final review fix round):
   // burst guards in front of the two D1-backed hourly budgets in
   // src/crashes/ingest.ts and src/feedback/ingest.ts. Those budgets are read
@@ -58,6 +90,15 @@
   // INSERT ... ON CONFLICT DO UPDATE ... RETURNING per request, not a
   // separate SELECT-then-write) -- see the ingest files' comments for what
   // that closes outright versus what these bindings merely bound.
+  //
+  // `namespace_id` is NOT a provisioned cloud resource -- there is nothing to
+  // create in the dashboard -- but it is also NOT free-form per Worker. It is
+  // "a string containing a positive integer that uniquely defines this rate
+  // limiting namespace within your Cloudflare account", and per Cloudflare's
+  // own docs two bindings sharing one id "even across different Workers on
+  // the same account -- share the same rate limit counters for a given key".
+  // That is why env.staging below uses 2001-2005 rather than repeating these:
+  // reusing them would let a staging smoke test spend production's budget.
   "ratelimits": [
     { "name": "PROXY_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } },
     { "name": "PAIRING_CREATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
@@ -65,15 +106,91 @@
     { "name": "CRASH_INGEST_LIMITER", "namespace_id": "1004", "simple": { "limit": 10, "period": 10 } },
     { "name": "FEEDBACK_INGEST_LIMITER", "namespace_id": "1005", "simple": { "limit": 10, "period": 10 } }
   ],
-  // Drives src/index.ts's scheduled() handler (src/obs/sweep.ts), which
-  // deletes stale feedback_rate_limits rows and expired pairing_claims
-  // rows. Hourly matches the rate-limit bucket's own granularity: at most
-  // two hours of feedback_rate_limits rows (current + previous) are ever
-  // resident between sweeps, and pairing claims are short-lived (minutes),
-  // so hourly is frequent enough that its own table growth stays bounded
-  // between runs without needing sub-hourly scheduling. Cron Triggers cost
-  // nothing on Workers.
-  "triggers": {
-    "crons": ["0 * * * *"]
+
+  // ---------------------------------------------------------------------
+  // Deploy targets.
+  //
+  // `vars`, `kv_namespaces`, `d1_databases` and `ratelimits` are
+  // NON-INHERITABLE: an environment that overrides any one of them must
+  // repeat ALL of them, or `wrangler deploy` fails validation. That is why
+  // each block below is a full copy rather than a diff against the top level.
+  // Adding a fifth binding kind means adding it in three places.
+  //
+  // Secrets are per-Worker-script and are NOT in this file. Each environment
+  // needs its own `wrangler secret put --env <name>`; see README.md.
+  // ---------------------------------------------------------------------
+  "env": {
+    // Deployed on every push to master/main touching relay-worker/**.
+    // Its D1 database is what makes that push a real migration rehearsal:
+    // `d1 migrations apply --env staging --remote` runs against
+    // mydia-relay-staging, so a migration that fails does so here, hours or
+    // days before the tag ships it to production.
+    "staging": {
+      "name": "mydia-relay-staging",
+      "vars": {
+        // Distinguishes the two Workers in a /health or /stats response, which
+        // is the only way to tell them apart once both answer on workers.dev.
+        "RELAY_VERSION": "1.0.0-staging",
+        "FEEDBACK_FROM": "metadata-relay@mydia.dev",
+        "FEEDBACK_TO": "arsfeld@gmail.com"
+      },
+      "kv_namespaces": [
+        { "binding": "CACHE_KV", "id": "19d00e7cf9524ebe809786d6b96e1951" }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "mydia-relay-staging",
+          "database_id": "c72a6def-d3e6-4453-9d54-e5daff7c47e7",
+          "migrations_dir": "migrations"
+        }
+      ],
+      // 2001-2005, not 1001-1005: see the note on the top-level ratelimits.
+      // Sharing production's namespace ids would share its counters.
+      "ratelimits": [
+        { "name": "PROXY_LIMITER", "namespace_id": "2001", "simple": { "limit": 300, "period": 60 } },
+        { "name": "PAIRING_CREATE_LIMITER", "namespace_id": "2002", "simple": { "limit": 10, "period": 60 } },
+        { "name": "PAIRING_READ_LIMITER", "namespace_id": "2003", "simple": { "limit": 30, "period": 60 } },
+        { "name": "CRASH_INGEST_LIMITER", "namespace_id": "2004", "simple": { "limit": 10, "period": 10 } },
+        { "name": "FEEDBACK_INGEST_LIMITER", "namespace_id": "2005", "simple": { "limit": 10, "period": 10 } }
+      ]
+    },
+
+    // Deployed only on a `relay-worker-v*` tag.
+    //
+    // `name` is overridden so this deploys as `mydia-relay`, not
+    // `mydia-relay-production`: this is the script the eventual
+    // relay.mydia.dev route attaches to, and the hostname it serves on until
+    // then is mydia-relay.<subdomain>.workers.dev.
+    //
+    // No `routes` key here on purpose. relay.mydia.dev is still served by the
+    // Elixir relay; adding the route is the cutover, and it is deliberately
+    // not part of this config yet. See README.md's runbook.
+    "production": {
+      "name": "mydia-relay",
+      "vars": {
+        "RELAY_VERSION": "1.0.0",
+        "FEEDBACK_FROM": "metadata-relay@mydia.dev",
+        "FEEDBACK_TO": "arsfeld@gmail.com"
+      },
+      "kv_namespaces": [
+        { "binding": "CACHE_KV", "id": "a3ce6dbae7ca40bebaa835fd8baecdf3" }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "mydia-relay",
+          "database_id": "84653ecc-8612-4d14-ac1b-72d6b1e94c52",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ratelimits": [
+        { "name": "PROXY_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } },
+        { "name": "PAIRING_CREATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
+        { "name": "PAIRING_READ_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } },
+        { "name": "CRASH_INGEST_LIMITER", "namespace_id": "1004", "simple": { "limit": 10, "period": 10 } },
+        { "name": "FEEDBACK_INGEST_LIMITER", "namespace_id": "1005", "simple": { "limit": 10, "period": 10 } }
+      ]
+    }
   }
 }

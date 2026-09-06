@@ -8,7 +8,21 @@ routing, no server and no tunnel — Cloudflare's edge is the whole runtime.
 **Nothing has cut over yet.** `relay.mydia.dev` is still served by the Elixir
 relay; this Worker deploys continuously but does not yet own any production
 traffic. The runbook at the bottom of this file is the cutover sequence, and
-none of it has been executed.
+only Step 0 (account setup) has been executed.
+
+**Two environments, two Workers.** `wrangler.jsonc` defines `staging` and
+`production`; the top-level environment is for `wrangler dev` and vitest and
+is never deployed.
+
+| | Deploys on | Worker | Hostname | D1 |
+| --- | --- | --- | --- | --- |
+| staging | push to `master`/`main` touching `relay-worker/**` | `mydia-relay-staging` | `mydia-relay-staging.<subdomain>.workers.dev` | `mydia-relay-staging` |
+| production | `relay-worker-v*` tag | `mydia-relay` | `mydia-relay.<subdomain>.workers.dev` | `mydia-relay` |
+
+Both are Cloudflare-only hostnames today. Neither has a `routes` key, so
+`relay.mydia.dev` is untouched by either — adding that route to
+`env.production` is the cutover, and it is Step 4, not something a deploy does
+on its own.
 
 ## What this migration changed
 
@@ -35,12 +49,15 @@ Things an operator who knew the Elixir relay would not expect:
   but that collided with `POST /feedback`'s public path, since
   Cloudflare Access (like Hono's router) has no HTTP-method dimension to
   separate them. Bookmarks and any saved links need updating.
-- **The deploy ritual is a `git push`, not a tag.** The Elixir relay ships on
-  a `metadata-relay-v*` tag, built into a Docker image, picked up by Keel's
-  five-minute GHCR poll. The Worker ships on every push to `master`/`main`
-  that touches `relay-worker/**`, straight to `wrangler deploy` — no tag, no
-  version bump, no image, no poll delay. `git log` on `relay-worker/` is now
-  effectively the release history.
+- **Staging ships on a `git push`; production still ships on a tag — but a
+  different one.** The Elixir relay ships on a `metadata-relay-v*` tag, built
+  into a Docker image, picked up by Keel's five-minute GHCR poll. The Worker
+  splits that: every push to `master`/`main` touching `relay-worker/**` goes
+  straight to `mydia-relay-staging` with no tag, no version bump, no image and
+  no poll delay, while production waits for a `relay-worker-v*` tag. The two
+  tag namespaces are deliberately distinct — a Worker fix must not require
+  cutting an Elixir release, and vice versa. `git log` on `relay-worker/` is
+  the staging release history; `git tag -l 'relay-worker-v*'` is production's.
 - **A bulk metadata refresh can now consume rate-limit budget it never used
   to.** `src/obs/ratelimit.ts`'s proxy limiter used to check the budget
   *after* running the request, specifically so it could look at
@@ -87,9 +104,29 @@ route itself regressed.
 | `CRASH_INGEST_LIMITER` / `FEEDBACK_INGEST_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Atomic, D1-free burst guards in front of crash ingest's and feedback ingest's D1-backed hourly budgets — see those files' comments for why the D1 accounting alone isn't safe under concurrency |
 | Cron Trigger `0 * * * *` | scheduled | `wrangler.jsonc` (`triggers.crons`) | Hourly sweep (`src/obs/sweep.ts`): evicts stale `feedback_rate_limits` and `ingest_buckets` rows and expired `pairing_claims` |
 
-`ratelimits[].namespace_id` values (`1001`-`1005`) are arbitrary identifiers
-for the binding, not provisioned cloud resources — there is nothing to create
-for them in the dashboard, unlike `CACHE_KV` and `DB`.
+**Every binding above is declared twice**, once under `env.staging` and once
+under `env.production`. `vars`, `kv_namespaces`, `d1_databases` and
+`ratelimits` are [non-inheritable
+keys](https://developers.cloudflare.com/workers/wrangler/configuration/#non-inheritable-keys):
+an environment that overrides any one of them must repeat *all* of them, or
+`wrangler deploy` fails validation. Adding a fifth binding kind means editing
+three places (top level for dev/test, plus both environments). `triggers` is
+inheritable, which is why the cron appears only once.
+
+Secrets are per-Worker-script, so each environment needs its own
+`wrangler secret put --env <name>`. Setting a secret with no `--env` sets it
+on `mydia-relay-dev`, which is never deployed — a silent no-op that looks
+like success.
+
+`ratelimits[].namespace_id` values are not provisioned cloud resources —
+there is nothing to create for them in the dashboard, unlike `CACHE_KV` and
+`DB`. They are **not** free-form per Worker either. Cloudflare defines one as
+"a string containing a positive integer that uniquely defines this rate
+limiting namespace within your Cloudflare account", and two bindings sharing
+an id — "even across different Workers on the same account" — share the same
+counters for a given key. Production therefore uses `1001`-`1005` and staging
+uses `2001`-`2005`: reusing production's ids would let a staging smoke test
+spend production's budget.
 
 **Requires wrangler >= 4.36.0.** The `ratelimits` config key was silently
 dropped by older wrangler versions with no error, found the hard way — the
@@ -137,7 +174,7 @@ comment for how that was diagnosed).
 `npm test`/CI runs, so the whole suite no-ops:
 
 ```bash
-CONTRACT_WORKER_URL=https://<staging>.workers.dev npm run test:contract
+CONTRACT_WORKER_URL=https://mydia-relay-staging.<subdomain>.workers.dev npm run test:contract
 ```
 
 **This is not wired into CI** (see the runbook below for why and where the
@@ -149,29 +186,47 @@ code can rubber-stamp a cutover having compared nothing.
 
 ## Deployment
 
-**`wrangler deploy` is the release ritual.** There is no `metadata-relay-v*`
-tag for this Worker and no version bump to make first — CI deploys on every
-push to `master`/`main` that touches `relay-worker/**` (the `deploy-worker`
-job in `.github/workflows/deploy-relay.yml`):
+Two jobs in `.github/workflows/deploy-relay.yml`, each running the same four
+steps against a different environment:
 
-1. `npm ci`
-2. `npm test` && `npm run typecheck`
-3. `npx wrangler d1 migrations apply mydia-relay --remote` — always before the
-   deploy step, so a new binding a commit adds never reaches a database that
-   doesn't have its table yet
-4. `npx wrangler deploy`
+| | `deploy-staging` | `deploy-production` |
+| --- | --- | --- |
+| Fires on | push to `master`/`main` touching `relay-worker/**` | `relay-worker-v*` tag |
+| 1 | `npm ci` | `npm ci` |
+| 2 | `npm test` && `npm run typecheck` | `npm test` && `npm run typecheck` |
+| 3 | `wrangler d1 migrations apply mydia-relay-staging --env staging --remote` | `wrangler d1 migrations apply mydia-relay --env production --remote` |
+| 4 | `wrangler deploy --env staging` | `wrangler deploy --env production` |
 
-A test or typecheck failure stops the job before step 3, so a broken commit
-on `master` cannot reach Cloudflare — but note that today nothing runs these
-checks on the pull request itself (no `ci-relay-worker.yml` equivalent of
-`ci-relay.yml` exists yet); the first automated signal a PR gets is this job,
-after merge. See "Known gaps" at the end of this file.
+Step 3 always precedes step 4, so a new binding a commit adds never reaches a
+database that doesn't have its table yet. A test or typecheck failure stops
+either job before step 3, so a broken commit cannot reach Cloudflare — but
+note that today nothing runs these checks on the pull request itself (no
+`ci-relay-worker.yml` equivalent of `ci-relay.yml` exists yet); the first
+automated signal a PR gets is `deploy-staging`, after merge. See "Known gaps"
+at the end of this file.
+
+**`--env` is load-bearing on both commands in both jobs.** Wrangler with no
+`--env` reads the top-level environment, whose binding ids are the
+`placeholder_local_dev_only` values kept for vitest and `wrangler dev`.
+
+**To ship production**, tag a commit that has already been through
+`deploy-staging`:
+
+```bash
+git tag relay-worker-v1.0.0 && git push origin relay-worker-v1.0.0
+```
+
+The suite runs again in `deploy-production` rather than trusting the staging
+run, because a tag can be placed on any commit — including one that never
+landed on `master`.
 
 The Docker/GHCR job in the same workflow file is the **Elixir** relay's
 unrelated, still-live release path (tag-triggered on `metadata-relay-v*`);
-the two share the file until the Elixir side is decommissioned. `if:` guards on
-both jobs keep a relay-worker-only commit from also invoking the Docker job
-(and vice versa) — see the comment at the top of the workflow file.
+the three share the file until the Elixir side is decommissioned. `if:` guards
+on every job keep each trigger to its own — note that `docker`'s guard matches
+`refs/tags/metadata-relay-v` specifically, not a bare `refs/tags/`, or a
+`relay-worker-v*` tag would also kick off an Elixir Docker build that then
+fails parsing a semver out of the wrong tag name.
 
 ### Dashboards
 
@@ -232,13 +287,13 @@ relay-worker/
 
 Every migration in `migrations/` has so far been amended in place rather than
 superseded by a new numbered file. That was safe because nothing had ever been
-deployed: `database_id` was a placeholder, the CI `deploy-worker` job had never
-run, and every local and test database is rebuilt from scratch on each apply.
+deployed: `database_id` was a placeholder, the CI deploy job had never run, and
+every local and test database is rebuilt from scratch on each apply.
 
 **That stops being true the moment the first deploy lands.** Wrangler tracks
 applied D1 migrations by filename, not by content. Once
-`wrangler d1 migrations apply mydia-relay --remote` has run against the real
-database, every filename in `migrations/` is recorded as applied. Editing one of
+`wrangler d1 migrations apply ... --remote` has run against a real database,
+every filename in `migrations/` is recorded as applied there. Editing one of
 those files afterwards silently does nothing to the remote schema, while local
 runs and CI keep passing because they reapply from an empty database. The
 divergence stays invisible until a query hits a column that exists in every
@@ -246,6 +301,17 @@ developer's database and not in production.
 
 So: after the first successful remote apply, a schema change is a NEW numbered
 migration, always. Never an edit to an existing one.
+
+**The two environments cross this line at different times**, and that is the
+point of splitting them. A push to `master` applies migrations to
+`mydia-relay-staging` only; `mydia-relay` sees them later, when a
+`relay-worker-v*` tag ships. So a migration that is going to fail — bad SQL, a
+column that already exists, an index name collision — fails against staging
+first, with production's schema still untouched and the tag not yet cut.
+
+The corollary is that the two databases can legitimately sit at different
+migration counts, and staging is always at or ahead of production. Do not
+"fix" that by applying a migration to production by hand; cut the tag.
 
 ## Runbook: one-time and manual deployment steps
 
@@ -256,32 +322,62 @@ in order; each step depends on the one before it.
 
 ### Step 0: Cloudflare account setup (before the CI job can succeed at all)
 
-`wrangler.jsonc`'s `d1_databases[0].database_id` and `kv_namespaces[0].id` are
-`"placeholder_local_dev_only"` — real for Miniflare/vitest-pool-workers, but
-not a real Cloudflare resource. `wrangler deploy` and
-`wrangler d1 migrations apply --remote` will fail against them. Before the
-`deploy-worker` CI job can succeed even once:
+Sub-steps 1 and 2 below are **done**; 3 and 4 are not. The top-level
+`d1_databases[0].database_id` and `kv_namespaces[0].id` are still
+`"placeholder_local_dev_only"` and should stay that way — that environment is
+never deployed, and Miniflare/vitest-pool-workers need it. Only `env.staging`
+and `env.production` carry real ids.
 
-1. **Create the D1 database and KV namespace** (needs a Cloudflare account
-   with Workers/D1/KV enabled):
+1. ~~**Create the D1 databases and KV namespaces**~~ — **done, 2026-09-06.**
+   Four resources exist in the account:
+
+   | Resource | Name | Id |
+   | --- | --- | --- |
+   | D1 | `mydia-relay` | `84653ecc-8612-4d14-ac1b-72d6b1e94c52` |
+   | D1 | `mydia-relay-staging` | `c72a6def-d3e6-4453-9d54-e5daff7c47e7` |
+   | KV | `mydia-relay-CACHE_KV` | `a3ce6dbae7ca40bebaa835fd8baecdf3` |
+   | KV | `mydia-relay-staging-CACHE_KV` | `19d00e7cf9524ebe809786d6b96e1951` |
+
+   Both D1 databases were created with `primary_location_hint: enam`. The ids
+   are already in `wrangler.jsonc` under their respective environments; both
+   `wrangler deploy --env <name> --dry-run` calls validate.
+
+2. **Set the four secrets — once per environment.** Secrets are
+   per-Worker-script, so this is eight `wrangler secret put` calls, not four.
+   A call with no `--env` sets the secret on `mydia-relay-dev`, which is never
+   deployed: a silent no-op that looks like success.
+
    ```bash
    cd relay-worker
-   npx wrangler d1 create mydia-relay
-   npx wrangler kv namespace create CACHE_KV
+   for e in staging production; do
+     for k in TMDB_API_KEY TVDB_API_KEY SUBDL_API_KEY RESEND_API_KEY; do
+       npx wrangler secret put "$k" --env "$e"
+     done
+   done
    ```
-   Copy the `database_id` and `id` each command prints into
-   `wrangler.jsonc`, replacing both `placeholder_local_dev_only` values.
-   Commit that change separately from this task's CI/README commit.
 
-2. **Set the four secrets** (once, against the real Worker):
-   ```bash
-   npx wrangler secret put TMDB_API_KEY
-   npx wrangler secret put TVDB_API_KEY
-   npx wrangler secret put SUBDL_API_KEY
-   npx wrangler secret put RESEND_API_KEY
-   ```
+   The TMDB, TVDB and SubDL values are the ones the Elixir relay already uses,
+   in `infra/config.yaml` as `relay_tmdb_api_key`, `relay_tvdb_api_key` and
+   `relay_subdl_api_key`.
+
+   `RESEND_API_KEY` has no counterpart there — the Elixir relay sends feedback
+   mail over SMTP (`relay_smtp_*`), not the Resend HTTP API. If those SMTP
+   credentials are Resend's, the password *is* an `re_...` API key and can be
+   reused; otherwise mint one. Either way it is optional: without it feedback
+   ingest still accepts and stores every submission and only the notification
+   email is skipped, which is a supported configuration, not a broken one.
+
+   **On sharing keys between the environments:** TMDB and TVDB are fine to
+   share. SubDL is the one to think about — it is a single key with a shared
+   2000 search/day quota across every mydia install, so staging spending it is
+   spending production's. Staging sees no real traffic, so this only matters if
+   someone load-tests the subtitle path against it; if that ever becomes
+   routine, give staging its own SubDL key or leave `SUBDL_API_KEY` unset there
+   (those routes then 503, which is the documented behaviour).
 
 3. **Mint a Cloudflare API token for CI**, and find the account ID.
+   The account ID is `67a60cd5057ea97341c77d16f7cd3100` — it is visible in
+   the API URL of any failed `deploy-relay.yml` run log, and needs no lookup.
    The token and ID already in `infra/config.yaml` cannot be reused for this
    — see "Known gaps" below for exactly why. Create a new
    token at <https://dash.cloudflare.com/profile/api-tokens> scoped to at
@@ -304,10 +400,12 @@ not a real Cloudflare resource. `wrangler deploy` and
      deploys too, or store the new token under a different secret name and
      point this job's two `CLOUDFLARE_API_TOKEN` references at that name
      instead. Either is fine; pick one and document which.
-   - `CLOUDFLARE_ACCOUNT_ID` — does not exist yet anywhere in this
-     repository's secrets or config.
+   - `CLOUDFLARE_ACCOUNT_ID` — confirmed absent from this repository's
+     secrets as of 2026-09-06 (`gh secret list` shows only
+     `CLOUDFLARE_API_TOKEN`). Set it to
+     `67a60cd5057ea97341c77d16f7cd3100`.
 
-Only after all of the above will the `deploy-worker` CI job's first run
+Only after all of the above will the CI job's first run
 succeed. Until then, every push to `master` touching `relay-worker/**` will
 fail at the "Apply D1 migrations" or "Deploy" step — loudly, in CI, without
 having deployed anything broken (the failure is expected and safe).
@@ -392,8 +490,8 @@ application's path scope before proceeding with cutover.
 
 ### Step 2: contract diff — not wired into CI, on purpose
 
-`npm run test:contract` (see Testing above) is **not** part of the
-`deploy-worker` CI job. Two reasons:
+`npm run test:contract` (see Testing above) is **not** part of either
+deploy job. Two reasons:
 
 1. **There is nothing meaningful to diff against at CI deploy time.** The
    job deploys the Worker being tested; running the contract diff immediately
@@ -408,7 +506,7 @@ application's path scope before proceeding with cutover.
    no gate, because it looks like one.
 
 **The real gate is manual, in Step 4 below** — a human runs
-`CONTRACT_WORKER_URL=https://<staging>.workers.dev npm run test:contract`
+`CONTRACT_WORKER_URL=https://mydia-relay-staging.<subdomain>.workers.dev npm run test:contract`
 against a staging deploy before flipping any production route, watches the
 output, and does not proceed on a single mismatch. That manual supervision is
 deliberate: a person who runs the command and reads a "42 skipped" line
@@ -429,7 +527,7 @@ constraint — the Workers **free plan's 10ms CPU-time-per-invocation limit** �
 because that requires a deployed Worker, and none exists yet.
 
 **Do this once the first real deploy exists** — i.e., after Step 0 above
-succeeds and `deploy-worker` has pushed to the Worker's `workers.dev`
+succeeds and `deploy-staging` has pushed to the Worker's `workers.dev`
 subdomain for the first time (this happens automatically; the cutover in
 Step 4 is what later adds `relay.mydia.dev` routes, but the Worker is live on
 `*.workers.dev` from the very first successful CI deploy):
@@ -702,8 +800,9 @@ with no surprises), never before.
 **5f. Retire the Elixir service source and its CI.**
 
 Delete `metadata-relay/` and `.github/workflows/ci-relay.yml`, remove the
-`docker` job from `.github/workflows/deploy-relay.yml` (leaving only
-`deploy-worker`), and rename that file to `deploy-relay-worker.yml`.
+`docker` job from `.github/workflows/deploy-relay.yml` (leaving
+`deploy-staging` and `deploy-production`), and rename that file to
+`deploy-relay-worker.yml`.
 
 **Before doing this, understand what it costs:** `metadata-relay/`'s source
 is the reference implementation this entire Worker port was verified
@@ -772,12 +871,16 @@ Recorded so the next person doesn't re-discover them the hard way:
   invoke the unrelated `docker` job, which parses a semver out of the ref and
   would receive a branch ref instead of a tag — producing a broken Docker
   build on every such commit. Both jobs in the shipped workflow carry
-  `if:` guards (`startsWith(github.ref, 'refs/tags/')` for `docker`,
-  `github.ref_type == 'branch'` for `deploy-worker`) to prevent this.
+  `if:` guards: `startsWith(github.ref, 'refs/tags/metadata-relay-v')` for
+  `docker`, `github.ref_type == 'branch'` for `deploy-staging`, and
+  `startsWith(github.ref, 'refs/tags/relay-worker-v')` for
+  `deploy-production`. The `docker` guard matches the full tag prefix rather
+  than a bare `refs/tags/` precisely because a second tag pattern now lands
+  in this workflow.
 - **No PR-time CI signal exists for `relay-worker/` yet.** Unlike
   `metadata-relay/` (covered by `ci-relay.yml` on every push and PR), there
   is no equivalent workflow running `npm test`/`npm run typecheck` against
-  `relay-worker/**` on pull requests. The `deploy-worker` job added here
+  `relay-worker/**` on pull requests. The `deploy-staging` job added here
   only runs after a merge to `master`, and it is safe (a failing test/
   typecheck step stops the job before `wrangler deploy` runs), but it means a
   broken PR currently gets no automated feedback before merge — only after.
