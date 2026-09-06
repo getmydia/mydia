@@ -204,6 +204,25 @@ relay-worker/
 └── package.json
 ```
 
+## Migrations: stop amending in place after the first real deploy
+
+Every migration in `migrations/` has so far been amended in place rather than
+superseded by a new numbered file. That was safe because nothing had ever been
+deployed: `database_id` was a placeholder, the CI `deploy-worker` job had never
+run, and every local and test database is rebuilt from scratch on each apply.
+
+**That stops being true the moment the first deploy lands.** Wrangler tracks
+applied D1 migrations by filename, not by content. Once
+`wrangler d1 migrations apply mydia-relay --remote` has run against the real
+database, every filename in `migrations/` is recorded as applied. Editing one of
+those files afterwards silently does nothing to the remote schema, while local
+runs and CI keep passing because they reapply from an empty database. The
+divergence stays invisible until a query hits a column that exists in every
+developer's database and not in production.
+
+So: after the first successful remote apply, a schema change is a NEW numbered
+migration, always. Never an edit to an existing one.
+
 ## Runbook: one-time and manual deployment steps
 
 Everything above this line is code and CI, already working. Everything below
