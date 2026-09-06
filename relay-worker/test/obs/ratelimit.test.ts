@@ -19,9 +19,24 @@ describe("serviceFromPath", () => {
   });
 });
 
-// PROXY_LIMITER is limit: 300, period: 60 (wrangler.jsonc). Miniflare's own
-// rate-limit simulator resets its whole counter on wall-clock time, not on
-// consumption -- node_modules/miniflare/dist/src/workers/ratelimit/ratelimit.worker.js:
+// PROXY_LIMITER is limit: 25, period: 60 UNDER TEST, set by
+// vitest.config.ts's miniflare.ratelimits override. Production is 300/60s
+// (wrangler.jsonc) and is untouched by that override -- this constant must
+// track the TEST value, since it is what the loops below actually spend.
+//
+// Why the test value is not the production one: nothing in Miniflare can
+// spend a rate-limit budget except real requests, so proving a 429 costs
+// `limit + 1` round trips through the whole Hono stack, and this file needs
+// that four times over. At 300 the file took ~17s locally and blew the 30s
+// per-test timeout on CI hardware, failing the deploy job on master
+// (2026-09-06). None of these tests assert anything about the SIZE of the
+// budget -- they assert that exceeding it produces a 429, with the right
+// header, logged in the right order, and not charged to exempt paths. All of
+// that holds at 25 exactly as it did at 300, in a fortieth of the requests.
+//
+// Miniflare's own rate-limit simulator resets its whole counter on wall-clock
+// time, not on consumption --
+// node_modules/miniflare/dist/src/workers/ratelimit/ratelimit.worker.js:
 //   let epoch = Math.floor(Date.now() / (period * 1e3));
 //   epoch != this.epoch && (this.epoch = epoch, this.buckets.clear());
 // If a real 60s boundary falls in the middle of one of the loops below, the
@@ -33,16 +48,19 @@ describe("serviceFromPath", () => {
 // limiting is Cloudflare's real service, not this fixed-window-per-process
 // approximation.
 //
-// The cap below (2 * limit + margin) survives exactly one such reset,
-// wherever in the loop it lands: up to `limit - 1` requests before the
-// reset, then a full `limit + 1` after it. `if (last.status === 429) break`
-// means an ordinary run (no reset) still exits after ~301 iterations, same
-// as before -- only a run that hits the reset pays the extra iterations.
-// This does not eliminate the flake (two resets in one loop would still
-// lose), it makes the common single-reset case survivable by construction.
-// Do not shrink this back toward `limit` because "305 was fine before" --
-// that reasoning is exactly what shipped the flake.
-const PROXY_LIMIT = 300;
+// The smaller budget shrinks that flake too, without being a fix for it: a
+// loop that spans ~26 requests occupies a few tens of milliseconds instead of
+// seconds, so the odds of a 60s boundary landing inside one drop by roughly
+// the same factor the runtime does. The window is narrower, not closed.
+//
+// So the cap below stays. It survives exactly one reset wherever in the loop
+// it lands: up to `limit - 1` requests before the reset, then a full
+// `limit + 1` after it. `if (last.status === 429) break` means an ordinary
+// run (no reset) still exits after ~26 iterations -- only a run that hits the
+// reset pays the extra ones. Do not shrink this toward `limit` because "26
+// was fine before"; that reasoning is exactly what shipped the flake, and it
+// is no more true at 25 than it was at 300.
+const PROXY_LIMIT = 25;
 const PROXY_LIMIT_ITERATION_CAP = 2 * PROXY_LIMIT + 10;
 
 describe("rate limiting", () => {
