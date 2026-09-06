@@ -1,9 +1,33 @@
 name: Deploy / Relay
 
+# Two independent release rituals share this file until Task 17 of
+# docs/superpowers/plans/2026-09-05-metadata-relay-on-cloudflare-workers.md
+# deletes the Elixir side and renames this file to deploy-relay-worker.yml:
+#
+# - `docker` (metadata-relay/, the Elixir service): tag-triggered, unchanged.
+# - `deploy-worker` (relay-worker/, the Cloudflare Worker): triggered by a
+#   push to master/main that touches relay-worker/**, since `wrangler deploy`
+#   is now that ritual rather than a version tag.
+#
+# `paths` filters are never evaluated for tag pushes (only for branch
+# pushes), so adding one here does not gate the tag-triggered `docker` job.
+# It DOES mean this workflow now also runs on a plain branch push, which is
+# new -- hence the `if:` guard on each job below. Without it, a
+# relay-worker-only commit to master would also invoke `docker`, which
+# parses a semver out of `${GITHUB_REF#refs/tags/metadata-relay-v}`; fed a
+# branch ref instead of a tag, that expansion doesn't strip anything and the
+# job would fail trying to build a Docker tag from a literal
+# "refs/heads/master".
 on:
   push:
     tags:
       - "metadata-relay-v*"
+    branches:
+      - master
+      - main
+    paths:
+      - "relay-worker/**"
+      - ".github/workflows/deploy-relay.yml"
 
 env:
   REGISTRY: ghcr.io
@@ -12,6 +36,7 @@ env:
 jobs:
   docker:
     name: Docker / Build and Push
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,3 +97,62 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+  deploy-worker:
+    name: Deploy relay Worker
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    # Cloudflare auth is a bearer token in CLOUDFLARE_API_TOKEN, not the
+    # workflow's GITHUB_TOKEN, so nothing here needs write access to the repo.
+    permissions:
+      contents: read
+    # A second push landing mid-deploy would race wrangler against itself;
+    # queue instead of overlapping, but don't cancel a deploy already in
+    # flight (unlike a CI job, a cancelled `wrangler deploy` can leave D1
+    # migrations applied against code that never actually shipped).
+    concurrency:
+      group: deploy-relay-worker
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: relay-worker/package-lock.json
+
+      - name: Install
+        working-directory: relay-worker
+        run: npm ci
+
+      - name: Test
+        working-directory: relay-worker
+        run: npm test
+
+      - name: Typecheck
+        working-directory: relay-worker
+        run: npm run typecheck
+
+      # Runs before `wrangler deploy` so a new binding never reaches a
+      # database without its table. `--remote` targets the real D1 database
+      # (see relay-worker/README.md); omitting it would silently touch a
+      # local-only DB instead. Requires the D1 database and KV namespace in
+      # wrangler.jsonc to already be real Cloudflare resources, not the
+      # `placeholder_local_dev_only` ids checked in for local dev/test --
+      # see relay-worker/README.md's "One-time cloud setup" section.
+      - name: Apply D1 migrations
+        working-directory: relay-worker
+        run: npx wrangler d1 migrations apply mydia-relay --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy
+        working-directory: relay-worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
