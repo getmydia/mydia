@@ -11,6 +11,38 @@ Through Task 16, `relay.mydia.dev` is still served by the Elixir relay; this
 Worker deploys continuously but does not yet own any production traffic. See
 that plan for the full route-by-route parity work and the cutover sequence.
 
+## What this migration changed
+
+Four things an operator who knew the Elixir relay would not expect:
+
+- **Responses are actually cached at Cloudflare's edge now.** The Elixir
+  relay sent `cache-control: max-age=0, private, must-revalidate` on every
+  response, so `cf-cache-status` was `DYNAMIC` on every hit — nothing was
+  ever cached at the edge despite `metadata-relay/`'s own in-process cache.
+  The Worker emits real `public, s-maxage=..., stale-while-revalidate=...,
+  stale-if-error=...` headers and gets genuine `HIT`s. This is a real
+  latency and TMDB/TVDB-quota improvement, not a no-op port, and it's why
+  the cutover verification checks `cf-cache-status` explicitly rather than
+  just a 200.
+- **A crash-storm occurrence count can be a floor, not an exact number.**
+  D1's write budget is bounded per install-per-hour (`ingest_buckets`); once
+  a bucket saturates, further occurrences in that hour are not written. The
+  dashboard marks the affected error group's `count_is_floor` sticky (it
+  only ever ratchets from 0 to 1, never back down, even once traffic quiets
+  down) so `/admin/errors` can render "500+" instead of a wrong exact
+  number. If a total looks suspiciously round or capped, that column is why.
+- **The maintainer dashboards moved to `/admin/errors` and
+  `/admin/feedback`.** They used to be `/errors` and `/feedback` in the
+  original brief; that collided with `POST /feedback`'s public path, since
+  Cloudflare Access (like Hono's router) has no HTTP-method dimension to
+  separate them. Bookmarks and any saved links need updating.
+- **The deploy ritual is a `git push`, not a tag.** The Elixir relay ships on
+  a `metadata-relay-v*` tag, built into a Docker image, picked up by Keel's
+  five-minute GHCR poll. The Worker ships on every push to `master`/`main`
+  that touches `relay-worker/**`, straight to `wrangler deploy` — no tag, no
+  version bump, no image, no poll delay. `git log` on `relay-worker/` is now
+  effectively the release history.
+
 ## Bindings
 
 Declared in `wrangler.jsonc` (KV, D1, rate limiters, vars) and `src/env.ts`
@@ -377,6 +409,275 @@ later adds `relay.mydia.dev` routes, but the Worker is live on
      (currently 20,000,000) if real-world archives never approach it, trading
      rejected-but-legitimate edge cases for headroom.
 
+### Step 4: production cutover (Task 16)
+
+Everything below is **manual** and moves real traffic. Nothing in this repo
+adds a production route ahead of time — `wrangler.jsonc` has no `routes` key
+today, on purpose. Add it by hand, deliberately, following this sequence.
+
+**Preconditions, all must already be true:**
+
+- Steps 0-3 above are done: real Cloudflare resources exist (not
+  `placeholder_local_dev_only`), the four secrets are set, CI has deployed at
+  least once to the Worker's `*.workers.dev` subdomain, and the Step 3 CPU
+  measurement has a recorded number.
+- **The `/admin*` Access application from Step 1 exists and both its
+  verification curls pass.** This is the ordering constraint that matters
+  most in this whole runbook: neither a Worker route nor a Cloudflare Access
+  application can be scoped by HTTP method, only by path. A bare
+  `relay.mydia.dev/*` route (added below in 4b) exposes every path the
+  Worker answers, `/admin/errors` and `/admin/feedback` included, to
+  anonymous traffic the instant it deploys — regardless of what Access
+  policy exists for any other path. Do not add the wildcard route on the
+  assumption Access can follow "right after." If Step 1 isn't done, stop and
+  do it first.
+- `POST /feedback` and `POST /crashes/report` must stay reachable with no
+  Access in front of them, at every point in this rollout, not just at the
+  end. They are what every mydia install in the field already calls
+  unauthenticated. Access is scoped to `/admin*` and only `/admin*` — never
+  the hostname root, never these two paths individually.
+
+**4a. Run the contract diff against staging, and read the output, not just
+the exit code:**
+
+```bash
+cd relay-worker
+CONTRACT_WORKER_URL=https://mydia-relay-staging.<subdomain>.workers.dev npm run test:contract
+```
+
+This is the real gate Step 2 above deferred out of CI. Read the summary line
+before trusting it:
+
+- If it says something like `42 skipped`, `CONTRACT_WORKER_URL` did not take
+  effect (typo in the URL, wrong shell, env not exported) and this run has
+  compared nothing. Vitest still exits 0 for an all-skipped run — a green
+  exit code alone is not evidence anything ran. Fix the invocation and rerun
+  before reading anything else into it.
+- Once tests are actually running, do not proceed on a single mismatch,
+  **except** these two documented, expected ones:
+  - `/music/search` and `/openlibrary/search` are fuzzy-ranked. Two
+    near-simultaneous identical requests can come back reordered or
+    rescored against real MusicBrainz/OpenLibrary — this was observed live
+    during Task 9, not theorized. A failure on either route: rerun just that
+    one route in isolation before concluding the port regressed. Do not add
+    retry logic to the harness itself; a silent retry would also hide a
+    genuine regression.
+  - `/tvdb/series/:id/episodes` returns 400 from **both** the Elixir and the
+    Worker. The Elixir builds `/series/{id}/episodes/default/page/{page}`,
+    which has never been a valid TVDB v4 path (TVDB's own OpenAPI spec wants
+    `/series/{id}/episodes/{season-type}` with `page` as a *query* param,
+    not a path segment). Nothing in mydia calls this route — the real
+    client uses `/series/:id/extended` and `/seasons/:id/extended` instead
+    — so it has been silently broken since it was introduced and nobody
+    noticed. The Worker is deliberately bug-compatible with it. A matching
+    400 on both sides here is correct, not a false pass. If this route ever
+    shows a **genuine diff** (one side 400, the other something else) at a
+    later cutover, that means someone fixed the Elixir's URL construction,
+    not that the Worker regressed — go verify which side changed before
+    treating it as a blocker, and if it's the Elixir, port the fix into the
+    Worker to keep them matching.
+
+**4b. Add production routes for the metadata paths only:**
+
+```jsonc
+  "routes": [
+    { "pattern": "relay.mydia.dev/configuration", "zone_name": "mydia.dev" },
+    { "pattern": "relay.mydia.dev/tmdb/*", "zone_name": "mydia.dev" },
+    { "pattern": "relay.mydia.dev/tvdb/*", "zone_name": "mydia.dev" },
+    { "pattern": "relay.mydia.dev/api/v1/subtitles/*", "zone_name": "mydia.dev" },
+    { "pattern": "relay.mydia.dev/music/*", "zone_name": "mydia.dev" },
+    { "pattern": "relay.mydia.dev/openlibrary/*", "zone_name": "mydia.dev" }
+  ]
+```
+
+`cae1-1.relay.mydia.dev` is a different hostname (iroh-relay) and none of
+these patterns touch it — confirm that by eye before deploying, then:
+
+```bash
+cd relay-worker && npx wrangler deploy
+```
+
+Verify from outside:
+
+```bash
+# Worker is serving, with real edge caching (not the Elixir's DYNAMIC).
+curl -sI "https://relay.mydia.dev/tmdb/genre/movie?_cb=$RANDOM" | grep -iE 'cache-control|cf-cache-status'
+# expect: cache-control: public, s-maxage=..., stale-if-error=...
+
+# iroh relay still answers on its own hostname, untouched.
+curl -sI https://cae1-1.relay.mydia.dev/ | head -1
+
+# Anything not in the route list above is still the Elixir relay.
+curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/health
+```
+
+Watch Workers Logs and the Cloudflare dashboard's request analytics for at
+least an hour before moving on. Rollback at this stage is removing the
+routes from `wrangler.jsonc` and redeploying — the Elixir relay is still
+live and still routed for everything else.
+
+**4c. Move the remaining paths — only after the Access precondition above is
+confirmed, again:**
+
+```jsonc
+  "routes": [{ "pattern": "relay.mydia.dev/*", "zone_name": "mydia.dev" }]
+```
+
+```bash
+cd relay-worker && npx wrangler deploy
+```
+
+Verify pairing, crash ingest and feedback ingest end to end. Note the real
+response field name below — it is `claim_code`, not `code`:
+
+```bash
+CLAIM=$(curl -sS -X POST https://relay.mydia.dev/pairing/claim \
+  -H 'content-type: application/json' \
+  -d '{"node_addr":"{\"id\":\"testnode\"}"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["claim_code"])')
+curl -sS "https://relay.mydia.dev/pairing/claim/$CLAIM"
+curl -sS -X DELETE -o /dev/null -w '%{http_code}\n' "https://relay.mydia.dev/pairing/claim/$CLAIM"
+
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://relay.mydia.dev/crashes/report \
+  -H 'content-type: application/json' \
+  -d '{"error_type":"RuntimeError","error_message":"cutover smoke test","version":"0.0.0"}'
+# expect 201, NOT 202: CrashReporter.Sender matches only 201 as success and
+# retries/logs-failed on anything else.
+
+curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/admin/errors
+# expect 302 (Access login redirect) -- confirms the smoke-test crash landed
+# behind Access, not on an unauthenticated path.
+
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://relay.mydia.dev/feedback \
+  -H 'content-type: application/json' -d '{"type":"idea","message":"cutover smoke test"}'
+# expect 201, with NO Access redirect -- this must never require login.
+```
+
+**Note on the plan document's Verification checklist:** the checklist at the
+end of `docs/superpowers/plans/2026-09-05-metadata-relay-on-cloudflare-workers.md`
+still says the crash report "returns 202" and appears at "`/errors`", and
+that "`GET /errors` and `GET /feedback` redirect to Access" — all three are
+stale. Task 15 moved both dashboards to `/admin/errors` and `/admin/feedback`
+and Task 11 established 201 as the only success status the real producer
+accepts; this section supersedes that checklist. Use the commands above, not
+that list, when actually running the cutover.
+
+Commit only `relay-worker/wrangler.jsonc` once the whole hostname is moved
+and stable — see the plan's Task 16 Step 5 for the commit message shape.
+
+### Step 5: decommission the Elixir relay on can-1 (Task 17)
+
+Do not start this until Step 4 has been stable in production for real
+traffic. This is a staged, mostly-irreversible sequence — read it end to end
+before running the first command. The ordering below is deliberate: each
+stage is either reversible in seconds or a pure archival step, right up
+until the last one, which is neither.
+
+**5a. Soak with the Elixir relay running but unrouted, at least 7 days.**
+Once Step 4c lands, `relay.mydia.dev` no longer sends the Elixir pod any
+traffic, but nothing has stopped it. Leave it running. Confirm from Workers
+Logs that the Worker is serving every route and that error rates match the
+pre-cutover baseline. The pod costs nothing while idle and it is the entire
+rollback plan for this stage — if anything looks wrong, the fix is
+re-pointing `wrangler.jsonc`'s routes back, not touching can-1 at all.
+
+**5b. Archive the crash history — from the host path, never from inside the
+pod.**
+
+```bash
+ssh root@can-1 'cp /var/lib/rancher/k3s/storage/pvc-*_metadata-relay_metadata-relay-data/metadata_relay.db /var/tmp/metadata_relay_archive.db'
+scp root@can-1:/var/tmp/metadata_relay_archive.db ~/archive/
+ssh root@can-1 'rm /var/tmp/metadata_relay_archive.db'
+```
+
+Two details in that command are load-bearing, not stylistic:
+
+- **Copy from the host filesystem, not `kubectl exec` into the pod.** The
+  pod's memory limit is 512Mi and the database is roughly 634MB; opening or
+  querying it in-pod has OOM-killed this service in production before. A
+  plain host-side `cp` never loads the file into the container's memory at
+  all.
+- **Use `/var/tmp`, not `/tmp`.** `/tmp` on can-1 is a 3.8G tmpfs on a 7G
+  box — copying a 634MB database into it is a meaningful fraction of total
+  RAM on a host that is not provisioned for that spike. `/var/tmp` is
+  regular disk.
+
+**5c. Dump the live k8s secret before running `infra/deploy` again for any
+reason, and before Step 5d touches it.**
+
+```bash
+ssh root@can-1 'sudo k3s kubectl get secret metadata-relay-secrets -n metadata-relay -o yaml' \
+  > metadata-relay-secrets-backup.yaml
+```
+
+`infra/deploy`'s `metadata_relay_secret_data()` (`infra/deploy:1027`) only
+knows five keys: `RELAY_TOKEN_SECRET`, `TMDB_API_KEY`, `TVDB_API_KEY`,
+`SMTP_PASSWORD`, `SUBDL_API_KEY`. If the live secret has ever been hand-edited
+(`kubectl edit secret ...`) to add or rotate something this function was
+never taught about, that value exists only on the live cluster object —
+nowhere in this repo, nowhere in `infra/config.yaml`. Step 5d below deletes
+the entire `metadata-relay` namespace, which deletes the Secret outright.
+Take this backup before that point; there is no merge or patch semantics to
+save an unknown key from a namespace deletion.
+
+**5d. Scale to zero and wait 48 hours before deleting anything.**
+
+```bash
+ssh root@can-1 'sudo k3s kubectl -n metadata-relay scale deploy/metadata-relay --replicas=0'
+ssh root@can-1 'sudo k3s kubectl -n metadata-relay scale deploy/redis --replicas=0'
+```
+
+Scaling to zero is reversible in seconds (`--replicas=1`). Nothing after
+this point is.
+
+**5e. Delete the manifests, the namespace, and the `infra/deploy` entry —
+last, and only after 5b and 5c are confirmed done:**
+
+```bash
+ssh root@can-1 'sudo k3s kubectl delete namespace metadata-relay'
+git rm infra/kubernetes/apps/metadata-relay/{deployment,redis,pvc,service,ingress,configmap,secret.yaml.example}.yaml
+```
+
+Update `infra/kubernetes/apps/metadata-relay/kustomization.yaml` to drop the
+removed resources (or delete the directory entirely if nothing remains), and
+remove the metadata-relay entry from `infra/deploy`'s
+`metadata_relay_secret_data`/`metadata_relay_configmap_data`/`phase_metadata_relay`
+so a future `infra/deploy` run does not try to recreate what was just torn
+down.
+
+Deleting the namespace deletes the PVC and everything on it. This is the one
+genuinely irreversible step in this whole runbook — it must come after 5b
+(archive taken), 5c (secret backed up) and 5d (48-hour soak at zero replicas
+with no surprises), never before.
+
+**5f. Retire the Elixir service source and its CI.**
+
+Delete `metadata-relay/` and `.github/workflows/ci-relay.yml`, remove the
+`docker` job from `.github/workflows/deploy-relay.yml` (leaving only
+`deploy-worker`), and rename that file to `deploy-relay-worker.yml`.
+
+**Before doing this, understand what it costs:** `metadata-relay/`'s source
+is the reference implementation this entire Worker port was verified
+against, task by task, for 15 tasks — every route table, every TTL, every
+edge case (the SubDL field names, the pairing `claim_code` shape, the
+crash-report status code, the CORS preflight behaviour) was confirmed
+correct by reading that code, not by guessing. Deleting the directory
+removes the ability to answer any future "does the Worker actually match
+what the Elixir did here" question by reading source — git history still
+holds every line (`git log --all -- metadata-relay/`, or check out the last
+commit before this deletion), but that is a materially higher-friction path
+than a file in the working tree, and it is easy to forget the history is
+there at all once the directory is gone from `HEAD`. Make sure whoever runs
+this step knows that trade before running `git rm -r metadata-relay/`.
+
+**5g. Update the docs.** `lib/mydia/metadata/README.md`: note that
+`relay.mydia.dev` is now a Worker, and that the `append_to_response`
+behaviour it documents is preserved by the no-allowlist forwarding rule in
+`relay-worker/src/proxy/forward.ts`. `AGENTS.md`'s Metadata Relay Service
+section: point it at `relay-worker/` and `wrangler deploy` as the deploy
+ritual — as of this writing that section doesn't actually name the old
+`metadata-relay-v*` tag or Keel, so there is nothing incorrect to remove
+there, only `relay-worker/` to add.
+
 ## Brief vs. reality
 
 This task's brief (`task-15-brief.md`) assumed several things that don't
@@ -442,3 +743,18 @@ re-discover them the hard way:
 - **The Step 6 CPU measurement was never performed**, for the reason stated
   in Task 6's report: it needs a deployed Worker, which didn't exist yet.
   See the runbook's Step 3 above.
+- **Task 16 Step 4's own pairing-verification snippet reads the wrong JSON
+  field.** It parses the claim response as `["code"]`; the route actually
+  returns `{"claim_code": "..."}` (`src/pairing/routes.ts`, and confirmed
+  against both `remote_access.ex` and the Flutter client during Task 10) —
+  the original snippet would `KeyError` before ever reaching the GET/DELETE
+  checks. Fixed in this runbook's Step 4c.
+- **The plan's final "Verification checklist"** (the very end of the plan
+  document, distinct from Task 16 Step 4's own inline verification, which
+  Task 15 already corrected) **was never updated for the `/admin/*` move or
+  the 201 status code.** It still says a crash report "returns 202" and
+  appears at "`/errors`", and that "`GET /errors` and `GET /feedback`
+  redirect to Access" — all three predate Task 11 (201 is the only status
+  the real producer accepts) and Task 15 (both dashboards moved to
+  `/admin/*`). This runbook's Step 4c commands are the corrected version;
+  do not run the plan document's own checklist verbatim.
