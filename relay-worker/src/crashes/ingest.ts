@@ -30,6 +30,10 @@ export interface ErrorRow {
   first_seen_at: number;
   last_seen_at: number;
   occurrence_count: number;
+  // Sticky: set to 1 the moment any bucket for this fingerprint ever
+  // saturates, never reset back to 0. See 0002_crash_reports.sql for why
+  // this can't be answered from ingest_buckets.saturated alone.
+  count_is_floor: number;
 }
 
 export interface OccurrenceRow {
@@ -273,14 +277,24 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
     const saturated = written >= MAX_OCCURRENCE_ROWS_PER_BUCKET ? 1 : 0;
     let writes = 0;
 
+    // count_is_floor is bound to the SAME `saturated` value computed above
+    // for THIS write's bucket -- the moment this write is the one that pushes
+    // the bucket to the cap. ON CONFLICT's `MAX(errors.count_is_floor,
+    // excluded.count_is_floor)` is what makes it sticky: once a prior write
+    // has set it to 1, a later write binding 0 (an ordinary, unsaturated
+    // crash from a *different* hour or instance) can never flip it back.
+    // Unlike ingest_buckets.saturated, this column is never told to reset --
+    // see 0002_crash_reports.sql for why that distinction is load-bearing.
     const errorsResult = await c.env.DB.prepare(
       `INSERT INTO errors (fingerprint, kind, message, source_file, source_line,
-                           status, first_seen_at, last_seen_at, occurrence_count)
-       VALUES (?, ?, ?, ?, ?, 'unresolved', ?, ?, 1)
+                           status, first_seen_at, last_seen_at, occurrence_count,
+                           count_is_floor)
+       VALUES (?, ?, ?, ?, ?, 'unresolved', ?, ?, 1, ?)
        ON CONFLICT(fingerprint) DO UPDATE SET
          last_seen_at = excluded.last_seen_at,
          occurrence_count = errors.occurrence_count + 1,
-         message = excluded.message`,
+         message = excluded.message,
+         count_is_floor = MAX(errors.count_is_floor, excluded.count_is_floor)`,
     )
       .bind(
         fingerprint,
@@ -290,6 +304,7 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
         crash.sourceLine,
         crash.occurredAt,
         crash.occurredAt,
+        saturated,
       )
       .run();
     writes += errorsResult.meta.rows_written;

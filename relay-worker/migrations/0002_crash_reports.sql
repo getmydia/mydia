@@ -7,7 +7,15 @@ CREATE TABLE errors (
   status TEXT NOT NULL DEFAULT 'unresolved',
   first_seen_at INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL,
-  occurrence_count INTEGER NOT NULL DEFAULT 0
+  occurrence_count INTEGER NOT NULL DEFAULT 0,
+  -- Set to 1 (via `MAX(errors.count_is_floor, excluded.count_is_floor)` in
+  -- src/crashes/ingest.ts's upsert) the moment ANY of this fingerprint's
+  -- ingest_buckets rows ever reaches MAX_OCCURRENCE_ROWS_PER_BUCKET, and
+  -- NEVER reset back to 0 afterwards. See ingest_buckets.saturated below for
+  -- why this can't live on that table instead -- this column is the durable
+  -- half of that story. A dashboard must read THIS column, not
+  -- ingest_buckets.saturated, to decide whether occurrence_count is exact.
+  count_is_floor INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX errors_last_seen_idx ON errors (last_seen_at DESC);
@@ -51,10 +59,27 @@ CREATE INDEX occurrences_fingerprint_time_idx
 -- One consequence: once a bucket saturates, `errors.occurrence_count` stops
 -- advancing too (its upsert is part of what gets skipped), so it becomes a
 -- floor, not an exact count, for the rest of that hour. `saturated` records
--- exactly when that happened so a reader (e.g. a dashboard) can render the
--- count as "at least N in this hour, throttled" instead of presenting an
--- undercount as if it were exact. It resets to 0 whenever `hour_bucket`
--- rolls over, since a fresh hour gets a fresh budget.
+-- that this happened -- but ONLY for as long as this exact row's current
+-- hour window lasts. It resets to 0 the moment a fresh hour's write lands
+-- for the same (fingerprint, instance_key) pair (a fresh hour gets a fresh
+-- budget), and that reset is in-place: nothing preserves what `saturated`
+-- was a moment before.
+--
+-- That reset is exactly right for what THIS table is for -- deciding
+-- whether to admit the CURRENT hour's writes -- and exactly wrong for
+-- answering "is errors.occurrence_count exact?" for a fingerprint whose
+-- misbehaving install keeps crashing past the hour boundary: saturate hour
+-- H, then send one single further crash in hour H+1, and this row flips
+-- back to `saturated = 0` even though every crash dropped during H's
+-- throttling is gone forever and will never be counted -- the total is
+-- STILL a floor, permanently, regardless of what any later hour's traffic
+-- looks like. A dashboard reading `saturated` directly would show a
+-- precise-looking number at exactly the moment (some time after a storm)
+-- an operator is most likely to look. `errors.count_is_floor` is the fix:
+-- a separate, sticky, never-reset flag set the instant any bucket for that
+-- fingerprint ever saturates. Keep using `saturated` for what it's
+-- correctly used for (the live per-hour admission decision in
+-- src/crashes/ingest.ts); read `count_is_floor` for "is the total exact?".
 CREATE TABLE ingest_buckets (
   fingerprint TEXT NOT NULL,
   instance_key TEXT NOT NULL,

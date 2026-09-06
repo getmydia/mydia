@@ -1,6 +1,16 @@
 import { env, SELF, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeAll } from "vitest";
 import { escapeHtml } from "../../src/dashboards/layout";
+import { MAX_OCCURRENCE_ROWS_PER_BUCKET } from "../../src/crashes/ingest";
+
+// Resolve/unresolve now validate the :fingerprint path segment against
+// fingerprintOf's real shape (32 lowercase hex chars) before touching D1 or
+// building a redirect, so every fixture exercised through those two routes
+// needs a realistic-looking fingerprint rather than a short mnemonic string.
+// GET routes never validate shape (D1 handles an arbitrary string safely and
+// simply returns no row), so list/detail/escaping-only tests keep their
+// short fixture names below.
+const FP1 = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
 
 beforeAll(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
@@ -8,9 +18,9 @@ beforeAll(async () => {
   await env.DB.prepare(
     `INSERT INTO errors (fingerprint, kind, message, source_file, source_line,
                          status, first_seen_at, last_seen_at, occurrence_count)
-     VALUES ('fp1', 'RuntimeError', 'boom', 'm.ex', 3, 'unresolved', ?, ?, 7)`,
+     VALUES (?, 'RuntimeError', 'boom', 'm.ex', 3, 'unresolved', ?, ?, 7)`,
   )
-    .bind(now, now)
+    .bind(FP1, now, now)
     .run();
 });
 
@@ -35,7 +45,7 @@ describe("GET /errors", () => {
   });
 
   it("shows a single error group with its occurrences", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/errors/fp1");
+    const res = await SELF.fetch(`https://relay.mydia.dev/errors/${FP1}`);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("RuntimeError");
   });
@@ -49,16 +59,41 @@ describe("GET /errors", () => {
     // fetch()'s default `redirect: "follow"` would otherwise chase the 303
     // and hand back the followed page's 200, hiding the redirect status this
     // assertion cares about.
-    const res = await SELF.fetch("https://relay.mydia.dev/errors/fp1/resolve", {
+    const res = await SELF.fetch(`https://relay.mydia.dev/errors/${FP1}/resolve`, {
       method: "POST",
       redirect: "manual",
     });
     expect(res.status).toBe(303);
 
     const row = await env.DB.prepare(
-      "SELECT status FROM errors WHERE fingerprint = 'fp1'",
-    ).first<{ status: string }>();
+      "SELECT status FROM errors WHERE fingerprint = ?",
+    )
+      .bind(FP1)
+      .first<{ status: string }>();
     expect(row!.status).toBe("resolved");
+  });
+
+  // MINOR fix-round-1 gap: only resolve had a test; unresolve is the other
+  // half of the same write-mutating pair and got none.
+  it("unresolves a group and reflects the new status", async () => {
+    const resolveRes = await SELF.fetch(`https://relay.mydia.dev/errors/${FP1}/resolve`, {
+      method: "POST",
+      redirect: "manual",
+    });
+    expect(resolveRes.status).toBe(303);
+
+    const unresolveRes = await SELF.fetch(
+      `https://relay.mydia.dev/errors/${FP1}/unresolve`,
+      { method: "POST", redirect: "manual" },
+    );
+    expect(unresolveRes.status).toBe(303);
+
+    const row = await env.DB.prepare(
+      "SELECT status FROM errors WHERE fingerprint = ?",
+    )
+      .bind(FP1)
+      .first<{ status: string }>();
+    expect(row!.status).toBe("unresolved");
   });
 
   it("never renders a crash message as raw HTML", async () => {
@@ -100,21 +135,74 @@ describe("GET /errors", () => {
   // be escaped defensively rather than trusted because "the input happens to
   // be safe today".
   it("escapes the fingerprint used to build occurrence links", async () => {
-    const found = await env.DB.prepare(
-      "SELECT fingerprint FROM errors WHERE kind = 'RuntimeError' AND message = 'boom'",
-    ).first<{ fingerprint: string }>();
-
     const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
-    expect(html).toContain(`href="/errors/${found!.fingerprint}"`);
+    expect(html).toContain(`href="/errors/${FP1}"`);
+  });
+});
+
+// IMPORTANT-1 fix-round-1 finding: `Number(c.req.query("page") ?? "0")` fed
+// straight into a D1 OFFSET with no guard. Each of these five inputs was
+// confirmed to throw `D1_ERROR: datatype mismatch`, surfaced as an unhandled
+// Hono 500, before the fix -- on an endpoint that is unauthenticated today.
+describe("GET /errors?page= guards against hostile input", () => {
+  const hostileValues = ["abc", "NaN", "Infinity", "1e300", "99999999999999999999"];
+
+  it.each(hostileValues)("does not 500 for page=%s", async (value) => {
+    const res = await SELF.fetch(
+      `https://relay.mydia.dev/errors?page=${encodeURIComponent(value)}`,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("still paginates normally for an ordinary page number", async () => {
+    const res = await SELF.fetch("https://relay.mydia.dev/errors?page=1");
+    expect(res.status).toBe(200);
+  });
+
+  it("clamps a negative page to the first page instead of erroring", async () => {
+    const res = await SELF.fetch("https://relay.mydia.dev/errors?page=-5");
+    expect(res.status).toBe(200);
+  });
+});
+
+// IMPORTANT-2 fix-round-1 finding: c.redirect() builds the Location header
+// from the raw, decoded :fingerprint param. A value containing a CRLF
+// sequence made the underlying Headers implementation throw -- fails safe
+// (no header injection actually lands; the runtime itself rejects the
+// control characters, and the fixed "/errors/" prefix rules out an open
+// redirect either way) but still surfaced as an unhandled 500 rather than a
+// clean 404, on an endpoint that is unauthenticated today.
+describe("POST /errors/:fingerprint/resolve validates the fingerprint shape first", () => {
+  it("returns 404, not a 500, for a CRLF-injected fingerprint segment", async () => {
+    const res = await SELF.fetch(
+      "https://relay.mydia.dev/errors/abc%0D%0AInjected/resolve",
+      { method: "POST", redirect: "manual" },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 for a non-hex fingerprint", async () => {
+    const res = await SELF.fetch(
+      "https://relay.mydia.dev/errors/not-a-real-fingerprint/resolve",
+      { method: "POST", redirect: "manual" },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("also validates on the unresolve route", async () => {
+    const res = await SELF.fetch(
+      "https://relay.mydia.dev/errors/abc%0D%0AInjected/unresolve",
+      { method: "POST", redirect: "manual" },
+    );
+    expect(res.status).toBe(404);
   });
 });
 
 // Task 11's ingest throttle stops counting (and stops writing new rows) once
-// a fingerprint/instance/hour bucket saturates: ingest_buckets.saturated
-// records that occurrence_count is a FLOOR, not an exact total, for the rest
-// of that hour. A dashboard that prints occurrence_count as a plain number
-// presents a throttled undercount as if it were precise -- worst exactly
-// when an operator most needs the real number, during a crash storm.
+// a fingerprint/instance/hour bucket saturates. errors.count_is_floor
+// (fix-round-1) is the durable record of that, distinct from
+// ingest_buckets.saturated, which resets the moment a fresh hour's write
+// lands for the same fingerprint/instance -- see 0002_crash_reports.sql.
 describe("GET /errors occurrence count vs. ingest throttling", () => {
   const SATURATED_FP = "fpsaturated";
 
@@ -122,16 +210,10 @@ describe("GET /errors occurrence count vs. ingest throttling", () => {
     const now = Math.floor(Date.now() / 1000);
     await env.DB.prepare(
       `INSERT INTO errors (fingerprint, kind, message, status,
-                           first_seen_at, last_seen_at, occurrence_count)
-       VALUES (?, 'StormError', 'storm', 'unresolved', ?, ?, 3)`,
+                           first_seen_at, last_seen_at, occurrence_count, count_is_floor)
+       VALUES (?, 'StormError', 'storm', 'unresolved', ?, ?, 3, 1)`,
     )
       .bind(SATURATED_FP, now, now)
-      .run();
-    await env.DB.prepare(
-      `INSERT INTO ingest_buckets (fingerprint, instance_key, hour_bucket, written, saturated)
-       VALUES (?, 'some-instance', ?, 3, 1)`,
-    )
-      .bind(SATURATED_FP, Math.floor(now / 3600))
       .run();
   });
 
@@ -147,9 +229,9 @@ describe("GET /errors occurrence count vs. ingest throttling", () => {
 
   it("does not mark an unsaturated fingerprint's count as a floor", async () => {
     const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
-    // fp1's own row (found via its detail link), bounded to just that <tr>
+    // FP1's own row (found via its detail link), bounded to just that <tr>
     // so a neighbouring saturated row's markup can't leak into the slice.
-    const linkIndex = html.indexOf('href="/errors/fp1"');
+    const linkIndex = html.indexOf(`href="/errors/${FP1}"`);
     expect(linkIndex).toBeGreaterThan(-1);
     const rowEnd = html.indexOf("</tr>", linkIndex);
     const rowSlice = html.slice(linkIndex, rowEnd);
@@ -161,5 +243,150 @@ describe("GET /errors occurrence count vs. ingest throttling", () => {
       await SELF.fetch(`https://relay.mydia.dev/errors/${SATURATED_FP}`)
     ).text();
     expect(html).toMatch(/&ge;|≥|throttled|at least/i);
+  });
+});
+
+// The critical fix-round-1 finding, reproduced end-to-end through the real
+// ingest route rather than by hand-inserting rows: a bucket saturates, the
+// hour rolls over, and the same misbehaving install sends exactly one more
+// crash. Before this fix that one further request reset
+// ingest_buckets.saturated back to 0 in place, and the dashboard (which used
+// to read that live flag) started rendering a bare, precise-looking number
+// again -- permanently wrong, since the crashes dropped during the
+// saturated hour are gone forever.
+describe("the floor marker survives an hour rollover", () => {
+  function postCrash(kind: string, ip: string, occurredAtSeconds: number) {
+    return SELF.fetch("https://relay.mydia.dev/crashes/report", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+      body: JSON.stringify({
+        error_type: kind,
+        error_message: "loop",
+        stacktrace: [{ module: "M", function: "f/0", file: "m.ex", line: 42 }],
+        occurred_at: new Date(occurredAtSeconds * 1000).toISOString(),
+      }),
+    });
+  }
+
+  it("keeps rendering the floor after the hour rolls over and one more crash arrives from the same instance", async () => {
+    const ip = "203.0.113.50";
+    const kind = "RolloverStorm";
+    const hourStart = 500_000 * 3600; // arbitrary hour, far from "now"
+
+    // Saturate the bucket within the first hour.
+    for (let i = 0; i < MAX_OCCURRENCE_ROWS_PER_BUCKET + 2; i++) {
+      await postCrash(kind, ip, hourStart + 10);
+    }
+
+    const fingerprintRow = await env.DB.prepare(
+      "SELECT fingerprint FROM errors WHERE kind = ?",
+    )
+      .bind(kind)
+      .first<{ fingerprint: string }>();
+    const fingerprint = fingerprintRow!.fingerprint;
+
+    const beforeRollover = await env.DB.prepare(
+      "SELECT count_is_floor, occurrence_count FROM errors WHERE fingerprint = ?",
+    )
+      .bind(fingerprint)
+      .first<{ count_is_floor: number; occurrence_count: number }>();
+    expect(beforeRollover!.count_is_floor).toBe(1);
+    expect(beforeRollover!.occurrence_count).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET);
+
+    // Roll the hour forward and send exactly ONE more crash from the SAME
+    // fingerprint and instance.
+    await postCrash(kind, ip, hourStart + 3600 + 10);
+
+    // Sanity: the transient per-hour flag really did reset -- this is
+    // precisely the scenario that used to erase the floor signal.
+    const bucket = await env.DB.prepare(
+      "SELECT hour_bucket, written, saturated FROM ingest_buckets WHERE fingerprint = ? AND instance_key = ?",
+    )
+      .bind(fingerprint, ip)
+      .first<{ hour_bucket: number; written: number; saturated: number }>();
+    expect(bucket!.saturated).toBe(0);
+    expect(bucket!.written).toBe(1);
+
+    const afterRollover = await env.DB.prepare(
+      "SELECT count_is_floor, occurrence_count FROM errors WHERE fingerprint = ?",
+    )
+      .bind(fingerprint)
+      .first<{ count_is_floor: number; occurrence_count: number }>();
+    // The durable flag must NOT reset, and the count keeps advancing on top
+    // of the floor it was already at.
+    expect(afterRollover!.count_is_floor).toBe(1);
+    expect(afterRollover!.occurrence_count).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET + 1);
+
+    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
+    const rowStart = html.indexOf(kind);
+    expect(rowStart).toBeGreaterThan(-1);
+    const rowEnd = html.indexOf("</tr>", rowStart);
+    expect(html.slice(rowStart, rowEnd)).toMatch(/&ge;|≥|throttled|at least/i);
+  });
+
+  it("keeps rendering a plain exact count for a fingerprint that never saturates, across many hours", async () => {
+    const ip = "203.0.113.51";
+    const kind = "NeverSaturates";
+    const baseHour = 600_000;
+
+    // One crash per hour for several hours -- never enough in any single
+    // hour to reach MAX_OCCURRENCE_ROWS_PER_BUCKET.
+    for (let h = 0; h < 5; h++) {
+      await postCrash(kind, ip, (baseHour + h) * 3600 + 10);
+    }
+
+    const row = await env.DB.prepare(
+      "SELECT count_is_floor, occurrence_count FROM errors WHERE kind = ?",
+    )
+      .bind(kind)
+      .first<{ count_is_floor: number; occurrence_count: number }>();
+    expect(row!.count_is_floor).toBe(0);
+    expect(row!.occurrence_count).toBe(5);
+
+    const html = await (await SELF.fetch("https://relay.mydia.dev/errors")).text();
+    const rowStart = html.indexOf(kind);
+    expect(rowStart).toBeGreaterThan(-1);
+    const rowEnd = html.indexOf("</tr>", rowStart);
+    expect(html.slice(rowStart, rowEnd)).not.toMatch(/throttled/i);
+  });
+
+  it("keeps the floor marker across a resolve/unresolve cycle", async () => {
+    const ip = "203.0.113.52";
+    const kind = "ResolveCycleStorm";
+    const occurredAt = 700_000 * 3600 + 10;
+
+    for (let i = 0; i < MAX_OCCURRENCE_ROWS_PER_BUCKET + 1; i++) {
+      await postCrash(kind, ip, occurredAt);
+    }
+
+    const fingerprintRow = await env.DB.prepare(
+      "SELECT fingerprint FROM errors WHERE kind = ?",
+    )
+      .bind(kind)
+      .first<{ fingerprint: string }>();
+    const fingerprint = fingerprintRow!.fingerprint;
+
+    const hasFloorMarker = async (): Promise<boolean> => {
+      const html = await (
+        await SELF.fetch(`https://relay.mydia.dev/errors/${fingerprint}`)
+      ).text();
+      return /&ge;|≥|throttled|at least/i.test(html);
+    };
+
+    expect(await hasFloorMarker()).toBe(true);
+
+    const resolveRes = await SELF.fetch(
+      `https://relay.mydia.dev/errors/${fingerprint}/resolve`,
+      { method: "POST", redirect: "manual" },
+    );
+    expect(resolveRes.status).toBe(303);
+    expect(await hasFloorMarker()).toBe(true);
+
+    const unresolveRes = await SELF.fetch(
+      `https://relay.mydia.dev/errors/${fingerprint}/unresolve`,
+      { method: "POST", redirect: "manual" },
+    );
+    expect(unresolveRes.status).toBe(303);
+    expect(await hasFloorMarker()).toBe(true);
   });
 });
