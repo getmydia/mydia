@@ -6,6 +6,7 @@ import { registerSubdlRoutes, subdlApiKey } from "./proxy/subdl";
 import { registerPassthroughRoutes } from "./proxy/passthrough";
 import { registerPairingRoutes } from "./pairing/routes";
 import { registerCrashRoutes } from "./crashes/ingest";
+import { registerFeedbackRoutes } from "./feedback/ingest";
 import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
 
@@ -64,6 +65,10 @@ registerSubdlRoutes(app);
 registerPassthroughRoutes(app);
 registerPairingRoutes(app);
 registerCrashRoutes(app);
+// POST only -- Task 14 adds GET /feedback (the maintainer dashboard) as a
+// separate route registration, and Hono matches by path AND method, so the
+// two coexist without either swallowing the other.
+registerFeedbackRoutes(app);
 
 // 404 catch-all, matching the Elixir router's behaviour.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));
