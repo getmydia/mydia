@@ -1,15 +1,9 @@
 import type { Hono } from "hono";
 import type { Env } from "../env";
 import { listErrors, getError, setErrorStatus } from "../crashes/queries";
-import { layout, escapeHtml } from "./layout";
+import { layout, escapeHtml, parsePage, when } from "./layout";
 
 const PAGE_SIZE = 50;
-
-// A page number past this is almost certainly hostile rather than a real
-// operator paging through results; clamping here (rather than merely
-// rejecting) keeps GET /errors always answering 200 regardless of what a
-// caller sends -- this route is unauthenticated until Task 15.
-const MAX_PAGE = 100_000;
 
 // fingerprintOf (src/crashes/ingest.ts) always produces exactly 32 lowercase
 // hex characters (the first 32 hex chars of a SHA-256 digest). Anything else
@@ -20,27 +14,8 @@ function isValidFingerprintShape(value: string): boolean {
   return FINGERPRINT_SHAPE.test(value);
 }
 
-function when(unix: number): string {
-  return new Date(unix * 1000).toISOString().replace("T", " ").slice(0, 19);
-}
-
 function formatInteger(n: number): string {
   return Math.trunc(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
-// `?page=` arrives as arbitrary caller-supplied text on an unauthenticated
-// route. `Number(...)` alone turns "abc"/"NaN" into NaN, "Infinity" into
-// Infinity, and "1e300"/"99999999999999999999" into finite-but-astronomical
-// floats -- every one of those reaches D1 as an OFFSET value D1 rejects with
-// `D1_ERROR: datatype mismatch`, which Hono surfaces as an unhandled 500.
-// Reject anything that isn't a small non-negative safe integer by falling
-// back to page 0, and clamp anything absurdly large (but technically a safe
-// integer) to MAX_PAGE rather than trusting it straight into the query.
-function parsePage(raw: string | undefined): number {
-  if (raw === undefined) return 0;
-  const n = Number(raw);
-  if (!Number.isSafeInteger(n) || n < 0) return 0;
-  return Math.min(n, MAX_PAGE);
 }
 
 // The single place a raw occurrence_count is turned into markup. When

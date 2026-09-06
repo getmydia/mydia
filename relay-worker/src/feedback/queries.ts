@@ -43,9 +43,20 @@ export async function setFeedbackState(
 }
 
 export async function setGithubRef(env: Env, id: string, ref: string): Promise<void> {
+  // Mirrors Submission.github_ref_changeset/2: Ecto.Changeset.cast/4's
+  // default `empty_values` (which includes "") normalizes a blank change
+  // away entirely, so the Elixir side never persists "" -- a blank
+  // submission leaves the struct's `nil` default in place. Trim first so a
+  // whitespace-only submission is treated the same way (the Elixir cast
+  // only special-cases the exact string "", but nothing here should ever
+  // want to persist "   " as if it were a real reference either). A
+  // non-blank ref is stored exactly as submitted, uninspected -- same as
+  // the Elixir side, which never trims real content.
+  const normalized = ref.trim() === "" ? null : ref;
+
   await env.DB.prepare(
     "UPDATE feedback_submissions SET github_ref = ?, updated_at = ? WHERE id = ?",
   )
-    .bind(ref, Math.floor(Date.now() / 1000), id)
+    .bind(normalized, Math.floor(Date.now() / 1000), id)
     .run();
 }

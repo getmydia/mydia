@@ -19,6 +19,33 @@ export function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
+// Shared pagination guard for both dashboards' ?page= query param. It is
+// arbitrary caller-supplied text on an unauthenticated route, and
+// `Number("abc")`/`Number("NaN")`/`Number("Infinity")`/`Number("1e300")`/an
+// oversized numeric string each produce a value that reaches D1 as an
+// OFFSET and throws `D1_ERROR: datatype mismatch`, surfaced as an unhandled
+// Hono 500. Reject anything that isn't a small non-negative safe integer by
+// falling back to page 0, and clamp anything absurdly large (but technically
+// a safe integer) to MAX_PAGE rather than trusting it straight into the
+// query. Originated in dashboards/errors.ts (Task 13) and was duplicated
+// verbatim into dashboards/feedback.ts (Task 14) before being extracted
+// here -- one copy, so a future fix to this guard can't land in one
+// dashboard and not the other.
+export const MAX_PAGE = 100_000;
+
+export function parsePage(raw: string | undefined): number {
+  if (raw === undefined) return 0;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < 0) return 0;
+  return Math.min(n, MAX_PAGE);
+}
+
+// Shared "unix seconds -> readable UTC timestamp" formatter for both
+// dashboards' list tables. Same extraction reasoning as parsePage above.
+export function when(unix: number): string {
+  return new Date(unix * 1000).toISOString().replace("T", " ").slice(0, 19);
+}
+
 export function layout(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -36,6 +63,7 @@ export function layout(title: string, body: string): string {
   th { font-weight: 600; }
   pre { overflow-x: auto; background: #8881; padding: .75rem; border-radius: .375rem; }
   .muted { opacity: .65; }
+  .wrap { white-space: pre-wrap; }
   .floor { white-space: nowrap; }
   .floor .badge {
     display: inline-block; margin-left: .35rem; padding: .05rem .4rem;

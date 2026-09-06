@@ -16,9 +16,9 @@ beforeAll(async () => {
   const now = Math.floor(Date.now() / 1000);
   await env.DB.prepare(
     `INSERT INTO feedback_submissions
-       (id, type, message, contact, mydia_version, state, inserted_at, updated_at)
+       (id, type, message, contact, mydia_version, source_ip, state, inserted_at, updated_at)
      VALUES (?, 'bug', 'Scanner missed a file', 'someone@example.com',
-             '1.2.3', 'unread', ?, ?)`,
+             '1.2.3', '203.0.113.42', 'unread', ?, ?)`,
   )
     .bind(FB1, now, now)
     .run();
@@ -33,6 +33,35 @@ describe("GET /feedback dashboard", () => {
     const html = await res.text();
     expect(html).toContain("Scanner missed a file");
     expect(html).toContain("1.2.3");
+  });
+
+  // Fix-round-1 finding: index.html.heex surfaces submission.source_ip per
+  // row (a triage/anti-abuse signal -- deciding whether a run of
+  // submissions is one person), and the dashboard dropped it without
+  // disclosing the omission.
+  it("shows the source IP column, an anti-abuse signal the Elixir dashboard also surfaces", async () => {
+    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback")).text();
+    expect(html).toContain("Source IP");
+    expect(html).toContain("203.0.113.42");
+  });
+
+  // The Elixir template applies whitespace-pre-wrap to the message; without
+  // it a multi-line submission renders as one run-on line even though the
+  // text is intact in the markup. Assert the CSS hook is actually wired to
+  // the message cell, not just present somewhere in the stylesheet.
+  it("preserves multi-line messages visually via the wrap class", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    await env.DB.prepare(
+      `INSERT INTO feedback_submissions (id, type, message, state, inserted_at, updated_at)
+       VALUES ('fbmultiline', 'bug', 'Line one\nLine two', 'unread', ?, ?)`,
+    )
+      .bind(now, now)
+      .run();
+
+    const html = await (await SELF.fetch("https://relay.mydia.dev/feedback")).text();
+    expect(html).toContain("Line one\nLine two");
+    const cellStart = html.indexOf('<td class="wrap">Line one');
+    expect(cellStart).toBeGreaterThan(-1);
   });
 
   it("does not shadow the public POST ingest route", async () => {
@@ -93,11 +122,15 @@ describe("GET /feedback dashboard", () => {
   });
 
   // Submission.github_ref_changeset/2 (metadata-relay) has no
-  // validate_required -- a blank value is accepted and stored as-is
-  // (clearing a previously attached ref), not rejected with a 422. Mirror
-  // that rather than inventing a "github_ref is required" rule the Elixir
-  // dashboard never enforced.
-  it("accepts a blank github ref, clearing any previous one", async () => {
+  // validate_required, so a blank value is accepted rather than rejected
+  // with a 422 the Elixir dashboard never enforced. But Ecto.Changeset.cast/4's
+  // default `empty_values` (which includes "") normalizes that blank change
+  // away entirely, so the Elixir side never persists an empty string -- it
+  // leaves the struct's `nil` default in place. Fix-round-1 finding: this
+  // test originally asserted `.toBe("")`, locking in a persisted-data
+  // mismatch (NULL vs. "") that was invisible in the UI because both
+  // templates render null and "" identically.
+  it("accepts a blank github ref, clearing any previous one to NULL (not empty string)", async () => {
     const res = await SELF.fetch(`https://relay.mydia.dev/feedback/${FB1}/github`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -110,8 +143,25 @@ describe("GET /feedback dashboard", () => {
       "SELECT github_ref FROM feedback_submissions WHERE id = ?",
     )
       .bind(FB1)
-      .first<{ github_ref: string }>();
-    expect(row!.github_ref).toBe("");
+      .first<{ github_ref: string | null }>();
+    expect(row!.github_ref).toBeNull();
+  });
+
+  it("treats a whitespace-only github ref the same as blank", async () => {
+    const res = await SELF.fetch(`https://relay.mydia.dev/feedback/${FB1}/github`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `github_ref=${encodeURIComponent("   ")}`,
+      redirect: "manual",
+    });
+    expect(res.status).toBe(303);
+
+    const row = await env.DB.prepare(
+      "SELECT github_ref FROM feedback_submissions WHERE id = ?",
+    )
+      .bind(FB1)
+      .first<{ github_ref: string | null }>();
+    expect(row!.github_ref).toBeNull();
   });
 
   it("escapes submission text, which is user supplied", async () => {
