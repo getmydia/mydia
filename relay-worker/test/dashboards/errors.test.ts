@@ -404,3 +404,48 @@ describe("the floor marker survives an hour rollover", () => {
     expect(await hasFloorMarker()).toBe(true);
   });
 });
+
+// Fix-round-1 finding on the hono/jsx conversion: the pager's "Next" link
+// carries the `status` filter forward via `encodeURIComponent`, not the
+// `escapeHtml` the pre-conversion file used at this spot. That is a
+// deliberate improvement, not an oversight -- `status` is unvalidated caller
+// input straight from `c.req.query("status")` (unlike `fingerprint`, it has
+// no shape guard), and it lands inside a URL query string, not HTML markup.
+// HTML-escaping a literal "&" produces "&amp;", which a browser decodes back
+// to "&" before parsing the query string, silently splitting one parameter
+// into two. Percent-encoding is the correct tool for this position, and this
+// test pins that so a future refactor can't quietly regress it back to
+// escapeHtml.
+describe("GET /admin/errors pager link encodes the status filter for the URL, not for HTML", () => {
+  const PAGER_STATUS = "custom&type";
+
+  beforeAll(async () => {
+    // PAGE_SIZE (50) rows sharing one status value the rest of this file
+    // never uses, so the pager link only appears once a full page of exactly
+    // this filtered result set is returned.
+    const now = Math.floor(Date.now() / 1000);
+    for (let i = 0; i < 50; i++) {
+      await env.DB.prepare(
+        `INSERT INTO errors (fingerprint, kind, message, status,
+                             first_seen_at, last_seen_at, occurrence_count)
+         VALUES (?, 'PagerFilterError', 'pager filter fixture', ?, ?, ?, 1)`,
+      )
+        .bind(`fppager${i}`, PAGER_STATUS, now, now)
+        .run();
+    }
+  });
+
+  it("percent-encodes the status filter in the pager link so an ampersand cannot split the query string", async () => {
+    const res = await SELF.fetch(
+      `https://relay.mydia.dev/admin/errors?status=${encodeURIComponent(PAGER_STATUS)}`,
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+
+    // The value's own "&" must survive as the URL-structural "%26", not be
+    // turned into the HTML entity "&amp;" that a browser would decode back
+    // into a literal "&" and treat as a second query parameter.
+    expect(html).toContain("status=custom%26type");
+    expect(html).not.toContain("status=custom&amp;type");
+  });
+});
