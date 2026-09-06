@@ -44,18 +44,21 @@ export function escapeHtml(value: unknown): string {
 // Hono 500. Reject anything that isn't a small non-negative safe integer by
 // falling back to page 0, and clamp anything absurdly large (but technically
 // a safe integer) to MAX_PAGE rather than trusting it straight into the
-// query.
+// query. Originated in dashboards/errors.ts and was duplicated
+// verbatim into dashboards/feedback.ts before being extracted
+// here -- one copy, so a future fix to this guard can't land in one
+// dashboard and not the other.
 export const MAX_PAGE = 100_000;
 
-export function parsePage(raw: string | undefined): number {
-  if (raw === undefined) return 0;
-  const n = Number(raw);
+export function parsePage(rawPage: string | undefined): number {
+  if (rawPage === undefined) return 0;
+  const n = Number(rawPage);
   if (!Number.isSafeInteger(n) || n < 0) return 0;
   return Math.min(n, MAX_PAGE);
 }
 
 // Shared "unix seconds -> readable UTC timestamp" formatter for both
-// dashboards' list tables.
+// dashboards' list tables. Same extraction reasoning as parsePage above.
 //
 // The guard is not defensive padding. `toISOString()` throws
 // `RangeError: Invalid time value` once `unix * 1000` leaves Date's
