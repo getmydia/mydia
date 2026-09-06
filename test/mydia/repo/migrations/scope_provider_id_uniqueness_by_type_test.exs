@@ -84,6 +84,38 @@ defmodule Mydia.Repo.Migrations.ScopeProviderIdUniquenessByTypeTest do
     end
   end
 
+  @tag :tmp_dir
+  test "up succeeds on an install whose media_items predates the named tmdb index" do
+    seed_legacy_schema()
+
+    run_migration!(ScopeProviderIdUniquenessByType, @version)
+
+    assert index?("media_items_type_tmdb_id_index")
+    assert index?("media_items_type_tvdb_id_index")
+    refute index?("media_items_tvdb_id_index")
+  end
+
+  @tag :tmp_dir
+  test "the legacy inline UNIQUE still scopes tmdb_id globally after the migration" do
+    seed_legacy_schema()
+    run_migration!(ScopeProviderIdUniquenessByType, @version)
+
+    insert_item("a", "movie", "Cinder Lantern", tmdb_id: 4006)
+
+    # Not the behaviour this migration wants, but the honest state of a
+    # pre-2025-11-24 database: `tmdb_id INTEGER UNIQUE` is a column constraint
+    # and only a table rebuild can remove it. Flipping this to an `assert` is
+    # the test that a rebuild actually landed.
+    assert_raise Exqlite.Error, fn ->
+      insert_item("b", "tv_show", "Cinder Lantern", tmdb_id: 4006)
+    end
+
+    # The tvdb relaxation is unaffected: that index was always a named one.
+    insert_item("c", "movie", "Harrow Bay", tvdb_id: 4007)
+    insert_item("d", "tv_show", "Harrow Bay", tvdb_id: 4007)
+    assert %{rows: [[2]]} = sql!("SELECT COUNT(*) FROM media_items WHERE tvdb_id = 4007")
+  end
+
   # Only the columns and indexes this migration touches. The real table has far
   # more, none of which the migration reads.
   defp seed_schema do
@@ -104,6 +136,44 @@ defmodule Mydia.Repo.Migrations.ScopeProviderIdUniquenessByTypeTest do
     sql!(
       "CREATE UNIQUE INDEX media_items_tvdb_id_index ON media_items (tvdb_id) WHERE tvdb_id IS NOT NULL"
     )
+  end
+
+  # The shape an install created before 2025-11-24 still has: `media_items` came
+  # from a raw `CREATE TABLE` with `tmdb_id INTEGER UNIQUE` inline, so SQLite
+  # enforces it through an autoindex and `media_items_tmdb_id_index` does not
+  # exist. `tvdb_id` arrived later, through a normal migration, so its named
+  # index does.
+  defp seed_legacy_schema do
+    sql!("""
+    CREATE TABLE media_items (
+      id TEXT PRIMARY KEY NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('movie', 'tv_show')),
+      title TEXT NOT NULL,
+      original_title TEXT,
+      year INTEGER,
+      tmdb_id INTEGER UNIQUE,
+      imdb_id TEXT,
+      metadata TEXT,
+      monitored INTEGER DEFAULT 1 CHECK(monitored IN (0, 1)),
+      inserted_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+    """)
+
+    sql!("ALTER TABLE media_items ADD COLUMN tvdb_id INTEGER")
+
+    sql!(
+      "CREATE UNIQUE INDEX media_items_tvdb_id_index ON media_items (tvdb_id) WHERE tvdb_id IS NOT NULL"
+    )
+
+    refute index?("media_items_tmdb_id_index")
+  end
+
+  defp index?(name) do
+    %{rows: [[count]]} =
+      sql!("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?1", [name])
+
+    count == 1
   end
 
   defp insert_item(id, type, title, ids) do
