@@ -172,6 +172,46 @@ describe("normalizeCrashReport", () => {
     expect(out.stacktrace[0]?.file).toBe("lib/fake_0.ex");
   });
 
+  // Entries parseStacktraceEntry drops must not consume frame slots, or a
+  // caller could pad the head of the array with junk and push the real frames
+  // -- including the one the fingerprint is derived from -- out of the window.
+  it("does not let unparseable entries push real frames out of the kept window", () => {
+    const junk = Array.from({ length: 40 }, () => ({ module: "Elixir.NoFileNoLine" }));
+    const real = Array.from({ length: 10 }, (_, i) => ({
+      module: "Elixir.Fake",
+      function: "run/0",
+      file: `lib/real_${i}.ex`,
+      line: i,
+    }));
+
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace: [...junk, ...real],
+    });
+
+    expect(out.stacktrace.length).toBe(10);
+    expect(out.stacktrace[0]?.file).toBe("lib/real_0.ex");
+  });
+
+  // The frame cap alone does not bound the WORK: mapping then slicing still
+  // allocates one parsed object per attacker-supplied entry first. This route
+  // is unauthenticated and exempt from the proxy limiter, and normalization
+  // runs before the burst guard, so the scan itself has to be bounded too.
+  it("stops scanning raw entries at the cap rather than parsing the whole array", () => {
+    // Every entry is unparseable, so the 64-frame limit can never trigger the
+    // early exit -- only the raw scan bound can stop this.
+    const unparseable = Array.from({ length: 100_000 }, () => ({ module: "Elixir.Junk" }));
+
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace: unparseable,
+    });
+
+    expect(out.stacktrace).toEqual([]);
+  });
+
   it("truncates oversized strings inside a frame", () => {
     const out = normalizeCrashReport({
       error_type: "RuntimeError",
