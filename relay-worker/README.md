@@ -248,17 +248,26 @@ it closes). Setting up the Access application is a manual, one-time step —
 see the runbook.
 
 **Access is configured per hostname, and the Worker answers on more than
-one.** The Step 1 Access application covers `relay.mydia.dev/admin*`. From the
-first successful CI deploy the Worker is *also* live on its `*.workers.dev`
-subdomain, plus the versioned preview URLs alongside it, and Access never sees
-those requests. `src/index.ts` therefore answers `/admin/*` with a 404 on any
-`.workers.dev` hostname, so the dashboards are unreachable there for the whole
-window between the first deploy and the Step 4 cutover. `workers_dev: false`
-would have been the blunter fix, but Step 3's CPU measurement and Step 4a's
-staging contract diff both need that hostname serving the public routes.
+one.** Access *can* cover a `workers.dev` hostname: Cloudflare documents
+[hostname-based applications](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
+on `<worker>.<subdomain>.workers.dev` explicitly, and shipped one-click Access
+for workers.dev in October 2025. What no per-hostname application covers is
+the **versioned preview URLs** minted alongside every deploy, each on a
+hostname nobody named in advance.
 
-That deny is not authentication and must not be mistaken for it — it removes
-an unprotected hostname from reach, it does not decide who may look. Access
+`src/index.ts` therefore answers `/admin/*` with a 404 on every `.workers.dev`
+hostname *except* the one named by `ADMIN_ACCESS_HOSTNAME`, a var set on
+`env.staging` only. That makes the dashboards reachable on
+`mydia-relay-staging.<subdomain>.workers.dev`, where the staging Access
+application gates them, and nowhere else under workers.dev. It fails closed:
+the var is optional, and an unset or blank value never matches a hostname, so
+production's workers.dev host and every preview URL keep 404ing.
+`workers_dev: false` would have been the blunter fix, but Step 3's CPU
+measurement and Step 4a's staging contract diff both need that hostname
+serving the public routes.
+
+That deny is not authentication and must not be mistaken for it -- it removes
+unprotected hostnames from reach, it does not decide who may look. Access
 still decides that, and skipping Step 1 still leaves the dashboards open on
 the production hostname the moment Step 4b adds the route.
 
@@ -458,6 +467,19 @@ collision with anything public.
    - Policy: Allow, Include → Emails → the maintainer address
 
 That's it — one application, one path pattern, no exclusion list to maintain.
+
+**Step 1 has already been rehearsed on staging.** A second, identical
+application covers `mydia-relay-staging.arsfeld.workers.dev/admin*` with the
+same `/admin*` path scope and the same maintainer-email policy. It exists so
+the maintainer dashboards are usable on staging, and it doubles as proof that
+the path scoping this runbook depends on behaves as described: it was verified
+to return 302 on both `/admin` routes while leaving `GET /health` at 200 and
+`POST /feedback` at 201. Configure the production application to match it.
+
+If the production application ever behaves differently from the staging one,
+the difference is in the application config, not in the Worker. The Worker
+treats every hostname the same except for the single allowlist entry described
+above.
 
 **Verify both halves after configuring Access:**
 
