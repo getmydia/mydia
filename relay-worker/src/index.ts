@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { registerTmdbRoutes } from "./proxy/tmdb";
 import { registerTvdbRoutes } from "./proxy/tvdb";
 import { registerSubdlRoutes, subdlApiKey } from "./proxy/subdl";
+import { registerPassthroughRoutes } from "./proxy/passthrough";
 
 export const app = new Hono<{ Bindings: Env }>();
 
@@ -33,6 +34,7 @@ app.get("/stats", (c) =>
 registerTmdbRoutes(app);
 registerTvdbRoutes(app);
 registerSubdlRoutes(app);
+registerPassthroughRoutes(app);
 
 // 404 catch-all, matching the Elixir router's behaviour.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));

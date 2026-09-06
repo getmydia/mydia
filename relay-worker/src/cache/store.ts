@@ -23,7 +23,13 @@ export function filterHeaders(headers: Headers): Headers {
 // The Cache API is URL-keyed, so a logical key becomes a synthetic URL on a
 // reserved host that never resolves. Encoding keeps a key containing "/" or
 // "?" from splitting into path and query.
-function cacheUrl(key: string): string {
+//
+// Exported so passthrough.ts can address the same edge-cache entries with its
+// own binary-safe get/put: cachePut below always round-trips the body through
+// `.text()`, which corrupts a JPEG (or anything else that isn't valid UTF-8)
+// on the way back out, so the music cover art route cannot reuse cacheGet/
+// cachePut and instead talks to `caches.default` directly, keyed the same way.
+export function cacheUrl(key: string): string {
   return `https://cache.invalid/${encodeURIComponent(key)}`;
 }
 
