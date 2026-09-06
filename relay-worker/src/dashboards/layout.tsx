@@ -1,3 +1,7 @@
+import { html, raw } from "hono/html";
+import type { Child } from "hono/jsx";
+import { css } from "./styles";
+
 // Shared chrome for the maintainer dashboards (errors, feedback). Both live
 // under the /admin/* prefix specifically so a single Cloudflare Access
 // application scoped to /admin* covers both today and any future
@@ -9,12 +13,20 @@
 // /admin/* without also updating the Access application's path scope --
 // see relay-worker/README.md's runbook.
 
-// Every value rendered into one of these pages can originate from an
+// Every value rendered into these pages can originate from an
 // unauthenticated remote install (POST /crashes/report, POST /feedback are
-// both open). escapeHtml is the one and only sanctioned way to interpolate
-// dynamic text into a template string here -- never interpolate a
-// crash/feedback-derived value without it, including values that "look safe"
-// like a hex fingerprint or an integer count.
+// both open). That used to make escapeHtml a hand-applied discipline at
+// every interpolation point, where a single omission was a stored XSS.
+// It no longer is: hono/jsx escapes both child text and attribute values
+// automatically, so `{value}` and `href={value}` are safe by construction.
+//
+// raw() below is the ONLY bypass in the codebase, and it wraps a static
+// stylesheet with no interpolation. Do not reach for it anywhere else, and
+// do not pass a crash- or feedback-derived value through it.
+//
+// escapeHtml survives because errors.test.ts tests it directly and because
+// it stays correct for any future non-JSX string assembly. It should have no
+// callers in markup.
 export function escapeHtml(value: unknown): string {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -32,10 +44,7 @@ export function escapeHtml(value: unknown): string {
 // Hono 500. Reject anything that isn't a small non-negative safe integer by
 // falling back to page 0, and clamp anything absurdly large (but technically
 // a safe integer) to MAX_PAGE rather than trusting it straight into the
-// query. Originated in dashboards/errors.ts and was duplicated
-// verbatim into dashboards/feedback.ts before being extracted
-// here -- one copy, so a future fix to this guard can't land in one
-// dashboard and not the other.
+// query.
 export const MAX_PAGE = 100_000;
 
 export function parsePage(raw: string | undefined): number {
@@ -46,7 +55,7 @@ export function parsePage(raw: string | undefined): number {
 }
 
 // Shared "unix seconds -> readable UTC timestamp" formatter for both
-// dashboards' list tables. Same extraction reasoning as parsePage above.
+// dashboards' list tables.
 //
 // The guard is not defensive padding. `toISOString()` throws
 // `RangeError: Invalid time value` once `unix * 1000` leaves Date's
@@ -66,37 +75,40 @@ export function when(unix: number): string {
   return new Date(ms).toISOString().replace("T", " ").slice(0, 19);
 }
 
-export function layout(title: string, body: string): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title>
-<style>
-  :root { color-scheme: light dark; }
-  body { font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; margin: 0; padding: 2rem; }
-  h1 { font-size: 1.25rem; }
-  nav a { margin-right: 1rem; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { text-align: left; padding: .5rem .75rem; border-bottom: 1px solid #8883; vertical-align: top; }
-  th { font-weight: 600; }
-  pre { overflow-x: auto; background: #8881; padding: .75rem; border-radius: .375rem; }
-  .muted { opacity: .65; }
-  .wrap { white-space: pre-wrap; }
-  .floor { white-space: nowrap; }
-  .floor .badge {
-    display: inline-block; margin-left: .35rem; padding: .05rem .4rem;
-    border-radius: .25rem; font-size: .75rem; background: #f59e0b3d; color: inherit;
-  }
-  form { display: inline; }
-  button { font: inherit; padding: .25rem .6rem; cursor: pointer; }
-</style>
-</head>
-<body>
-<nav><a href="/admin/errors">Errors</a><a href="/admin/feedback">Feedback</a></nav>
-<h1>${escapeHtml(title)}</h1>
-${body}
-</body>
-</html>`;
+export function Layout({ title, children }: { title: string; children?: Child }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{title}</title>
+        <style>{raw(css)}</style>
+      </head>
+      <body>
+        <nav class="chrome-nav">
+          <a href="/admin/errors">Errors</a>
+          <a href="/admin/feedback">Feedback</a>
+        </nav>
+        <h1>{title}</h1>
+        <main>{children}</main>
+      </body>
+    </html>
+  );
+}
+
+// hono/jsx renders no doctype of its own, and without one browsers use
+// quirks mode, which breaks the stylesheet's box sizing. Every route returns
+// through here rather than rendering <Layout> directly.
+export function page(title: string, body: Child) {
+  return html`<!doctype html>${(<Layout title={title}>{body}</Layout>)}`;
+}
+
+// TEMPORARY compatibility shim, removed in Task 5 of this plan.
+//
+// errors.ts and feedback.ts still build their bodies as HTML strings and
+// call layout(title, body). This keeps them working, and the suite green,
+// until each is converted. raw() here is safe ONLY because those two callers
+// escape every interpolated value themselves; it must not outlive them.
+export function layout(title: string, body: string) {
+  return page(title, raw(body));
 }
