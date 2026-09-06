@@ -475,6 +475,12 @@ scoping this runbook depends on against a deploy that serves no real traffic,
 and it is the cheapest place to find out if that scoping does not behave as
 described here.
 
+Verify it there too, before touching production: run the same four curls below
+against `mydia-relay-staging.arsfeld.workers.dev` instead of `relay.mydia.dev`.
+The expected answers are identical, and a 404 rather than a 302 on the two
+`/admin` routes is the signal that path-scoped Access is not covering that
+hostname at all, which is worth learning on staging.
+
 Note that staging's `/admin/*` becomes reachable as soon as
 `ADMIN_ACCESS_HOSTNAME` names its hostname, whether or not the Access
 application exists: the Worker's allowlist controls reachability, Access
