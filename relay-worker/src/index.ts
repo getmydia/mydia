@@ -4,8 +4,24 @@ import { registerTmdbRoutes } from "./proxy/tmdb";
 import { registerTvdbRoutes } from "./proxy/tvdb";
 import { registerSubdlRoutes, subdlApiKey } from "./proxy/subdl";
 import { registerPassthroughRoutes } from "./proxy/passthrough";
+import { rateLimitMiddleware } from "./obs/ratelimit";
+import { logRequest } from "./obs/log";
 
 export const app = new Hono<{ Bindings: Env }>();
+
+// Registered before every route (including /health and /stats below) so the
+// EXEMPT set inside rateLimitMiddleware is what actually protects those
+// routes, not an accident of Hono's registration-order middleware
+// composition -- app.use() only wraps routes registered after it, so a
+// health-check route defined ahead of this would otherwise never reach
+// either middleware at all.
+app.use("*", rateLimitMiddleware());
+
+app.use("*", async (c, next) => {
+  await next();
+  const cache = c.res.headers.get("x-relay-cache") === "HIT" ? "HIT" : "MISS";
+  logRequest(new URL(c.req.url).pathname, c.res.status, cache);
+});
 
 app.get("/health", (c) =>
   c.json({
