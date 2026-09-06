@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mydia-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    "RELAY_VERSION": "1.0.0",
+    "FEEDBACK_FROM": "metadata-relay@mydia.dev",
+    "FEEDBACK_TO": "arsfeld@gmail.com"
+  }
+}
