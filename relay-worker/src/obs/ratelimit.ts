@@ -7,9 +7,13 @@ import type { Env } from "../env";
 const EXEMPT = new Set(["/health", "/stats"]);
 
 // Prefixes that carry their own, tighter limiter and must not also be charged
-// against the 300/min proxy budget. Pairing uses 10/min create and 30/min read;
-// charging both would let a normal pairing flow exhaust the proxy budget for
-// the same IP and break metadata for that install.
+// against the 300/min proxy budget. Pairing uses 10/min create and 30/min
+// read; feedback uses feedback/ingest.ts's checkFeedbackRateLimit (5/hour by
+// IP and by instance id, a D1-backed mirror of router.ex's
+// handle_feedback/1); crashes uses crashes/ingest.ts's own per-hour
+// write-bounding. Charging any of these against the proxy budget too would
+// let a normal flow exhaust that budget for the same IP and break metadata
+// for that install.
 const EXEMPT_PREFIXES = ["/pairing/", "/crashes/", "/feedback", "/errors"];
 
 // Applied on a cache miss only, matching ProxyRateLimit's placement after the

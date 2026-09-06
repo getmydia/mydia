@@ -172,31 +172,171 @@ export async function notify(env: Env, submission: Submission): Promise<void> {
   });
 }
 
+// -- Rate limiting -------------------------------------------------------
+//
+// router.ex's handle_feedback/1: two independent checks -- 5 requests/hour
+// by client IP, and 5 requests/hour by an anti-collision-namespaced
+// instance id -- both gating BEFORE process_feedback/2 (validation and the
+// D1 insert) ever runs. This endpoint is public and unauthenticated with no
+// per-identity cap otherwise, sharing D1's 100k-row-writes/day free-tier
+// budget with crash ingest, so leaving it unthrottled risks the same class
+// of exhaustion Task 11 spent two rounds bounding for /crashes/report --
+// except here every accepted row also fires an unthrottled outbound Resend
+// call.
+//
+// Cloudflare's `ratelimit` binding (PROXY_LIMITER etc.) cannot express this:
+// its `simple.period` only supports 10 or 60 seconds (confirmed against
+// node_modules/wrangler/config-schema.json), so "5 per hour" needs a D1
+// bucket instead, structured like crashes/ingest.ts's ingest_buckets.
+
+export const FEEDBACK_RATE_LIMIT = 5;
+
+interface RateLimitBucketRow {
+  hour_bucket: number;
+  count: number;
+}
+
+// Mirrors router.ex's feedback_rate_limit_instance_id/2 exactly, including
+// its T-236 anti-collision namespacing: the supplied and fallback cases are
+// tagged with fixed, disjoint literal prefixes applied BEFORE the
+// caller-controlled or IP-derived value, not interpolated together into one
+// string a caller could reproduce. A caller sending
+// instance_id: "fallback:<victim ip>" therefore produces
+// "instance:supplied:fallback:<victim ip>", which can never equal another
+// caller's real fallback key "instance:fallback:<their ip>" -- only the
+// fallback path can ever produce a key with that prefix.
+export function feedbackInstanceRateLimitKey(rawInstanceId: unknown, ip: string): string {
+  if (typeof rawInstanceId === "string" && rawInstanceId !== "") {
+    return `instance:supplied:${rawInstanceId}`;
+  }
+  return `instance:fallback:${ip}`;
+}
+
+export interface FeedbackRateLimitResult {
+  allowed: boolean;
+  writes: number;
+}
+
+// Read-before-write, the exact trade crashes/ingest.ts's fix round mandated
+// for ingest_buckets: an INSERT ... ON CONFLICT DO UPDATE bills a write on
+// every call whether it inserts or updates, so a storm of requests against
+// an already-saturated bucket would otherwise cost a write per request
+// regardless of the cap. Reading first means a saturated bucket costs
+// exactly one read and zero writes; the write only happens on the branch
+// that actually admits the request. hour_bucket is a resettable column
+// (not part of the key), same as ingest_buckets, so this table is bounded
+// by distinct bucket_key values rather than growing by one row per key for
+// every hour that has ever elapsed.
+async function checkAndIncrementBucket(
+  db: D1Database,
+  bucketKey: string,
+  hourBucket: number,
+): Promise<FeedbackRateLimitResult> {
+  const existing = await db
+    .prepare("SELECT hour_bucket, count FROM feedback_rate_limits WHERE bucket_key = ?")
+    .bind(bucketKey)
+    .first<RateLimitBucketRow>();
+
+  const isFreshWindow = !existing || existing.hour_bucket !== hourBucket;
+  const priorCount = isFreshWindow ? 0 : existing!.count;
+
+  if (priorCount >= FEEDBACK_RATE_LIMIT) {
+    return { allowed: false, writes: 0 };
+  }
+
+  const result = await db
+    .prepare(
+      `INSERT INTO feedback_rate_limits (bucket_key, hour_bucket, count)
+       VALUES (?, ?, ?)
+       ON CONFLICT(bucket_key) DO UPDATE SET
+         hour_bucket = excluded.hour_bucket,
+         count = excluded.count`,
+    )
+    .bind(bucketKey, hourBucket, priorCount + 1)
+    .run();
+
+  return { allowed: true, writes: result.meta.rows_written };
+}
+
+// Mirrors router.ex's `with {:ok, _} <- check(ip), {:ok, _} <- check(instance)
+// do process_feedback(...) end`. The IP check runs first; same as the
+// Elixir's ETS-backed RateLimiter (which inserts the request into a bucket
+// the moment that bucket's own check passes), its write happens whenever it
+// INDIVIDUALLY passes -- independent of whether the instance check that
+// follows then rejects the request. The instance check is never reached at
+// all once the IP check itself rejects (a `with` short-circuits), so a
+// fully-saturated-on-IP request costs one read and zero writes total.
+export async function checkFeedbackRateLimit(
+  db: D1Database,
+  ip: string,
+  rawInstanceId: unknown,
+  hourBucket: number,
+): Promise<FeedbackRateLimitResult> {
+  const ipResult = await checkAndIncrementBucket(db, `ip:${ip}`, hourBucket);
+  if (!ipResult.allowed) return ipResult;
+
+  const instanceKey = feedbackInstanceRateLimitKey(rawInstanceId, ip);
+  const instanceResult = await checkAndIncrementBucket(db, instanceKey, hourBucket);
+
+  return {
+    allowed: instanceResult.allowed,
+    writes: ipResult.writes + instanceResult.writes,
+  };
+}
+
+const RATE_LIMITED_BODY = {
+  error: "Too many requests",
+  message: "Rate limit exceeded. Please try again later.",
+} as const;
+
 export function registerFeedbackRoutes(app: Hono<{ Bindings: Env }>): void {
   // A method-specific route (app.post, not app.all) so the Task 14 dashboard
   // can later register app.get("/feedback", ...) without either route
   // swallowing the other -- Hono matches on path AND method.
   app.post("/feedback", async (c) => {
-    const parsed: unknown = await c.req.json().catch(() => null);
+    // undefined here means the body wasn't parseable JSON *at all* -- this
+    // is the one case that never reaches Elixir's controller action, since
+    // Plug.Parsers rejects genuinely malformed syntax before routing, so it
+    // is also the one case that bypasses rate limiting entirely.
+    const parsed: unknown = await c.req.json().catch(() => undefined);
+    if (parsed === undefined) {
+      return c.json({ error: "Invalid JSON", message: "Request body must be valid JSON" }, 400);
+    }
+
+    const isObject = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
+    const body = isObject ? (parsed as Record<string, unknown>) : {};
+
+    const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+    const hourBucket = Math.floor(Date.now() / 3_600_000);
+
+    // router.ex checks both rate limits BEFORE process_feedback/2 runs at
+    // all -- before it even checks whether the body decoded to a proper
+    // JSON object -- so a parseable-but-non-object body, or one that will
+    // go on to fail field validation, still spends a rate-limit slot.
+    const rateLimit = await checkFeedbackRateLimit(c.env.DB, ip, body.instance_id, hourBucket);
+    if (!rateLimit.allowed) {
+      return c.json(RATE_LIMITED_BODY, 429, {
+        "retry-after": "3600",
+        "x-relay-d1-writes": String(rateLimit.writes),
+      });
+    }
 
     // router.ex's validate_feedback(_) catch-all: params must be a JSON
     // object (a map on the Elixir side), not an array, string, number, or
     // null.
-    if (
-      parsed === null ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed)
-    ) {
+    if (!isObject) {
       return c.json(
         { error: "Invalid JSON", message: "Request body must be valid JSON" },
         400,
+        { "x-relay-d1-writes": String(rateLimit.writes) },
       );
     }
 
-    const body = parsed as Record<string, unknown>;
     const result = validateSubmission(body);
     if (!result.ok) {
-      return c.json({ error: "Validation failed", errors: result.errors }, 400);
+      return c.json({ error: "Validation failed", errors: result.errors }, 400, {
+        "x-relay-d1-writes": String(rateLimit.writes),
+      });
     }
 
     // Only checked once the other validations pass, matching router.ex's
@@ -205,7 +345,11 @@ export function registerFeedbackRoutes(app: Hono<{ Bindings: Env }>): void {
     // byte_size(message) does on the Elixir side.
     const messageBytes = new TextEncoder().encode(result.value.message).length;
     if (messageBytes > MESSAGE_MAX_BYTES) {
-      return c.json({ error: "Message too long", limit_bytes: MESSAGE_MAX_BYTES }, 400);
+      return c.json(
+        { error: "Message too long", limit_bytes: MESSAGE_MAX_BYTES },
+        400,
+        { "x-relay-d1-writes": String(rateLimit.writes) },
+      );
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -214,7 +358,7 @@ export function registerFeedbackRoutes(app: Hono<{ Bindings: Env }>): void {
       source_ip: c.req.header("cf-connecting-ip") ?? null,
     };
 
-    await c.env.DB.prepare(
+    const insertResult = await c.env.DB.prepare(
       `INSERT INTO feedback_submissions
          (id, type, message, contact, instance_id, mydia_version, source_ip,
           state, github_ref, inserted_at, updated_at)
@@ -240,6 +384,8 @@ export function registerFeedbackRoutes(app: Hono<{ Bindings: Env }>): void {
     // and duplicate it -- Sender only recognises 201 as success.
     c.executionCtx.waitUntil(notify(c.env, submission).catch(() => undefined));
 
-    return c.json({ status: "created", id: submission.id }, 201);
+    return c.json({ status: "created", id: submission.id }, 201, {
+      "x-relay-d1-writes": String(rateLimit.writes + insertResult.meta.rows_written),
+    });
   });
 }

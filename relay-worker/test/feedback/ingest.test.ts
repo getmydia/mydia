@@ -1,6 +1,12 @@
 import { env, SELF, fetchMock, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { validateSubmission, sanitizeHeaderValue } from "../../src/feedback/ingest";
+import {
+  validateSubmission,
+  sanitizeHeaderValue,
+  feedbackInstanceRateLimitKey,
+  checkFeedbackRateLimit,
+  FEEDBACK_RATE_LIMIT,
+} from "../../src/feedback/ingest";
 
 const json = { "content-type": "application/json" };
 const FEEDBACK_URL = "https://relay.mydia.dev/feedback";
@@ -15,6 +21,11 @@ interface ValidationErrorResponse {
   errors: string[];
 }
 
+interface RateLimitedResponse {
+  error: string;
+  message: string;
+}
+
 interface FeedbackRowShape {
   id: string;
   type: string;
@@ -25,12 +36,30 @@ interface FeedbackRowShape {
   state: string;
 }
 
+// Every request now spends a rate-limit slot (including rejected ones -- see
+// the "rate limiting" describe block below), so tests that aren't
+// deliberately exercising the limiter must not share an IP: otherwise they'd
+// all pile into the "unknown" bucket and start tripping 429s on each other.
+// Mirrors test/pairing/routes.test.ts's freshIp() for the same reason.
+let nextTestIp = 10;
+function freshIp(): string {
+  return `198.51.100.${nextTestIp++}`;
+}
+
 async function getRowByVersion(version: string): Promise<FeedbackRowShape | null> {
   return env.DB.prepare(
     "SELECT id, type, message, contact, instance_id, mydia_version, state FROM feedback_submissions WHERE mydia_version = ?",
   )
     .bind(version)
     .first<FeedbackRowShape>();
+}
+
+async function tableCounts(): Promise<{ submissions: number; rateLimits: number }> {
+  const [submissions, rateLimits] = await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) AS n FROM feedback_submissions").first<{ n: number }>(),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM feedback_rate_limits").first<{ n: number }>(),
+  ]);
+  return { submissions: submissions!.n, rateLimits: rateLimits!.n };
 }
 
 beforeAll(async () => {
@@ -40,9 +69,10 @@ beforeAll(async () => {
 });
 
 // RESEND_API_KEY is set for every test (vitest.config.ts), so every POST
-// /feedback attempts a real notification call and each test must account for
-// (mock) exactly one -- an unconsumed interceptor is a real bug here, not
-// noise, since it means the code silently stopped calling out to Resend.
+// /feedback that gets past validation attempts a real notification call and
+// each such test must account for (mock) exactly one -- an unconsumed
+// interceptor is a real bug here, not noise, since it means the code
+// silently stopped calling out to Resend.
 afterEach(() => fetchMock.assertNoPendingInterceptors());
 
 function mockResendSuccess(): void {
@@ -123,13 +153,59 @@ describe("sanitizeHeaderValue", () => {
   });
 });
 
+// router.ex's feedback_rate_limit_instance_id/2, including its T-236
+// anti-collision namespacing.
+describe("feedbackInstanceRateLimitKey", () => {
+  it("namespaces a supplied instance_id separately from the IP fallback", () => {
+    expect(feedbackInstanceRateLimitKey("abc", "1.2.3.4")).toBe("instance:supplied:abc");
+    expect(feedbackInstanceRateLimitKey(undefined, "1.2.3.4")).toBe("instance:fallback:1.2.3.4");
+    expect(feedbackInstanceRateLimitKey(null, "1.2.3.4")).toBe("instance:fallback:1.2.3.4");
+    expect(feedbackInstanceRateLimitKey("", "1.2.3.4")).toBe("instance:fallback:1.2.3.4");
+  });
+
+  // Regression guard for the exact T-236 attack router.ex's own test suite
+  // covers: a caller-supplied instance_id crafted to look like the fallback
+  // key format must not land in the same bucket as the real fallback.
+  it("cannot be made to collide with another IP's fallback bucket by crafting instance_id", () => {
+    const victimIp = "203.0.113.99";
+    const attackerKey = feedbackInstanceRateLimitKey(`fallback:${victimIp}`, "203.0.113.1");
+    const victimKey = feedbackInstanceRateLimitKey(undefined, victimIp);
+    expect(attackerKey).not.toBe(victimKey);
+  });
+});
+
+describe("checkFeedbackRateLimit", () => {
+  // Feedback submissions carry no client-supplied timestamp (unlike crash
+  // reports' occurred_at), so hour rollover is tested by calling the
+  // exported function directly with explicit hour_bucket values rather than
+  // faking the Workers runtime clock, which vi.useFakeTimers() cannot reach
+  // inside workerd's own isolate.
+  it("resets the count once the hour bucket advances", async () => {
+    const ip = freshIp();
+    const hourA = 500_000;
+    const hourB = 500_001;
+
+    for (let i = 0; i < FEEDBACK_RATE_LIMIT; i++) {
+      const result = await checkFeedbackRateLimit(env.DB, ip, undefined, hourA);
+      expect(result.allowed).toBe(true);
+    }
+
+    const saturated = await checkFeedbackRateLimit(env.DB, ip, undefined, hourA);
+    expect(saturated.allowed).toBe(false);
+    expect(saturated.writes).toBe(0);
+
+    const nextHour = await checkFeedbackRateLimit(env.DB, ip, undefined, hourB);
+    expect(nextHour.allowed).toBe(true);
+  });
+});
+
 describe("POST /feedback", () => {
   it("stores a submission and returns 201 with the {status, id} shape router.ex sends", async () => {
     mockResendSuccess();
 
     const res = await SELF.fetch(FEEDBACK_URL, {
       method: "POST",
-      headers: json,
+      headers: { ...json, "cf-connecting-ip": freshIp() },
       body: JSON.stringify({
         type: "bug",
         message: "Scanner missed a file",
@@ -155,7 +231,7 @@ describe("POST /feedback", () => {
   it("returns 400 (not 422) with router.ex's exact error shape for an invalid submission", async () => {
     const res = await SELF.fetch(FEEDBACK_URL, {
       method: "POST",
-      headers: json,
+      headers: { ...json, "cf-connecting-ip": freshIp() },
       body: JSON.stringify({ type: "rant", message: "" }),
     });
     expect(res.status).toBe(400);
@@ -168,7 +244,7 @@ describe("POST /feedback", () => {
   it("returns 400 with a distinct body when the message exceeds router.ex's 4096-byte limit", async () => {
     const res = await SELF.fetch(FEEDBACK_URL, {
       method: "POST",
-      headers: json,
+      headers: { ...json, "cf-connecting-ip": freshIp() },
       body: JSON.stringify({ type: "bug", message: "a".repeat(4097) }),
     });
     expect(res.status).toBe(400);
@@ -180,7 +256,7 @@ describe("POST /feedback", () => {
     mockResendSuccess();
     const res = await SELF.fetch(FEEDBACK_URL, {
       method: "POST",
-      headers: json,
+      headers: { ...json, "cf-connecting-ip": freshIp() },
       body: JSON.stringify({ type: "bug", message: "a".repeat(4096) }),
     });
     expect(res.status).toBe(201);
@@ -196,7 +272,7 @@ describe("POST /feedback", () => {
 
     const res = await SELF.fetch(FEEDBACK_URL, {
       method: "POST",
-      headers: json,
+      headers: { ...json, "cf-connecting-ip": freshIp() },
       body: JSON.stringify({ type: "idea", message: "Keep the row", mydia_version: "9.9.9" }),
     });
 
@@ -221,7 +297,7 @@ describe("POST /feedback", () => {
 
     const res = await SELF.fetch(FEEDBACK_URL, {
       method: "POST",
-      headers: json,
+      headers: { ...json, "cf-connecting-ip": freshIp() },
       body: JSON.stringify({
         type: "bug",
         message: "Subtitles are offset",
@@ -251,7 +327,7 @@ describe("POST /feedback", () => {
 
     const res = await SELF.fetch(FEEDBACK_URL, {
       method: "POST",
-      headers: json,
+      headers: { ...json, "cf-connecting-ip": freshIp() },
       body: JSON.stringify({
         type: "idea",
         message: "Add a dark theme",
@@ -264,14 +340,139 @@ describe("POST /feedback", () => {
     expect(sent.reply_to).toBeUndefined();
   });
 
-  it("returns 400 for a body that is not a JSON object", async () => {
+  it("returns 400 for a body that is not valid JSON at all, without touching the rate limiter", async () => {
     const res = await SELF.fetch(FEEDBACK_URL, {
       method: "POST",
-      headers: json,
+      headers: { ...json, "cf-connecting-ip": freshIp() },
       body: "not json",
     });
     expect(res.status).toBe(400);
     const body = await res.json<{ error: string }>();
     expect(body.error).toBe("Invalid JSON");
+    // No rate-limit check ran at all for genuinely malformed syntax
+    // (mirrors Plug.Parsers rejecting it before routing in the Elixir), so
+    // no x-relay-d1-writes header is present.
+    expect(res.headers.get("x-relay-d1-writes")).toBeNull();
+  });
+
+  it("still consumes a rate-limit slot for parseable-but-non-object JSON, matching router.ex's ordering", async () => {
+    // router.ex checks rate limits inside handle_feedback/1, BEFORE
+    // process_feedback/2 (where the is-this-a-map check actually lives) is
+    // ever called -- so a syntactically valid but non-object body still
+    // spends a slot, unlike genuinely malformed syntax above.
+    const res = await SELF.fetch(FEEDBACK_URL, {
+      method: "POST",
+      headers: { ...json, "cf-connecting-ip": freshIp() },
+      body: JSON.stringify([1, 2, 3]),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json<{ error: string }>();
+    expect(body.error).toBe("Invalid JSON");
+    expect(res.headers.get("x-relay-d1-writes")).not.toBe("0");
+  });
+});
+
+describe("POST /feedback rate limiting", () => {
+  it("rejects the 6th submission from one IP within the hour with router.ex's exact 429 shape", async () => {
+    const ip = freshIp();
+
+    // Distinct instance_id per request so it's the IP bucket, not the
+    // instance bucket, that saturates.
+    for (let i = 0; i < FEEDBACK_RATE_LIMIT; i++) {
+      mockResendSuccess();
+      const res = await SELF.fetch(FEEDBACK_URL, {
+        method: "POST",
+        headers: { ...json, "cf-connecting-ip": ip },
+        body: JSON.stringify({ type: "bug", message: `Message ${i}`, instance_id: `inst-${i}` }),
+      });
+      expect(res.status).toBe(201);
+    }
+
+    const before = await tableCounts();
+
+    const res = await SELF.fetch(FEEDBACK_URL, {
+      method: "POST",
+      headers: { ...json, "cf-connecting-ip": ip },
+      body: JSON.stringify({ type: "bug", message: "Message 6", instance_id: "inst-6" }),
+    });
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("3600");
+    // The IP bucket is already saturated: the check costs a read, and the
+    // `with`-style short-circuit means the instance check (and the D1
+    // insert) is never even reached -- zero writes total, asserted both via
+    // the write-count header (Task 11's instrument, since a table's row
+    // COUNT(*) can't distinguish a skipped write from an unconditional
+    // UPDATE that happens not to change a row) and via the row-count delta
+    // across both tables below.
+    expect(res.headers.get("x-relay-d1-writes")).toBe("0");
+    const body = await res.json<RateLimitedResponse>();
+    expect(body).toEqual({
+      error: "Too many requests",
+      message: "Rate limit exceeded. Please try again later.",
+    });
+
+    const after = await tableCounts();
+    expect(after).toEqual(before);
+  });
+
+  it("rejects the 6th submission from one instance id even when the IP differs each time", async () => {
+    const instanceId = `shared-${freshIp()}`;
+
+    for (let i = 0; i < FEEDBACK_RATE_LIMIT; i++) {
+      mockResendSuccess();
+      const res = await SELF.fetch(FEEDBACK_URL, {
+        method: "POST",
+        headers: { ...json, "cf-connecting-ip": freshIp() },
+        body: JSON.stringify({ type: "bug", message: `Message ${i}`, instance_id: instanceId }),
+      });
+      expect(res.status).toBe(201);
+    }
+
+    const res = await SELF.fetch(FEEDBACK_URL, {
+      method: "POST",
+      headers: { ...json, "cf-connecting-ip": freshIp() },
+      body: JSON.stringify({ type: "bug", message: "Message 6", instance_id: instanceId }),
+    });
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("3600");
+    const body = await res.json<RateLimitedResponse>();
+    expect(body).toEqual({
+      error: "Too many requests",
+      message: "Rate limit exceeded. Please try again later.",
+    });
+  });
+
+  // Integration-level version of the T-236 regression above: an attacker
+  // spreading requests across throwaway IPs, all supplying instance_id
+  // crafted to mimic the victim's fallback-key format, must not exhaust the
+  // victim's real (no-instance_id) fallback bucket.
+  it("does not let a crafted instance_id collide with another caller's IP-fallback bucket", async () => {
+    const victimIp = freshIp();
+
+    for (let i = 0; i < FEEDBACK_RATE_LIMIT; i++) {
+      mockResendSuccess();
+      const res = await SELF.fetch(FEEDBACK_URL, {
+        method: "POST",
+        headers: { ...json, "cf-connecting-ip": freshIp() },
+        body: JSON.stringify({
+          type: "bug",
+          message: `Attacker ${i}`,
+          instance_id: `fallback:${victimIp}`,
+        }),
+      });
+      expect(res.status).toBe(201);
+    }
+
+    // The victim, sending from their own IP with no instance_id at all,
+    // must still get through.
+    mockResendSuccess();
+    const res = await SELF.fetch(FEEDBACK_URL, {
+      method: "POST",
+      headers: { ...json, "cf-connecting-ip": victimIp },
+      body: JSON.stringify({ type: "bug", message: "Victim" }),
+    });
+    expect(res.status).toBe(201);
   });
 });
