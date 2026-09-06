@@ -5,6 +5,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:contract": "vitest run test/contract",
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev"

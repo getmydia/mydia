@@ -2,6 +2,10 @@ import { defineWorkersConfig } from "@cloudflare/vitest-pool-workers/config";
 
 export default defineWorkersConfig({
   test: {
+    // test/contract is a separate Vitest project (vitest.workspace.ts): a
+    // plain-Node HTTP diff against two external services, not a workerd test.
+    // Excluded here so this project's workerd pool never tries to load it.
+    exclude: ["test/contract/**", "**/node_modules/**"],
     poolOptions: {
       workers: {
         wrangler: { configPath: "./wrangler.jsonc" },

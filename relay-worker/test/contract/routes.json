@@ -1,0 +1,46 @@
+[
+  { "method": "GET", "path": "/health" },
+  { "method": "GET", "path": "/configuration" },
+  { "method": "GET", "path": "/tmdb/genre/movie" },
+  { "method": "GET", "path": "/tmdb/genre/tv" },
+  { "method": "GET", "path": "/tmdb/movies/popular" },
+  { "method": "GET", "path": "/tmdb/tv/popular" },
+  { "method": "GET", "path": "/tmdb/movies/search?query=Quantum%20Harbour" },
+  { "method": "GET", "path": "/tmdb/tv/search?query=Glass%20Meridian" },
+  { "method": "GET", "path": "/tmdb/movies/550" },
+  {
+    "method": "GET",
+    "path": "/tmdb/movies/550?append_to_response=credits,keywords,images,videos,recommendations,release_dates"
+  },
+  { "method": "GET", "path": "/tmdb/tv/shows/1399" },
+  {
+    "method": "GET",
+    "path": "/tmdb/tv/shows/1399?append_to_response=credits,content_ratings"
+  },
+  { "method": "GET", "path": "/tmdb/tv/shows/1399/images" },
+  { "method": "GET", "path": "/tmdb/tv/shows/1399/2" },
+  { "method": "GET", "path": "/tmdb/movies/550/images" },
+  { "method": "GET", "path": "/tmdb/collections/131296" },
+  { "method": "GET", "path": "/tvdb/search?query=Glass%20Meridian" },
+  { "method": "GET", "path": "/tvdb/series/331753" },
+  { "method": "GET", "path": "/tvdb/series/331753/extended" },
+  { "method": "GET", "path": "/tvdb/series/331753/episodes" },
+  { "method": "GET", "path": "/tvdb/series/999999999" },
+  { "method": "GET", "path": "/openlibrary/search?q=Invented%20Book" },
+  {
+    "method": "POST",
+    "path": "/api/v1/subtitles/search",
+    "body": { "tmdb_id": 550, "media_type": "movie" }
+  },
+  { "method": "POST", "path": "/api/v1/subtitles/search", "body": {} },
+  {
+    "method": "GET",
+    "path": "/api/v1/subtitles/download-url/bm90LWEtcmVhbC1maWxl"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/subtitles/download/bm90LWEtcmVhbC1maWxl"
+  },
+  { "method": "GET", "path": "/tmdb/movies/999999999" },
+  { "method": "GET", "path": "/nope/not/a/route" }
+]
