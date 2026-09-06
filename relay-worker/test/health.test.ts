@@ -22,7 +22,7 @@ describe("GET /health", () => {
   });
 
   it("reports subtitles_configured true when a SubDL key is set", async () => {
-    // Task 6 added a global SUBDL_API_KEY test binding (vitest.config.ts) so
+    // There is a global SUBDL_API_KEY test binding (vitest.config.ts) so
     // the search/download routes can be exercised without 503ing first, which
     // means every SELF.fetch dispatch in this pool now sees a configured key.
     // SELF.fetch has no per-call env override (bindings are fixed for the

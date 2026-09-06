@@ -92,8 +92,8 @@ function parseStacktraceEntry(entry: unknown): CrashFrame | null {
 
 // router.ex's metadata_stack_frame/1: builds a frame from `metadata` only
 // when `file` or `line` is present (Elixir truthy), not when only
-// module/function are given. Getting this backwards was the brief's own bug
-// (it gated on module || function || file): a report describing only which
+// module/function are given. An earlier version of this port got it backwards
+// by gating on module || function || file: a report describing only which
 // function crashed, with no file/line, would otherwise still fingerprint
 // distinctly from another report with genuinely no metadata at all, or
 // worse, a report with only module/function would collapse into one bucket
@@ -109,7 +109,7 @@ function metadataStackFrame(metadata: unknown): CrashFrame | null {
 
 // Mydia.CrashReporter.build_report/3 sends `occurred_at` via
 // `DateTime.to_iso8601/1` -- always a string, never a Unix number. Accepting
-// only `typeof === "number"` (the brief's original check) would silently
+// only `typeof === "number"`, as this first did, would silently
 // discard this field on every real report and substitute ingestion time
 // instead. A Unix-seconds number is still accepted for callers other than
 // the Elixir producer (e.g. direct API use, tests).

@@ -31,9 +31,9 @@ export default defineWorkspace([
       // 500ms-20s+ across otherwise-identical runs, most likely MusicBrainz's
       // documented ~1req/s courtesy rate limit applied per source IP, shared
       // across every mydia install this relay serves in production plus this
-      // test's own doubled (Worker+relay) concurrent calls. Not a body
-      // mismatch -- see task-9-report.md's diagnosis of the two timeouts this
-      // was raised to fix.
+      // test's own doubled (Worker+relay) concurrent calls. The two timeouts
+      // this was raised to fix were both slow responses, not body mismatches:
+      // the same routes passed on a rerun with no code change.
       testTimeout: 60_000,
     },
   },

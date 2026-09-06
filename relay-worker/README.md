@@ -5,11 +5,10 @@ service). It proxies TMDB, TVDB, SubDL, MusicBrainz and OpenLibrary for every
 mydia install, plus pairing, crash ingest and feedback. TypeScript, Hono for
 routing, no server and no tunnel — Cloudflare's edge is the whole runtime.
 
-This is one of 17 tasks in
-`docs/superpowers/plans/2026-09-05-metadata-relay-on-cloudflare-workers.md`.
-Through Task 16, `relay.mydia.dev` is still served by the Elixir relay; this
-Worker deploys continuously but does not yet own any production traffic. See
-that plan for the full route-by-route parity work and the cutover sequence.
+**Nothing has cut over yet.** `relay.mydia.dev` is still served by the Elixir
+relay; this Worker deploys continuously but does not yet own any production
+traffic. The runbook at the bottom of this file is the cutover sequence, and
+none of it has been executed.
 
 ## What this migration changed
 
@@ -32,8 +31,8 @@ Things an operator who knew the Elixir relay would not expect:
   down) so `/admin/errors` can render "500+" instead of a wrong exact
   number. If a total looks suspiciously round or capped, that column is why.
 - **The maintainer dashboards moved to `/admin/errors` and
-  `/admin/feedback`.** They used to be `/errors` and `/feedback` in the
-  original brief; that collided with `POST /feedback`'s public path, since
+  `/admin/feedback`.** The obvious paths were `/errors` and `/feedback`,
+  but that collided with `POST /feedback`'s public path, since
   Cloudflare Access (like Hono's router) has no HTTP-method dimension to
   separate them. Bookmarks and any saved links need updating.
 - **The deploy ritual is a `git push`, not a tag.** The Elixir relay ships on
@@ -82,7 +81,7 @@ for the binding, not provisioned cloud resources — there is nothing to create
 for them in the dashboard, unlike `CACHE_KV` and `DB`.
 
 **Requires wrangler >= 4.36.0.** The `ratelimits` config key was silently
-dropped by older wrangler versions with no error (Task 8's finding) — the
+dropped by older wrangler versions with no error, found the hard way — the
 binding would be `undefined` at runtime and every proxy route would 500. This
 repo pins an exact version in `package.json`; do not loosen that pin without
 re-checking this.
@@ -155,12 +154,11 @@ A test or typecheck failure stops the job before step 3, so a broken commit
 on `master` cannot reach Cloudflare — but note that today nothing runs these
 checks on the pull request itself (no `ci-relay-worker.yml` equivalent of
 `ci-relay.yml` exists yet); the first automated signal a PR gets is this job,
-after merge. See the runbook's "What Task 15 did not do" for why this wasn't
-added here.
+after merge. See "Known gaps" at the end of this file.
 
 The Docker/GHCR job in the same workflow file is the **Elixir** relay's
 unrelated, still-live release path (tag-triggered on `metadata-relay-v*`);
-the two share the file until Task 17 deletes the Elixir side. `if:` guards on
+the two share the file until the Elixir side is decommissioned. `if:` guards on
 both jobs keep a relay-worker-only commit from also invoking the Docker job
 (and vice versa) — see the comment at the top of the workflow file.
 
@@ -258,8 +256,8 @@ not a real Cloudflare resource. `wrangler deploy` and
    ```
 
 3. **Mint a Cloudflare API token for CI**, and find the account ID.
-   The brief for this task assumed the token and ID in `infra/config.yaml`
-   could be reused. They cannot — see "Brief vs. reality" below. Create a new
+   The token and ID already in `infra/config.yaml` cannot be reused for this
+   — see "Known gaps" below for exactly why. Create a new
    token at <https://dash.cloudflare.com/profile/api-tokens> scoped to at
    least:
    - Account / Workers Scripts: Edit
@@ -295,16 +293,14 @@ having deployed anything broken (the failure is expected and safe).
 including instance identifiers. **Nothing may be routed to a public hostname
 before the Access application below exists.** This is not a recommendation to
 configure Access soon after cutover — it is a precondition of cutover.
-(Today, before Task 16, this Worker has no production route yet, so the
-constraint is not yet live — but it must be satisfied before Task 16 adds
-`relay.mydia.dev/*` routes to `wrangler.jsonc`. Task 16's own plan text now
-carries this same precondition on its Step 4 — see
-`docs/superpowers/plans/2026-09-05-metadata-relay-on-cloudflare-workers.md`
-— so it's enforced at the point someone would otherwise miss it.)
+(Today this Worker has no production route, so the constraint is not yet
+live — but it must be satisfied before Step 4 below adds `relay.mydia.dev/*`
+routes to `wrangler.jsonc`. Step 4 repeats this precondition inline, at the
+point someone would otherwise miss it.)
 
 **Why both dashboards live under `/admin/*` instead of their naive
-`/errors`/`/feedback` paths:** the brief's original Step 1 asked for an
-Access application covering literal `/errors` and `/feedback`. That doesn't
+`/errors`/`/feedback` paths:** an Access application covering literal
+`/errors` and `/feedback` is the obvious approach and it doesn't
 work. Cloudflare Access self-hosted applications match on **hostname + path
 only** — there is no HTTP-method selector in Access's own policy engine
 (Access policy selectors are identity/context attributes: email, country, IP
@@ -373,12 +369,11 @@ application's path scope before proceeding with cutover.
 `npm run test:contract` (see Testing above) is **not** part of the
 `deploy-worker` CI job. Two reasons:
 
-1. **There is nothing meaningful to diff against at Task 15's CI-job
-   deploy time.** The job deploys the Worker being tested; running the
-   contract diff immediately after would compare the freshly deployed Worker
-   against itself moments later, which (per Task 9's finding) proves the
-   harness mechanics and nothing about correctness of the change just
-   shipped.
+1. **There is nothing meaningful to diff against at CI deploy time.** The
+   job deploys the Worker being tested; running the contract diff immediately
+   after would compare the freshly deployed Worker against itself moments
+   later. A self-comparison proves the harness mechanics and nothing about
+   the correctness of the change just shipped.
 2. **An all-skipped run exits 0.** `CONTRACT_WORKER_URL` unset means the
    entire suite is `describe.skipIf`-skipped, and Vitest's exit code cannot
    distinguish that from every test passing. A CI job that ran this
@@ -386,7 +381,7 @@ application's path scope before proceeding with cutover.
    gate that can rubber-stamp a cutover having compared nothing — worse than
    no gate, because it looks like one.
 
-**The real gate lives in Task 16, Step 1** — a human runs
+**The real gate is manual, in Step 4 below** — a human runs
 `CONTRACT_WORKER_URL=https://<staging>.workers.dev npm run test:contract`
 against a staging deploy before flipping any production route, watches the
 output, and does not proceed on a single mismatch. That manual supervision is
@@ -399,19 +394,18 @@ the suite at all) — never trust the bare exit code.
 
 ### Step 3: real platform CPU measurement (subtitle download path)
 
-Task 6 shipped `src/proxy/subdl.ts`'s archive extraction (`extractSubtitle`)
-with a **local-only** CPU measurement: 0.1630ms mean / 0.3049ms p99 over a
-~10KB archive, measured with Node's `perf_hooks`, explicitly caveated in
-`task-6-report.md` as a different engine (V8 in Node vs. workerd) and
-different silicon than production. It was never validated against the real
+`src/proxy/subdl.ts`'s archive extraction (`extractSubtitle`) shipped with a
+**local-only** CPU measurement: 0.1630ms mean / 0.3049ms p99 over a ~10KB
+archive, measured with Node's `perf_hooks`. That is a different engine (V8 in
+Node vs. workerd) on different silicon than production, so treat it as an
+order of magnitude, not a number. It has never been validated against the real
 constraint — the Workers **free plan's 10ms CPU-time-per-invocation limit** —
-because that requires a deployed Worker, which did not exist when Task 6 ran.
-It still doesn't, as of this task.
+because that requires a deployed Worker, and none exists yet.
 
 **Do this once the first real deploy exists** — i.e., after Step 0 above
 succeeds and `deploy-worker` has pushed to the Worker's `workers.dev`
-subdomain for the first time (this happens automatically; Task 16 is what
-later adds `relay.mydia.dev` routes, but the Worker is live on
+subdomain for the first time (this happens automatically; the cutover in
+Step 4 is what later adds `relay.mydia.dev` routes, but the Worker is live on
 `*.workers.dev` from the very first successful CI deploy):
 
 1. Trigger a real request through the download path against a live SubDL
@@ -442,7 +436,7 @@ later adds `relay.mydia.dev` routes, but the Worker is live on
      (currently 20,000,000) if real-world archives never approach it, trading
      rejected-but-legitimate edge cases for headroom.
 
-### Step 4: production cutover (Task 16)
+### Step 4: production cutover
 
 Everything below is **manual** and moves real traffic. Nothing in this repo
 adds a production route ahead of time — `wrangler.jsonc` has no `routes` key
@@ -490,8 +484,8 @@ before trusting it:
   **except** these two documented, expected ones:
   - `/music/search` and `/openlibrary/search` are fuzzy-ranked. Two
     near-simultaneous identical requests can come back reordered or
-    rescored against real MusicBrainz/OpenLibrary — this was observed live
-    during Task 9, not theorized. A failure on either route: rerun just that
+    rescored against real MusicBrainz/OpenLibrary — this was observed live,
+    not theorized. A failure on either route: rerun just that
     one route in isolation before concluding the port regressed. Do not add
     retry logic to the harness itself; a silent retry would also hide a
     genuine regression.
@@ -585,19 +579,16 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://relay.mydia.dev/feedba
 # expect 201, with NO Access redirect -- this must never require login.
 ```
 
-**Note on the plan document's Verification checklist:** the checklist at the
-end of `docs/superpowers/plans/2026-09-05-metadata-relay-on-cloudflare-workers.md`
-still says the crash report "returns 202" and appears at "`/errors`", and
-that "`GET /errors` and `GET /feedback` redirect to Access" — all three are
-stale. Task 15 moved both dashboards to `/admin/errors` and `/admin/feedback`
-and Task 11 established 201 as the only success status the real producer
-accepts; this section supersedes that checklist. Use the commands above, not
-that list, when actually running the cutover.
+**The commands above are the verification list.** Watch for two stale claims
+that circulate about this cutover: the crash report returns **201**, not 202,
+and the dashboards are at `/admin/errors` and `/admin/feedback`, not `/errors`
+and `/feedback`. Anything asserting otherwise predates the `/admin/*` move and
+the status-code fix.
 
 Commit only `relay-worker/wrangler.jsonc` once the whole hostname is moved
-and stable — see the plan's Task 16 Step 5 for the commit message shape.
+and stable.
 
-### Step 5: decommission the Elixir relay on can-1 (Task 17)
+### Step 5: decommission the Elixir relay on can-1
 
 Do not start this until Step 4 has been stable in production for real
 traffic. This is a staged, mostly-irreversible sequence — read it end to end
@@ -711,21 +702,19 @@ ritual — as of this writing that section doesn't actually name the old
 `metadata-relay-v*` tag or Keel, so there is nothing incorrect to remove
 there, only `relay-worker/` to add.
 
-## Brief vs. reality
+## Known gaps and traps
 
-This task's brief (`task-15-brief.md`) assumed several things that don't
-match this repository as it stands. Recorded here so the next person doesn't
-re-discover them the hard way:
+Wrong assumptions this port already paid for, plus what is still missing.
+Recorded so the next person doesn't re-discover them the hard way:
 
-- **The Access path split as specified (`/errors` and `/feedback`) doesn't
-  work.** See Step 1 above — Access matches by path only, not method, and
-  `/feedback` used to serve both the public POST and the dashboard GET on the
-  identical path. Fixed by moving both dashboards under `/admin/*`, a path no
-  public endpoint shares. This was the biggest gap found in this task;
-  everything else below is comparatively minor.
-- **"The Cloudflare API token and zone id already exist in
-  `infra/config.yaml`; add them as repository secrets if they are not there
-  yet"** conflates three different things:
+- **Splitting Access by `/errors` and `/feedback` doesn't work.** See Step 1
+  above — Access matches by path only, not method, and `/feedback` served
+  both the public POST and the dashboard GET on the identical path. Fixed by
+  moving both dashboards under `/admin/*`, a path no public endpoint shares.
+  This was the biggest design gap found; everything else below is
+  comparatively minor.
+- **The Cloudflare credentials in `infra/config.yaml` cannot be reused for
+  this**, tempting as it looks. Three separate reasons:
   - `infra/config.yaml` is a **local, git-ignored** operator file consumed by
     the `infra/deploy` Python tool. Nothing in it is automatically a GitHub
     Actions secret; there is no sync between the two.
@@ -742,18 +731,13 @@ re-discover them the hard way:
     edit, not Workers/D1/KV edit).
 - **`d1_databases[0].database_id` and `kv_namespaces[0].id` are
   placeholders**, not real Cloudflare resources — `wrangler.jsonc`'s own
-  comments say so. The brief's CI snippet assumes `wrangler d1 migrations
-  apply --remote` and `wrangler deploy` just work once secrets exist; they
-  don't, until the D1 database and KV namespace are actually created (Step 0
-  above) and the placeholder IDs are replaced.
-- **Action versions.** The brief's Step 2 snippet uses
-  `actions/checkout@v4` and `actions/setup-node@v4`. This repository's own
-  workflows (including the `docker` job already in this same file) use
-  `@v7` for both; the shipped workflow matches the repository's convention
-  instead.
+  comments say so. `wrangler d1 migrations apply --remote` and
+  `wrangler deploy` do not start working the moment the secrets exist; the D1
+  database and KV namespace have to be actually created (Step 0 above) and
+  the placeholder IDs replaced first.
 - **Adding a bare `paths:` filter to the existing tag-triggered push block
-  would have been a silent trap**, not the drop-in change Step 3 describes —
-  except it turns out fine, for a documented reason: GitHub Actions does not
+  looks like a silent trap** — and it turns out fine, for a reason worth
+  writing down: GitHub Actions does not
   evaluate `paths` filters on tag pushes at all, only on branch pushes. So
   adding `paths: ["relay-worker/**"]` alongside the existing `tags:` trigger
   doesn't gate the Docker job's tag trigger — but it does mean the workflow
@@ -771,23 +755,11 @@ re-discover them the hard way:
   only runs after a merge to `master`, and it is safe (a failing test/
   typecheck step stops the job before `wrangler deploy` runs), but it means a
   broken PR currently gets no automated feedback before merge — only after.
-  This wasn't in Task 15's authorized scope (CI/README only); flagging it as
-  a gap worth a small follow-up rather than fixing it here.
-- **The Step 6 CPU measurement was never performed**, for the reason stated
-  in Task 6's report: it needs a deployed Worker, which didn't exist yet.
-  See the runbook's Step 3 above.
-- **Task 16 Step 4's own pairing-verification snippet reads the wrong JSON
-  field.** It parses the claim response as `["code"]`; the route actually
-  returns `{"claim_code": "..."}` (`src/pairing/routes.ts`, and confirmed
-  against both `remote_access.ex` and the Flutter client during Task 10) —
-  the original snippet would `KeyError` before ever reaching the GET/DELETE
-  checks. Fixed in this runbook's Step 4c.
-- **The plan's final "Verification checklist"** (the very end of the plan
-  document, distinct from Task 16 Step 4's own inline verification, which
-  Task 15 already corrected) **was never updated for the `/admin/*` move or
-  the 201 status code.** It still says a crash report "returns 202" and
-  appears at "`/errors`", and that "`GET /errors` and `GET /feedback`
-  redirect to Access" — all three predate Task 11 (201 is the only status
-  the real producer accepts) and Task 15 (both dashboards moved to
-  `/admin/*`). This runbook's Step 4c commands are the corrected version;
-  do not run the plan document's own checklist verbatim.
+  Worth a small follow-up workflow.
+- **The real CPU measurement was never performed**, because it needs a
+  deployed Worker and none exists. See Step 3 of the runbook above.
+- **The pairing claim response field is `claim_code`, not `code`.** Anything
+  parsing `["code"]` out of `POST /pairing/claims` gets a `KeyError`;
+  `src/pairing/routes.ts` returns `{"claim_code": "..."}`, confirmed against
+  both `remote_access.ex` and the Flutter client. Step 4c above has the
+  correct snippet.

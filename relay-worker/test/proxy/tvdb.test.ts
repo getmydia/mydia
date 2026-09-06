@@ -60,8 +60,8 @@ describe("TVDB routes", () => {
   // metadata_relay/tvdb/handler.ex's get_series_episodes/2 reads `page`
   // (default 0) out of the params map and bakes it into the path as
   // .../episodes/default/page/N — it is not simply /series/{id}/episodes,
-  // and the brief's naive `/series/{id}/episodes/default` mapping still
-  // silently drops the page segment TVDB requires.
+  // and the naive `/series/{id}/episodes/default` mapping this route is easy
+  // to write silently drops the page segment TVDB requires.
   it("maps the episodes route to the paginated default-season upstream path", async () => {
     let seenPath = "";
     fetchMock

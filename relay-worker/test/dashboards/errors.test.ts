@@ -212,9 +212,9 @@ describe("POST /admin/errors/:fingerprint/resolve validates the fingerprint shap
   });
 });
 
-// Task 11's ingest throttle stops counting (and stops writing new rows) once
+// The ingest throttle stops counting (and stops writing new rows) once
 // a fingerprint/instance/hour bucket saturates. errors.count_is_floor
-// (fix-round-1) is the durable record of that, distinct from
+// is the durable record of that, distinct from
 // ingest_buckets.saturated, which resets the moment a fresh hour's write
 // lands for the same fingerprint/instance -- see 0002_crash_reports.sql.
 describe("GET /admin/errors occurrence count vs. ingest throttling", () => {

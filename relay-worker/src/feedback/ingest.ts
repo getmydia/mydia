@@ -180,7 +180,7 @@ export async function notify(env: Env, submission: Submission): Promise<void> {
 // D1 insert) ever runs. This endpoint is public and unauthenticated with no
 // per-identity cap otherwise, sharing D1's 100k-row-writes/day free-tier
 // budget with crash ingest, so leaving it unthrottled risks the same class
-// of exhaustion Task 11 spent two rounds bounding for /crashes/report --
+// of exhaustion that /crashes/report took two rounds to bound --
 // except here every accepted row also fires an unthrottled outbound Resend
 // call.
 //

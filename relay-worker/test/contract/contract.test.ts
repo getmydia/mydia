@@ -3,9 +3,10 @@ import rawRoutes from "./routes.json";
 
 // Replays a fixed request list against a deployed Worker and the live Elixir
 // relay, diffing status and body. This is the gate that proves the port
-// before Task 16 cuts the production hostname over -- see
-// .superpowers/sdd/2026-09-05-metadata-relay-on-cloudflare-workers/task-9-report.md
-// for what has (and has not) actually been exercised through it.
+// before the production cutover moves the hostname over. Note what it has
+// NOT exercised: no run has ever compared a real deployed Worker against the
+// relay, only the relay against itself (see below), so the harness mechanics
+// are proven and the actual port parity is not.
 //
 // This file runs as the separate "contract" Vitest project (see
 // vitest.workspace.ts), under plain Node rather than workerd: it treats both
@@ -19,13 +20,13 @@ import rawRoutes from "./routes.json";
 //
 // CONTRACT_WORKER_URL is unset by default, so this whole suite is skipped in
 // ordinary `npm run test` / CI runs -- there is no staging Worker to compare
-// against until one is deployed (Step 4 of the brief). Point both env vars at
+// against until one is deployed. Point both env vars at
 // the live relay to self-compare instead: every route then diffs against
 // itself, which proves the harness mechanics, the cache-buster, and the
 // volatile-key stripping, and -- most valuable -- that every path in
 // routes.json is a real route on the live service.
 //
-// IMPORTANT for whoever wires this into the Task 16 cutover gate: Vitest
+// IMPORTANT for whoever wires this into the cutover gate: Vitest
 // exits 0 for a run that is entirely `describe.skipIf`-skipped, same as a
 // run where every test genuinely passed. A gate that only checks the exit
 // code would rubber-stamp a cutover having compared nothing, which is the
@@ -58,7 +59,7 @@ const routes = rawRoutes as ContractRoute[];
 // matters once CONTRACT_WORKER_URL points at a real deployed staging Worker:
 // that Worker's KV-backed cache (cachePut/cacheGet with {kv: true}) WILL
 // serve a stale transform for an identical body across separate contract
-// runs. Task 16 should deploy staging with a fresh KV namespace (or purge
+// runs. Deploy staging with a fresh KV namespace (or purge
 // CACHE_KV) before trusting this route's result, or a stale cached response
 // could be compared instead of a fresh one.
 function bytesEqual(a: ArrayBuffer, b: ArrayBuffer): boolean {

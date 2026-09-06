@@ -236,7 +236,7 @@ describe("GET /admin/feedback dashboard", () => {
     expect(html).not.toContain("<script>alert(4)</script>");
   });
 
-  // The other non-obvious sink the brief calls out: the row id is
+  // The other non-obvious injection sink: the row id is
   // interpolated into every mutation form's `action="..."` attribute. Real
   // ids are always crypto.randomUUID() output, but this is defense in
   // depth -- same reasoning as dashboards/errors.ts escaping a fingerprint
@@ -281,7 +281,7 @@ describe("GET /admin/feedback?page= guards against hostile input", () => {
 });
 
 // Mirrors Feedback.list_submissions/1's maybe_filter/3: nil and the literal
-// "all" both mean "no filter". Task 12 already fixed listFeedback for this;
+// "all" both mean "no filter". listFeedback already handles this;
 // this confirms the dashboard's own filter links actually produce values
 // that exercise it, including "all".
 describe("GET /admin/feedback?state= filtering", () => {

@@ -93,8 +93,8 @@ describe("scheduled() handler", () => {
 
     expect(await rateLimitBucketExists("sweep-scheduled:stale")).toBe(false);
     expect(await rateLimitBucketExists("sweep-scheduled:current")).toBe(true);
-    // pairing/store.ts's purgeExpiredClaims, written in Task 10 and never
-    // wired to anything until this handler -- the identical "table with no
+    // pairing/store.ts's purgeExpiredClaims, written when pairing landed and
+    // never wired to anything until this handler -- the identical "table with no
     // eviction path" defect in a different table.
     expect(await pairingClaimExists("sweep-scheduled:expired")).toBe(false);
     expect(await pairingClaimExists("sweep-scheduled:live")).toBe(true);

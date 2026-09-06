@@ -32,8 +32,8 @@ export function escapeHtml(value: unknown): string {
 // Hono 500. Reject anything that isn't a small non-negative safe integer by
 // falling back to page 0, and clamp anything absurdly large (but technically
 // a safe integer) to MAX_PAGE rather than trusting it straight into the
-// query. Originated in dashboards/errors.ts (Task 13) and was duplicated
-// verbatim into dashboards/feedback.ts (Task 14) before being extracted
+// query. Originated in dashboards/errors.ts and was duplicated
+// verbatim into dashboards/feedback.ts before being extracted
 // here -- one copy, so a future fix to this guard can't land in one
 // dashboard and not the other.
 export const MAX_PAGE = 100_000;

@@ -26,9 +26,10 @@ export async function sweepStaleFeedbackRateLimits(env: Env): Promise<number> {
 }
 
 // Runs both sweeps under one Cron Trigger. pairing/store.ts's
-// purgeExpiredClaims was written in Task 10 and never wired to anything --
-// the identical defect (a table with no eviction path) in a different
-// table, closed here in the same commit rather than left for a third round.
+// purgeExpiredClaims was written when pairing landed and then never wired to
+// anything -- the identical defect (a table with no eviction path) in a
+// different table, closed here in the same commit rather than left to be
+// rediscovered a third time.
 // readClaim already refuses an expired row on read, so this, like the
 // feedback sweep above, is housekeeping (bounding table growth), not a
 // correctness fix.

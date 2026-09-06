@@ -46,9 +46,9 @@ describe("extractSubtitle", () => {
 
   // Mirrors archive.ex's check_declared_size/1 + check_total_size/1: a small
   // download must not be allowed to expand into an unbounded write. These
-  // three tests were run against the pre-fix, uncapped extractSubtitle before
-  // this cap existed; see task-6-report.md's fix round 1 section for that
-  // "before" output. The zip-bomb test in particular is written so it fails
+  // three tests were run against the uncapped extractSubtitle before this cap
+  // existed, and all three failed there, so they are known to have teeth.
+  // The zip-bomb test in particular is written so it fails
   // against an implementation that fully decompresses before checking size.
   describe("size cap", () => {
     it("rejects an archive whose declared size is exactly at the cap", () => {

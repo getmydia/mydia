@@ -252,7 +252,7 @@ describe("POST /feedback", () => {
 
   // Mydia.Feedback.Sender.post/1 pattern-matches on exactly {status: 400,
   // body: response} to extract {:validation_error, errors}. A 422 here (the
-  // brief's original status) falls through Sender's case statement into the
+  // obvious choice for a validation failure) falls through Sender's case into the
   // generic {:http_error, status, body} branch instead, silently discarding
   // the structured validation errors for every caller that checks for
   // {:validation_error, _}.
@@ -429,7 +429,7 @@ describe("POST /feedback rate limiting", () => {
     // The IP bucket is already saturated: the check costs a read, and the
     // `with`-style short-circuit means the instance check (and the D1
     // insert) is never even reached -- zero writes total, asserted both via
-    // the write-count header (Task 11's instrument, since a table's row
+    // the write-count header (added for crash ingest, since a table's row
     // COUNT(*) can't distinguish a skipped write from an unconditional
     // UPDATE that happens not to change a row) and via the row-count delta
     // across both tables below.

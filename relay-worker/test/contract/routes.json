@@ -27,7 +27,7 @@
   {
     "method": "GET",
     "path": "/tvdb/series/331753/episodes",
-    "note": "Both sides currently 400. TVDB's own OpenAPI spec defines this endpoint as GET /series/{id}/episodes/{season-type} with `page` as a QUERY parameter, but handler.ex bakes the page number into the path instead (.../episodes/default/page/{N}), which has never been a valid TVDB path -- confirmed against TVDB's spec, not guessed. mydia's own client never calls this route (it gets episodes from the *_extended endpoints), so the bug went unnoticed. Do NOT fix the Worker to work around this: it is deliberately bug-compatible with the Elixir during the port. This entry proves the two sides fail identically, not that the route works -- see task-9-report.md."
+    "note": "Both sides currently 400. TVDB's own OpenAPI spec defines this endpoint as GET /series/{id}/episodes/{season-type} with `page` as a QUERY parameter, but handler.ex bakes the page number into the path instead (.../episodes/default/page/{N}), which has never been a valid TVDB path -- confirmed against TVDB's spec, not guessed. mydia's own client never calls this route (it gets episodes from the *_extended endpoints), so the bug went unnoticed. Do NOT fix the Worker to work around this: it is deliberately bug-compatible with the Elixir during the port. This entry proves the two sides fail identically, not that the route works."
   },
   { "method": "GET", "path": "/tvdb/series/999999999" },
   { "method": "GET", "path": "/tvdb/seasons/720595" },
@@ -42,7 +42,7 @@
   {
     "method": "GET",
     "path": "/music/search?query=Nebula%20Wraithcoil&type=artist",
-    "note": "Fuzzy-ranked full-text search over MusicBrainz's live index, not an exact-id lookup. Result order, per-entry `score`, and the top-level `count` can all differ between two near-simultaneous identical requests -- observed directly: one live contract run failed here with a shifted `count` and reordered/rescored artist entries, then passed 552ms later in isolation and 42/42 on the next full run. A single failure on this route is not by itself evidence the Worker's music port regressed -- retry it alone before concluding that. See task-9-report.md's non-determinism section."
+    "note": "Fuzzy-ranked full-text search over MusicBrainz's live index, not an exact-id lookup. Result order, per-entry `score`, and the top-level `count` can all differ between two near-simultaneous identical requests -- observed directly: one live contract run failed here with a shifted `count` and reordered/rescored artist entries, then passed 552ms later in isolation and 42/42 on the next full run. A single failure on this route is not by itself evidence the Worker's music port regressed -- retry it alone before concluding that."
   },
   { "method": "GET", "path": "/music/artist/5b11f4ce-a62d-471e-81fc-a69a8278c7da" },
   { "method": "GET", "path": "/music/release/eccae410-7577-4daa-b602-92d305828331" },
@@ -60,7 +60,7 @@
     "method": "POST",
     "path": "/api/v1/subtitles/search",
     "body": { "tmdb_id": 550, "media_type": "movie" },
-    "note": "This route's cache key is a SHA-256 of the request body (bodyFingerprint in cache/key.ts), not the URL, so the _cb cache-buster below is a no-op here -- see the comment in contract.test.ts for the Task 16 implication."
+    "note": "This route's cache key is a SHA-256 of the request body (bodyFingerprint in cache/key.ts), not the URL, so the _cb cache-buster below is a no-op here -- see the comment in contract.test.ts for what that means when comparing against a real deployed Worker."
   },
   { "method": "POST", "path": "/api/v1/subtitles/search", "body": {} },
   {

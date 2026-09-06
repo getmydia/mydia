@@ -1,8 +1,8 @@
 name: Deploy / Relay
 
-# Two independent release rituals share this file until Task 17 of
-# docs/superpowers/plans/2026-09-05-metadata-relay-on-cloudflare-workers.md
-# deletes the Elixir side and renames this file to deploy-relay-worker.yml:
+# Two independent release rituals share this file until the Elixir relay is
+# decommissioned, at which point its job goes away and this file becomes
+# deploy-relay-worker.yml:
 #
 # - `docker` (metadata-relay/, the Elixir service): tag-triggered, unchanged.
 # - `deploy-worker` (relay-worker/, the Cloudflare Worker): triggered by a
