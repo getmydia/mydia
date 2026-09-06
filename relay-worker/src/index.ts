@@ -8,6 +8,7 @@ import { registerPairingRoutes } from "./pairing/routes";
 import { registerCrashRoutes } from "./crashes/ingest";
 import { registerErrorDashboard } from "./dashboards/errors";
 import { registerFeedbackRoutes } from "./feedback/ingest";
+import { registerFeedbackDashboard } from "./dashboards/feedback";
 import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
 import { runScheduledSweep } from "./obs/sweep";
@@ -72,10 +73,15 @@ registerCrashRoutes(app);
 // Cloudflare Access in front of it; do not deploy this to a public hostname
 // before that lands.
 registerErrorDashboard(app);
-// POST only -- Task 14 adds GET /feedback (the maintainer dashboard) as a
-// separate route registration, and Hono matches by path AND method, so the
-// two coexist without either swallowing the other.
+// POST only -- registerFeedbackDashboard below adds GET /feedback (the
+// maintainer dashboard replacing FeedbackLive.Index) as a separate route
+// registration, and Hono matches by path AND method, so the two coexist
+// without either swallowing the other.
 registerFeedbackRoutes(app);
+// GET /feedback plus the state/github mutation routes. Unauthenticated
+// until Task 15 puts Cloudflare Access in front of it; do not deploy this
+// to a public hostname before that lands.
+registerFeedbackDashboard(app);
 
 // 404 catch-all, matching the Elixir router's behaviour.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));
