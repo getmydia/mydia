@@ -45,7 +45,7 @@ export interface OccurrenceRow {
 
 // Occurrence rows written per fingerprint per instance per hour. Beyond this
 // the crash is still counted, but no new row is written.
-const MAX_OCCURRENCE_ROWS_PER_BUCKET = 3;
+export const MAX_OCCURRENCE_ROWS_PER_BUCKET = 3;
 
 function frame(
   module: unknown,
@@ -169,6 +169,35 @@ export async function fingerprintOf(
     .slice(0, 32);
 }
 
+// router.ex's validate_crash_report/1: these three keys must be PRESENT
+// (Map.has_key?; any value, including null, satisfies it) or the request is
+// rejected with 400 before anything is stored. normalizeCrashReport's
+// lenient defaulting is correct for the pure function -- the Elixir also
+// normalises leniently once past this gate -- so this replicates the GATE
+// itself, run at the route, strictly before any D1 access. A well-formed but
+// empty `{}` always maps to the same fingerprint, and that fingerprint's
+// first-ever request is never throttled (there's no bucket row yet), so
+// without this gate, repeated anonymous POSTs of `{}` to this
+// unauthenticated endpoint would be an easier route to budget exhaustion
+// than an actual crash loop.
+const REQUIRED_FIELDS = ["error_type", "error_message", "stacktrace"] as const;
+
+function validateCrashReportShape(body: Record<string, unknown>): string[] {
+  const errors = REQUIRED_FIELDS.filter((field) => !(field in body)).map(
+    (field) => `Missing required field: ${field}`,
+  );
+  if ("stacktrace" in body && !Array.isArray(body.stacktrace)) {
+    errors.push("stacktrace must be a list");
+  }
+  return errors;
+}
+
+interface BucketRow {
+  hour_bucket: number;
+  written: number;
+  saturated: number;
+}
+
 export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
   app.post("/crashes/report", async (c) => {
     const body = (await c.req.json().catch(() => null)) as Record<
@@ -176,6 +205,11 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
       unknown
     > | null;
     if (!body) return c.json({ error: "Invalid JSON body" }, 400);
+
+    const validationErrors = validateCrashReportShape(body);
+    if (validationErrors.length > 0) {
+      return c.json({ error: "Validation failed", errors: validationErrors }, 400);
+    }
 
     const crash = normalizeCrashReport(body);
     const top = crash.stacktrace[0];
@@ -188,8 +222,58 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
       c.req.header("cf-connecting-ip") ?? crash.version ?? "unknown";
     const hourBucket = Math.floor(crash.occurredAt / 3600);
 
-    // Always count. This is one small upsert regardless of storm volume.
-    await c.env.DB.prepare(
+    // READ the bucket first. This is the fix for fix round 1's critical
+    // finding: the original version upserted `errors` and `ingest_buckets`
+    // UNCONDITIONALLY on every request, before ever checking the cap -- only
+    // the `occurrences` insert was actually throttled. D1 counts an
+    // `INSERT ... ON CONFLICT DO UPDATE` as a write on every call whether it
+    // inserts or updates, so a storm of N requests performed ~2N writes
+    // regardless of the cap: the install that could exhaust the daily
+    // budget before this fix could still exhaust it after, needing only the
+    // same order of magnitude of requests.
+    //
+    // A read is roughly a fiftieth the cost of a write on D1's free tier (5M
+    // row reads/day vs. 100k row writes/day), so paying for one read per
+    // request to decide whether to write at all is the trade that actually
+    // bounds writes: once a bucket is saturated, this request performs NO
+    // further D1 access at all -- no errors upsert, no bucket write, no
+    // occurrence insert.
+    const existing = await c.env.DB.prepare(
+      "SELECT hour_bucket, written, saturated FROM ingest_buckets WHERE fingerprint = ? AND instance_key = ?",
+    )
+      .bind(fingerprint, instanceKey)
+      .first<BucketRow>();
+
+    // A stored hour_bucket different from the current one (including no row
+    // at all) means this is a fresh budget window: reset to a clean count
+    // rather than carrying the previous hour's total forward. This is also
+    // what keeps ingest_buckets bounded by distinct (fingerprint,
+    // instance_key) pairs instead of growing by one row per pair for every
+    // hour that has ever elapsed -- the table's primary key no longer
+    // includes hour_bucket at all (migrations/0002_crash_reports.sql).
+    const isFreshWindow = !existing || existing.hour_bucket !== hourBucket;
+    const priorWritten = isFreshWindow ? 0 : existing!.written;
+
+    if (!isFreshWindow && priorWritten >= MAX_OCCURRENCE_ROWS_PER_BUCKET) {
+      // Already saturated for this hour: perform no writes at all. The
+      // producer still gets the 201 it expects (Sender only retries on a
+      // non-201 status); the crash is simply not reflected in
+      // occurrence_count or a new occurrences row. ingest_buckets.saturated
+      // (set below, on the write that reached the cap) is what tells a
+      // reader this count is a floor, not an exact total, for the rest of
+      // this hour.
+      return c.json(
+        { status: "created", message: "Crash report received", id: fingerprint },
+        201,
+        { "x-relay-d1-writes": "0" },
+      );
+    }
+
+    const written = priorWritten + 1;
+    const saturated = written >= MAX_OCCURRENCE_ROWS_PER_BUCKET ? 1 : 0;
+    let writes = 0;
+
+    const errorsResult = await c.env.DB.prepare(
       `INSERT INTO errors (fingerprint, kind, message, source_file, source_line,
                            status, first_seen_at, last_seen_at, occurrence_count)
        VALUES (?, ?, ?, ?, ?, 'unresolved', ?, ?, 1)
@@ -208,38 +292,37 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
         crash.occurredAt,
       )
       .run();
+    writes += errorsResult.meta.rows_written;
 
-    // Write a full occurrence row only while this fingerprint/instance/hour
-    // is under budget. A crash-looping install keeps being counted but stops
-    // consuming D1's daily write allowance for everybody else.
-    const bucket = await c.env.DB.prepare(
-      `INSERT INTO ingest_buckets (fingerprint, instance_key, hour_bucket, written)
-       VALUES (?, ?, ?, 1)
-       ON CONFLICT(fingerprint, instance_key, hour_bucket) DO UPDATE SET
-         written = ingest_buckets.written + 1
-       RETURNING written`,
+    const bucketResult = await c.env.DB.prepare(
+      `INSERT INTO ingest_buckets (fingerprint, instance_key, hour_bucket, written, saturated)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(fingerprint, instance_key) DO UPDATE SET
+         hour_bucket = excluded.hour_bucket,
+         written = excluded.written,
+         saturated = excluded.saturated`,
     )
-      .bind(fingerprint, instanceKey, hourBucket)
-      .first<{ written: number }>();
+      .bind(fingerprint, instanceKey, hourBucket, written, saturated)
+      .run();
+    writes += bucketResult.meta.rows_written;
 
-    if ((bucket?.written ?? 0) <= MAX_OCCURRENCE_ROWS_PER_BUCKET) {
-      await c.env.DB.prepare(
-        `INSERT INTO occurrences
-           (id, fingerprint, occurred_at, version, environment, instance_key, context, stacktrace)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    const occurrenceResult = await c.env.DB.prepare(
+      `INSERT INTO occurrences
+         (id, fingerprint, occurred_at, version, environment, instance_key, context, stacktrace)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        fingerprint,
+        crash.occurredAt,
+        crash.version,
+        crash.environment,
+        instanceKey,
+        JSON.stringify(crash.context),
+        JSON.stringify(crash.stacktrace),
       )
-        .bind(
-          crypto.randomUUID(),
-          fingerprint,
-          crash.occurredAt,
-          crash.version,
-          crash.environment,
-          instanceKey,
-          JSON.stringify(crash.context),
-          JSON.stringify(crash.stacktrace),
-        )
-        .run();
-    }
+      .run();
+    writes += occurrenceResult.meta.rows_written;
 
     // Mydia.CrashReporter.Sender.send_http_request/2 pattern-matches on
     // exactly {status: 201, body: response} as its only success case (see
@@ -249,9 +332,18 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
     // backoff retry, eventually discarding it after 10 attempts or 24 hours.
     // Returning 201 here is load-bearing, not cosmetic parity with the old
     // Elixir relay.
+    //
+    // x-relay-d1-writes exposes the actual write count this request
+    // performed. It's not part of the producer's contract (Sender only
+    // checks the status code), but it's the only way to observe
+    // meta.rows_written from outside the Worker's own request handling, and
+    // is what test/crashes/ingest.test.ts's write-bounding regression test
+    // asserts on -- table row counts can't distinguish a skipped write from
+    // an unconditional UPDATE that happens not to change a row count.
     return c.json(
       { status: "created", message: "Crash report received", id: fingerprint },
       201,
+      { "x-relay-d1-writes": String(writes) },
     );
   });
 }

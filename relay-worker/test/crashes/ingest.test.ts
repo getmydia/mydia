@@ -1,13 +1,45 @@
 import { env, SELF, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeAll } from "vitest";
-import { normalizeCrashReport } from "../../src/crashes/ingest";
+import { normalizeCrashReport, MAX_OCCURRENCE_ROWS_PER_BUCKET } from "../../src/crashes/ingest";
 
 const json = { "content-type": "application/json" };
+const REPORT_URL = "https://relay.mydia.dev/crashes/report";
 
 interface ReportResponse {
   status: string;
   message: string;
   id: string;
+}
+
+interface ValidationErrorResponse {
+  error: string;
+  errors: string[];
+}
+
+interface TableCounts {
+  errors: number;
+  occurrences: number;
+  buckets: number;
+}
+
+// Table ROW COUNTS are the wrong instrument for proving writes are bounded --
+// an INSERT ... ON CONFLICT DO UPDATE against an existing row doesn't change
+// COUNT(*), even though D1 bills it as a write every time (confirmed against
+// D1's own `meta.rows_written` during fix round 1's review). This is exactly
+// why the original storm test's `occurrences.n < 10` assertion missed the
+// real defect: the `errors` and `ingest_buckets` rows were being upserted on
+// every single request, and COUNT(*) on either table stayed at 1 the whole
+// time regardless. Used below only for the "nothing was written at all"
+// (validation-rejected) and "exactly one row landed" (happy path) cases,
+// where the before/after DELTA in row count is the right signal; the
+// write-bounding test itself sums `x-relay-d1-writes` instead.
+async function tableCounts(): Promise<TableCounts> {
+  const [errors, occurrences, buckets] = await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) AS n FROM errors").first<{ n: number }>(),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM occurrences").first<{ n: number }>(),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM ingest_buckets").first<{ n: number }>(),
+  ]);
+  return { errors: errors!.n, occurrences: occurrences!.n, buckets: buckets!.n };
 }
 
 beforeAll(async () => {
@@ -82,8 +114,10 @@ describe("normalizeCrashReport", () => {
 });
 
 describe("POST /crashes/report", () => {
-  it("accepts a report and creates the error group", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/crashes/report", {
+  it("accepts a report, creates the error group, and writes exactly one row per table", async () => {
+    const before = await tableCounts();
+
+    const res = await SELF.fetch(REPORT_URL, {
       method: "POST",
       headers: json,
       body: JSON.stringify({
@@ -111,6 +145,13 @@ describe("POST /crashes/report", () => {
       .bind("RuntimeError")
       .first();
     expect(row).toMatchObject({ kind: "RuntimeError", occurrence_count: 1 });
+
+    const after = await tableCounts();
+    expect(after).toEqual({
+      errors: before.errors + 1,
+      occurrences: before.occurrences + 1,
+      buckets: before.buckets + 1,
+    });
   });
 
   it("groups two identical crashes under one fingerprint", async () => {
@@ -121,7 +162,7 @@ describe("POST /crashes/report", () => {
     };
 
     for (let i = 0; i < 2; i++) {
-      await SELF.fetch("https://relay.mydia.dev/crashes/report", {
+      await SELF.fetch(REPORT_URL, {
         method: "POST",
         headers: json,
         body: JSON.stringify(payload),
@@ -138,42 +179,218 @@ describe("POST /crashes/report", () => {
     expect(results[0].occurrence_count).toBe(2);
   });
 
-  it("counts a crash storm but stops writing occurrence rows for it", async () => {
+  // Fix round 1's critical finding: the original implementation upserted
+  // `errors` and `ingest_buckets` UNCONDITIONALLY on every request, before
+  // even checking the cap -- only the `occurrences` insert was actually
+  // throttled. D1 counts an `ON CONFLICT DO UPDATE` as a write on every call
+  // whether it inserts or updates, so a storm of N requests performed ~2N
+  // writes: the install that could exhaust the daily budget before this fix
+  // could still exhaust it after, needing only the same order of magnitude
+  // of requests.
+  //
+  // This sums the actual D1 writes each request performs (exposed via the
+  // x-relay-d1-writes response header, since the test has no other way to
+  // observe meta.rows_written from inside the Worker's own request handling)
+  // rather than inspecting table row counts, which can't tell an
+  // unconditional UPDATE from a skipped one.
+  //
+  // It deliberately does NOT assert an exact write total: a single INSERT
+  // touches its table's own B-tree plus one per index (including the
+  // implicit autoindex a non-INTEGER PRIMARY KEY creates), so the true
+  // per-request cost is a small implementation detail of the schema, not a
+  // clean constant -- measured at 9, 7, and 7 writes for the three requests
+  // that actually write, once for each of errors/ingest_buckets/occurrences
+  // in this schema. What must hold regardless of that detail is the actual
+  // invariant this task cares about: a storm 10x larger performs the SAME
+  // total writes, not 10x more, because writes stop entirely once the
+  // bucket saturates.
+  it("performs the same total D1 writes for a small and a large crash storm", async () => {
+    async function totalWritesFor(kind: string, ip: string, count: number): Promise<number> {
+      let total = 0;
+      for (let i = 0; i < count; i++) {
+        const res = await SELF.fetch(REPORT_URL, {
+          method: "POST",
+          headers: { ...json, "cf-connecting-ip": ip },
+          body: JSON.stringify({
+            error_type: kind,
+            error_message: "loop",
+            stacktrace: [{ module: "M", function: "f/0", file: "m.ex", line: 11 }],
+          }),
+        });
+        expect(res.status).toBe(201);
+        total += Number(res.headers.get("x-relay-d1-writes") ?? "0");
+      }
+      return total;
+    }
+
+    // Both counts exceed MAX_OCCURRENCE_ROWS_PER_BUCKET, so both storms
+    // saturate partway through -- different fingerprints/instances so they
+    // can't share (and thus contaminate) a bucket.
+    const smallStorm = await totalWritesFor("WriteBoundSmall", "198.51.100.61", 5);
+    const bigStorm = await totalWritesFor("WriteBoundBig", "198.51.100.63", 50);
+
+    expect(bigStorm).toBe(smallStorm);
+    // Sanity bound well under what unconditional per-request upserts (the
+    // pre-fix behaviour) would cost 50 requests: observed 23, asserted <50
+    // to avoid coupling this test to the schema's exact index count.
+    expect(bigStorm).toBeLessThan(50);
+  });
+
+  it("caps occurrence_count and marks the bucket saturated once a storm exceeds the per-hour budget", async () => {
     const payload = {
       error_type: "StormError",
       error_message: "loop",
       stacktrace: [{ module: "M", function: "f/0", file: "m.ex", line: 9 }],
     };
+    const ip = "198.51.100.7";
 
     for (let i = 0; i < 50; i++) {
-      await SELF.fetch("https://relay.mydia.dev/crashes/report", {
+      await SELF.fetch(REPORT_URL, {
         method: "POST",
-        headers: { ...json, "cf-connecting-ip": "198.51.100.7" },
+        headers: { ...json, "cf-connecting-ip": ip },
         body: JSON.stringify(payload),
       });
     }
 
     const error = await env.DB.prepare(
-      "SELECT occurrence_count FROM errors WHERE kind = ?",
+      "SELECT fingerprint, occurrence_count FROM errors WHERE kind = ?",
     )
       .bind("StormError")
-      .first<{ occurrence_count: number }>();
+      .first<{ fingerprint: string; occurrence_count: number }>();
 
     const occurrences = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM occurrences
-       WHERE fingerprint = (SELECT fingerprint FROM errors WHERE kind = ?)`,
+      "SELECT COUNT(*) AS n FROM occurrences WHERE fingerprint = ?",
     )
-      .bind("StormError")
+      .bind(error!.fingerprint)
       .first<{ n: number }>();
 
-    // Every crash is counted.
-    expect(error!.occurrence_count).toBe(50);
-    // But the write budget is bounded: far fewer rows than reports.
-    expect(occurrences!.n).toBeLessThan(10);
+    const bucket = await env.DB.prepare(
+      "SELECT written, saturated FROM ingest_buckets WHERE fingerprint = ? AND instance_key = ?",
+    )
+      .bind(error!.fingerprint, ip)
+      .first<{ written: number; saturated: number }>();
+
+    // occurrence_count is now a FLOOR once saturated, not an exact count of
+    // every crash received -- this is the deliberate trade-off fix round 1
+    // mandated in exchange for bounding writes (superseding this task's
+    // original "every crash is still counted" goal). `saturated` is what
+    // lets a reader tell the two apart instead of silently presenting an
+    // undercount as exact.
+    expect(error!.occurrence_count).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET);
+    expect(occurrences!.n).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET);
+    expect(bucket!.written).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET);
+    expect(bucket!.saturated).toBe(1);
+  });
+
+  // router.ex's validate_crash_report/1 requires error_type, error_message
+  // and stacktrace to be PRESENT KEYS (Map.has_key?, any value including
+  // null satisfies it) before it stores anything, returning 400 with no
+  // write when they're missing. The Worker had no equivalent gate: since a
+  // bare `{}` always normalises to the same kind/topKey and the errors
+  // upsert was unthrottled, this was a second, EASIER route to budget
+  // exhaustion than a crash loop -- no throttling applies to a fingerprint
+  // that's never been seen before, so repeated anonymous POSTs of `{}` to
+  // this unauthenticated endpoint could each mint a fresh write.
+  describe("required-field validation (matches router.ex's Map.has_key? gate)", () => {
+    it("rejects an empty object with zero rows written anywhere", async () => {
+      const before = await tableCounts();
+
+      const res = await SELF.fetch(REPORT_URL, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json<ValidationErrorResponse>();
+      expect(body.error).toBe("Validation failed");
+      expect(body.errors).toEqual(
+        expect.arrayContaining([
+          "Missing required field: error_type",
+          "Missing required field: error_message",
+          "Missing required field: stacktrace",
+        ]),
+      );
+
+      expect(await tableCounts()).toEqual(before);
+    });
+
+    it("rejects a payload missing only stacktrace, with zero rows written", async () => {
+      const before = await tableCounts();
+
+      const res = await SELF.fetch(REPORT_URL, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({
+          error_type: "SomeError",
+          error_message: "no stacktrace field at all",
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json<ValidationErrorResponse>();
+      expect(body.errors).toEqual(["Missing required field: stacktrace"]);
+
+      expect(await tableCounts()).toEqual(before);
+    });
+
+    it("rejects a non-list stacktrace even when the key is present", async () => {
+      const res = await SELF.fetch(REPORT_URL, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({
+          error_type: "SomeError",
+          error_message: "stacktrace is a string, not a list",
+          stacktrace: "not-a-list",
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json<ValidationErrorResponse>();
+      expect(body.errors).toContain("stacktrace must be a list");
+    });
+  });
+
+  // Prior schema keyed ingest_buckets on (fingerprint, instance_key,
+  // hour_bucket), so this table grew by one row per fingerprint/instance for
+  // every hour that ever elapsed, forever -- unbounded by anything but
+  // wall-clock time. The fixed schema keys on (fingerprint, instance_key)
+  // alone and treats hour_bucket as a column that gets reset in place.
+  it("does not multiply bucket rows across hour boundaries for the same fingerprint/instance", async () => {
+    const ip = "198.51.100.62";
+    const reportAt = (occurredAt: string) =>
+      SELF.fetch(REPORT_URL, {
+        method: "POST",
+        headers: { ...json, "cf-connecting-ip": ip },
+        body: JSON.stringify({
+          error_type: "HourRollover",
+          error_message: "boom",
+          stacktrace: [{ module: "M", function: "f/0", file: "m.ex", line: 42 }],
+          occurred_at: occurredAt,
+        }),
+      });
+
+    await reportAt("2026-01-01T00:10:00.000Z");
+    await reportAt("2026-01-01T05:45:00.000Z"); // a different hour bucket entirely
+
+    const error = await env.DB.prepare("SELECT fingerprint FROM errors WHERE kind = ?")
+      .bind("HourRollover")
+      .first<{ fingerprint: string }>();
+
+    const { results } = await env.DB.prepare(
+      "SELECT hour_bucket, written FROM ingest_buckets WHERE fingerprint = ? AND instance_key = ?",
+    )
+      .bind(error!.fingerprint, ip)
+      .all<{ hour_bucket: number; written: number }>();
+
+    expect(results).toHaveLength(1);
+    // The stored hour_bucket tracks the most recent request's hour, and its
+    // budget was reset for that hour rather than carried over.
+    expect(results[0].written).toBe(1);
   });
 
   it("rejects a body that is not JSON", async () => {
-    const res = await SELF.fetch("https://relay.mydia.dev/crashes/report", {
+    const res = await SELF.fetch(REPORT_URL, {
       method: "POST",
       headers: json,
       body: "not json",
