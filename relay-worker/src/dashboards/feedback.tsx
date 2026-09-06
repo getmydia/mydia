@@ -1,7 +1,9 @@
 import type { Hono } from "hono";
 import type { Env } from "../env";
+import type { FeedbackRow } from "../feedback/ingest";
 import { listFeedback, setFeedbackState, setGithubRef } from "../feedback/queries";
-import { layout, escapeHtml, parsePage, when } from "./layout";
+import { page, when, parsePage } from "./layout";
+import { Tabs, DataTable, PostButton, Pager } from "./ui";
 
 const PAGE_SIZE = 50;
 
@@ -27,15 +29,111 @@ const DEFAULT_STATE_FILTER: FeedbackState = "unread";
 // Feedback.get_submission/1's :id argument on the Elixir side. Anything
 // else in the :id path segment cannot be a real submission, and letting it
 // through to c.redirect() risks the same CRLF -> unhandled-500-in-Headers
-// failure dashboards/errors.ts already hit for :fingerprint. Validate
-// before touching D1 or building a redirect.
+// failure dashboards/errors.tsx already guards against for :fingerprint.
+// Validate before touching D1 or building a redirect.
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isValidIdShape(value: string): boolean {
   return UUID_SHAPE.test(value);
 }
 
-const NOT_FOUND_BODY = "<p>No such feedback submission.</p>";
+const NOT_FOUND_BODY = <p>No such feedback submission.</p>;
+
+const HEADERS = [
+  "When",
+  "Type",
+  "Message",
+  "Version",
+  "Contact",
+  "Instance",
+  "Source IP",
+  "State",
+  "GitHub",
+];
+
+// Mirrors index.html.heex's contextual buttons: "mark read" only shows for
+// an unread row, "archive" only for a not-yet-archived row. Neither the
+// Elixir dashboard nor this one exposes a generic "switch to any other
+// state" control per row.
+//
+// `{cond && <PostButton/>}` is the right idiom here: hono/jsx drops false,
+// null and undefined children, so a hidden button renders nothing at all.
+function FeedbackTableRow({ row }: { row: FeedbackRow }) {
+  return (
+    <tr>
+      <td class="muted num">{when(row.inserted_at)}</td>
+      <td>{row.type}</td>
+      <td class="wrap">{row.message}</td>
+      <td class="muted">{row.mydia_version ?? ""}</td>
+      <td class="muted">{row.contact ?? ""}</td>
+      <td class="muted">{row.instance_id ?? ""}</td>
+      <td class="muted">{row.source_ip ?? ""}</td>
+      <td>
+        {row.state}{" "}
+        {row.state === "unread" && (
+          <PostButton
+            action={`/admin/feedback/${row.id}/state`}
+            label="mark read"
+            fields={{ state: "read" }}
+          />
+        )}{" "}
+        {row.state !== "archived" && (
+          <PostButton
+            action={`/admin/feedback/${row.id}/state`}
+            label="archive"
+            fields={{ state: "archived" }}
+          />
+        )}
+      </td>
+      <td>
+        <form method="post" action={`/admin/feedback/${row.id}/github`}>
+          <input
+            type="text"
+            name="github_ref"
+            placeholder="owner/repo#123"
+            value={row.github_ref ?? ""}
+            size={16}
+          />
+          <button type="submit">save</button>
+        </form>
+      </td>
+    </tr>
+  );
+}
+
+function FeedbackPage({
+  rows,
+  state,
+  page: pageNumber,
+}: {
+  rows: FeedbackRow[];
+  state: FeedbackState | "all";
+  page: number;
+}) {
+  const next =
+    rows.length === PAGE_SIZE
+      ? `/admin/feedback?page=${pageNumber + 1}&state=${encodeURIComponent(state)}`
+      : null;
+
+  return (
+    <>
+      <Tabs
+        links={[
+          { href: "/admin/feedback", label: "unread", active: state === "unread" },
+          { href: "/admin/feedback?state=read", label: "read", active: state === "read" },
+          { href: "/admin/feedback?state=archived", label: "archived", active: state === "archived" },
+          { href: "/admin/feedback?state=all", label: "all", active: state === "all" },
+        ]}
+      />
+      <DataTable headers={HEADERS}>
+        {rows.map((row) => (
+          <FeedbackTableRow row={row} />
+        ))}
+      </DataTable>
+      <Pager href={next} />
+    </>
+  );
+}
 
 export function registerFeedbackDashboard(app: Hono<{ Bindings: Env }>): void {
   app.get("/admin/feedback", async (c) => {
@@ -50,72 +148,23 @@ export function registerFeedbackDashboard(app: Hono<{ Bindings: Env }>): void {
         : rawState === "all" || isValidState(rawState)
           ? rawState
           : "all";
-    const page = parsePage(c.req.query("page"));
+    const pageNumber = parsePage(c.req.query("page"));
 
     const rows = await listFeedback(c.env, {
       state,
       limit: PAGE_SIZE,
-      offset: page * PAGE_SIZE,
+      offset: pageNumber * PAGE_SIZE,
     });
 
-    const body = `
-<p class="muted">
-  <a href="/admin/feedback">unread</a>
-  <a href="/admin/feedback?state=read">read</a>
-  <a href="/admin/feedback?state=archived">archived</a>
-  <a href="/admin/feedback?state=all">all</a>
-</p>
-<table>
-  <thead><tr><th>When</th><th>Type</th><th>Message</th><th>Version</th><th>Contact</th><th>Instance</th><th>Source IP</th><th>State</th><th>GitHub</th></tr></thead>
-  <tbody>
-    ${rows
-      .map((r) => {
-        // Mirrors index.html.heex's contextual buttons: "Mark read" only
-        // shows for an unread row, "Archive" only for a not-yet-archived
-        // row -- neither the Elixir dashboard nor this one exposes a
-        // generic "switch to any other state" control per row.
-        const markReadForm = `<form method="post" action="/admin/feedback/${escapeHtml(r.id)}/state">
-              <input type="hidden" name="state" value="read">
-              <button type="submit">mark read</button>
-            </form>`;
-        const archiveForm = `<form method="post" action="/admin/feedback/${escapeHtml(r.id)}/state">
-              <input type="hidden" name="state" value="archived">
-              <button type="submit">archive</button>
-            </form>`;
-
-        return `<tr>
-      <td class="muted">${escapeHtml(when(r.inserted_at))}</td>
-      <td>${escapeHtml(r.type)}</td>
-      <td class="wrap">${escapeHtml(r.message)}</td>
-      <td class="muted">${escapeHtml(r.mydia_version ?? "")}</td>
-      <td class="muted">${escapeHtml(r.contact ?? "")}</td>
-      <td class="muted">${escapeHtml(r.instance_id ?? "")}</td>
-      <td class="muted">${escapeHtml(r.source_ip ?? "")}</td>
-      <td>
-        ${escapeHtml(r.state)}
-        ${r.state === "unread" ? markReadForm : ""}
-        ${r.state !== "archived" ? archiveForm : ""}
-      </td>
-      <td>
-        <form method="post" action="/admin/feedback/${escapeHtml(r.id)}/github">
-          <input name="github_ref" placeholder="owner/repo#123" value="${escapeHtml(r.github_ref ?? "")}" size="16">
-          <button type="submit">save</button>
-        </form>
-      </td>
-    </tr>`;
-      })
-      .join("")}
-  </tbody>
-</table>
-${rows.length === PAGE_SIZE ? `<p><a href="/admin/feedback?page=${page + 1}&state=${escapeHtml(state)}">Next</a></p>` : ""}`;
-
-    return c.html(layout("Feedback", body));
+    return c.html(
+      page("Feedback", <FeedbackPage rows={rows} state={state} page={pageNumber} />),
+    );
   });
 
   app.post("/admin/feedback/:id/state", async (c) => {
     const id = c.req.param("id");
     if (!isValidIdShape(id)) {
-      return c.html(layout("Not found", NOT_FOUND_BODY), 404);
+      return c.html(page("Not found", NOT_FOUND_BODY), 404);
     }
 
     const form = await c.req.formData();
@@ -131,7 +180,7 @@ ${rows.length === PAGE_SIZE ? `<p><a href="/admin/feedback?page=${page + 1}&stat
   app.post("/admin/feedback/:id/github", async (c) => {
     const id = c.req.param("id");
     if (!isValidIdShape(id)) {
-      return c.html(layout("Not found", NOT_FOUND_BODY), 404);
+      return c.html(page("Not found", NOT_FOUND_BODY), 404);
     }
 
     const form = await c.req.formData();
