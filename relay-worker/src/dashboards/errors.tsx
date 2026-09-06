@@ -88,6 +88,19 @@ function ErrorsPage({
   status: string | undefined;
   page: number;
 }) {
+  // Deliberate, reviewed departure from a byte-for-byte port: the replaced
+  // errors.ts ran `status` through escapeHtml here, which is the wrong tool
+  // for this position. `status` is unvalidated caller input straight from
+  // `c.req.query("status")` -- unlike `fingerprint`, it carries no shape
+  // guard -- and it is being placed inside a URL query string, not HTML
+  // markup. HTML-escaping doesn't protect a query string: a literal "&" in
+  // `status` would survive escapeHtml as "&amp;", the browser decodes that
+  // back to "&" before parsing the query, and one parameter silently splits
+  // into two. `encodeURIComponent` is the correct encoding for this
+  // position. hono/jsx still escapes the finished href string for the HTML
+  // attribute layer on top of this -- the two encodings guard different
+  // layers (URL structure vs. HTML markup) and neither substitutes for the
+  // other.
   const next =
     rows.length === PAGE_SIZE
       ? `/admin/errors?page=${pageNumber + 1}${status ? `&status=${encodeURIComponent(status)}` : ""}`
