@@ -59,3 +59,14 @@ CREATE TABLE feedback_rate_limits (
   hour_bucket INTEGER NOT NULL,
   count INTEGER NOT NULL
 );
+
+-- The only index this table needs beyond its primary key, and it exists for
+-- the sweep rather than for any request: sweepStaleFeedbackRateLimits
+-- (src/obs/sweep.ts) deletes by `hour_bucket < ?`, a column the bucket_key
+-- primary key cannot serve. Without it the hourly Cron Trigger full-scans
+-- feedback_rate_limits every run, and this table's live cardinality is one row
+-- per distinct submitter IP per hour, which nothing in the code bounds.
+-- Request-path access is always by bucket_key, so the primary key still covers
+-- every read and write ingest performs.
+CREATE INDEX feedback_rate_limits_hour_bucket_idx
+  ON feedback_rate_limits (hour_bucket);

@@ -62,6 +62,41 @@ app.get("/stats", (c) =>
   }),
 );
 
+// Cloudflare Access is the real gate on /admin/*, and it is configured per
+// hostname: the Step 1 Access application in relay-worker/README.md's runbook
+// covers `relay.mydia.dev/admin*` and nothing else. The Worker is ALSO live on
+// its `*.workers.dev` subdomain from the first successful CI deploy onwards
+// (runbook Step 3 and Step 4a both depend on that, which is why
+// `workers_dev: false` is not the fix here), and Access does not see requests
+// to that hostname at all. Without this middleware the maintainer dashboards
+// would be anonymously readable on the workers.dev URL for the whole window
+// between the first deploy and the Step 4 cutover -- the same
+// path-not-method, hostname-by-hostname trap the runbook's cutover
+// preconditions already warn about for the wildcard route, one hostname
+// earlier.
+//
+// So: /admin/* answers 404 on any workers.dev hostname, which covers both the
+// deploy subdomain (`mydia-relay.<subdomain>.workers.dev`) and the versioned
+// preview URLs Cloudflare mints alongside it. Every other hostname -- the
+// production custom domain, local dev, Miniflare in tests -- is unaffected,
+// and none of test/contract/routes.json's routes are under /admin, so the
+// staging contract diff still exercises everything it did before.
+//
+// This is not authentication and must never grow into it: it removes an
+// UNPROTECTED hostname from reach, it does not decide who may look. Access
+// still decides that, and the README's "the Worker holds no dashboard
+// credentials, and none should ever be added" rule stands unchanged.
+//
+// Registered before the dashboards it guards, since app.use() only wraps
+// routes registered after it (same composition rule as the two middlewares
+// above).
+app.use("/admin/*", async (c, next) => {
+  if (new URL(c.req.url).hostname.endsWith(".workers.dev")) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  await next();
+});
+
 registerTmdbRoutes(app);
 registerTvdbRoutes(app);
 registerSubdlRoutes(app);
@@ -77,7 +112,9 @@ registerCrashRoutes(app);
 // Worker route, matches on path only, with no HTTP-method dimension, so a
 // dashboard sharing a path with a public endpoint could never be gated
 // without also gating the public one. Creating that Access application is
-// still a manual step; until it exists, this route has no auth at all.
+// still a manual step; until it exists, this route has no auth at all on any
+// hostname Access does not cover -- which is why the workers.dev deny above
+// exists, and why it is not a substitute for doing Step 1.
 registerErrorDashboard(app);
 // POST /feedback is the public ingest endpoint every mydia install calls --
 // a wire contract that must never move. registerFeedbackDashboard below

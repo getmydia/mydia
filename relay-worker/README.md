@@ -58,8 +58,19 @@ Things an operator who knew the Elixir relay would not expect:
 ## Bindings
 
 Declared in `wrangler.jsonc` (KV, D1, rate limiters, vars) and `src/env.ts`
-(the full `Env` interface, including secrets). Nothing below is optional in
-production; a missing secret degrades a route to a 503/502, not a crash.
+(the full `Env` interface, including secrets).
+
+`RESEND_API_KEY` is the one genuinely optional entry below, and it is optional
+by design rather than by oversight: without it `POST /feedback` still accepts
+and stores every submission, and only the maintainer's notification email is
+skipped. A relay running without it is a supported configuration, not a broken
+one, so do not go looking for a fault when `/health` is green and no mail
+arrives.
+
+Everything else is required in production. A missing value there degrades its
+route to a 503/502 rather than crashing the Worker, which means the symptom is
+a dead route, not a dead deployment — check the secret before assuming the
+route itself regressed.
 
 | Binding | Kind | Set via | Used for |
 | --- | --- | --- | --- |
@@ -74,7 +85,7 @@ production; a missing secret degrades a route to a 503/502, not a crash.
 | `PROXY_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Shared per-edge-IP budget across the metadata/music/openlibrary/subtitle proxy routes |
 | `PAIRING_CREATE_LIMITER` / `PAIRING_READ_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Remote-access pairing claim creation/lookup |
 | `CRASH_INGEST_LIMITER` / `FEEDBACK_INGEST_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Atomic, D1-free burst guards in front of crash ingest's and feedback ingest's D1-backed hourly budgets — see those files' comments for why the D1 accounting alone isn't safe under concurrency |
-| Cron Trigger `0 * * * *` | scheduled | `wrangler.jsonc` (`triggers.crons`) | Hourly sweep (`src/obs/sweep.ts`): evicts stale `feedback_rate_limits` rows and expired `pairing_claims` |
+| Cron Trigger `0 * * * *` | scheduled | `wrangler.jsonc` (`triggers.crons`) | Hourly sweep (`src/obs/sweep.ts`): evicts stale `feedback_rate_limits` and `ingest_buckets` rows and expired `pairing_claims` |
 
 `ratelimits[].namespace_id` values (`1001`-`1005`) are arbitrary identifiers
 for the binding, not provisioned cloud resources — there is nothing to create
@@ -180,6 +191,21 @@ equivalent exists in `Env`, and none should ever be added; that pattern is
 exactly what Access retires (see the runbook below for the operational trap
 it closes). Setting up the Access application is a manual, one-time step —
 see the runbook.
+
+**Access is configured per hostname, and the Worker answers on more than
+one.** The Step 1 Access application covers `relay.mydia.dev/admin*`. From the
+first successful CI deploy the Worker is *also* live on its `*.workers.dev`
+subdomain, plus the versioned preview URLs alongside it, and Access never sees
+those requests. `src/index.ts` therefore answers `/admin/*` with a 404 on any
+`.workers.dev` hostname, so the dashboards are unreachable there for the whole
+window between the first deploy and the Step 4 cutover. `workers_dev: false`
+would have been the blunter fix, but Step 3's CPU measurement and Step 4a's
+staging contract diff both need that hostname serving the public routes.
+
+That deny is not authentication and must not be mistaken for it — it removes
+an unprotected hostname from reach, it does not decide who may look. Access
+still decides that, and skipping Step 1 still leaves the dashboards open on
+the production hostname the moment Step 4b adds the route.
 
 ## Project structure
 

@@ -51,6 +51,45 @@ export interface OccurrenceRow {
 // the crash is still counted, but no new row is written.
 export const MAX_OCCURRENCE_ROWS_PER_BUCKET = 3;
 
+// Size caps on what one report can persist. POST /crashes/report is
+// unauthenticated, and none of `error_message`, `stacktrace` or `metadata`
+// was bounded before: a single request could bind a multi-megabyte string
+// into the INSERT. D1 rejects an oversized bound value, so `.batch()` throws
+// and the route answers an unhandled 500 -- and
+// Mydia.CrashReporter.Sender.send_http_request/2 retries every non-201
+// status, so the producer would keep re-sending a request that can never
+// succeed until it exhausts its 10 attempts / 24 hours. The per-bucket cap
+// (MAX_OCCURRENCE_ROWS_PER_BUCKET) bounds how MANY rows a fingerprint can
+// write, never how big any one of them is.
+//
+// The numbers are chosen to be far above any real report from
+// Mydia.CrashReporter and far below anything D1 objects to. An Elixir
+// exception message runs to a few hundred characters even when it inlines a
+// struct; BEAM stacktraces are tens of frames, not hundreds; and the
+// `metadata` map is Logger metadata, which is small by construction.
+// Truncation is deliberately silent and non-fatal rather than a 400 -- a
+// report that is too big is still worth keeping the head of, and rejecting it
+// would just feed the producer's retry loop.
+const MAX_MESSAGE_CHARS = 4_096;
+const MAX_FRAME_STRING_CHARS = 1_024;
+const MAX_STACK_FRAMES = 64;
+const MAX_CONTEXT_BYTES = 16_384;
+
+// The marker is appended after the cut, so the result is bounded by
+// max + marker length rather than exactly max. Being able to see that a value
+// was cut is worth more than the handful of characters.
+const TRUNCATION_MARKER = "...[truncated]";
+
+function truncate(value: string, max: number): string {
+  return value.length <= max
+    ? value
+    : `${value.slice(0, max)}${TRUNCATION_MARKER}`;
+}
+
+function truncateOrNull(value: unknown, max: number): string | null {
+  return typeof value === "string" ? truncate(value, max) : null;
+}
+
 function frame(
   module: unknown,
   fn: unknown,
@@ -58,10 +97,26 @@ function frame(
   line: unknown,
 ): CrashFrame {
   return {
-    module: typeof module === "string" ? module : null,
-    function: typeof fn === "string" ? fn : null,
-    file: typeof file === "string" ? file : null,
+    module: truncateOrNull(module, MAX_FRAME_STRING_CHARS),
+    function: truncateOrNull(fn, MAX_FRAME_STRING_CHARS),
+    file: truncateOrNull(file, MAX_FRAME_STRING_CHARS),
     line: typeof line === "number" ? line : null,
+  };
+}
+
+// `context` is persisted as one JSON string, so its cost is the cost of the
+// whole serialized object, not of any single key -- there is no useful
+// per-field cap here the way there is for a frame. Rather than cut the JSON
+// text (which would store something that no longer parses, breaking the
+// dashboard on read), an over-budget map is replaced wholesale by a marker
+// object that is itself valid JSON and says what happened.
+function boundContext(context: Record<string, unknown>): Record<string, unknown> {
+  const encoded = new TextEncoder().encode(JSON.stringify(context));
+  if (encoded.byteLength <= MAX_CONTEXT_BYTES) return context;
+  return {
+    _truncated: true,
+    _reason: `metadata exceeded ${MAX_CONTEXT_BYTES} bytes and was dropped`,
+    _original_bytes: encoded.byteLength,
   };
 }
 
@@ -113,12 +168,40 @@ function metadataStackFrame(metadata: unknown): CrashFrame | null {
 // discard this field on every real report and substitute ingestion time
 // instead. A Unix-seconds number is still accepted for callers other than
 // the Elixir producer (e.g. direct API use, tests).
+//
+// Number.isFinite is not a tight enough gate on the numeric branch. This
+// endpoint is unauthenticated, and `occurred_at: 1e300` is finite, so it used
+// to be stored verbatim; the dashboard then renders that row through
+// `when()` (src/dashboards/layout.ts), whose `new Date(unix * 1000)` is
+// outside the +/-8.64e15ms range Date represents, and `toISOString()` throws
+// `RangeError: Invalid time value`. One such row does not corrupt a cell, it
+// throws while building the page, so /admin/errors returns 500 and stays
+// broken until someone deletes the row by hand -- a stored, unauthenticated
+// denial of service against the maintainer's own view of crashes.
+//
+// MAX_OCCURRED_AT is Date's own limit expressed in the seconds this column
+// stores. Out-of-range values fall through to ingestion time rather than
+// being rejected, matching what this function already does for an
+// unparseable string: `occurred_at` is a report ATTRIBUTE, not something the
+// producer must get right for the report to be worth keeping, and the Elixir
+// producer's own retry loop (Mydia.CrashReporter.Sender) would hammer a 400
+// forever. Negative values are legal and kept -- a clock skewed before the
+// epoch is odd but representable, and `when()` renders it fine.
+const MAX_OCCURRED_AT = 8_640_000_000_000; // 8.64e15 ms / 1000
+
+function inDateRange(seconds: number): boolean {
+  return Math.abs(seconds) <= MAX_OCCURRED_AT;
+}
+
 function parseOccurredAt(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.floor(value);
+    const seconds = Math.floor(value);
+    if (inDateRange(seconds)) return seconds;
   }
   if (typeof value === "string") {
     const parsed = Date.parse(value);
+    // Date.parse already rejects out-of-range input with NaN, so a successful
+    // parse is in range by construction; inDateRange is not repeated here.
     if (!Number.isNaN(parsed)) return Math.floor(parsed / 1000);
   }
   return Math.floor(Date.now() / 1000);
@@ -127,15 +210,31 @@ function parseOccurredAt(value: unknown): number {
 export function normalizeCrashReport(
   body: Record<string, unknown>,
 ): NormalizedCrash {
+  // Capped like every other caller-supplied string here. `kind` is also one
+  // of the two fingerprint inputs, so an uncapped value would additionally
+  // let one request write an arbitrarily long primary-key-adjacent grouping
+  // label; the SHA-256 in fingerprintOf hides that from the errors table's
+  // key, but `kind` itself is stored and rendered.
   const kind =
-    typeof body.error_type === "string" ? body.error_type : "RuntimeError";
+    typeof body.error_type === "string"
+      ? truncate(body.error_type, MAX_FRAME_STRING_CHARS)
+      : "RuntimeError";
   const message =
-    typeof body.error_message === "string" ? body.error_message : "Unknown error";
+    typeof body.error_message === "string"
+      ? truncate(body.error_message, MAX_MESSAGE_CHARS)
+      : "Unknown error";
 
+  // Sliced AFTER parsing rather than before, so MAX_STACK_FRAMES counts
+  // frames that survived parseStacktraceEntry's drop rule, not raw array
+  // entries -- a caller padding the array with junk entries can't push real
+  // frames out of the window that way. The top frame is what the fingerprint
+  // is derived from, and this keeps the top of the trace, so the grouping a
+  // truncated report lands in is the same one it would have had.
   const rawStack = Array.isArray(body.stacktrace) ? body.stacktrace : [];
   let stacktrace = rawStack
     .map(parseStacktraceEntry)
-    .filter((f): f is CrashFrame => f !== null);
+    .filter((f): f is CrashFrame => f !== null)
+    .slice(0, MAX_STACK_FRAMES);
 
   // Without any source info every report derives the same fingerprint and
   // collapses into one useless group, so metadata stands in for a frame.
@@ -152,10 +251,10 @@ export function normalizeCrashReport(
     stacktrace,
     sourceFile: top?.file ?? null,
     sourceLine: top?.line ?? null,
-    version: typeof body.version === "string" ? body.version : null,
-    environment: typeof body.environment === "string" ? body.environment : null,
+    version: truncateOrNull(body.version, MAX_FRAME_STRING_CHARS),
+    environment: truncateOrNull(body.environment, MAX_FRAME_STRING_CHARS),
     occurredAt: parseOccurredAt(body.occurred_at),
-    context: isPlainObject(body.metadata) ? body.metadata : {},
+    context: boundContext(isPlainObject(body.metadata) ? body.metadata : {}),
   };
 }
 

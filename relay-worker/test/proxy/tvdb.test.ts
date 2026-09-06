@@ -143,6 +143,72 @@ describe("TVDB routes", () => {
     expect(seenPath).toContain("meta=translations");
   });
 
+  // Same confused-deputy class as the TMDB traversal test: the host stays
+  // fixed, but an unencoded path param lets the caller choose the endpoint the
+  // relay's bearer token is spent on.
+  it("encodes a traversal attempt in :id instead of resolving it upstream", async () => {
+    let seenPath = "";
+    fetchMock
+      .get("https://api4.thetvdb.com")
+      .intercept({
+        method: "GET",
+        path: (p) => {
+          seenPath = p;
+          return true;
+        },
+      })
+      .reply(200, { data: {} });
+
+    await SELF.fetch("https://relay.mydia.dev/tvdb/series/%2e%2e%2f%2e%2e%2flogin");
+
+    expect(seenPath.startsWith("/v4/series/")).toBe(true);
+    expect(seenPath).not.toContain("/v4/login");
+    expect(seenPath).not.toContain("../");
+  });
+
+  // `page` is spliced into the upstream PATH rather than sent as a query
+  // parameter (handler.ex bakes it in), so a non-numeric value was a traversal
+  // vector too. Anything that is not a run of digits becomes the same "0" an
+  // absent page already produces, which keeps this route bug-compatible with
+  // handler.ex for every input either side would treat as real.
+  it("falls back to page 0 for a non-numeric page rather than splicing it into the path", async () => {
+    let seenPath = "";
+    fetchMock
+      .get("https://api4.thetvdb.com")
+      .intercept({
+        method: "GET",
+        path: (p) => {
+          seenPath = p;
+          return true;
+        },
+      })
+      .reply(200, { data: { episodes: [] } });
+
+    await SELF.fetch(
+      "https://relay.mydia.dev/tvdb/series/81189/episodes?page=..%2F..%2Flogin",
+    );
+
+    expect(seenPath).toBe("/v4/series/81189/episodes/default/page/0");
+  });
+
+  it("still forwards a legitimate numeric page", async () => {
+    let seenPath = "";
+    fetchMock
+      .get("https://api4.thetvdb.com")
+      .intercept({
+        method: "GET",
+        path: (p) => {
+          seenPath = p;
+          return true;
+        },
+      })
+      .reply(200, { data: { episodes: [] } });
+
+    await SELF.fetch("https://relay.mydia.dev/tvdb/series/81189/episodes?page=4");
+
+    expect(seenPath).toBe("/v4/series/81189/episodes/default/page/4");
+  });
+
   it("maps a login failure to 502 rather than passing it off as a metadata error", async () => {
     await env.CACHE_KV.delete("tvdb:jwt");
     fetchMock

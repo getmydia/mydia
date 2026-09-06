@@ -47,8 +47,23 @@ export function parsePage(raw: string | undefined): number {
 
 // Shared "unix seconds -> readable UTC timestamp" formatter for both
 // dashboards' list tables. Same extraction reasoning as parsePage above.
+//
+// The guard is not defensive padding. `toISOString()` throws
+// `RangeError: Invalid time value` once `unix * 1000` leaves Date's
+// +/-8.64e15ms range, and this runs while BUILDING the page, so one bad row
+// does not render as a bad cell -- it takes the whole dashboard down with a
+// 500 and keeps it down until someone deletes the row by hand.
+//
+// The values reach here from `occurred_at` on the unauthenticated
+// POST /crashes/report, whose parseOccurredAt (src/crashes/ingest.ts) is
+// where this is actually fixed: it now clamps to the same range before
+// anything is stored. This guard stays anyway, because that fix only governs
+// rows written after it ships, and a row stored before it must not be able to
+// break the dashboard the maintainer would use to find it.
 export function when(unix: number): string {
-  return new Date(unix * 1000).toISOString().replace("T", " ").slice(0, 19);
+  const ms = unix * 1000;
+  if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return "invalid date";
+  return new Date(ms).toISOString().replace("T", " ").slice(0, 19);
 }
 
 export function layout(title: string, body: string): string {

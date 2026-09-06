@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { Env } from "../env";
 import { buildKey } from "../cache/key";
-import { forwardParams, proxyJson } from "./forward";
+import { forwardParams, pathSegment, proxyJson } from "./forward";
 import { getTvdbToken } from "./tvdb-auth";
 
 const TVDB_BASE = "https://api4.thetvdb.com/v4";
@@ -23,16 +23,35 @@ interface TvdbRoute {
 }
 
 // Source of truth: metadata-relay/lib/metadata_relay/tvdb/handler.ex.
+// `page` is the one caller-controlled value here that is NOT a Hono path
+// param, and it is spliced into the upstream path rather than sent as a query
+// parameter (see the get_series_episodes note below). pathSegment would make
+// it safe, but a percent-encoded non-number is still a nonsense TVDB path, so
+// this rejects outright instead: anything that is not a run of digits becomes
+// the same "0" an absent `page` already produces. That keeps this route
+// bug-compatible with handler.ex for every input either side would treat as
+// real -- both still answer 400, for the reason recorded in
+// test/contract/routes.json -- while removing the traversal.
+const PAGE_PATTERN = /^\d+$/;
+
+function pagePathValue(query: URLSearchParams): string {
+  const raw = query.get("page");
+  return raw !== null && PAGE_PATTERN.test(raw) ? raw : "0";
+}
+
+// Every `:id` below goes through pathSegment (see forward.ts for why): Hono
+// percent-decodes path params, so interpolating one raw lets the caller
+// choose which TVDB endpoint the relay's own bearer token is spent on.
 const ROUTES: TvdbRoute[] = [
   { path: "/tvdb/search", toUpstream: () => "/search", forwardQuery: true },
   {
     path: "/tvdb/series/:id",
-    toUpstream: (p) => `/series/${p.id}`,
+    toUpstream: (p) => `/series/${pathSegment(p.id)}`,
     forwardQuery: false,
   },
   {
     path: "/tvdb/series/:id/extended",
-    toUpstream: (p) => `/series/${p.id}/extended`,
+    toUpstream: (p) => `/series/${pathSegment(p.id)}/extended`,
     forwardQuery: true,
   },
   // get_series_episodes/2 reads `page` (default 0) out of the params map and
@@ -42,32 +61,32 @@ const ROUTES: TvdbRoute[] = [
   {
     path: "/tvdb/series/:id/episodes",
     toUpstream: (p, query) =>
-      `/series/${p.id}/episodes/default/page/${query.get("page") ?? "0"}`,
+      `/series/${pathSegment(p.id)}/episodes/default/page/${pagePathValue(query)}`,
     forwardQuery: false,
   },
   {
     path: "/tvdb/seasons/:id",
-    toUpstream: (p) => `/seasons/${p.id}`,
+    toUpstream: (p) => `/seasons/${pathSegment(p.id)}`,
     forwardQuery: false,
   },
   {
     path: "/tvdb/seasons/:id/extended",
-    toUpstream: (p) => `/seasons/${p.id}/extended`,
+    toUpstream: (p) => `/seasons/${pathSegment(p.id)}/extended`,
     forwardQuery: true,
   },
   {
     path: "/tvdb/episodes/:id",
-    toUpstream: (p) => `/episodes/${p.id}`,
+    toUpstream: (p) => `/episodes/${pathSegment(p.id)}`,
     forwardQuery: false,
   },
   {
     path: "/tvdb/episodes/:id/extended",
-    toUpstream: (p) => `/episodes/${p.id}/extended`,
+    toUpstream: (p) => `/episodes/${pathSegment(p.id)}/extended`,
     forwardQuery: true,
   },
   {
     path: "/tvdb/artwork/:id",
-    toUpstream: (p) => `/artwork/${p.id}`,
+    toUpstream: (p) => `/artwork/${pathSegment(p.id)}`,
     forwardQuery: false,
   },
 ];

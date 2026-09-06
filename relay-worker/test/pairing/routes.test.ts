@@ -1,5 +1,10 @@
 import { env, SELF, applyD1Migrations } from "cloudflare:test";
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+import {
+  generateCode,
+  CODE_ALPHABET,
+  REJECTION_THRESHOLD,
+} from "../../src/pairing/routes";
 
 const json = { "content-type": "application/json" };
 
@@ -17,6 +22,87 @@ function freshIp(): string {
 
 beforeAll(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+});
+
+describe("generateCode", () => {
+  it("only ever emits characters from the alphabet, at the documented length", () => {
+    for (let i = 0; i < 200; i++) {
+      const code = generateCode();
+      expect(code).toHaveLength(6);
+      for (const ch of code) expect(CODE_ALPHABET).toContain(ch);
+    }
+  });
+
+  // The claim code is the entire secret protecting a pairing claim for its
+  // 300-second TTL, so a skewed alphabet directly shrinks the space an
+  // attacker has to cover. `byte % 31` gave the first eight characters nine
+  // byte values each and the remaining twenty-three only eight -- 12.5%
+  // likelier per position. Rejecting bytes >= 248 leaves exactly eight values
+  // per character.
+  //
+  // Asserted by feeding generateCode a known byte stream rather than by
+  // sampling its output distribution. A statistical check is the obvious
+  // instrument and the wrong one here: telling a 12.5% bias apart from
+  // sampling noise needs a sample large enough that the noise band sits well
+  // under 12.5%, and any bound tight enough to be meaningful is close enough
+  // to the noise to flake. Driving the rejection directly tests the actual
+  // mechanism, deterministically, in microseconds.
+  it("rejects bytes at or above the threshold instead of folding them in with modulo", () => {
+    // Every byte in the first block is rejected; the second block supplies the
+    // whole code. Under `byte % 31` the first block would have produced a code
+    // outright (248 % 31 = 1 -> "B", 249 -> "C", ...), which is precisely the
+    // path that made those characters over-represented.
+    const blocks = [
+      new Uint8Array([248, 249, 250, 251, 252, 255]),
+      new Uint8Array([0, 1, 2, 3, 4, 5]),
+    ];
+    let call = 0;
+    const spy = vi
+      .spyOn(crypto, "getRandomValues")
+      .mockImplementation(((target: Uint8Array) => {
+        target.set(blocks[Math.min(call++, blocks.length - 1)]!);
+        return target;
+      }) as typeof crypto.getRandomValues);
+
+    try {
+      expect(generateCode()).toBe("ABCDEF");
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("keeps drawing until it has a full-length code, however many blocks that takes", () => {
+    // Three consecutive fully-rejected blocks: the loop has to survive all of
+    // them rather than returning a short code.
+    const rejected = new Uint8Array([248, 249, 250, 251, 252, 253]);
+    const accepted = new Uint8Array([30, 29, 28, 27, 26, 25]);
+    let call = 0;
+    const spy = vi
+      .spyOn(crypto, "getRandomValues")
+      .mockImplementation(((target: Uint8Array) => {
+        target.set(call++ < 3 ? rejected : accepted);
+        return target;
+      }) as typeof crypto.getRandomValues);
+
+    try {
+      const code = generateCode();
+      expect(code).toHaveLength(6);
+      for (const ch of code) expect(CODE_ALPHABET).toContain(ch);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // 248 is the largest multiple of 31 that fits in a byte. If that constant
+  // ever drifts, every uniformity claim above it silently becomes false, so
+  // pin the arithmetic rather than the number alone.
+  it("uses the largest multiple of the alphabet size that fits in a byte", () => {
+    expect(REJECTION_THRESHOLD).toBe(
+      Math.floor(256 / CODE_ALPHABET.length) * CODE_ALPHABET.length,
+    );
+    expect(REJECTION_THRESHOLD % CODE_ALPHABET.length).toBe(0);
+  });
 });
 
 describe("pairing v1", () => {

@@ -108,3 +108,20 @@ CREATE TABLE ingest_buckets (
   saturated INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (fingerprint, instance_key)
 );
+
+-- Exists for sweepStaleIngestBuckets (src/obs/sweep.ts), not for the request
+-- path, which always addresses a row by the full (fingerprint, instance_key)
+-- primary key.
+--
+-- This table needs a sweep for a reason feedback_rate_limits does not: the
+-- primary key is (fingerprint, instance_key), so rolling into a new hour
+-- RESETS an existing row rather than creating a second one. A row is therefore
+-- only ever abandoned, never superseded -- and `instance_key` is per install,
+-- so every install that ever reports a given crash leaves one row behind
+-- permanently once it stops reporting. Nothing in the request path can
+-- reclaim those, because the request path only ever touches the exact key it
+-- was handed. Growth is bounded by (distinct fingerprints x distinct installs
+-- that ever hit them), which is unbounded in the only direction that matters:
+-- it never goes down on its own.
+CREATE INDEX ingest_buckets_hour_bucket_idx
+  ON ingest_buckets (hour_bucket);
