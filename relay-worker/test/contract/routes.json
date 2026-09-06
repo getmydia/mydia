@@ -24,13 +24,39 @@
   { "method": "GET", "path": "/tvdb/search?query=Glass%20Meridian" },
   { "method": "GET", "path": "/tvdb/series/331753" },
   { "method": "GET", "path": "/tvdb/series/331753/extended" },
-  { "method": "GET", "path": "/tvdb/series/331753/episodes" },
+  {
+    "method": "GET",
+    "path": "/tvdb/series/331753/episodes",
+    "note": "Both sides currently 400. TVDB's own OpenAPI spec defines this endpoint as GET /series/{id}/episodes/{season-type} with `page` as a QUERY parameter, but handler.ex bakes the page number into the path instead (.../episodes/default/page/{N}), which has never been a valid TVDB path -- confirmed against TVDB's spec, not guessed. mydia's own client never calls this route (it gets episodes from the *_extended endpoints), so the bug went unnoticed. Do NOT fix the Worker to work around this: it is deliberately bug-compatible with the Elixir during the port. This entry proves the two sides fail identically, not that the route works -- see task-9-report.md."
+  },
   { "method": "GET", "path": "/tvdb/series/999999999" },
+  { "method": "GET", "path": "/tvdb/seasons/720595" },
+  { "method": "GET", "path": "/tvdb/seasons/720595/extended" },
+  { "method": "GET", "path": "/tvdb/episodes/6279071" },
+  { "method": "GET", "path": "/tvdb/episodes/6279071/extended" },
+  { "method": "GET", "path": "/tvdb/artwork/62278912" },
   { "method": "GET", "path": "/openlibrary/search?q=Invented%20Book" },
+  { "method": "GET", "path": "/openlibrary/works/OL2618680W" },
+  { "method": "GET", "path": "/openlibrary/authors/OL381465A" },
+  { "method": "GET", "path": "/openlibrary/isbn/9780140328721" },
+  { "method": "GET", "path": "/music/search?query=Nebula%20Wraithcoil&type=artist" },
+  { "method": "GET", "path": "/music/artist/5b11f4ce-a62d-471e-81fc-a69a8278c7da" },
+  { "method": "GET", "path": "/music/release/eccae410-7577-4daa-b602-92d305828331" },
+  {
+    "method": "GET",
+    "path": "/music/release-group/1b022e01-4da6-387b-8658-8678046e4cef"
+  },
+  { "method": "GET", "path": "/music/recording/5fb524f1-8cc8-4c04-a921-e34c0a911ea7" },
+  {
+    "method": "GET",
+    "path": "/music/cover/eccae410-7577-4daa-b602-92d305828331",
+    "note": "Binary route (image/jpeg). Compared byte-for-byte in contract.test.ts, not as decoded text -- see the comment there on why a text/UTF-8 comparison cannot be trusted for binary bodies."
+  },
   {
     "method": "POST",
     "path": "/api/v1/subtitles/search",
-    "body": { "tmdb_id": 550, "media_type": "movie" }
+    "body": { "tmdb_id": 550, "media_type": "movie" },
+    "note": "This route's cache key is a SHA-256 of the request body (bodyFingerprint in cache/key.ts), not the URL, so the _cb cache-buster below is a no-op here -- see the comment in contract.test.ts for the Task 16 implication."
   },
   { "method": "POST", "path": "/api/v1/subtitles/search", "body": {} },
   {

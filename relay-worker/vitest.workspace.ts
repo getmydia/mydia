@@ -24,10 +24,17 @@ export default defineWorkspace([
       include: ["test/contract/**/*.test.ts"],
       environment: "node",
       // Real network round trips to a live service (two in parallel per
-      // route, one of which -- OpenLibrary search -- routinely takes longer
-      // than Vitest's 5s default) rather than the sub-millisecond in-process
-      // calls the rest of the suite makes.
-      testTimeout: 20_000,
+      // route) rather than the sub-millisecond in-process calls the rest of
+      // the suite makes. OpenLibrary search alone can take several seconds.
+      // MusicBrainz-backed routes (search, artist, release, release-group,
+      // recording) are the slowest and least predictable of all: observed
+      // 500ms-20s+ across otherwise-identical runs, most likely MusicBrainz's
+      // documented ~1req/s courtesy rate limit applied per source IP, shared
+      // across every mydia install this relay serves in production plus this
+      // test's own doubled (Worker+relay) concurrent calls. Not a body
+      // mismatch -- see task-9-report.md's diagnosis of the two timeouts this
+      // was raised to fix.
+      testTimeout: 60_000,
     },
   },
 ]);
