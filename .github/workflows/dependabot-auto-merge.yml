@@ -41,6 +41,13 @@ on:
       - CI / Nix
       - CI / Player Desktop
       - CI / Relay
+      # `CI / Relay` above is metadata-relay/ (Elixir). This is relay-worker/
+      # (the Cloudflare Worker) -- a different service, and one that had no
+      # pull_request check at all until 2026-09-06. Its absence is how PR #728
+      # merged a vitest bump that makes `npm ci` fail: the rollup this gate
+      # reads contained nothing from relay-worker, so all-green was accurate
+      # and useless. See .github/workflows/ci-relay-worker.yml.
+      - CI / Relay Worker
       - CI / Security
       - CI / Site
       - CI Server

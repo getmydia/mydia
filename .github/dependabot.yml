@@ -63,6 +63,31 @@ updates:
       metadata-relay-assets:
         patterns: ["*"]
 
+  # relay-worker is the Cloudflare Worker, a different service from
+  # metadata-relay above despite the name. It had no entry here until
+  # 2026-09-06, which is the first half of how it broke.
+  #
+  # Security updates fire repository-wide whether or not an ecosystem is
+  # configured here, so the only effect of the omission was that nothing kept
+  # relay-worker CURRENT between advisories. Its vitest sat on 2.1.9 until an
+  # advisory arrived, at which point the security updater offered the jump it
+  # always offers -- the latest, 5.0.0 -- landing well outside
+  # @cloudflare/vitest-pool-workers's `2.0.x - 3.2.x` peer range and breaking
+  # `npm ci` outright. That is the same drift-then-major-bump failure this
+  # file's header describes for the site tree.
+  #
+  # The other half was the absent pull_request check, fixed in
+  # .github/workflows/ci-relay-worker.yml. Weekly version updates here reduce
+  # how often a bump is a major one; that workflow is what stops a broken one
+  # merging either way.
+  - package-ecosystem: npm
+    directory: /relay-worker
+    schedule:
+      interval: weekly
+    groups:
+      relay-worker:
+        patterns: ["*"]
+
   - package-ecosystem: uv
     directory: /docs
     schedule:
