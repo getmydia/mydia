@@ -33,6 +33,10 @@ dependencies:
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
   dio: ^5.4.0
+  # Talks to org.freedesktop.portal.Flatpak so the Flatpak build can update
+  # itself. Plain Dart rather than a Flutter plugin, so it adds no platform
+  # channel and no build step, and it is only constructed inside the sandbox.
+  dbus: ^0.7.15
   path_provider: ^2.1.0
   dart_cast: 0.7.4
   bonsoir: ^7.1.5

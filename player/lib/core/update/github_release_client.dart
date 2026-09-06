@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
-import '../../domain/models/app_update.dart';
+import '../../domain/models/available_update.dart';
 
 /// Queries the GitHub Releases API for the latest Mydia player release.
 class GitHubReleaseClient {
@@ -32,9 +32,9 @@ class GitHubReleaseClient {
       final version = tagName.startsWith('v') ? tagName.substring(1) : tagName;
       final htmlUrl = data['html_url'] as String? ?? '';
       final name = data['name'] as String? ?? tagName;
-      final publishedAt = DateTime.tryParse(
-              data['published_at'] as String? ?? '') ??
-          DateTime.now();
+      final publishedAt =
+          DateTime.tryParse(data['published_at'] as String? ?? '') ??
+              DateTime.now();
 
       final assets = data['assets'] as List<dynamic>? ?? [];
       final pattern = _platformAssetPattern();

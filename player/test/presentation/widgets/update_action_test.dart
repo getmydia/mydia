@@ -3,23 +3,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/install_environment.dart';
 import 'package:player/core/update/update_provider.dart';
-import 'package:player/domain/models/app_update.dart';
+import 'package:player/domain/models/available_update.dart';
 import 'package:player/presentation/widgets/update_action.dart';
 
 class _FakeUpdateNotifier extends UpdateNotifier {
   _FakeUpdateNotifier(this._state);
 
   final UpdateState _state;
-  int applyCount = 0;
+  int requestCount = 0;
 
   @override
   UpdateState build() => _state;
 
-  // UpdateNotifier.applyUpdate reaches for `_platformUpdater`, a `late final`
-  // that only `build()` assigns. Overriding `build` without overriding this
-  // too throws LateInitializationError the moment the dialog is confirmed.
   @override
-  Future<void> applyUpdate() async => applyCount++;
+  Future<void> requestUpdate({
+    void Function(double progress)? onProgress,
+  }) async =>
+      requestCount++;
 }
 
 AppUpdate _update() => AppUpdate(
@@ -29,6 +29,9 @@ AppUpdate _update() => AppUpdate(
       releaseTitle: 'Faster library scans',
       publishedAt: DateTime.utc(2026, 8, 1),
     );
+
+const _flatpakUpdate =
+    FlatpakRemoteUpdate(releaseNotesUrl: 'https://example.invalid/releases');
 
 Future<void> _pump(
   WidgetTester tester, {
@@ -78,11 +81,11 @@ void main() {
 
     expect(find.textContaining('Mydia will close and update'), findsOneWidget);
     expect(find.textContaining('0.15.0'), findsOneWidget);
-    expect(notifier.applyCount, 0);
+    expect(notifier.requestCount, 0);
     expect(launched, isEmpty);
   });
 
-  testWidgets('confirming an in-place update applies it', (tester) async {
+  testWidgets('confirming an in-place update requests it', (tester) async {
     final notifier = _FakeUpdateNotifier(
       UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
     );
@@ -98,10 +101,10 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Update'));
     await tester.pumpAndSettle();
 
-    expect(notifier.applyCount, 1);
+    expect(notifier.requestCount, 1);
   });
 
-  testWidgets('cancelling an in-place update applies nothing', (tester) async {
+  testWidgets('cancelling an in-place update requests nothing', (tester) async {
     final notifier = _FakeUpdateNotifier(
       UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
     );
@@ -117,13 +120,14 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
 
-    expect(notifier.applyCount, 0);
+    expect(notifier.requestCount, 0);
   });
 
-  testWidgets('a Flatpak install names the command and downloads nothing',
-      (tester) async {
+  testWidgets(
+      'a Flatpak install requests the update through the backend directly, '
+      'with no dialog and no terminal command', (tester) async {
     final notifier = _FakeUpdateNotifier(
-      UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
+      UpdateState(currentVersion: '0.14.2', availableUpdate: _flatpakUpdate),
     );
     final launched = <Uri>[];
 
@@ -136,15 +140,15 @@ void main() {
     await tester.tap(find.text('go'));
     await tester.pumpAndSettle();
 
-    expect(find.text('flatpak update dev.mydia.player'), findsOneWidget);
-    expect(find.text('Copy command'), findsOneWidget);
-    // The whole point of the branch: no download, no browser tab.
-    expect(notifier.applyCount, 0);
+    // The portal already knows how to fetch and apply its own update, so
+    // this used to tell the user to run `flatpak update` themselves; now it
+    // just asks the backend to do it.
+    expect(notifier.requestCount, 1);
+    expect(find.byType(AlertDialog), findsNothing);
     expect(launched, isEmpty);
   });
 
-  testWidgets(
-      'a read-only install opens the release page and downloads nothing',
+  testWidgets('a read-only install opens the release page and requests nothing',
       (tester) async {
     final notifier = _FakeUpdateNotifier(
       UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
@@ -161,7 +165,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(launched, [Uri.parse('https://example.invalid/releases/0.15.0')]);
-    expect(notifier.applyCount, 0);
+    expect(notifier.requestCount, 0);
     expect(find.byType(AlertDialog), findsNothing);
   });
 
@@ -182,7 +186,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AlertDialog), findsNothing);
-    expect(notifier.applyCount, 0);
+    expect(notifier.requestCount, 0);
     expect(launched, isEmpty);
   });
 }

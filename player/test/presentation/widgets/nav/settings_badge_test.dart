@@ -5,7 +5,7 @@ import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/update/update_provider.dart';
-import 'package:player/domain/models/app_update.dart';
+import 'package:player/domain/models/available_update.dart';
 import 'package:player/presentation/widgets/nav/nav_badges.dart';
 
 class _FakeConnectionNotifier extends ConnectionNotifier {
@@ -30,9 +30,6 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 
   @override
   UpdateState build() => _state;
-
-  @override
-  Future<void> applyUpdate() async {}
 }
 
 const _idle = P2pStatus(

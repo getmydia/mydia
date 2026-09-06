@@ -14,11 +14,13 @@ import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
 import 'package:player/core/remote/remote_control_settings.dart';
+import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
+import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
 /// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
 /// `Box`, and the settings screen's row is the thing under test here, not a
@@ -153,6 +155,7 @@ Future<void> _pump(
   String version = '',
   Size size = const Size(1000, 1400),
   RegistrationStatus registration = const RegistrationIdle(),
+  UpdateState? updateState,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -172,7 +175,17 @@ Future<void> _pump(
           () => _FakeP2pStatusNotifier(_status),
         ),
         updateProvider.overrideWith(
-          () => _FakeUpdateNotifier(UpdateState(currentVersion: version)),
+          () => _FakeUpdateNotifier(
+            updateState ??
+                UpdateState(
+                  currentVersion: version,
+                  // A generic supported desktop platform, matching what this
+                  // suite's Linux test host reported before the row's gate
+                  // moved from PlatformUpdater.supportedOnCurrentPlatform
+                  // onto this.
+                  manualCheck: ManualCheckBehaviour.checksOnly,
+                ),
+          ),
         ),
         authStateProvider.overrideWith(_RecordingAuthNotifier.new),
         remoteControlSettingsProvider.overrideWith(
@@ -438,11 +451,35 @@ void main() {
       (tester) async {
     // A `flutter test` host on Linux always reports a supported platform, so
     // only this branch is reachable here. The absent branch is covered at the
-    // gate itself by test/core/update/platform_updater_test.dart, which
-    // exercises `supportedOnPlatform` for web, Android, and iOS.
+    // gate itself by test/core/update/update_host_test.dart, which exercises
+    // createUpdateBackend returning null for web, Android, and iOS.
     await _pump(tester);
 
     expect(find.byKey(const Key('check-for-updates-row')), findsOneWidget);
+  });
+
+  testWidgets(
+      'the check-for-updates row shows a spinner and disables while a '
+      'Flatpak check-and-install is in flight', (tester) async {
+    // The row's spinner used to key off isChecking alone, which only the
+    // checksOnly path (_refresh) ever sets. A Flatpak press goes straight to
+    // requestUpdate, which sets isApplying instead, so a multi-second
+    // check-and-install transaction showed no feedback at all.
+    await _pump(
+      tester,
+      updateState: const UpdateState(
+        manualCheck: ManualCheckBehaviour.checksAndInstalls,
+        isApplying: true,
+      ),
+    );
+
+    final row = find.byKey(const Key('check-for-updates-row'));
+    expect(
+      find.descendant(
+          of: row, matching: find.byType(CircularProgressIndicator)),
+      findsOneWidget,
+    );
+    expect(tester.widget<SettingsRow>(row).onTap, isNull);
   });
 
   testWidgets('no row shows a raw relay url or peer count', (tester) async {
@@ -487,38 +524,8 @@ void main() {
     });
   });
 
-  group('updateCheckSubtitle', () {
-    test('macOS says Sparkle owns it rather than claiming a clean check', () {
-      // Sparkle owns checking on macOS, so UpdateNotifier never runs one and
-      // availableUpdate stays null. Reusing the generic wording here would
-      // report "up to date" off the back of a check that never happened.
-      expect(
-        updateCheckSubtitle(isMacOS: true, availableVersion: null),
-        'Opens the Sparkle update dialog',
-      );
-    });
-
-    test('macOS wording wins even when a version is somehow known', () {
-      expect(
-        updateCheckSubtitle(isMacOS: true, availableVersion: '0.15.0'),
-        'Opens the Sparkle update dialog',
-      );
-    });
-
-    test('elsewhere an available version is named', () {
-      expect(
-        updateCheckSubtitle(isMacOS: false, availableVersion: '0.15.0'),
-        'v0.15.0 available',
-      );
-    });
-
-    test('elsewhere no available version reads as up to date', () {
-      expect(
-        updateCheckSubtitle(isMacOS: false, availableVersion: null),
-        "You're up to date",
-      );
-    });
-  });
+  // updateCheckSubtitle's own coverage lives in update_card_test.dart now,
+  // alongside the card that shares its Flatpak wording.
 
   group('remote control registration status', () {
     testWidgets('shows the retry row only when registration has failed',

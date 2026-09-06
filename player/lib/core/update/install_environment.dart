@@ -1,6 +1,8 @@
-import 'dart:io' show File, FileSystemEntity, Platform;
+import 'dart:io' show File, Platform;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+
+import 'updaters/linux_updater.dart';
 
 /// How the running install can be replaced.
 ///
@@ -55,17 +57,21 @@ enum InstallEnvironment {
         : InstallEnvironment.readOnly;
   }
 
-  /// Whether the directory holding the running executable is writable.
+  /// Whether [path] is writable, or the directory holding the running
+  /// executable when [path] is omitted.
   ///
-  /// Lifted from `LinuxUpdater._isInstallDirWritable` so the updater and the
-  /// UI ask one question and get one answer.
-  static bool installDirWritable() {
-    try {
-      final installDir = File(Platform.resolvedExecutable).parent;
-      return FileSystemEntity.isDirectorySync(installDir.path) &&
-          installDir.statSync().mode & 0x80 != 0; // owner write bit
-    } catch (_) {
-      return false;
-    }
+  /// Delegates to `LinuxUpdater.installDirWritable`, which probes with a real
+  /// write rather than reading permission bits. A root-owned 0755 directory
+  /// has its owner write bit set, which a bit check reads as writable even
+  /// though this process cannot write it; only an actual write tells the
+  /// truth. Two implementations of that probe would let this one drift back
+  /// to the bit check while the updater's stayed fixed. [path] exists so a
+  /// test can point this at a directory it does not own, the way
+  /// `LinuxUpdater.installDirWritable`'s own tests do, without the running
+  /// executable's directory getting in the way.
+  @visibleForTesting
+  static bool installDirWritable({String? path}) {
+    final target = path ?? File(Platform.resolvedExecutable).parent.path;
+    return LinuxUpdater.installDirWritable(path: target);
   }
 }

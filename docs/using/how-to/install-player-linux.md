@@ -11,7 +11,10 @@ flatpak install mydia dev.mydia.player
 flatpak run dev.mydia.player
 ```
 
-Updates arrive with `flatpak update`, alongside everything else on your system.
+The player updates itself. When a new build reaches the remote you installed
+from, Settings offers to install it and then to restart. `flatpak update` and
+your desktop's software centre keep working exactly as before; nothing has to
+be done in the app.
 
 ## Beta
 

@@ -43,6 +43,12 @@ finish-args:
   - --device=dri
   # Stop the screen blanking during playback.
   - --talk-name=org.freedesktop.ScreenSaver
+  # The in-app updater talks to org.freedesktop.portal.Flatpak, which needs no
+  # entry here: sandboxed apps may talk to any org.freedesktop.portal.* name by
+  # default. Verified against portal version 8 with CreateUpdateMonitor and
+  # Spawn(FLATPAK_SPAWN_FLAGS_LATEST_VERSION). Do not add a --talk-name for it,
+  # and do not remove this note, or someone will conclude the updater is
+  # missing a permission and grant it one it does not need.
   # flutter_secure_storage reaches the host Secret Service through libsecret,
   # which talks D-Bus. Without this the sandbox reports the name as unknown,
   # every credential write fails, and a pairing silently does not survive a

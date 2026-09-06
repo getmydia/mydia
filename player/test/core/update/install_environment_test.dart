@@ -1,7 +1,32 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/update/install_environment.dart';
 
 void main() {
+  group('InstallEnvironment.installDirWritable', () {
+    test('a directory we do not own reports not writable', () {
+      // The shape that fooled the old bit check: /etc is 0755, so the owner
+      // write bit is set, but root owns it and we do not. mode & 0x80 said
+      // writable here; the real probe LinuxUpdater.installDirWritable does
+      // not. Mirrors the equivalent test in
+      // test/core/update/updaters/linux_updater_test.dart, which exercises
+      // the same probe directly.
+      //
+      // The root guard must not call installDirWritable itself. Root bypasses
+      // DAC checks, so under root the probe legitimately succeeds and there
+      // is nothing to assert. Asking the function under test whether to skip
+      // would let a revert to the bit check answer "writable", skip the
+      // test, and pass CI green while the bug was back.
+      if (Process.runSync('id', ['-u']).stdout.toString().trim() == '0') {
+        markTestSkipped('running as root, where DAC checks are bypassed');
+        return;
+      }
+
+      expect(InstallEnvironment.installDirWritable(path: '/etc'), isFalse);
+    }, skip: !Platform.isLinux);
+  });
+
   group('InstallEnvironment.resolve', () {
     test('a writable Linux install can be replaced in place', () {
       expect(

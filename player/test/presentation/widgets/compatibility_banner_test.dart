@@ -6,7 +6,7 @@ import 'package:player/core/compatibility/compatibility_provider.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/update/install_environment.dart';
 import 'package:player/core/update/update_provider.dart';
-import 'package:player/domain/models/app_update.dart';
+import 'package:player/domain/models/available_update.dart';
 import 'package:player/presentation/widgets/compatibility_banner.dart';
 
 /// Pumps the banner over a fixed state, bypassing the provider's own fetch.
@@ -89,7 +89,10 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   UpdateState build() => _state;
 
   @override
-  Future<void> applyUpdate() async => applyCount++;
+  Future<void> requestUpdate({
+    void Function(double progress)? onProgress,
+  }) async =>
+      applyCount++;
 }
 
 void main() {

@@ -4,7 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path_provider/path_provider.dart';
 
-import '../../../domain/models/app_update.dart';
+import '../../../domain/models/available_update.dart';
 import '../platform_updater.dart';
 
 /// Windows updater: downloads the Inno Setup installer and runs it silently.

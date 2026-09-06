@@ -7,8 +7,8 @@ import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/player/platform_features.dart';
 import '../../core/theme/colors.dart';
-import '../../core/update/platform_updater.dart';
 import '../../core/update/update_dismissal_provider.dart';
+import '../../core/update/update_host.dart';
 import '../../core/update/update_provider.dart';
 import 'banner_button.dart';
 import 'update_action.dart';
@@ -93,8 +93,7 @@ class UpdateBanner extends ConsumerWidget {
         compatibility == null && !compatibilityAsync.hasError;
 
     final visible = shouldShowUpdateBanner(
-      supported:
-          supportedOverride ?? PlatformUpdater.supportedOnCurrentPlatform,
+      supported: supportedOverride ?? UpdateHost.current().supportsInAppUpdates,
       isMacOS: PlatformFeatures.isMacOS,
       availableVersion: update?.version,
       dismissedVersions: ref.watch(updateDismissalProvider).value,
@@ -108,6 +107,15 @@ class UpdateBanner extends ConsumerWidget {
     // The null check is redundant with `visible`, and present so the compiler
     // can promote `update` below.
     if (!visible || update == null) return const SizedBox.shrink();
+
+    // shouldShowUpdateBanner already required availableVersion (== this same
+    // update.version) to be non-null to reach here, but that check ran on a
+    // local variable, not this getter, so the compiler cannot carry the
+    // promotion across. Re-deriving it as a local both satisfies the type
+    // checker and keeps a versionless FlatpakRemoteUpdate, which the check
+    // above already excludes, from ever reaching a "null" literal below.
+    final version = update.version;
+    if (version == null) return const SizedBox.shrink();
 
     final failed = updateState.error != null;
     final color = failed ? AppColors.error : AppColors.info;
@@ -131,7 +139,7 @@ class UpdateBanner extends ConsumerWidget {
               child: Text(
                 failed
                     ? updateState.error!
-                    : 'Mydia Player ${update.version} is available.',
+                    : 'Mydia Player $version is available.',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -158,9 +166,8 @@ class UpdateBanner extends ConsumerWidget {
               color: color,
               visualDensity: VisualDensity.compact,
               tooltip: 'Dismiss',
-              onPressed: () => ref
-                  .read(updateDismissalProvider.notifier)
-                  .dismiss(update.version),
+              onPressed: () =>
+                  ref.read(updateDismissalProvider.notifier).dismiss(version),
             ),
           ],
         ),

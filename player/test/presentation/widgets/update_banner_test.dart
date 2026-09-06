@@ -9,7 +9,7 @@ import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/update/update_dismissal_provider.dart';
 import 'package:player/core/update/update_provider.dart';
-import 'package:player/domain/models/app_update.dart';
+import 'package:player/domain/models/available_update.dart';
 import 'package:player/presentation/widgets/update_banner.dart';
 
 class _FakeUpdateNotifier extends UpdateNotifier {
@@ -20,7 +20,9 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   UpdateState build() => _state;
 
   @override
-  Future<void> applyUpdate() async {}
+  Future<void> requestUpdate({
+    void Function(double progress)? onProgress,
+  }) async {}
 }
 
 class _FakeDismissalNotifier extends UpdateDismissalNotifier {
@@ -218,6 +220,29 @@ void main() {
       expect(find.byType(Text), findsNothing);
       expect(find.byType(Container), findsNothing);
       expect(find.byType(Icon), findsNothing);
+    });
+
+    testWidgets('renders nothing for a versionless Flatpak update',
+        (tester) async {
+      // shouldShowUpdateBanner's null-version guard exists to keep a
+      // FlatpakRemoteUpdate, which never has one, from ever reaching the
+      // "Mydia Player $version is available" text below and rendering the
+      // literal word "null". The update still surfaces through UpdateCard and
+      // the settings badge, neither of which need a version to dismiss by.
+      await _pump(
+        tester,
+        state: const UpdateState(
+          currentVersion: '0.14.2',
+          availableUpdate: FlatpakRemoteUpdate(
+            releaseNotesUrl: 'https://example.invalid/releases',
+          ),
+        ),
+      );
+
+      expect(find.byType(Text), findsNothing);
+      expect(find.byType(Container), findsNothing);
+      expect(find.byType(Icon), findsNothing);
+      expect(find.textContaining('null'), findsNothing);
     });
 
     testWidgets('renders nothing for a dismissed version', (tester) async {

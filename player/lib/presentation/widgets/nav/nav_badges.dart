@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/player/platform_features.dart';
-import '../../../core/update/platform_updater.dart';
+import '../../../core/update/update_host.dart';
 import '../../../core/update/update_provider.dart';
 import '../connection_status_dot.dart';
 import 'bottom_nav.dart';
@@ -24,7 +24,7 @@ class SettingsBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final supported =
-        supportedOverride ?? PlatformUpdater.supportedOnCurrentPlatform;
+        supportedOverride ?? UpdateHost.current().supportsInAppUpdates;
     final updatePending = supported &&
         !PlatformFeatures.isMacOS &&
         ref.watch(updateProvider).availableUpdate != null;
