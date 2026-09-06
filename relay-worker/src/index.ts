@@ -9,6 +9,7 @@ import { registerCrashRoutes } from "./crashes/ingest";
 import { registerFeedbackRoutes } from "./feedback/ingest";
 import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
+import { runScheduledSweep } from "./obs/sweep";
 
 export const app = new Hono<{ Bindings: Env }>();
 
@@ -73,4 +74,14 @@ registerFeedbackRoutes(app);
 // 404 catch-all, matching the Elixir router's behaviour.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Cron Trigger (wrangler.jsonc's triggers.crons), never the request path.
+  // Sweeps two tables that grow without an eviction path otherwise:
+  // feedback_rate_limits (src/obs/sweep.ts's justification for why this is
+  // required, not optional, for that table specifically) and
+  // pairing_claims via pairing/store.ts's purgeExpiredClaims.
+  async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    await runScheduledSweep(env);
+  },
+} satisfies ExportedHandler<Env>;

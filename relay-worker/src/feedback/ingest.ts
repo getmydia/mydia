@@ -196,20 +196,47 @@ interface RateLimitBucketRow {
   count: number;
 }
 
-// Mirrors router.ex's feedback_rate_limit_instance_id/2 exactly, including
-// its T-236 anti-collision namespacing: the supplied and fallback cases are
-// tagged with fixed, disjoint literal prefixes applied BEFORE the
+// SHA-256 hex digest, same primitive crashes/ingest.ts's fingerprintOf uses.
+// Bounds every bucket_key to a fixed size regardless of what a client sends
+// -- see feedbackInstanceRateLimitKey below for why that matters.
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Mirrors router.ex's feedback_rate_limit_instance_id/2's T-236
+// anti-collision namespacing: the supplied and fallback cases are tagged
+// with fixed, disjoint literal prefixes applied BEFORE the
 // caller-controlled or IP-derived value, not interpolated together into one
 // string a caller could reproduce. A caller sending
 // instance_id: "fallback:<victim ip>" therefore produces
-// "instance:supplied:fallback:<victim ip>", which can never equal another
-// caller's real fallback key "instance:fallback:<their ip>" -- only the
-// fallback path can ever produce a key with that prefix.
-export function feedbackInstanceRateLimitKey(rawInstanceId: unknown, ip: string): string {
+// "instance:supplied:<hash of that literal string>", which can never equal
+// another caller's real fallback key "instance:fallback:<hash of their
+// ip>" -- only the fallback path can ever produce a key with that prefix,
+// and hashing doesn't change that: the prefix, not the hash, is what
+// prevents the collision.
+//
+// The value is hashed (not used raw) because, unlike an IP address --
+// bounded in size and cardinality by Cloudflare's own edge, which sets
+// cf-connecting-ip and isn't something an attacker can cheaply manufacture
+// more of -- `instance_id` is an arbitrary client-supplied JSON string with
+// no length cap anywhere (validateSubmission only bounds `message`), and
+// this check runs BEFORE validation. Without hashing, one row lands in
+// feedback_rate_limits per distinct instance_id ever sent, sized by
+// whatever the attacker chose to send, at zero attacker cost and no upper
+// bound -- unlike crashes/ingest.ts's ingest_buckets, whose cardinality is
+// bounded by real crash/install diversity, not attacker-paced. Hashing
+// makes every row a fixed ~90 bytes regardless of input; sweepStale
+// FeedbackRateLimits (src/obs/sweep.ts) bounds the row *count* the same way
+// Elixir's ETS-backed RateLimiter self-evicts via its own periodic cleaner.
+export async function feedbackInstanceRateLimitKey(
+  rawInstanceId: unknown,
+  ip: string,
+): Promise<string> {
   if (typeof rawInstanceId === "string" && rawInstanceId !== "") {
-    return `instance:supplied:${rawInstanceId}`;
+    return `instance:supplied:${await sha256Hex(rawInstanceId)}`;
   }
-  return `instance:fallback:${ip}`;
+  return `instance:fallback:${await sha256Hex(ip)}`;
 }
 
 export interface FeedbackRateLimitResult {
@@ -275,7 +302,7 @@ export async function checkFeedbackRateLimit(
   const ipResult = await checkAndIncrementBucket(db, `ip:${ip}`, hourBucket);
   if (!ipResult.allowed) return ipResult;
 
-  const instanceKey = feedbackInstanceRateLimitKey(rawInstanceId, ip);
+  const instanceKey = await feedbackInstanceRateLimitKey(rawInstanceId, ip);
   const instanceResult = await checkAndIncrementBucket(db, instanceKey, hourBucket);
 
   return {

@@ -36,5 +36,16 @@
     { "name": "PROXY_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } },
     { "name": "PAIRING_CREATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } },
     { "name": "PAIRING_READ_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
-  ]
+  ],
+  // Drives src/index.ts's scheduled() handler (src/obs/sweep.ts), which
+  // deletes stale feedback_rate_limits rows and expired pairing_claims
+  // rows. Hourly matches the rate-limit bucket's own granularity: at most
+  // two hours of feedback_rate_limits rows (current + previous) are ever
+  // resident between sweeps, and pairing claims are short-lived (minutes),
+  // so hourly is frequent enough that its own table growth stays bounded
+  // between runs without needing sub-hourly scheduling. Cron Triggers cost
+  // nothing on Workers.
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
 }

@@ -156,20 +156,48 @@ describe("sanitizeHeaderValue", () => {
 // router.ex's feedback_rate_limit_instance_id/2, including its T-236
 // anti-collision namespacing.
 describe("feedbackInstanceRateLimitKey", () => {
-  it("namespaces a supplied instance_id separately from the IP fallback", () => {
-    expect(feedbackInstanceRateLimitKey("abc", "1.2.3.4")).toBe("instance:supplied:abc");
-    expect(feedbackInstanceRateLimitKey(undefined, "1.2.3.4")).toBe("instance:fallback:1.2.3.4");
-    expect(feedbackInstanceRateLimitKey(null, "1.2.3.4")).toBe("instance:fallback:1.2.3.4");
-    expect(feedbackInstanceRateLimitKey("", "1.2.3.4")).toBe("instance:fallback:1.2.3.4");
+  it("namespaces a supplied instance_id separately from the IP fallback", async () => {
+    expect(await feedbackInstanceRateLimitKey("abc", "1.2.3.4")).toMatch(
+      /^instance:supplied:[0-9a-f]{64}$/,
+    );
+    expect(await feedbackInstanceRateLimitKey(undefined, "1.2.3.4")).toMatch(
+      /^instance:fallback:[0-9a-f]{64}$/,
+    );
+    expect(await feedbackInstanceRateLimitKey(null, "1.2.3.4")).toMatch(
+      /^instance:fallback:[0-9a-f]{64}$/,
+    );
+    expect(await feedbackInstanceRateLimitKey("", "1.2.3.4")).toMatch(
+      /^instance:fallback:[0-9a-f]{64}$/,
+    );
+  });
+
+  // instance_id is an arbitrary client-supplied string with no length cap
+  // anywhere (validateSubmission only bounds `message`), and this check
+  // runs BEFORE validation -- so an unhashed key would let a row's size in
+  // feedback_rate_limits be attacker-chosen. Hashing bounds it to a fixed
+  // size regardless of input length.
+  it("produces a fixed-length key regardless of instance_id length", async () => {
+    const short = await feedbackInstanceRateLimitKey("a", "1.2.3.4");
+    const long = await feedbackInstanceRateLimitKey("x".repeat(50_000), "1.2.3.4");
+    expect(short.length).toBe(long.length);
+  });
+
+  it("still lands two different (long) instance ids in different buckets", async () => {
+    const a = await feedbackInstanceRateLimitKey("x".repeat(50_000), "1.2.3.4");
+    const b = await feedbackInstanceRateLimitKey("y".repeat(50_000), "1.2.3.4");
+    expect(a).not.toBe(b);
   });
 
   // Regression guard for the exact T-236 attack router.ex's own test suite
   // covers: a caller-supplied instance_id crafted to look like the fallback
-  // key format must not land in the same bucket as the real fallback.
-  it("cannot be made to collide with another IP's fallback bucket by crafting instance_id", () => {
+  // key format must not land in the same bucket as the real fallback. Must
+  // still hold after hashing -- the "supplied:"/"fallback:" prefix, not the
+  // hash, is what prevents the collision, so hashing the suffix must not
+  // have disturbed it.
+  it("cannot be made to collide with another IP's fallback bucket by crafting instance_id", async () => {
     const victimIp = "203.0.113.99";
-    const attackerKey = feedbackInstanceRateLimitKey(`fallback:${victimIp}`, "203.0.113.1");
-    const victimKey = feedbackInstanceRateLimitKey(undefined, victimIp);
+    const attackerKey = await feedbackInstanceRateLimitKey(`fallback:${victimIp}`, "203.0.113.1");
+    const victimKey = await feedbackInstanceRateLimitKey(undefined, victimIp);
     expect(attackerKey).not.toBe(victimKey);
   });
 });
