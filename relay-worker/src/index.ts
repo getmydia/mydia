@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "./env";
+import { registerTmdbRoutes } from "./proxy/tmdb";
 
 export const app = new Hono<{ Bindings: Env }>();
 
@@ -23,6 +24,8 @@ app.get("/stats", (c) =>
     cache: { backend: "cloudflare-cache-api+kv" },
   }),
 );
+
+registerTmdbRoutes(app);
 
 // 404 catch-all, matching the Elixir router's behaviour.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));

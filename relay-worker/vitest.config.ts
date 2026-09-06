@@ -5,6 +5,13 @@ export default defineWorkersConfig({
     poolOptions: {
       workers: {
         wrangler: { configPath: "./wrangler.jsonc" },
+        // Test-only secret so upstream-proxying tests (fetchMock-intercepted)
+        // exercise the real forwarding path instead of the "not configured"
+        // 503. Production keys are set with `wrangler secret put` and never
+        // live in source.
+        miniflare: {
+          bindings: { TMDB_API_KEY: "test-tmdb-key" },
+        },
       },
     },
   },
