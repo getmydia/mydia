@@ -13,6 +13,7 @@ export default defineWorkersConfig({
           bindings: {
             TMDB_API_KEY: "test-tmdb-key",
             TVDB_API_KEY: "test-tvdb-key",
+            SUBDL_API_KEY: "test-subdl-key",
           },
         },
       },

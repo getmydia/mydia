@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "./env";
 import { registerTmdbRoutes } from "./proxy/tmdb";
 import { registerTvdbRoutes } from "./proxy/tvdb";
+import { registerSubdlRoutes, subdlApiKey } from "./proxy/subdl";
 
 export const app = new Hono<{ Bindings: Env }>();
 
@@ -10,7 +11,10 @@ app.get("/health", (c) =>
     status: "ok",
     service: "metadata-relay",
     version: c.env.RELAY_VERSION ?? "0.0.0",
-    subtitles_configured: Boolean(c.env.SUBDL_API_KEY),
+    // subdlApiKey treats a blank/whitespace-only key as absent, same as the
+    // search route does, so this can't report "configured" for a value that
+    // would 503 on the first real search.
+    subtitles_configured: Boolean(subdlApiKey(c.env)),
   }),
 );
 
@@ -28,6 +32,7 @@ app.get("/stats", (c) =>
 
 registerTmdbRoutes(app);
 registerTvdbRoutes(app);
+registerSubdlRoutes(app);
 
 // 404 catch-all, matching the Elixir router's behaviour.
 app.all("*", (c) => c.json({ error: "Not found" }, 404));

@@ -21,7 +21,17 @@ describe("GET /health", () => {
     expect(typeof body.subtitles_configured).toBe("boolean");
   });
 
-  it("reports subtitles_configured false when no SubDL key is set", async () => {
+  it("reports subtitles_configured true when a SubDL key is set", async () => {
+    // Task 6 added a global SUBDL_API_KEY test binding (vitest.config.ts) so
+    // the search/download routes can be exercised without 503ing first, which
+    // means every SELF.fetch dispatch in this pool now sees a configured key.
+    // SELF.fetch has no per-call env override (bindings are fixed for the
+    // whole pool at startup; verified empirically that mutating the imported
+    // `env` object does not propagate to the dispatched worker), so the
+    // "absent key" branch can no longer be reached through this route test.
+    // It is covered directly instead, by src/proxy/subdl.ts's exported
+    // subdlApiKey helper -- see test/proxy/subdl.test.ts's "subdlApiKey"
+    // block for the absent/blank cases this test used to assert.
     const res = await SELF.fetch("https://relay.mydia.dev/health");
     const body = await res.json<{
       status: string;
@@ -29,6 +39,6 @@ describe("GET /health", () => {
       version: string;
       subtitles_configured: boolean;
     }>();
-    expect(body.subtitles_configured).toBe(false);
+    expect(body.subtitles_configured).toBe(true);
   });
 });
