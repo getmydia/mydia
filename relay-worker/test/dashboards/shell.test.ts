@@ -51,3 +51,10 @@ describe("page shell", () => {
     }
   });
 });
+
+describe("no raw HTML escape hatch survives", () => {
+  it("no longer exports a string-body layout shim", async () => {
+    const mod = await import("../../src/dashboards/layout");
+    expect("layout" in mod).toBe(false);
+  });
+});

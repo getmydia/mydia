@@ -105,13 +105,3 @@ export function Layout({ title, children }: { title: string; children?: Child })
 export function page(title: string, body: Child) {
   return html`<!doctype html>${(<Layout title={title}>{body}</Layout>)}`;
 }
-
-// TEMPORARY compatibility shim, removed in Task 5 of this plan.
-//
-// errors.ts and feedback.ts still build their bodies as HTML strings and
-// call layout(title, body). This keeps them working, and the suite green,
-// until each is converted. raw() here is safe ONLY because those two callers
-// escape every interpolated value themselves; it must not outlive them.
-export function layout(title: string, body: string) {
-  return page(title, raw(body));
-}
