@@ -1,0 +1,98 @@
+name: CI / Relay Worker
+
+# The Cloudflare Worker in relay-worker/, NOT the Elixir service in
+# metadata-relay/. Those are two different services with confusingly similar
+# names, and conflating them is exactly how this file came to be needed.
+#
+# Before this workflow existed, `relay-worker/**` had no pull_request check of
+# any kind. `ci-relay.yml` looks like it would cover it and does not: its paths
+# are `metadata-relay/**`. The only workflow that touched relay-worker was
+# deploy-relay.yml, which triggers on push to master and on tags, never on
+# pull_request.
+#
+# The consequence, on 2026-09-06: dependabot PR #728 bumped vitest 2.1.9 -> 5.0.0
+# in relay-worker, straight out of @cloudflare/vitest-pool-workers's
+# `2.0.x - 3.2.x` peer range, which makes `npm ci` fail outright with ERESOLVE.
+# The PR collected thirty green checks, none of which installed or ran anything
+# in relay-worker, so dependabot-auto-merge.yml's gate read an all-green rollup
+# and merged it. `gh run list --commit eb22012d1` then returned zero runs in any
+# workflow, so even the post-merge deploy-staging signal never arrived. Master
+# sat broken and green at the same time.
+#
+# That gate is not at fault and needs no change in kind: scripts/dependabot-gate.sh
+# already waits on the FULL rollup and blocks on anything not
+# SUCCESS/SKIPPED/NEUTRAL. It had nothing to block on. This workflow is the
+# missing contribution to that rollup, which is why `CI / Relay Worker` is also
+# added to dependabot-auto-merge.yml's `workflows:` list -- without that entry
+# the gate would not re-evaluate when this workflow finishes, and could decide
+# before it reported.
+#
+# Steps deliberately mirror deploy-relay.yml's deploy-staging job (Install /
+# Test / Typecheck). The duplication is the point: this runs BEFORE merge, that
+# one runs after, and a change that passes here cannot surprise the deploy.
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - "relay-worker/**"
+      - ".github/workflows/ci-relay-worker.yml"
+  pull_request:
+    branches:
+      - "**"
+    paths:
+      - "relay-worker/**"
+      - ".github/workflows/ci-relay-worker.yml"
+
+# A second push to the same ref supersedes the first: unlike a deploy, a
+# cancelled test run leaves nothing half-applied.
+concurrency:
+  group: ci-relay-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Relay Worker / Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: relay-worker
+
+    steps:
+      # persist-credentials: false because the two steps below run
+      # pull-request-controlled code. actions/checkout otherwise leaves
+      # GITHUB_TOKEN in .git/config as an http.extraheader, where an npm
+      # install script or a test file could read it. This job only needs the
+      # tree, never authenticated git, so there is nothing to trade away.
+      # Matches ci-site.yml, ci-player.yml, ci-fastlane.yml, ci-appcast.yml and
+      # dependabot-auto-merge.yml.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: relay-worker/package-lock.json
+
+      # `npm ci`, not `npm install`, and that distinction is load-bearing here.
+      # `npm ci` fails on a lockfile whose peer dependencies do not resolve,
+      # which is precisely the breakage that reached master unnoticed. `npm
+      # install` would paper over it by re-resolving, and would also rewrite
+      # package-lock.json inside CI, so a lockfile defect would never fail a
+      # build.
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
