@@ -21,11 +21,24 @@ defmodule Mydia.Repo.Migrations.ScopeProviderIdUniquenessByType do
   Ecto-convention name. Keeping them partial makes SQLite and PostgreSQL report
   the same literal index name, which is what `MediaItem.changeset/2`'s
   `unique_constraint` calls have to match.
+
+  The drops are `drop_if_exists` because `media_items_tmdb_id_index` is not
+  present on every install. Until 2025-11-24 the table was created by a raw
+  `CREATE TABLE` carrying `tmdb_id INTEGER UNIQUE` inline, so SQLite enforced
+  the uniqueness through `sqlite_autoindex_media_items_2` and no named index
+  ever existed. A plain `drop` raised `no such index` on those databases, and
+  since `Ecto.Migrator` sits in the supervision tree that is a boot loop, not a
+  failed upgrade.
+
+  Removing that inline constraint needs a table rebuild, which this migration
+  deliberately does not attempt. On such an install the composite indexes are
+  created and correct, but the surviving column-level `UNIQUE` still keeps a
+  movie and a show from sharing a `tmdb_id`.
   """
 
   def up do
-    drop unique_index(:media_items, [:tmdb_id], name: :media_items_tmdb_id_index)
-    drop unique_index(:media_items, [:tvdb_id], name: :media_items_tvdb_id_index)
+    drop_if_exists unique_index(:media_items, [:tmdb_id], name: :media_items_tmdb_id_index)
+    drop_if_exists unique_index(:media_items, [:tvdb_id], name: :media_items_tvdb_id_index)
 
     create unique_index(:media_items, [:type, :tmdb_id],
              where: "tmdb_id IS NOT NULL",
