@@ -43,4 +43,22 @@ describe("forwardParams", () => {
 
     expect(out.getAll("with_genres")).toEqual(["28", "12"]);
   });
+
+  it("forwards params named after Object.prototype members", () => {
+    // A naive `key in inject` check walks the prototype chain, so params
+    // named toString/constructor/etc are silently dropped even though
+    // `inject` never owns those keys. This is the exact allowlist-by-accident
+    // this task's central rule forbids.
+    const incoming = new URLSearchParams({
+      toString: "1",
+      constructor: "2",
+      api_key: "ATTACKER",
+    });
+
+    const out = forwardParams(incoming, { api_key: "SECRET" });
+
+    expect(out.get("toString")).toBe("1");
+    expect(out.get("constructor")).toBe("2");
+    expect(out.getAll("api_key")).toEqual(["SECRET"]);
+  });
 });

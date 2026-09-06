@@ -39,7 +39,12 @@ export async function cacheGet(
   opts: { kv?: boolean } = {},
 ): Promise<Response | null> {
   const edge = await caches.default.match(cacheUrl(key));
-  if (edge) return edge;
+  // A Response read back from the Cache API has immutable headers. Every
+  // caller of cacheGet eventually wants to stamp something onto the
+  // response it gets back (x-relay-cache today, more later), so return a
+  // fresh Response here rather than letting each call site discover the
+  // "Can't modify immutable headers" TypeError on its own.
+  if (edge) return new Response(edge.body, edge);
 
   if (!opts.kv) return null;
 

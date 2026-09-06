@@ -12,7 +12,7 @@ export function forwardParams(
 ): URLSearchParams {
   const out = new URLSearchParams();
   for (const [key, value] of incoming.entries()) {
-    if (key in inject) continue;
+    if (Object.hasOwn(inject, key)) continue;
     out.append(key, value);
   }
   for (const [key, value] of Object.entries(inject)) {
