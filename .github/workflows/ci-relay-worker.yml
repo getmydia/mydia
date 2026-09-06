@@ -63,8 +63,17 @@ jobs:
         working-directory: relay-worker
 
     steps:
+      # persist-credentials: false because the two steps below run
+      # pull-request-controlled code. actions/checkout otherwise leaves
+      # GITHUB_TOKEN in .git/config as an http.extraheader, where an npm
+      # install script or a test file could read it. This job only needs the
+      # tree, never authenticated git, so there is nothing to trade away.
+      # Matches ci-site.yml, ci-player.yml, ci-fastlane.yml, ci-appcast.yml and
+      # dependabot-auto-merge.yml.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v7
