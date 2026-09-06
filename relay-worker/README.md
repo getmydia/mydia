@@ -468,18 +468,22 @@ collision with anything public.
 
 That's it — one application, one path pattern, no exclusion list to maintain.
 
-**Step 1 has already been rehearsed on staging.** A second, identical
-application covers `mydia-relay-staging.arsfeld.workers.dev/admin*` with the
-same `/admin*` path scope and the same maintainer-email policy. It exists so
-the maintainer dashboards are usable on staging, and it doubles as proof that
-the path scoping this runbook depends on behaves as described: it was verified
-to return 302 on both `/admin` routes while leaving `GET /health` at 200 and
-`POST /feedback` at 201. Configure the production application to match it.
+**Rehearse this on staging first.** `mydia-relay-staging.arsfeld.workers.dev`
+takes its own self-hosted application, with the same `/admin*` path scope and
+the same maintainer-email policy. Doing staging first exercises the path
+scoping this runbook depends on against a deploy that serves no real traffic,
+and it is the cheapest place to find out if that scoping does not behave as
+described here.
 
-If the production application ever behaves differently from the staging one,
-the difference is in the application config, not in the Worker. The Worker
-treats every hostname the same except for the single allowlist entry described
-above.
+Note that staging's `/admin/*` becomes reachable as soon as
+`ADMIN_ACCESS_HOSTNAME` names its hostname, whether or not the Access
+application exists: the Worker's allowlist controls reachability, Access
+controls who may look. Create the application first, not after.
+
+Configure the production application to match staging's, and still run the
+verification curls below against production. A working staging application is
+encouraging, not evidence about production: Access is configured per hostname,
+and the two are configured independently.
 
 **Verify both halves after configuring Access:**
 
