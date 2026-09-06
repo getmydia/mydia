@@ -1,0 +1,25 @@
+{
+  "name": "mydia-relay-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:contract": "vitest run test/contract",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.12.0",
+    "@cloudflare/workers-types": "^4.20260310.1",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "~2.1.0",
+    "wrangler": "4.72.0"
+  }
+}
