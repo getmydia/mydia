@@ -5,16 +5,18 @@ beforeAll(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 });
 
-// Cloudflare Access is configured per hostname: the runbook's Step 1
-// application covers `relay.mydia.dev/admin*` and nothing else. The Worker is
-// ALSO live on its `*.workers.dev` subdomain from the first successful CI
-// deploy, plus the versioned preview URLs alongside it, and Access never sees
-// those requests -- so without this deny the maintainer dashboards would be
-// anonymously readable there for the whole window between the first deploy
-// and the Step 4 cutover.
+// Cloudflare Access is configured per hostname, and it CAN cover a
+// workers.dev hostname -- the staging deploy subdomain has an application
+// scoped to `/admin*`, which is why ACCESS_HOSTNAME below is served rather
+// than denied.
 //
-// This is not authentication and these tests do not claim it is. It removes an
-// unprotected hostname from reach; Access still decides who may look.
+// What no per-hostname application covers is the versioned preview URLs
+// Cloudflare mints alongside every deploy. Those, production's own workers.dev
+// hostname, and anything else under `.workers.dev` must keep answering 404.
+// That is what these tests pin.
+//
+// This is not authentication and these tests do not claim it is. It removes
+// unprotected hostnames from reach; Access still decides who may look.
 describe("/admin/* on a workers.dev hostname", () => {
   const ADMIN_PATHS = ["/admin/errors", "/admin/feedback"];
 

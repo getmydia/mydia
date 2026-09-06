@@ -64,27 +64,32 @@ app.get("/stats", (c) =>
 );
 
 // Cloudflare Access is the real gate on /admin/*, and it is configured per
-// hostname: the Step 1 Access application in relay-worker/README.md's runbook
-// covers `relay.mydia.dev/admin*` and nothing else. The Worker is ALSO live on
-// its `*.workers.dev` subdomain from the first successful CI deploy onwards
-// (runbook Step 3 and Step 4a both depend on that, which is why
-// `workers_dev: false` is not the fix here), and Access does not see requests
-// to that hostname at all. Without this middleware the maintainer dashboards
-// would be anonymously readable on the workers.dev URL for the whole window
-// between the first deploy and the Step 4 cutover -- the same
-// path-not-method, hostname-by-hostname trap the runbook's cutover
-// preconditions already warn about for the wildcard route, one hostname
-// earlier.
+// hostname. Access CAN cover a workers.dev hostname: Cloudflare documents
+// hostname-based applications on `<worker>.<subdomain>.workers.dev`
+// explicitly, and shipped one-click Access for workers.dev in October 2025.
+// An earlier revision of this comment claimed the opposite and used it to
+// justify a blanket deny; that claim was wrong.
 //
-// So: /admin/* answers 404 on any workers.dev hostname, which covers both the
-// deploy subdomain (`mydia-relay.<subdomain>.workers.dev`) and the versioned
-// preview URLs Cloudflare mints alongside it. Every other hostname -- the
-// production custom domain, local dev, Miniflare in tests -- is unaffected,
-// and none of test/contract/routes.json's routes are under /admin, so the
-// staging contract diff still exercises everything it did before.
+// What no per-hostname application covers is the versioned PREVIEW URLs
+// Cloudflare mints alongside every deploy, each on a hostname nobody named in
+// advance. That is this middleware's real and continuing justification.
 //
-// This is not authentication and must never grow into it: it removes an
-// UNPROTECTED hostname from reach, it does not decide who may look. Access
+// So: an allowlist of exactly one hostname, ADMIN_ACCESS_HOSTNAME, set on
+// env.staging only (wrangler.jsonc). The dashboards are reachable on
+// `mydia-relay-staging.<subdomain>.workers.dev`, where a staging Access
+// application gates them, and nowhere else under workers.dev -- not on
+// preview URLs, and not on production's `mydia-relay.<subdomain>.workers.dev`,
+// whose dashboards wait for the relay.mydia.dev Access application at
+// cutover. It fails closed when the var is absent or blank; see
+// src/dashboards/hostname-guard.ts for why that needs no branch.
+//
+// Every other hostname -- the eventual production custom domain, local dev,
+// Miniflare in tests -- is unaffected, and none of test/contract/routes.json's
+// routes are under /admin, so the staging contract diff still exercises
+// everything it did before.
+//
+// This is not authentication and must never grow into it: it removes
+// UNPROTECTED hostnames from reach, it does not decide who may look. Access
 // still decides that, and the README's "the Worker holds no dashboard
 // credentials, and none should ever be added" rule stands unchanged.
 //
