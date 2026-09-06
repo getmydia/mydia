@@ -1,4 +1,4 @@
-import { SELF, fetchMock } from "cloudflare:test";
+import { env, SELF, fetchMock, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { serviceFromPath } from "../../src/obs/log";
 
@@ -19,9 +19,17 @@ describe("serviceFromPath", () => {
 });
 
 describe("rate limiting", () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     fetchMock.activate();
     fetchMock.disableNetConnect();
+
+    // "does not charge pairing against the proxy budget" below drives real
+    // requests through /pairing/claim/:code, which is now D1-backed (Task
+    // 10). Without migrating this file's own isolated storage first, every
+    // one of those requests throws "SQLITE_ERROR: no such table:
+    // pairing_claims" to stderr -- the assertion still passes (it only
+    // checks the sibling /tmdb call), but the noise drowns out real errors.
+    await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
   });
 
   it("returns 429 with a Retry-After header once the budget is spent", async () => {

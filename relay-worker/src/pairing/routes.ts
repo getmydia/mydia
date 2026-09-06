@@ -35,13 +35,62 @@ function normalizeCode(code: string): string {
   return code.toUpperCase().replace(/[-\s]/g, "");
 }
 
-// router.ex's allow_web_player/1, verbatim: origin only. The Elixir router
-// never sends access-control-allow-headers, even on the OPTIONS preflight
-// below -- don't add one here even though a browser client with custom
-// headers would want it; that's a latent gap in the Elixir this task is not
-// scoped to fix.
+// router.ex's allow_web_player/1, verbatim: origin only, no allow-headers.
+// This is correct ONLY for a non-preflight request (a plain GET/DELETE/404,
+// or an OPTIONS that isn't a genuine CORS preflight) -- see
+// isGenuinePreflight/corsicaPreflightResponse below for the case this does
+// NOT cover. A first pass at this file concluded router.ex's missing
+// allow-headers was a production gap; it is not, because router.ex is not
+// the whole picture in production (see below).
 function corsOrigin(extra: Record<string, string> = {}): Record<string, string> {
   return { ...extra, "access-control-allow-origin": "*" };
+}
+
+// metadata_relay_web/endpoint.ex plugs Corsica GLOBALLY, in front of the
+// router: `plug Corsica, origins: "*", allow_headers: ["content-type",
+// "authorization", "x-request-id"], allow_methods: ["GET", "POST", "PUT",
+// "DELETE", "OPTIONS"]`. Corsica's own preflight_req?/1 (verified against
+// its v2.1.3 source) treats a request as a genuine preflight only when it is
+// OPTIONS AND carries both an Origin header and an
+// Access-Control-Request-Method header; when both are present it halts the
+// plug pipeline and answers directly with send_preflight_resp/4 -- the
+// router's own `options "/pairing/claim/:code"` handler (the one
+// corsOrigin() above serves) is never reached at all. A bare OPTIONS missing
+// either header is not a CORS request to Corsica and falls through to that
+// router handler unmodified, which is what corsOrigin() continues to model.
+//
+// This is why send_rate_limited-style parity wasn't enough: for a genuine
+// preflight, production never even reaches router.ex, so router.ex's own
+// CORS gaps (no allow-headers, "GET, DELETE" methods scoped to one route)
+// are irrelevant -- Corsica answers first, with its own STATIC, app-wide
+// configuration, regardless of which path or which methods that specific
+// route actually supports.
+function isGenuinePreflight(c: PairingContext): boolean {
+  return (
+    c.req.header("origin") !== undefined &&
+    c.req.header("access-control-request-method") !== undefined
+  );
+}
+
+// Mirrors Corsica.send_preflight_resp/4 exactly for this app's static
+// config, confirmed against the v2.1.3 source:
+// - status 200 (Corsica's default), not the router's own 204.
+// - access-control-allow-origin: "*" (origins: "*", allow_credentials not
+//   set so send_wildcard_origin?/1 is true -- literal "*", no Vary header).
+// - access-control-allow-methods / -headers: Enum.join(list, ",") -- a bare
+//   comma, NOT ", " -- over the endpoint's full configured list, not just
+//   the methods this one route supports.
+// - body "" (empty), no max-age (option not configured, so Corsica never
+//   sends the header at all -- there is no default value to fall back to).
+function corsicaPreflightResponse(): Response {
+  return new Response("", {
+    status: 200,
+    headers: {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+      "access-control-allow-headers": "content-type,authorization,x-request-id",
+    },
+  });
 }
 
 function validationError(message: string): ErrorBody {
@@ -171,10 +220,16 @@ export function registerPairingRoutes(app: Hono<{ Bindings: Env }>): void {
     return c.json({ node_addr: value }, 200, corsOrigin());
   });
 
-  // Preflight for the claim lookup. Elixir sets allow-methods but never
-  // allow-headers, even here.
+  // Preflight for the claim lookup. A GENUINE preflight (Origin +
+  // Access-Control-Request-Method) never reaches router.ex in production --
+  // Corsica answers it first, globally -- so that case is served by
+  // corsicaPreflightResponse() instead of this route's own 204. Anything
+  // else (a bare OPTIONS probe, or one missing either header) falls through
+  // to router.ex's own handler, which this models faithfully.
   app.options("/pairing/claim/:code", (c) =>
-    c.body(null, 204, corsOrigin({ "access-control-allow-methods": "GET, DELETE" })),
+    isGenuinePreflight(c)
+      ? corsicaPreflightResponse()
+      : c.body(null, 204, corsOrigin({ "access-control-allow-methods": "GET, DELETE" })),
   );
 
   // Delete claim code after successful pairing. Idempotent in the Elixir
@@ -231,8 +286,11 @@ export function registerPairingRoutes(app: Hono<{ Bindings: Env }>): void {
     return c.json({ sealed: value }, 200, corsOrigin());
   });
 
+  // Same Corsica-vs-router split as the v1 OPTIONS handler above.
   app.options("/pairing/v2/claim/:lookup_key", (c) =>
-    c.body(null, 204, corsOrigin({ "access-control-allow-methods": "GET, DELETE" })),
+    isGenuinePreflight(c)
+      ? corsicaPreflightResponse()
+      : c.body(null, 204, corsOrigin({ "access-control-allow-methods": "GET, DELETE" })),
   );
 
   app.delete("/pairing/v2/claim/:lookup_key", async (c) => {

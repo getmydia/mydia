@@ -124,17 +124,46 @@ describe("pairing v1", () => {
     expect(res.status).toBe(404);
   });
 
-  it("answers the CORS preflight with 204, the allowed methods, and no allow-headers", async () => {
+  it("answers a bare OPTIONS (no Origin, no Access-Control-Request-Method) with router.ex's own 204", async () => {
+    // Missing both headers means Corsica's preflight_req?/1 doesn't consider
+    // this a CORS request at all, so it falls through to router.ex's own
+    // `options "/pairing/claim/:code"` handler untouched.
     const res = await SELF.fetch("https://relay.mydia.dev/pairing/claim/ABC", {
       method: "OPTIONS",
     });
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-methods")).toBe("GET, DELETE");
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    // router.ex's allow_web_player/1 never sets this header, even on the
-    // preflight -- a real (if pre-existing) gap in the Elixir, not something
-    // to silently "fix" while porting.
+    // router.ex's allow_web_player/1 never sets this header itself. It
+    // doesn't need to for a real browser preflight, though -- see the
+    // genuine-preflight test below for why.
     expect(res.headers.get("access-control-allow-headers")).toBeNull();
+  });
+
+  it("answers a genuine preflight (Origin + Access-Control-Request-Method) the way Corsica does, not router.ex", async () => {
+    // endpoint.ex plugs Corsica globally, in front of the router. A request
+    // carrying both headers is a real CORS preflight to Corsica, which
+    // halts the pipeline and answers directly -- router.ex's own 204 handler
+    // (exercised by the bare-OPTIONS test above) is never reached in
+    // production for this shape of request.
+    const res = await SELF.fetch("https://relay.mydia.dev/pairing/claim/ABC", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://player.example.com",
+        "access-control-request-method": "GET",
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    // Corsica's Enum.join(list, ",") -- a bare comma, not ", " -- over the
+    // endpoint's FULL configured lists, not the two methods this specific
+    // route supports.
+    expect(res.headers.get("access-control-allow-methods")).toBe(
+      "GET,POST,PUT,DELETE,OPTIONS",
+    );
+    expect(res.headers.get("access-control-allow-headers")).toBe(
+      "content-type,authorization,x-request-id",
+    );
   });
 
   it("carries the CORS origin header on a 404, not just a 200", async () => {
@@ -309,7 +338,7 @@ describe("pairing v2 sealed claims", () => {
     expect(after.status).toBe(404);
   });
 
-  it("answers the v2 CORS preflight with 204 and the allowed methods", async () => {
+  it("answers a bare v2 OPTIONS with router.ex's own 204", async () => {
     const res = await SELF.fetch(
       `https://relay.mydia.dev/pairing/v2/claim/${"1".repeat(64)}`,
       { method: "OPTIONS" },
@@ -317,5 +346,26 @@ describe("pairing v2 sealed claims", () => {
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-methods")).toBe("GET, DELETE");
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("answers a genuine v2 preflight the way Corsica does, not router.ex", async () => {
+    const res = await SELF.fetch(
+      `https://relay.mydia.dev/pairing/v2/claim/${"2".repeat(64)}`,
+      {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://player.example.com",
+          "access-control-request-method": "DELETE",
+        },
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("access-control-allow-methods")).toBe(
+      "GET,POST,PUT,DELETE,OPTIONS",
+    );
+    expect(res.headers.get("access-control-allow-headers")).toBe(
+      "content-type,authorization,x-request-id",
+    );
   });
 });
