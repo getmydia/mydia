@@ -27,6 +27,48 @@ export default defineWorkersConfig({
             RESEND_API_KEY: "test-resend-key",
             TEST_MIGRATIONS: migrations,
           },
+          // Overrides wrangler.jsonc's PROXY_LIMITER (300/60s) for tests only.
+          // These entries take precedence over the ones the `wrangler` block
+          // above loads, so production is untouched -- the deployed Worker
+          // still gets 300/60s from wrangler.jsonc.
+          //
+          // The production number is unreachable in a test. Nothing in
+          // Miniflare can spend the budget except real requests, so proving a
+          // 429 costs `limit + 1` round trips through the whole Hono stack,
+          // and test/obs/ratelimit.test.ts needs that four times over. At 300
+          // that was ~17s locally and over the 30s per-test timeout on CI
+          // hardware, which is how the suite came to fail the deploy job on
+          // master (2026-09-06). Raising the timeout would only have moved the
+          // threshold; the loops are the cost.
+          //
+          // It also shrinks the OTHER flake that file documents at length.
+          // Miniflare's simulator clears its buckets on a wall-clock epoch
+          // boundary rather than on consumption, so a 60s boundary landing
+          // mid-loop wipes the in-flight count and the loop has to start over.
+          // A loop that takes ~50ms instead of several seconds is far less
+          // likely to span one at all.
+          //
+          // ONLY PROXY_LIMITER's limit differs from wrangler.jsonc. The other
+          // four are repeated here at their exact production values, not
+          // because they need overriding, but because this key may replace the
+          // wrangler-derived set rather than merge into it -- listing all five
+          // is correct either way, and omitting four of them would silently
+          // delete those bindings if it replaces.
+          //
+          // Do not "tidy" the other four to round numbers. Tests depend on
+          // their exact values: the crash and feedback suites assert D1 write
+          // counts that follow directly from the 10/10s burst guards, and the
+          // pairing suite deliberately exhausts the 10/min create budget.
+          // Changing one of those is a test-expectation change, not a config
+          // tweak. PROXY_LIMITER is the only one no test asserts a count
+          // against -- every loop that spends it stops at the first 429.
+          ratelimits: {
+            PROXY_LIMITER: { simple: { limit: 25, period: 60 } },
+            PAIRING_CREATE_LIMITER: { simple: { limit: 10, period: 60 } },
+            PAIRING_READ_LIMITER: { simple: { limit: 30, period: 60 } },
+            CRASH_INGEST_LIMITER: { simple: { limit: 10, period: 10 } },
+            FEEDBACK_INGEST_LIMITER: { simple: { limit: 10, period: 10 } },
+          },
         },
       },
     },
