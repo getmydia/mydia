@@ -18,14 +18,14 @@ dependencies:
   convert: ^3.1.2
   flutter_riverpod: ^3.0.0
   riverpod_annotation: ^4.0.0
-  go_router: ^18.0.0
+  go_router: ^18.0.1
   graphql_flutter: ^5.1.0
   # >=10.3.1 pulls flutter_secure_storage_darwin >=0.3.2. Earlier darwin builds
   # read the macOS option under the wrong key ("useDataProtectionKeyChain"), so
   # usesDataProtectionKeychain was ignored and every keychain call failed with
   # -34018 on an app signed without a keychain access group.
   flutter_secure_storage: ^11.0.0
-  cached_network_image: ^3.3.0
+  cached_network_image: ^4.0.0
   flutter_cache_manager: ^3.3.0
   http: ^1.1.0
   shimmer: ^4.0.0
@@ -91,8 +91,8 @@ dev_dependencies:
   fake_async: ^1.3.3
   flutter_launcher_icons: ^0.14.3
   hive_ce_generator: ^1.10.0
-  freezed: ^3.2.3
-  yaml: ^3.1.2
+  freezed: ^3.2.6-dev.1
+  yaml: ^3.1.4
 
 flutter_launcher_icons:
   android: true
