@@ -110,6 +110,11 @@ function FeedbackPage({
   state: FeedbackState | "all";
   page: number;
 }) {
+  // Uses encodeURIComponent, not escapeHtml, for consistency with the errors
+  // dashboard's pager (same substitution there). Here it's inert: `state` is
+  // the closed union FeedbackState | "all", so no value differs under either
+  // encoding. errors.tsx's `status` is unvalidated query input, which is why
+  // it matters there -- see that file's ErrorsPage comment for the mechanism.
   const next =
     rows.length === PAGE_SIZE
       ? `/admin/feedback?page=${pageNumber + 1}&state=${encodeURIComponent(state)}`
