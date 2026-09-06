@@ -24,7 +24,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
             formatted_progress = format_progress(progress)
 
             # Publish subscription event
-            Absinthe.Subscription.publish(
+            MydiaWeb.Schema.Publish.publish(
               MydiaWeb.Endpoint,
               formatted_progress,
               progress_updated: movie_id
@@ -56,7 +56,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
             formatted_progress = format_progress(progress)
 
             # Publish subscription event
-            Absinthe.Subscription.publish(
+            MydiaWeb.Schema.Publish.publish(
               MydiaWeb.Endpoint,
               formatted_progress,
               progress_updated: episode_id

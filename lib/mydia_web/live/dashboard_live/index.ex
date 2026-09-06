@@ -113,6 +113,18 @@ defmodule MydiaWeb.DashboardLive.Index do
         0
       end
 
+    # request_status only ever affects the Request button, which only a guest
+    # sees (Authorization.can_submit_request?/1), so a viewer who cannot
+    # submit a request skips the two unfiltered list_requests/1 scans
+    # entirely rather than paying for a result they can never act on.
+    # Mirrors FranchiseEvents/RecommendationEvents (#461).
+    request_status_map =
+      if Authorization.can_submit_request?(socket.assigns.current_user) do
+        MediaRequestHelpers.request_status_map()
+      else
+        %{}
+      end
+
     # Load trending data asynchronously
     send(self(), :load_trending_movies)
     send(self(), :load_trending_tv)
@@ -134,7 +146,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:active_downloads_count, active_downloads_count)
     |> assign(:total_storage, total_storage)
     |> assign(:library_status_map, library_status_map)
-    |> assign(:request_status_map, MediaRequestHelpers.request_status_map())
+    |> assign(:request_status_map, request_status_map)
     |> assign(:recent_episodes, Enum.take(recent_episodes, 10))
     |> assign(:upcoming_episodes, Enum.take(upcoming_episodes, 10))
     |> assign(:pending_requests_count, pending_requests_count)

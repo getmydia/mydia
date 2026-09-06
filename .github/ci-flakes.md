@@ -643,8 +643,11 @@ reason to keep the dialog open, since a metadata failure now re-renders it with
 the operator's choices instead of closing and flashing. A stubbed fetch that
 errors rather than merely lagging would produce exactly this message.
 
-One occurrence so far, so this is not yet flake-first. Check master at the same
-SHA before treating it as either.
+Seen again 2026-09-05 on PR #717, a `grid_density_components.ex`/CSS-only diff
+nowhere near the config-add dialog. Master's most recent run (`fc4003317`,
+27 minutes earlier) passed the same workflow, and `gh run rerun --failed`
+cleared it on the first try. Two occurrences on unrelated diffs; treat this
+signature as flake-first now.
 
 **`MydiaWeb.Features.MediaBackdropTest`**, "below the lg breakpoint the backdrop
 spans the full width", failing alone (1 of 34) with `(MatchError) no match of

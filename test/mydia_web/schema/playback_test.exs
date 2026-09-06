@@ -294,6 +294,49 @@ defmodule MydiaWeb.Schema.PlaybackTest do
     end
   end
 
+  describe "updateMovieProgress/updateEpisodeProgress mutations when Absinthe.Subscription is down (issue #708)" do
+    setup do
+      :ok = Supervisor.terminate_child(Mydia.Supervisor, Absinthe.Subscription)
+
+      on_exit(fn ->
+        {:ok, _pid} = Supervisor.restart_child(Mydia.Supervisor, Absinthe.Subscription)
+      end)
+
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      %{movie: movie}
+    end
+
+    test "still saves movie progress and returns ok", ctx do
+      result =
+        run_query(
+          @update_movie_progress_mutation,
+          %{"movieId" => ctx.movie.id, "positionSeconds" => 42, "durationSeconds" => 100},
+          ctx.user
+        )
+
+      assert {:ok, %{data: %{"updateMovieProgress" => %{"positionSeconds" => 42}}}} = result
+
+      progress = Playback.get_progress(ctx.user.id, media_item_id: ctx.movie.id)
+      assert progress.position_seconds == 42
+    end
+
+    test "still saves episode progress and returns ok", ctx do
+      episode = hd(ctx.episodes)
+
+      result =
+        run_query(
+          @update_episode_progress_mutation,
+          %{"episodeId" => episode.id, "positionSeconds" => 15, "durationSeconds" => 60},
+          ctx.user
+        )
+
+      assert {:ok, %{data: %{"updateEpisodeProgress" => %{"positionSeconds" => 15}}}} = result
+
+      progress = Playback.get_progress(ctx.user.id, episode_id: episode.id)
+      assert progress.position_seconds == 15
+    end
+  end
+
   defp run_query(query, variables, user \\ nil) do
     context = if user, do: %{current_user: user}, else: %{}
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)

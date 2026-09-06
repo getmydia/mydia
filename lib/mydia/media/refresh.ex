@@ -149,11 +149,19 @@ defmodule Mydia.Media.Refresh do
       }
       |> put_provider_id(source, metadata.id)
       |> ExternalIds.put_free_ids(metadata.external_ids,
+        type: media_item.type,
         exclude_id: media_item.id,
         title: metadata.title
       )
 
-    case Media.update_media_item(media_item, attrs, reason: "Metadata refreshed") do
+    result =
+      ExternalIds.write(
+        attrs,
+        [type: media_item.type, exclude_id: media_item.id, title: metadata.title],
+        fn attrs -> Media.update_media_item(media_item, attrs, reason: "Metadata refreshed") end
+      )
+
+    case result do
       {:ok, updated} ->
         {:ok, updated}
 

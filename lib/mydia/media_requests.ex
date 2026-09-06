@@ -265,11 +265,26 @@ defmodule Mydia.MediaRequests do
   defp check_duplicate_media(changeset) do
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
     tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
+    # Provider ids are unique per type. A TV request whose tmdb_id matches a
+    # movie already in the library is not a duplicate of it.
+    type = Ecto.Changeset.get_field(changeset, :media_type)
 
     cond do
-      tmdb_id && Media.get_media_item_by_tmdb(tmdb_id) -> {:error, :duplicate_media}
-      tvdb_id && Media.get_media_item_by_tvdb(tvdb_id) -> {:error, :duplicate_media}
-      true -> :ok
+      # `create_request/1` runs this before inserting, so the changeset may still
+      # be invalid. `find_by_external_ids/2` raises on an unrecognised type, and
+      # an ArgumentError here would mask the validation error the caller is about
+      # to get anyway.
+      type not in MediaRequest.valid_media_types() ->
+        :ok
+
+      tmdb_id && Media.find_by_external_ids(%{tmdb: tmdb_id}, type: type) ->
+        {:error, :duplicate_media}
+
+      tvdb_id && Media.find_by_external_ids(%{tvdb: tvdb_id}, type: type) ->
+        {:error, :duplicate_media}
+
+      true ->
+        :ok
     end
   end
 

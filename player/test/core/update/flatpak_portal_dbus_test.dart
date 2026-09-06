@@ -437,5 +437,31 @@ void main() {
       expect(harness.monitorObject.closeCalled, isTrue);
       await expectLater(harness.testClient.ping(), throwsA(anything));
     });
+
+    test('ends an in-flight update() stream instead of leaving it hanging',
+        () async {
+      // Regression guard: this method's own doc comment used to claim that
+      // closing the client tears down an in-flight update() stream. It does
+      // not -- the dbus package's underlying signal subscription just stops
+      // delivering events without ever erroring or completing, so a caller
+      // doing `await for` over update() hung forever. onUpdate never
+      // replying keeps this update() call genuinely in flight for the life
+      // of the test.
+      harness.monitorObject.onUpdate =
+          () => Completer<DBusMethodResponse>().future;
+
+      final portal = harness.makePortal();
+      await portal.startMonitoring();
+
+      final stream = portal.update();
+      final expectation = expectLater(
+        stream,
+        emitsInOrder([emitsError(isA<StateError>()), emitsDone]),
+      );
+
+      await portal.close();
+
+      await expectation.timeout(const Duration(seconds: 5));
+    });
   });
 }

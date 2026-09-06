@@ -130,6 +130,12 @@ class DBusFlatpakPortal implements FlatpakPortal {
   DBusRemoteObject? _monitor;
   StreamSubscription<DBusSignal>? _availableSub;
 
+  // The stream update() most recently handed out, and the D-Bus signal
+  // subscription feeding it. Tracked so close() can end them itself instead
+  // of hoping the client teardown does it; see the note in close().
+  StreamController<FlatpakProgress>? _activeUpdate;
+  StreamSubscription<DBusSignal>? _progressSub;
+
   DBusRemoteObject get _portal => DBusRemoteObject(
         _client,
         name: _portalName,
@@ -174,12 +180,12 @@ class DBusFlatpakPortal implements FlatpakPortal {
     }
 
     final controller = StreamController<FlatpakProgress>();
-    StreamSubscription<DBusSignal>? progressSub;
+    _activeUpdate = controller;
 
     // Every failure path has to reach here. An error that escapes instead
     // leaves the controller open, so the caller's await never returns and the
     // progress bar on this stream spins forever. Closing the controller is
-    // also what cancels progressSub, by way of onCancel.
+    // also what cancels _progressSub, by way of onCancel.
     Future<void> fail(Object error) async {
       if (controller.isClosed) return;
       controller.addError(error);
@@ -188,7 +194,7 @@ class DBusFlatpakPortal implements FlatpakPortal {
 
     controller.onListen = () async {
       try {
-        progressSub = DBusRemoteObjectSignalStream(
+        _progressSub = DBusRemoteObjectSignalStream(
           object: monitor,
           interface: _monitorInterface,
           name: 'Progress',
@@ -231,7 +237,7 @@ class DBusFlatpakPortal implements FlatpakPortal {
       }
     };
 
-    controller.onCancel = () => progressSub?.cancel();
+    controller.onCancel = () => _progressSub?.cancel();
     return controller.stream;
   }
 
@@ -271,9 +277,21 @@ class DBusFlatpakPortal implements FlatpakPortal {
       }
     }
     await _available.close();
-    // Also tears down progressSub from an in-flight update(), if any: closing
-    // the client ends its signal stream, which the listen() callback above
-    // never explicitly cancels on this path.
+
+    // Ends an in-flight update() stream, if any, deterministically. Closing
+    // the client does not do this on its own: the dbus package's signal
+    // stream simply stops delivering events without erroring or completing,
+    // so a caller doing `await for` over update() would otherwise hang
+    // forever waiting for a Progress that will never arrive. Cancelling
+    // _progressSub first keeps that dead subscription from racing this
+    // addError with one of its own.
+    await _progressSub?.cancel();
+    final activeUpdate = _activeUpdate;
+    if (activeUpdate != null && !activeUpdate.isClosed) {
+      activeUpdate.addError(StateError('Flatpak portal closed'));
+      await activeUpdate.close();
+    }
+
     await _client.close();
   }
 }

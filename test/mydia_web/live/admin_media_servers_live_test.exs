@@ -376,9 +376,12 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     test "the modal still opens and suggests a match when an SSO account exists",
          %{conn: conn, bypass: bypass} do
       # initial_mapping/3 built its own unguarded username index, so opening
-      # the modal on an install with SSO crashed the LiveView outright.
+      # the modal on an install with SSO crashed the LiveView outright. The
+      # nameless account models an install from before the username backfill
+      # (or one that skipped it), inserted directly rather than through the
+      # OIDC upsert path, which would derive and claim a name of its own.
       user = Mydia.AccountsFixtures.user_fixture(%{username: "tonix"})
-      _sso = Mydia.AccountsFixtures.oidc_user_fixture(%{display_name: "Robin Vega"})
+      _sso = Mydia.AccountsFixtures.nameless_user_fixture(%{display_name: "Robin Vega"})
       server = sync_enabled_server(bypass)
 
       stub_jellyfin_users(bypass, [%{"Id" => "guid-1", "Name" => "Tonix"}])

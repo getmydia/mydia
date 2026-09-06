@@ -105,18 +105,20 @@
                       <div class="avatar placeholder">
                         <div class="bg-primary text-primary-content rounded-full w-12">
                           <%= if user.avatar_url do %>
-                            <img src={user.avatar_url} alt={user.username} />
+                            <img src={user.avatar_url} alt={User.label(user)} />
                           <% else %>
                             <span class="text-lg">
-                              {String.first(user.username || "?")}
+                              {user |> User.label() |> String.first() |> String.upcase()}
                             </span>
                           <% end %>
                         </div>
                       </div>
                       <div>
-                        <div class="font-bold">{user.username}</div>
+                        <div class="font-bold" id={"user-name-#{user.id}"}>
+                          {User.label(user)}
+                        </div>
                         <div class="text-sm text-base-content/70">{user.email}</div>
-                        <%= if user.display_name && user.display_name != user.username do %>
+                        <%= if user.display_name && user.display_name != User.label(user) do %>
                           <div class="text-xs text-base-content/50">{user.display_name}</div>
                         <% end %>
                       </div>
@@ -415,8 +417,8 @@
     <div class="modal modal-open">
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Edit User Role</h3>
-        <p class="text-sm text-base-content/70 mb-4">
-          Change role for <strong>{@selected_user.username}</strong>
+        <p class="text-sm text-base-content/70 mb-4" id="edit-role-modal-title">
+          Change role for <strong>{User.label(@selected_user)}</strong>
         </p>
 
         <.form
@@ -466,7 +468,7 @@
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Reset Password</h3>
         <p class="text-sm text-base-content/70 mb-4">
-          Reset password for <strong>{@selected_user.username}</strong>
+          Reset password for <strong>{User.label(@selected_user)}</strong>
         </p>
 
         <%= if @password_reset_success do %>
@@ -656,8 +658,8 @@
     <div class="modal modal-open">
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4 text-error">Delete User</h3>
-        <p class="text-sm text-base-content/70 mb-4">
-          Are you sure you want to delete <strong>{@selected_user.username}</strong>?
+        <p class="text-sm text-base-content/70 mb-4" id="delete-modal-prompt">
+          Are you sure you want to delete <strong>{User.label(@selected_user)}</strong>?
         </p>
 
         <div class="alert alert-error">

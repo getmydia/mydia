@@ -373,10 +373,10 @@ defmodule Mydia.Media.MetadataTypeTest do
     end
 
     test "load/1 coerces string external ids to integers" do
-      # tmdb and tvdb feed Media.get_media_item_by_tmdb/1 and its tvdb twin,
-      # which query :integer columns and raise Ecto.Query.CastError on a string
-      # rather than returning nil. TVDB's remoteIds are strings at the source,
-      # so the load path coerces exactly as the API-side parser does.
+      # tmdb and tvdb feed Media.find_by_external_ids/2, which queries :integer
+      # columns and raises Ecto.Query.CastError on a string rather than
+      # returning nil. TVDB's remoteIds are strings at the source, so the load
+      # path coerces exactly as the API-side parser does.
       json =
         Jason.encode!(%{
           "provider_id" => "121361",

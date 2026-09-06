@@ -156,12 +156,36 @@ defmodule MydiaWeb.AuthController do
       email: auth.info.email,
       display_name: auth.info.name || auth.info.email,
       avatar_url: auth.info.image,
-      role: determine_role(auth)
+      role: determine_role(auth),
+      preferred_username: preferred_username(auth)
     }
 
     # Create or update user from OIDC
     Accounts.upsert_user_from_oidc(oidc_sub, oidc_issuer, attrs)
   end
+
+  # `preferred_username` is a standard OIDC claim. Ueberauth's Info struct has
+  # a `nickname` field and the OIDC strategies map the claim onto it, but not
+  # every strategy does, so the raw userinfo is the second look.
+  defp preferred_username(auth) do
+    userinfo =
+      case auth.extra do
+        %{raw_info: %{userinfo: userinfo}} when is_map(userinfo) -> userinfo
+        _other -> %{}
+      end
+
+    blank_to_nil(Map.get(auth.info, :nickname)) ||
+      blank_to_nil(Map.get(userinfo, "preferred_username"))
+  end
+
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(_value), do: nil
 
   # Determine user role from OIDC claims
   # Can be customized based on your OIDC provider's group/role claims

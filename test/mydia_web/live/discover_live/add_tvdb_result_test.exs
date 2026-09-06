@@ -69,7 +69,9 @@ defmodule MydiaWeb.DiscoverLive.AddTvdbResultTest do
     render_click(view, "add_to_library", %{"ref" => "imdb:tt3230854", "media_type" => "tv_show"})
 
     assert render(view) =~ "Could not add that item"
-    assert Mydia.Media.get_media_item_by_tvdb(MetadataStubProvider.series_tvdb_id()) == nil
+
+    assert Mydia.Media.find_by_external_ids(%{tvdb: MetadataStubProvider.series_tvdb_id()}) ==
+             nil
   end
 
   # The add lands in a handle_info the render_click round trip does not wait
@@ -81,7 +83,7 @@ defmodule MydiaWeb.DiscoverLive.AddTvdbResultTest do
   end
 
   defp wait_until_media_item(tvdb_id, retries) do
-    case Mydia.Media.get_media_item_by_tvdb(tvdb_id) do
+    case Mydia.Media.find_by_external_ids(%{tvdb: tvdb_id}) do
       nil ->
         Process.sleep(10)
         wait_until_media_item(tvdb_id, retries - 1)

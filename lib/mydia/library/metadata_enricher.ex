@@ -131,10 +131,10 @@ defmodule Mydia.Library.MetadataEnricher do
          match_result,
          config
        ) do
+    provider_key = if provider_type == :tvdb, do: :tvdb, else: :tmdb
+
     existing_item =
-      if provider_type == :tvdb,
-        do: Media.get_media_item_by_tvdb(id),
-        else: Media.get_media_item_by_tmdb(id)
+      Media.find_by_external_ids(%{provider_key => id}, type: media_type_to_string(media_type))
 
     case existing_item do
       nil ->
@@ -383,6 +383,7 @@ defmodule Mydia.Library.MetadataEnricher do
     # every owner found really is a different item.
     attrs =
       ExternalIds.put_free_ids(attrs, metadata.external_ids,
+        type: media_type_to_string(media_type),
         exclude_id: Map.get(match_result, :exclude_id)
       )
 
@@ -451,19 +452,45 @@ defmodule Mydia.Library.MetadataEnricher do
     end
   end
 
-  defp persist_media_item(%MetadataPreparation{operation: :create, media_item_attrs: attrs}) do
-    Media.create_media_item(attrs, skip_episode_refresh: true)
+  defp persist_media_item(%MetadataPreparation{
+         operation: :create,
+         media_type: media_type,
+         media_item_attrs: attrs
+       }) do
+    ExternalIds.write(
+      attrs,
+      [type: media_type_to_string(media_type), title: attrs[:title]],
+      fn attrs ->
+        Media.create_media_item(attrs, skip_episode_refresh: true)
+      end
+    )
   end
 
+  # `:type` comes from `preparation.media_type`, not `attrs[:type]`: the
+  # `:stamp_source` operation's attrs is bare `%{metadata_source: ...}`, with
+  # no `:type` key of its own, and `media_type` is always present on the
+  # preparation regardless of what the attrs happen to carry.
   defp persist_media_item(%MetadataPreparation{
          operation: operation,
+         media_type: media_type,
          media_item_id: media_item_id,
          media_item_attrs: attrs
        })
        when operation in [:update, :stamp_source] do
     case Repo.get(MediaItem, media_item_id) do
-      nil -> {:error, {:media_item_missing, media_item_id}}
-      media_item -> Media.update_media_item(media_item, attrs, reason: "Metadata enriched")
+      nil ->
+        {:error, {:media_item_missing, media_item_id}}
+
+      media_item ->
+        ExternalIds.write(
+          attrs,
+          [
+            type: media_type_to_string(media_type),
+            exclude_id: media_item.id,
+            title: media_item.title
+          ],
+          fn attrs -> Media.update_media_item(media_item, attrs, reason: "Metadata enriched") end
+        )
     end
   end
 

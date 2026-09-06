@@ -74,7 +74,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       assert_redirect(view, ~p"/media/#{1}")
 
       # Verify media item was created
-      media_item = Media.get_media_item_by_tmdb(550)
+      media_item = Media.find_by_external_ids(%{tmdb: 550})
       assert media_item
       assert media_item.title == "Fight Club"
       assert media_item.year == 1999
@@ -125,7 +125,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
 
       # Since we can't easily mock external calls, we'll test the duplicate detection
       # logic by directly verifying the database query works
-      duplicate = Media.get_media_item_by_tmdb(550)
+      duplicate = Media.find_by_external_ids(%{tmdb: 550})
       assert duplicate
       assert duplicate.id == existing_item.id
       assert duplicate.title == "Fight Club"
@@ -153,7 +153,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       assert_redirect(view, ~p"/media/#{1}")
 
       # Verify TV show was created
-      media_item = Media.get_media_item_by_tmdb(1396)
+      media_item = Media.find_by_external_ids(%{tmdb: 1396})
       assert media_item
       assert media_item.title == "Breaking Bad"
       assert media_item.type == "tv_show"
@@ -182,7 +182,7 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
       assert_redirect(view, ~p"/media/#{1}")
 
       # Verify all episodes were created
-      media_item = Media.get_media_item_by_tmdb(1396)
+      media_item = Media.find_by_external_ids(%{tmdb: 1396})
       episodes = Media.list_episodes(media_item.id)
       assert length(episodes) == 3
 
@@ -431,14 +431,14 @@ defmodule MydiaWeb.SearchLive.AddToLibraryTest do
           monitored: true
         })
 
-      found = Media.get_media_item_by_tmdb(999)
+      found = Media.find_by_external_ids(%{tmdb: 999})
       assert found
       assert found.id == existing_item.id
       assert found.title == "Existing Movie"
     end
 
     test "returns nil when TMDB ID not found" do
-      result = Media.get_media_item_by_tmdb(99999)
+      result = Media.find_by_external_ids(%{tmdb: 99999})
       assert result == nil
     end
 

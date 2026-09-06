@@ -2,9 +2,9 @@ defmodule Mydia.MediaRequestsTest do
   use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
-  import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
 
+  alias Mydia.Events
   alias Mydia.MediaRequests
   alias Mydia.{Accounts, Media, Repo}
   alias Mydia.Media.MediaItem
@@ -194,6 +194,31 @@ defmodule Mydia.MediaRequestsTest do
 
       assert {:error, :duplicate_media} = MediaRequests.create_request(attrs)
     end
+
+    test "accepts a tv request whose tmdb_id belongs to a movie already in the library", %{
+      user: user
+    } do
+      tmdb_id = System.unique_integer([:positive])
+
+      {:ok, _movie} =
+        Media.create_media_item(%{
+          type: "movie",
+          title: "Crossed Type",
+          year: 2023,
+          tmdb_id: tmdb_id
+        })
+
+      assert {:ok, request} =
+               MediaRequests.create_request(%{
+                 media_type: "tv_show",
+                 title: "Crossed Type",
+                 tmdb_id: tmdb_id,
+                 requester_id: user.id
+               })
+
+      assert request.media_type == "tv_show"
+      assert request.tmdb_id == tmdb_id
+    end
   end
 
   describe "approve_request/2" do
@@ -260,13 +285,7 @@ defmodule Mydia.MediaRequestsTest do
       assert %{approved_by_id: ["can't be blank"]} = errors_on(changeset)
     end
 
-    # `Add.from_attrs/3`'s pre-flight is scoped to the request's own media type,
-    # while the unique index on tmdb_id is global. A movie holding the id is
-    # therefore invisible to the lookup and only the index catches it, which is
-    # the one path left that reaches insert_approval/4's media_item rollback.
-    # Pinning the behaviour here: closing the cross-type gap needs a composite
-    # (type, tmdb_id) index and so a migration.
-    test "rolls back and leaves the request pending when the other media type owns the tmdb_id",
+    test "approves a tv request whose tmdb_id matches an existing movie",
          %{user: user, admin: admin} do
       bypass = Bypass.open()
       tmdb_id = System.unique_integer([:positive])
@@ -289,24 +308,112 @@ defmodule Mydia.MediaRequestsTest do
 
       before_count = Repo.aggregate(MediaItem, :count)
 
-      log =
-        capture_log(fn ->
-          assert {:error, %Ecto.Changeset{} = changeset} =
-                   MediaRequests.approve_request(request, %{approved_by_id: admin.id},
-                     config: relay_config(bypass)
-                   )
+      # approve_request/3 returns {:ok, %{request: _, media_item: _}}
+      # (lib/mydia/media_requests.ex:111-128).
+      assert {:ok, %{request: approved, media_item: show}} =
+               MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
 
-          assert %{tmdb_id: ["has already been taken"]} = errors_on(changeset)
-        end)
+      # TMDB numbers movies and series independently, so the show and the movie
+      # hold the same tmdb_id without conflicting.
+      assert Repo.aggregate(MediaItem, :count) == before_count + 1
 
-      assert log =~ "Failed to create media item for request #{request.id}"
+      assert approved.status == "approved"
+      assert approved.media_item_id == show.id
 
-      reloaded = Repo.get!(MediaRequest, request.id)
-      assert reloaded.status == "pending"
-      assert is_nil(reloaded.media_item_id)
+      assert show.type == "tv_show"
+      assert show.tmdb_id == tmdb_id
+      refute show.id == movie.id
+    end
+  end
 
-      assert Repo.aggregate(MediaItem, :count) == before_count
-      assert Media.get_media_item_by_tmdb(tmdb_id).id == movie.id
+  describe "approve_request/3 provider-id constraint race" do
+    setup do
+      user = create_user()
+      admin = create_user(%{role: "admin"})
+      %{user: user, admin: admin}
+    end
+
+    # Regression for the CRITICAL finding on the #473 provider-id-uniqueness
+    # branch: on PostgreSQL, a statement that fails a unique-constraint check
+    # aborts the whole ambient transaction (SQLSTATE 25P02,
+    # `in_failed_sql_transaction`) until an explicit rollback. Before
+    # ExternalIds.write/3 wrapped each attempt in its own savepoint, the
+    # re-read `drop_taken/3` issues right after such a failure ran on that
+    # same poisoned connection and raised, instead of returning the
+    # degraded-warning outcome `put_free_ids/3` would have produced had it won
+    # the race.
+    #
+    # `Add.existing_item/1`'s pre-flight would normally catch an
+    # already-committed same-type collision before ever reaching the insert,
+    # so reproducing this deterministically (rather than via genuinely
+    # concurrent connections) means landing the colliding row in the narrow
+    # window *after* that pre-flight's one SELECT against media_items returns
+    # empty but *before* the insert that follows it, on the very same
+    # connection and inside the very same `Multi.run` + `Repo.transaction`
+    # `insert_approval/4` opens. A `:telemetry` handler on
+    # `[:mydia, :repo, :query]` does exactly that: it fires once, on the first
+    # query sourced from `media_items`, which this request's attrs are built
+    # to guarantee is that pre-flight read (a plain TMDB movie response with
+    # no external_ids cross-reference means `existing_item/1`'s second pass
+    # never queries at all).
+    test "a genuine same-type tmdb_id collision degrades to the warning flow instead of raising",
+         %{user: user, admin: admin} do
+      bypass = Bypass.open()
+      tmdb_id = System.unique_integer([:positive])
+
+      request =
+        create_request(user, %{media_type: "movie", title: "Collision Feature", tmdb_id: tmdb_id})
+
+      stub_tmdb_movie(bypass, tmdb_id, "Collision Feature", "/stub.jpg")
+
+      test_pid = self()
+      handler_id = "provider-id-race-#{inspect(make_ref())}"
+
+      :telemetry.attach(
+        handler_id,
+        [:mydia, :repo, :query],
+        fn _event, _measurements, metadata, _config ->
+          if metadata.source == "media_items" do
+            :telemetry.detach(handler_id)
+
+            {:ok, owner} =
+              %MediaItem{}
+              |> MediaItem.changeset(%{
+                type: "movie",
+                title: "Incumbent Feature",
+                year: 2019,
+                tmdb_id: tmdb_id
+              })
+              |> Repo.insert()
+
+            send(test_pid, {:owner_inserted, owner.id})
+          end
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      result =
+        MediaRequests.approve_request(request, %{approved_by_id: admin.id},
+          config: relay_config(bypass)
+        )
+
+      assert_received {:owner_inserted, owner_id}
+
+      assert {:ok, %{request: approved, media_item: created}} = result
+      assert approved.status == "approved"
+      assert approved.media_item_id == created.id
+      refute created.id == owner_id
+      assert is_nil(created.tmdb_id)
+      assert created.title == "Collision Feature"
+
+      assert [event] = Events.list_events(type: "media_item.duplicate_provider_id")
+      assert event.resource_id == owner_id
+      assert event.metadata["provider"] == "tmdb"
+      assert event.metadata["provider_id"] == tmdb_id
     end
   end
 
@@ -563,7 +670,7 @@ defmodule Mydia.MediaRequestsTest do
                )
 
       assert Repo.get!(MediaRequest, request.id).status == "pending"
-      refute Media.get_media_item_by_tmdb(request.tmdb_id)
+      refute Media.find_by_external_ids(%{tmdb: request.tmdb_id})
     end
 
     test "reports a request with no TMDB or TVDB id rather than creating a shell", %{

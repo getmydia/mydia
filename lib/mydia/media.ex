@@ -147,28 +147,6 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Gets a single media item by TMDB ID.
-  """
-  @spec get_media_item_by_tmdb(integer(), keyword()) :: MediaItem.t() | nil
-  def get_media_item_by_tmdb(tmdb_id, opts \\ []) do
-    MediaItem
-    |> where([m], m.tmdb_id == ^tmdb_id)
-    |> maybe_preload(opts[:preload])
-    |> Repo.one()
-  end
-
-  @doc """
-  Gets a single media item by TVDB ID.
-  """
-  @spec get_media_item_by_tvdb(integer(), keyword()) :: MediaItem.t() | nil
-  def get_media_item_by_tvdb(tvdb_id, opts \\ []) do
-    MediaItem
-    |> where([m], m.tvdb_id == ^tvdb_id)
-    |> maybe_preload(opts[:preload])
-    |> Repo.one()
-  end
-
-  @doc """
   Finds a media item by external IDs using cascading lookup: IMDB → TVDB → TMDB.
 
   Accepts a map with atom keys: `%{imdb: id, tvdb: id, tmdb: id}`.

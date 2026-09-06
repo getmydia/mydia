@@ -242,7 +242,7 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
   end
 
   defp wait_until_media_item(tmdb_id, retries) do
-    case Mydia.Media.get_media_item_by_tmdb(tmdb_id) do
+    case Mydia.Media.find_by_external_ids(%{tmdb: tmdb_id}) do
       nil ->
         Process.sleep(10)
         wait_until_media_item(tmdb_id, retries - 1)
@@ -262,7 +262,7 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
   defp media_item_created_within?(_tmdb_id, 0), do: false
 
   defp media_item_created_within?(tmdb_id, retries) do
-    case Mydia.Media.get_media_item_by_tmdb(tmdb_id) do
+    case Mydia.Media.find_by_external_ids(%{tmdb: tmdb_id}) do
       nil ->
         Process.sleep(10)
         media_item_created_within?(tmdb_id, retries - 1)
@@ -387,7 +387,7 @@ defmodule MydiaWeb.MediaLive.Show.AddConfigHostTest do
       })
 
     assert html =~ "That library is no longer available"
-    assert Mydia.Media.get_media_item_by_tmdb(missing_tmdb_id) == nil
+    assert Mydia.Media.find_by_external_ids(%{tmdb: missing_tmdb_id}) == nil
   end
 
   # Server-side authorization must never depend on a hidden UI element. The
