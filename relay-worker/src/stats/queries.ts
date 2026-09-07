@@ -53,6 +53,7 @@ export interface TableCounts {
   ingest_buckets: number;
   feedback_rate_limits: number;
   pairing_claims: number;
+  sweep_runs: number;
 }
 
 export interface SweepRunRow {
@@ -167,16 +168,23 @@ export async function loadOverviewStats(
        ORDER BY recent DESC, e.last_seen_at DESC LIMIT ?`,
     ).bind(since, TOP_ERROR_LIMIT),
     env.DB.prepare("SELECT COUNT(*) AS n FROM pairing_claims WHERE expires_at > ?").bind(now),
-    // Six counts as one statement of scalar subqueries rather than six more
-    // entries in this batch. Nothing here is windowed: these are "how big is
-    // the database right now".
+    // Seven counts as one statement of scalar subqueries rather than seven
+    // more entries in this batch. Nothing here is windowed: these are "how big
+    // is the database right now".
+    //
+    // sweep_runs belongs here even though it is bounded: the count is how you
+    // see that its self-eviction still works. Three tables in this Worker
+    // needed an eviction path retrofitted, so a sweep_runs count far above the
+    // ~168 the retention window implies is the signal that a fourth has
+    // started growing without one.
     env.DB.prepare(
       `SELECT (SELECT COUNT(*) FROM errors)               AS errors,
               (SELECT COUNT(*) FROM occurrences)          AS occurrences,
               (SELECT COUNT(*) FROM feedback_submissions) AS feedback_submissions,
               (SELECT COUNT(*) FROM ingest_buckets)       AS ingest_buckets,
               (SELECT COUNT(*) FROM feedback_rate_limits) AS feedback_rate_limits,
-              (SELECT COUNT(*) FROM pairing_claims)       AS pairing_claims`,
+              (SELECT COUNT(*) FROM pairing_claims)       AS pairing_claims,
+              (SELECT COUNT(*) FROM sweep_runs)           AS sweep_runs`,
     ),
     env.DB.prepare("SELECT * FROM sweep_runs ORDER BY ran_at DESC LIMIT 1"),
   ]);
@@ -203,6 +211,7 @@ export async function loadOverviewStats(
       ingest_buckets: zeroed(counts.ingest_buckets),
       feedback_rate_limits: zeroed(counts.feedback_rate_limits),
       pairing_claims: zeroed(counts.pairing_claims),
+      sweep_runs: zeroed(counts.sweep_runs),
     },
     lastSweep: rows<SweepRunRow>(results[Q.LastSweep])[0] ?? null,
   };

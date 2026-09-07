@@ -199,6 +199,7 @@ describe("loadOverviewStats", () => {
       "ingest_buckets",
       "feedback_rate_limits",
       "pairing_claims",
+      "sweep_runs",
     ] as const) {
       expect(typeof stats.tableCounts[key]).toBe("number");
     }
