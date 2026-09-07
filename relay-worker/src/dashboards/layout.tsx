@@ -89,6 +89,7 @@ export function Layout({ title, children }: { title: string; children?: Child })
       </head>
       <body>
         <nav class="chrome-nav">
+          <a href="/admin">Overview</a>
           <a href="/admin/errors">Errors</a>
           <a href="/admin/feedback">Feedback</a>
         </nav>

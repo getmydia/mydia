@@ -7,6 +7,7 @@ import { registerPassthroughRoutes } from "./proxy/passthrough";
 import { registerPairingRoutes } from "./pairing/routes";
 import { registerCrashRoutes } from "./crashes/ingest";
 import { registerErrorDashboard } from "./dashboards/errors";
+import { registerOverviewDashboard } from "./dashboards/overview";
 import { registerFeedbackRoutes } from "./feedback/ingest";
 import { registerFeedbackDashboard } from "./dashboards/feedback";
 import { adminHostnameBlocked } from "./dashboards/hostname-guard";
@@ -96,6 +97,11 @@ app.get("/stats", (c) =>
 // Registered before the dashboards it guards, since app.use() only wraps
 // routes registered after it (same composition rule as the two middlewares
 // above).
+//
+// The wildcard also guards the bare /admin route registered below, not just
+// the /admin/* subpaths: Hono's `/admin/*` was measured against 4.13.7 and
+// does match `/admin` itself, so the overview page is covered here too, with
+// no separate registration.
 app.use("/admin/*", async (c, next) => {
   const hostname = new URL(c.req.url).hostname;
   if (adminHostnameBlocked(hostname, c.env.ADMIN_ACCESS_HOSTNAME)) {
@@ -122,6 +128,12 @@ registerCrashRoutes(app);
 // still a manual step; until it exists, this route has no auth at all on any
 // hostname Access does not cover -- which is why the workers.dev deny above
 // exists, and why it is not a substitute for doing Step 1.
+// GET /admin -- the maintainer overview, and the landing page the other two
+// dashboards link back to. It is under the same /admin/* middleware above:
+// Hono's wildcard was measured against 4.13.7 and does match the bare path,
+// so this inherits the workers.dev deny with no separate registration, and
+// Cloudflare Access's own /admin* scope already covers it too.
+registerOverviewDashboard(app);
 registerErrorDashboard(app);
 // POST /feedback is the public ingest endpoint every mydia install calls --
 // a wire contract that must never move. registerFeedbackDashboard below

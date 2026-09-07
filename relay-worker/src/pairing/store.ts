@@ -33,12 +33,13 @@ export async function deleteClaim(env: Env, key: string): Promise<void> {
   await env.DB.prepare("DELETE FROM pairing_claims WHERE key = ?").bind(key).run();
 }
 
-// Not wired to a scheduled trigger yet -- no cron handler exists in this
-// Worker as of this task. Kept as the obvious hook for one later, exactly as
-// the module-level comment above says: housekeeping, not correctness, since
-// readClaim already refuses an expired row on its own.
-export async function purgeExpiredClaims(env: Env): Promise<void> {
-  await env.DB.prepare("DELETE FROM pairing_claims WHERE expires_at <= ?")
+// Returns the delete count so runScheduledSweep (src/obs/sweep.ts) can record
+// it alongside the other two sweeps, exactly as the module-level comment
+// above says: housekeeping, not correctness, since readClaim already refuses
+// an expired row on its own.
+export async function purgeExpiredClaims(env: Env): Promise<number> {
+  const result = await env.DB.prepare("DELETE FROM pairing_claims WHERE expires_at <= ?")
     .bind(Math.floor(Date.now() / 1000))
     .run();
+  return result.meta.changes;
 }

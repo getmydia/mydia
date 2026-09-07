@@ -51,18 +51,66 @@ export async function sweepStaleIngestBuckets(env: Env): Promise<number> {
   return result.meta.changes;
 }
 
+// Seven days of hourly runs, so this table holds roughly 168 rows. The sweep
+// that writes a row deletes the expired ones in the same batch, which is what
+// keeps this from becoming the fourth table here to need an eviction path
+// added after the fact.
+export const SWEEP_RUN_RETENTION_SECONDS = 604_800;
+
+// Bookkeeping, wrapped so it cannot fail the sweep. Before this the hourly
+// Cron Trigger left no durable trace at all, so "is the cron actually
+// running" had no answer short of reading Workers Logs.
+async function recordSweepRun(
+  env: Env,
+  ranAt: number,
+  deleted: { rateLimits: number; ingestBuckets: number; pairingClaims: number },
+  durationMs: number,
+): Promise<void> {
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO sweep_runs (ran_at, feedback_rate_limits_deleted,
+                                 ingest_buckets_deleted, pairing_claims_deleted, duration_ms)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).bind(
+        ranAt,
+        deleted.rateLimits,
+        deleted.ingestBuckets,
+        deleted.pairingClaims,
+        durationMs,
+      ),
+      env.DB.prepare("DELETE FROM sweep_runs WHERE ran_at < ?").bind(
+        ranAt - SWEEP_RUN_RETENTION_SECONDS,
+      ),
+    ]);
+  } catch (error) {
+    // Deliberately swallowed. A rethrow here would mark a Cron Trigger
+    // invocation failed even though all three sweeps completed, and
+    // Cloudflare reports that as a broken schedule.
+    console.log(
+      JSON.stringify({ event: "sweep_run_record_failed", message: String(error) }),
+    );
+  }
+}
+
 // Runs all three sweeps under one Cron Trigger. pairing/store.ts's
 // purgeExpiredClaims was written when pairing landed and then never wired to
 // anything -- the identical defect (a table with no eviction path) in a
-// different table, closed here in the same commit rather than left to be
-// rediscovered a third time.
-// readClaim already refuses an expired row on read, so this, like the
-// feedback sweep above, is housekeeping (bounding table growth), not a
-// correctness fix.
+// different table, closed here rather than left to be rediscovered a third
+// time. readClaim already refuses an expired row on read, so that one, like
+// the feedback sweep, is housekeeping and not a correctness fix.
 export async function runScheduledSweep(env: Env): Promise<void> {
-  await Promise.all([
+  const startedAt = Date.now();
+  const [rateLimits, ingestBuckets, pairingClaims] = await Promise.all([
     sweepStaleFeedbackRateLimits(env),
     sweepStaleIngestBuckets(env),
     purgeExpiredClaims(env),
   ]);
+
+  await recordSweepRun(
+    env,
+    Math.floor(startedAt / 1000),
+    { rateLimits, ingestBuckets, pairingClaims },
+    Date.now() - startedAt,
+  );
 }

@@ -10,6 +10,8 @@ import worker from "../../src/index";
 import {
   sweepStaleFeedbackRateLimits,
   sweepStaleIngestBuckets,
+  SWEEP_RUN_RETENTION_SECONDS,
+  runScheduledSweep,
 } from "../../src/obs/sweep";
 
 beforeAll(async () => {
@@ -177,5 +179,84 @@ describe("scheduled() handler", () => {
     // eviction path" defect in a different table.
     expect(await pairingClaimExists("sweep-scheduled:expired")).toBe(false);
     expect(await pairingClaimExists("sweep-scheduled:live")).toBe(true);
+  });
+});
+
+async function latestSweepRun(): Promise<Record<string, number> | null> {
+  return await env.DB.prepare("SELECT * FROM sweep_runs ORDER BY ran_at DESC LIMIT 1")
+    .first<Record<string, number>>();
+}
+
+describe("sweep run bookkeeping", () => {
+  it("records one row carrying each sweep's delete count", async () => {
+    await env.DB.prepare("DELETE FROM sweep_runs").run();
+
+    const currentHour = Math.floor(Date.now() / 3_600_000);
+    const now = Math.floor(Date.now() / 1000);
+    await insertRateLimitBucket("sweep-record:stale", currentHour - 10, 5);
+    await insertIngestBucket("sweep-record-fp", "stale-instance", currentHour - 10);
+    await insertPairingClaim("sweep-record:expired", now - 3600);
+
+    await runScheduledSweep(env);
+
+    const run = await latestSweepRun();
+    expect(run).not.toBeNull();
+    expect(run!.feedback_rate_limits_deleted).toBeGreaterThanOrEqual(1);
+    expect(run!.ingest_buckets_deleted).toBeGreaterThanOrEqual(1);
+    expect(run!.pairing_claims_deleted).toBeGreaterThanOrEqual(1);
+    expect(run!.duration_ms).toBeGreaterThanOrEqual(0);
+    expect(run!.ran_at).toBeGreaterThan(now - 60);
+  });
+
+  // The fourth table in this Worker to need bounding, and the first to do it
+  // in the same batch that writes the row instead of waiting to be
+  // retrofitted.
+  it("evicts its own rows past the retention window", async () => {
+    await env.DB.prepare("DELETE FROM sweep_runs").run();
+    const now = Math.floor(Date.now() / 1000);
+
+    await env.DB.prepare(
+      `INSERT INTO sweep_runs (ran_at, feedback_rate_limits_deleted,
+                               ingest_buckets_deleted, pairing_claims_deleted, duration_ms)
+       VALUES (?, 0, 0, 0, 1)`,
+    )
+      .bind(now - SWEEP_RUN_RETENTION_SECONDS - 3600)
+      .run();
+
+    await runScheduledSweep(env);
+
+    const remaining = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM sweep_runs WHERE ran_at < ?",
+    )
+      .bind(now - SWEEP_RUN_RETENTION_SECONDS)
+      .first<{ n: number }>();
+    expect(remaining?.n).toBe(0);
+  });
+
+  // Losing one bookkeeping row must never turn a successful sweep into a
+  // failed cron invocation Cloudflare then reports as a broken schedule. The
+  // sweeps are the work; the record is bookkeeping.
+  it("still completes the sweeps when recording the run fails", async () => {
+    const currentHour = Math.floor(Date.now() / 3_600_000);
+    await insertRateLimitBucket("sweep-broken:stale", currentHour - 10, 5);
+
+    // Proxy rather than a spread: D1Database's methods live on its prototype
+    // and need the real receiver, so every non-overridden call is rebound to
+    // the genuine target.
+    const brokenDb = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "batch") {
+          return () => Promise.reject(new Error("D1 batch is down"));
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    await expect(
+      runScheduledSweep({ ...env, DB: brokenDb } as unknown as Parameters<typeof runScheduledSweep>[0]),
+    ).resolves.toBeUndefined();
+
+    expect(await rateLimitBucketExists("sweep-broken:stale")).toBe(false);
   });
 });

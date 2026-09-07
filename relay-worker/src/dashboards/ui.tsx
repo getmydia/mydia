@@ -59,6 +59,16 @@ export function Badge({ label, title }: { label: string; title: string }) {
   );
 }
 
+// The single explanation of what a "throttled" badge means, shared by the
+// errors dashboard (where it hangs off one error's total) and the overview
+// (where it hangs off the aggregate crash count). One constant rather than a
+// copy in each, so the two can never drift into describing the same
+// mechanism differently.
+export const FLOOR_TITLE =
+  "The ingest throttle saturated at least one hourly bucket at some point. " +
+  "Crashes beyond the per-hour cap were accepted but not counted, so this " +
+  "total is a permanent floor, not an exact count.";
+
 // A single-button POST form. Used for resolve/unresolve on the errors
 // dashboard and mark-read/archive on the feedback one. Kept as a real form
 // rather than a fetch() so the dashboards keep working with JS disabled,
@@ -90,5 +100,44 @@ export function Pager({ href }: { href: string | null }) {
     <p class="pager">
       <a href={href}>Next</a>
     </p>
+  );
+}
+
+// The overview's headline row. Purely a layout container: it applies no
+// meaning to its children and does not decide how many fit, which is
+// grid-template-columns' job in styles.ts.
+export function StatGrid({ children }: { children?: Child }) {
+  return <div class="stat-grid">{children}</div>;
+}
+
+// One number with its label. `value` arrives pre-formatted, so this component
+// never has to decide what an unreadable count should look like -- see
+// overview.tsx's count().
+//
+// `hint` renders as visible text rather than a title attribute. The two hints
+// this page actually uses both correct an assumption the number invites (that
+// "crash sources" means installs, that a crash total is exact), and a tooltip
+// on a div is neither keyboard-reachable nor visible to the reader who most
+// needs it.
+export function StatCard({
+  label,
+  value,
+  hint,
+  badge,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  badge?: Child;
+}) {
+  return (
+    <div class="stat-card">
+      <div class="stat-label">{label}</div>
+      <div class="stat-value">
+        {value}
+        {badge}
+      </div>
+      {hint && <div class="stat-hint">{hint}</div>}
+    </div>
   );
 }

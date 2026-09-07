@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { Tabs, DataTable, Badge, PostButton, Pager } from "../../src/dashboards/ui";
+import { Tabs, DataTable, Badge, PostButton, Pager, StatGrid, StatCard, FLOOR_TITLE } from "../../src/dashboards/ui";
+import { css } from "../../src/dashboards/styles";
 
 // A component that renders nothing returns null, and null has no toString.
 // Verified against hono/jsx 4.13.7: `Pager({ href: null })` is literally
@@ -81,5 +82,83 @@ describe("Pager", () => {
     const html = render(Pager({ href: "/admin/errors?page=1" }));
     expect(html).toContain('href="/admin/errors?page=1"');
     expect(html).toContain("Next");
+  });
+});
+
+describe("StatCard", () => {
+  it("renders its label and value", () => {
+    const html = render(StatCard({ label: "Crashes", value: "42" }));
+    expect(html).toContain("Crashes");
+    expect(html).toContain("42");
+    expect(html).toContain('class="stat-card"');
+  });
+
+  // A hint is a visible line rather than a title tooltip: the reader has to
+  // see that "crash sources" is IP-derived without hovering a div, which is
+  // not reachable by keyboard anyway.
+  it("renders a hint as visible text when given one", () => {
+    const html = render(
+      StatCard({ label: "Crash sources", value: "8", hint: "IP-derived" }),
+    );
+    expect(html).toContain('class="stat-hint"');
+    expect(html).toContain("IP-derived");
+  });
+
+  it("emits no hint element when no hint is given", () => {
+    const html = render(StatCard({ label: "Crashes", value: "42" }));
+    expect(html).not.toContain("stat-hint");
+  });
+
+  it("escapes a label and value it is handed", () => {
+    const html = render(
+      StatCard({ label: "<script>alert(1)</script>", value: "<b>x</b>" }),
+    );
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).not.toContain("<b>x</b>");
+  });
+
+  it("renders a badge alongside the value", () => {
+    const html = render(
+      StatCard({
+        label: "Crashes",
+        value: "42",
+        badge: Badge({ label: "throttled", title: "why" }),
+      }),
+    );
+    expect(html).toContain("throttled");
+  });
+});
+
+describe("StatGrid", () => {
+  it("wraps its children in the grid container", () => {
+    const html = render(StatGrid({ children: "CARDS-MARKER" }));
+    expect(html).toContain('class="stat-grid"');
+    expect(html).toContain("CARDS-MARKER");
+  });
+});
+
+describe("stat card styles", () => {
+  it("defines every class the components emit", () => {
+    for (const selector of [
+      ".stat-grid",
+      ".stat-card",
+      ".stat-label",
+      ".stat-value",
+      ".stat-hint",
+    ]) {
+      expect(css).toContain(selector);
+    }
+  });
+});
+
+describe("FLOOR_TITLE", () => {
+  // The badge itself only says "throttled". This constant is the entire
+  // explanation of what that means, so a version that just restates the label
+  // would be useless to the maintainer reading it.
+  it("explains the mechanism, not just the label", () => {
+    expect(FLOOR_TITLE).toContain("hourly bucket");
+    expect(FLOOR_TITLE).toContain("floor");
+    expect(FLOOR_TITLE.length).toBeGreaterThan(80);
   });
 });

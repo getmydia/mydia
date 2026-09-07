@@ -230,15 +230,31 @@ fails parsing a semver out of the wrong tag name.
 
 ### Dashboards
 
-`GET /admin/errors` and `GET /admin/feedback` are maintainer dashboards,
-replacing the Elixir's ErrorTracker page and `FeedbackLive.Index`. Both live
-under a shared `/admin/*` prefix **on purpose**: it lets one Cloudflare
-Access application, scoped to `/admin*`, cover every maintainer-only route by
-construction, so adding a third dashboard later inherits the gate instead of
-needing its own conscious Access decision. Neither dashboard shares a path
-with a public endpoint — the public ingest routes (`POST /feedback`,
-`POST /crashes/report`) stay exactly where every mydia install already calls
-them.
+`GET /admin`, `GET /admin/errors` and `GET /admin/feedback` are maintainer
+dashboards, replacing the Elixir's ErrorTracker page and `FeedbackLive.Index`.
+All three live under a shared `/admin/*` prefix **on purpose**: it lets one
+Cloudflare Access application, scoped to `/admin*`, cover every
+maintainer-only route by construction, so adding a fourth dashboard later
+inherits the gate instead of needing its own conscious Access decision.
+Neither `/admin/errors` nor `/admin/feedback` shares a path with a public
+endpoint — the public ingest routes (`POST /feedback`, `POST /crashes/report`)
+stay exactly where every mydia install already calls them.
+
+`GET /admin` is the overview: crash volume and distinct crash sources over a
+selectable window, unresolved and throttled group counts, unread feedback,
+live pairing claims, a version breakdown, the top unresolved errors, D1 table
+row counts, and when the hourly sweep last ran. Every number comes from D1
+tables that already exist, in one `DB.batch()`. Proxy request volume and cache
+hit rate are deliberately absent: nothing counts them anywhere durable, and
+adding them needs an Analytics Engine binding plus an account API token.
+
+Two numbers on it mean something narrower than they look, and the page says so
+on the page rather than in this file. "Crash sources" counts distinct
+`occurrences.instance_key` values, and that column holds `cf-connecting-ip`, so
+it undercounts installs behind one NAT and overcounts one install on a changing
+address. Crash totals carry a `throttled` badge whenever any unresolved group
+has `errors.count_is_floor` set, because ingest stops writing occurrence rows
+once an hour's budget saturates.
 
 **Cloudflare Access guards `/admin/*`, not code.** The Worker holds no
 dashboard credentials at all — no `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`
@@ -266,6 +282,13 @@ production's workers.dev host and every preview URL keep 404ing.
 measurement and Step 4a's staging contract diff both need that hostname
 serving the public routes.
 
+The deny covers the bare `/admin` as well as the subpaths. Hono's `/admin/*`
+wildcard matches a path with no trailing segment (measured against 4.13.7, and
+pinned by `test/dashboards/hostname.test.ts`), so the overview needs no
+separate registration. Cloudflare Access's application scope is `/admin*`
+rather than `/admin/*`, so it covers the bare path too, with no configuration
+change at cutover.
+
 That deny is not authentication and must not be mistaken for it -- it removes
 unprotected hostnames from reach, it does not decide who may look. Access
 still decides that, and skipping Step 1 still leaves the dashboards open on
@@ -283,7 +306,8 @@ relay-worker/
 │   ├── pairing/            # remote-access pairing claims
 │   ├── crashes/            # crash report ingest
 │   ├── feedback/           # feedback ingest (public POST) + email notification
-│   ├── dashboards/         # errors + feedback maintainer dashboards, under /admin/*
+│   ├── dashboards/         # overview + errors + feedback maintainer dashboards, under /admin/*
+│   ├── stats/              # the overview's D1 aggregates, one batch per page load
 │   ├── archive/             # SubDL zip extraction with size caps
 │   └── obs/                # rate limiting, request logging, scheduled sweep
 ├── migrations/              # D1 migrations, applied by wrangler + vitest-pool-workers
@@ -421,9 +445,10 @@ having deployed anything broken (the failure is expected and safe).
 
 ### Step 1: Cloudflare Access — hard ordering constraint
 
-**The dashboards are currently unauthenticated.** `GET /admin/errors` and
-`GET /admin/feedback` expose crash reports and user-submitted feedback,
-including instance identifiers. **Nothing may be routed to a public hostname
+**The dashboards are currently unauthenticated.** `GET /admin`,
+`GET /admin/errors` and `GET /admin/feedback` expose crash reports,
+user-submitted feedback, and the aggregate stats built from both, including
+instance identifiers. **Nothing may be routed to a public hostname
 before the Access application below exists.** This is not a recommendation to
 configure Access soon after cutover — it is a precondition of cutover.
 (Today this Worker has no production route, so the constraint is not yet
@@ -451,7 +476,7 @@ the moment Access was configured.
 `/admin/errors` and `/admin/feedback` — entirely separate paths from any
 public endpoint. `POST /feedback` and `POST /crashes/report` did **not**
 move; they are wire contracts every deployed mydia instance already calls.
-One Access application scoped to `/admin*` now cleanly covers both
+One Access application scoped to `/admin*` now cleanly covers all three
 dashboards, present and future, with no per-route decision and no path
 collision with anything public.
 
@@ -459,7 +484,7 @@ collision with anything public.
 
 1. Create one self-hosted Access application:
    - Application domain: `relay.mydia.dev`
-   - Path: `/admin*` (covers `/admin/errors`, `/admin/errors/:fingerprint`,
+   - Path: `/admin*` (covers `/admin`, `/admin/errors`, `/admin/errors/:fingerprint`,
      `/admin/errors/:fingerprint/resolve`, `/admin/errors/:fingerprint/unresolve`,
      `/admin/feedback`, `/admin/feedback/:id/state`, and
      `/admin/feedback/:id/github` — every maintainer-only route in the
@@ -475,11 +500,11 @@ scoping this runbook depends on against a deploy that serves no real traffic,
 and it is the cheapest place to find out if that scoping does not behave as
 described here.
 
-Verify it there too, before touching production: run the same four curls below
+Verify it there too, before touching production: run the same five curls below
 against `mydia-relay-staging.arsfeld.workers.dev` instead of `relay.mydia.dev`.
-The expected answers are identical, and a 404 rather than a 302 on the two
-`/admin` routes is the signal that path-scoped Access is not covering that
-hostname at all, which is worth learning on staging.
+The expected answers are identical, and a 404 rather than a 302 on any of the
+three `/admin` routes is the signal that path-scoped Access is not covering
+that hostname at all, which is worth learning on staging.
 
 Note that staging's `/admin/*` becomes reachable as soon as
 `ADMIN_ACCESS_HOSTNAME` names its hostname, whether or not the Access
@@ -494,6 +519,10 @@ and the two are configured independently.
 **Verify both halves after configuring Access:**
 
 ```bash
+# GET /admin: must require login
+curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/admin
+# expect: 302 (redirect to the Access login)
+
 # GET /admin/errors: must require login
 curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/admin/errors
 # expect: 302 (redirect to the Access login)
@@ -516,7 +545,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/feedback
 # expect: 404
 ```
 
-If either `/admin/*` curl ever comes back 200 instead of 302, or the `POST
+If any `/admin` curl ever comes back 200 instead of 302, or the `POST
 /feedback` curl comes back anything but 201, stop and re-check the Access
 application's path scope before proceeding with cutover.
 
@@ -604,12 +633,12 @@ today, on purpose. Add it by hand, deliberately, following this sequence.
   `placeholder_local_dev_only`), the four secrets are set, CI has deployed at
   least once to the Worker's `*.workers.dev` subdomain, and the Step 3 CPU
   measurement has a recorded number.
-- **The `/admin*` Access application from Step 1 exists and both its
+- **The `/admin*` Access application from Step 1 exists and all three of its
   verification curls pass.** This is the ordering constraint that matters
   most in this whole runbook: neither a Worker route nor a Cloudflare Access
   application can be scoped by HTTP method, only by path. A bare
   `relay.mydia.dev/*` route (added below in 4b) exposes every path the
-  Worker answers, `/admin/errors` and `/admin/feedback` included, to
+  Worker answers, `/admin`, `/admin/errors` and `/admin/feedback` included, to
   anonymous traffic the instant it deploys — regardless of what Access
   policy exists for any other path. Do not add the wildcard route on the
   assumption Access can follow "right after." If Step 1 isn't done, stop and
@@ -725,6 +754,10 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://relay.mydia.dev/crashe
   -d '{"error_type":"RuntimeError","error_message":"cutover smoke test","version":"0.0.0"}'
 # expect 201, NOT 202: CrashReporter.Sender matches only 201 as success and
 # retries/logs-failed on anything else.
+
+curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/admin
+# expect 302 (Access login redirect) -- confirms the overview is not
+# reachable without logging in either.
 
 curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/admin/errors
 # expect 302 (Access login redirect) -- confirms the smoke-test crash landed
