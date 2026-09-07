@@ -29,7 +29,7 @@ dependencies:
   elliptic: ^0.4.0
   pointycastle: ^4.0.0
   convert: ^3.1.2
-  flutter_riverpod: ^3.0.0
+  flutter_riverpod: ^3.3.2
   riverpod_annotation: ^4.0.0
   go_router: ^18.0.1
   graphql_flutter: ^5.1.0
@@ -47,7 +47,7 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
-  dio: ^5.4.0
+  dio: ^5.11.1
   # Talks to org.freedesktop.portal.Flatpak so the Flatpak build can update
   # itself. Plain Dart rather than a Flutter plugin, so it adds no platform
   # channel and no build step, and it is only constructed inside the sandbox.
@@ -91,7 +91,7 @@ dependencies:
   # LiquidGlassSettings are what the OSD's whole appearance rides on. An
   # unattended `pub upgrade` moving this is a visual regression nobody
   # reviewed.
-  liquid_glass_widgets: 0.29.5
+  liquid_glass_widgets: 1.3.0
 
 dev_dependencies:
   flutter_test:
