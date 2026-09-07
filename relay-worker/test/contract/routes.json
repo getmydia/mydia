@@ -1,5 +1,6 @@
 [
   { "method": "GET", "path": "/health" },
+  { "method": "GET", "path": "/client-config" },
   { "method": "GET", "path": "/configuration" },
   { "method": "GET", "path": "/tmdb/genre/movie" },
   { "method": "GET", "path": "/tmdb/genre/tv" },
