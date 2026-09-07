@@ -226,6 +226,10 @@ class P2pService {
   StreamSubscription<FlutterInboundControlRequest>? _controlSubscription;
 
   // Stream of P2P status updates
+  /// Set by [dispose]. Checked after every await in [_initialize], which can
+  /// otherwise finish building a host for a service that is already gone.
+  bool _disposed = false;
+
   final _statusController = StreamController<P2pStatus>.broadcast();
   Stream<P2pStatus> get onStatusChanged => _statusController.stream;
 
@@ -403,7 +407,16 @@ class P2pService {
   }
 
   Future<void> _initialize({List<String>? relayUrls}) async {
+    // Resolving the relay list is a network call, so this await can be seconds
+    // long. `dispose()` can land inside it, and it cannot defend itself here:
+    // it closes the controllers after cancelling `_eventSubscription`, but that
+    // subscription does not exist yet, so there is nothing for it to cancel.
+    // Without the checks below, initialization would carry on after dispose,
+    // build a host, subscribe, and fire into closed controllers with
+    // "Bad state: Cannot add new events after calling close".
     final resolved = relayUrls ?? (await resolveRelayList()).urls;
+    if (_disposed) return;
+
     _configuredRelayUrls = List.unmodifiable(resolved);
 
     try {
@@ -411,6 +424,7 @@ class P2pService {
           '[P2P] Initializing iroh-based P2P Host with relays: $resolved');
 
       final keypairBytes = await _loadOrCreateKeypairBytes();
+      if (_disposed) return;
 
       // Initialize Host via FRB - returns (P2PHost, String)
       final (host, nodeId) = P2PHost.init(
@@ -436,7 +450,9 @@ class P2pService {
           _currentConnectionType = _parseConnectionType(connectionType);
           _autoReconnectAttempts = 0;
           _autoReconnectTimer?.cancel();
-          _peerConnectedController.add(peerId);
+          if (!_peerConnectedController.isClosed) {
+            _peerConnectedController.add(peerId);
+          }
           _emitStatus();
         } else if (event.startsWith('connection_type_changed:')) {
           final parts =
@@ -476,6 +492,7 @@ class P2pService {
       _controlSubscription = _host!.remoteControlStream().listen((request) {
         debugPrint(
             '[P2P] Control request: ${request.requestId} from ${request.peer}');
+        if (_controlRequestController.isClosed) return;
         _controlRequestController.add(request);
       });
 
@@ -492,6 +509,10 @@ class P2pService {
   }
 
   void _emitStatus() {
+    // Defence in depth alongside the `_disposed` checks in `_initialize`. The
+    // Rust host is dropped on garbage collection rather than synchronously, so
+    // an event can still arrive from a host whose service is already gone.
+    if (_statusController.isClosed) return;
     _statusController.add(status);
   }
 
@@ -865,6 +886,7 @@ class P2pService {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
     _autoReconnectTimer?.cancel();
     // Cancel before closing the controllers below: the Rust host is only
     // dropped when it is garbage collected, not synchronously here, so a
