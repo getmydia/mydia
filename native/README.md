@@ -137,3 +137,23 @@ format. The one real change inside the generator is rejection sampling replacing
 When relay registration fails, `relay_registered: false` makes the UI hide the
 code entirely and show a `#pairing-relay-warning` box reading "Typed code
 unavailable", so a server on master against a pre-0.13.0 relay offers QR only.
+
+## The relay list is resolved outside the core
+
+`HostConfig.relay_urls` is a plain `Vec<String>` and the core does no I/O to
+fill it. `build_relay_mode` parses the entries, drops anything unparseable, and
+appends n0's three production relays underneath as fallbacks. An empty vec, or
+one where nothing parsed, leaves iroh's preset alone: an empty
+`RelayMode::Custom` map is invalid, because `Endpoint` requires at least one
+relay.
+
+Deciding what goes in that vec belongs to the callers, and there are two of
+them with the same four precedence levels:
+
+- `lib/mydia/p2p/relay_list.ex` for the server
+- `player/lib/core/p2p/relay_list.dart` for the player
+
+Both read `GET /client-config` from the metadata relay at boot, so a relay can
+be moved by deploying the metadata relay rather than shipping a new server
+image and player build. Change one of those two files and you almost certainly
+need to change the other.
