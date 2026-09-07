@@ -28,4 +28,24 @@ void main() {
     // honest answer.
     expect(service.activeRelayUrl, 'https://relay-one.example.test');
   });
+
+  test('reset clears the configured relays so a stale list cannot linger', () {
+    final service = P2pService();
+    service.debugSetConfiguredRelays(const ['https://relay-one.example.test']);
+    expect(service.activeRelayUrl, 'https://relay-one.example.test');
+
+    service.reset();
+
+    // reinitializeWithRelayUrl is reset() followed by initialize(). If reset
+    // left the old list in place, the window between the two would report the
+    // relay the user just replaced.
+    //
+    // This covers reset's own teardown only. The related race, where an
+    // initialize() still awaiting resolveRelayList() publishes its host over
+    // the replacement's, is guarded by _initGeneration but is not reachable
+    // from here: driving _initialize past that await needs P2PHost.init and so
+    // the native bridge, which the unit suite does not load. The Player E2E
+    // suite is what exercises it.
+    expect(service.activeRelayUrl, isNull);
+  });
 }

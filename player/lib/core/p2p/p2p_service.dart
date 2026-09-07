@@ -230,6 +230,18 @@ class P2pService {
   /// otherwise finish building a host for a service that is already gone.
   bool _disposed = false;
 
+  /// Bumped by [reset] and [dispose]. An in-flight [_initialize] captures this
+  /// on entry and abandons its work the moment it changes.
+  ///
+  /// Resolving the relay list is a network call, so an attempt can sit in that
+  /// await for seconds. `reinitializeWithRelayUrl` calls `reset()` and then
+  /// `initialize()` inside that window whenever the user saves a relay while
+  /// the app is still starting, which is exactly when they would. Without this,
+  /// the stale attempt walks on to build a second iroh host, overwrite `_host`
+  /// and `_configuredRelayUrls` with the relay the user just replaced, and
+  /// install a second event subscription, leaving the abandoned host running.
+  int _initGeneration = 0;
+
   final _statusController = StreamController<P2pStatus>.broadcast();
   Stream<P2pStatus> get onStatusChanged => _statusController.stream;
 
@@ -407,15 +419,21 @@ class P2pService {
   }
 
   Future<void> _initialize({List<String>? relayUrls}) async {
-    // Resolving the relay list is a network call, so this await can be seconds
-    // long. `dispose()` can land inside it, and it cannot defend itself here:
-    // it closes the controllers after cancelling `_eventSubscription`, but that
-    // subscription does not exist yet, so there is nothing for it to cancel.
-    // Without the checks below, initialization would carry on after dispose,
-    // build a host, subscribe, and fire into closed controllers with
-    // "Bad state: Cannot add new events after calling close".
+    // Every await below can be raced by dispose() or reset(). Resolving the
+    // relay list is a network call, so this first one can be seconds long.
+    //
+    // dispose() cannot defend itself here: it cancels `_eventSubscription`
+    // before closing the controllers, but during this window that subscription
+    // does not exist yet, so there is nothing to cancel. Without these checks
+    // initialization carried on, built a host, subscribed, and fired into
+    // closed controllers with "Bad state: Cannot add new events after calling
+    // close". reset() is the same shape with a different ending: the stale
+    // attempt would install its host over the replacement's.
+    final generation = _initGeneration;
+    bool stale() => _disposed || generation != _initGeneration;
+
     final resolved = relayUrls ?? (await resolveRelayList()).urls;
-    if (_disposed) return;
+    if (stale()) return;
 
     _configuredRelayUrls = List.unmodifiable(resolved);
 
@@ -424,13 +442,20 @@ class P2pService {
           '[P2P] Initializing iroh-based P2P Host with relays: $resolved');
 
       final keypairBytes = await _loadOrCreateKeypairBytes();
-      if (_disposed) return;
+      if (stale()) return;
 
       // Initialize Host via FRB - returns (P2PHost, String)
       final (host, nodeId) = P2PHost.init(
         relayUrls: resolved,
         keypairBytes: keypairBytes,
       );
+
+      // P2PHost.init is synchronous, but the two awaits above mean this
+      // attempt may already have been superseded. Drop the host on the floor
+      // rather than publishing it: the Rust side is released when the Dart
+      // object is garbage collected, the same way dispose() releases it.
+      if (stale()) return;
+
       _host = host;
       _nodeId = nodeId;
 
@@ -499,8 +524,14 @@ class P2pService {
       _isInitialized = true;
       _emitStatus();
 
-      // Get initial node address (async FFI call, runs on worker thread)
-      _nodeAddr = await _host!.getNodeAddr();
+      // Get initial node address (async FFI call, runs on worker thread).
+      // Read through the local `host`, not `_host!`: a reset() during this
+      // await nulls the field, and the bang would then throw rather than
+      // letting the stale check below do its job.
+      final nodeAddr = await host.getNodeAddr();
+      if (stale()) return;
+
+      _nodeAddr = nodeAddr;
       debugPrint('[P2P] Initial node addr: $_nodeAddr');
     } catch (e) {
       debugPrint('[P2P] Failed to initialize: $e');
@@ -823,6 +854,9 @@ class P2pService {
   /// and attach an error handler to the cancellation itself so a rejected
   /// Future cannot surface as an unhandled async error.
   void reset() {
+    // Abandon any in-flight _initialize before tearing state down, so it
+    // cannot publish its host over the one the next initialize() builds.
+    _initGeneration++;
     _autoReconnectTimer?.cancel();
     _autoReconnectAttempts = 0;
     _lastDialedEndpointAddr = null;
@@ -887,6 +921,7 @@ class P2pService {
 
   Future<void> dispose() async {
     _disposed = true;
+    _initGeneration++;
     _autoReconnectTimer?.cancel();
     // Cancel before closing the controllers below: the Rust host is only
     // dropped when it is garbage collected, not synchronously here, so a
