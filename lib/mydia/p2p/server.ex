@@ -94,7 +94,7 @@ defmodule Mydia.P2p.Server do
     keypair_path |> Path.dirname() |> File.mkdir_p!()
 
     # Start the host - NIF returns {resource, node_id} directly (raises on error)
-    {resource, node_id} = P2p.start_host(relay_url, bind_port, keypair_path)
+    {resource, node_id} = P2p.start_host([relay_url], bind_port, keypair_path)
 
     Logger.info("P2P Host started with NodeID: #{node_id}, relay: #{relay_url}")
 

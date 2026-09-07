@@ -293,12 +293,12 @@ fn wire__crate__P2PHost_init_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_relay_url = <Option<String>>::sse_decode(&mut deserializer);
+            let api_relay_urls = <Vec<String>>::sse_decode(&mut deserializer);
             let api_keypair_bytes = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok =
-                    Ok::<_, ()>(crate::P2pHost::init(api_relay_url, api_keypair_bytes))?;
+                    Ok::<_, ()>(crate::P2pHost::init(api_relay_urls, api_keypair_bytes))?;
                 std::result::Result::Ok(output_ok)
             })())
         },

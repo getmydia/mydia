@@ -402,7 +402,7 @@ class P2pService {
 
       // Initialize Host via FRB - returns (P2PHost, String)
       final (host, nodeId) = P2PHost.init(
-        relayUrl: effectiveRelayUrl,
+        relayUrls: [effectiveRelayUrl],
         keypairBytes: keypairBytes,
       );
       _host = host;

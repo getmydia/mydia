@@ -31,7 +31,8 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// Get this node's EndpointAddr as JSON for sharing.
   Future<String> getNodeAddr();
 
-  /// Initialize a new P2P host with optional custom relay URL.
+  /// Initialize a new P2P host with custom relay URLs, in preference
+  /// order. An empty list uses iroh's default relays.
   ///
   /// `keypair_bytes` is the node's raw 32-byte Ed25519 secret. A browser has
   /// no filesystem, so it reads the secret out of IndexedDB and hands it in
@@ -39,9 +40,10 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// where it was already decided. A slice of the wrong length is dropped
   /// rather than trusted, which costs a fresh identity but never a
   /// malformed one.
-  static (P2PHost, String) init({String? relayUrl, Uint8List? keypairBytes}) =>
+  static (P2PHost, String) init(
+          {required List<String> relayUrls, Uint8List? keypairBytes}) =>
       RustLib.instance.api
-          .crateP2PHostInit(relayUrl: relayUrl, keypairBytes: keypairBytes);
+          .crateP2PHostInit(relayUrls: relayUrls, keypairBytes: keypairBytes);
 
   /// Stream inbound control requests to Flutter.
   ///

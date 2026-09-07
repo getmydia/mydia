@@ -27,19 +27,20 @@ struct HostResource {
 impl rustler::Resource for HostResource {}
 
 /// Start the p2p host with configuration.
-/// relay_url: Custom relay URL for NAT traversal (uses default relays if None).
+/// relay_urls: Custom relay URLs for NAT traversal, in preference order.
+/// An empty list uses iroh's default relays.
 /// bind_port: UDP port for direct connections (0 or None for random port).
 /// keypair_path: Path to store/load the node's keypair for persistent identity.
 /// Returns (resource, node_id_string).
 #[rustler::nif]
 fn start_host<'a>(
     env: Env<'a>,
-    relay_url: Option<String>,
+    relay_urls: Vec<String>,
     bind_port: Option<u16>,
     keypair_path: Option<String>,
 ) -> Term<'a> {
     let config = HostConfig {
-        relay_url,
+        relay_urls,
         bind_port,
         keypair_path,
         // The server reads its identity off disk; only a browser hands raw
