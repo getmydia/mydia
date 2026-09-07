@@ -18,7 +18,13 @@ beforeAll(async () => {
 // This is not authentication and these tests do not claim it is. It removes
 // unprotected hostnames from reach; Access still decides who may look.
 describe("/admin/* on a workers.dev hostname", () => {
-  const ADMIN_PATHS = ["/admin/errors", "/admin/feedback"];
+  // `/admin` is in this list deliberately. Hono's `/admin/*` wildcard was
+  // measured against 4.13.7 and does match a bare `/admin`, so the overview
+  // inherits the deny with no extra registration. That behaviour is
+  // load-bearing: if a router upgrade ever changed it, the overview would
+  // start serving on production's workers.dev host and on every versioned
+  // preview URL. These cases are what would catch it.
+  const ADMIN_PATHS = ["/admin", "/admin/errors", "/admin/feedback"];
 
   // Mirrors vitest.config.ts's miniflare binding. The deliberately different
   // worker name (`-staging`) is what keeps every pre-existing case in this

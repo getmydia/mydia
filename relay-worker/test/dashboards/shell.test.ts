@@ -31,8 +31,9 @@ describe("page shell", () => {
     expect(html).toContain("color-scheme: light dark");
   });
 
-  it("renders both nav links", () => {
+  it("renders all three nav links", () => {
     const html = render(page("Errors", "body"));
+    expect(html).toContain('href="/admin"');
     expect(html).toContain('href="/admin/errors"');
     expect(html).toContain('href="/admin/feedback"');
   });
