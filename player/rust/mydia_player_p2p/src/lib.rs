@@ -631,7 +631,8 @@ async fn run_event_dispatcher(
 }
 
 impl P2pHost {
-    /// Initialize a new P2P host with optional custom relay URL.
+    /// Initialize a new P2P host with custom relay URLs, in preference
+    /// order. An empty list uses iroh's default relays.
     ///
     /// `keypair_bytes` is the node's raw 32-byte Ed25519 secret. A browser has
     /// no filesystem, so it reads the secret out of IndexedDB and hands it in
@@ -640,10 +641,10 @@ impl P2pHost {
     /// rather than trusted, which costs a fresh identity but never a
     /// malformed one.
     #[frb(sync)]
-    pub fn init(relay_url: Option<String>, keypair_bytes: Option<Vec<u8>>) -> (Self, String) {
+    pub fn init(relay_urls: Vec<String>, keypair_bytes: Option<Vec<u8>>) -> (Self, String) {
         let keypair_supplied = keypair_bytes.is_some();
         log::info!(
-            "P2pHost::init() called with relay_url: {relay_url:?}, keypair_supplied: {keypair_supplied}"
+            "P2pHost::init() called with relay_urls: {relay_urls:?}, keypair_supplied: {keypair_supplied}"
         );
         let keypair_bytes = keypair_bytes.and_then(|bytes| {
             let len = bytes.len();
@@ -656,7 +657,7 @@ impl P2pHost {
                 .ok()
         });
         let config = HostConfig {
-            relay_url,
+            relay_urls,
             bind_port: None,
             keypair_path: None,
             keypair_bytes,

@@ -64,6 +64,14 @@ defmodule MetadataRelay.Router do
     |> send_resp(200, metrics)
   end
 
+  # Client configuration. Read by mydia servers and players at boot to learn
+  # which iroh relays to use. See MetadataRelay.ClientConfig.
+  get "/client-config" do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, Jason.encode!(MetadataRelay.ClientConfig.document()))
+  end
+
   # TMDB Configuration
   get "/configuration" do
     handle_tmdb_request(conn, fn -> Handler.configuration() end)

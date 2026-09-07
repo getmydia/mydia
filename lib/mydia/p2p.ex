@@ -12,7 +12,8 @@ defmodule Mydia.P2p do
   Start the p2p host with configuration.
 
   ## Options
-    * `:relay_url` - Custom relay URL for NAT traversal (uses iroh default relays if nil).
+    * `:relay_urls` - Custom relay URLs for NAT traversal, in preference order.
+      An empty list uses iroh's default relays.
     * `:bind_port` - UDP port for direct connections (enables hole punching in Docker).
       If nil or 0, a random port is used.
     * `:keypair_path` - Path to store/load the node's keypair for persistent identity.
@@ -20,7 +21,7 @@ defmodule Mydia.P2p do
 
   Returns `{:ok, {resource, node_id}}` on success.
   """
-  def start_host(_relay_url \\ nil, _bind_port \\ nil, _keypair_path \\ nil),
+  def start_host(_relay_urls \\ [], _bind_port \\ nil, _keypair_path \\ nil),
     do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """

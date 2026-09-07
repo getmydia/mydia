@@ -7,13 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/p2p/p2p_keystore.dart';
 import 'package:player/native/lib.dart';
 
-/// Default iroh relay URL (our own relay).
-/// Can be overridden at build time via dart-define IROH_RELAY_URL.
-const _defaultRelayUrl = 'https://cae1-1.relay.mydia.dev';
-const _customIrohRelayUrl = String.fromEnvironment('IROH_RELAY_URL');
+import 'relay_list.dart';
 
-/// Display placeholder for when using the default relay
-const defaultRelayUrl = _defaultRelayUrl;
+/// The iroh relay compiled into this build.
+///
+/// Re-exported from `relay_list.dart`, which owns the constant now, so callers
+/// that already import it from here keep working.
+const defaultRelayUrl = defaultIrohRelayUrl;
 
 /// Provider for the P2pService
 final p2pServiceProvider = Provider<P2pService>((ref) {
@@ -64,8 +64,11 @@ class P2pStatusNotifier extends Notifier<P2pStatus> {
       // Reset old host (allows re-initialization)
       p2pService.reset();
 
-      // Reinitialize with new relay URL
-      await p2pService.initialize(relayUrl: relayUrl);
+      // Reinitialize with new relay URL. A null relayUrl means "go back to
+      // resolving the list normally" rather than "use this one relay".
+      await p2pService.initialize(
+        relayUrls: relayUrl == null ? null : [relayUrl],
+      );
 
       if (!ref.mounted) return;
 
@@ -223,6 +226,22 @@ class P2pService {
   StreamSubscription<FlutterInboundControlRequest>? _controlSubscription;
 
   // Stream of P2P status updates
+  /// Set by [dispose]. Checked after every await in [_initialize], which can
+  /// otherwise finish building a host for a service that is already gone.
+  bool _disposed = false;
+
+  /// Bumped by [reset] and [dispose]. An in-flight [_initialize] captures this
+  /// on entry and abandons its work the moment it changes.
+  ///
+  /// Resolving the relay list is a network call, so an attempt can sit in that
+  /// await for seconds. `reinitializeWithRelayUrl` calls `reset()` and then
+  /// `initialize()` inside that window whenever the user saves a relay while
+  /// the app is still starting, which is exactly when they would. Without this,
+  /// the stale attempt walks on to build a second iroh host, overwrite `_host`
+  /// and `_configuredRelayUrls` with the relay the user just replaced, and
+  /// install a second event subscription, leaving the abandoned host running.
+  int _initGeneration = 0;
+
   final _statusController = StreamController<P2pStatus>.broadcast();
   Stream<P2pStatus> get onStatusChanged => _statusController.stream;
 
@@ -303,15 +322,26 @@ class P2pService {
     };
   }
 
-  /// The custom relay URL passed during initialization (null if using iroh defaults)
-  String? _customRelayUrl;
+  /// The relay URLs this host was configured with, in preference order. Empty
+  /// before initialization.
+  List<String> _configuredRelayUrls = const [];
+
+  /// Set the configured relays without initializing a host. Tests only.
+  @visibleForTesting
+  void debugSetConfiguredRelays(List<String> urls) {
+    _configuredRelayUrls = List.unmodifiable(urls);
+  }
 
   /// Get the active relay URL (null before initialization)
   String? get activeRelayUrl => _getEffectiveRelayUrl();
 
-  /// Get the effective relay URL from cached event data (no FFI call)
+  /// Get the effective relay URL from cached event data (no FFI call).
+  ///
+  /// The relay the node actually landed on, which only the `ready:` event
+  /// knows, falling back to the first relay it was configured with.
   String? _getEffectiveRelayUrl() {
-    return _cachedRelayUrl ?? _customRelayUrl;
+    if (_cachedRelayUrl != null) return _cachedRelayUrl;
+    return _configuredRelayUrls.isEmpty ? null : _configuredRelayUrls.first;
   }
 
   /// Extract the relay URL from a nodeAddr JSON string.
@@ -338,14 +368,16 @@ class P2pService {
 
   /// Initialize the P2P host.
   ///
-  /// [relayUrl] - Optional custom iroh relay URL. If not provided, uses
-  /// the build-time IROH_RELAY_URL or falls back to [_defaultRelayUrl].
+  /// [relayUrls] - Optional explicit relay list, which skips resolution
+  /// entirely. When omitted the list comes from [resolveRelayList]: a build
+  /// time or user override, else the metadata relay's `/client-config`, else
+  /// the last cached fetch, else the compiled-in default.
   ///
   /// Concurrent callers join the attempt already in flight instead of each
   /// building a host of their own. That guard is needed because reading the
   /// keypair is asynchronous, so the `_isInitialized` check and the assignment
   /// that satisfies it no longer happen in one synchronous run.
-  Future<void> initialize({String? relayUrl}) async {
+  Future<void> initialize({List<String>? relayUrls}) async {
     if (_isInitialized) return;
 
     final inFlight = _initializeFuture;
@@ -354,7 +386,7 @@ class P2pService {
       return;
     }
 
-    final attempt = _initialize(relayUrl: relayUrl);
+    final attempt = _initialize(relayUrls: relayUrls);
     _initializeFuture = attempt;
     try {
       await attempt;
@@ -386,25 +418,44 @@ class P2pService {
     return secret;
   }
 
-  Future<void> _initialize({String? relayUrl}) async {
-    // Use provided URL, or custom from env, or our default relay
-    final effectiveRelayUrl = relayUrl ??
-        (_customIrohRelayUrl.isNotEmpty
-            ? _customIrohRelayUrl
-            : _defaultRelayUrl);
-    _customRelayUrl = effectiveRelayUrl;
+  Future<void> _initialize({List<String>? relayUrls}) async {
+    // Every await below can be raced by dispose() or reset(). Resolving the
+    // relay list is a network call, so this first one can be seconds long.
+    //
+    // dispose() cannot defend itself here: it cancels `_eventSubscription`
+    // before closing the controllers, but during this window that subscription
+    // does not exist yet, so there is nothing to cancel. Without these checks
+    // initialization carried on, built a host, subscribed, and fired into
+    // closed controllers with "Bad state: Cannot add new events after calling
+    // close". reset() is the same shape with a different ending: the stale
+    // attempt would install its host over the replacement's.
+    final generation = _initGeneration;
+    bool stale() => _disposed || generation != _initGeneration;
+
+    final resolved = relayUrls ?? (await resolveRelayList()).urls;
+    if (stale()) return;
+
+    _configuredRelayUrls = List.unmodifiable(resolved);
 
     try {
       debugPrint(
-          '[P2P] Initializing iroh-based P2P Host with relay: $effectiveRelayUrl');
+          '[P2P] Initializing iroh-based P2P Host with relays: $resolved');
 
       final keypairBytes = await _loadOrCreateKeypairBytes();
+      if (stale()) return;
 
       // Initialize Host via FRB - returns (P2PHost, String)
       final (host, nodeId) = P2PHost.init(
-        relayUrl: effectiveRelayUrl,
+        relayUrls: resolved,
         keypairBytes: keypairBytes,
       );
+
+      // P2PHost.init is synchronous, but the two awaits above mean this
+      // attempt may already have been superseded. Drop the host on the floor
+      // rather than publishing it: the Rust side is released when the Dart
+      // object is garbage collected, the same way dispose() releases it.
+      if (stale()) return;
+
       _host = host;
       _nodeId = nodeId;
 
@@ -424,7 +475,9 @@ class P2pService {
           _currentConnectionType = _parseConnectionType(connectionType);
           _autoReconnectAttempts = 0;
           _autoReconnectTimer?.cancel();
-          _peerConnectedController.add(peerId);
+          if (!_peerConnectedController.isClosed) {
+            _peerConnectedController.add(peerId);
+          }
           _emitStatus();
         } else if (event.startsWith('connection_type_changed:')) {
           final parts =
@@ -464,14 +517,21 @@ class P2pService {
       _controlSubscription = _host!.remoteControlStream().listen((request) {
         debugPrint(
             '[P2P] Control request: ${request.requestId} from ${request.peer}');
+        if (_controlRequestController.isClosed) return;
         _controlRequestController.add(request);
       });
 
       _isInitialized = true;
       _emitStatus();
 
-      // Get initial node address (async FFI call, runs on worker thread)
-      _nodeAddr = await _host!.getNodeAddr();
+      // Get initial node address (async FFI call, runs on worker thread).
+      // Read through the local `host`, not `_host!`: a reset() during this
+      // await nulls the field, and the bang would then throw rather than
+      // letting the stale check below do its job.
+      final nodeAddr = await host.getNodeAddr();
+      if (stale()) return;
+
+      _nodeAddr = nodeAddr;
       debugPrint('[P2P] Initial node addr: $_nodeAddr');
     } catch (e) {
       debugPrint('[P2P] Failed to initialize: $e');
@@ -480,6 +540,10 @@ class P2pService {
   }
 
   void _emitStatus() {
+    // Defence in depth alongside the `_disposed` checks in `_initialize`. The
+    // Rust host is dropped on garbage collection rather than synchronously, so
+    // an event can still arrive from a host whose service is already gone.
+    if (_statusController.isClosed) return;
     _statusController.add(status);
   }
 
@@ -790,6 +854,9 @@ class P2pService {
   /// and attach an error handler to the cancellation itself so a rejected
   /// Future cannot surface as an unhandled async error.
   void reset() {
+    // Abandon any in-flight _initialize before tearing state down, so it
+    // cannot publish its host over the one the next initialize() builds.
+    _initGeneration++;
     _autoReconnectTimer?.cancel();
     _autoReconnectAttempts = 0;
     _lastDialedEndpointAddr = null;
@@ -809,7 +876,7 @@ class P2pService {
     _isRelayConnected = false;
     _nodeAddr = null;
     _nodeId = null;
-    _customRelayUrl = null;
+    _configuredRelayUrls = const [];
     _currentConnectionType = P2pConnectionType.none;
     _cachedRelayUrl = null;
     _connectedPeers.clear();
@@ -853,6 +920,8 @@ class P2pService {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
+    _initGeneration++;
     _autoReconnectTimer?.cancel();
     // Cancel before closing the controllers below: the Rust host is only
     // dropped when it is garbage collected, not synchronously here, so a

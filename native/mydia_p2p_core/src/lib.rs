@@ -409,8 +409,11 @@ impl Default for PeerConnectionType {
 /// Configuration for the Host
 #[derive(Clone, Default)]
 pub struct HostConfig {
-    /// Custom relay URL for NAT traversal. If None, uses iroh's default relays.
-    pub relay_url: Option<String>,
+    /// Custom relay URLs for NAT traversal, in preference order. Empty means
+    /// use iroh's default relays. Entries that do not parse as a RelayUrl are
+    /// dropped; if that leaves nothing, the defaults are used rather than an
+    /// empty custom map, which Endpoint rejects.
+    pub relay_urls: Vec<String>,
     /// UDP port for direct connections. If None or 0, uses a random port.
     pub bind_port: Option<u16>,
     /// Path to store/load keypair (optional). If not set, a new random keypair is generated.
@@ -794,6 +797,45 @@ fn create_dns_resolver() -> DnsResolver {
     DnsResolver::default()
 }
 
+/// Build the relay mode for a config, or None to leave iroh's preset alone.
+///
+/// mydia's own relays come first and n0's four production relays follow as
+/// fallbacks, so losing a mydia relay degrades to a slower path rather than
+/// taking remote access down.
+///
+/// The fallback set must stay in step with `iroh::defaults::prod::default_relay_map`,
+/// which is what a node gets when no custom relay is configured at all. Listing
+/// them individually rather than calling that function is deliberate: the
+/// configured relays have to come first. An earlier revision omitted
+/// `default_na_west_relay`, which silently cost NA-west nodes their nearest
+/// fallback and made the custom-relay path strictly worse than the preset.
+fn build_relay_mode(config: &HostConfig) -> Option<RelayMode> {
+    let configured: Vec<RelayConfig> = config
+        .relay_urls
+        .iter()
+        .filter_map(|raw| match raw.parse::<RelayUrl>() {
+            Ok(url) => Some(RelayConfig::new(url, Some(RelayQuicConfig::default()))),
+            Err(e) => {
+                tracing::warn!("Ignoring unparseable relay URL {raw:?}: {e}");
+                None
+            }
+        })
+        .collect();
+
+    if configured.is_empty() {
+        return None;
+    }
+
+    let relay_map = RelayMap::from_iter(configured.into_iter().chain([
+        default_relays::default_na_east_relay(),
+        default_relays::default_na_west_relay(),
+        default_relays::default_eu_relay(),
+        default_relays::default_ap_relay(),
+    ]));
+
+    Some(RelayMode::Custom(relay_map))
+}
+
 /// Main event loop that runs in a background thread
 async fn run_event_loop(
     secret_key: SecretKey,
@@ -816,19 +858,8 @@ async fn run_event_loop(
     }
 
     // Configure relay
-    if let Some(relay_url) = &config.relay_url {
-        if let Ok(url) = relay_url.parse::<RelayUrl>() {
-            // Custom relay with QUIC enabled
-            let custom = RelayConfig::new(url, Some(RelayQuicConfig::default()));
-            // Combine with iroh's default production relays for fallback
-            let relay_map = RelayMap::from_iter([
-                custom,
-                default_relays::default_na_east_relay(),
-                default_relays::default_eu_relay(),
-                default_relays::default_ap_relay(),
-            ]);
-            builder = builder.relay_mode(RelayMode::Custom(relay_map));
-        }
+    if let Some(mode) = build_relay_mode(&config) {
+        builder = builder.relay_mode(mode);
     }
 
     // Configure bind port. A browser owns no UDP socket, so iroh compiles the
@@ -2263,7 +2294,7 @@ mod tests {
 
     fn test_config() -> HostConfig {
         HostConfig {
-            relay_url: None,
+            relay_urls: Vec::new(),
             bind_port: Some(0),
             keypair_path: None,
             keypair_bytes: None,
@@ -2667,5 +2698,100 @@ mod tests {
             );
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod relay_map_tests {
+    use super::*;
+
+    #[test]
+    fn empty_relay_urls_leaves_the_default_mode() {
+        let config = HostConfig::default();
+        assert!(config.relay_urls.is_empty());
+        assert!(build_relay_mode(&config).is_none());
+    }
+
+    #[test]
+    fn configured_relays_come_first_then_n0_defaults() {
+        let config = HostConfig {
+            relay_urls: vec![
+                "https://relay-one.example.test".to_string(),
+                "https://relay-two.example.test".to_string(),
+            ],
+            ..Default::default()
+        };
+
+        let RelayMode::Custom(map) = build_relay_mode(&config).expect("custom mode") else {
+            panic!("expected a custom relay mode");
+        };
+
+        // Two configured plus n0's four production relays.
+        assert_eq!(map.len(), 6);
+        assert!(map.contains(&"https://relay-one.example.test".parse().unwrap()));
+        assert!(map.contains(&"https://relay-two.example.test".parse().unwrap()));
+    }
+
+    #[test]
+    fn unparseable_entries_are_dropped_without_losing_the_rest() {
+        let config = HostConfig {
+            relay_urls: vec![
+                "not a url at all".to_string(),
+                "https://relay-one.example.test".to_string(),
+            ],
+            ..Default::default()
+        };
+
+        let RelayMode::Custom(map) = build_relay_mode(&config).expect("custom mode") else {
+            panic!("expected a custom relay mode");
+        };
+
+        // One surviving configured relay plus n0's four production relays.
+        assert_eq!(map.len(), 5);
+        assert!(map.contains(&"https://relay-one.example.test".parse().unwrap()));
+    }
+
+    /// The fallbacks must stay in step with what a node gets when no custom
+    /// relay is configured. Asserting the count alone would not catch a swap,
+    /// and hardcoding hostnames would break on an n0 rollout, so compare
+    /// against iroh's own preset: every relay it would have used must still be
+    /// reachable through ours.
+    #[test]
+    fn the_fallbacks_are_every_relay_in_iroh_s_own_preset() {
+        let config = HostConfig {
+            relay_urls: vec!["https://relay-one.example.test".to_string()],
+            ..Default::default()
+        };
+
+        let RelayMode::Custom(map) = build_relay_mode(&config).expect("custom mode") else {
+            panic!("expected a custom relay mode");
+        };
+
+        let preset = default_relays::default_relay_map();
+        let preset_urls: Vec<RelayUrl> = preset.urls();
+
+        assert!(
+            !preset_urls.is_empty(),
+            "iroh's preset should not be empty; the rest of this test proves nothing if it is"
+        );
+
+        for url in preset_urls {
+            assert!(
+                map.contains(&url),
+                "custom relay map is missing {url}, which iroh's own preset includes"
+            );
+        }
+    }
+
+    #[test]
+    fn all_entries_unparseable_falls_back_to_the_default_mode() {
+        let config = HostConfig {
+            relay_urls: vec!["not a url at all".to_string()],
+            ..Default::default()
+        };
+
+        // An empty custom map is invalid: Endpoint requires at least one relay.
+        // Falling back to the preset is the only safe answer.
+        assert!(build_relay_mode(&config).is_none());
     }
 }

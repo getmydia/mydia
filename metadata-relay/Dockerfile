@@ -17,11 +17,21 @@ ENV HEX_HTTP_TIMEOUT=300000
 
 WORKDIR /app
 
-# Install hex and rebar with cache
-# Use id=relay-* to avoid cache contamination with mydia builds (different OTP version)
-RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
-    --mount=type=cache,id=relay-mix,target=/root/.mix \
-    mix local.hex --force && \
+# Install hex and rebar into the image layer, NOT into a cache mount.
+#
+# These used to be written to --mount=type=cache at /root/.hex and /root/.mix.
+# A cache mount is not part of the layer, so on a cold or evicted BuildKit
+# cache the archives installed here were simply absent by the time a later
+# step ran, and `mix compile` died with "Shall I install Hex?" followed by
+# "Could not find an SCM for dependency :bandit". That is a build that
+# succeeds or fails on cache state rather than on the tree, and it only
+# surfaces on the path that builds the relay image from source, which CI takes
+# only when metadata-relay/** changes.
+#
+# The archives are a few hundred KB and this is the builder stage of a
+# multi-stage build, so nothing here reaches the final image. Caching them
+# saved nothing and cost determinism.
+RUN mix local.hex --force && \
     mix local.rebar --force
 
 # Copy mix files (building from repo root)
@@ -29,9 +39,7 @@ COPY metadata-relay/mix.exs metadata-relay/mix.lock ./
 COPY metadata-relay/assets/package.json metadata-relay/assets/package-lock.json ./assets/
 
 # Install dependencies with cache (with retry for transient network failures)
-RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
-    --mount=type=cache,id=relay-mix,target=/root/.mix \
-    --mount=type=cache,id=relay-deps,target=/app/deps \
+RUN --mount=type=cache,id=relay-deps,target=/app/deps \
     for i in 1 2 3; do \
       mix deps.get --only prod && break || \
       (echo "Attempt $i failed, retrying in 10s..." && sleep 10); \
@@ -45,9 +53,7 @@ RUN rm -rf deps && mv deps_copy deps
 RUN cd assets && npm ci
 
 # Compile dependencies with cache
-RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
-    --mount=type=cache,id=relay-mix,target=/root/.mix \
-    --mount=type=cache,id=relay-build,target=/app/_build,sharing=locked \
+RUN --mount=type=cache,id=relay-build,target=/app/_build,sharing=locked \
     mix deps.compile && \
     cp -r _build _build_copy
 
@@ -61,19 +67,13 @@ COPY metadata-relay/lib ./lib
 COPY metadata-relay/priv ./priv
 
 # Compile the application
-RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
-    --mount=type=cache,id=relay-mix,target=/root/.mix \
-    mix compile
+RUN mix compile
 
 # Build frontend assets
-RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
-    --mount=type=cache,id=relay-mix,target=/root/.mix \
-    mix assets.deploy
+RUN mix assets.deploy
 
 # Build release
-RUN --mount=type=cache,id=relay-hex,target=/root/.hex \
-    --mount=type=cache,id=relay-mix,target=/root/.mix \
-    mix release
+RUN mix release
 
 # Start a new stage for the final image
 # Alpine 3.23, not 3.24, on purpose. musl 1.2.6 (Alpine 3.24) tightened

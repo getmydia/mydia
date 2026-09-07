@@ -93,7 +93,7 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateP2PHostGetNodeAddr({required P2PHost that});
 
   (P2PHost, String) crateP2PHostInit(
-      {String? relayUrl, Uint8List? keypairBytes});
+      {required List<String> relayUrls, Uint8List? keypairBytes});
 
   Stream<FlutterInboundControlRequest> crateP2PHostRemoteControlStream(
       {required P2PHost that});
@@ -261,11 +261,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   (P2PHost, String) crateP2PHostInit(
-      {String? relayUrl, Uint8List? keypairBytes}) {
+      {required List<String> relayUrls, Uint8List? keypairBytes}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_opt_String(relayUrl, serializer);
+        sse_encode_list_String(relayUrls, serializer);
         sse_encode_opt_list_prim_u_8_strict(keypairBytes, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
       },
@@ -275,14 +275,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         decodeErrorData: null,
       ),
       constMeta: kCrateP2PHostInitConstMeta,
-      argValues: [relayUrl, keypairBytes],
+      argValues: [relayUrls, keypairBytes],
       apiImpl: this,
     ));
   }
 
   TaskConstMeta get kCrateP2PHostInitConstMeta => const TaskConstMeta(
         debugName: "P2PHost_init",
-        argNames: ["relayUrl", "keypairBytes"],
+        argNames: ["relayUrls", "keypairBytes"],
       );
 
   @override

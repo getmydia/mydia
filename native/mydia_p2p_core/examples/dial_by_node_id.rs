@@ -34,7 +34,7 @@ use std::env;
 
 fn host_config() -> HostConfig {
     HostConfig {
-        relay_url: None,
+        relay_urls: Vec::new(),
         bind_port: Some(0),
         keypair_path: None,
         keypair_bytes: None,

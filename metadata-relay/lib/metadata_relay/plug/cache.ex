@@ -58,8 +58,10 @@ defmodule MetadataRelay.Plug.Cache do
 
   @impl true
   def call(%Plug.Conn{method: "GET", request_path: path} = conn, _opts)
-      when path in ["/health", "/stats", "/metrics"] do
-    # Skip caching for health/stats/metrics endpoints
+      when path in ["/health", "/stats", "/metrics", "/client-config"] do
+    # Skip caching for health/stats/metrics/client-config endpoints. These are
+    # answered from local constants or process state, so the ETS cache would
+    # only add a copy of data that is already free to produce.
     conn
   end
 

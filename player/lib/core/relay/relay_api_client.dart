@@ -8,7 +8,11 @@ import 'pairing_key_handle.dart';
 export 'claim_resolve_result.dart'
     show ServerNotOnlineException, TamperedClaimException;
 
-const _defaultRelayUrl = String.fromEnvironment(
+/// The metadata relay this build talks to for pairing and client config.
+///
+/// Distinct from the *iroh* relay in `core/p2p/relay_list.dart`: this one is
+/// mydia's HTTP service, that one is the QUIC relay for NAT traversal.
+const String metadataRelayBaseUrl = String.fromEnvironment(
   'RELAY_URL',
   defaultValue: 'https://relay.mydia.dev',
 );
@@ -19,7 +23,7 @@ class RelayApiClient {
   final PairingKeyFactory _pairingKeys;
 
   RelayApiClient({
-    this.baseUrl = _defaultRelayUrl,
+    this.baseUrl = metadataRelayBaseUrl,
     http.Client? client,
     PairingKeyFactory? pairingKeys,
   })  : _client = client ?? http.Client(),

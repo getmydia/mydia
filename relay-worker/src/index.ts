@@ -10,6 +10,7 @@ import { registerErrorDashboard } from "./dashboards/errors";
 import { registerOverviewDashboard } from "./dashboards/overview";
 import { registerFeedbackRoutes } from "./feedback/ingest";
 import { registerFeedbackDashboard } from "./dashboards/feedback";
+import { registerClientConfigRoutes } from "./config/client_config";
 import { adminHostnameBlocked } from "./dashboards/hostname-guard";
 import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
@@ -116,6 +117,7 @@ registerSubdlRoutes(app);
 registerPassthroughRoutes(app);
 registerPairingRoutes(app);
 registerCrashRoutes(app);
+registerClientConfigRoutes(app);
 // GET/POST /admin/errors and /admin/errors/:fingerprint -- the maintainer
 // dashboard replacing error_tracker's LiveView UI. Deliberately under
 // /admin/* (not the bare /errors a naive port would use) so one Cloudflare

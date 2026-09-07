@@ -3,8 +3,11 @@ import type { Env } from "../env";
 
 // Paths that are never throttled here. /health and /stats are polled by
 // deployed monitoring, and throttling those would turn a busy relay into an
-// apparently dead one.
-const EXEMPT = new Set(["/health", "/stats"]);
+// apparently dead one. /client-config is called once per install per boot,
+// costs no upstream quota, and throttling it would silently push installs
+// onto their cached or compiled-in relay list, which is the exact failure
+// this endpoint exists to avoid.
+const EXEMPT = new Set(["/health", "/stats", "/client-config"]);
 
 // Prefixes that carry their own, tighter limiter and must not also be charged
 // against the 300/min proxy budget. Pairing uses 10/min create and 30/min
