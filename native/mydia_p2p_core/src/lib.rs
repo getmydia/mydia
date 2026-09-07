@@ -799,9 +799,16 @@ fn create_dns_resolver() -> DnsResolver {
 
 /// Build the relay mode for a config, or None to leave iroh's preset alone.
 ///
-/// mydia's own relays come first and n0's three production relays follow as
+/// mydia's own relays come first and n0's four production relays follow as
 /// fallbacks, so losing a mydia relay degrades to a slower path rather than
 /// taking remote access down.
+///
+/// The fallback set must stay in step with `iroh::defaults::prod::default_relay_map`,
+/// which is what a node gets when no custom relay is configured at all. Listing
+/// them individually rather than calling that function is deliberate: the
+/// configured relays have to come first. An earlier revision omitted
+/// `default_na_west_relay`, which silently cost NA-west nodes their nearest
+/// fallback and made the custom-relay path strictly worse than the preset.
 fn build_relay_mode(config: &HostConfig) -> Option<RelayMode> {
     let configured: Vec<RelayConfig> = config
         .relay_urls
@@ -821,6 +828,7 @@ fn build_relay_mode(config: &HostConfig) -> Option<RelayMode> {
 
     let relay_map = RelayMap::from_iter(configured.into_iter().chain([
         default_relays::default_na_east_relay(),
+        default_relays::default_na_west_relay(),
         default_relays::default_eu_relay(),
         default_relays::default_ap_relay(),
     ]));
@@ -2718,8 +2726,8 @@ mod relay_map_tests {
             panic!("expected a custom relay mode");
         };
 
-        // Two configured plus n0's na-east, eu and ap.
-        assert_eq!(map.len(), 5);
+        // Two configured plus n0's four production relays.
+        assert_eq!(map.len(), 6);
         assert!(map.contains(&"https://relay-one.example.test".parse().unwrap()));
         assert!(map.contains(&"https://relay-two.example.test".parse().unwrap()));
     }
@@ -2738,8 +2746,41 @@ mod relay_map_tests {
             panic!("expected a custom relay mode");
         };
 
-        assert_eq!(map.len(), 4);
+        // One surviving configured relay plus n0's four production relays.
+        assert_eq!(map.len(), 5);
         assert!(map.contains(&"https://relay-one.example.test".parse().unwrap()));
+    }
+
+    /// The fallbacks must stay in step with what a node gets when no custom
+    /// relay is configured. Asserting the count alone would not catch a swap,
+    /// and hardcoding hostnames would break on an n0 rollout, so compare
+    /// against iroh's own preset: every relay it would have used must still be
+    /// reachable through ours.
+    #[test]
+    fn the_fallbacks_are_every_relay_in_iroh_s_own_preset() {
+        let config = HostConfig {
+            relay_urls: vec!["https://relay-one.example.test".to_string()],
+            ..Default::default()
+        };
+
+        let RelayMode::Custom(map) = build_relay_mode(&config).expect("custom mode") else {
+            panic!("expected a custom relay mode");
+        };
+
+        let preset = default_relays::default_relay_map();
+        let preset_urls: Vec<RelayUrl> = preset.urls();
+
+        assert!(
+            !preset_urls.is_empty(),
+            "iroh's preset should not be empty; the rest of this test proves nothing if it is"
+        );
+
+        for url in preset_urls {
+            assert!(
+                map.contains(&url),
+                "custom relay map is missing {url}, which iroh's own preset includes"
+            );
+        }
     }
 
     #[test]
