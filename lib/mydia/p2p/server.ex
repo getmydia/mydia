@@ -66,9 +66,6 @@ defmodule Mydia.P2p.Server do
 
   @impl true
   def init(_) do
-    # Default to our own relay; override via IROH_RELAY_URL env var
-    relay_url = System.get_env("IROH_RELAY_URL", "https://cae1-1.relay.mydia.dev")
-
     # Get bind_port from config (required for hole punching in Docker)
     bind_port = Application.get_env(:mydia, :p2p_bind_port)
 
@@ -93,15 +90,42 @@ defmodule Mydia.P2p.Server do
     # install does not exist yet. The NIF cannot create it.
     keypair_path |> Path.dirname() |> File.mkdir_p!()
 
+    state = %{
+      resource: nil,
+      node_id: nil,
+      node_addr: nil,
+      relay_connected: false,
+      bind_port: bind_port,
+      keypair_path: keypair_path,
+      # Track connected peers (Map of peer_id => connection_type)
+      connected_peers: %{}
+    }
+
+    # Resolving the relay list means an HTTP call with a 3s timeout, and
+    # starting the host opens an iroh endpoint. Neither belongs in init/1,
+    # which runs inside the supervisor's start_link and would block the whole
+    # application boot behind an unreachable network.
+    #
+    # A {:continue, _} is processed before any other message in the mailbox, so
+    # every handle_call clause below still sees a started host. A caller that
+    # arrives during startup blocks until this finishes, which is correct.
+    {:ok, state, {:continue, :start_host}}
+  end
+
+  @impl true
+  def handle_continue(:start_host, state) do
+    {relay_urls, source} = Mydia.P2p.RelayList.resolve()
+
+    Logger.info("P2P relay list (#{source}): #{Enum.join(relay_urls, ", ")}")
+
     # Start the host - NIF returns {resource, node_id} directly (raises on error)
-    {resource, node_id} = P2p.start_host([relay_url], bind_port, keypair_path)
+    {resource, node_id} = P2p.start_host(relay_urls, state.bind_port, state.keypair_path)
 
-    Logger.info("P2P Host started with NodeID: #{node_id}, relay: #{relay_url}")
+    Logger.info("P2P Host started with NodeID: #{node_id}")
+    Logger.info("P2P Host using persistent keypair at #{state.keypair_path}")
 
-    Logger.info("P2P Host using persistent keypair at #{keypair_path}")
-
-    if bind_port do
-      Logger.info("P2P Host using UDP port #{bind_port}")
+    if state.bind_port do
+      Logger.info("P2P Host using UDP port #{state.bind_port}")
     else
       Logger.info("P2P Host using random port")
     end
@@ -110,16 +134,7 @@ defmodule Mydia.P2p.Server do
     # NIF returns "ok" directly (raises on error)
     "ok" = P2p.start_listening(resource, self())
 
-    state = %{
-      resource: resource,
-      node_id: node_id,
-      node_addr: nil,
-      relay_connected: false,
-      # Track connected peers (Map of peer_id => connection_type)
-      connected_peers: %{}
-    }
-
-    {:ok, state}
+    {:noreply, %{state | resource: resource, node_id: node_id}}
   end
 
   @doc """
