@@ -13,7 +13,6 @@ defmodule MetadataRelay.ClientConfigTest do
       urls = ClientConfig.relay_urls()
 
       assert is_list(urls)
-      assert urls != []
       assert "https://cae1-1.relay.mydia.dev" in urls
     end
 

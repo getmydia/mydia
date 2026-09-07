@@ -100,7 +100,15 @@ defmodule Mydia.P2p.RelayList do
     req =
       Req.new(
         base_url: base_url,
+        # receive_timeout only bounds the gap between chunks (Finch default
+        # 15s), not the whole response. A relay that trickles bytes with
+        # gaps under that limit would otherwise hang Req.get/1 forever,
+        # because Finch's request_timeout defaults to :infinity. This runs
+        # from Mydia.P2p.Server's handle_continue, which OTP runs before any
+        # other message, so an unbounded fetch here means the GenServer
+        # never finishes starting and never answers any call.
         receive_timeout: @timeout_ms,
+        request_timeout: @timeout_ms,
         connect_options: [timeout: @timeout_ms],
         retry: false,
         headers: [accept: "application/json"]
