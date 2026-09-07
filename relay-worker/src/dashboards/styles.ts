@@ -124,4 +124,22 @@ input[type="text"] {
 input[type="text"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .pager { margin-top: 1.25rem; }
+
+/* The overview's headline row. auto-fit rather than a fixed column count so
+   the same markup works from a phone to a wide desktop with no breakpoints. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.75rem;
+}
+.stat-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0.85rem 1rem;
+}
+.stat-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.stat-value { font-size: 1.5rem; font-variant-numeric: tabular-nums; margin-top: 0.2rem; }
+.stat-hint  { font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; }
 `;

@@ -3,7 +3,7 @@ import type { Env } from "../env";
 import type { ErrorRow, OccurrenceRow } from "../crashes/ingest";
 import { listErrors, getError, setErrorStatus } from "../crashes/queries";
 import { page, when, parsePage } from "./layout";
-import { Tabs, DataTable, Badge, PostButton, Pager } from "./ui";
+import { Tabs, DataTable, Badge, PostButton, Pager, FLOOR_TITLE } from "./ui";
 
 const PAGE_SIZE = 50;
 
@@ -19,11 +19,6 @@ function isValidFingerprintShape(value: string): boolean {
 function formatInteger(n: number): string {
   return Math.trunc(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
-
-const FLOOR_TITLE =
-  "The ingest throttle saturated at least one hourly bucket for this error at " +
-  "some point. Crashes beyond the per-hour cap were accepted but not counted, " +
-  "so this total is a permanent floor, not an exact count.";
 
 // The single place a raw occurrence_count is turned into markup. When
 // errors.count_is_floor is set (ingest.ts sets it the moment any of this
