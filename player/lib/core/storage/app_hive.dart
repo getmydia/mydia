@@ -15,7 +15,7 @@
 /// first launch; see `hive_box_migration.dart`.
 library;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:hive_ce_flutter/adapters.dart';
 import 'package:path_provider/path_provider.dart';
@@ -57,25 +57,49 @@ Future<void> _initHive() async {
     Hive.init(null);
   } else {
     final support = await getApplicationSupportDirectory();
-
-    // Ahead of `Hive.init`, so the boxes are in place before anything opens
-    // one. Best-effort by contract: `migrateHiveBoxes` never throws.
-    //
-    // `Hive.isBoxOpen` covers the case this ordering does not: a caller that
-    // opened a box at the old path before reaching here. Hive holds a box's
-    // lock file open and deletes it itself on close, so moving the files out
-    // from under it turns `box.close()` into a `PathNotFoundException`.
-    final documents = await getApplicationDocumentsDirectory();
-    await migrateHiveBoxes(
-      from: documents.path,
-      to: support.path,
-      isBoxOpen: Hive.isBoxOpen,
-    );
-
+    await _migrateFromDocuments(support.path);
     Hive.init(support.path);
   }
 
   _registerFlutterAdapters();
+}
+
+/// Moves any boxes left in the old location, if that location can be found.
+///
+/// Runs ahead of `Hive.init` so the boxes are in place before anything opens
+/// one, and passes `Hive.isBoxOpen` to cover the case that ordering does not:
+/// a caller that opened a box at the old path before reaching here. Hive holds
+/// a box's lock file open and deletes it itself on close, so moving the files
+/// out from under it turns `box.close()` into a `PathNotFoundException`.
+///
+/// Resolving Documents is allowed to fail, and failing costs only the
+/// migration. On Linux `getApplicationDocumentsDirectory()` is
+/// `xdg.getUserDirectory('DOCUMENTS')`, and path_provider turns a null answer
+/// into a thrown `MissingPlatformDirectoryException` -- so a machine with no
+/// `user-dirs.dirs`, or an XDG setup that simply declares no Documents
+/// folder, throws here through no fault of the app. Letting that reach
+/// [initAppHive] would leave `Hive.init` uncalled and every box unopenable,
+/// which trades all of the app's persistence for a directory it only wanted
+/// to read old files out of. There is nothing to migrate from a directory
+/// that is not there, and nothing to abandon Hive over.
+///
+/// This is defence, not a fix for anything observed: the Flatpak sandbox
+/// resolves Documents fine despite granting no `--filesystem`, which its
+/// smoke-test log confirms by initializing Hive with no complaint.
+Future<void> _migrateFromDocuments(String supportPath) async {
+  final String documentsPath;
+  try {
+    documentsPath = (await getApplicationDocumentsDirectory()).path;
+  } catch (e) {
+    debugPrint('[Hive] No documents directory to migrate from: $e');
+    return;
+  }
+
+  await migrateHiveBoxes(
+    from: documentsPath,
+    to: supportPath,
+    isBoxOpen: Hive.isBoxOpen,
+  );
 }
 
 /// The `Color` and `TimeOfDay` adapters `Hive.initFlutter()` registers.
