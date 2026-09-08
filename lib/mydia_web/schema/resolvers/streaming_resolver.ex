@@ -36,11 +36,12 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
         case Candidates.resolve_media_file(content_type, id) do
           {:ok, media_file} ->
             media_file = Candidates.ensure_codec_info(media_file)
+            device_profile = context[:device_profile]
 
             candidates =
               Candidates.build_streaming_candidates(
                 media_file,
-                context[:device_profile] || DeviceProfile.browser_default()
+                device_profile || DeviceProfile.browser_default()
               )
 
             metadata = Candidates.build_metadata_response(media_file, user_id: user.id)
@@ -59,6 +60,25 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
               Enum.map(candidates, fn candidate ->
                 %{candidate | strategy: strategy_to_atom(candidate.strategy)}
               end)
+
+            # The leading strategy is the whole answer: the client reads it as
+            # the compatibility verdict and will not direct play behind a
+            # leading TRANSCODE or HLS_COPY. Logging it with the two inputs that
+            # decide it turns "why did this transcode?" into one grep. Both
+            # inputs were invisible before, and answering that question on
+            # 2026-09-08 meant ruling out three hypotheses by hand.
+            leading =
+              case candidates do
+                [%{strategy: strategy} | _] -> strategy
+                _ -> nil
+              end
+
+            Logger.info(
+              "Streaming candidates for file #{media_file.id}: " <>
+                "leading=#{inspect(leading)} " <>
+                "device_profile=#{if device_profile, do: "client", else: "absent (assuming browser)"} " <>
+                "connection=#{context[:peer_connection_type] || "unknown"}"
+            )
 
             {:ok, %{file_id: media_file.id, candidates: candidates, metadata: metadata}}
 
@@ -307,9 +327,14 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       reported_start_position =
         if info.playlist_mode == :full, do: 0, else: info.start_position
 
+      # max_height is here because its absence cost three ruled-out hypotheses
+      # on 2026-09-08. A capped height is the one thing that vetoes direct play
+      # from the client side, and without it in the log there is no way to tell
+      # a viewer who picked a quality rung from one who did not.
       Logger.info(
         "Started streaming session #{info.session_id} for file #{file_id}, user #{user_id}" <>
           if(max_bitrate, do: " (max_bitrate: #{max_bitrate}kbps)", else: "") <>
+          if(max_height, do: " (max_height: #{max_height}p)", else: "") <>
           if(session_start_position > 0,
             do: " (start_position: #{session_start_position}s)",
             else: ""
