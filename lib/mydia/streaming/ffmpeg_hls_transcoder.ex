@@ -106,7 +106,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     * `:on_error` - (optional) Callback function called when an error occurs
     * `:video_codec` - (optional) Video codec (default: auto-detect from media_file or "libx264")
     * `:audio_codec` - (optional) Audio codec (default: auto-detect from media_file or "aac")
-    * `:preset` - (optional) FFmpeg preset (default: "medium")
+    * `:preset` - (optional) FFmpeg preset (default: "veryfast")
     * `:crf` - (optional) Constant Rate Factor for quality (default: 23)
     * `:max_bitrate` - (optional) Total kbps cap; forces a transcode when set
     * `:max_height` - (optional) Output height ceiling in pixels. Preserves
@@ -592,7 +592,13 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           codec
       end
 
-    preset = Keyword.get(opts, :preset, "medium")
+    # "veryfast", not x264's own "medium" default. This preset governs a live
+    # HLS encode a player is already waiting on, so the only quality that
+    # matters is the quality reachable before the viewer gives up. On an AV1
+    # source "medium" took 29.6s to write the first playlist against the 30s
+    # budget in `Mydia.P2p.Server`, which is a black screen, not better video.
+    # An operator who would rather spend the wall clock can still pass :preset.
+    preset = Keyword.get(opts, :preset, "veryfast")
     crf = Keyword.get(opts, :crf, 23)
 
     # Use index.m3u8 to match HLS controller expectations

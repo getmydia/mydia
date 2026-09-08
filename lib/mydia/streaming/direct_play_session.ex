@@ -152,7 +152,13 @@ defmodule Mydia.Streaming.DirectPlaySession do
         "Direct Play session #{state.session_id} inactive for #{inactive_duration}ms, terminating"
       )
 
-      {:stop, :timeout, state}
+      # `:normal`, not `:timeout`. Reaching the idle deadline is this process
+      # finishing its job, not failing at it, but OTP treats any reason other
+      # than :normal/:shutdown as a crash and prints a full error report with a
+      # stacktrace. Every routine session expiry was landing in the log as
+      # "** (stop) time out", which reads like a fault an operator should chase.
+      # The line above already records why the session ended.
+      {:stop, :normal, state}
     else
       state = schedule_timeout_check(state)
       {:noreply, state}
