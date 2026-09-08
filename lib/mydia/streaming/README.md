@@ -81,3 +81,74 @@ them, never a codec's mere absence from the allowlist. A codec missing from the
 lists means the client never claimed it, which still leaves stream-copy on the
 table for a browser that judges codec strings itself. Breaking that distinction
 would silently force Safari to transcode HEVC.
+
+## Four deadlines sit between "play" and the first segment
+
+Starting playback on a file that needs transcoding crosses four independent
+timeouts, in three languages. They are not redundant, and changing one without
+reading the others produces a failure that looks like the network.
+
+| budget | where | covers |
+| --- | --- | --- |
+| 25s | `@request_timeout`, `p2p/server.ex` | one GraphQL request, host side |
+| 30s | `RESPONSE_TIMEOUT`, `mydia_p2p_core/src/lib.rs` | one GraphQL request, peer side |
+| 2min | `@session_ready_timeout`, `p2p/server.ex` | FFmpeg writing its first playlist |
+| 60s | `:timeout`, `Mydia.Repo` config | one query, *excluding* the pool checkout |
+
+The database row is narrower than it looks. `:timeout` bounds the query itself.
+Waiting for a pool connection is governed separately, by `:queue_target` (50ms)
+and `:queue_interval` (2s), and neither is configured here. `:pool_timeout` does
+not exist in db_connection 2.x at all, so the `pool_timeout: 60_000` still sitting
+in `config/test.exs` is a dead option, not a longer budget.
+
+That distinction has diagnostic value: an exhausted pool does not stall quietly,
+it raises `connection not available and request was dropped from queue after Nms`.
+A slow query with no such error in the log was never waiting on a checkout.
+
+Two rules hold the p2p side together.
+
+**The host's request deadline must stay under the peer's.** They were both 30s,
+which raced: an overrunning request was abandoned by the peer at the same moment
+the host decided to answer it, so the peer inferred a timeout from silence
+instead of reading the error the host had prepared. `serve_request/5` exists to
+guarantee exactly one answer goes back; equal deadlines defeated it.
+
+**The readiness budget is not a request budget.** HLS bytes travel a separate
+QUIC stream path (`stream_hls_response/3`), not the request/response path, so no
+`RESPONSE_TIMEOUT` covers it and the peer waits as long as the host takes. That
+budget therefore bounds only how long a dead encoder ties up a slot, and is sized
+for the worst cold start rather than the typical one.
+
+Which is why it runs under `Mydia.P2p.StreamSupervisor` rather than a bare
+`Task.start`. iroh accepts an inbound connection on ALPN alone, so every request
+against a session still warming up parks a task for the whole readiness budget
+plus a waiter inside the session, and a two-minute budget is four times the
+window a thirty-second one gave a peer to pile them up. The bound is what makes
+the longer wait safe to have; stretch one without the other and the readiness
+budget becomes a denial-of-service budget.
+
+Observed on 2026-09-08 on the production instance: a viewer advanced to an AV1
+episode, which needs a full software encode. FFmpeg took 29.6s to write a
+playlist against the then-30s readiness budget, and `StartStreamingSession`
+returned in 29,728ms against the peer's 30s. Both missed by under half a second,
+in opposite directions.
+
+Something else stretched the two GraphQL calls in front of the encoder, and it is
+still unexplained. `StreamingCandidates` billed 14,955ms for work that measures
+1ms when the same resolver is driven directly on the live node, and every slow
+call that day finished within 30ms of a `media_import` commit. Three candidate
+mechanisms were checked and none survives: `CandidatePromotion.commit_group`
+opens a DB-only transaction, `MetadataEnricher` does its network work before the
+transaction opens, and the pool was never exhausted (zero queue-drop errors in
+24 hours, against a signature that cannot fail silently). `busy_timeout` reads 0
+on a pooled connection despite `config/runtime.exs` asking for 30,000, which is
+worth chasing on its own.
+
+Resist raising `pool_size` as a reflex here. It was tried and withdrawn: with no
+queue drops in the log there was no evidence the pool was ever the constraint,
+and the change would have been a guess wearing a measurement's clothes.
+
+The lasting lesson is that time-to-first-segment is a budget chain, not a single
+number, and that a transcode preset is part of it: `veryfast` is the default in
+`ffmpeg_hls_transcoder.ex` because a preset chosen for offline encoding spends
+wall clock the viewer is sitting through.
