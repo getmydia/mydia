@@ -55,12 +55,22 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
         Capabilities.software(no_device_reason(opts))
 
       devices ->
-        Enum.find_value(devices, Capabilities.software(last_failure_reason(devices)), fn device ->
+        devices
+        |> Enum.reduce_while({:error, []}, fn device, {:error, failures} ->
           case probe_device(device) do
-            {:ok, caps} -> forced_note(caps, backend)
-            {:error, _reason} -> nil
+            {:ok, caps} -> {:halt, {:ok, forced_note(caps, backend)}}
+            {:error, reason} -> {:cont, {:error, [{device, reason} | failures]}}
           end
         end)
+        |> case do
+          {:ok, caps} ->
+            caps
+
+          {:error, failures} ->
+            reason = failure_reason(Enum.reverse(failures))
+            Logger.warning("No usable VAAPI device: #{reason}")
+            Capabilities.software(reason)
+        end
     end
   end
 
@@ -78,8 +88,14 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
     end
   end
 
-  defp last_failure_reason(devices) do
-    "no usable VAAPI device among #{Enum.join(devices, ", ")}"
+  # Each device's actual failure text is preserved. Discarding it and reporting
+  # a generic "no usable device" collapses "the driver package is missing" into
+  # the same bucket as "vainfo is not installed" and "the test encode failed",
+  # and those lead an operator to three different actions. The driver-missing
+  # case is the one measured on real hardware, so it is exactly the one that
+  # must survive.
+  defp failure_reason(failures) do
+    Enum.map_join(failures, "; ", fn {device, reason} -> "#{device}: #{reason}" end)
   end
 
   # An explicitly requested backend is recorded in the reason so the settings

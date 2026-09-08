@@ -1,6 +1,7 @@
 defmodule Mydia.Streaming.HardwareAccel.ProbeTest do
   use ExUnit.Case, async: true
 
+  alias Mydia.Streaming.HardwareAccel.Capabilities
   alias Mydia.Streaming.HardwareAccel.Probe
 
   defp fixture(name), do: File.read!("test/support/fixtures/#{name}")
@@ -66,6 +67,27 @@ defmodule Mydia.Streaming.HardwareAccel.ProbeTest do
 
       assert caps.backend == :none
       assert caps.reason =~ "/nonexistent/renderD128"
+    end
+
+    test "a device that exists but is not a working render node reports its own failure, not a generic one" do
+      # File.touch!/1 creates something that satisfies File.exists?/1 but is
+      # not a real render node, so vainfo (or, absent that binary, the
+      # rescue ErlangError clause) fails on it. In this devenv vainfo is not
+      # installed, so this also exercises the boot-safety path where
+      # System.cmd/3 raises: the probe must degrade to software capabilities
+      # rather than crash the caller.
+      tmp_path = Path.join(System.tmp_dir!(), "probe_test_#{System.unique_integer([:positive])}")
+      File.touch!(tmp_path)
+      on_exit(fn -> File.rm(tmp_path) end)
+
+      caps = Probe.run(hwaccel: :vaapi, device: tmp_path)
+
+      assert %Capabilities{backend: :none} = caps
+      # The reason names this specific device and its actual failure, not the
+      # generic "no usable VAAPI device among ..." that discards which device
+      # failed and why.
+      assert caps.reason =~ tmp_path
+      refute caps.reason =~ "no usable VAAPI device among"
     end
   end
 end
