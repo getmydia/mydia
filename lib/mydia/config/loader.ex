@@ -324,6 +324,12 @@ defmodule Mydia.Config.Loader do
       System.get_env("SUBTITLE_LANGUAGE"),
       &parse_string_list/1
     )
+    |> put_if_present(
+      :hwaccel,
+      System.get_env("HWACCEL"),
+      &parse_hwaccel/1
+    )
+    |> put_if_present(:hwaccel_device, System.get_env("HWACCEL_DEVICE"))
   end
 
   defp load_logging_env do
@@ -690,6 +696,26 @@ defmodule Mydia.Config.Loader do
   end
 
   defp parse_external_torrents(_), do: :error
+
+  # A dedicated fixed-enum parser. parse_atom/1 must not be reused here: it
+  # rescues into String.to_atom/1, which mints atoms from environment input.
+  #
+  # An unrecognised value becomes :invalid rather than :error. put_if_present/4
+  # drops the key on :error, which would make a typo silently resolve to the
+  # schema default of :auto; :invalid is not a member of the Ecto.Enum, so
+  # config validation rejects it by name.
+  defp parse_hwaccel(value) when is_atom(value), do: {:ok, value}
+
+  defp parse_hwaccel(value) when is_binary(value) do
+    case value |> String.trim() |> String.downcase() do
+      "auto" -> {:ok, :auto}
+      "off" -> {:ok, :off}
+      "vaapi" -> {:ok, :vaapi}
+      _unrecognised -> {:ok, :invalid}
+    end
+  end
+
+  defp parse_hwaccel(_), do: :error
 
   defp parse_string_list(value) when is_list(value), do: {:ok, value}
 

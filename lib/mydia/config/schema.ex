@@ -200,6 +200,21 @@ defmodule Mydia.Config.Schema do
       # languages to go and get, and resolving "original" per item would make
       # a bulk run's target set depend on metadata that may be absent.
       field :subtitle_language, {:array, :string}, default: ["en"]
+
+      # Which hardware video backend to use. :auto probes and uses whatever
+      # works; :off forces software even on a capable box; :vaapi names a
+      # backend explicitly, which skips auto-selection so the operator learns
+      # whether the one they asked for actually worked rather than silently
+      # receiving a different answer.
+      #
+      # :invalid is not selectable. It is what the env parser emits for an
+      # unrecognised value so that validation rejects it by name; see
+      # Mydia.Config.Loader.parse_hwaccel/1.
+      field :hwaccel, Ecto.Enum, values: [:auto, :off, :vaapi, :invalid], default: :auto
+
+      # Render node to use on a multi-GPU host. nil means "pick the first one
+      # that probes successfully".
+      field :hwaccel_device, :string
     end
 
     embeds_one :logging, Logging, on_replace: :update, primary_key: false do
@@ -486,7 +501,13 @@ defmodule Mydia.Config.Schema do
 
   defp streaming_changeset(schema, attrs) do
     schema
-    |> cast(attrs, [:max_transcode_height, :audio_language, :prefer_default_audio_track])
+    |> cast(attrs, [
+      :max_transcode_height,
+      :audio_language,
+      :prefer_default_audio_track,
+      :hwaccel,
+      :hwaccel_device
+    ])
     # cast/3's default empty_values ([""]) silently drops blank entries from
     # array fields before validate_subtitle_language/1 ever sees them, which
     # is also why validate_audio_language/1's blank-entry branch below is
