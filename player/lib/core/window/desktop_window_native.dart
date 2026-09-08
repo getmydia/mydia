@@ -24,12 +24,13 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-// Re-exports hive_ce, so this one import covers Hive, Box and initFlutter.
+// Re-exports hive_ce, so this one import covers both Hive and Box.
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../player/platform_features.dart';
+import '../storage/app_hive.dart';
 import 'player_window_sizer.dart';
 import 'player_window_sizer_native.dart';
 import 'window_controller_native.dart';
@@ -137,7 +138,7 @@ Future<List<WorkArea>> _readWorkAreas() async {
 
 Future<WindowGeometryStore> _openStore() async {
   try {
-    await Hive.initFlutter();
+    await initAppHive();
     return HiveWindowGeometryStore(
       await Hive.openBox<Map>(HiveWindowGeometryStore.boxName),
     );

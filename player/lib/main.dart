@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'core/graphql/watch/fetch_log.dart';
 import 'core/player/input_capabilities.dart';
 import 'core/navigation/sidebar_layout_providers.dart';
+import 'core/storage/app_hive.dart';
 import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
 import 'core/startup/startup_lock.dart';
@@ -177,8 +178,9 @@ Future<void> _startApp() async {
   // Best-effort and self-guarding: `initDesktopWindow` never throws and is a
   // no-op off desktop, so this cannot violate this function's invariant that
   // `runApp` is called exactly once on every path. It opens its own Hive box
-  // rather than depending on the `initHiveForFlutter` call further down, since
-  // geometry must be restored before the first frame.
+  // rather than depending on the GraphQL cache step further down, since
+  // geometry must be restored before the first frame. `initAppHive` is
+  // memoized, so whichever of the two runs first does the work.
   await initDesktopWindow();
 
   // Everything below persists to Hive boxes under the same per-user data
@@ -191,7 +193,14 @@ Future<void> _startApp() async {
   try {
     // Initialize GraphQL Hive cache for offline support. Best-effort: it's
     // an optimisation for offline support, not a requirement to run.
-    await initHiveForFlutter();
+    //
+    // `initAppHive` plus an explicit `HiveStore.open` rather than
+    // graphql_flutter's `initHiveForFlutter`, which is the same two steps
+    // with the base path hard-wired to `getApplicationDocumentsDirectory()`
+    // -- the user's Documents folder on every desktop platform. See
+    // `core/storage/app_hive.dart`.
+    await initAppHive();
+    await HiveStore.open();
   } catch (e, st) {
     debugPrint('[Hive] Failed to initialize GraphQL cache: $e');
     debugPrint('Stack trace: $st');

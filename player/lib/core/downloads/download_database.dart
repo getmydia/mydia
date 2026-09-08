@@ -1,5 +1,6 @@
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import '../../domain/models/download.dart';
+import '../storage/app_hive.dart';
 import 'download_recovery.dart';
 
 class DownloadDatabase {
@@ -10,7 +11,7 @@ class DownloadDatabase {
   late Box<DownloadedMedia> _mediaBox;
 
   Future<void> initialize() async {
-    await Hive.initFlutter();
+    await initAppHive();
 
     // Register adapters if not already registered
     if (!Hive.isAdapterRegistered(0)) {

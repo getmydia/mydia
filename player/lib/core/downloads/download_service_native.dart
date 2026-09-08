@@ -16,6 +16,7 @@ import '../../domain/models/download.dart';
 import '../../domain/models/download_option.dart';
 import '../../domain/models/download_settings.dart';
 import '../../domain/models/storage_settings.dart';
+import '../storage/app_hive.dart';
 import 'download_notification_service.dart';
 import 'download_recovery.dart';
 import 'download_service.dart';
@@ -56,7 +57,7 @@ class _NativeDownloadDatabase implements DownloadDatabase {
 
   @override
   Future<void> initialize() async {
-    await Hive.initFlutter();
+    await initAppHive();
 
     // Register adapters if not already registered
     if (!Hive.isAdapterRegistered(0)) {
