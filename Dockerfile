@@ -268,6 +268,12 @@ LABEL org.opencontainers.image.title="Mydia" \
 # openssl is needed for self-signed certificate generation
 # libstdc++ and ncurses-libs came from the erlang base this image used to use;
 # the bundled ERTS and the Rust NIFs link against them
+# VA drivers for hardware transcoding. ffmpeg links libva unconditionally and
+# advertises `vaapi` in -hwaccels whether or not a driver exists, so without
+# these the feature detects as present and then fails at vaInitialize.
+# mesa-va-gallium covers AMD and older Intel; intel-media-driver covers
+# Broadwell and newer; libva-utils provides vainfo, which the probe parses.
+# Adds roughly 30-50MB, mostly the Intel driver.
 RUN apk add --no-cache \
     sqlite \
     libpq \
@@ -276,6 +282,9 @@ RUN apk add --no-cache \
     ffmpeg \
     chromaprint \
     fdk-aac \
+    mesa-va-gallium \
+    intel-media-driver \
+    libva-utils \
     su-exec \
     tzdata \
     shadow \

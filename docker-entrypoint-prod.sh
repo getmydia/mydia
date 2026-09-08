@@ -83,6 +83,38 @@ if [ -n "$TZ" ]; then
     fi
 fi
 
+# Give the app user access to the render node when one is bind-mounted.
+#
+# The gid that owns /dev/dri/renderD128 is assigned by the host and has no
+# stable name inside the container: on a NixOS host it appears as the bare
+# number 303, because Alpine has no matching /etc/group entry. So stat the
+# device and add the gid, rather than looking up a group called "render" or
+# "video" that may not exist.
+#
+# Many hosts ship the node 0666, where this is a no-op. Debian and Ubuntu
+# commonly ship 0660 root:render, where without this the probe fails with
+# Permission denied on a correctly configured host, and the operator reads
+# that as Mydia not supporting their GPU.
+#
+# A host with no GPU is the common case, so every step below fails soft:
+# nothing here may abort the entrypoint under `set -e`.
+if [ -e /dev/dri/renderD128 ]; then
+    RENDER_GID="$(stat -c '%g' /dev/dri/renderD128 2>/dev/null)" || RENDER_GID=""
+
+    if [ -n "$RENDER_GID" ]; then
+        if ! getent group "$RENDER_GID" >/dev/null 2>&1; then
+            addgroup -g "$RENDER_GID" render 2>/dev/null || true
+        fi
+
+        RENDER_GROUP="$(getent group "$RENDER_GID" 2>/dev/null | cut -d: -f1)"
+
+        if [ -n "$RENDER_GROUP" ]; then
+            addgroup mydia "$RENDER_GROUP" 2>/dev/null || true
+            echo "Granted mydia access to /dev/dri/renderD128 (group $RENDER_GROUP/$RENDER_GID)"
+        fi
+    fi
+fi
+
 echo "────────────────────────────────────────"
 echo "Starting Mydia..."
 echo "────────────────────────────────────────"
