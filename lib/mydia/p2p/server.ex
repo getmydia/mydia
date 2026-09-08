@@ -30,10 +30,24 @@ defmodule Mydia.P2p.Server do
   @opaque_failure "Request failed"
 
   # How long one peer request may run before its task is killed and its slot
-  # returned. Matches the Rust core's `RESPONSE_TIMEOUT`: past that the peer has
-  # already been handed a timeout error and stopped waiting, so anything still
-  # running is work whose result nothing will read.
-  @request_timeout :timer.seconds(30)
+  # returned. Deliberately *under* the Rust core's 30s `RESPONSE_TIMEOUT` rather
+  # than equal to it. Equal, the two deadlines race: a request that overruns is
+  # abandoned by the peer at the same instant the host decides to answer it, and
+  # the peer is left to infer a timeout from silence. Landing first means the
+  # host always gets to send the error, which is the whole point of the deadline
+  # (see `serve_request/5`). The gap has to cover sending that response back
+  # over the wire, so it is seconds, not milliseconds.
+  @request_timeout :timer.seconds(25)
+
+  # How long a peer's first HLS request waits for FFmpeg to write a playlist.
+  # This is not the request/response path and has no `RESPONSE_TIMEOUT` over it:
+  # the peer holds a QUIC stream open and waits as long as the host takes, so
+  # the only thing this bounds is how long a genuinely dead encoder ties up a
+  # slot. It used to be 30s, which a cold software transcode of an AV1 source
+  # missed by 400ms, turning a slow start into a 503 the player showed as a
+  # failure. Sized for the worst realistic cold start rather than the typical
+  # one, because being late costs a spinner and being early costs playback.
+  @session_ready_timeout :timer.minutes(2)
 
   @doc """
   Status information about the p2p host.
@@ -647,7 +661,7 @@ defmodule Mydia.P2p.Server do
     case lookup_hls_session(req.session_id) do
       {:ok, pid, session_info} ->
         # Wait for the session to be ready (FFmpeg has created initial files)
-        case HlsSession.await_ready(pid, 30_000) do
+        case HlsSession.await_ready(pid, @session_ready_timeout) do
           :ok ->
             case resolve_session_file(session_info, req.path) do
               {:ok, file_path} ->
