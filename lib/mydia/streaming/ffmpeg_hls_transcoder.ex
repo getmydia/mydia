@@ -289,7 +289,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # sees the whole message rather than one chunk — `buffer` above gets
     # cleared as soon as parse_ffmpeg_output/1 recognizes a line, which would
     # otherwise chop a multi-line VAAPI failure apart before it could match.
-    state = %{state | output_buffer: String.slice(state.output_buffer <> data, -4_000, 4_000)}
+    state = %{state | output_buffer: append_output(state.output_buffer, data)}
 
     # Parse FFmpeg output for progress and duration
     state =
@@ -825,11 +825,20 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # software: retrying a genuine error would hide a bug behind a second, slower
   # failure. The first pattern is captured verbatim from a container whose
   # ffmpeg links libva with no driver installed.
+  #
+  # Deliberately NOT included: a standalone `Function not implemented`
+  # pattern. That string is the literal strerror(ENOSYS) text ffmpeg prints
+  # via av_strerror for ANY AVERROR(ENOSYS) — an unsupported muxer, protocol,
+  # or codec feature, not only hardware device init. Matching it on its own
+  # would classify an unrelated encode-time ENOSYS as a hardware failure and
+  # retry it in software, which is exactly the over-matching this classifier
+  # exists to avoid. The real VAAPI case is still caught: it always appears
+  # as the parenthetical on the connection line, which
+  # `Failed to initialise VAAPI connection` already matches.
   @hwaccel_failure_patterns [
     ~r/Failed to initialise VAAPI connection/i,
     ~r/No VA display found/i,
     ~r/Device creation failed/i,
-    ~r/Function not implemented/i,
     ~r/Failed to open .*\/dev\/dri\/.*Permission denied/i,
     ~r/for option 'init_hw_device'/i,
     ~r/for option 'hwaccel_device'/i
@@ -847,6 +856,35 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   end
 
   def hwaccel_failure?(_), do: false
+
+  # Bound in bytes, not graphemes. String.slice/3 counts grapheme clusters,
+  # so slicing a buffer full of multi-byte characters to "the last 4,000"
+  # keeps 4,000 *graphemes* — up to 3x @output_buffer_bytes for 3-byte UTF-8
+  # sequences (common CJK/accented text, realistic here since this is a
+  # self-hosted media server with arbitrary international file paths). This
+  # buffer lives for the whole session, so that growth is exactly what the
+  # bound exists to prevent.
+  @output_buffer_bytes 4_000
+
+  @doc false
+  # Public only so the byte bound can be unit-tested directly, without
+  # starting a transcoder; nothing outside this module should call it.
+  def append_output(buffer, data) do
+    combined = buffer <> data
+    size = byte_size(combined)
+
+    if size > @output_buffer_bytes do
+      # A byte-based cut can land inside a multi-byte character, leaving
+      # invalid UTF-8 at the start of the buffer. That's fine here: the
+      # buffer is only ever regex-matched, and @hwaccel_failure_patterns are
+      # plain ASCII without the `u` modifier, so the regex engine matches
+      # against raw bytes and never raises on the malformed prefix.
+      # Scrubbing it back to valid UTF-8 would cost more than it buys.
+      binary_part(combined, size - @output_buffer_bytes, @output_buffer_bytes)
+    else
+      combined
+    end
+  end
 
   # Parse FFmpeg output for duration, progress, and errors
   defp parse_ffmpeg_output(output) do
