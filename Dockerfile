@@ -273,7 +273,11 @@ LABEL org.opencontainers.image.title="Mydia" \
 # these the feature detects as present and then fails at vaInitialize.
 # mesa-va-gallium covers AMD and older Intel; intel-media-driver covers
 # Broadwell and newer; libva-utils provides vainfo, which the probe parses.
-# Adds roughly 30-50MB, mostly the Intel driver.
+# Adds roughly 250MB uncompressed (measured: 154MB -> 407MB on this package
+# set), most of it llvm21-libs (~170MB), pulled in transitively by
+# mesa-va-gallium because its gallium driver compiles shaders through LLVM;
+# intel-media-driver itself is only ~38MB. The compressed layer delta will
+# be smaller, but on that order.
 RUN apk add --no-cache \
     sqlite \
     libpq \
