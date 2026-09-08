@@ -5,6 +5,7 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
   attr :config_settings_with_sources, :map, required: true
   attr :crash_report_stats, :map, required: true
   attr :invalid_config_settings, :list, default: []
+  attr :hwaccel, Mydia.Streaming.HardwareAccel.Capabilities, required: true
 
   def general_settings_tab(assigns) do
     ~H"""
@@ -70,6 +71,39 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
                       category={category}
                       editable={Map.get(setting, :editable, setting.source != :env)}
                     />
+                  </div>
+                </div>
+              </div>
+            <% end %>
+            <%= if category == "Streaming" do %>
+              <div id="hwaccel-status" class="p-3 sm:p-4">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <div class="flex-1 min-w-0">
+                    <div class="font-medium flex items-center gap-2 flex-wrap">
+                      Hardware transcoding
+                    </div>
+                    <div class="text-xs opacity-60 mt-1">
+                      <%= if @hwaccel.backend == :none do %>
+                        Unavailable: {@hwaccel.reason}
+                      <% else %>
+                        {@hwaccel.backend} on {@hwaccel.device || "unknown device"}
+                        <%= if @hwaccel.decode_profiles != [] do %>
+                          &middot; decodes {Enum.map_join(
+                            @hwaccel.decode_profiles,
+                            ", ",
+                            &to_string/1
+                          )}
+                        <% end %>
+                      <% end %>
+                    </div>
+                  </div>
+                  <div class="sm:ml-auto">
+                    <span class={[
+                      "badge",
+                      if(@hwaccel.backend == :none, do: "badge-ghost", else: "badge-success")
+                    ]}>
+                      {if @hwaccel.backend == :none, do: "Software", else: "Accelerated"}
+                    </span>
                   </div>
                 </div>
               </div>
