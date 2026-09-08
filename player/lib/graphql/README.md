@@ -34,7 +34,7 @@ Initialize Hive for GraphQL caching in your app's main function:
 ```dart
 import 'package:graphql_flutter/graphql_flutter.dart';
 
-import '../core/storage/app_hive.dart';
+import 'core/storage/app_hive.dart';
 
 void main() async {
   await initAppHive();

@@ -125,13 +125,40 @@ Future<void> _migrateBox(String from, String to, String name) async {
 Future<void> _move(File source, File destination) async {
   try {
     await source.rename(destination.path);
+    return;
   } on FileSystemException {
     // `rename` cannot cross a filesystem boundary, and these two paths
     // routinely sit on different ones -- a Documents folder redirected to
-    // another volume, or to a OneDrive reparse point. Copy instead, and drop
-    // the original only once the copy is on disk.
-    await source.copy(destination.path);
+    // another volume, or to a OneDrive reparse point.
+  }
+
+  // Copy through a staging file in the destination directory rather than
+  // straight onto `destination`. `File.copy` promises no atomicity, so an
+  // interrupted copy would leave a truncated `.hive` at the destination while
+  // the source is still intact -- and the next launch reads that as a
+  // completed migration, because [_migrateBox] treats any existing
+  // destination as authoritative. Hive would then open the fragment and its
+  // crash recovery would accept it as a short box, silently losing whatever
+  // had not been written. Renaming within one directory is atomic, so the
+  // destination only ever appears complete.
+  //
+  // The pid keeps two instances racing this from writing each other's
+  // staging file. A hard kill can strand one, which is inert: it lives in the
+  // app's own support directory and nothing but this function looks for it.
+  final staging = File('${destination.path}.$pid.migrating');
+  try {
+    await source.copy(staging.path);
+    await staging.rename(destination.path);
     await source.delete();
+  } catch (_) {
+    if (staging.existsSync()) {
+      try {
+        await staging.delete();
+      } catch (e) {
+        debugPrint('[Hive] Could not clean up ${staging.path}: $e');
+      }
+    }
+    rethrow;
   }
 }
 

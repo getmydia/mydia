@@ -162,6 +162,27 @@ void main() {
       expect(asked, ['graphqlClientStore']);
     });
 
+    test('a failed cross-device copy leaves no partial box behind', () async {
+      // The copy fallback runs when `rename` cannot cross a filesystem
+      // boundary. A directory at the destination path forces both to fail,
+      // standing in for an interrupted copy: what matters is that no
+      // half-written `.hive` and no staging file survive at the destination,
+      // since the next launch would read either as a completed migration.
+      await _hive(from, 'playback_progress').writeAsString('records');
+      await Directory(_hive(to, 'playback_progress').path).create();
+
+      await migrateHiveBoxes(from: from.path, to: to.path);
+
+      final leftovers = to
+          .listSync()
+          .map((e) => e.path.split(Platform.pathSeparator).last)
+          .where((name) => name.contains('migrating'))
+          .toList();
+      expect(leftovers, isEmpty, reason: 'staging files must be cleaned up');
+      // The source is still the only complete copy, so a later launch retries.
+      expect(await _hive(from, 'playback_progress').readAsString(), 'records');
+    });
+
     test('one unmovable box does not strand the rest', () async {
       await _hive(from, 'cast_session').writeAsString('session');
       // A directory sitting where the destination file belongs. Both the
