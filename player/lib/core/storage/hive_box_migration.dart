@@ -145,6 +145,20 @@ Future<void> _move(File source, File destination) async {
   // The pid keeps two instances racing this from writing each other's
   // staging file. A hard kill can strand one, which is inert: it lives in the
   // app's own support directory and nothing but this function looks for it.
+  //
+  // Promotion replaces whatever is at the destination, and two instances
+  // migrating at once can both get past [_migrateBox]'s existence check. That
+  // is deliberately not locked against. Both racers copy the same bytes from
+  // the same untouched source, so the promoted file is identical either way;
+  // losing a record needs the other instance to finish its own copy, run
+  // `Hive.init`, open the box and write, all inside this copy. Two live
+  // instances are already the state `isLockContentionError` and
+  // `StartupErrorApp.alreadyRunning` exist to refuse. Closing the window
+  // properly would need an interprocess lock with stale-lock recovery on the
+  // startup path, because `dart:io` exposes no no-replace rename, and
+  // claiming the destination with `create(exclusive: true)` would put an
+  // empty `.hive` there that a crash turns into the very "already migrated,
+  // now empty" outcome this staging exists to prevent.
   final staging = File('${destination.path}.$pid.migrating');
   try {
     await source.copy(staging.path);
