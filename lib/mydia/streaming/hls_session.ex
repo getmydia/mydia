@@ -235,6 +235,20 @@ defmodule Mydia.Streaming.HlsSession do
     GenServer.cast(pid, {:segments_ready, generation, indices})
   end
 
+  @doc """
+  Notifies the session that its backend failed to initialise hardware
+  acceleration and stopped (with reason `:normal`) rather than crashing.
+
+  `generation` guards against this exact race the same way `notify_segments/3`
+  does: a backend the session has already relocated away from (a viewer seeked
+  before this notification arrived) must not be allowed to restart a window
+  that no longer exists.
+  """
+  @spec notify_hwaccel_failed(pid(), non_neg_integer(), String.t()) :: :ok
+  def notify_hwaccel_failed(pid, generation, output) do
+    GenServer.cast(pid, {:hwaccel_failed, generation, output})
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -672,30 +686,25 @@ defmodule Mydia.Streaming.HlsSession do
     {:noreply, %{state | window: window, segment_waiters: remaining}}
   end
 
-  @impl true
-  def handle_info(:check_timeout, state) do
-    now = DateTime.utc_now()
-    inactive_duration = DateTime.diff(now, state.last_activity, :millisecond)
-
-    if inactive_duration >= @session_timeout do
-      Logger.info("Session #{state.session_id} inactive for #{inactive_duration}ms, terminating")
-
-      {:stop, :timeout, state}
-    else
-      # Still active, schedule next check
-      state = schedule_timeout_check(state)
-      {:noreply, state}
-    end
+  def handle_cast({:hwaccel_failed, generation, _output}, %{window_generation: current} = state)
+      when generation != current do
+    # A dead backend's failure report for a window the session has already
+    # relocated away from (a viewer seeked before the notification arrived).
+    # Mirrors the identical guard on {:segments_ready, ...} above.
+    {:noreply, state}
   end
 
   # A hardware initialisation failure is recoverable: re-encode the same window
   # in software rather than taking the session down. Reuses relocate/2, which
   # already knows how to stop a backend, restart it at a target segment number,
-  # and bump window_generation so the dead backend's late polls are discarded.
-  def handle_info(
-        {:DOWN, _ref, :process, pid, {:hwaccel_failed, output}},
-        %{backend_pid: pid} = state
-      ) do
+  # and bump window_generation so a late report from this same dead backend
+  # (were it to somehow arrive twice) is discarded by the guard clause above.
+  #
+  # FfmpegHlsTranscoder stops itself with reason :normal for this case
+  # specifically so the link from this session to its backend does not take
+  # the session down before this callback can run (see the comment on
+  # relocate/2, and on FfmpegHlsTranscoder's exit-status handler).
+  def handle_cast({:hwaccel_failed, _generation, output}, state) do
     Mydia.Streaming.HardwareAccel.report_failure(
       :vaapi,
       state.media_file && state.media_file.codec
@@ -715,6 +724,22 @@ defmodule Mydia.Streaming.HlsSession do
       :stop ->
         Logger.error("Session #{state.session_id}: hardware fallback already used; giving up")
         {:stop, {:backend_terminated, {:hwaccel_failed, output}}, state}
+    end
+  end
+
+  @impl true
+  def handle_info(:check_timeout, state) do
+    now = DateTime.utc_now()
+    inactive_duration = DateTime.diff(now, state.last_activity, :millisecond)
+
+    if inactive_duration >= @session_timeout do
+      Logger.info("Session #{state.session_id} inactive for #{inactive_duration}ms, terminating")
+
+      {:stop, :timeout, state}
+    else
+      # Still active, schedule next check
+      state = schedule_timeout_check(state)
+      {:noreply, state}
     end
   end
 
@@ -948,6 +973,9 @@ defmodule Mydia.Streaming.HlsSession do
           end,
           on_error: fn error ->
             Logger.error("FFmpeg transcoding error for #{absolute_path}: #{error}")
+          end,
+          on_hwaccel_failed: fn output ->
+            __MODULE__.notify_hwaccel_failed(session_pid, generation, output)
           end
         ] ++
         if Keyword.get(opts, :playlist_mode) == :full do

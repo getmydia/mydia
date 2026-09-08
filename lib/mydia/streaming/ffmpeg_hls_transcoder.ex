@@ -45,6 +45,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           on_progress: (map() -> any()) | nil,
           on_complete: (-> any()) | nil,
           on_error: (String.t() -> any()) | nil,
+          on_hwaccel_failed: (String.t() -> any()) | nil,
           media_file: Mydia.Library.MediaFile.t() | nil,
           video_codec: String.t(),
           audio_codec: String.t(),
@@ -66,6 +67,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       :on_error,
       :on_ready,
       :on_segments,
+      :on_hwaccel_failed,
       :playlist_path,
       :buffer,
       :duration,
@@ -86,6 +88,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             on_error: (String.t() -> any()) | nil,
             on_ready: (-> any()) | nil,
             on_segments: ([non_neg_integer()] -> any()) | nil,
+            on_hwaccel_failed: (String.t() -> any()) | nil,
             seen_segments: MapSet.t(non_neg_integer()),
             playlist_path: String.t() | nil,
             buffer: String.t(),
@@ -110,6 +113,11 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     * `:on_progress` - (optional) Callback function called with progress updates
     * `:on_complete` - (optional) Callback function called when transcoding completes
     * `:on_error` - (optional) Callback function called when an error occurs
+    * `:on_hwaccel_failed` - (optional) Callback called with the buffered FFmpeg
+      output when a hardware initialisation failure is detected. The process
+      then stops with reason `:normal` (recoverable, not a crash) instead of
+      `{:ffmpeg_exit, status}`; the callback is the only way the caller learns
+      why.
     * `:video_codec` - (optional) Video codec (default: auto-detect from media_file or "libx264")
     * `:audio_codec` - (optional) Audio codec (default: auto-detect from media_file or "aac")
     * `:preset` - (optional) FFmpeg preset (default: "medium")
@@ -204,6 +212,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     on_error = Keyword.get(opts, :on_error)
     on_ready = Keyword.get(opts, :on_ready)
     on_segments = Keyword.get(opts, :on_segments)
+    on_hwaccel_failed = Keyword.get(opts, :on_hwaccel_failed)
 
     # Build FFmpeg command
     args = build_ffmpeg_args(input_path, output_dir, opts)
@@ -240,6 +249,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           on_error: on_error,
           on_ready: on_ready,
           on_segments: on_segments,
+          on_hwaccel_failed: on_hwaccel_failed,
           playlist_path: playlist_path,
           buffer: "",
           duration: nil,
@@ -372,19 +382,26 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       state.on_error.(error_msg)
     end
 
-    reason =
-      if state.accel_tier != :software and hwaccel_failure?(state.output_buffer) do
-        Logger.warning(
-          "Hardware encode failed to initialise (tier #{state.accel_tier}); " <>
-            "the session will retry in software"
-        )
+    if state.accel_tier != :software and hwaccel_failure?(state.output_buffer) do
+      Logger.warning(
+        "Hardware encode failed to initialise (tier #{state.accel_tier}); " <>
+          "the session will retry in software"
+      )
 
-        {:hwaccel_failed, state.output_buffer}
-      else
-        {:ffmpeg_exit, status}
+      if state.on_hwaccel_failed do
+        state.on_hwaccel_failed.(state.output_buffer)
       end
 
-    {:stop, reason, state}
+      # :normal, not {:hwaccel_failed, output}: HlsSession links to this
+      # process (see the comment on HlsSession.relocate/2), and a link to a
+      # non-trapping process only kills it for a non-normal exit. A hardware
+      # init failure is recoverable and must not take the session down the
+      # same way a genuine crash does; on_hwaccel_failed above is what tells
+      # the session to actually recover it.
+      {:stop, :normal, state}
+    else
+      {:stop, {:ffmpeg_exit, status}, state}
+    end
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
