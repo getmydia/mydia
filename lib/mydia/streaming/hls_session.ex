@@ -694,11 +694,22 @@ defmodule Mydia.Streaming.HlsSession do
     {:noreply, state}
   end
 
-  # A hardware initialisation failure is recoverable: re-encode the same window
-  # in software rather than taking the session down. Reuses relocate/2, which
-  # already knows how to stop a backend, restart it at a target segment number,
-  # and bump window_generation so a late report from this same dead backend
-  # (were it to somehow arrive twice) is discarded by the guard clause above.
+  # A hardware initialisation failure is recoverable: re-encode in software
+  # rather than taking the session down, and bump window_generation so a late
+  # report from this same dead backend (were it to somehow arrive twice) is
+  # discarded by the guard clause above.
+  #
+  # A :full session reuses relocate/2, which already knows how to stop a
+  # backend and restart it at a target segment number while preserving the
+  # segment grid. A :window session has no segment grid -- both segment_plan
+  # and window are nil (see start_registered_session/7) -- and never reaches
+  # relocate/2 any other way (it is only ever called from
+  # {:request_segment, index}, which a :window session's handle_call answers
+  # with {:error, :window_mode} before relocate/2 could run). Calling
+  # relocate/2 for a :window session would crash on
+  # SegmentPlan.start_time(nil, _), so it gets the simpler
+  # restart_backend_in_place/1 instead: same backend_opts (already forced to
+  # software by hwaccel_fallback/2 below), no grid to advance.
   #
   # FfmpegHlsTranscoder stops itself with reason :normal for this case
   # specifically so the link from this session to its backend does not take
@@ -719,7 +730,13 @@ defmodule Mydia.Streaming.HlsSession do
             "at segment #{target}"
         )
 
-        {:noreply, relocate(%{state | backend_pid: nil}, target)}
+        new_state =
+          case state.playlist_mode do
+            :full -> relocate(%{state | backend_pid: nil}, target)
+            :window -> restart_backend_in_place(%{state | backend_pid: nil})
+          end
+
+        {:noreply, new_state}
 
       :stop ->
         Logger.error("Session #{state.session_id}: hardware fallback already used; giving up")
@@ -837,15 +854,15 @@ defmodule Mydia.Streaming.HlsSession do
     :exit, _reason -> :ok
   end
 
-  # Moves the encoder to `target`, keeping every segment already on disk.
+  # Stops the current backend (unlinked first, so its exit doesn't take this
+  # session down) if it is still alive, then starts a new one at
+  # `opts`/`generation`. Returns exactly what start_backend/6 returns.
   #
-  # The backend is unlinked before it is stopped. HlsSession links to its
-  # backend so a crashed encoder takes the session down; without the unlink, a
-  # deliberate stop would do the same thing and every seek would kill the
-  # session.
-  defp relocate(state, target) do
-    generation = state.window_generation + 1
-
+  # Shared by relocate/2 and restart_backend_in_place/1 below: both need
+  # "replace the running backend with a new one," and only differ in what
+  # session state to update once that succeeds (relocate/2 also advances the
+  # segment window; a :window session has no window to advance).
+  defp stop_and_start_backend(state, opts, generation) do
     if is_pid(state.backend_pid) and Process.alive?(state.backend_pid) do
       Process.unlink(state.backend_pid)
 
@@ -864,27 +881,27 @@ defmodule Mydia.Streaming.HlsSession do
       #
       # This does mean the old and new encoders overlap for roughly 100ms.
       # That is safe: the old backend is already unlinked and about to stop
-      # producing segments, and any {:segments_ready, ...} it still manages
-      # to send in that window carries the old generation, which the guard
-      # clause on that handle_cast discards.
+      # producing segments, and any {:segments_ready, ...} or
+      # {:hwaccel_failed, ...} it still manages to send in that window
+      # carries the old generation, which the matching guard clause discards.
       backend_pid = state.backend_pid
       backend = state.backend
       Task.start(fn -> stop_backend(backend, backend_pid) end)
     end
+
+    start_backend(:ffmpeg, state.media_file, state.temp_dir, state.db_job_id, opts, generation)
+  end
+
+  # Moves the encoder to `target`, keeping every segment already on disk.
+  defp relocate(state, target) do
+    generation = state.window_generation + 1
 
     opts =
       state.backend_opts
       |> Keyword.put(:start_position, trunc(SegmentPlan.start_time(state.segment_plan, target)))
       |> Keyword.put(:start_number, target)
 
-    case start_backend(
-           :ffmpeg,
-           state.media_file,
-           state.temp_dir,
-           state.db_job_id,
-           opts,
-           generation
-         ) do
+    case stop_and_start_backend(state, opts, generation) do
       {:ok, backend_pid} ->
         Process.link(backend_pid)
 
@@ -904,6 +921,27 @@ defmodule Mydia.Streaming.HlsSession do
             window: TranscodeWindow.stopped(state.window),
             window_generation: generation
         }
+    end
+  end
+
+  # The :window-mode counterpart to relocate/2, used only for the
+  # hardware-failure fallback. A :window session has no SegmentPlan and no
+  # TranscodeWindow to advance (both nil -- see start_registered_session/7),
+  # so there is nothing to seek to: it just restarts the backend with its
+  # existing backend_opts, which hwaccel_fallback/2 has already forced to
+  # software, at a bumped window_generation so a stray late report from the
+  # old backend is discarded the same way a stale relocation is.
+  defp restart_backend_in_place(state) do
+    generation = state.window_generation + 1
+
+    case stop_and_start_backend(state, state.backend_opts, generation) do
+      {:ok, backend_pid} ->
+        Process.link(backend_pid)
+        %{state | backend_pid: backend_pid, window_generation: generation}
+
+      {:error, reason} ->
+        Logger.error("Failed to restart backend in software: #{inspect(reason)}")
+        %{state | backend_pid: nil, window_generation: generation}
     end
   end
 
