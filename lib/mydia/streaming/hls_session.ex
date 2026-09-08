@@ -423,7 +423,8 @@ defmodule Mydia.Streaming.HlsSession do
         # A :playback lease is claimed once for the whole session, not once
         # per FfmpegHlsTranscoder process -- see acquire_hwaccel_lease/0 for
         # why.
-        {capabilities, hwaccel_lease} = maybe_acquire_hwaccel_lease(media_file, max_bitrate)
+        {capabilities, hwaccel_lease} =
+          maybe_acquire_hwaccel_lease(media_file, max_bitrate, max_height)
 
         # The keyword list a relocation reuses verbatim (see relocate/2), so it
         # has to carry everything start_backend/6 needs beyond the offset and
@@ -436,7 +437,7 @@ defmodule Mydia.Streaming.HlsSession do
           max_height: max_height,
           start_position: start_position,
           start_number: first_index,
-          grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate),
+          grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate, max_height),
           absolute_timestamps: playlist_mode == :full,
           playlist_mode: playlist_mode,
           audio_language: playback.audio_language,
@@ -504,10 +505,13 @@ defmodule Mydia.Streaming.HlsSession do
   # plain MediaFile struct, without a live HardwareAccel process, a DB row, or
   # a real init/1; nothing outside this module should call it.
   @doc false
-  @spec maybe_acquire_hwaccel_lease(Mydia.Library.MediaFile.t() | nil, integer() | nil) ::
-          {Capabilities.t() | nil, reference() | nil}
-  def maybe_acquire_hwaccel_lease(media_file, max_bitrate) do
-    if FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate) do
+  @spec maybe_acquire_hwaccel_lease(
+          Mydia.Library.MediaFile.t() | nil,
+          integer() | nil,
+          integer() | nil
+        ) :: {Capabilities.t(), reference() | nil}
+  def maybe_acquire_hwaccel_lease(media_file, max_bitrate, max_height) do
+    if FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate, max_height) do
       acquire_hwaccel_lease()
     else
       {nil, nil}
@@ -570,10 +574,15 @@ defmodule Mydia.Streaming.HlsSession do
   # job row, a real media file), which is unrelated to whether the decision
   # itself is right. Nothing outside this module should call it.
   @doc false
-  @spec grid_aligned?(:full | :window, Mydia.Library.MediaFile.t() | nil, integer() | nil) ::
-          boolean()
-  def grid_aligned?(playlist_mode, media_file, max_bitrate) do
-    playlist_mode == :full and FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate)
+  @spec grid_aligned?(
+          :full | :window,
+          Mydia.Library.MediaFile.t() | nil,
+          integer() | nil,
+          integer() | nil
+        ) :: boolean()
+  def grid_aligned?(playlist_mode, media_file, max_bitrate, max_height) do
+    playlist_mode == :full and
+      FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate, max_height)
   end
 
   @doc """
