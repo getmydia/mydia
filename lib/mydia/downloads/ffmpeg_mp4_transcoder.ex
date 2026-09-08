@@ -16,12 +16,13 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
 
   ## FFmpeg Command Structure
 
-  The core FFmpeg command used:
+  The core FFmpeg command used (software tier shown; a VAAPI-capable host
+  swaps in `h264_vaapi` and a `scale_vaapi` filter instead):
 
       ffmpeg -i input.mkv \
         -c:v libx264 -preset medium -crf 23 \
         -pix_fmt yuv420p -profile:v high \
-        -s 1920x1080 \
+        -vf scale=-2:1080 \
         -c:a aac -b:a 128k -ar 48000 -ac 2 \
         -movflags +frag_keyframe+empty_moov+default_base_moof \
         -progress pipe:2 \
@@ -31,6 +32,19 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
   - `frag_keyframe`: Create a new fragment at each keyframe (enables seeking)
   - `empty_moov`: Write the moov atom immediately (enables playback before complete)
   - `default_base_moof`: Optimize fragment headers for seeking
+
+  ## Hardware Acceleration
+
+  The video encode goes through `Mydia.Streaming.HardwareAccel.Args`, the same
+  builder the HLS path uses, so a VAAPI-capable host encodes with `h264_vaapi`
+  instead of `libx264`. This is a background job rather than interactive
+  playback, so `init/1` takes a `:background` lease from
+  `Mydia.Streaming.HardwareAccel`, which is refused one slot early so an
+  interactive playback start never waits behind a batch download; a refusal
+  just means "encode in software". If the hardware encoder fails to
+  initialise, the whole job restarts once in software (there is no window or
+  segment grid to preserve here, unlike HLS) via `retry_in_software?/1` and
+  `Mydia.Streaming.FfmpegHlsTranscoder.hwaccel_failure?/1`.
 
   ## Usage
 
@@ -49,6 +63,11 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
 
   use GenServer
   require Logger
+
+  alias Mydia.Streaming.FfmpegHlsTranscoder
+  alias Mydia.Streaming.HardwareAccel
+  alias Mydia.Streaming.HardwareAccel.Args, as: AccelArgs
+  alias Mydia.Streaming.HardwareAccel.Capabilities
 
   @type resolution :: :p1080 | :p720 | :p480
   @type transcode_opts :: [
@@ -75,7 +94,13 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
       :on_error,
       :buffer,
       :duration,
-      :started_at
+      :started_at,
+      :job_id,
+      :source_codec,
+      :opts,
+      :hwaccel_lease,
+      hwaccel_retried: false,
+      output_buffer: ""
     ]
 
     @type t :: %__MODULE__{
@@ -89,7 +114,13 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
             on_error: (String.t() -> any()) | nil,
             buffer: String.t(),
             duration: float() | nil,
-            started_at: DateTime.t()
+            started_at: DateTime.t(),
+            job_id: String.t() | nil,
+            source_codec: String.t() | nil,
+            opts: keyword(),
+            hwaccel_lease: reference() | nil,
+            hwaccel_retried: boolean(),
+            output_buffer: String.t()
           }
   end
 
@@ -175,6 +206,19 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
       on_complete = Keyword.get(opts, :on_complete)
       on_error = Keyword.get(opts, :on_error)
 
+      # A background lease is refused one slot early so an interactive
+      # playback start never waits behind a batch download transcode. A
+      # refusal means "encode in software", not an error -- fall back to the
+      # software capabilities so build_ffmpeg_args/4 never reaches for a
+      # device this job was refused.
+      {capabilities, lease} =
+        case HardwareAccel.lease(:background) do
+          {:ok, ref} -> {HardwareAccel.capabilities(), ref}
+          :refused -> {Capabilities.software("no hardware slot free for a background job"), nil}
+        end
+
+      opts = Keyword.put(opts, :capabilities, capabilities)
+
       # Build FFmpeg command
       args = build_ffmpeg_args(input_path, output_path, resolution, opts)
 
@@ -195,13 +239,20 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
             on_error: on_error,
             buffer: "",
             duration: nil,
-            started_at: DateTime.utc_now()
+            started_at: DateTime.utc_now(),
+            job_id: Keyword.get(opts, :media_file_id, input_path),
+            source_codec: Keyword.get(opts, :source_codec),
+            opts: opts,
+            hwaccel_lease: lease,
+            hwaccel_retried: false,
+            output_buffer: ""
           }
 
           {:ok, state}
 
         {:error, reason} ->
           Logger.error("Failed to start FFmpeg process: #{inspect(reason)}")
+          if lease, do: HardwareAccel.release(lease)
           {:stop, {:ffmpeg_start_failed, reason}}
       end
     else
@@ -234,6 +285,12 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
 
     # Accumulate output in buffer
     buffer = state.buffer <> data
+
+    # Separate, bounded accumulation of raw stderr so the hwaccel classifier
+    # sees the whole message rather than one chunk -- `buffer` above gets
+    # cleared as soon as parse_ffmpeg_output/1 recognizes a line, which would
+    # otherwise chop a multi-line VAAPI failure apart before it could match.
+    state = %{state | output_buffer: FfmpegHlsTranscoder.append_output(state.output_buffer, data)}
 
     # Parse FFmpeg output for progress and duration
     state =
@@ -297,7 +354,30 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
       state.on_error.(error_msg)
     end
 
-    {:stop, {:ffmpeg_failed, status}, state}
+    if retry_in_software?(state) do
+      Logger.warning(
+        "Download transcode hardware encode failed; restarting in software for job " <>
+          "#{state.job_id}"
+      )
+
+      HardwareAccel.report_failure(:vaapi, state.source_codec)
+
+      case restart_in_software(state) do
+        {:ok, new_state} ->
+          {:noreply, new_state}
+
+        {:error, reason} ->
+          Logger.error("Failed to restart FFmpeg in software: #{inspect(reason)}")
+          {:stop, {:ffmpeg_failed, status}, state}
+      end
+    else
+      # {:ffmpeg_failed, status}, not {:ffmpeg_exit, status}: JobManager
+      # pattern-matches on this exact reason (see
+      # lib/mydia/downloads/job_manager.ex) to drive download job failure
+      # handling, unlike the HLS transcoder's equivalent reason which nothing
+      # matches on.
+      {:stop, {:ffmpeg_failed, status}, state}
+    end
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
@@ -313,6 +393,11 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
   @impl true
   def terminate(reason, state) do
     Logger.info("Terminating FFmpeg MP4 transcoder, reason: #{inspect(reason)}")
+
+    # Release the hardware slot on every exit path -- normal completion,
+    # ffmpeg failure, or a crash -- so a leaked background lease never starves
+    # playback of a slot it was never using.
+    if state.hwaccel_lease, do: HardwareAccel.release(state.hwaccel_lease)
 
     # Stop FFmpeg process if still running
     if is_port(state.ffmpeg_port) && Port.info(state.ffmpeg_port) do
@@ -356,57 +441,117 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
     _ -> false
   end
 
-  # Build FFmpeg command arguments for progressive MP4 transcoding
-  defp build_ffmpeg_args(input_path, output_path, resolution, opts) do
-    preset = Keyword.get(opts, :preset, "medium")
-    crf = Keyword.get(opts, :crf, 23)
+  # Build FFmpeg command arguments for progressive MP4 transcoding.
+  #
+  # `-s WxH` is deliberately gone: it forces exact dimensions with no aspect
+  # handling and cannot coexist with a hardware filter chain -- it would force
+  # a software scale after the frames are already on the GPU. The height
+  # reaches AccelArgs as :max_height instead, so one filter expression
+  # (software scale, or scale_vaapi on the hardware tiers) handles every
+  # resolution preset.
+  @doc false
+  # Public only so the argument construction can be unit-tested directly,
+  # without spawning ffmpeg; nothing outside this module should call it.
+  def build_ffmpeg_args(input_path, output_path, resolution, opts) do
+    %{height: height} = @resolution_presets[resolution]
 
-    # Get resolution dimensions
-    %{width: width, height: height} = @resolution_presets[resolution]
+    capabilities =
+      Keyword.get_lazy(opts, :capabilities, fn ->
+        HardwareAccel.capabilities()
+      end)
 
-    # Build FFmpeg arguments
-    [
-      # Input
-      "-i",
-      input_path,
-      # Video encoding
-      "-c:v",
-      "libx264",
-      "-preset",
-      preset,
-      "-crf",
-      to_string(crf),
-      "-pix_fmt",
-      "yuv420p",
-      "-profile:v",
-      "high",
-      "-s",
-      "#{width}x#{height}",
-      # Audio encoding
-      "-c:a",
-      "aac",
-      "-b:a",
-      "128k",
-      "-ar",
-      "48000",
-      "-ac",
-      "2",
-      # Fragmented MP4 output flags for progressive playback
-      # - frag_keyframe: Create new fragment at each keyframe (enables seeking)
-      # - empty_moov: Write moov atom immediately (enables playback before complete)
-      # - default_base_moof: Optimize fragment headers
-      "-movflags",
-      "+frag_keyframe+empty_moov+default_base_moof",
-      # Progress reporting (FFmpeg writes to stderr)
-      "-progress",
-      "pipe:2",
-      # Format and output
-      "-f",
-      "mp4",
-      "-loglevel",
-      "info",
-      output_path
-    ]
+    accel =
+      AccelArgs.build(capabilities,
+        source_codec: Keyword.get(opts, :source_codec),
+        max_height: height,
+        crf: Keyword.get(opts, :crf, 23),
+        preset: Keyword.get(opts, :preset, "medium")
+      )
+
+    # -hwaccel flags must precede -i. After it, ffmpeg has already selected a
+    # decoder and silently ignores them.
+    accel.input ++
+      ["-i", input_path] ++
+      accel.video ++
+      [
+        # Audio encoding
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        # Fragmented MP4 output flags for progressive playback -- these are
+        # what make the file playable before the download completes; losing
+        # them breaks progressive playback silently, with no error.
+        # - frag_keyframe: Create new fragment at each keyframe (enables seeking)
+        # - empty_moov: Write moov atom immediately (enables playback before complete)
+        # - default_base_moof: Optimize fragment headers
+        "-movflags",
+        "+frag_keyframe+empty_moov+default_base_moof",
+        # Progress reporting (FFmpeg writes to stderr)
+        "-progress",
+        "pipe:2",
+        # Format and output
+        "-f",
+        "mp4",
+        output_path
+      ]
+  end
+
+  # Whether a non-zero ffmpeg exit should be retried once in software.
+  #
+  # Public so the branch decision is testable without spawning ffmpeg,
+  # mirroring FfmpegHlsTranscoder.hwaccel_failure?/1. A hardware failure is
+  # only worth retrying the first time -- retrying a genuine encode error
+  # would just hide a bug behind a second, slower failure -- so a job that
+  # already retried always answers false here regardless of what the output
+  # looks like.
+  @doc false
+  @spec retry_in_software?(map()) :: boolean()
+  def retry_in_software?(%{hwaccel_retried: true}), do: false
+
+  def retry_in_software?(%{output_buffer: output}) do
+    FfmpegHlsTranscoder.hwaccel_failure?(output)
+  end
+
+  # Restarts the whole job in software after a hardware initialisation
+  # failure. There is no window or segment grid to preserve here, unlike the
+  # HLS session, so this rebuilds the arguments from scratch and spawns a
+  # fresh port rather than relocating anything.
+  defp restart_in_software(state) do
+    if state.hwaccel_lease, do: HardwareAccel.release(state.hwaccel_lease)
+
+    opts =
+      Keyword.put(
+        state.opts,
+        :capabilities,
+        Capabilities.software("fell back after a hardware failure")
+      )
+
+    args = build_ffmpeg_args(state.input_path, state.output_path, state.resolution, opts)
+
+    Logger.debug("FFmpeg args (software fallback): #{inspect(args)}")
+
+    case start_ffmpeg_process(args) do
+      {:ok, port, pid} ->
+        {:ok,
+         %{
+           state
+           | ffmpeg_pid: pid,
+             ffmpeg_port: port,
+             buffer: "",
+             output_buffer: "",
+             opts: opts,
+             hwaccel_lease: nil,
+             hwaccel_retried: true
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   # Start FFmpeg process using Port
