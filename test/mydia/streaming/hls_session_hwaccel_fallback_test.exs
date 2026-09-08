@@ -307,8 +307,17 @@ defmodule Mydia.Streaming.HlsSessionHwaccelFallbackTest do
         # in a restart loop.
         :ok = FailingHwaccelBackend.trigger_failure(new_backend_pid, "vaapi init failed again")
 
+        # Explicit budget rather than ExUnit's 100ms default. Reaching this
+        # DOWN spans several process hops (backend classifies, casts to the
+        # session, the session decides :stop and terminates), and the
+        # PostgreSQL CI job is the only one that runs the suite concurrently
+        # (`max_cases: System.schedulers_online()` in test_helper.exs, against
+        # 1 for SQLite). 100ms is comfortable when serial and marginal under
+        # that load, which is exactly the timeout-budget flake shape
+        # .github/ci-flakes.md warns about.
         assert_receive {:DOWN, ^ref, :process, ^harness_pid,
-                        {:backend_terminated, {:hwaccel_failed, "vaapi init failed again"}}}
+                        {:backend_terminated, {:hwaccel_failed, "vaapi init failed again"}}},
+                       2_000
       end
     end
   end

@@ -107,12 +107,16 @@ defmodule Mydia.Streaming.HardwareAccelTest do
           end
         end)
 
-      assert_receive {:leased, _ref}
+      # Explicit budget rather than ExUnit's 100ms default: the PostgreSQL CI
+      # job runs the suite concurrently (max_cases: System.schedulers_online()
+      # in test_helper.exs, against 1 for SQLite), where a cross-process
+      # handoff can exceed 100ms without anything being wrong.
+      assert_receive {:leased, _ref}, 2_000
       assert :refused = HardwareAccel.lease(name, :playback)
 
       holder_monitor = Process.monitor(holder)
       send(holder, :die)
-      assert_receive {:DOWN, ^holder_monitor, :process, ^holder, :normal}
+      assert_receive {:DOWN, ^holder_monitor, :process, ^holder, :normal}, 2_000
 
       assert eventually(fn -> match?({:ok, _}, HardwareAccel.lease(name, :playback)) end)
     end
@@ -203,7 +207,7 @@ defmodule Mydia.Streaming.HardwareAccelTest do
          end}
       )
 
-      assert_receive {:probe_opts, opts}
+      assert_receive {:probe_opts, opts}, 2_000
 
       streaming = Mydia.Config.get().streaming
       assert Keyword.fetch!(opts, :hwaccel) == streaming.hwaccel
