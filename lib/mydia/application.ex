@@ -242,6 +242,16 @@ defmodule Mydia.Application do
         # returns on its own schedule or never, and a bound whose slots never
         # come back just fails every later request instead.
         {Task.Supervisor, name: Mydia.P2p.RequestSupervisor, max_children: 512},
+        # HLS byte-serving, kept off RequestSupervisor on purpose. These tasks
+        # are long-lived where a request handler is not: one may sit in
+        # `HlsSession.await_ready/2` for the whole readiness budget waiting on a
+        # cold encoder, then stream a segment. Sharing the request pool would let
+        # a stalled encoder's backlog fill it and start refusing GraphQL, so the
+        # two get separate budgets and a stream backlog can only exhaust its own.
+        #
+        # One child per in-flight stream request here, not two, since nothing
+        # wraps these with a deadline: the readiness wait is the bound.
+        {Task.Supervisor, name: Mydia.P2p.StreamSupervisor, max_children: 256},
         Mydia.P2p.Server,
         # Resume active pairing claims on startup
         Mydia.RemoteAccess.ResumeClaims

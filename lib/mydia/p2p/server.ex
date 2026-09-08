@@ -609,9 +609,19 @@ defmodule Mydia.P2p.Server do
     :ok
   end
 
-  defp stream_hls_response(resource, stream_id, req) do
-    # Spawn a task to handle the streaming so we don't block the GenServer
-    Task.start(fn ->
+  # Public only so the regression test can fill the bound and drive the refusal
+  # without a live NIF resource, the same reason `serve_request/5` is public.
+  # Nothing outside this module should call it.
+  @doc false
+  def stream_hls_response(resource, stream_id, req) do
+    # Spawn a task to handle the streaming so we don't block the GenServer, under
+    # a supervisor that bounds how many can be in flight. A bare `Task.start`
+    # here was unbounded: iroh gates inbound connections on ALPN alone, and every
+    # request against a session still warming up parks a task for the whole
+    # `@session_ready_timeout` plus a waiter inside the session. Raising that
+    # budget to two minutes stretched the window in which a peer could pile them
+    # up, so the bound is what makes the longer wait safe to have.
+    task = fn ->
       t0 = System.monotonic_time(:millisecond)
       handle_hls_stream(resource, stream_id, req)
       elapsed = System.monotonic_time(:millisecond) - t0
@@ -619,7 +629,22 @@ defmodule Mydia.P2p.Server do
       Logger.info(
         "p2p_metrics_elixir: handler_complete total_ms=#{elapsed} session=#{req.session_id} path=#{req.path}"
       )
-    end)
+    end
+
+    case Task.Supervisor.start_child(Mydia.P2p.StreamSupervisor, task) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, :max_children} ->
+        # 503 rather than a silent drop: the peer can back off and retry, which
+        # is the behaviour it already has for a session that is not ready.
+        Logger.warning("P2P HLS stream refused: too many streams in flight")
+        send_hls_error(resource, stream_id, 503, "Too many streams in flight")
+
+      {:error, reason} ->
+        Logger.error("P2P HLS stream could not be started: #{inspect(reason)}")
+        send_hls_error(resource, stream_id, 503, "Stream failed to start")
+    end
 
     :ok
   end
