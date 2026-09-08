@@ -4,6 +4,8 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
+import '../storage/app_hive.dart';
+
 /// Remembers which languages the user last searched subtitles for.
 ///
 /// Local only, on purpose: subtitle acquisition is manual, so there is no
@@ -68,7 +70,7 @@ class SubtitleLanguagePrefs {
 
   static Future<Box<List>> _box() async {
     if (Hive.isBoxOpen(boxName)) return Hive.box<List>(boxName);
-    await Hive.initFlutter();
+    await initAppHive();
     return Hive.openBox<List>(boxName);
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
+import '../../storage/app_hive.dart';
 import 'query_key.dart';
 
 /// When each query last reached the network.
@@ -66,7 +67,7 @@ class HiveFetchLog implements FetchLog {
   static const String boxName = 'mydia_fetch_log';
 
   static Future<HiveFetchLog> open() async {
-    await Hive.initFlutter();
+    await initAppHive();
     return HiveFetchLog(await Hive.openBox<int>(boxName));
   }
 

@@ -34,11 +34,18 @@ Initialize Hive for GraphQL caching in your app's main function:
 ```dart
 import 'package:graphql_flutter/graphql_flutter.dart';
 
+import 'core/storage/app_hive.dart';
+
 void main() async {
-  await initHiveForFlutter();
+  await initAppHive();
+  await HiveStore.open();
   runApp(MyApp());
 }
 ```
+
+`initAppHive` rather than graphql_flutter's `initHiveForFlutter`: the latter
+hard-wires its base path to `getApplicationDocumentsDirectory()`, which is the
+user's own Documents folder on desktop. See `core/storage/app_hive.dart`.
 
 ### 3. Code Generation
 

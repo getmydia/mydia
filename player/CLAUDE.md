@@ -20,7 +20,10 @@ Deeper reference lives alongside this file in `player/docs/`:
 - **State Management**: Riverpod with code generation
 - **Routing**: go_router with hash-based URLs
 - **Data Layer**: GraphQL via graphql_flutter with codegen
-- **Storage**: flutter_secure_storage (credentials), Hive (cache)
+- **Storage**: flutter_secure_storage (credentials), Hive (cache). Open Hive
+  through `initAppHive()` in `core/storage/app_hive.dart`, never
+  `Hive.initFlutter()` or `initHiveForFlutter()` -- those put boxes in the
+  user's Documents folder. A new box also needs adding to `kMydiaHiveBoxes`.
 
 ## Development Commands
 
