@@ -1,0 +1,23 @@
+libva info: VA-API version 1.22.0
+libva info: Trying to open /usr/lib/dri/iHD_drv_video.so
+libva info: Found init function __vaDriverInit_1_22
+libva info: va_openDriver() returns 0
+vainfo: VA-API version: 1.22 (libva 2.22.0)
+vainfo: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 25.4.6 ()
+vainfo: Supported profile and entrypoints
+      VAProfileNone                   :	VAEntrypointVideoProc
+      VAProfileMPEG2Simple            :	VAEntrypointVLD
+      VAProfileH264Main               :	VAEntrypointVLD
+      VAProfileH264Main               :	VAEntrypointEncSlice
+      VAProfileH264High               :	VAEntrypointVLD
+      VAProfileH264High               :	VAEntrypointEncSlice
+      VAProfileVC1Advanced            :	VAEntrypointVLD
+      VAProfileJPEGBaseline           :	VAEntrypointVLD
+      VAProfileVP8Version0_3          :	VAEntrypointVLD
+      VAProfileHEVCMain               :	VAEntrypointVLD
+      VAProfileHEVCMain               :	VAEntrypointEncSlice
+      VAProfileHEVCMain10             :	VAEntrypointVLD
+      VAProfileHEVCMain10             :	VAEntrypointEncSliceLP
+      VAProfileVP9Profile0            :	VAEntrypointVLD
+      VAProfileVP9Profile2            :	VAEntrypointVLD
+      VAProfileAV1Profile0            :	VAEntrypointVLD

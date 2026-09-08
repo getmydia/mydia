@@ -187,11 +187,19 @@ in
   #   inotify-tools  Phoenix live reload uses fs_events on darwin
   #   chromium/…     Wallaby feature tests are Linux/CI-only (see env below)
   #   gcc            NIFs build against the host clang from the Xcode CLT
+  #   libva-utils    VAAPI is Linux/DRM only; its libdrm dependency has no
+  #                  darwin meta.platforms entry, so this belongs here rather
+  #                  than beside ffmpeg above
   ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
     gcc
     inotify-tools
     chromium
     chromedriver
+    # vainfo, which Mydia.Streaming.HardwareAccel.Probe shells out to when
+    # detecting VAAPI capabilities. libva alone (an ffmpeg dependency) does not
+    # provide the CLI; without it the opt-in hwaccel_live_test.exs suite could
+    # never run outside the production container.
+    libva-utils
   ]);
 
   env = {

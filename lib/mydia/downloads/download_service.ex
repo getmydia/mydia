@@ -390,6 +390,7 @@ defmodule Mydia.Downloads.DownloadService do
                resolution: resolution_atom,
                input_path: input_path,
                output_path: output_path,
+               source_codec: media_file.codec,
                on_progress: on_progress,
                on_complete: on_complete,
                on_error: on_error

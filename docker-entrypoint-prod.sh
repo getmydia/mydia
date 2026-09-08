@@ -83,6 +83,50 @@ if [ -n "$TZ" ]; then
     fi
 fi
 
+# Give the app user access to the render node when one is bind-mounted.
+#
+# The device path is configurable (HWACCEL_DEVICE, see Mydia.Config and
+# Mydia.Streaming.HardwareAccel.Probe) so an operator can pick a render node
+# on a multi-GPU host; default to the common single-GPU path when unset.
+# Resolve it once and use the same value throughout, so a grant on a
+# non-default device actually lands on the device the app will probe.
+#
+# The gid that owns the node is assigned by the host and has no stable name
+# inside the container: on a NixOS host it appears as the bare number 303,
+# because Alpine has no matching /etc/group entry. So stat the device and
+# add the gid, rather than looking up a group called "render" or "video"
+# that may not exist.
+#
+# Many hosts ship the node 0666, where this is a no-op. Debian and Ubuntu
+# commonly ship 0660 root:render, where without this the probe fails with
+# Permission denied on a correctly configured host, and the operator reads
+# that as Mydia not supporting their GPU.
+#
+# A host with no GPU is the common case, so every step below fails soft:
+# nothing here may abort the entrypoint under `set -e`.
+RENDER_DEVICE="${HWACCEL_DEVICE:-/dev/dri/renderD128}"
+
+if [ -e "$RENDER_DEVICE" ]; then
+    RENDER_GID="$(stat -c '%g' "$RENDER_DEVICE" 2>/dev/null)" || RENDER_GID=""
+
+    if [ -n "$RENDER_GID" ]; then
+        if ! getent group "$RENDER_GID" >/dev/null 2>&1; then
+            addgroup -g "$RENDER_GID" render 2>/dev/null || true
+        fi
+
+        RENDER_GROUP="$(getent group "$RENDER_GID" 2>/dev/null | cut -d: -f1)"
+
+        if [ -n "$RENDER_GROUP" ]; then
+            addgroup mydia "$RENDER_GROUP" 2>/dev/null || true
+            echo "Granted mydia access to $RENDER_DEVICE (group $RENDER_GROUP/$RENDER_GID)"
+        else
+            echo "Warning: found $RENDER_DEVICE but could not resolve or create its group (gid $RENDER_GID); skipping the grant"
+        fi
+    else
+        echo "Warning: found $RENDER_DEVICE but could not read its gid; skipping the grant"
+    fi
+fi
+
 echo "────────────────────────────────────────"
 echo "Starting Mydia..."
 echo "────────────────────────────────────────"

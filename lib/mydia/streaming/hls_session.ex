@@ -33,6 +33,8 @@ defmodule Mydia.Streaming.HlsSession do
 
   alias Mydia.Library
   alias Mydia.Streaming.FfmpegHlsTranscoder
+  alias Mydia.Streaming.HardwareAccel
+  alias Mydia.Streaming.HardwareAccel.Capabilities
   alias Mydia.Streaming.SegmentPlan
   alias Mydia.Streaming.TranscodeWindow
   alias Mydia.Repo
@@ -67,12 +69,15 @@ defmodule Mydia.Streaming.HlsSession do
       :db_job_id,
       :segment_plan,
       :backend_opts,
+      :hwaccel_lease,
       playlist_mode: :window,
       window: nil,
       segment_waiters: %{},
       window_generation: 0,
       ready: false,
-      ready_waiters: []
+      ready_waiters: [],
+      accel: :auto,
+      accel_fallbacks: 0
     ]
 
     @type t :: %__MODULE__{
@@ -91,12 +96,15 @@ defmodule Mydia.Streaming.HlsSession do
             db_job_id: binary() | nil,
             segment_plan: Mydia.Streaming.SegmentPlan.t() | nil,
             backend_opts: keyword(),
+            hwaccel_lease: reference() | nil,
             playlist_mode: :full | :window,
             window: Mydia.Streaming.TranscodeWindow.t() | nil,
             segment_waiters: %{non_neg_integer() => [GenServer.from()]},
             window_generation: non_neg_integer(),
             ready: boolean(),
-            ready_waiters: list()
+            ready_waiters: list(),
+            accel: :auto | :none,
+            accel_fallbacks: non_neg_integer()
           }
   end
 
@@ -229,6 +237,20 @@ defmodule Mydia.Streaming.HlsSession do
   @spec notify_segments(pid(), non_neg_integer(), [non_neg_integer()]) :: :ok
   def notify_segments(pid, generation, indices) do
     GenServer.cast(pid, {:segments_ready, generation, indices})
+  end
+
+  @doc """
+  Notifies the session that its backend failed to initialise hardware
+  acceleration and stopped (with reason `:normal`) rather than crashing.
+
+  `generation` guards against this exact race the same way `notify_segments/3`
+  does: a backend the session has already relocated away from (a viewer seeked
+  before this notification arrived) must not be allowed to restart a window
+  that no longer exists.
+  """
+  @spec notify_hwaccel_failed(pid(), non_neg_integer(), String.t()) :: :ok
+  def notify_hwaccel_failed(pid, generation, output) do
+    GenServer.cast(pid, {:hwaccel_failed, generation, output})
   end
 
   ## Server Callbacks
@@ -398,9 +420,17 @@ defmodule Mydia.Streaming.HlsSession do
         Logger.info("Temp directory: #{temp_dir}")
         Logger.info("Starting HLS transcoding with FFmpeg backend")
 
+        # A :playback lease is claimed once for the whole session, not once
+        # per FfmpegHlsTranscoder process -- see acquire_hwaccel_lease/0 for
+        # why.
+        {capabilities, hwaccel_lease} = maybe_acquire_hwaccel_lease(media_file, max_bitrate)
+
         # The keyword list a relocation reuses verbatim (see relocate/2), so it
         # has to carry everything start_backend/6 needs beyond the offset and
-        # start number, which relocate overwrites per-call.
+        # start number, which relocate overwrites per-call. :capabilities is
+        # carried the same way: decided once here (or by hwaccel_fallback/2
+        # after a failure), never re-derived per relocation, so a seek never
+        # has to contact HardwareAccel again.
         backend_opts = [
           max_bitrate: max_bitrate,
           max_height: max_height,
@@ -410,7 +440,8 @@ defmodule Mydia.Streaming.HlsSession do
           absolute_timestamps: playlist_mode == :full,
           playlist_mode: playlist_mode,
           audio_language: playback.audio_language,
-          show_audio_language: playback.show_audio_language
+          show_audio_language: playback.show_audio_language,
+          capabilities: capabilities
         ]
 
         # Start FFmpeg backend
@@ -436,7 +467,8 @@ defmodule Mydia.Streaming.HlsSession do
               segment_plan: segment_plan,
               playlist_mode: playlist_mode,
               window: if(playlist_mode == :full, do: TranscodeWindow.new(first_index), else: nil),
-              backend_opts: backend_opts
+              backend_opts: backend_opts,
+              hwaccel_lease: hwaccel_lease
             }
 
             # Schedule initial timeout check
@@ -451,6 +483,7 @@ defmodule Mydia.Streaming.HlsSession do
               "Failed to start FFmpeg backend for session #{session_id}: #{inspect(reason)}"
             )
 
+            if hwaccel_lease, do: HardwareAccel.release(hwaccel_lease)
             File.rm_rf!(temp_dir)
             {:stop, {:backend_start_failed, reason}}
         end
@@ -458,6 +491,55 @@ defmodule Mydia.Streaming.HlsSession do
       {:error, reason} ->
         Logger.error("Failed to create temp directory #{temp_dir}: #{inspect(reason)}")
         {:stop, {:temp_dir_creation_failed, reason}}
+    end
+  end
+
+  # Decides whether this session is worth leasing a hardware slot for at all.
+  # Only a re-encoding session ever reaches the hardware encoder --
+  # reencodes_video?/2 is the exact same decision build_ffmpeg_args/3 makes
+  # between "copy" and "libx264"/"h264_vaapi" -- so a stream-copy session
+  # leasing a slot it will never use would only starve a session that does.
+  #
+  # Public only so the gating decision can be asserted directly against a
+  # plain MediaFile struct, without a live HardwareAccel process, a DB row, or
+  # a real init/1; nothing outside this module should call it.
+  @doc false
+  @spec maybe_acquire_hwaccel_lease(Mydia.Library.MediaFile.t() | nil, integer() | nil) ::
+          {Capabilities.t() | nil, reference() | nil}
+  def maybe_acquire_hwaccel_lease(media_file, max_bitrate) do
+    if FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate) do
+      acquire_hwaccel_lease()
+    else
+      {nil, nil}
+    end
+  end
+
+  # Claims a :playback hardware lease for the life of this session.
+  #
+  # Deliberately a session-level call, not one made by FfmpegHlsTranscoder
+  # itself on every start (which is how FfmpegMp4Transcoder's :background
+  # lease works -- see its init/1). FfmpegHlsTranscoder is restarted on every
+  # window relocation (a seek: see relocate/2) and on every hardware-failure
+  # fallback (see hwaccel_fallback/2 below), and stop_and_start_backend/3
+  # deliberately overlaps the old and new backend by roughly 100ms so the
+  # relocation itself never blocks the session's mailbox. A per-transcoder
+  # lease would have to hold two slots during that overlap on every single
+  # seek, and would be refused near the cap -- turning an ordinary seek on a
+  # session that already holds a slot into a spurious software fallback.
+  # Leasing once here and carrying the result through backend_opts (reused
+  # verbatim by both relocate/2 and restart_backend_in_place/1) means a seek
+  # never contacts HardwareAccel at all: only session start, session end, and
+  # a permanent hardware-failure fallback do.
+  #
+  # Public only so the "not leased" fallback shape can be asserted directly
+  # without a live HardwareAccel process; nothing outside this module should
+  # call it.
+  @doc false
+  @spec acquire_hwaccel_lease() :: {Capabilities.t(), reference() | nil}
+  def acquire_hwaccel_lease do
+    case HardwareAccel.lease(:playback) do
+      {:ok, ref} -> {HardwareAccel.capabilities(), ref}
+      :refused -> {Capabilities.software("no hardware slot free for playback"), nil}
     end
   end
 
@@ -492,6 +574,41 @@ defmodule Mydia.Streaming.HlsSession do
           boolean()
   def grid_aligned?(playlist_mode, media_file, max_bitrate) do
     playlist_mode == :full and FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate)
+  end
+
+  @doc """
+  Decides what to do when the backend died of a hardware initialisation failure.
+
+  Returns `{:retry, state}` with acceleration disabled for the rest of the
+  session, or `:stop` when this session has already fallen back once. Public so
+  the decision is testable without starting a backend.
+  """
+  @spec hwaccel_fallback(State.t(), non_neg_integer()) :: {:retry, State.t()} | :stop
+  def hwaccel_fallback(%State{accel_fallbacks: n}, _target) when n >= 1, do: :stop
+
+  def hwaccel_fallback(%State{} = state, target) do
+    # This session is about to encode in software for the rest of its life
+    # (only one fallback is ever allowed -- see the clause above), so
+    # continuing to hold a hardware slot would waste it: another session could
+    # be leasing it instead.
+    if state.hwaccel_lease, do: HardwareAccel.release(state.hwaccel_lease)
+
+    software =
+      Capabilities.software("fell back to software after a hardware failure in this session")
+
+    backend_opts =
+      state.backend_opts
+      |> Keyword.put(:capabilities, software)
+      |> Keyword.put(:start_number, target)
+
+    {:retry,
+     %{
+       state
+       | accel: :none,
+         accel_fallbacks: state.accel_fallbacks + 1,
+         backend_opts: backend_opts,
+         hwaccel_lease: nil
+     }}
   end
 
   @impl true
@@ -638,6 +755,64 @@ defmodule Mydia.Streaming.HlsSession do
     {:noreply, %{state | window: window, segment_waiters: remaining}}
   end
 
+  def handle_cast({:hwaccel_failed, generation, _output}, %{window_generation: current} = state)
+      when generation != current do
+    # A dead backend's failure report for a window the session has already
+    # relocated away from (a viewer seeked before the notification arrived).
+    # Mirrors the identical guard on {:segments_ready, ...} above.
+    {:noreply, state}
+  end
+
+  # A hardware initialisation failure is recoverable: re-encode in software
+  # rather than taking the session down, and bump window_generation so a late
+  # report from this same dead backend (were it to somehow arrive twice) is
+  # discarded by the guard clause above.
+  #
+  # A :full session reuses relocate/2, which already knows how to stop a
+  # backend and restart it at a target segment number while preserving the
+  # segment grid. A :window session has no segment grid -- both segment_plan
+  # and window are nil (see start_registered_session/7) -- and never reaches
+  # relocate/2 any other way (it is only ever called from
+  # {:request_segment, index}, which a :window session's handle_call answers
+  # with {:error, :window_mode} before relocate/2 could run). Calling
+  # relocate/2 for a :window session would crash on
+  # SegmentPlan.start_time(nil, _), so it gets the simpler
+  # restart_backend_in_place/1 instead: same backend_opts (already forced to
+  # software by hwaccel_fallback/2 below), no grid to advance.
+  #
+  # FfmpegHlsTranscoder stops itself with reason :normal for this case
+  # specifically so the link from this session to its backend does not take
+  # the session down before this callback can run (see the comment on
+  # relocate/2, and on FfmpegHlsTranscoder's exit-status handler).
+  def handle_cast({:hwaccel_failed, _generation, output}, state) do
+    Mydia.Streaming.HardwareAccel.report_failure(
+      :vaapi,
+      state.media_file && state.media_file.codec
+    )
+
+    target = Keyword.get(state.backend_opts, :start_number, 0)
+
+    case hwaccel_fallback(state, target) do
+      {:retry, state} ->
+        Logger.warning(
+          "Session #{state.session_id}: hardware encode failed, restarting in software " <>
+            "at segment #{target}"
+        )
+
+        new_state =
+          case state.playlist_mode do
+            :full -> relocate(%{state | backend_pid: nil}, target)
+            :window -> restart_backend_in_place(%{state | backend_pid: nil})
+          end
+
+        {:noreply, new_state}
+
+      :stop ->
+        Logger.error("Session #{state.session_id}: hardware fallback already used; giving up")
+        {:stop, {:backend_terminated, {:hwaccel_failed, output}}, state}
+    end
+  end
+
   @impl true
   def handle_info(:check_timeout, state) do
     now = DateTime.utc_now()
@@ -694,6 +869,12 @@ defmodule Mydia.Streaming.HlsSession do
   def terminate(reason, state) do
     Logger.info("Terminating HLS session #{state.session_id}, reason: #{inspect(reason)}")
 
+    # Release the hardware slot on every exit path -- normal termination,
+    # timeout, backend crash -- so a session that leased one at start never
+    # leaks it. Already nil after a permanent software fallback (see
+    # hwaccel_fallback/2), so this is a no-op then.
+    if state.hwaccel_lease, do: HardwareAccel.release(state.hwaccel_lease)
+
     Phoenix.PubSub.broadcast(Mydia.PubSub, "hls_sessions", :session_ended)
 
     # Remove the job from the database
@@ -748,15 +929,15 @@ defmodule Mydia.Streaming.HlsSession do
     :exit, _reason -> :ok
   end
 
-  # Moves the encoder to `target`, keeping every segment already on disk.
+  # Stops the current backend (unlinked first, so its exit doesn't take this
+  # session down) if it is still alive, then starts a new one at
+  # `opts`/`generation`. Returns exactly what start_backend/6 returns.
   #
-  # The backend is unlinked before it is stopped. HlsSession links to its
-  # backend so a crashed encoder takes the session down; without the unlink, a
-  # deliberate stop would do the same thing and every seek would kill the
-  # session.
-  defp relocate(state, target) do
-    generation = state.window_generation + 1
-
+  # Shared by relocate/2 and restart_backend_in_place/1 below: both need
+  # "replace the running backend with a new one," and only differ in what
+  # session state to update once that succeeds (relocate/2 also advances the
+  # segment window; a :window session has no window to advance).
+  defp stop_and_start_backend(state, opts, generation) do
     if is_pid(state.backend_pid) and Process.alive?(state.backend_pid) do
       Process.unlink(state.backend_pid)
 
@@ -775,27 +956,27 @@ defmodule Mydia.Streaming.HlsSession do
       #
       # This does mean the old and new encoders overlap for roughly 100ms.
       # That is safe: the old backend is already unlinked and about to stop
-      # producing segments, and any {:segments_ready, ...} it still manages
-      # to send in that window carries the old generation, which the guard
-      # clause on that handle_cast discards.
+      # producing segments, and any {:segments_ready, ...} or
+      # {:hwaccel_failed, ...} it still manages to send in that window
+      # carries the old generation, which the matching guard clause discards.
       backend_pid = state.backend_pid
       backend = state.backend
       Task.start(fn -> stop_backend(backend, backend_pid) end)
     end
+
+    start_backend(:ffmpeg, state.media_file, state.temp_dir, state.db_job_id, opts, generation)
+  end
+
+  # Moves the encoder to `target`, keeping every segment already on disk.
+  defp relocate(state, target) do
+    generation = state.window_generation + 1
 
     opts =
       state.backend_opts
       |> Keyword.put(:start_position, trunc(SegmentPlan.start_time(state.segment_plan, target)))
       |> Keyword.put(:start_number, target)
 
-    case start_backend(
-           :ffmpeg,
-           state.media_file,
-           state.temp_dir,
-           state.db_job_id,
-           opts,
-           generation
-         ) do
+    case stop_and_start_backend(state, opts, generation) do
       {:ok, backend_pid} ->
         Process.link(backend_pid)
 
@@ -815,6 +996,27 @@ defmodule Mydia.Streaming.HlsSession do
             window: TranscodeWindow.stopped(state.window),
             window_generation: generation
         }
+    end
+  end
+
+  # The :window-mode counterpart to relocate/2, used only for the
+  # hardware-failure fallback. A :window session has no SegmentPlan and no
+  # TranscodeWindow to advance (both nil -- see start_registered_session/7),
+  # so there is nothing to seek to: it just restarts the backend with its
+  # existing backend_opts, which hwaccel_fallback/2 has already forced to
+  # software, at a bumped window_generation so a stray late report from the
+  # old backend is discarded the same way a stale relocation is.
+  defp restart_backend_in_place(state) do
+    generation = state.window_generation + 1
+
+    case stop_and_start_backend(state, state.backend_opts, generation) do
+      {:ok, backend_pid} ->
+        Process.link(backend_pid)
+        %{state | backend_pid: backend_pid, window_generation: generation}
+
+      {:error, reason} ->
+        Logger.error("Failed to restart backend in software: #{inspect(reason)}")
+        %{state | backend_pid: nil, window_generation: generation}
     end
   end
 
@@ -844,7 +1046,8 @@ defmodule Mydia.Streaming.HlsSession do
         if(opts[:show_audio_language],
           do: [show_audio_language: opts[:show_audio_language]],
           else: []
-        )
+        ) ++
+        if(opts[:capabilities], do: [capabilities: opts[:capabilities]], else: [])
 
     # Only a :full session has a TranscodeWindow to mark ready, so only wire
     # the callback that reports segment completion for that mode. A :window
@@ -883,6 +1086,9 @@ defmodule Mydia.Streaming.HlsSession do
           end,
           on_error: fn error ->
             Logger.error("FFmpeg transcoding error for #{absolute_path}: #{error}")
+          end,
+          on_hwaccel_failed: fn output ->
+            __MODULE__.notify_hwaccel_failed(session_pid, generation, output)
           end
         ] ++
         if Keyword.get(opts, :playlist_mode) == :full do

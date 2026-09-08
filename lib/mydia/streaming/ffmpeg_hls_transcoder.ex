@@ -36,6 +36,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
   alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.AudioTrackSelector
+  alias Mydia.Streaming.HardwareAccel
+  alias Mydia.Streaming.HardwareAccel.Args, as: AccelArgs
 
   @type transcode_opts :: [
           input_path: String.t(),
@@ -43,6 +45,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           on_progress: (map() -> any()) | nil,
           on_complete: (-> any()) | nil,
           on_error: (String.t() -> any()) | nil,
+          on_hwaccel_failed: (String.t() -> any()) | nil,
           media_file: Mydia.Library.MediaFile.t() | nil,
           video_codec: String.t(),
           audio_codec: String.t(),
@@ -64,12 +67,15 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       :on_error,
       :on_ready,
       :on_segments,
+      :on_hwaccel_failed,
       :playlist_path,
       :buffer,
       :duration,
       :started_at,
       ready_notified: false,
-      seen_segments: MapSet.new()
+      seen_segments: MapSet.new(),
+      accel_tier: :software,
+      output_buffer: ""
     ]
 
     @type t :: %__MODULE__{
@@ -82,12 +88,15 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             on_error: (String.t() -> any()) | nil,
             on_ready: (-> any()) | nil,
             on_segments: ([non_neg_integer()] -> any()) | nil,
+            on_hwaccel_failed: (String.t() -> any()) | nil,
             seen_segments: MapSet.t(non_neg_integer()),
             playlist_path: String.t() | nil,
             buffer: String.t(),
             duration: float() | nil,
             started_at: DateTime.t(),
-            ready_notified: boolean()
+            ready_notified: boolean(),
+            accel_tier: AccelArgs.tier(),
+            output_buffer: String.t()
           }
   end
 
@@ -104,6 +113,11 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     * `:on_progress` - (optional) Callback function called with progress updates
     * `:on_complete` - (optional) Callback function called when transcoding completes
     * `:on_error` - (optional) Callback function called when an error occurs
+    * `:on_hwaccel_failed` - (optional) Callback called with the buffered FFmpeg
+      output when a hardware initialisation failure is detected. The process
+      then stops with reason `:normal` (recoverable, not a crash) instead of
+      `{:ffmpeg_exit, status}`; the callback is the only way the caller learns
+      why.
     * `:video_codec` - (optional) Video codec (default: auto-detect from media_file or "libx264")
     * `:audio_codec` - (optional) Audio codec (default: auto-detect from media_file or "aac")
     * `:preset` - (optional) FFmpeg preset (default: "veryfast")
@@ -198,9 +212,23 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     on_error = Keyword.get(opts, :on_error)
     on_ready = Keyword.get(opts, :on_ready)
     on_segments = Keyword.get(opts, :on_segments)
+    on_hwaccel_failed = Keyword.get(opts, :on_hwaccel_failed)
 
     # Build FFmpeg command
     args = build_ffmpeg_args(input_path, output_dir, opts)
+
+    # Derived from the argument list rather than by calling AccelArgs.build/2
+    # again: re-deriving from inputs risks drift, and build_ffmpeg_args/3's
+    # return shape can't change without breaking the six regression test
+    # files that assert its exact output. The gate below only needs to know
+    # whether this was a hardware attempt at all, but deriving the precise
+    # tier costs nothing and keeps the log line below accurate.
+    accel_tier =
+      cond do
+        "-hwaccel" in args -> :full_hardware
+        "-init_hw_device" in args -> :hybrid
+        true -> :software
+      end
 
     Logger.info("Starting FFmpeg HLS transcoding: #{input_path}")
     Logger.debug("FFmpeg args: #{inspect(args)}")
@@ -221,10 +249,13 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           on_error: on_error,
           on_ready: on_ready,
           on_segments: on_segments,
+          on_hwaccel_failed: on_hwaccel_failed,
           playlist_path: playlist_path,
           buffer: "",
           duration: nil,
-          started_at: DateTime.utc_now()
+          started_at: DateTime.utc_now(),
+          accel_tier: accel_tier,
+          output_buffer: ""
         }
 
         # One timer drives both signals. Readiness is just "the playlist
@@ -263,6 +294,12 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
     # Accumulate output in buffer
     buffer = state.buffer <> data
+
+    # Separate, bounded accumulation of raw stderr so the hwaccel classifier
+    # sees the whole message rather than one chunk — `buffer` above gets
+    # cleared as soon as parse_ffmpeg_output/1 recognizes a line, which would
+    # otherwise chop a multi-line VAAPI failure apart before it could match.
+    state = %{state | output_buffer: append_output(state.output_buffer, data)}
 
     # Parse FFmpeg output for progress and duration
     state =
@@ -345,7 +382,26 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       state.on_error.(error_msg)
     end
 
-    {:stop, {:ffmpeg_failed, status}, state}
+    if state.accel_tier != :software and hwaccel_failure?(state.output_buffer) do
+      Logger.warning(
+        "Hardware encode failed to initialise (tier #{state.accel_tier}); " <>
+          "the session will retry in software"
+      )
+
+      if state.on_hwaccel_failed do
+        state.on_hwaccel_failed.(state.output_buffer)
+      end
+
+      # :normal, not {:hwaccel_failed, output}: HlsSession links to this
+      # process (see the comment on HlsSession.relocate/2), and a link to a
+      # non-trapping process only kills it for a non-normal exit. A hardware
+      # init failure is recoverable and must not take the session down the
+      # same way a genuine crash does; on_hwaccel_failed above is what tells
+      # the session to actually recover it.
+      {:stop, :normal, state}
+    else
+      {:stop, {:ffmpeg_exit, status}, state}
+    end
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
@@ -620,55 +676,43 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
         _ -> []
       end
 
-    base_args =
-      seek_args ++
-        [
-          "-i",
-          input_path
-        ]
-
-    # Build video encoding args
-    video_args =
+    # Acceleration is decided only on the encode branch. A stream copy returns
+    # empty argument lists, so nothing here can turn a copy into a transcode.
+    accel =
       if video_codec == "copy" do
-        # Stream copy - no encoding parameters needed
-        ["-c:v", "copy"]
+        %AccelArgs{tier: :software, input: [], video: []}
       else
-        # Base encoding parameters shared by CRF and ABR modes
-        base_video = [
-          "-c:v",
-          video_codec,
-          "-preset",
-          preset,
-          "-pix_fmt",
-          "yuv420p",
-          "-profile:v",
-          "high",
-          "-g",
-          "60",
-          "-bf",
-          "0"
-        ]
+        capabilities =
+          Keyword.get_lazy(opts, :capabilities, fn -> HardwareAccel.capabilities() end)
 
-        # Rate control: ABR when max_bitrate is set, CRF otherwise
-        rate_control =
+        video_bitrate_kbps =
           if max_bitrate do
-            video_kbps = max(max_bitrate - @audio_bitrate_kbps, 100)
-
-            Logger.info("Using ABR mode: video=#{video_kbps}kbps, total_cap=#{max_bitrate}kbps")
-
-            [
-              "-b:v",
-              "#{video_kbps}k",
-              "-maxrate",
-              "#{video_kbps}k",
-              "-bufsize",
-              "#{video_kbps * 2}k"
-            ]
-          else
-            ["-crf", to_string(crf)]
+            kbps = max(max_bitrate - @audio_bitrate_kbps, 100)
+            Logger.info("Using ABR mode: video=#{kbps}kbps, total_cap=#{max_bitrate}kbps")
+            kbps
           end
 
-        base_video ++ scale_args(max_height) ++ rate_control
+        AccelArgs.build(capabilities,
+          source_codec: media_file && media_file.codec,
+          max_height: max_height,
+          video_bitrate_kbps: video_bitrate_kbps,
+          crf: crf,
+          preset: preset,
+          video_codec: video_codec
+        )
+      end
+
+    Logger.info("Encoding tier: #{accel.tier}")
+
+    # -hwaccel flags must precede -i. After it, ffmpeg has already selected a
+    # decoder and silently ignores them.
+    base_args = seek_args ++ accel.input ++ ["-i", input_path]
+
+    video_args =
+      if video_codec == "copy" do
+        ["-c:v", "copy"]
+      else
+        accel.video
       end
 
     # Build audio encoding args
@@ -799,6 +843,72 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     end
   end
 
+  # Matched against ffmpeg's stderr to tell a hardware initialisation failure
+  # from an ordinary encode error. Only the former is worth retrying in
+  # software: retrying a genuine error would hide a bug behind a second, slower
+  # failure. The first pattern is captured verbatim from a container whose
+  # ffmpeg links libva with no driver installed.
+  #
+  # Deliberately NOT included: a standalone `Function not implemented`
+  # pattern. That string is the literal strerror(ENOSYS) text ffmpeg prints
+  # via av_strerror for ANY AVERROR(ENOSYS) — an unsupported muxer, protocol,
+  # or codec feature, not only hardware device init. Matching it on its own
+  # would classify an unrelated encode-time ENOSYS as a hardware failure and
+  # retry it in software, which is exactly the over-matching this classifier
+  # exists to avoid. The real VAAPI case is still caught: it always appears
+  # as the parenthetical on the connection line, which
+  # `Failed to initialise VAAPI connection` already matches.
+  @hwaccel_failure_patterns [
+    ~r/Failed to initialise VAAPI connection/i,
+    ~r/No VA display found/i,
+    ~r/Device creation failed/i,
+    ~r/Failed to open .*\/dev\/dri\/.*Permission denied/i,
+    ~r/for option 'init_hw_device'/i,
+    ~r/for option 'hwaccel_device'/i
+  ]
+
+  @doc """
+  Whether ffmpeg's output describes a hardware initialisation failure.
+
+  Public so the classifier can be tested against captured output without
+  starting a transcoder.
+  """
+  @spec hwaccel_failure?(String.t()) :: boolean()
+  def hwaccel_failure?(output) when is_binary(output) do
+    Enum.any?(@hwaccel_failure_patterns, &Regex.match?(&1, output))
+  end
+
+  def hwaccel_failure?(_), do: false
+
+  # Bound in bytes, not graphemes. String.slice/3 counts grapheme clusters,
+  # so slicing a buffer full of multi-byte characters to "the last 4,000"
+  # keeps 4,000 *graphemes* — up to 3x @output_buffer_bytes for 3-byte UTF-8
+  # sequences (common CJK/accented text, realistic here since this is a
+  # self-hosted media server with arbitrary international file paths). This
+  # buffer lives for the whole session, so that growth is exactly what the
+  # bound exists to prevent.
+  @output_buffer_bytes 4_000
+
+  @doc false
+  # Public only so the byte bound can be unit-tested directly, without
+  # starting a transcoder; nothing outside this module should call it.
+  def append_output(buffer, data) do
+    combined = buffer <> data
+    size = byte_size(combined)
+
+    if size > @output_buffer_bytes do
+      # A byte-based cut can land inside a multi-byte character, leaving
+      # invalid UTF-8 at the start of the buffer. That's fine here: the
+      # buffer is only ever regex-matched, and @hwaccel_failure_patterns are
+      # plain ASCII without the `u` modifier, so the regex engine matches
+      # against raw bytes and never raises on the malformed prefix.
+      # Scrubbing it back to valid UTF-8 would cost more than it buys.
+      binary_part(combined, size - @output_buffer_bytes, @output_buffer_bytes)
+    else
+      combined
+    end
+  end
+
   # Parse FFmpeg output for duration, progress, and errors
   defp parse_ffmpeg_output(output) do
     cond do
@@ -832,63 +942,6 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
         :no_match
     end
   end
-
-  # Builds the video scale filter. Every encode gets one; only the ceiling is
-  # optional.
-  #
-  # `-2` keeps the width proportional to the source and divisible by two,
-  # which H.264 requires; hardcoding both dimensions (the previous `-s
-  # WxH`) distorted anything that was not 16:9. `min(h, ih)` clamps against
-  # the *input* height so a rung above the source never upscales, which
-  # would burn CPU to produce a larger, blurrier picture.
-  #
-  # The comma inside `min()` is backslash-escaped because FFmpeg reads a
-  # bare comma in a filtergraph as a filter separator. The usual shell form
-  # `-vf scale=-2:'min(720,ih)'` is wrong here: these arguments go straight
-  # to a port with no shell, so the quotes would arrive literally and the
-  # filter would fail to parse.
-  #
-  # `2*trunc(.../2)` rounds the height down to an even number, and it is the
-  # reason the uncapped clause emits a filter at all rather than nothing. An
-  # odd frame height makes libx264 with `-pix_fmt yuv420p` refuse to open the
-  # encoder outright ("height not divisible by 2", exit 187): the transcode
-  # dies before writing a playlist, the client's playlist wait times out, and
-  # the viewer gets a generic playback error with nothing in it pointing here.
-  #
-  # That is reachable on the DEFAULT path, not just under a cap. The old
-  # hardcoded `-s 1280x720` evened every transcode as a side effect; removing
-  # it (correctly, since it also squished everything that was not 16:9) took
-  # the evening with it. VP9 and AV1 both permit odd frame heights and are
-  # exactly the codecs this module force-transcodes, and ordinary rips like
-  # 720x405 and 848x477 are odd too. Rounding down rather than up is what
-  # keeps the no-upscale guarantee; `-2` then tracks the width to it, which is
-  # what preserves the aspect ratio.
-  #
-  # Only ever reached on the encode branch — a stream copy returns before
-  # this, so no filter can turn a copy into a transcode.
-  defp scale_args(height) when is_integer(height) and height > 0 do
-    ["-vf", "scale=-2:2*trunc(min(#{height}\\,ih)/2)"]
-  end
-
-  # A zero or negative ceiling would scale to nothing. It can only arrive from
-  # a misconfigured `streaming.max_transcode_height` (the schema rejects it,
-  # but a stale cached runtime config could still carry one), so say so rather
-  # than silently ignoring it and leaving the operator to wonder why their cap
-  # does nothing. The encode still gets the evening filter: a bad ceiling is
-  # no reason to hand libx264 an odd height.
-  defp scale_args(height) when is_integer(height) do
-    Logger.warning(
-      "Ignoring a non-positive transcode height ceiling (#{height}); " <>
-        "encoding at the source resolution"
-    )
-
-    even_height_args()
-  end
-
-  defp scale_args(_), do: even_height_args()
-
-  # No ceiling: keep the source resolution, rounded down to an even height.
-  defp even_height_args, do: ["-vf", "scale=-2:2*trunc(ih/2)"]
 
   @doc """
   Composes a requested output height with the operator's configured ceiling

@@ -348,6 +348,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     |> assign(:config_settings_with_sources, get_all_settings_with_sources())
     |> assign(:crash_report_stats, Mydia.CrashReporter.stats())
     |> assign(:invalid_config_settings, Settings.invalid_config_settings())
+    |> assign(:hwaccel, Mydia.Streaming.HardwareAccel.capabilities())
   end
 
   defp get_all_settings_with_sources do

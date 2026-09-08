@@ -124,80 +124,83 @@ defmodule Mydia.Application do
       # because it runs before this tree exists. Must sit after the migrator: on
       # a fresh install config_settings does not exist until the migrator has
       # run. Returns :ignore once done. See the module doc.
-      {Mydia.Config.Bootstrap, skip: skip_config_merge?()},
-      # Releases import runs whose coordinator died with the previous node.
-      # Must run after the migrator (it queries import_runs) and before the
-      # Oban child below, because "no queue has started yet" is exactly what
-      # lets it read a lingering `executing` job row as an orphan rather than
-      # as a healthy job this boot just picked up. Returns :ignore once done.
-      Mydia.Jobs.ImportRunReconciler,
-      {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Mydia.PubSub},
-      # Owns every asynchronous event insert. Must sit after the repo and
-      # PubSub, which it uses, and therefore stops before them on shutdown so
-      # its terminate/2 has a chance to flush what is still buffered (best
-      # effort, not a guarantee; see the writer's moduledoc).
-      Mydia.Events.Writer,
-      Mydia.Downloads.Client.Registry,
-      # Owns the ETS table holding the derived set of client torrents Mydia
-      # does not manage. init/1 only creates the table (no I/O), so unlike
-      # ClientHealth this is safe to start in every environment.
-      Mydia.Downloads.ExternalTorrents,
-      Mydia.Indexers.Adapter.Registry,
-      Mydia.Indexers.RateLimiter,
-      # Passive circuit breaker for subtitle providers. In-memory only, no DB,
-      # so it is safe to start in every environment including tests.
-      Mydia.Subtitles.Health,
-      Mydia.Metadata.Provider.Registry,
-      Mydia.Metadata.Cache,
-      Mydia.Metadata.ProviderIDRegistry,
-      {Task.Supervisor, name: Mydia.TaskSupervisor},
-      # Supervises optimistic manual-grab pipelines (Mydia.Downloads.Grabber)
-      # so grabs survive the LiveView that started them.
-      {Task.Supervisor, name: Mydia.Downloads.GrabSupervisor},
-      # WASM plugin platform: per-plugin pools register here and live under
-      # the dynamic supervisor (see Mydia.Plugins.Host); the Agent registry
-      # holds installed plugin descriptors (see Mydia.Plugins.Registry).
-      Mydia.Plugins.Registry,
-      {Registry, keys: :unique, name: Mydia.Plugins.PoolRegistry},
-      {DynamicSupervisor, name: Mydia.Plugins.PoolSupervisor, strategy: :one_for_one},
-      # Per-plugin invocation single-flight lock (U4): serializes on-event /
-      # on-schedule / inline calls for one plugin so shared KV state is safe.
-      Mydia.Plugins.SingleFlight,
-      # Separate named lock instance serializing session subtitle extraction
-      # (see Mydia.Streaming.SessionSubtitles). A slow ffmpeg extraction must
-      # never make a plugin invocation wait behind it, hence its own instance
-      # rather than sharing the plugin host's lock above. The explicit :id
-      # disambiguates it from the SingleFlight child above: both default to
-      # the module name as their child id, which the supervisor rejects as
-      # a duplicate.
-      Supervisor.child_spec({Mydia.Plugins.SingleFlight, name: Mydia.Streaming.SubtitleLock},
-        id: Mydia.Streaming.SubtitleLock
-      ),
-      # Fans "events:all" out to subscribed plugins (U5). Replaces the Luerl
-      # hooks manager removed in U11.
-      Mydia.Plugins.Dispatcher,
-      {Registry, keys: :unique, name: Mydia.Streaming.HlsSessionRegistry},
-      Mydia.Streaming.HlsSessionSupervisor,
-      {Mydia.Streaming.SessionSampler,
-       Application.get_env(:mydia, Mydia.Streaming.SessionSampler, [])},
-      {Registry, keys: :unique, name: Mydia.Downloads.TranscodeRegistry},
-      {Registry, keys: :unique, name: Mydia.Downloads.Client.Debrid.FetcherRegistry},
-      {DynamicSupervisor,
-       name: Mydia.Downloads.Client.Debrid.FetcherSupervisor, strategy: :one_for_one},
-      Mydia.Downloads.Client.Debrid.RateLimiter,
-      {Registry, keys: :unique, name: Mydia.Downloads.Seedbox.FetcherRegistry},
-      {DynamicSupervisor,
-       name: Mydia.Downloads.Seedbox.FetcherSupervisor, strategy: :one_for_one},
-      Mydia.Downloads.JobManager,
-      Mydia.CrashReporter.Throttle,
-      Mydia.CrashReporter.Queue,
-      Mydia.RemoteAccess.ClaimRateLimiter,
-      Mydia.Accounts.ApiKeyRateLimiter,
-      {Registry, keys: :unique, name: Mydia.DynamicSupervisorRegistry},
-      {DynamicSupervisor,
-       name: {:via, Registry, {Mydia.DynamicSupervisorRegistry, :relay}}, strategy: :one_for_one}
+      {Mydia.Config.Bootstrap, skip: skip_config_merge?()}
     ] ++
+      hardware_accel_children() ++
+      [
+        # Releases import runs whose coordinator died with the previous node.
+        # Must run after the migrator (it queries import_runs) and before the
+        # Oban child below, because "no queue has started yet" is exactly what
+        # lets it read a lingering `executing` job row as an orphan rather than
+        # as a healthy job this boot just picked up. Returns :ignore once done.
+        Mydia.Jobs.ImportRunReconciler,
+        {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: Mydia.PubSub},
+        # Owns every asynchronous event insert. Must sit after the repo and
+        # PubSub, which it uses, and therefore stops before them on shutdown so
+        # its terminate/2 has a chance to flush what is still buffered (best
+        # effort, not a guarantee; see the writer's moduledoc).
+        Mydia.Events.Writer,
+        Mydia.Downloads.Client.Registry,
+        # Owns the ETS table holding the derived set of client torrents Mydia
+        # does not manage. init/1 only creates the table (no I/O), so unlike
+        # ClientHealth this is safe to start in every environment.
+        Mydia.Downloads.ExternalTorrents,
+        Mydia.Indexers.Adapter.Registry,
+        Mydia.Indexers.RateLimiter,
+        # Passive circuit breaker for subtitle providers. In-memory only, no DB,
+        # so it is safe to start in every environment including tests.
+        Mydia.Subtitles.Health,
+        Mydia.Metadata.Provider.Registry,
+        Mydia.Metadata.Cache,
+        Mydia.Metadata.ProviderIDRegistry,
+        {Task.Supervisor, name: Mydia.TaskSupervisor},
+        # Supervises optimistic manual-grab pipelines (Mydia.Downloads.Grabber)
+        # so grabs survive the LiveView that started them.
+        {Task.Supervisor, name: Mydia.Downloads.GrabSupervisor},
+        # WASM plugin platform: per-plugin pools register here and live under
+        # the dynamic supervisor (see Mydia.Plugins.Host); the Agent registry
+        # holds installed plugin descriptors (see Mydia.Plugins.Registry).
+        Mydia.Plugins.Registry,
+        {Registry, keys: :unique, name: Mydia.Plugins.PoolRegistry},
+        {DynamicSupervisor, name: Mydia.Plugins.PoolSupervisor, strategy: :one_for_one},
+        # Per-plugin invocation single-flight lock (U4): serializes on-event /
+        # on-schedule / inline calls for one plugin so shared KV state is safe.
+        Mydia.Plugins.SingleFlight,
+        # Separate named lock instance serializing session subtitle extraction
+        # (see Mydia.Streaming.SessionSubtitles). A slow ffmpeg extraction must
+        # never make a plugin invocation wait behind it, hence its own instance
+        # rather than sharing the plugin host's lock above. The explicit :id
+        # disambiguates it from the SingleFlight child above: both default to
+        # the module name as their child id, which the supervisor rejects as
+        # a duplicate.
+        Supervisor.child_spec({Mydia.Plugins.SingleFlight, name: Mydia.Streaming.SubtitleLock},
+          id: Mydia.Streaming.SubtitleLock
+        ),
+        # Fans "events:all" out to subscribed plugins (U5). Replaces the Luerl
+        # hooks manager removed in U11.
+        Mydia.Plugins.Dispatcher,
+        {Registry, keys: :unique, name: Mydia.Streaming.HlsSessionRegistry},
+        Mydia.Streaming.HlsSessionSupervisor,
+        {Mydia.Streaming.SessionSampler,
+         Application.get_env(:mydia, Mydia.Streaming.SessionSampler, [])},
+        {Registry, keys: :unique, name: Mydia.Downloads.TranscodeRegistry},
+        {Registry, keys: :unique, name: Mydia.Downloads.Client.Debrid.FetcherRegistry},
+        {DynamicSupervisor,
+         name: Mydia.Downloads.Client.Debrid.FetcherSupervisor, strategy: :one_for_one},
+        Mydia.Downloads.Client.Debrid.RateLimiter,
+        {Registry, keys: :unique, name: Mydia.Downloads.Seedbox.FetcherRegistry},
+        {DynamicSupervisor,
+         name: Mydia.Downloads.Seedbox.FetcherSupervisor, strategy: :one_for_one},
+        Mydia.Downloads.JobManager,
+        Mydia.CrashReporter.Throttle,
+        Mydia.CrashReporter.Queue,
+        Mydia.RemoteAccess.ClaimRateLimiter,
+        Mydia.Accounts.ApiKeyRateLimiter,
+        {Registry, keys: :unique, name: Mydia.DynamicSupervisorRegistry},
+        {DynamicSupervisor,
+         name: {:via, Registry, {Mydia.DynamicSupervisorRegistry, :relay}}, strategy: :one_for_one}
+      ] ++
       remote_access_children() ++
       client_health_children() ++
       indexer_health_children() ++
@@ -256,6 +259,26 @@ defmodule Mydia.Application do
         # Resume active pairing claims on startup
         Mydia.RemoteAccess.ResumeClaims
       ]
+    else
+      []
+    end
+  end
+
+  # Probes the host's video hardware once and caches the answer. Must sit after
+  # Config.Bootstrap, which merges the database layer carrying HWACCEL and
+  # HWACCEL_DEVICE. Probing costs one to three seconds and runs in
+  # handle_continue, so it delays only the first caller asking for
+  # capabilities, not the rest of the tree.
+  #
+  # Not started under `mix test`. A developer machine with a real render node
+  # would otherwise hand hardware capabilities to every streaming test, and
+  # those tests assert software arguments on purpose: they are what proves the
+  # accelerated path did not change the unaccelerated one. capabilities/0
+  # reports software when this process is absent, so nothing else needs to
+  # know.
+  defp hardware_accel_children do
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      [Mydia.Streaming.HardwareAccel]
     else
       []
     end

@@ -1,0 +1,5 @@
+libva info: VA-API version 1.22.0
+libva info: User environment variable requested driver 'iHD'
+libva info: Trying to open /usr/lib/dri/iHD_drv_video.so
+libva info: va_openDriver() returns -1
+vaInitialize failed with error code -1 (unknown libva error),exit
