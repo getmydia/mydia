@@ -130,6 +130,10 @@ defmodule Mydia.Streaming.HardwareAccel.Args do
 
   defp height_expression(_), do: "2*trunc(ih/2)"
 
+  # :crf is software-only. The hardware tiers ignore it entirely and rate-control
+  # off -qp (unmetered) or -rc_mode/-b:v (capped) instead, set by the two
+  # `rate_control_args(_hardware, ...)` clauses below -- a caller that raises
+  # :crf expecting it to affect a hardware encode's quality is a no-op.
   defp rate_control_args(:software, nil, crf), do: ["-crf", to_string(crf)]
 
   defp rate_control_args(:software, kbps, _crf) do

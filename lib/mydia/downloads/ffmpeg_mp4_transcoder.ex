@@ -350,10 +350,15 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
     error_msg = "FFmpeg exited with status #{status}#{error_details}"
     Logger.error(error_msg)
 
-    if state.on_error do
-      state.on_error.(error_msg)
-    end
-
+    # on_error is deliberately NOT called here unconditionally. JobManager
+    # drives download job failure straight from this callback (see
+    # DownloadService.maybe_start_transcode/2, which wires on_error to
+    # Downloads.fail_job/2), so calling it on every non-zero exit -- including
+    # a hardware-init failure this process is about to retry in software --
+    # marked the job failed while a software retry was still starting behind
+    # it, racing JobManager against that retry's own eventual on_complete or
+    # on_error. It is only called below, on the two branches that are
+    # actually terminal for this job.
     if retry_in_software?(state) do
       Logger.warning(
         "Download transcode hardware encode failed; restarting in software for job " <>
@@ -368,9 +373,17 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
 
         {:error, reason} ->
           Logger.error("Failed to restart FFmpeg in software: #{inspect(reason)}")
+
+          # Terminal: the software retry itself never started, so no later
+          # callback will ever report this job's outcome.
+          if state.on_error, do: state.on_error.(error_msg)
           {:stop, {:ffmpeg_failed, status}, state}
       end
     else
+      # Terminal: not retrying, so this exit is the job's one and only
+      # outcome.
+      if state.on_error, do: state.on_error.(error_msg)
+
       # {:ffmpeg_failed, status}, not {:ffmpeg_exit, status}: JobManager
       # pattern-matches on this exact reason (see
       # lib/mydia/downloads/job_manager.ex) to drive download job failure
@@ -523,6 +536,18 @@ defmodule Mydia.Downloads.FfmpegMp4Transcoder do
   # fresh port rather than relocating anything.
   defp restart_in_software(state) do
     if state.hwaccel_lease, do: HardwareAccel.release(state.hwaccel_lease)
+
+    # The failed hardware attempt already left a file at output_path:
+    # -movflags +empty_moov (see build_ffmpeg_args/4) writes the moov atom
+    # immediately, before a single frame is encoded, so the file exists even
+    # though the hardware attempt produced no usable output. build_ffmpeg_args/4
+    # never emits -y, so without this the software retry would stop at
+    # ffmpeg's interactive overwrite prompt -- with no terminal attached to
+    # answer it -- and hang forever instead of retrying. Removing the
+    # known-dead partial is narrower than adding -y globally, which would
+    # also silently paper over a genuine "output already exists" bug
+    # elsewhere.
+    File.rm(state.output_path)
 
     opts =
       Keyword.put(

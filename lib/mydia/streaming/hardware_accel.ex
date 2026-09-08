@@ -52,9 +52,11 @@ defmodule Mydia.Streaming.HardwareAccel do
   @doc "The probe result, or software capabilities when no probe is running."
   @spec capabilities(GenServer.server()) :: Capabilities.t()
   def capabilities(server \\ __MODULE__) do
+    fallback = Capabilities.software("hardware acceleration probe is not running")
+
     case GenServer.whereis(server) do
-      nil -> Capabilities.software("hardware acceleration probe is not running")
-      pid -> GenServer.call(pid, :capabilities, @call_timeout)
+      nil -> fallback
+      pid -> call_or(pid, :capabilities, fallback)
     end
   end
 
@@ -72,7 +74,7 @@ defmodule Mydia.Streaming.HardwareAccel do
   def lease(server \\ __MODULE__, priority) do
     case GenServer.whereis(server) do
       nil -> :refused
-      pid -> GenServer.call(pid, {:lease, priority}, @call_timeout)
+      pid -> call_or(pid, {:lease, priority}, :refused)
     end
   end
 
@@ -89,8 +91,25 @@ defmodule Mydia.Streaming.HardwareAccel do
   def report_failure(server \\ __MODULE__, backend, source_codec) do
     case GenServer.whereis(server) do
       nil -> :ok
-      pid -> GenServer.call(pid, {:report_failure, backend, source_codec}, @call_timeout)
+      pid -> call_or(pid, {:report_failure, backend, source_codec}, :ok)
     end
+  end
+
+  # GenServer.whereis/1 resolves a pid, but the probe process can exit in the
+  # gap between that lookup and this call actually being handled (a probe
+  # crash and its supervisor restart are the realistic version of this,
+  # boot-time or not). A plain GenServer.call/3 turns that race into an exit
+  # in the CALLER -- an admin LiveView mount, or a playback session -- which
+  # contradicts this module's documented contract that it never raises and
+  # instead reports software/refused/ok, the same as when the process was
+  # never running at all. Every call site above already has that fallback
+  # value on hand for the "not running" branch; a mid-call exit gets the
+  # identical one.
+  @spec call_or(pid(), term(), term()) :: term()
+  defp call_or(pid, message, fallback) do
+    GenServer.call(pid, message, @call_timeout)
+  catch
+    :exit, _ -> fallback
   end
 
   @impl true

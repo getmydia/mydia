@@ -17,10 +17,17 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
 
   require Logger
 
-  alias Mydia.Library.Ffmpeg
   alias Mydia.Streaming.HardwareAccel.Capabilities
 
   @device_glob "/dev/dri/renderD*"
+
+  # `HardwareAccel.handle_continue(:probe, ...)` runs before any queued
+  # capabilities/1, lease/2 or report_failure/3 call is answered (they queue
+  # behind it in the mailbox), so a wedged vainfo or ffmpeg here blocks every
+  # one of those callers until the 30s GenServer.call timeout instead of the
+  # software fallback this module promises. A probe that legitimately takes
+  # more than a few seconds is already broken hardware.
+  @probe_timeout_ms 5_000
 
   # VAProfile names map onto codec atoms. Profile variants (Main, Main10,
   # High, Profile0) collapse onto the codec, because the tier decision only
@@ -118,8 +125,8 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
   end
 
   defp vainfo(device) do
-    case System.cmd("vainfo", ["--display", "drm", "--device", device], stderr_to_stdout: true) do
-      {output, 0} ->
+    case run_bounded("vainfo", ["--display", "drm", "--device", device]) do
+      {:ok, output} ->
         matrix = parse_vainfo(output)
 
         if matrix.encoders == [] do
@@ -128,11 +135,15 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
           {:ok, matrix}
         end
 
-      {output, _code} ->
+      {:error, {:exit, _code, output}} ->
         {:error, "vainfo failed on #{device}: #{String.trim(output)}"}
+
+      {:error, :timeout} ->
+        {:error, "vainfo did not finish within #{@probe_timeout_ms}ms on #{device}"}
+
+      {:error, :not_found} ->
+        {:error, "vainfo is not installed"}
     end
-  rescue
-    ErlangError -> {:error, "vainfo is not installed"}
   end
 
   @doc """
@@ -187,10 +198,104 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
       "-"
     ]
 
-    case Ffmpeg.run(args) do
-      {:ok, _output} -> :ok
-      {:error, {:ffmpeg_error, _code, output}} -> {:error, String.trim(output)}
-      {:error, :ffmpeg_not_found} -> {:error, "ffmpeg is not installed"}
+    # Deliberately not Mydia.Library.Ffmpeg.run/2: that wraps System.cmd/3,
+    # which blocks this process until the OS process exits with no way to
+    # bound or interrupt it. run_bounded/3 below is the same
+    # :spawn_executable + tracked-os_pid pattern FfmpegHlsTranscoder and
+    # FfmpegMp4Transcoder already use to actually kill a wedged ffmpeg
+    # instead of merely giving up on waiting for it.
+    case run_bounded(executable(:ffmpeg_path, "ffmpeg"), args) do
+      {:ok, _output} ->
+        :ok
+
+      {:error, {:exit, _code, output}} ->
+        {:error, String.trim(output)}
+
+      {:error, :timeout} ->
+        {:error, "ffmpeg test encode did not finish within #{@probe_timeout_ms}ms"}
+
+      {:error, :not_found} ->
+        {:error, "ffmpeg is not installed"}
     end
+  end
+
+  # Same executable-override convention as Mydia.Library.Ffmpeg: an
+  # application-env path (used by tests) falls back to resolving the bare
+  # name on PATH.
+  defp executable(env_key, default_name) do
+    Application.get_env(:mydia, env_key) || default_name
+  end
+
+  @doc false
+  # Runs `name` as a Port with a tracked OS pid, the same shape
+  # FfmpegHlsTranscoder.start_ffmpeg_process/1 uses, so a timeout can
+  # actually SIGKILL the child instead of merely abandoning a handle to it --
+  # Task.shutdown/2 around System.cmd/3 cannot do that, since System.cmd/3
+  # never gives the caller an OS pid to kill.
+  #
+  # Public only so the timeout and kill behaviour can be exercised directly
+  # against a generic command (`sleep`, `sh`) without depending on vainfo or
+  # ffmpeg being installed, and without a test having to wait out a real
+  # multi-second probe; nothing outside this module should call it.
+  @spec run_bounded(String.t(), [String.t()], timeout()) ::
+          {:ok, binary()} | {:error, {:exit, integer(), binary()} | :timeout | :not_found}
+  def run_bounded(name, args, timeout \\ @probe_timeout_ms) do
+    case System.find_executable(name) do
+      nil ->
+        {:error, :not_found}
+
+      path ->
+        port =
+          Port.open({:spawn_executable, path}, [
+            :binary,
+            :exit_status,
+            :stderr_to_stdout,
+            :hide,
+            args: args
+          ])
+
+        os_pid =
+          case Port.info(port, :os_pid) do
+            {:os_pid, os_pid} -> os_pid
+            nil -> nil
+          end
+
+        collect_bounded(port, os_pid, "", timeout)
+    end
+  end
+
+  defp collect_bounded(port, os_pid, buffer, timeout) do
+    receive do
+      {^port, {:data, data}} ->
+        collect_bounded(port, os_pid, buffer <> data, timeout)
+
+      {^port, {:exit_status, 0}} ->
+        {:ok, buffer}
+
+      {^port, {:exit_status, code}} ->
+        {:error, {:exit, code, buffer}}
+    after
+      timeout ->
+        kill_bounded(port, os_pid)
+        {:error, :timeout}
+    end
+  end
+
+  # Closing the port stops it relaying further messages, but does not by
+  # itself terminate a running child -- Erlang's default port behaviour on
+  # close is to keep the OS process alive when the driver was opened with
+  # :spawn_executable. SIGKILL via the same `kill -9` mechanism the
+  # transcoders use is what actually ends it, leaving no orphaned vainfo or
+  # ffmpeg process behind.
+  defp kill_bounded(port, os_pid) do
+    if os_pid, do: System.cmd("kill", ["-9", to_string(os_pid)], stderr_to_stdout: true)
+
+    try do
+      Port.close(port)
+    rescue
+      ArgumentError -> :ok
+    end
+
+    :ok
   end
 end

@@ -49,6 +49,53 @@ defmodule Mydia.Streaming.HardwareAccelTest do
     end
   end
 
+  describe "surviving the process exiting mid-call" do
+    # GenServer.whereis/1 resolves a pid before the call is made, but the
+    # process can die in the gap -- realistically the probe crashing and the
+    # supervisor restarting it. :sys.suspend/1 makes that race deterministic:
+    # the suspended process still queues the call message but never answers
+    # it, so killing it while a caller is blocked on GenServer.call/3
+    # reliably reproduces "exited while a call was in flight" instead of
+    # "was already gone before the call was made" (which capabilities/0's
+    # own "without a running process" test above already covers).
+    test "capabilities/1 reports software instead of crashing the caller" do
+      name = start_with(@vaapi)
+      pid = GenServer.whereis(name)
+
+      :sys.suspend(pid)
+      task = Task.async(fn -> HardwareAccel.capabilities(name) end)
+      Process.sleep(50)
+      Process.exit(pid, :kill)
+
+      assert %Capabilities{backend: :none, reason: reason} = Task.await(task)
+      assert reason =~ "not running"
+    end
+
+    test "lease/2 is refused instead of crashing the caller" do
+      name = start_with(@vaapi)
+      pid = GenServer.whereis(name)
+
+      :sys.suspend(pid)
+      task = Task.async(fn -> HardwareAccel.lease(name, :playback) end)
+      Process.sleep(50)
+      Process.exit(pid, :kill)
+
+      assert :refused = Task.await(task)
+    end
+
+    test "report_failure/3 reports ok instead of crashing the caller" do
+      name = start_with(@vaapi)
+      pid = GenServer.whereis(name)
+
+      :sys.suspend(pid)
+      task = Task.async(fn -> HardwareAccel.report_failure(name, :vaapi, "hevc") end)
+      Process.sleep(50)
+      Process.exit(pid, :kill)
+
+      assert :ok = Task.await(task)
+    end
+  end
+
   describe "leases" do
     test "playback takes slots up to the cap" do
       name = start_with(@vaapi, cap: 2)

@@ -33,6 +33,8 @@ defmodule Mydia.Streaming.HlsSession do
 
   alias Mydia.Library
   alias Mydia.Streaming.FfmpegHlsTranscoder
+  alias Mydia.Streaming.HardwareAccel
+  alias Mydia.Streaming.HardwareAccel.Capabilities
   alias Mydia.Streaming.SegmentPlan
   alias Mydia.Streaming.TranscodeWindow
   alias Mydia.Repo
@@ -67,6 +69,7 @@ defmodule Mydia.Streaming.HlsSession do
       :db_job_id,
       :segment_plan,
       :backend_opts,
+      :hwaccel_lease,
       playlist_mode: :window,
       window: nil,
       segment_waiters: %{},
@@ -93,6 +96,7 @@ defmodule Mydia.Streaming.HlsSession do
             db_job_id: binary() | nil,
             segment_plan: Mydia.Streaming.SegmentPlan.t() | nil,
             backend_opts: keyword(),
+            hwaccel_lease: reference() | nil,
             playlist_mode: :full | :window,
             window: Mydia.Streaming.TranscodeWindow.t() | nil,
             segment_waiters: %{non_neg_integer() => [GenServer.from()]},
@@ -416,9 +420,17 @@ defmodule Mydia.Streaming.HlsSession do
         Logger.info("Temp directory: #{temp_dir}")
         Logger.info("Starting HLS transcoding with FFmpeg backend")
 
+        # A :playback lease is claimed once for the whole session, not once
+        # per FfmpegHlsTranscoder process -- see acquire_hwaccel_lease/0 for
+        # why.
+        {capabilities, hwaccel_lease} = maybe_acquire_hwaccel_lease(media_file, max_bitrate)
+
         # The keyword list a relocation reuses verbatim (see relocate/2), so it
         # has to carry everything start_backend/6 needs beyond the offset and
-        # start number, which relocate overwrites per-call.
+        # start number, which relocate overwrites per-call. :capabilities is
+        # carried the same way: decided once here (or by hwaccel_fallback/2
+        # after a failure), never re-derived per relocation, so a seek never
+        # has to contact HardwareAccel again.
         backend_opts = [
           max_bitrate: max_bitrate,
           max_height: max_height,
@@ -428,7 +440,8 @@ defmodule Mydia.Streaming.HlsSession do
           absolute_timestamps: playlist_mode == :full,
           playlist_mode: playlist_mode,
           audio_language: playback.audio_language,
-          show_audio_language: playback.show_audio_language
+          show_audio_language: playback.show_audio_language,
+          capabilities: capabilities
         ]
 
         # Start FFmpeg backend
@@ -454,7 +467,8 @@ defmodule Mydia.Streaming.HlsSession do
               segment_plan: segment_plan,
               playlist_mode: playlist_mode,
               window: if(playlist_mode == :full, do: TranscodeWindow.new(first_index), else: nil),
-              backend_opts: backend_opts
+              backend_opts: backend_opts,
+              hwaccel_lease: hwaccel_lease
             }
 
             # Schedule initial timeout check
@@ -469,6 +483,7 @@ defmodule Mydia.Streaming.HlsSession do
               "Failed to start FFmpeg backend for session #{session_id}: #{inspect(reason)}"
             )
 
+            if hwaccel_lease, do: HardwareAccel.release(hwaccel_lease)
             File.rm_rf!(temp_dir)
             {:stop, {:backend_start_failed, reason}}
         end
@@ -476,6 +491,55 @@ defmodule Mydia.Streaming.HlsSession do
       {:error, reason} ->
         Logger.error("Failed to create temp directory #{temp_dir}: #{inspect(reason)}")
         {:stop, {:temp_dir_creation_failed, reason}}
+    end
+  end
+
+  # Decides whether this session is worth leasing a hardware slot for at all.
+  # Only a re-encoding session ever reaches the hardware encoder --
+  # reencodes_video?/2 is the exact same decision build_ffmpeg_args/3 makes
+  # between "copy" and "libx264"/"h264_vaapi" -- so a stream-copy session
+  # leasing a slot it will never use would only starve a session that does.
+  #
+  # Public only so the gating decision can be asserted directly against a
+  # plain MediaFile struct, without a live HardwareAccel process, a DB row, or
+  # a real init/1; nothing outside this module should call it.
+  @doc false
+  @spec maybe_acquire_hwaccel_lease(Mydia.Library.MediaFile.t() | nil, integer() | nil) ::
+          {Capabilities.t() | nil, reference() | nil}
+  def maybe_acquire_hwaccel_lease(media_file, max_bitrate) do
+    if FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate) do
+      acquire_hwaccel_lease()
+    else
+      {nil, nil}
+    end
+  end
+
+  # Claims a :playback hardware lease for the life of this session.
+  #
+  # Deliberately a session-level call, not one made by FfmpegHlsTranscoder
+  # itself on every start (which is how FfmpegMp4Transcoder's :background
+  # lease works -- see its init/1). FfmpegHlsTranscoder is restarted on every
+  # window relocation (a seek: see relocate/2) and on every hardware-failure
+  # fallback (see hwaccel_fallback/2 below), and stop_and_start_backend/3
+  # deliberately overlaps the old and new backend by roughly 100ms so the
+  # relocation itself never blocks the session's mailbox. A per-transcoder
+  # lease would have to hold two slots during that overlap on every single
+  # seek, and would be refused near the cap -- turning an ordinary seek on a
+  # session that already holds a slot into a spurious software fallback.
+  # Leasing once here and carrying the result through backend_opts (reused
+  # verbatim by both relocate/2 and restart_backend_in_place/1) means a seek
+  # never contacts HardwareAccel at all: only session start, session end, and
+  # a permanent hardware-failure fallback do.
+  #
+  # Public only so the "not leased" fallback shape can be asserted directly
+  # without a live HardwareAccel process; nothing outside this module should
+  # call it.
+  @doc false
+  @spec acquire_hwaccel_lease() :: {Capabilities.t(), reference() | nil}
+  def acquire_hwaccel_lease do
+    case HardwareAccel.lease(:playback) do
+      {:ok, ref} -> {HardwareAccel.capabilities(), ref}
+      :refused -> {Capabilities.software("no hardware slot free for playback"), nil}
     end
   end
 
@@ -523,10 +587,14 @@ defmodule Mydia.Streaming.HlsSession do
   def hwaccel_fallback(%State{accel_fallbacks: n}, _target) when n >= 1, do: :stop
 
   def hwaccel_fallback(%State{} = state, target) do
+    # This session is about to encode in software for the rest of its life
+    # (only one fallback is ever allowed -- see the clause above), so
+    # continuing to hold a hardware slot would waste it: another session could
+    # be leasing it instead.
+    if state.hwaccel_lease, do: HardwareAccel.release(state.hwaccel_lease)
+
     software =
-      Mydia.Streaming.HardwareAccel.Capabilities.software(
-        "fell back to software after a hardware failure in this session"
-      )
+      Capabilities.software("fell back to software after a hardware failure in this session")
 
     backend_opts =
       state.backend_opts
@@ -538,7 +606,8 @@ defmodule Mydia.Streaming.HlsSession do
        state
        | accel: :none,
          accel_fallbacks: state.accel_fallbacks + 1,
-         backend_opts: backend_opts
+         backend_opts: backend_opts,
+         hwaccel_lease: nil
      }}
   end
 
@@ -799,6 +868,12 @@ defmodule Mydia.Streaming.HlsSession do
   @impl true
   def terminate(reason, state) do
     Logger.info("Terminating HLS session #{state.session_id}, reason: #{inspect(reason)}")
+
+    # Release the hardware slot on every exit path -- normal termination,
+    # timeout, backend crash -- so a session that leased one at start never
+    # leaks it. Already nil after a permanent software fallback (see
+    # hwaccel_fallback/2), so this is a no-op then.
+    if state.hwaccel_lease, do: HardwareAccel.release(state.hwaccel_lease)
 
     Phoenix.PubSub.broadcast(Mydia.PubSub, "hls_sessions", :session_ended)
 
