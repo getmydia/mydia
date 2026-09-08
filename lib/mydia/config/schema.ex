@@ -207,10 +207,15 @@ defmodule Mydia.Config.Schema do
       # whether the one they asked for actually worked rather than silently
       # receiving a different answer.
       #
-      # :invalid is not selectable. It is what the env parser emits for an
-      # unrecognised value so that validation rejects it by name; see
-      # Mydia.Config.Loader.parse_hwaccel/1.
-      field :hwaccel, Ecto.Enum, values: [:auto, :off, :vaapi, :invalid], default: :auto
+      # :invalid is deliberately absent from `values:`. Mydia.Config.Loader's
+      # parse_hwaccel/1 emits {:ok, :invalid} for an unrecognised HWACCEL so
+      # that put_if_present/4 does not drop the key and fall back to :auto;
+      # Ecto.Enum then rejects that atom at cast time because it is not a
+      # member of this list. Adding :invalid here would make it a valid
+      # selection and defeat the whole mechanism -- see the
+      # DownloadClient.external_torrents field below (and
+      # parse_external_torrents/1 in the loader) for the working precedent.
+      field :hwaccel, Ecto.Enum, values: [:auto, :off, :vaapi], default: :auto
 
       # Render node to use on a multi-GPU host. nil means "pick the first one
       # that probes successfully".

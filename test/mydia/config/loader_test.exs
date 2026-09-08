@@ -47,7 +47,9 @@ defmodule Mydia.Config.LoaderTest do
         "AUTO_SEARCH_MIN_SEEDERS",
         "TRASH_RETENTION_DAYS",
         "SUBTITLE_LANGUAGE",
-        "DEFAULT_SEASON_MONITORING"
+        "DEFAULT_SEASON_MONITORING",
+        "HWACCEL",
+        "HWACCEL_DEVICE"
       ] ++ download_client_vars ++ library_path_vars
 
     # Store original values
@@ -760,6 +762,80 @@ defmodule Mydia.Config.LoaderTest do
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
 
       assert config.streaming.subtitle_language == ["en", "es"]
+    end
+
+    test "HWACCEL defaults to auto when the env var is absent" do
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.hwaccel == :auto
+    end
+
+    test "reads HWACCEL as an atom" do
+      System.put_env("HWACCEL", "vaapi")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.hwaccel == :vaapi
+    end
+
+    test "accepts HWACCEL case-insensitively with surrounding whitespace" do
+      System.put_env("HWACCEL", "  Off ")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.hwaccel == :off
+    end
+
+    test "a blank HWACCEL is treated as unset and leaves the default in place" do
+      System.put_env("HWACCEL", "")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.hwaccel == :auto
+    end
+
+    test "rejects an unrecognised HWACCEL rather than falling back to auto" do
+      # Dropping the key would silently fall back to :auto, so an operator who
+      # typed "vappi" would get software transcoding while believing they had
+      # forced (or disabled) hardware acceleration. Failing loudly matches how
+      # a bad DOWNLOAD_CLIENT_<N>_EXTERNAL_TORRENTS already behaves.
+      #
+      # This is the regression test for the review finding that :invalid must
+      # NOT be a member of Streaming.hwaccel's Ecto.Enum values: including it
+      # there would make Ecto.Enum accept the atom parse_hwaccel/1 emits for a
+      # typo, producing a *valid* config carrying the sentinel with no error
+      # anywhere.
+      System.put_env("HWACCEL", "vappi")
+
+      assert {:error, _reason} = Loader.load(config_file: "nonexistent.yml")
+    end
+
+    test "an unrecognised HWACCEL does not mint a new atom" do
+      # parse_atom/1 falls back to String.to_atom/1, and atoms are never
+      # garbage collected. The dedicated parser must never reach that path.
+      System.put_env("HWACCEL", "definitely_not_a_backend_atom")
+
+      {:error, _reason} = Loader.load(config_file: "nonexistent.yml")
+
+      assert_raise ArgumentError, fn ->
+        String.to_existing_atom("definitely_not_a_backend_atom")
+      end
+    end
+
+    test "HWACCEL_DEVICE round-trips a render node path" do
+      System.put_env("HWACCEL_DEVICE", "/dev/dri/renderD129")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.hwaccel_device == "/dev/dri/renderD129"
+    end
+
+    test "a blank HWACCEL_DEVICE is treated as unset" do
+      System.put_env("HWACCEL_DEVICE", "")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.hwaccel_device == nil
     end
 
     test "the automatic-search seeder floor is reachable from every layer" do
