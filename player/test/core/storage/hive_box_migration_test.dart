@@ -122,6 +122,46 @@ void main() {
       expect(await _hive(to, 'download_tasks').readAsString(), 'tasks');
     });
 
+    test('leaves an open box completely alone', () async {
+      // Hive holds a box's lock file open for the life of the box and deletes
+      // it itself on close. Moving either file out from under it turns
+      // `box.close()` into a PathNotFoundException thrown from inside Hive,
+      // which is exactly what took out the E2E suite.
+      await _hive(from, 'cast_session').writeAsString('live');
+      await _lock(from, 'cast_session').writeAsString('held');
+      await _hive(from, 'sidebar_layout').writeAsString('closed');
+
+      await migrateHiveBoxes(
+        from: from.path,
+        to: to.path,
+        isBoxOpen: (name) => name == 'cast_session',
+      );
+
+      expect(await _hive(from, 'cast_session').readAsString(), 'live');
+      expect(_lock(from, 'cast_session').existsSync(), isTrue);
+      expect(_hive(to, 'cast_session').existsSync(), isFalse);
+      // The other boxes still move.
+      expect(await _hive(to, 'sidebar_layout').readAsString(), 'closed');
+    });
+
+    test('asks about the declared box name, not the lowercased filename',
+        () async {
+      await _hive(from, 'graphqlClientStore').writeAsString('cache');
+      final asked = <String>[];
+
+      await migrateHiveBoxes(
+        from: from.path,
+        to: to.path,
+        boxes: const ['graphqlClientStore'],
+        isBoxOpen: (name) {
+          asked.add(name);
+          return false;
+        },
+      );
+
+      expect(asked, ['graphqlClientStore']);
+    });
+
     test('one unmovable box does not strand the rest', () async {
       await _hive(from, 'cast_session').writeAsString('session');
       // A directory sitting where the destination file belongs. Both the
@@ -134,6 +174,41 @@ void main() {
 
       expect(await _hive(to, 'downloaded_media').readAsString(), 'media');
       expect(await _hive(from, 'cast_session').readAsString(), 'session');
+    });
+  });
+
+  group('Hive initialization', () {
+    test('nothing bypasses initAppHive', () async {
+      // Both of these default their base path to the user's Documents folder,
+      // which is the whole bug. `initAppHive` is the only sanctioned entry
+      // point. The E2E bootstrap was missed on the first pass and only
+      // surfaced as a PathNotFoundException deep inside Hive, so this looks
+      // everywhere source lives rather than just `lib/`.
+      //
+      // Built by concatenation so this file does not match its own scan.
+      final banned = ['Hive.init${'Flutter('}', 'init${'HiveForFlutter('}'];
+      final offenders = <String>[];
+
+      for (final root in ['lib', 'test', 'integration_test']) {
+        await for (final entity in Directory(root).list(recursive: true)) {
+          if (entity is! File || !entity.path.endsWith('.dart')) continue;
+          final lines = entity.readAsLinesSync();
+          for (var i = 0; i < lines.length; i++) {
+            final line = lines[i];
+            if (line.trimLeft().startsWith('//')) continue;
+            if (banned.any(line.contains)) {
+              offenders.add('${entity.path}:${i + 1}: ${line.trim()}');
+            }
+          }
+        }
+      }
+
+      expect(
+        offenders,
+        isEmpty,
+        reason: 'call initAppHive() from lib/core/storage/app_hive.dart '
+            'instead, so boxes stay out of the user Documents folder',
+      );
     });
   });
 

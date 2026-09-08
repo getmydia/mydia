@@ -57,10 +57,18 @@ const kMydiaHiveBoxes = <String>[
 /// Safe to run on every launch. Once a box has moved there is nothing left at
 /// [from] to find, and a box whose data file already exists at [to] is left
 /// strictly alone rather than overwritten.
+/// [isBoxOpen] reports whether a box is currently open, and any box it names
+/// is skipped entirely. Moving a box's files while Hive holds them is not
+/// survivable: Hive keeps the lock file open for the life of the box and
+/// deletes it itself on close, so deleting it first makes `box.close()` throw
+/// `PathNotFoundException` from inside Hive, far from here. Callers pass
+/// `Hive.isBoxOpen`; the default assumes nothing is open, which is what makes
+/// this function testable without a Hive instance.
 Future<void> migrateHiveBoxes({
   required String from,
   required String to,
   Iterable<String> boxes = kMydiaHiveBoxes,
+  bool Function(String name)? isBoxOpen,
 }) async {
   if (_normalize(from) == _normalize(to)) return;
 
@@ -73,6 +81,10 @@ Future<void> migrateHiveBoxes({
   }
 
   for (final box in boxes) {
+    if (isBoxOpen != null && isBoxOpen(box)) {
+      debugPrint('[Hive] Box "$box" is already open; leaving it where it is');
+      continue;
+    }
     try {
       await _migrateBox(from, to, box.toLowerCase());
     } catch (e) {

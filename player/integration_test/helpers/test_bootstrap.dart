@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:player/app.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/storage/app_hive.dart';
 import 'package:player/native/frb_generated.dart';
 
 /// One-time initialization shared by every integration test file.
@@ -23,7 +24,11 @@ Future<void> ensureTestBootstrap() {
 Future<void> _runBootstrap() async {
   await RustLib.init();
   MediaKit.ensureInitialized();
-  await initHiveForFlutter();
+  // The same pair `main` runs, and for the same reason: `initHiveForFlutter`
+  // would put every box in the user's Documents folder, which under the E2E
+  // container is `/root`. See `core/storage/app_hive.dart`.
+  await initAppHive();
+  await HiveStore.open();
 }
 
 /// Replaces the app with an empty widget, after giving its startup work time

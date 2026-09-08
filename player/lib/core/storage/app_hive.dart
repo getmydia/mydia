@@ -60,8 +60,17 @@ Future<void> _initHive() async {
 
     // Ahead of `Hive.init`, so the boxes are in place before anything opens
     // one. Best-effort by contract: `migrateHiveBoxes` never throws.
+    //
+    // `Hive.isBoxOpen` covers the case this ordering does not: a caller that
+    // opened a box at the old path before reaching here. Hive holds a box's
+    // lock file open and deletes it itself on close, so moving the files out
+    // from under it turns `box.close()` into a `PathNotFoundException`.
     final documents = await getApplicationDocumentsDirectory();
-    await migrateHiveBoxes(from: documents.path, to: support.path);
+    await migrateHiveBoxes(
+      from: documents.path,
+      to: support.path,
+      isBoxOpen: Hive.isBoxOpen,
+    );
 
     Hive.init(support.path);
   }
