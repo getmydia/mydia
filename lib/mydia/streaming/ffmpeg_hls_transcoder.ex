@@ -36,6 +36,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
   alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.AudioTrackSelector
+  alias Mydia.Streaming.HardwareAccel
+  alias Mydia.Streaming.HardwareAccel.Args, as: AccelArgs
 
   @type transcode_opts :: [
           input_path: String.t(),
@@ -614,55 +616,43 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
         _ -> []
       end
 
-    base_args =
-      seek_args ++
-        [
-          "-i",
-          input_path
-        ]
-
-    # Build video encoding args
-    video_args =
+    # Acceleration is decided only on the encode branch. A stream copy returns
+    # empty argument lists, so nothing here can turn a copy into a transcode.
+    accel =
       if video_codec == "copy" do
-        # Stream copy - no encoding parameters needed
-        ["-c:v", "copy"]
+        %AccelArgs{tier: :software, input: [], video: []}
       else
-        # Base encoding parameters shared by CRF and ABR modes
-        base_video = [
-          "-c:v",
-          video_codec,
-          "-preset",
-          preset,
-          "-pix_fmt",
-          "yuv420p",
-          "-profile:v",
-          "high",
-          "-g",
-          "60",
-          "-bf",
-          "0"
-        ]
+        capabilities =
+          Keyword.get_lazy(opts, :capabilities, fn -> HardwareAccel.capabilities() end)
 
-        # Rate control: ABR when max_bitrate is set, CRF otherwise
-        rate_control =
+        video_bitrate_kbps =
           if max_bitrate do
-            video_kbps = max(max_bitrate - @audio_bitrate_kbps, 100)
-
-            Logger.info("Using ABR mode: video=#{video_kbps}kbps, total_cap=#{max_bitrate}kbps")
-
-            [
-              "-b:v",
-              "#{video_kbps}k",
-              "-maxrate",
-              "#{video_kbps}k",
-              "-bufsize",
-              "#{video_kbps * 2}k"
-            ]
-          else
-            ["-crf", to_string(crf)]
+            kbps = max(max_bitrate - @audio_bitrate_kbps, 100)
+            Logger.info("Using ABR mode: video=#{kbps}kbps, total_cap=#{max_bitrate}kbps")
+            kbps
           end
 
-        base_video ++ scale_args(max_height) ++ rate_control
+        AccelArgs.build(capabilities,
+          source_codec: media_file && media_file.codec,
+          max_height: max_height,
+          video_bitrate_kbps: video_bitrate_kbps,
+          crf: crf,
+          preset: preset,
+          video_codec: video_codec
+        )
+      end
+
+    Logger.info("Encoding tier: #{accel.tier}")
+
+    # -hwaccel flags must precede -i. After it, ffmpeg has already selected a
+    # decoder and silently ignores them.
+    base_args = seek_args ++ accel.input ++ ["-i", input_path]
+
+    video_args =
+      if video_codec == "copy" do
+        ["-c:v", "copy"]
+      else
+        accel.video
       end
 
     # Build audio encoding args
@@ -826,63 +816,6 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
         :no_match
     end
   end
-
-  # Builds the video scale filter. Every encode gets one; only the ceiling is
-  # optional.
-  #
-  # `-2` keeps the width proportional to the source and divisible by two,
-  # which H.264 requires; hardcoding both dimensions (the previous `-s
-  # WxH`) distorted anything that was not 16:9. `min(h, ih)` clamps against
-  # the *input* height so a rung above the source never upscales, which
-  # would burn CPU to produce a larger, blurrier picture.
-  #
-  # The comma inside `min()` is backslash-escaped because FFmpeg reads a
-  # bare comma in a filtergraph as a filter separator. The usual shell form
-  # `-vf scale=-2:'min(720,ih)'` is wrong here: these arguments go straight
-  # to a port with no shell, so the quotes would arrive literally and the
-  # filter would fail to parse.
-  #
-  # `2*trunc(.../2)` rounds the height down to an even number, and it is the
-  # reason the uncapped clause emits a filter at all rather than nothing. An
-  # odd frame height makes libx264 with `-pix_fmt yuv420p` refuse to open the
-  # encoder outright ("height not divisible by 2", exit 187): the transcode
-  # dies before writing a playlist, the client's playlist wait times out, and
-  # the viewer gets a generic playback error with nothing in it pointing here.
-  #
-  # That is reachable on the DEFAULT path, not just under a cap. The old
-  # hardcoded `-s 1280x720` evened every transcode as a side effect; removing
-  # it (correctly, since it also squished everything that was not 16:9) took
-  # the evening with it. VP9 and AV1 both permit odd frame heights and are
-  # exactly the codecs this module force-transcodes, and ordinary rips like
-  # 720x405 and 848x477 are odd too. Rounding down rather than up is what
-  # keeps the no-upscale guarantee; `-2` then tracks the width to it, which is
-  # what preserves the aspect ratio.
-  #
-  # Only ever reached on the encode branch — a stream copy returns before
-  # this, so no filter can turn a copy into a transcode.
-  defp scale_args(height) when is_integer(height) and height > 0 do
-    ["-vf", "scale=-2:2*trunc(min(#{height}\\,ih)/2)"]
-  end
-
-  # A zero or negative ceiling would scale to nothing. It can only arrive from
-  # a misconfigured `streaming.max_transcode_height` (the schema rejects it,
-  # but a stale cached runtime config could still carry one), so say so rather
-  # than silently ignoring it and leaving the operator to wonder why their cap
-  # does nothing. The encode still gets the evening filter: a bad ceiling is
-  # no reason to hand libx264 an odd height.
-  defp scale_args(height) when is_integer(height) do
-    Logger.warning(
-      "Ignoring a non-positive transcode height ceiling (#{height}); " <>
-        "encoding at the source resolution"
-    )
-
-    even_height_args()
-  end
-
-  defp scale_args(_), do: even_height_args()
-
-  # No ceiling: keep the source resolution, rounded down to an even height.
-  defp even_height_args, do: ["-vf", "scale=-2:2*trunc(ih/2)"]
 
   @doc """
   Composes a requested output height with the operator's configured ceiling
