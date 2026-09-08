@@ -72,7 +72,9 @@ defmodule Mydia.Streaming.HlsSession do
       segment_waiters: %{},
       window_generation: 0,
       ready: false,
-      ready_waiters: []
+      ready_waiters: [],
+      accel: :auto,
+      accel_fallbacks: 0
     ]
 
     @type t :: %__MODULE__{
@@ -96,7 +98,9 @@ defmodule Mydia.Streaming.HlsSession do
             segment_waiters: %{non_neg_integer() => [GenServer.from()]},
             window_generation: non_neg_integer(),
             ready: boolean(),
-            ready_waiters: list()
+            ready_waiters: list(),
+            accel: :auto | :none,
+            accel_fallbacks: non_neg_integer()
           }
   end
 
@@ -494,6 +498,36 @@ defmodule Mydia.Streaming.HlsSession do
     playlist_mode == :full and FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate)
   end
 
+  @doc """
+  Decides what to do when the backend died of a hardware initialisation failure.
+
+  Returns `{:retry, state}` with acceleration disabled for the rest of the
+  session, or `:stop` when this session has already fallen back once. Public so
+  the decision is testable without starting a backend.
+  """
+  @spec hwaccel_fallback(State.t(), non_neg_integer()) :: {:retry, State.t()} | :stop
+  def hwaccel_fallback(%State{accel_fallbacks: n}, _target) when n >= 1, do: :stop
+
+  def hwaccel_fallback(%State{} = state, target) do
+    software =
+      Mydia.Streaming.HardwareAccel.Capabilities.software(
+        "fell back to software after a hardware failure in this session"
+      )
+
+    backend_opts =
+      state.backend_opts
+      |> Keyword.put(:capabilities, software)
+      |> Keyword.put(:start_number, target)
+
+    {:retry,
+     %{
+       state
+       | accel: :none,
+         accel_fallbacks: state.accel_fallbacks + 1,
+         backend_opts: backend_opts
+     }}
+  end
+
   @impl true
   def handle_call(:get_info, _from, state) do
     # Getting info counts as activity
@@ -651,6 +685,36 @@ defmodule Mydia.Streaming.HlsSession do
       # Still active, schedule next check
       state = schedule_timeout_check(state)
       {:noreply, state}
+    end
+  end
+
+  # A hardware initialisation failure is recoverable: re-encode the same window
+  # in software rather than taking the session down. Reuses relocate/2, which
+  # already knows how to stop a backend, restart it at a target segment number,
+  # and bump window_generation so the dead backend's late polls are discarded.
+  def handle_info(
+        {:DOWN, _ref, :process, pid, {:hwaccel_failed, output}},
+        %{backend_pid: pid} = state
+      ) do
+    Mydia.Streaming.HardwareAccel.report_failure(
+      :vaapi,
+      state.media_file && state.media_file.codec
+    )
+
+    target = Keyword.get(state.backend_opts, :start_number, 0)
+
+    case hwaccel_fallback(state, target) do
+      {:retry, state} ->
+        Logger.warning(
+          "Session #{state.session_id}: hardware encode failed, restarting in software " <>
+            "at segment #{target}"
+        )
+
+        {:noreply, relocate(%{state | backend_pid: nil}, target)}
+
+      :stop ->
+        Logger.error("Session #{state.session_id}: hardware fallback already used; giving up")
+        {:stop, {:backend_terminated, {:hwaccel_failed, output}}, state}
     end
   end
 
@@ -844,7 +908,8 @@ defmodule Mydia.Streaming.HlsSession do
         if(opts[:show_audio_language],
           do: [show_audio_language: opts[:show_audio_language]],
           else: []
-        )
+        ) ++
+        if(opts[:capabilities], do: [capabilities: opts[:capabilities]], else: [])
 
     # Only a :full session has a TranscodeWindow to mark ready, so only wire
     # the callback that reports segment completion for that mode. A :window
