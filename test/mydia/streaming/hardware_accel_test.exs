@@ -18,6 +18,18 @@ defmodule Mydia.Streaming.HardwareAccelTest do
     name
   end
 
+  # A dead lease holder's :DOWN reaches HardwareAccel independently of any
+  # :DOWN the test process set up for its own synchronization, so there is no
+  # ordering guarantee between "test observed the holder die" and "server
+  # finished reclaiming the slot". Poll briefly instead of asserting once.
+  defp eventually(fun, attempts \\ 50) do
+    cond do
+      fun.() -> true
+      attempts > 0 -> Process.sleep(5) && eventually(fun, attempts - 1)
+      true -> false
+    end
+  end
+
   describe "capabilities/0 without a running process" do
     test "reports software rather than crashing" do
       # Every existing streaming test runs with no probe process. They must keep
@@ -76,6 +88,47 @@ defmodule Mydia.Streaming.HardwareAccelTest do
 
       assert :refused = HardwareAccel.lease(name, :playback)
     end
+
+    test "reclaims a lease when its holder dies without releasing it" do
+      # The realistic failure mode this feature will meet: an ffmpeg-wrapping
+      # session gets OOM-killed or times out and never calls release/2. The
+      # slot must come back on its own rather than leaking until HardwareAccel
+      # itself restarts.
+      name = start_with(@vaapi, cap: 1)
+      test_pid = self()
+
+      holder =
+        spawn(fn ->
+          {:ok, ref} = HardwareAccel.lease(name, :playback)
+          send(test_pid, {:leased, ref})
+
+          receive do
+            :die -> :ok
+          end
+        end)
+
+      assert_receive {:leased, _ref}
+      assert :refused = HardwareAccel.lease(name, :playback)
+
+      holder_monitor = Process.monitor(holder)
+      send(holder, :die)
+      assert_receive {:DOWN, ^holder_monitor, :process, ^holder, :normal}
+
+      assert eventually(fn -> match?({:ok, _}, HardwareAccel.lease(name, :playback)) end)
+    end
+
+    test "a normal release demonitors, so a late DOWN cannot double-free the slot" do
+      name = start_with(@vaapi, cap: 1)
+
+      {:ok, ref} = HardwareAccel.lease(name, :playback)
+      :ok = HardwareAccel.release(name, ref)
+
+      # Two independent leases now fit in the cap-1 slot: proof the release
+      # path leaves no stray monitor that could otherwise reclaim a slot a
+      # second, unrelated holder is legitimately using.
+      assert {:ok, _} = HardwareAccel.lease(name, :playback)
+      assert :refused = HardwareAccel.lease(name, :playback)
+    end
   end
 
   describe "report_failure/3" do
@@ -101,6 +154,60 @@ defmodule Mydia.Streaming.HardwareAccelTest do
       HardwareAccel.report_failure(name, :vaapi, "not_a_codec")
 
       assert HardwareAccel.capabilities(name).decode_profiles == [:hevc, :av1]
+    end
+  end
+
+  describe "call timeout hardening" do
+    test "lease/2 and report_failure/3 wait out a slow probe instead of racing the default GenServer timeout" do
+      name = :"hwaccel_#{System.unique_integer([:positive])}"
+
+      start_supervised!({HardwareAccel,
+       name: name,
+       cap: 3,
+       probe: fn _ ->
+         # Longer than the default GenServer.call/3 timeout (5s). Before
+         # this fix, lease/2 and report_failure/3 used that default while
+         # queued behind this same handle_continue, so both would raise
+         # exit(:timeout) here instead of simply waiting the probe out the
+         # way capabilities/1 already does.
+         Process.sleep(5_300)
+         @vaapi
+       end})
+
+      lease_task = Task.async(fn -> HardwareAccel.lease(name, :playback) end)
+      failure_task = Task.async(fn -> HardwareAccel.report_failure(name, :vaapi, "hevc") end)
+
+      assert {:ok, _ref} = Task.await(lease_task, 10_000)
+      assert :ok = Task.await(failure_task, 10_000)
+    end
+  end
+
+  describe "the config wiring" do
+    test "passes the configured hwaccel and device through to the probe" do
+      # Every other test here injects a probe stub that ignores its argument,
+      # so nothing exercises handle_continue's read of Mydia.Config.get().
+      # Pin it: a future rename of the streaming.hwaccel/hwaccel_device schema
+      # fields would otherwise make handle_continue's Map.get/3 calls fall
+      # back to :auto/nil silently, disabling the feature while the rest of
+      # the suite stayed green.
+      test_pid = self()
+      name = :"hwaccel_#{System.unique_integer([:positive])}"
+
+      start_supervised!(
+        {HardwareAccel,
+         name: name,
+         cap: 3,
+         probe: fn opts ->
+           send(test_pid, {:probe_opts, opts})
+           Capabilities.software("stub")
+         end}
+      )
+
+      assert_receive {:probe_opts, opts}
+
+      streaming = Mydia.Config.get().streaming
+      assert Keyword.fetch!(opts, :hwaccel) == streaming.hwaccel
+      assert Keyword.fetch!(opts, :device) == streaming.hwaccel_device
     end
   end
 

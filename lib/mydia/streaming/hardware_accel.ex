@@ -29,6 +29,16 @@ defmodule Mydia.Streaming.HardwareAccel do
   # of the decode list.
   @default_demote_after 3
 
+  # Every call below queues behind handle_continue's :probe message, which can
+  # legitimately run for a few seconds (a hung vainfo or driver ioctl makes
+  # that worse, not better). The default GenServer.call/3 timeout of 5s would
+  # then raise exit(:timeout) in the caller instead of returning :refused,
+  # turning a slow probe into a crash in the playback path -- exactly what
+  # this module's "a refusal means encode in software, not an error" contract
+  # promises callers it won't do. One shared value so lease/2 and
+  # report_failure/3 cannot drift from capabilities/1's timeout again.
+  @call_timeout 30_000
+
   defmodule State do
     @moduledoc false
     defstruct [:capabilities, :cap, :demote_after, :probe, leases: %{}, failures: %{}]
@@ -44,7 +54,7 @@ defmodule Mydia.Streaming.HardwareAccel do
   def capabilities(server \\ __MODULE__) do
     case GenServer.whereis(server) do
       nil -> Capabilities.software("hardware acceleration probe is not running")
-      pid -> GenServer.call(pid, :capabilities, 30_000)
+      pid -> GenServer.call(pid, :capabilities, @call_timeout)
     end
   end
 
@@ -52,12 +62,17 @@ defmodule Mydia.Streaming.HardwareAccel do
   Claims a hardware slot. `:background` is refused one slot early so an
   interactive playback start never waits behind a batch download transcode. A
   refusal means "encode in software", not an error.
+
+  Monitors the calling process for the lifetime of the lease: if the holder
+  dies without calling `release/2` (an ffmpeg-wrapping session killed by OOM
+  or a timeout, the realistic failure mode here), the slot is reclaimed on the
+  resulting `:DOWN` rather than leaking until this process restarts.
   """
   @spec lease(GenServer.server(), :playback | :background) :: {:ok, reference()} | :refused
   def lease(server \\ __MODULE__, priority) do
     case GenServer.whereis(server) do
       nil -> :refused
-      pid -> GenServer.call(pid, {:lease, priority})
+      pid -> GenServer.call(pid, {:lease, priority}, @call_timeout)
     end
   end
 
@@ -74,7 +89,7 @@ defmodule Mydia.Streaming.HardwareAccel do
   def report_failure(server \\ __MODULE__, backend, source_codec) do
     case GenServer.whereis(server) do
       nil -> :ok
-      pid -> GenServer.call(pid, {:report_failure, backend, source_codec})
+      pid -> GenServer.call(pid, {:report_failure, backend, source_codec}, @call_timeout)
     end
   end
 
@@ -124,9 +139,13 @@ defmodule Mydia.Streaming.HardwareAccel do
     {:reply, :refused, state}
   end
 
-  def handle_call({:lease, priority}, _from, state) do
+  def handle_call({:lease, priority}, {pid, _tag}, state) do
     if map_size(state.leases) < limit_for(priority, state.cap) do
-      ref = make_ref()
+      # The monitor reference doubles as the lease reference handed back to
+      # the caller: it is already unique, and using it directly means the
+      # :DOWN handler below needs no separate index to find which lease a
+      # dead holder held.
+      ref = Process.monitor(pid)
       {:reply, {:ok, ref}, %{state | leases: Map.put(state.leases, ref, priority)}}
     else
       {:reply, :refused, state}
@@ -168,6 +187,25 @@ defmodule Mydia.Streaming.HardwareAccel do
 
   @impl true
   def handle_cast({:release, ref}, state) do
+    # Flush so a DOWN that already fired (or fires concurrently with this
+    # cast) for a ref we're about to forget cannot land in the mailbox and be
+    # treated as a live message later.
+    Process.demonitor(ref, [:flush])
     {:noreply, %{state | leases: Map.delete(state.leases, ref)}}
+  end
+
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    case Map.pop(state.leases, ref) do
+      {nil, _leases} ->
+        {:noreply, state}
+
+      {priority, leases} ->
+        Logger.info(
+          "Reclaimed a leaked #{priority} hardware lease: holder exited (#{inspect(reason)})"
+        )
+
+        {:noreply, %{state | leases: leases}}
+    end
   end
 end
