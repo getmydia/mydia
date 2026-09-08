@@ -260,14 +260,25 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
             nil -> nil
           end
 
-        collect_bounded(port, os_pid, "", timeout)
+        # An absolute deadline, not a per-receive timeout. `after` applies to
+        # each `receive`, so passing the bound straight down would restart the
+        # whole window on every {:data, _} chunk, and a child that hangs while
+        # still writing output would run indefinitely -- exactly the case this
+        # bound exists to stop.
+        deadline =
+          case timeout do
+            :infinity -> :infinity
+            ms -> System.monotonic_time(:millisecond) + ms
+          end
+
+        collect_bounded(port, os_pid, "", deadline)
     end
   end
 
-  defp collect_bounded(port, os_pid, buffer, timeout) do
+  defp collect_bounded(port, os_pid, buffer, deadline) do
     receive do
       {^port, {:data, data}} ->
-        collect_bounded(port, os_pid, buffer <> data, timeout)
+        collect_bounded(port, os_pid, buffer <> data, deadline)
 
       {^port, {:exit_status, 0}} ->
         {:ok, buffer}
@@ -275,11 +286,16 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
       {^port, {:exit_status, code}} ->
         {:error, {:exit, code, buffer}}
     after
-      timeout ->
+      remaining_ms(deadline) ->
         kill_bounded(port, os_pid)
         {:error, :timeout}
     end
   end
+
+  defp remaining_ms(:infinity), do: :infinity
+
+  defp remaining_ms(deadline),
+    do: max(deadline - System.monotonic_time(:millisecond), 0)
 
   # Closing the port stops it relaying further messages, but does not by
   # itself terminate a running child -- Erlang's default port behaviour on

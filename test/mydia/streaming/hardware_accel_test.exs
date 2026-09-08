@@ -22,7 +22,11 @@ defmodule Mydia.Streaming.HardwareAccelTest do
   # :DOWN the test process set up for its own synchronization, so there is no
   # ordering guarantee between "test observed the holder die" and "server
   # finished reclaiming the slot". Poll briefly instead of asserting once.
-  defp eventually(fun, attempts \\ 50) do
+  # 400 attempts at 5ms is a 2s ceiling, matching the explicit budgets on the
+  # assert_receive calls beside it. The holder's :DOWN and HardwareAccel's
+  # reclamation of its slot are independently ordered, so a shorter wait can
+  # still lose the race under the concurrent PostgreSQL CI job.
+  defp eventually(fun, attempts \\ 400) do
     cond do
       fun.() -> true
       attempts > 0 -> Process.sleep(5) && eventually(fun, attempts - 1)
