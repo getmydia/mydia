@@ -24,33 +24,97 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   attr :summary, :map, required: true
   attr :retention_days, :integer, required: true
+  attr :scanning, :boolean, required: true
+  attr :sweeping, :boolean, required: true
+  attr :audit, :map, default: nil
+  attr :counts, :map, required: true
+  attr :reason, :atom, default: nil
+  attr :selection, :any, required: true
+  attr :total_matching, :integer, required: true
+  attr :page_size, :integer, required: true
+  attr :files, :list, required: true
+  attr :page, :integer, required: true
+
+  def trash_tab(assigns) do
+    ~H"""
+    <div id="trash-content" class="p-4 sm:p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <.icon name="hero-trash" class="w-5 h-5 opacity-60" /> Trash
+          <span class="badge badge-ghost">{@summary.count}</span>
+        </h2>
+
+        <div class="join">
+          <button
+            id="trash-scan"
+            type="button"
+            class="btn btn-sm btn-ghost join-item"
+            phx-click="scan_directory"
+          >
+            <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Scan directory
+          </button>
+          <button
+            id="trash-empty"
+            type="button"
+            class="btn btn-sm btn-error join-item"
+            phx-click="confirm_empty"
+            disabled={@summary.count == 0}
+          >
+            <.icon name="hero-trash" class="w-4 h-4" /> Empty trash
+          </button>
+        </div>
+      </div>
+
+      <.summary_bar summary={@summary} retention_days={@retention_days} />
+
+      <div :if={@scanning} class="alert">
+        <span class="loading loading-spinner loading-sm"></span> Reading the trash directory...
+      </div>
+
+      <div :if={@sweeping} class="alert">
+        <span class="loading loading-spinner loading-sm"></span> Sweeping the trash directory...
+      </div>
+
+      <.audit_result :if={@audit} audit={@audit} />
+
+      <div class="space-y-2">
+        <h3 class="font-semibold flex items-center gap-2 px-1">
+          <.icon name="hero-funnel" class="w-4 h-4 opacity-60" /> Filter by reason
+        </h3>
+        <.reason_filters counts={@counts} active={@reason} />
+      </div>
+
+      <.bulk_bar
+        selection={@selection}
+        total_matching={@total_matching}
+        page_size={@page_size}
+      />
+
+      <.trash_list
+        files={@files}
+        retention_days={@retention_days}
+        selection={@selection}
+      />
+
+      <.pagination
+        :if={@total_matching > @page_size}
+        page={@page}
+        page_size={@page_size}
+        total_matching={@total_matching}
+      />
+    </div>
+    """
+  end
+
+  attr :summary, :map, required: true
+  attr :retention_days, :integer, required: true
 
   def summary_bar(assigns) do
     ~H"""
-    <div id="trash-summary" class="flex flex-wrap items-center gap-3 mb-6">
-      <div class="flex items-center gap-2">
-        <.icon name="hero-trash" class="w-5 h-5 text-base-content/60" />
-        <span class="font-semibold">{file_count(@summary.count)}</span>
-        <span class="text-base-content/60">
-          · {humanize_bytes(@summary.bytes)} tracked · purged after {@retention_days} days
-        </span>
-      </div>
-
-      <div class="ml-auto flex gap-2">
-        <button id="trash-scan" type="button" class="btn btn-sm btn-ghost" phx-click="scan_directory">
-          <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Scan trash directory
-        </button>
-        <button
-          id="trash-empty"
-          type="button"
-          class="btn btn-sm btn-error"
-          phx-click="confirm_empty"
-          disabled={@summary.count == 0}
-        >
-          <.icon name="hero-trash" class="w-4 h-4" /> Empty trash now
-        </button>
-      </div>
-    </div>
+    <p id="trash-summary" class="text-sm text-base-content/60">
+      {file_count(@summary.count)} tracked, using {humanize_bytes(@summary.bytes)}. Files are
+      permanently deleted after {@retention_days} days.
+    </p>
     """
   end
 
@@ -59,7 +123,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   def reason_filters(assigns) do
     ~H"""
-    <div class="filter mb-5">
+    <div class="filter">
       <input
         id="trash-filter-all"
         class="btn btn-sm"
@@ -92,60 +156,67 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   def trash_list(assigns) do
     ~H"""
-    <div id="trash-list" class="space-y-2">
-      <div :if={@files == []} class="text-center py-12 text-base-content/60">
-        Nothing in the trash.
+    <div id="trash-list">
+      <div :if={@files == []} class="alert alert-info">
+        <.icon name="hero-information-circle" class="w-5 h-5" />
+        <span>Nothing in the trash.</span>
       </div>
 
-      <div
-        :for={file <- @files}
-        id={"trash-row-#{file.id}"}
-        class="flex items-center gap-4 p-4 rounded-lg border border-base-300 hover:border-base-content/20 transition-colors"
-      >
-        <input
-          id={"trash-select-#{file.id}"}
-          type="checkbox"
-          class="checkbox checkbox-sm"
-          checked={selected?(@selection, file.id)}
-          phx-click="toggle_select"
-          phx-value-id={file.id}
-        />
+      <div :if={@files != []} class="bg-base-200 rounded-box divide-y divide-base-300">
+        <div
+          :for={file <- @files}
+          id={"trash-row-#{file.id}"}
+          class="flex items-center gap-3 p-3 sm:p-4 hover:bg-base-300/50 transition-colors"
+        >
+          <input
+            id={"trash-select-#{file.id}"}
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            checked={selected?(@selection, file.id)}
+            phx-click="toggle_select"
+            phx-value-id={file.id}
+          />
 
-        <div class="min-w-0 flex-1">
-          <div class="font-medium truncate">{label_for(file)}</div>
-          <div class="text-sm text-base-content/60 flex items-center gap-2 mt-0.5">
-            <span
-              id={"trash-reason-#{file.id}"}
-              class={["badge badge-sm", badge_class(file.trashed_reason)]}
-            >
-              {reason_label(file.trashed_reason)}
-            </span>
-            <span>{humanize_bytes(file.size)}</span>
-            <span>· trashed {relative_age(file.trashed_at)}</span>
-            <span>· purges {purge_due(file.trashed_at, @retention_days)}</span>
+          <div class="min-w-0 flex-1">
+            <div class="font-medium truncate">{label_for(file)}</div>
+            <div class="text-xs opacity-60 flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+              <span
+                id={"trash-reason-#{file.id}"}
+                class={["badge badge-sm", badge_class(file.trashed_reason)]}
+              >
+                {reason_label(file.trashed_reason)}
+              </span>
+              <span>{humanize_bytes(file.size)}</span>
+              <span>Trashed {relative_age(file.trashed_at)}</span>
+              <span>Purges {purge_due(file.trashed_at, @retention_days)}</span>
+            </div>
           </div>
-        </div>
 
-        <div class="flex gap-2 flex-shrink-0">
-          <button
-            id={"trash-restore-#{file.id}"}
-            type="button"
-            class="btn btn-sm btn-ghost"
-            phx-click="restore_file"
-            phx-value-id={file.id}
-          >
-            <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Restore
-          </button>
-          <button
-            id={"trash-purge-#{file.id}"}
-            type="button"
-            class="btn btn-sm btn-ghost text-error"
-            phx-click="purge_file"
-            phx-value-id={file.id}
-            data-confirm="Permanently delete this file? This cannot be undone."
-          >
-            <.icon name="hero-x-mark" class="w-4 h-4" /> Delete
-          </button>
+          <div class="join ml-auto sm:ml-2 shrink-0">
+            <button
+              id={"trash-restore-#{file.id}"}
+              type="button"
+              class="btn btn-sm btn-ghost join-item"
+              title="Restore"
+              aria-label="Restore"
+              phx-click="restore_file"
+              phx-value-id={file.id}
+            >
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
+            </button>
+            <button
+              id={"trash-purge-#{file.id}"}
+              type="button"
+              class="btn btn-sm btn-ghost join-item text-error"
+              title="Delete permanently"
+              aria-label="Delete permanently"
+              phx-click="purge_file"
+              phx-value-id={file.id}
+              data-confirm="Permanently delete this file? This cannot be undone."
+            >
+              <.icon name="hero-x-mark" class="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
