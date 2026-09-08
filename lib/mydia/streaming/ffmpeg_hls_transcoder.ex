@@ -71,7 +71,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       :duration,
       :started_at,
       ready_notified: false,
-      seen_segments: MapSet.new()
+      seen_segments: MapSet.new(),
+      accel_tier: :software,
+      output_buffer: ""
     ]
 
     @type t :: %__MODULE__{
@@ -89,7 +91,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             buffer: String.t(),
             duration: float() | nil,
             started_at: DateTime.t(),
-            ready_notified: boolean()
+            ready_notified: boolean(),
+            accel_tier: AccelArgs.tier(),
+            output_buffer: String.t()
           }
   end
 
@@ -204,6 +208,19 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # Build FFmpeg command
     args = build_ffmpeg_args(input_path, output_dir, opts)
 
+    # Derived from the argument list rather than by calling AccelArgs.build/2
+    # again: re-deriving from inputs risks drift, and build_ffmpeg_args/3's
+    # return shape can't change without breaking the six regression test
+    # files that assert its exact output. The gate below only needs to know
+    # whether this was a hardware attempt at all, but deriving the precise
+    # tier costs nothing and keeps the log line below accurate.
+    accel_tier =
+      cond do
+        "-hwaccel" in args -> :full_hardware
+        "-init_hw_device" in args -> :hybrid
+        true -> :software
+      end
+
     Logger.info("Starting FFmpeg HLS transcoding: #{input_path}")
     Logger.debug("FFmpeg args: #{inspect(args)}")
 
@@ -226,7 +243,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           playlist_path: playlist_path,
           buffer: "",
           duration: nil,
-          started_at: DateTime.utc_now()
+          started_at: DateTime.utc_now(),
+          accel_tier: accel_tier,
+          output_buffer: ""
         }
 
         # One timer drives both signals. Readiness is just "the playlist
@@ -265,6 +284,12 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
     # Accumulate output in buffer
     buffer = state.buffer <> data
+
+    # Separate, bounded accumulation of raw stderr so the hwaccel classifier
+    # sees the whole message rather than one chunk — `buffer` above gets
+    # cleared as soon as parse_ffmpeg_output/1 recognizes a line, which would
+    # otherwise chop a multi-line VAAPI failure apart before it could match.
+    state = %{state | output_buffer: String.slice(state.output_buffer <> data, -4_000, 4_000)}
 
     # Parse FFmpeg output for progress and duration
     state =
@@ -347,7 +372,19 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       state.on_error.(error_msg)
     end
 
-    {:stop, {:ffmpeg_failed, status}, state}
+    reason =
+      if state.accel_tier != :software and hwaccel_failure?(state.output_buffer) do
+        Logger.warning(
+          "Hardware encode failed to initialise (tier #{state.accel_tier}); " <>
+            "the session will retry in software"
+        )
+
+        {:hwaccel_failed, state.output_buffer}
+      else
+        {:ffmpeg_exit, status}
+      end
+
+    {:stop, reason, state}
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
@@ -782,6 +819,34 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
         {:error, e}
     end
   end
+
+  # Matched against ffmpeg's stderr to tell a hardware initialisation failure
+  # from an ordinary encode error. Only the former is worth retrying in
+  # software: retrying a genuine error would hide a bug behind a second, slower
+  # failure. The first pattern is captured verbatim from a container whose
+  # ffmpeg links libva with no driver installed.
+  @hwaccel_failure_patterns [
+    ~r/Failed to initialise VAAPI connection/i,
+    ~r/No VA display found/i,
+    ~r/Device creation failed/i,
+    ~r/Function not implemented/i,
+    ~r/Failed to open .*\/dev\/dri\/.*Permission denied/i,
+    ~r/for option 'init_hw_device'/i,
+    ~r/for option 'hwaccel_device'/i
+  ]
+
+  @doc """
+  Whether ffmpeg's output describes a hardware initialisation failure.
+
+  Public so the classifier can be tested against captured output without
+  starting a transcoder.
+  """
+  @spec hwaccel_failure?(String.t()) :: boolean()
+  def hwaccel_failure?(output) when is_binary(output) do
+    Enum.any?(@hwaccel_failure_patterns, &Regex.match?(&1, output))
+  end
+
+  def hwaccel_failure?(_), do: false
 
   # Parse FFmpeg output for duration, progress, and errors
   defp parse_ffmpeg_output(output) do
