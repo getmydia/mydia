@@ -147,11 +147,12 @@ defmodule Mydia.Streaming.StreamPlan do
   `effective_max_height/1`, so the latter would turn every session on a
   configured server into an encode.
 
-  `max_height` here is the **already-effective** height, with the operator's
-  ceiling applied. `for_hls/2` and `FfmpegHlsTranscoder.reencodes_video?/3` each
-  apply `effective_max_height/1` before calling in. Applying it again here would
-  be harmless today (the function takes a minimum, so it is idempotent) but it
-  would hide which layer owns the ceiling.
+  `max_height` here must already be the **effective** height, with the
+  operator's `MAX_TRANSCODE_HEIGHT` ceiling folded in: this function does not
+  call `effective_max_height/1` itself and takes whatever it is given at face
+  value. `for_hls/2` applies `effective_max_height/1` before calling in; any
+  other caller must do the same, or a configured ceiling will silently stop
+  applying to this decision.
   """
   @spec encodes_video?(Mydia.Library.MediaFile.t() | nil, integer() | nil, integer() | nil) ::
           boolean()
