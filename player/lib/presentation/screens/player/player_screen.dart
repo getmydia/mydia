@@ -1279,10 +1279,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // choice means going through a transcoded HLS session instead. Original
       // is the only rung with nothing to ask for, so it is the only one that
       // leaves the cheap path available.
+      // A null `candidatesResult` here can only be a transport failure against
+      // the route's own file id: both paths that would leave us without a
+      // usable id throw at `playFileId` above. See `nativeDirectPlayAllowed`
+      // for why unknown means direct play rather than a transcode.
       final canDirect = !kIsWeb &&
-          candidatesResult != null &&
-          _canDirectPlay(candidatesResult.candidates) &&
-          _selectedQuality.isOriginal;
+          nativeDirectPlayAllowed(
+            strategyValues: candidatesResult?.candidates
+                .map((c) => c.strategy.toJson())
+                .toList(),
+            isOriginalQuality: _selectedQuality.isOriginal,
+          );
 
       _isDirectPlay = canDirect;
 
@@ -1861,40 +1868,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return null;
   }
 
-  /// Check if the first candidate supports direct play on native.
-  ///
-  /// Delegates to [firstStrategyAllowsDirectPlay], which accepts only
-  /// DIRECT_PLAY and REMUX. HLS_COPY is deliberately excluded even when it
-  /// leads the list: the server only ever leads with HLS_COPY from its
-  /// `:needs_transcoding` branch, and HLS_COPY repackages the stream
-  /// without re-encoding it, so it still carries the exact video codec the
-  /// server just said this device cannot decode. Treating a leading
-  /// HLS_COPY as direct-playable is what let a Fire HD 10 — whose HEVC
-  /// decoder is Main 8-bit only, with no Main 10 support — stream an HEVC
-  /// Main 10 file untouched, straight into mpv's "Could not open codec.".
-  ///
-  /// This guard used to stay permissive on the theory that the native
-  /// device profile the server checks against hadn't been validated on real
-  /// hardware and might under-report a device's true decoder support. That
-  /// hedge no longer applies: `android_codec_capabilities.dart`'s
-  /// `MediaCodecList` probe against a Fire HD 10 confirmed its decoder is
-  /// exactly as limited as the server's verdict assumed — `video/hevc`
-  /// capped at 8-bit, `video/vp9` capped at 10-bit — so a
-  /// `:needs_transcoding` verdict for a codec this device cannot decode is
-  /// trustworthy, and HLS_COPY must not be used to second-guess it. REMUX
-  /// stays accepted because it only repackages a codec the compatibility
-  /// check already found acceptable into a different container — an
-  /// unrelated case.
-  bool _canDirectPlay(
-    List<Query$StreamingCandidates$streamingCandidates$candidates> candidates,
-  ) {
-    final values = candidates.map((c) => c.strategy.toJson()).toList();
-    return firstStrategyAllowsDirectPlay(values);
-  }
-
   /// Cache the Original-rung delivery subtitle from resolved candidates.
   ///
-  /// Labels only — does not change the [_canDirectPlay] playback gate.
+  /// Labels only — does not change the [nativeDirectPlayAllowed] playback gate.
   void _rememberOriginalDeliverySubtitle(
     List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
   ) {

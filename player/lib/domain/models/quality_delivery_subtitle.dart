@@ -48,6 +48,16 @@ String cappedRungDeliverySubtitle(int? maxBitrateKbps) {
 /// compatibility check already found acceptable into a different
 /// container.
 ///
+/// This guard used to stay permissive on the theory that the native device
+/// profile the server checks against hadn't been validated on real hardware
+/// and might under-report a device's true decoder support. That hedge no
+/// longer applies: `android_codec_capabilities.dart`'s `MediaCodecList` probe
+/// against a Fire HD 10 confirmed its decoder is exactly as limited as the
+/// server's verdict assumed — `video/hevc` capped at 8-bit, `video/vp9` capped
+/// at 10-bit — so a `:needs_transcoding` verdict for a codec this device
+/// cannot decode is trustworthy, and HLS_COPY must not be used to second-guess
+/// it.
+///
 /// Platform gating (`!kIsWeb`) is intentionally left to the caller — this
 /// only inspects strategy ordering.
 bool firstStrategyAllowsDirectPlay(Iterable<String> strategyValues) {
@@ -55,6 +65,34 @@ bool firstStrategyAllowsDirectPlay(Iterable<String> strategyValues) {
   if (!iterator.moveNext()) return false;
   final first = iterator.current;
   return first == 'DIRECT_PLAY' || first == 'REMUX';
+}
+
+/// Whether a native client may hand the file to mpv untouched.
+///
+/// [strategyValues] is null when the candidates call gave no answer. That is a
+/// transport failure, not a verdict: `PlayerScreen` throws before reaching this
+/// on both paths that would leave it without a usable file id, so the id in
+/// hand is still the route's own. Unknown therefore means direct play, because
+/// the alternative is asking a server we just failed to reach to run an encode
+/// first, and mpv decodes very nearly everything a transcode would produce.
+///
+/// Observed 2026-09-08: a 15s `StreamingCandidates` call surfaced as a failure
+/// and downgraded an AV1/Opus MKV that had direct-played 22 minutes earlier
+/// into a software transcode, which then died on a malformed Opus header. The
+/// cautious branch produced no playback where the cheap one would have worked.
+///
+/// A non-Original rung still vetoes. Direct play hands the file over untouched,
+/// so there is no encoder to give a height or bitrate cap to, and honouring the
+/// viewer's choice means going through an HLS session instead.
+///
+/// Platform gating (`!kIsWeb`) is left to the caller, as above.
+bool nativeDirectPlayAllowed({
+  required List<String>? strategyValues,
+  required bool isOriginalQuality,
+}) {
+  if (!isOriginalQuality) return false;
+  if (strategyValues == null) return true;
+  return firstStrategyAllowsDirectPlay(strategyValues);
 }
 
 /// Whether any candidate is a no-re-encode delivery (HLS_COPY or REMUX).

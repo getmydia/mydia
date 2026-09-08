@@ -103,4 +103,65 @@ void main() {
       );
     });
   });
+
+  group('nativeDirectPlayAllowed', () {
+    test('unknown candidates mean direct play, not a transcode', () {
+      // A null list is a transport failure, not a verdict. Falling back to a
+      // transcode asks a server we just failed to reach to do more work, and
+      // on 2026-09-08 that produced no playback at all for a file mpv decodes.
+      expect(
+        nativeDirectPlayAllowed(strategyValues: null, isOriginalQuality: true),
+        isTrue,
+      );
+    });
+
+    test('a chosen rung still vetoes, known candidates or not', () {
+      // Direct play hands the file over untouched, so there is no encoder to
+      // give the rung's height and bitrate caps to.
+      expect(
+        nativeDirectPlayAllowed(strategyValues: null, isOriginalQuality: false),
+        isFalse,
+      );
+      expect(
+        nativeDirectPlayAllowed(
+          strategyValues: const ['DIRECT_PLAY', 'TRANSCODE'],
+          isOriginalQuality: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('known candidates are still judged on their leading strategy', () {
+      expect(
+        nativeDirectPlayAllowed(
+          strategyValues: const ['DIRECT_PLAY', 'TRANSCODE'],
+          isOriginalQuality: true,
+        ),
+        isTrue,
+      );
+      expect(
+        nativeDirectPlayAllowed(
+          strategyValues: const ['REMUX', 'HLS_COPY', 'TRANSCODE'],
+          isOriginalQuality: true,
+        ),
+        isTrue,
+      );
+      // A leading HLS_COPY is the server's :needs_transcoding verdict. Unknown
+      // meaning direct play must not become a way to smuggle past it.
+      expect(
+        nativeDirectPlayAllowed(
+          strategyValues: const ['HLS_COPY', 'TRANSCODE'],
+          isOriginalQuality: true,
+        ),
+        isFalse,
+      );
+      expect(
+        nativeDirectPlayAllowed(
+          strategyValues: const [],
+          isOriginalQuality: true,
+        ),
+        isFalse,
+      );
+    });
+  });
 }
