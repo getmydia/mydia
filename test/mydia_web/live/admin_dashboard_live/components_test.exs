@@ -20,6 +20,22 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
       assert html =~ "now-playing-idle"
       assert html =~ "Nobody is watching."
       refute html =~ "BODY"
+
+      # "no box" means the idle line itself carries no box styling, not merely
+      # that the old boxed markup is gone from the fragment. Asserting on the
+      # element's own class list (rather than `refute html =~ "bg-base-200"`
+      # against the whole fragment) is what would actually catch someone
+      # adding padding/background/rounding/fixed-height back onto this <p>.
+      [idle_class] =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(p[id$="-idle"]))
+        |> LazyHTML.attribute("class")
+
+      refute idle_class =~ "bg-base-200"
+      refute idle_class =~ "rounded-box"
+      refute idle_class =~ "p-8"
+      refute idle_class =~ ~r/\bh-\d/
     end
 
     test "renders the body and no idle line when populated" do
