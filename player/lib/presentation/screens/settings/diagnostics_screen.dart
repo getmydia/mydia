@@ -5,18 +5,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/p2p/p2p_service.dart';
+import '../../../core/player/fullscreen/fullscreen_report.dart';
+import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/update/update_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
 
-/// Read-only connection internals.
+/// Read-only internals.
 ///
 /// These used to sit inline on the settings screen, where a relay URL and a
 /// peer count read as things you could act on. Nothing here is actionable
 /// except the copy button, which exists so a bug report can carry the whole
 /// picture without a screenshot.
+///
+/// The Playback section is here for the same reason and answers a question the
+/// device itself cannot otherwise be asked: on iOS Safari the fullscreen button
+/// can be present and do nothing, and every explanation for that used to be a
+/// `debugPrint` reachable only from a Mac with Web Inspector attached.
 class DiagnosticsScreen extends ConsumerWidget {
   const DiagnosticsScreen({super.key});
 
@@ -33,7 +40,7 @@ class DiagnosticsScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Connection details')),
+      appBar: AppBar(title: const Text('Diagnostics')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -89,6 +96,11 @@ class DiagnosticsScreen extends ConsumerWidget {
               ],
             ),
           ],
+          const SizedBox(height: 18),
+          ValueListenableBuilder<FullscreenReport?>(
+            valueListenable: fullscreenReport,
+            builder: (context, report, _) => _PlaybackSection(report: report),
+          ),
           const SizedBox(height: 24),
           FilledButton.icon(
             key: const Key('copy-diagnostics'),
@@ -115,6 +127,7 @@ class DiagnosticsScreen extends ConsumerWidget {
       if (status.relayUrl != null) 'Relay server: ${status.relayUrl}',
       'Peers: ${status.connectedPeersCount}',
       if (status.nodeAddr != null) 'Node address: ${status.nodeAddr}',
+      ...fullscreenReportLines(fullscreenReport.value),
     ].join('\n');
 
     await Clipboard.setData(ClipboardData(text: report));
@@ -122,6 +135,49 @@ class DiagnosticsScreen extends ConsumerWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Diagnostics copied')),
+    );
+  }
+}
+
+/// The fullscreen readout, or a line saying nothing has played yet.
+///
+/// Read-only like everything else on this screen. It exists to be looked at
+/// once, on a device whose console is unreachable, and copied.
+class _PlaybackSection extends StatelessWidget {
+  const _PlaybackSection({required this.report});
+
+  final FullscreenReport? report;
+
+  @override
+  Widget build(BuildContext context) {
+    final report = this.report;
+    return SettingsSection(
+      label: 'Playback',
+      children: [
+        if (report == null)
+          const SettingsRow.action(
+            icon: Icons.fullscreen,
+            title: 'Fullscreen',
+            subtitle: 'Nothing played yet this session',
+          )
+        else
+          for (final (label, value) in report.rows)
+            // `trailing` sits unconstrained beside the expanded title column,
+            // so a browser's rejection text laid out there overflows the row
+            // on a phone. The subtitle is inside that column and wraps.
+            if (label == FullscreenReport.lastFailureLabel)
+              SettingsRow.action(
+                icon: Icons.fullscreen,
+                title: label,
+                subtitle: value,
+              )
+            else
+              SettingsRow.action(
+                icon: Icons.fullscreen,
+                title: label,
+                trailing: _Value(value),
+              ),
+      ],
     );
   }
 }
