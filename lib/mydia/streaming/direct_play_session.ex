@@ -15,6 +15,8 @@ defmodule Mydia.Streaming.DirectPlaySession do
   alias Mydia.Repo
   alias Mydia.Downloads.TranscodeJob
 
+  @registry_name Mydia.Streaming.HlsSessionRegistry
+
   # Default timeout is 10 minutes
   @session_timeout Application.compile_env(
                      :mydia,
@@ -68,6 +70,22 @@ defmodule Mydia.Streaming.DirectPlaySession do
   """
   def stop(pid) do
     GenServer.stop(pid, :normal)
+  end
+
+  @doc """
+  Replaces this session's stream plan.
+
+  A remux tracker is reused across requests: a browser seek aborts the response
+  and immediately opens another, and `start_remux_session/3` hands back the
+  running session rather than starting a second one. A later request can
+  resolve a different audio track, and therefore a different plan, so the plan
+  the session was started with goes stale. Leaving it stale is the exact
+  failure this feature exists to remove — the dashboard describing an encode
+  that is not the one running.
+  """
+  @spec update_plan(pid(), Mydia.Streaming.StreamPlan.t()) :: :ok
+  def update_plan(pid, plan) do
+    GenServer.call(pid, {:update_plan, plan})
   end
 
   ## Server Callbacks
@@ -144,6 +162,21 @@ defmodule Mydia.Streaming.DirectPlaySession do
     {:reply, {:ok, info}, state}
   end
 
+  def handle_call({:update_plan, plan}, _from, state) do
+    # Both copies, deliberately. `Streaming.list_active_sessions/0` reads the
+    # live process when it can and falls back to the Registry metadata when
+    # that call races a shutdown, so a plan refreshed in only one place still
+    # leaves a path that reports the stale one.
+    #
+    # `Registry.update_value/3` may only be called by the key's owner. That is
+    # this process: the `:via` tuple in the child spec registered the key from
+    # inside `start_link`, so the call has to happen here rather than in the
+    # supervisor that asked for the refresh.
+    Registry.update_value(@registry_name, registry_key(state), &Map.put(&1, :plan, plan))
+
+    {:reply, :ok, %{state | plan: plan}}
+  end
+
   @impl true
   def handle_cast(:heartbeat, state) do
     state = update_activity(state)
@@ -188,6 +221,13 @@ defmodule Mydia.Streaming.DirectPlaySession do
   end
 
   ## Helpers
+
+  # Mirrors the keys HlsSessionSupervisor registers these sessions under.
+  defp registry_key(%State{kind: :remux, media_file_id: id, user_id: user_id}),
+    do: {:remux_session, id, user_id}
+
+  defp registry_key(%State{media_file_id: id, user_id: user_id}),
+    do: {:direct_session, id, user_id}
 
   defp update_activity(state) do
     if state.timeout_ref, do: Process.cancel_timer(state.timeout_ref)

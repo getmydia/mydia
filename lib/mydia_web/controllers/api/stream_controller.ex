@@ -533,22 +533,22 @@ defmodule MydiaWeb.Api.StreamController do
     # immediately opens another, and tearing the session down here would churn
     # out a second card and a second job row for one viewer. The session's own
     # inactivity timeout reaps it, fed by the :on_activity heartbeat below.
-    remux_session =
+    {remux_session, remux_status} =
       case get_user_id(conn) do
         {:ok, user_id} ->
           plan = StreamPlan.for_remux(media_file, remux_opts)
 
           case HlsSessionSupervisor.start_remux_session(media_file.id, user_id, plan) do
-            {:ok, pid, _status} ->
-              pid
+            {:ok, pid, status} ->
+              {pid, status}
 
             error ->
               Logger.warning("Failed to start remux session tracker: #{inspect(error)}")
-              nil
+              {nil, nil}
           end
 
         _ ->
-          nil
+          {nil, nil}
       end
 
     case FfmpegRemuxer.start_remux(file_path, remux_opts) do
@@ -559,6 +559,7 @@ defmodule MydiaWeb.Api.StreamController do
         )
 
       {:error, :ffmpeg_not_found} ->
+        discard_unused_remux_session(remux_session, remux_status)
         Logger.error("FFmpeg not found on system, cannot remux #{file_path}")
 
         conn
@@ -566,6 +567,7 @@ defmodule MydiaWeb.Api.StreamController do
         |> json(%{error: "Streaming not available", details: "FFmpeg is not installed"})
 
       {:error, reason} ->
+        discard_unused_remux_session(remux_session, remux_status)
         Logger.error("Failed to start remux for #{file_path}: #{inspect(reason)}")
 
         conn
@@ -573,6 +575,27 @@ defmodule MydiaWeb.Api.StreamController do
         |> json(%{error: "Failed to start streaming"})
     end
   end
+
+  # FFmpeg never started, so no bytes will ever flow and no `:on_activity`
+  # heartbeat will arrive: the tracker would sit in Now Playing as a phantom
+  # viewer, holding a `"playing"` job row, until its ten-minute inactivity
+  # timeout expired.
+  #
+  # Only `:started` is torn down. An `:existing` session belongs to another
+  # in-flight request that is streaming perfectly well — stopping it would
+  # delete that viewer's job row and clear their card out from under them.
+  # This is why the status is threaded down here rather than discarded.
+  #
+  # Note this does not contradict the "never stop on the way out" rule above:
+  # that rule is about a *successful* stream whose request ends, where a seek
+  # will reopen immediately. Here there is no stream to come back to.
+  defp discard_unused_remux_session(pid, :started) when is_pid(pid) do
+    DirectPlaySession.stop(pid)
+  catch
+    :exit, _reason -> :ok
+  end
+
+  defp discard_unused_remux_session(_pid, _status), do: :ok
 
   # Get duration for remuxing - try metadata first, then probe fresh
   defp get_duration_for_remux(media_file, file_path) do
