@@ -84,22 +84,62 @@ void main() {
     });
   });
 
-  group('strategiesAllowLosslessDelivery', () {
-    test('true when any HLS_COPY or REMUX is present', () {
+  group('hlsDeliveryIsLossless', () {
+    test('false when HLS_COPY leads, because that copy is never requested', () {
+      // The :needs_transcoding shape. pickHlsStrategy refuses a leading
+      // HLS_COPY and asks for TRANSCODE instead, so the delivery re-encodes
+      // however many HLS_COPY entries the server listed. Reporting these as
+      // lossless is what put "Original · no re-encoding" on a web session
+      // the dashboard showed re-encoding HEVC to H.264.
+      expect(hlsDeliveryIsLossless(['HLS_COPY', 'TRANSCODE']), isFalse);
       expect(
-        strategiesAllowLosslessDelivery(['REMUX', 'TRANSCODE']),
-        isTrue,
+        hlsDeliveryIsLossless(['HLS_COPY', 'HLS_COPY', 'TRANSCODE']),
+        isFalse,
       );
+    });
+
+    test('true when HLS_COPY sits behind REMUX', () {
+      // The :needs_remux shape, where the codecs are already compatible and
+      // only the container is not. pickHlsStrategy requests that HLS_COPY.
       expect(
-        strategiesAllowLosslessDelivery(['HLS_COPY', 'TRANSCODE']),
+        hlsDeliveryIsLossless(['REMUX', 'HLS_COPY', 'TRANSCODE']),
         isTrue,
       );
     });
 
-    test('false for DIRECT_PLAY + TRANSCODE only (web direct-play shape)', () {
+    test('false without any HLS_COPY to request', () {
+      // Both of these fall through to TRANSCODE.
+      expect(hlsDeliveryIsLossless(['DIRECT_PLAY', 'TRANSCODE']), isFalse);
+      expect(hlsDeliveryIsLossless(['REMUX', 'TRANSCODE']), isFalse);
+    });
+
+    test('false when empty', () {
+      expect(hlsDeliveryIsLossless([]), isFalse);
+    });
+  });
+
+  group('originalDeliverySubtitle over real candidate lists', () {
+    // Guards the pairing the bug broke: the same list must not be read as
+    // direct-playable by one helper and lossless by the other.
+    test('web HEVC session reports re-encoding, not lossless', () {
+      const hevc = ['HLS_COPY', 'HLS_COPY', 'TRANSCODE'];
       expect(
-        strategiesAllowLosslessDelivery(['DIRECT_PLAY', 'TRANSCODE']),
-        isFalse,
+        originalDeliverySubtitle(
+          canDirectPlay: false, // kIsWeb forces this false
+          hasLosslessDelivery: hlsDeliveryIsLossless(hevc),
+        ),
+        kOriginalTranscodeSubtitle,
+      );
+    });
+
+    test('web remux session still reports lossless', () {
+      const remux = ['REMUX', 'HLS_COPY', 'TRANSCODE'];
+      expect(
+        originalDeliverySubtitle(
+          canDirectPlay: false,
+          hasLosslessDelivery: hlsDeliveryIsLossless(remux),
+        ),
+        kOriginalLosslessSubtitle,
       );
     });
   });

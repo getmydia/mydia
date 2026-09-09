@@ -1928,6 +1928,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Cache the Original-rung delivery subtitle from resolved candidates.
   ///
   /// Labels only — does not change the [_canDirectPlay] playback gate.
+  ///
+  /// Both flags are read off the same two functions the playback path uses,
+  /// [firstStrategyAllowsDirectPlay] for the direct fork and
+  /// [hlsDeliveryIsLossless] (via [pickHlsStrategy]) for the HLS one, so the
+  /// label cannot describe a delivery this player never asked for.
   void _rememberOriginalDeliverySubtitle(
     List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
   ) {
@@ -1935,7 +1940,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         const <String>[];
 
     final canDirect = !kIsWeb && firstStrategyAllowsDirectPlay(values);
-    final lossless = strategiesAllowLosslessDelivery(values);
+    final lossless = hlsDeliveryIsLossless(values);
     _originalDeliverySubtitle = originalDeliverySubtitle(
       canDirectPlay: canDirect,
       hasLosslessDelivery: lossless,
