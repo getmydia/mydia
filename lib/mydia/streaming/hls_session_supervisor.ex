@@ -391,16 +391,34 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     end
   end
 
+  # The key tags that identify a viewer. The registry holds more than these:
+  # `HlsSession` also registers itself under `{:session, session_id}` so a
+  # segment request can find it in O(1) (see `start_registered_session/7`
+  # there), which means one transcoding viewer owns two entries. Selecting the
+  # registry without discriminating on the tag counted that viewer twice and
+  # rendered two identical Now Playing cards, sharing one DOM id, for a single
+  # stream. Whitelist the session tags rather than blacklisting the alias: a
+  # future lookup key added for the same reason is then excluded by default
+  # instead of silently reappearing on the dashboard.
+  @session_key_tags [:hls_session, :direct_session, :remux_session]
+
   @doc """
-  Lists all active HLS sessions.
+  Lists all active playback sessions: HLS, direct play and remux.
 
   ## Returns
 
   List of tuples: `{session_key, pid, metadata}`
   """
   def list_sessions do
-    Registry.select(@registry_name, [{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}])
+    @registry_name
+    |> Registry.select([{{:"$1", :"$2", :"$3"}, [], [{{:"$1", :"$2", :"$3"}}]}])
+    |> Enum.filter(&session_entry?/1)
   end
+
+  defp session_entry?({{tag, _media_file_id, _user_id}, _pid, _meta}),
+    do: tag in @session_key_tags
+
+  defp session_entry?(_entry), do: false
 
   @doc """
   Counts the number of active sessions.
