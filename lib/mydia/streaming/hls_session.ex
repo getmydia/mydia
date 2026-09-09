@@ -36,6 +36,7 @@ defmodule Mydia.Streaming.HlsSession do
   alias Mydia.Streaming.HardwareAccel
   alias Mydia.Streaming.HardwareAccel.Capabilities
   alias Mydia.Streaming.SegmentPlan
+  alias Mydia.Streaming.StreamPlan
   alias Mydia.Streaming.TranscodeWindow
   alias Mydia.Repo
   alias Mydia.Downloads.TranscodeJob
@@ -70,6 +71,7 @@ defmodule Mydia.Streaming.HlsSession do
       :segment_plan,
       :backend_opts,
       :hwaccel_lease,
+      :plan,
       playlist_mode: :window,
       window: nil,
       segment_waiters: %{},
@@ -97,6 +99,7 @@ defmodule Mydia.Streaming.HlsSession do
             segment_plan: Mydia.Streaming.SegmentPlan.t() | nil,
             backend_opts: keyword(),
             hwaccel_lease: reference() | nil,
+            plan: StreamPlan.t() | nil,
             playlist_mode: :full | :window,
             window: Mydia.Streaming.TranscodeWindow.t() | nil,
             segment_waiters: %{non_neg_integer() => [GenServer.from()]},
@@ -445,6 +448,10 @@ defmodule Mydia.Streaming.HlsSession do
           capabilities: capabilities
         ]
 
+        # Computed from the same opts the backend receives, so the plan and the
+        # arguments describe the same encode by construction.
+        plan = StreamPlan.for_hls(media_file, backend_opts)
+
         # Start FFmpeg backend
         case start_backend(:ffmpeg, media_file, temp_dir, job.id, backend_opts, 0) do
           {:ok, backend_pid} ->
@@ -469,7 +476,8 @@ defmodule Mydia.Streaming.HlsSession do
               playlist_mode: playlist_mode,
               window: if(playlist_mode == :full, do: TranscodeWindow.new(first_index), else: nil),
               backend_opts: backend_opts,
-              hwaccel_lease: hwaccel_lease
+              hwaccel_lease: hwaccel_lease,
+              plan: plan
             }
 
             # Schedule initial timeout check
@@ -610,13 +618,25 @@ defmodule Mydia.Streaming.HlsSession do
       |> Keyword.put(:capabilities, software)
       |> Keyword.put(:start_number, target)
 
+    plan = StreamPlan.for_hls(state.media_file, backend_opts)
+
+    # The dashboard reloads Now Playing on this. Without it a card keeps
+    # advertising VAAPI after the encoder dropped to software, which is a
+    # smaller copy of the bug this whole change exists to fix.
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      "hls_sessions",
+      {:session_updated, state.session_id}
+    )
+
     {:retry,
      %{
        state
        | accel: :none,
          accel_fallbacks: state.accel_fallbacks + 1,
          backend_opts: backend_opts,
-         hwaccel_lease: nil
+         hwaccel_lease: nil,
+         plan: plan
      }}
   end
 
@@ -642,7 +662,8 @@ defmodule Mydia.Streaming.HlsSession do
       last_activity: state.last_activity,
       backend_alive?: is_pid(state.backend_pid) and Process.alive?(state.backend_pid),
       playlist_mode: state.playlist_mode,
-      duration: state.segment_plan && state.segment_plan.duration
+      duration: state.segment_plan && state.segment_plan.duration,
+      plan: state.plan
     }
 
     {:reply, {:ok, info}, state}
