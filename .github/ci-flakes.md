@@ -689,6 +689,13 @@ nowhere near the config-add dialog. Master's most recent run (`fc4003317`,
 cleared it on the first try. Two occurrences on unrelated diffs; treat this
 signature as flake-first now.
 
+Seen a third time 2026-09-08, this time on master itself (run 34277779380, the
+merge of #751, a transcoding diff). Useful mainly as a warning about reading a
+red master: that same run was red twice, and the other job was a genuine break
+(`Test / NixOS Module`, a compile error on Elixir 1.18). Read every failing job
+in a run before deciding the push broke something, and before deciding it did
+not.
+
 **`MydiaWeb.Features.MediaBackdropTest`**, "below the lg breakpoint the backdrop
 spans the full width", failing alone (1 of 34) with `(MatchError) no match of
 right hand side value: "no backdrop rendered"`. Fixed, not flaky any more, but

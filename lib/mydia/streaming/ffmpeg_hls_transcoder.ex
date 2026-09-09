@@ -858,14 +858,22 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # exists to avoid. The real VAAPI case is still caught: it always appears
   # as the parenthetical on the connection line, which
   # `Failed to initialise VAAPI connection` already matches.
-  @hwaccel_failure_patterns [
-    ~r/Failed to initialise VAAPI connection/i,
-    ~r/No VA display found/i,
-    ~r/Device creation failed/i,
-    ~r/Failed to open .*\/dev\/dri\/.*Permission denied/i,
-    ~r/for option 'init_hw_device'/i,
-    ~r/for option 'hwaccel_device'/i
-  ]
+  #
+  # A private function rather than a module attribute: under OTP 28 a compiled
+  # regex holds a reference, and Elixir 1.18 can only escape one at the top
+  # level of an attribute, not nested inside a list. The Nix release builds on
+  # 1.18 while devenv and the Docker image are on 1.19, so a list of regexes in
+  # an attribute compiles here and breaks the NixOS module job.
+  defp hwaccel_failure_patterns do
+    [
+      ~r/Failed to initialise VAAPI connection/i,
+      ~r/No VA display found/i,
+      ~r/Device creation failed/i,
+      ~r/Failed to open .*\/dev\/dri\/.*Permission denied/i,
+      ~r/for option 'init_hw_device'/i,
+      ~r/for option 'hwaccel_device'/i
+    ]
+  end
 
   @doc """
   Whether ffmpeg's output describes a hardware initialisation failure.
@@ -875,7 +883,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   """
   @spec hwaccel_failure?(String.t()) :: boolean()
   def hwaccel_failure?(output) when is_binary(output) do
-    Enum.any?(@hwaccel_failure_patterns, &Regex.match?(&1, output))
+    Enum.any?(hwaccel_failure_patterns(), &Regex.match?(&1, output))
   end
 
   def hwaccel_failure?(_), do: false
@@ -899,7 +907,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     if size > @output_buffer_bytes do
       # A byte-based cut can land inside a multi-byte character, leaving
       # invalid UTF-8 at the start of the buffer. That's fine here: the
-      # buffer is only ever regex-matched, and @hwaccel_failure_patterns are
+      # buffer is only ever regex-matched, and hwaccel_failure_patterns/0 are
       # plain ASCII without the `u` modifier, so the regex engine matches
       # against raw bytes and never raises on the malformed prefix.
       # Scrubbing it back to valid UTF-8 would cost more than it buys.
