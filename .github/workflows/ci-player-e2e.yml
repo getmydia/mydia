@@ -24,6 +24,7 @@ on:
   # target/, which no BuildKit cache backend can carry because it lives in a
   # RUN --mount=type=cache. That needs a Dockerfile change.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [master, main]
   workflow_dispatch:

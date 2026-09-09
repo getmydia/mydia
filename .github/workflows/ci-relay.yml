@@ -9,6 +9,7 @@ on:
       - "metadata-relay/**"
       - ".github/workflows/ci-relay.yml"
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - "**"
     paths:
