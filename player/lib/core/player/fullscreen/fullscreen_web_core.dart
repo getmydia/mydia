@@ -69,6 +69,11 @@ class WebFullscreenCore {
   bool _demoted = false;
   FullscreenFailure? _lastFailure;
 
+  /// Both document routes answer through a `Promise`, so a rejection can land
+  /// after the player screen is gone. Writing `_ready` then would throw on a
+  /// disposed `ValueNotifier`.
+  bool _disposed = false;
+
   FullscreenMode get mode => _mode;
 
   ValueListenable<bool> get ready => _ready;
@@ -114,13 +119,14 @@ class WebFullscreenCore {
   void exit() {
     switch (_mode) {
       case FullscreenMode.documentElement:
-        platform.exitDocumentFullscreen((error) => _record(
-              FullscreenFailure(
-                FullscreenFailureCause.documentExitRejected,
-                detail: '$error',
-                requestInitiated: true,
-              ),
-            ));
+        platform.exitDocumentFullscreen((error) {
+          if (_disposed) return;
+          _record(FullscreenFailure(
+            FullscreenFailureCause.documentExitRejected,
+            detail: '$error',
+            requestInitiated: true,
+          ));
+        });
       case FullscreenMode.nativeVideoElement:
         if (!_videoBound) return;
         try {
@@ -140,6 +146,7 @@ class WebFullscreenCore {
   }
 
   void dispose() {
+    _disposed = true;
     platform.stopListeningDocumentFullscreen();
     platform.unbindVideo();
     _ready.dispose();
@@ -201,45 +208,36 @@ class WebFullscreenCore {
   }
 
   /// The document route was refused. Fall back if there is anywhere to fall
-  /// back to, and retry the request on the new route immediately.
+  /// back to, and let the viewer's next request use the new route.
   ///
-  /// The retry is worth attempting rather than deferring to the next tap: the
-  /// rejection arrives off a promise, so transient user activation is usually
-  /// still live. Not throwing is the strongest synchronous signal available;
-  /// the authoritative answer is the `webkitbeginfullscreen` event, which
-  /// [onChange] carries whenever it arrives.
+  /// Deliberately does not retry on this tap. `requestFullscreen()` consumes
+  /// transient user activation, and this rejection arrives after it, so
+  /// `webkitEnterFullscreen` would run without the activation WebKit demands.
+  /// It would fail, and [_enterVideo] reads a failure there as evidence the
+  /// video route is dead and retires it. The fallback would destroy itself the
+  /// first time it was needed, on the iPhone path it exists for.
   ///
-  /// The refusal itself is only announced when there is nothing left to try.
-  /// If the fallback works the viewer got what they asked for, and the readout
-  /// still records what happened on the way.
+  /// So this tap is honestly reported as refused and the next one enters by the
+  /// video route with fresh activation. One message, then it works.
   void _onDocumentRequestRejected(Object error) {
-    _record(
-      FullscreenFailure(
-        FullscreenFailureCause.documentRequestRejected,
-        detail: '$error',
-        requestInitiated: true,
-      ),
-      emit: false,
-    );
+    if (_disposed) return;
+    _record(FullscreenFailure(
+      FullscreenFailureCause.documentRequestRejected,
+      detail: '$error',
+      requestInitiated: true,
+    ));
 
-    final fellBack = _demoteAfterRefusal();
+    _demoteAfterRefusal();
     _updateReady();
-
-    if (!fellBack) {
-      onFailure(_lastFailure!);
-      return;
-    }
-    _enterVideo();
   }
 
-  /// Moves to the route left after a refusal. Returns whether a usable one
-  /// remains. One-way: see [demoteWebMode].
-  bool _demoteAfterRefusal() {
+  /// Moves to the route left after a refusal. One-way: see [demoteWebMode].
+  void _demoteAfterRefusal() {
     final next = demoteWebMode(
       current: _mode,
       videoElementFullscreenSupported: _videoSupported,
     );
-    if (next == _mode) return false;
+    if (next == _mode) return;
 
     if (_mode == FullscreenMode.documentElement) {
       platform.stopListeningDocumentFullscreen();
@@ -248,13 +246,14 @@ class WebFullscreenCore {
     _demoted = true;
 
     if (_mode == FullscreenMode.nativeVideoElement) {
+      // Bound now rather than on the next tap, so readiness is already correct
+      // and the control does not flicker away between the two.
       _bindVideoIfNeeded(requestInitiated: true, emit: false);
-      return _videoBound;
+      return;
     }
 
     platform.unbindVideo();
     _videoBound = false;
-    return false;
   }
 
   void _record(FullscreenFailure failure, {bool emit = true}) {

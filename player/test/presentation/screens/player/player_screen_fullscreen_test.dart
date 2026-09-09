@@ -114,6 +114,20 @@ void main() {
     expect(find.text('Could not enter fullscreen'), findsOneWidget);
   });
 
+  testWidgets('a refused exit says exit, not enter', (tester) async {
+    await mount(tester);
+
+    backend.fail(const FullscreenFailure(
+      FullscreenFailureCause.documentExitRejected,
+      requestInitiated: true,
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Could not exit fullscreen'), findsOneWidget);
+    expect(find.text('Could not enter fullscreen'), findsNothing);
+  });
+
   testWidgets('a failure nobody asked for stays out of the way',
       (tester) async {
     await mount(tester);

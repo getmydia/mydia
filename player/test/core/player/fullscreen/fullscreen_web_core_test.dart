@@ -161,7 +161,7 @@ void main() {
   });
 
   group('the document route is refused', () {
-    test('falls back to the video element and enters by that route', () {
+    test('falls back to the video element, ready for the next request', () {
       final harness = _Harness(documentRequestError: 'NotAllowedError');
       addTearDown(harness.dispose);
       harness.core.attach(Object());
@@ -169,28 +169,39 @@ void main() {
       harness.core.enter();
 
       expect(harness.core.mode, FullscreenMode.nativeVideoElement);
-      expect(harness.platform.enterVideoCalls, 1);
       expect(harness.core.ready.value, isTrue);
       expect(harness.core.report.demoted, isTrue);
     });
 
-    test('a fallback that worked is not announced to the viewer', () {
+    test('does not retry on the refused tap, whose activation is spent', () {
       final harness = _Harness(documentRequestError: 'NotAllowedError');
       addTearDown(harness.dispose);
       harness.core.attach(Object());
 
       harness.core.enter();
 
-      expect(harness.failures, isEmpty);
-      // Still recorded, because the readout is how anyone learns the document
-      // route is dead on this browser.
-      expect(
-        harness.core.report.lastFailure?.cause,
-        FullscreenFailureCause.documentRequestRejected,
-      );
+      // `requestFullscreen()` consumed the transient activation, so calling
+      // `webkitEnterFullscreen` now would fail for want of a gesture and
+      // `_enterVideo` would read that as the video route being dead.
+      expect(harness.platform.enterVideoCalls, 0);
     });
 
-    test('later requests take the video route directly', () {
+    test('the refusal is announced, so the dead tap is not silent', () {
+      final harness = _Harness(documentRequestError: 'NotAllowedError');
+      addTearDown(harness.dispose);
+      harness.core.attach(Object());
+
+      harness.core.enter();
+
+      expect(harness.failures, hasLength(1));
+      expect(
+        harness.failures.single.cause,
+        FullscreenFailureCause.documentRequestRejected,
+      );
+      expect(harness.failures.single.requestInitiated, isTrue);
+    });
+
+    test('the next request takes the video route and works', () {
       final harness = _Harness(documentRequestError: 'NotAllowedError');
       addTearDown(harness.dispose);
       harness.core.attach(Object());
@@ -199,7 +210,9 @@ void main() {
       harness.core.enter();
 
       expect(harness.platform.documentRequests, 1);
-      expect(harness.platform.enterVideoCalls, 2);
+      expect(harness.platform.enterVideoCalls, 1);
+      // The second tap succeeded, so it added no message of its own.
+      expect(harness.failures, hasLength(1));
     });
 
     test('the document listener is dropped on demotion', () {
@@ -233,7 +246,8 @@ void main() {
       expect(harness.failures.single.requestInitiated, isTrue);
     });
 
-    test('a fallback that also fails is announced exactly once', () {
+    test('a video route that then refuses a real tap withdraws the control',
+        () {
       final harness = _Harness(
         documentRequestError: 'NotAllowedError',
         videoEnterError: 'InvalidStateError',
@@ -242,10 +256,13 @@ void main() {
       harness.core.attach(Object());
 
       harness.core.enter();
+      // The second tap has its own activation, so this refusal is the platform
+      // speaking rather than a spent gesture, and is worth acting on.
+      harness.core.enter();
 
-      expect(harness.failures, hasLength(1));
+      expect(harness.failures, hasLength(2));
       expect(
-        harness.failures.single.cause,
+        harness.failures.last.cause,
         FullscreenFailureCause.videoEnterFailed,
       );
       expect(harness.core.mode, FullscreenMode.unsupported);
@@ -264,6 +281,19 @@ void main() {
 
       expect(harness.failures, hasLength(1));
       expect(harness.core.ready.value, isFalse);
+    });
+
+    test('a rejection landing after disposal is ignored', () {
+      final harness = _Harness(documentRequestError: 'NotAllowedError');
+      harness.platform.deferRejection = true;
+      harness.core.attach(Object());
+
+      harness.core.enter();
+      harness.core.dispose();
+
+      // A real rejection arrives off a promise and can outlive the screen.
+      // Writing readiness here would throw on the disposed notifier.
+      expect(harness.platform.releaseRejection, returnsNormally);
     });
   });
 
@@ -427,9 +457,20 @@ class _FakePlatform implements WebFullscreenPlatform {
   int enterVideoCalls = 0;
   int exitVideoCalls = 0;
 
+  /// Holds the rejection instead of delivering it, so a test can land one
+  /// after `dispose()` the way a real promise can.
+  bool deferRejection = false;
+  void Function()? _pendingRejection;
+
   Object? _currentPlayer;
   void Function(bool)? _documentListener;
   void Function(bool)? _videoListener;
+
+  void releaseRejection() {
+    final pending = _pendingRejection;
+    _pendingRejection = null;
+    pending?.call();
+  }
 
   void emitDocumentFullscreen(bool value) => _documentListener?.call(value);
 
@@ -449,10 +490,16 @@ class _FakePlatform implements WebFullscreenPlatform {
   void requestDocumentFullscreen(void Function(Object error) onRejected) {
     documentRequests++;
     final error = documentRequestError;
-    // Synchronous, unlike a real promise rejection. The state machine treats
-    // it the same either way, and a synchronous fake keeps the assertions
-    // readable.
-    if (error != null) onRejected(error);
+    if (error == null) return;
+    // Synchronous by default, unlike a real promise rejection. The state
+    // machine treats it the same either way, and a synchronous fake keeps the
+    // assertions readable. `deferRejection` restores the real timing for the
+    // one case that turns on it: a rejection outliving the screen.
+    if (deferRejection) {
+      _pendingRejection = () => onRejected(error);
+      return;
+    }
+    onRejected(error);
   }
 
   @override

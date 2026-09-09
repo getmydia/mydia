@@ -162,11 +162,21 @@ class _PlaybackSection extends StatelessWidget {
           )
         else
           for (final (label, value) in report.rows)
-            SettingsRow.action(
-              icon: Icons.fullscreen,
-              title: label,
-              trailing: _Value(value),
-            ),
+            // `trailing` sits unconstrained beside the expanded title column,
+            // so a browser's rejection text laid out there overflows the row
+            // on a phone. The subtitle is inside that column and wraps.
+            if (label == FullscreenReport.lastFailureLabel)
+              SettingsRow.action(
+                icon: Icons.fullscreen,
+                title: label,
+                subtitle: value,
+              )
+            else
+              SettingsRow.action(
+                icon: Icons.fullscreen,
+                title: label,
+                trailing: _Value(value),
+              ),
       ],
     );
   }

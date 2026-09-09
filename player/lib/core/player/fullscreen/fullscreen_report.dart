@@ -73,6 +73,12 @@ class FullscreenReport {
         videoElementFullscreenSupported: videoElementFullscreenSupported,
       );
 
+  /// The one row whose value is free-form platform text rather than a short
+  /// token. A WebKit rejection reason has no length bound, so the screen wraps
+  /// this row instead of laying it out as trailing text. Named here so the
+  /// screen does not have to match on a literal that lives in [rows].
+  static const String lastFailureLabel = 'Last failure';
+
   /// Rows for the diagnostics readout, in display order.
   ///
   /// Pure and shared by the section and the copy button so the two cannot drift
@@ -88,7 +94,7 @@ class FullscreenReport {
           ('document.fullscreenEnabled', '$documentFullscreenEnabled'),
         if (videoElementFullscreenSupported != null)
           ('Video element fullscreen', '$videoElementFullscreenSupported'),
-        if (lastFailure != null) ('Last failure', '$lastFailure'),
+        if (lastFailure != null) (lastFailureLabel, '$lastFailure'),
       ];
 
   @override

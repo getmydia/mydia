@@ -4382,10 +4382,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _publishFullscreenReport();
     if (!failure.requestInitiated) return;
     if (!mounted) return;
+    // A refused exit is also viewer-initiated, so it reaches here too. Saying
+    // "could not enter" to someone trying to leave fullscreen would describe
+    // the opposite of what they did.
+    final message = switch (failure.cause) {
+      FullscreenFailureCause.documentExitRejected ||
+      FullscreenFailureCause.videoExitFailed =>
+        'Could not exit fullscreen',
+      _ => 'Could not enter fullscreen',
+    };
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Could not enter fullscreen'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
