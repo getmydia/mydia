@@ -94,13 +94,23 @@ defmodule Mydia.NoNestedRegexAttributesTest do
     assert nested_regex_attributes(~S"""
              @pattern ~R/^(disc|disk)\d+$/i
            """) == []
+
+    # The name alone is not the tell. A false positive here would block an
+    # attribute holding no regex at all.
+    assert nested_regex_attributes(~S"""
+             @labels ["Regex.compile_options"]
+           """) == []
   end
 
   # `~r` and `~R` build the same struct -- the uppercase sigil only turns off
   # interpolation and escape processing -- and an attribute's value is
   # evaluated at compile time, so a `Regex.compile` call in one lands a
   # reference there just as a sigil does. All three forms count.
-  @regex_forms ~r/~[rR][\/|"'({\[<]|Regex\.compile/
+  # The call syntax is required, not just the name: a bare `Regex.compile`
+  # substring also matches longer identifiers and ordinary text, so
+  # `@labels ["Regex.compile_options"]` would be flagged for containing no
+  # regex at all.
+  @regex_forms ~r/~[rR][\/|"'({\[<]|Regex\.compile!?\s*\(/
 
   # Matches `@name` followed by an opening `[`, `{` or `%{` on the same line,
   # then scans forward to the line that closes it at the same indentation. A
