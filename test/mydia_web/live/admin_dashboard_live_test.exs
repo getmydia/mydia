@@ -42,12 +42,37 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
     refute has_element?(view, "#kpi-bandwidth")
   end
 
-  test "renders empty states on an idle server", %{conn: conn, token: token} do
+  test "collapses empty sections to a single line on an idle server", %{conn: conn, token: token} do
     {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
 
-    assert has_element?(view, "#now-playing-empty")
+    assert has_element?(view, "#now-playing-idle")
+    assert has_element?(view, "#recent-activity-idle")
+    refute has_element?(view, "#now-playing-empty")
     refute has_element?(view, "#bandwidth-chart")
-    refute has_element?(view, "#bandwidth-chart-empty")
+  end
+
+  test "the idle line names when something last played", %{conn: conn, token: token} do
+    movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "Harbor Lights"})
+    media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+    viewer = Mydia.AccountsFixtures.user_fixture()
+
+    :ok = Mydia.Streaming.emit_playback_started(media_file.id, viewer.id)
+
+    {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+    assert view |> element("#now-playing-idle") |> render() =~ "Last played"
+  end
+
+  test "the idle line says only that nobody is watching when there is no history", %{
+    conn: conn,
+    token: token
+  } do
+    {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+    idle = view |> element("#now-playing-idle") |> render()
+
+    assert idle =~ "Nobody is watching."
+    refute idle =~ "Last played"
   end
 
   describe "background transcodes" do
@@ -100,7 +125,7 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
   # with `media_item_id` NULL and the session list required the latter.
   test "an episode stream appears in now playing", %{conn: conn, token: token} do
     show =
-      Mydia.MediaFixtures.media_item_fixture(%{type: "tv_show", title: "House of the Dragon"})
+      Mydia.MediaFixtures.media_item_fixture(%{type: "tv_show", title: "The Vantage Point"})
 
     episode = Mydia.MediaFixtures.episode_fixture(%{media_item_id: show.id})
     media_file = Mydia.MediaFixtures.media_file_fixture(%{episode_id: episode.id})
@@ -115,9 +140,9 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
 
     {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
 
-    refute has_element?(view, "#now-playing-empty")
+    refute has_element?(view, "#now-playing-idle")
     assert has_element?(view, "#now-playing-#{media_file.id}")
-    assert render(view) =~ "House of the Dragon"
+    assert render(view) =~ "The Vantage Point"
   end
 
   # LazyHTML.filter/2 matches only the fragment's root nodes (see

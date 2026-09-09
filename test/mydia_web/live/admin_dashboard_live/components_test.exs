@@ -5,6 +5,49 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
 
   alias MydiaWeb.AdminDashboardLive.Components
 
+  describe "dash_section/1" do
+    test "renders one line and no box when empty" do
+      html =
+        render_component(&Components.dash_section/1, %{
+          id: "now-playing",
+          title: "Now Playing",
+          icon: "hero-play-circle",
+          empty?: true,
+          empty_text: "Nobody is watching.",
+          inner_block: [%{__slot__: :inner_block, inner_block: fn _, _ -> "BODY" end}]
+        })
+
+      assert html =~ "now-playing-idle"
+      assert html =~ "Nobody is watching."
+      refute html =~ "BODY"
+    end
+
+    test "renders the body and no idle line when populated" do
+      html =
+        render_component(&Components.dash_section/1, %{
+          id: "now-playing",
+          title: "Now Playing",
+          icon: "hero-play-circle",
+          empty?: false,
+          inner_block: [%{__slot__: :inner_block, inner_block: fn _, _ -> "BODY" end}]
+        })
+
+      assert html =~ "BODY"
+      refute html =~ "now-playing-idle"
+    end
+  end
+
+  describe "elapsed_label/1" do
+    test "formats a bare duration with no trailing ago" do
+      now = DateTime.utc_now()
+
+      assert Components.elapsed_label(DateTime.add(now, -30, :second)) == "under a minute"
+      assert Components.elapsed_label(DateTime.add(now, -300, :second)) == "5m"
+      assert Components.elapsed_label(DateTime.add(now, -3 * 3600, :second)) == "3h"
+      assert Components.elapsed_label(DateTime.add(now, -2 * 86_400, :second)) == "2d"
+    end
+  end
+
   describe "plays_chart/1" do
     test "draws an axis rather than an empty box when every day is zero" do
       days = for i <- 0..6, do: %{date: Date.add(~D[2026-09-03], i), movies: 0, episodes: 0}

@@ -4,6 +4,7 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   alias Mydia.Downloads
   alias Mydia.Playback
   alias Mydia.Streaming
+  alias MydiaWeb.AdminDashboardLive.Components
 
   # Now Playing updates on PubSub push; only the day-bucketed figures need a
   # timer, since a daily bucket does not move often.
@@ -66,10 +67,13 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
       )
       |> Enum.filter(&(&1.type == "download"))
 
+    {activity, last_play_at} = recent_activity()
+
     socket
     |> assign(:active_sessions, sessions)
     |> assign(:background_jobs, background_jobs)
-    |> assign(:recent_activity, recent_activity())
+    |> assign(:recent_activity, activity)
+    |> assign(:last_play_at, last_play_at)
   end
 
   defp load_history(socket) do
@@ -103,6 +107,15 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   defp plays_on(nil), do: 0
   defp plays_on(day), do: day.movies + day.episodes
 
+  # `recent_plays/1` reads playback.started events, so this is when a play
+  # began. There is no durable session-end record, and claiming a stream
+  # "ended" would be a lie the data cannot support.
+  defp now_playing_idle_text(nil), do: "Nobody is watching."
+
+  defp now_playing_idle_text(at) do
+    "Nobody is watching. Last played #{Components.elapsed_label(at)} ago."
+  end
+
   defp recent_activity do
     job_preloads = [:user, media_file: [:media_item, episode: [:media_item]]]
 
@@ -111,7 +124,7 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
 
     # Plays, not progress rows: a media-server sync writes progress for watches
     # that happened elsewhere and stamps it with the sync time, which flooded
-    # this list with imported Plex history the moment a sync ran.
+    # this list with imported history the moment a sync ran.
     plays = Playback.Stats.recent_plays(15)
 
     job_items =
@@ -120,8 +133,12 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
     history_items =
       Enum.map(plays, &%{type: :watch_history, data: &1, timestamp: &1.last_watched_at})
 
-    (job_items ++ history_items)
-    |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
-    |> Enum.take(20)
+    items =
+      (job_items ++ history_items)
+      |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
+      |> Enum.take(20)
+
+    # recent_plays/1 is ordered newest first, so the head is the last play.
+    {items, plays |> List.first() |> then(&(&1 && &1.last_watched_at))}
   end
 end

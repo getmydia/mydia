@@ -37,6 +37,60 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     """
   end
 
+  @doc """
+  A dashboard section that collapses to a single line when it has nothing to
+  show, rather than reserving a placeholder box.
+
+  `empty_text` is only read when `empty?` is true, so a section that can never
+  be empty passes neither.
+  """
+  attr :id, :string, required: true
+  attr :title, :string, required: true
+  attr :icon, :string, required: true
+  attr :empty?, :boolean, default: false
+  attr :empty_text, :string, default: nil
+  slot :actions
+  slot :inner_block, required: true
+
+  def dash_section(assigns) do
+    ~H"""
+    <div id={@id}>
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <h3 class="text-lg font-semibold flex items-center gap-2">
+          <.icon name={@icon} class="w-5 h-5 text-primary" />{@title}
+        </h3>
+        {render_slot(@actions)}
+      </div>
+      <p
+        :if={@empty?}
+        id={"#{@id}-idle"}
+        class="flex items-center gap-2 text-sm text-base-content/50"
+      >
+        <.icon name={@icon} class="w-4 h-4 opacity-40" />{@empty_text}
+      </p>
+      <div :if={!@empty?}>{render_slot(@inner_block)}</div>
+    </div>
+    """
+  end
+
+  @doc """
+  A bare duration such as "3h" or "2d".
+
+  Separate from `relative_time/1` because the callers here read "Last played
+  3h ago" and "Idle for 3h", and the second must not carry the suffix.
+  """
+  @spec elapsed_label(DateTime.t()) :: String.t()
+  def elapsed_label(datetime) do
+    diff = DateTime.diff(DateTime.utc_now(), datetime, :second)
+
+    cond do
+      diff < 60 -> "under a minute"
+      diff < 3600 -> "#{div(diff, 60)}m"
+      diff < 86_400 -> "#{div(diff, 3600)}h"
+      true -> "#{div(diff, 86_400)}d"
+    end
+  end
+
   @ranges [7, 30, 90]
 
   attr :days, :list, required: true
