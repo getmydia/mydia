@@ -3,21 +3,8 @@
     <div class="space-y-6 sm:space-y-8 p-4 sm:p-6">
       <MydiaWeb.AdminDashboardLive.Components.kpi_row
         active_streams={length(@active_sessions)}
-        total_mbps={
-          @samples
-          |> List.last()
-          |> then(&((&1 && &1.sessions) || %{}))
-          |> Map.values()
-          |> Enum.sum()
-        }
         plays_today={@plays_today}
         plays_week={@plays_week}
-        unmeasured_count={@samples |> List.last() |> then(&((&1 && &1.unmeasured_count) || 0))}
-      />
-
-      <MydiaWeb.AdminDashboardLive.Components.bandwidth_chart
-        samples={@samples}
-        unmeasured_count={@samples |> List.last() |> then(&((&1 && &1.unmeasured_count) || 0))}
       />
 
       <div>

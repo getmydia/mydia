@@ -2,44 +2,22 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
-  alias Mydia.Streaming.SessionSampler.Sample
   alias MydiaWeb.AdminDashboardLive.ChartGeometry
 
-  @series_fills ~w(fill-primary fill-secondary fill-accent fill-info fill-success fill-warning)
-  @max_series length(@series_fills)
   @chart_w 600
   @chart_h 160
   @stack_gap 2
 
-  @doc """
-  Stable fill class for a session key. Public so the recolor regression test can
-  assert the same class appears before and after another session ends.
-  """
-  def series_fill(key), do: Enum.at(@series_fills, :erlang.phash2(key, length(@series_fills)))
-
-  defp series_swatch(key), do: String.replace_prefix(series_fill(key), "fill-", "bg-")
-
   attr :active_streams, :integer, required: true
-  attr :total_mbps, :float, required: true
   attr :plays_today, :integer, required: true
   attr :plays_week, :integer, required: true
-  attr :unmeasured_count, :integer, required: true
 
   def kpi_row(assigns) do
     ~H"""
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <div id="kpi-active-streams" class="stat bg-base-200 rounded-box shadow-sm">
         <div class="stat-title">Active streams</div>
         <div class="stat-value text-2xl">{@active_streams}</div>
-      </div>
-      <div id="kpi-bandwidth" class="stat bg-base-200 rounded-box shadow-sm">
-        <div class="stat-title">Bandwidth</div>
-        <div class="stat-value text-2xl">
-          {format_mbps(@total_mbps)}<span class="text-sm font-normal opacity-60 ml-1">Mbps</span>
-        </div>
-        <div class="stat-desc">
-          Estimated{if @unmeasured_count > 0, do: ", #{@unmeasured_count} unmeasured", else: ""}
-        </div>
       </div>
       <div id="kpi-plays-today" class="stat bg-base-200 rounded-box shadow-sm">
         <div class="stat-title">Plays today</div>
@@ -49,86 +27,6 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
         <div class="stat-title">Plays this week</div>
         <div class="stat-value text-2xl">{@plays_week}</div>
       </div>
-    </div>
-    """
-  end
-
-  attr :samples, :list, required: true
-  attr :unmeasured_count, :integer, required: true
-
-  def bandwidth_chart(assigns) do
-    samples = fold_other_sessions(assigns.samples)
-    bands = ChartGeometry.stacked_bands(samples, @chart_w, @chart_h)
-    count = length(samples)
-    step = if count > 1, do: @chart_w / (count - 1), else: 0.0
-
-    assigns =
-      assigns
-      |> assign(:bands, bands)
-      |> assign(:samples, samples)
-      |> assign(:step, step)
-      |> assign(:show_legend?, length(bands) >= 2)
-      |> assign(:chart_w, @chart_w)
-      |> assign(:chart_h, @chart_h)
-
-    ~H"""
-    <div class="space-y-2">
-      <div class="flex items-baseline justify-between gap-2">
-        <h3 class="font-semibold text-base-content">Estimated bandwidth</h3>
-        <%= if @unmeasured_count > 0 do %>
-          <p class="text-xs opacity-60">
-            {@unmeasured_count} unmeasured
-          </p>
-        <% end %>
-      </div>
-      <%= if @bands == [] do %>
-        <div
-          id="bandwidth-chart-empty"
-          class="flex items-center justify-center h-40 text-sm opacity-60"
-        >
-          Collecting samples
-        </div>
-      <% else %>
-        <div id="bandwidth-chart">
-          <svg
-            viewBox={"0 0 #{@chart_w} #{@chart_h}"}
-            preserveAspectRatio="none"
-            class="w-full h-40"
-          >
-            <%= for band <- @bands do %>
-              <path
-                d={band.path}
-                class={[series_fill(band.key), "stroke-base-100"]}
-                stroke-width="2"
-                fill-opacity="0.85"
-              />
-            <% end %>
-            <%= for {sample, index} <- Enum.with_index(@samples) do %>
-              <rect
-                x={Float.round(index * @step - @step / 2, 2)}
-                y="0"
-                width={Float.round(@step, 2)}
-                height={@chart_h}
-                fill="transparent"
-              >
-                <title>
-                  {Calendar.strftime(sample.at, "%H:%M:%S")}: {format_mbps(sample_total(sample))} Mbps
-                </title>
-              </rect>
-            <% end %>
-          </svg>
-          <%= if @show_legend? do %>
-            <div id="bandwidth-chart-legend" class="flex flex-wrap gap-3 mt-2">
-              <%= for band <- @bands do %>
-                <div class="flex items-center gap-1.5 text-xs text-base-content">
-                  <span class={["inline-block w-2.5 h-2.5 rounded-sm", series_swatch(band.key)]}></span>
-                  <span class="opacity-60 truncate max-w-[10rem]">{band.key}</span>
-                </div>
-              <% end %>
-            </div>
-          <% end %>
-        </div>
-      <% end %>
     </div>
     """
   end
@@ -406,47 +304,6 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     </div>
     """
   end
-
-  defp fold_other_sessions(samples) when length(samples) < 2, do: samples
-
-  defp fold_other_sessions(samples) do
-    keys =
-      samples
-      |> Enum.flat_map(&Map.keys(&1.sessions))
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    if length(keys) <= @max_series do
-      samples
-    else
-      {kept, overflow} = Enum.split(keys, @max_series - 1)
-      kept_set = MapSet.new(kept)
-
-      Enum.map(samples, fn %Sample{} = sample ->
-        {kept_sessions, other_total} =
-          Enum.reduce(sample.sessions, {%{}, 0.0}, fn {key, value}, {acc, other} ->
-            if MapSet.member?(kept_set, key) do
-              {Map.put(acc, key, value), other}
-            else
-              {acc, other + value}
-            end
-          end)
-
-        sessions =
-          if other_total > 0 or overflow != [] do
-            # Always expose Other when we folded keys, so the band persists even
-            # at samples where overflow sessions contributed zero.
-            Map.put(kept_sessions, "Other", other_total)
-          else
-            kept_sessions
-          end
-
-        %{sample | sessions: sessions}
-      end)
-    end
-  end
-
-  defp sample_total(%Sample{sessions: sessions}), do: sessions |> Map.values() |> Enum.sum()
 
   defp format_mbps(n) when is_float(n), do: :erlang.float_to_binary(n, decimals: 1)
   defp format_mbps(n) when is_integer(n), do: Integer.to_string(n)
