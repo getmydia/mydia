@@ -42,6 +42,16 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
     refute has_element?(view, "#kpi-bandwidth")
   end
 
+  test "a server with no history shows no comparison lines", %{conn: conn, token: token} do
+    {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+    html = render(view)
+
+    refute html =~ "yesterday"
+    refute html =~ "the week before"
+    refute html =~ "Idle for"
+  end
+
   test "collapses empty sections to a single line on an idle server", %{conn: conn, token: token} do
     {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
 
@@ -232,5 +242,62 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
 
     assert kpi_value(html_90, "kpi-plays-today") == today
     assert kpi_value(html_90, "kpi-plays-week") == week
+  end
+
+  defp kpi_desc(html, id) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("##{id} .stat-desc")
+    |> LazyHTML.text()
+    |> String.trim()
+  end
+
+  # Ordering needs a timestamp the emitter cannot backdate, so this writes the
+  # event row the emitter would have written, the same way
+  # test/mydia/playback/recent_plays_test.exs does for its ordering cases.
+  defp insert_play_at(user_id, media_item_id, at) do
+    Mydia.Repo.insert!(%Mydia.Events.Event{
+      category: "playback",
+      type: "playback.started",
+      actor_type: :user,
+      actor_id: user_id,
+      resource_type: "media_item",
+      resource_id: media_item_id,
+      metadata: %{"origin" => "player"},
+      inserted_at: at
+    })
+  end
+
+  # This is the case @stat_window exists for. plays_today and plays_week are
+  # tail-only aggregates: identical whether load_history/1 fetched 7, 14, 30 or
+  # 90 days, so neither can tell a fixed fourteen-day window apart from one
+  # coupled to the chart's range. plays_prior_week can: at range 7, a
+  # range-coupled fetch returns only 7 days, so week_total(stat_days, 1) reads
+  # the last 7 of a 7-element list -- the CURRENT week again -- instead of the
+  # seven days before it. The two weeks are seeded to genuinely differ so this
+  # cannot pass vacuously.
+  test "switching to a narrower range does not corrupt the prior-week comparison", %{
+    conn: conn,
+    token: token
+  } do
+    movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "The Ember Draft"})
+    viewer = Mydia.AccountsFixtures.user_fixture()
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    # Current week (today): four plays.
+    for _ <- 1..4, do: insert_play_at(viewer.id, movie.id, now)
+
+    # Prior week (ten days back, inside the 8-14-days-back block): one play.
+    insert_play_at(viewer.id, movie.id, DateTime.add(now, -10 * 86_400, :second))
+
+    {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+    html_7 =
+      view
+      |> form("#plays-range", %{"range" => "7"})
+      |> render_change()
+
+    assert kpi_value(html_7, "kpi-plays-week") == 4
+    assert kpi_desc(html_7, "kpi-plays-week") == "1 the week before"
   end
 end

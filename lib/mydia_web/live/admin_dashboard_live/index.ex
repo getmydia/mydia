@@ -85,7 +85,9 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
     |> assign(:days, Enum.take(days, -range))
     |> assign(:stat_days, stat_days)
     |> assign(:plays_today, plays_on(List.last(stat_days)))
+    |> assign(:plays_yesterday, plays_on(Enum.at(stat_days, -2)))
     |> assign(:plays_week, week_total(stat_days, 0))
+    |> assign(:plays_prior_week, week_total(stat_days, 1))
   end
 
   defp parse_range(value) do

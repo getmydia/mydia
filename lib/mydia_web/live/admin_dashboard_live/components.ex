@@ -17,6 +17,9 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   attr :active_streams, :integer, required: true
   attr :plays_today, :integer, required: true
   attr :plays_week, :integer, required: true
+  attr :plays_yesterday, :integer, required: true
+  attr :plays_prior_week, :integer, required: true
+  attr :idle_for, :string, default: nil
 
   def kpi_row(assigns) do
     ~H"""
@@ -24,14 +27,21 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
       <div id="kpi-active-streams" class="stat bg-base-200 rounded-box shadow-sm">
         <div class="stat-title">Active streams</div>
         <div class="stat-value text-2xl">{@active_streams}</div>
+        <div :if={@active_streams == 0 and @idle_for} class="stat-desc">Idle for {@idle_for}</div>
       </div>
       <div id="kpi-plays-today" class="stat bg-base-200 rounded-box shadow-sm">
         <div class="stat-title">Plays today</div>
         <div class="stat-value text-2xl">{@plays_today}</div>
+        <div :if={@plays_today > 0 or @plays_yesterday > 0} class="stat-desc">
+          {@plays_yesterday} yesterday
+        </div>
       </div>
       <div id="kpi-plays-week" class="stat bg-base-200 rounded-box shadow-sm">
         <div class="stat-title">Plays this week</div>
         <div class="stat-value text-2xl">{@plays_week}</div>
+        <div :if={@plays_week > 0 or @plays_prior_week > 0} class="stat-desc">
+          {@plays_prior_week} the week before
+        </div>
       </div>
     </div>
     """

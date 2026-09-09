@@ -183,18 +183,52 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
   end
 
   describe "kpi_row/1" do
+    defp kpi(overrides) do
+      defaults = [
+        active_streams: 0,
+        plays_today: 0,
+        plays_week: 0,
+        plays_yesterday: 0,
+        plays_prior_week: 0,
+        idle_for: nil
+      ]
+
+      render_component(&Components.kpi_row/1, Keyword.merge(defaults, overrides))
+    end
+
     test "renders all three figures and no bandwidth tile" do
-      html =
-        render_component(&Components.kpi_row/1,
-          active_streams: 3,
-          plays_today: 4,
-          plays_week: 21
-        )
+      html = kpi(active_streams: 3, plays_today: 4, plays_week: 21)
 
       assert html =~ "kpi-active-streams"
       assert html =~ "kpi-plays-today"
       assert html =~ "kpi-plays-week"
       refute html =~ "kpi-bandwidth"
+    end
+
+    test "carries prior-period comparisons when there is history" do
+      html = kpi(plays_today: 0, plays_yesterday: 4, plays_week: 3, plays_prior_week: 7)
+
+      assert html =~ "4 yesterday"
+      assert html =~ "7 the week before"
+    end
+
+    test "omits a comparison when both its figures are zero" do
+      html = kpi(plays_today: 0, plays_yesterday: 0, plays_week: 0, plays_prior_week: 0)
+
+      refute html =~ "yesterday"
+      refute html =~ "the week before"
+    end
+
+    test "reports how long the server has been idle" do
+      assert kpi(active_streams: 0, idle_for: "3h") =~ "Idle for 3h"
+    end
+
+    test "says nothing about idleness while a stream is running" do
+      refute kpi(active_streams: 2, idle_for: "3h") =~ "Idle for"
+    end
+
+    test "says nothing about idleness on a server that has never played anything" do
+      refute kpi(active_streams: 0, idle_for: nil) =~ "Idle for"
     end
   end
 

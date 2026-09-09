@@ -4,7 +4,10 @@
       <MydiaWeb.AdminDashboardLive.Components.kpi_row
         active_streams={length(@active_sessions)}
         plays_today={@plays_today}
+        plays_yesterday={@plays_yesterday}
         plays_week={@plays_week}
+        plays_prior_week={@plays_prior_week}
+        idle_for={@last_play_at && Components.elapsed_label(@last_play_at)}
       />
 
       <MydiaWeb.AdminDashboardLive.Components.dash_section
