@@ -24,6 +24,8 @@ import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/fullscreen/fullscreen_controller.dart';
+import '../../../core/player/fullscreen/fullscreen_failure.dart';
+import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_error.dart';
@@ -201,6 +203,19 @@ class PlayerScreen extends ConsumerStatefulWidget {
         backgroundColor: Colors.black,
         body: SafeArea(top: false, child: child),
       );
+
+  /// Stands in for the platform fullscreen backend while a test is mounted.
+  ///
+  /// The real one is chosen by a conditional import, so a `flutter test` host
+  /// always gets the native backend, which is unconditionally ready. That makes
+  /// the case this change exists for — a route that exists but cannot be used
+  /// right now, so the button must not draw — unreachable without a seam. The
+  /// controller is a field initializer with no constructor to thread an
+  /// argument through, hence a static rather than a parameter.
+  ///
+  /// Null in production, and a test that sets it must clear it.
+  @visibleForTesting
+  static FullscreenBackendFactory? debugFullscreenBackendFactory;
 
   /// Whether this build should install the playback key handler.
   ///
@@ -687,7 +702,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// optimistically and never learned that the platform had refused, which is
   /// why the button reported "exit fullscreen" over an inline video on
   /// iPhone Safari.
-  final FullscreenController _fullscreen = FullscreenController();
+  final FullscreenController _fullscreen = FullscreenController(
+    backendFactory: PlayerScreen.debugFullscreenBackendFactory,
+  );
+
+  /// Live while the screen is mounted. Carries refused requests to the viewer;
+  /// see [_onFullscreenFailure].
+  StreamSubscription<FullscreenFailure>? _fullscreenFailures;
 
   // Always-on-top state. Not persisted — starts false for every playback
   // session and is force-disabled in dispose() if still true, so it never
@@ -777,6 +798,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _loadAutoSkipPreference();
     _fullscreen.isFullscreen.addListener(_onFullscreenChanged);
+    // Availability moves at runtime on web: the media element route is not
+    // ready until a player is attached, and a refused request can retire the
+    // route mid-session. The button follows it, so the rebuild has to as well.
+    _fullscreen.available.addListener(_onFullscreenChanged);
+    _fullscreenFailures = _fullscreen.failures.listen(_onFullscreenFailure);
     _initializePlayer();
 
     // Force landscape orientation on mobile devices. Skipped on a television,
@@ -1709,7 +1735,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _videoController = VideoController(player);
     // Hands the backend the media_kit player so the web backend can reach the
     // underlying HTMLVideoElement. A no-op on native.
+    //
+    // Called again for every source this screen plays, and that repetition is
+    // load-bearing: each one is a fresh `Player` with a fresh element, and a
+    // backend still holding the previous one would fullscreen a disposed
+    // element. The backend keys on instance identity, so a repeat with the same
+    // player is free.
     _fullscreen.attach(player);
+    _publishFullscreenReport();
 
     // Bound before `open` deliberately: a source that fails to resolve at all
     // (a deleted file id, a dead HLS session) errors during the open itself,
@@ -4251,6 +4284,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.keyF:
+        // Gated on the same signal as the button, so the two cannot disagree
+        // about whether fullscreen exists. Claiming the key while doing nothing
+        // would swallow it from anything else that wants it.
+        if (!_fullscreen.available.value) return KeyEventResult.ignored;
         _fullscreen.toggle();
         return KeyEventResult.handled;
 
@@ -4319,10 +4356,38 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Rebuilds so the chrome's fullscreen icon follows observed state. Cheap:
-  /// the notifier only fires on a real transition.
+  /// Rebuilds so the chrome's fullscreen icon follows observed state, and so
+  /// the button appears and disappears with the route. Cheap: both notifiers
+  /// only fire on a real transition.
   void _onFullscreenChanged() {
+    _publishFullscreenReport();
     if (mounted) setState(() {});
+  }
+
+  /// Hands the current picture to `/settings/diagnostics`, which outlives this
+  /// screen and is where a bug report is assembled. See
+  /// `fullscreen_report_signal.dart`.
+  void _publishFullscreenReport() =>
+      fullscreenReportSignal.value = _fullscreen.report;
+
+  /// Tells the viewer that a fullscreen request was refused.
+  ///
+  /// Only requests get a message. A capability probe that threw while the
+  /// screen was opening is real and lands in `/settings/diagnostics`, but
+  /// announcing it to someone who never asked for fullscreen is noise.
+  ///
+  /// The text stays plain on purpose: a WebKit rejection reason is not
+  /// something a viewer can act on, and the detail is in the readout.
+  void _onFullscreenFailure(FullscreenFailure failure) {
+    _publishFullscreenReport();
+    if (!failure.requestInitiated) return;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not enter fullscreen'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   /// Toggle always-on-top across desktop platforms.
@@ -4359,6 +4424,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // `_element` is nulled only after dispose returns, so it still reads true.
     // Then exit before `dispose()`, which disposes the notifier underneath it.
     _fullscreen.isFullscreen.removeListener(_onFullscreenChanged);
+    _fullscreen.available.removeListener(_onFullscreenChanged);
+    unawaited(_fullscreenFailures?.cancel());
+    _fullscreenFailures = null;
     if (_fullscreen.isFullscreen.value) {
       _fullscreen.exit();
     }
@@ -4801,7 +4869,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           // Null where no fullscreen route exists, which hides the button
           // rather than leaving a dead one — matching how `onQualityTap`
           // above hides itself at a single quality rung.
-          onFullscreenTap: _fullscreen.available ? _fullscreen.toggle : null,
+          onFullscreenTap:
+              _fullscreen.available.value ? _fullscreen.toggle : null,
           onAlwaysOnTopTap: _toggleAlwaysOnTop,
           onPreviousEpisode: _hasPreviousEpisode ? _playPreviousEpisode : null,
           onNextEpisode: _hasNextEpisode ? _playNextEpisode : null,
