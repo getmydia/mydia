@@ -16,14 +16,15 @@ defmodule Mydia.Streaming.StreamPlan do
   (`lib/mydia/settings/runtime_config.ex:172`). No database, no registry, no
   port, so a plan can be asserted directly in a unit test.
 
-  `for_hls/2` serves the HLS transcoder and may encode either stream. A
-  `for_remux/2` constructor for the fMP4 remuxer, where video is always
-  copied by definition and only audio may be converted, is planned for a
-  later task and does not exist yet.
+  `for_hls/2` serves the HLS transcoder and may encode either stream.
+  `for_remux/2` serves the fMP4 remuxer, where video is always copied by
+  definition and only audio may be converted.
   """
 
   alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.AudioTrackSelector
+  alias Mydia.Streaming.Compatibility
+  alias Mydia.Streaming.DeviceProfile
   alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HardwareAccel
   alias Mydia.Streaming.HardwareAccel.Args, as: AccelArgs
@@ -140,6 +141,67 @@ defmodule Mydia.Streaming.StreamPlan do
       accel: accel,
       selected_audio: selected_audio
     }
+  end
+
+  @doc """
+  The plan for an fMP4 remux, from the same opts `FfmpegRemuxer.build_ffmpeg_args/2` reads.
+
+  Video is always copied: that is what REMUX means, and the strategy is only
+  offered when the client already decodes the source. Audio is copied only when
+  the *mapped* stream is one the caller's device profile accepts, which is a
+  different question from `media_file.audio_codec`, the first stream, that the
+  candidate was chosen from.
+  """
+  @spec for_remux(Mydia.Library.MediaFile.t() | nil, keyword()) :: t()
+  def for_remux(media_file, opts) do
+    {from_width, from_height} = source_dimensions(media_file)
+    selected = AudioTrackSelector.select_for_playback(media_file, opts)
+
+    from_codec =
+      case selected do
+        %StreamInfo{codec: codec} when is_binary(codec) -> codec
+        _ -> media_file && media_file.audio_codec
+      end
+
+    action = if remux_audio_compatible?(selected, opts), do: :copy, else: :encode
+
+    %__MODULE__{
+      video: %Video{
+        action: :copy,
+        from_codec: media_file && media_file.codec,
+        to_codec: media_file && media_file.codec,
+        from_width: from_width,
+        from_height: from_height,
+        to_width: from_width,
+        to_height: from_height,
+        tier: nil
+      },
+      audio: %Audio{
+        action: action,
+        from_codec: from_codec,
+        to_codec: if(action == :copy, do: from_codec, else: @audio_target_codec),
+        language: selected && selected.language,
+        stream_index: selected && selected.index,
+        channels: selected && selected.channels
+      },
+      container: :fmp4,
+      max_bitrate_kbps: nil,
+      accel: nil,
+      selected_audio: selected
+    }
+  end
+
+  # No stream was selected, so no -map is emitted and ffmpeg's implicit
+  # selection stands. That is the pre-existing behaviour for an unanalysed
+  # file, and the codec the strategy was chosen from is the one it will pick,
+  # so a blanket copy is correct there.
+  defp remux_audio_compatible?(nil, _opts), do: true
+
+  defp remux_audio_compatible?(%StreamInfo{codec: codec}, opts) do
+    case Keyword.get(opts, :device_profile) do
+      nil -> Compatibility.compatible_audio_codec?(codec)
+      %DeviceProfile{} = profile -> Compatibility.compatible_audio_codec?(codec, profile)
+    end
   end
 
   @doc """

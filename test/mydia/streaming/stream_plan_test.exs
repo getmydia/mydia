@@ -236,4 +236,68 @@ defmodule Mydia.Streaming.StreamPlanTest do
       refute StreamPlan.encodes_video?(file, nil, nil)
     end
   end
+
+  describe "for_remux/2" do
+    test "video is never encoded" do
+      # REMUX means repackaging. The strategy is only offered because the
+      # client can already decode the video, so touching it would be pure
+      # waste and would contradict the candidate the client accepted.
+      plan = StreamPlan.for_remux(media_file(codec: "hevc"), [])
+
+      assert plan.video.action == :copy
+      assert plan.video.from_codec == "hevc"
+      assert plan.video.to_codec == "hevc"
+      assert plan.container == :fmp4
+      assert plan.video.tier == nil
+      assert plan.accel == nil
+    end
+
+    test "a compatible mapped audio track is copied" do
+      # The mapped stream, not media_file.audio_codec, decides this: without an
+      # analysed audio stream select_for_playback/2 returns nil, and a nil
+      # selection always copies regardless of codec (see the next test), which
+      # would make this pass for the wrong reason.
+      file =
+        media_file(
+          audio_codec: "aac",
+          metadata: %FileMetadata{
+            width: 1920,
+            height: 1080,
+            streams: [%StreamInfo{index: 1, type: :audio, codec: "aac"}]
+          }
+        )
+
+      plan = StreamPlan.for_remux(file, [])
+
+      assert plan.audio.action == :copy
+    end
+
+    test "an incompatible mapped audio track is encoded to aac" do
+      # A blanket -c copy would put e.g. E-AC-3 into the fMP4 while the
+      # advertised MIME still said mp4a.40.2, so the browser plays silence.
+      file =
+        media_file(
+          audio_codec: "eac3",
+          metadata: %FileMetadata{
+            width: 1920,
+            height: 1080,
+            streams: [%StreamInfo{index: 1, type: :audio, codec: "eac3"}]
+          }
+        )
+
+      plan = StreamPlan.for_remux(file, [])
+
+      assert plan.audio.action == :encode
+      assert plan.audio.to_codec == "aac"
+    end
+
+    test "geometry is the source's, unchanged" do
+      plan = StreamPlan.for_remux(media_file(codec: "h264"), [])
+
+      assert plan.video.from_height == 1080
+      assert plan.video.to_height == 1080
+      assert plan.video.from_width == 1920
+      assert plan.video.to_width == 1920
+    end
+  end
 end
