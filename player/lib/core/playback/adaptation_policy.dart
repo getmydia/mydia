@@ -54,10 +54,12 @@ class AdaptationPolicy {
 
   AdaptationAction observe(HealthSample sample) {
     if (_done) return const NoAction();
+    final wasVerifying = verifying;
     _record(sample);
     if (source == SourceKind.transcode) return const NoAction();
 
-    final action = verifying ? _verify(sample) : _later(sample);
+    final action = wasVerifying ? _verify(sample) : _later(sample);
+    if (wasVerifying && !verifying) _stalls.clear();
     if (action is! NoAction) _done = true;
     return action;
   }
@@ -97,6 +99,9 @@ class AdaptationPolicy {
   int _dropLimit() =>
       (thresholds.maxDropsPerSecond * thresholds.dropWindow.inSeconds).round();
 
+  bool _hasCompleteDropWindow() =>
+      _recentDrops.length >= thresholds.dropWindow.inSeconds;
+
   /// Drops in the most recent [AdaptationThresholds.dropWindow].
   int _lastWindowDrops() {
     final size = thresholds.dropWindow.inSeconds;
@@ -135,7 +140,7 @@ class AdaptationPolicy {
     if (sample.fault && !_advanced) {
       return _fallback(FailureReason.decodeFailed);
     }
-    if (_lastWindowDrops() > _dropLimit()) {
+    if (_hasCompleteDropWindow() && _lastWindowDrops() > _dropLimit()) {
       return _fallback(FailureReason.decodeTooSlow);
     }
     if (_stalls.length >= thresholds.verificationStalls) {

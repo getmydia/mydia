@@ -87,6 +87,13 @@ void main() {
       );
     });
 
+    test('a partial drop window cannot trigger a strict fallback', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+
+      expect(policy.observe(s.next(dropped: 11)), isA<NoAction>());
+    });
+
     test('unknown dropped frames never count', () {
       final policy = AdaptationPolicy(source: SourceKind.direct);
       final s = _Script();
@@ -168,6 +175,23 @@ void main() {
       policy.observe(s.next());
       expect(policy.verifying, isFalse);
     });
+
+    test('the sample completing verification uses strict drop rules', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+
+      _drive(policy, List.generate(10, (_) => s.next()));
+      _drive(policy, List.generate(9, (_) => s.next(dropped: 1)));
+
+      final action = policy.observe(s.next(dropped: 2));
+
+      expect(action, isA<FallbackToTranscode>());
+      expect(
+        (action as FallbackToTranscode).reason,
+        FailureReason.decodeTooSlow,
+      );
+      expect(policy.done, isTrue);
+    });
   });
 
   group('after verification', () {
@@ -200,6 +224,24 @@ void main() {
         ...List.generate(30, (_) => s.next()),
       ];
       expect(_drive(policy, samples), isA<NoAction>());
+    });
+
+    test('later stalls exclude verification stalls', () {
+      final policy = AdaptationPolicy(
+        source: SourceKind.direct,
+        thresholds: const AdaptationThresholds(verificationStalls: 3),
+      );
+      final s = _Script();
+
+      _drive(policy, [
+        s.next(buffering: true),
+        s.next(),
+        s.next(buffering: true),
+        ...List.generate(20, (_) => s.next()),
+      ]);
+
+      expect(policy.verifying, isFalse);
+      expect(policy.observe(s.next(buffering: true)), isA<NoAction>());
     });
 
     test('a stall older than 120 s no longer counts', () {
