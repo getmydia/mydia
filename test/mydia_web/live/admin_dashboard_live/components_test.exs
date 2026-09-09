@@ -6,24 +6,38 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
   alias MydiaWeb.AdminDashboardLive.Components
 
   describe "plays_chart/1" do
-    test "renders an empty state when every day is zero" do
-      days = for i <- 0..6, do: %{date: Date.add(~D[2026-08-12], -i), movies: 0, episodes: 0}
+    test "draws an axis rather than an empty box when every day is zero" do
+      days = for i <- 0..6, do: %{date: Date.add(~D[2026-09-03], i), movies: 0, episodes: 0}
 
       html = render_component(&Components.plays_chart/1, days: days)
 
-      assert html =~ "plays-chart-empty"
+      refute html =~ "plays-chart-empty"
+      assert html =~ "plays-chart"
+      assert html =~ "Sep 03"
     end
 
     test "renders a bar per day when there is data" do
       days = [
-        %{date: ~D[2026-08-11], movies: 2, episodes: 1},
-        %{date: ~D[2026-08-12], movies: 0, episodes: 3}
+        %{date: ~D[2026-09-01], movies: 2, episodes: 1},
+        %{date: ~D[2026-09-02], movies: 0, episodes: 3}
       ]
 
       html = render_component(&Components.plays_chart/1, days: days)
 
       assert html =~ "plays-chart"
       assert html =~ "<rect"
+    end
+
+    test "labels the y-axis with the peak play count" do
+      days = [
+        %{date: ~D[2026-09-01], movies: 2, episodes: 4},
+        %{date: ~D[2026-09-02], movies: 0, episodes: 1}
+      ]
+
+      html = render_component(&Components.plays_chart/1, days: days)
+
+      assert html =~ ">6</text>"
+      assert html =~ ">0</text>"
     end
   end
 

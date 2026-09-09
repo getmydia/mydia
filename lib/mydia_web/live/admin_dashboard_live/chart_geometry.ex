@@ -10,6 +10,9 @@ defmodule MydiaWeb.AdminDashboardLive.ChartGeometry do
   whatever the container is; callers pass nominal width and height.
   """
 
+  # Five is the most labels that stay legible across 600px at 9px type.
+  @x_tick_count 5
+
   @doc """
   One column per day, each carrying stacked movie and episode segments.
 
@@ -20,11 +23,7 @@ defmodule MydiaWeb.AdminDashboardLive.ChartGeometry do
   def bar_columns([], _width, _height), do: []
 
   def bar_columns(days, width, height) do
-    peak =
-      days
-      |> Enum.map(&(&1.movies + &1.episodes))
-      |> Enum.max(fn -> 0 end)
-      |> max(1)
+    peak = peak_plays(days)
 
     count = length(days)
     slot = width / count
@@ -54,4 +53,54 @@ defmodule MydiaWeb.AdminDashboardLive.ChartGeometry do
       }
     end)
   end
+
+  @doc """
+  Y-axis ticks in whole plays: zero, the midpoint, and the peak.
+
+  Deduplicated, because a peak of 1 would otherwise place the midpoint on top
+  of the peak. Every tick names a value the chart actually reaches.
+  """
+  @spec y_ticks([map()], number()) :: [%{value: non_neg_integer(), y: float()}]
+  def y_ticks([], _height), do: []
+
+  def y_ticks(days, height) do
+    peak = peak_plays(days)
+
+    [0, div(peak + 1, 2), peak]
+    |> Enum.uniq()
+    |> Enum.map(fn value ->
+      %{value: value, y: r(height - value / peak * height)}
+    end)
+  end
+
+  @doc """
+  X-axis ticks, at most #{@x_tick_count} of them, centred on their column.
+
+  Dates carry the day at every range. Month-only labels would repeat across a
+  ninety-day window, which reads as a rendering fault rather than a scale.
+  """
+  @spec x_ticks([map()], number()) :: [%{label: String.t(), x: float()}]
+  def x_ticks([], _width), do: []
+
+  def x_ticks(days, width) do
+    count = length(days)
+    slot = width / count
+    stride = max(div(count - 1, @x_tick_count - 1), 1)
+
+    0..(count - 1)//stride
+    |> Enum.map(fn index ->
+      day = Enum.at(days, index)
+      %{label: Calendar.strftime(day.date, "%b %d"), x: r(index * slot + slot / 2)}
+    end)
+  end
+
+  # Floored at 1 so an all-zero window divides safely and still draws an axis.
+  defp peak_plays(days) do
+    days
+    |> Enum.map(&(&1.movies + &1.episodes))
+    |> Enum.max(fn -> 0 end)
+    |> max(1)
+  end
+
+  defp r(number), do: Float.round(number * 1.0, 2)
 end
