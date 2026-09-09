@@ -4,6 +4,8 @@ defmodule MydiaWeb.TranscodesLive.Index do
   alias Phoenix.PubSub
   alias MydiaWeb.Live.Authorization
 
+  require Logger
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -40,6 +42,11 @@ defmodule MydiaWeb.TranscodesLive.Index do
   @impl true
   def handle_info({:job_updated, _id}, socket) do
     {:noreply, load_jobs(socket)}
+  end
+
+  def handle_info(msg, socket) do
+    Logger.warning("Unhandled message in TranscodesLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
   end
 
   defp load_jobs(socket) do

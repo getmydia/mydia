@@ -5,6 +5,8 @@ defmodule MydiaWeb.ActivityLive.Index do
   alias Mydia.Events.Visibility
   alias Phoenix.PubSub
 
+  require Logger
+
   @page_size 50
 
   # The chip catalog lives here rather than in Mydia.Events.Visibility so that
@@ -168,6 +170,11 @@ defmodule MydiaWeb.ActivityLive.Index do
         socket
       end
 
+    {:noreply, socket}
+  end
+
+  def handle_info(msg, socket) do
+    Logger.warning("Unhandled message in ActivityLive.Index: #{inspect(msg)}")
     {:noreply, socket}
   end
 

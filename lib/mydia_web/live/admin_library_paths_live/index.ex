@@ -94,6 +94,11 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
     {:noreply, socket}
   end
 
+  def handle_info(msg, socket) do
+    Logger.warning("Unhandled message in AdminLibraryPathsLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
+  end
+
   ## Library Path Events
 
   @impl true
