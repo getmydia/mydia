@@ -153,5 +153,17 @@ defmodule Mydia.Streaming.FfmpegScaleTest do
       assert "-c:v" in result
       assert Enum.at(result, index_of(result, "-c:v") + 1) == "copy"
     end
+
+    test "an explicit non-default codec reaches -c:v, not the plan's own libx264 default" do
+      # StreamPlan.for_hls/2 builds its accel's video args by calling
+      # AccelArgs.build/2 with a video_codec of its own -- previously a
+      # hardcoded "libx264" regardless of what the caller asked for. Since
+      # build_ffmpeg_args/3 takes video_args straight from accel.video on the
+      # encode path, an explicit override that isn't "libx264" or "copy" was
+      # silently discarded: the emitted -c:v was "libx264" no matter what.
+      result = args(video_codec: "libx265")
+
+      assert Enum.at(result, index_of(result, "-c:v") + 1) == "libx265"
+    end
   end
 end

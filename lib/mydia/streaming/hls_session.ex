@@ -497,7 +497,7 @@ defmodule Mydia.Streaming.HlsSession do
 
   # Decides whether this session is worth leasing a hardware slot for at all.
   # Only a re-encoding session ever reaches the hardware encoder --
-  # reencodes_video?/2 is the exact same decision build_ffmpeg_args/3 makes
+  # reencodes_video?/3 is the exact same decision build_ffmpeg_args/3 makes
   # between "copy" and "libx264"/"h264_vaapi" -- so a stream-copy session
   # leasing a slot it will never use would only starve a session that does.
   #
@@ -509,7 +509,7 @@ defmodule Mydia.Streaming.HlsSession do
           Mydia.Library.MediaFile.t() | nil,
           integer() | nil,
           integer() | nil
-        ) :: {Capabilities.t(), reference() | nil}
+        ) :: {Capabilities.t() | nil, reference() | nil}
   def maybe_acquire_hwaccel_lease(media_file, max_bitrate, max_height) do
     if FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate, max_height) do
       acquire_hwaccel_lease()

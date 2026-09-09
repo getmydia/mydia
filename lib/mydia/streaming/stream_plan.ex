@@ -113,7 +113,11 @@ defmodule Mydia.Streaming.StreamPlan do
             video_bitrate_kbps: video_bitrate_kbps(max_bitrate),
             crf: Keyword.get(opts, :crf, 23),
             preset: Keyword.get(opts, :preset, "medium"),
-            video_codec: "libx264"
+            # The caller's override, not a hardcoded literal: this branch is
+            # only reached when video_action is :encode, so an explicit
+            # "copy" never arrives here. Falling back to "libx264" reproduces
+            # the pre-StreamPlan default for the nil case.
+            video_codec: Keyword.get(opts, :video_codec) || "libx264"
           )
       end
 

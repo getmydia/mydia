@@ -11,7 +11,7 @@ defmodule Mydia.Streaming.HlsSessionHwaccelLeaseTest do
   why: the transcoder is restarted on every seek, and a per-transcoder lease
   would churn HardwareAccel on every one of them). That means the meaningful
   units to test are: the gating decision
-  (`maybe_acquire_hwaccel_lease/2`, whether a session bothers leasing at
+  (`maybe_acquire_hwaccel_lease/3`, whether a session bothers leasing at
   all), the "not running" fallback shape (`acquire_hwaccel_lease/0`, which
   `mix test` always exercises since `HardwareAccel` is never started in this
   suite), and the two release sites (`hwaccel_fallback/2` and `terminate/2`).
@@ -53,7 +53,7 @@ defmodule Mydia.Streaming.HlsSessionHwaccelLeaseTest do
     end
 
     test "a bitrate cap forces a re-encode and therefore a lease attempt" do
-      # max_bitrate forces reencodes_video?/2 to true regardless of codec --
+      # max_bitrate forces reencodes_video?/3 to true regardless of codec --
       # even an already-compatible h264 source is transcoded to control the
       # output bitrate.
       assert {%Capabilities{backend: :none}, nil} =

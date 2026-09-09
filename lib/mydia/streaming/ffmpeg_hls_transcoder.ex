@@ -690,7 +690,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
     # Only meaningful when the video stream is re-encoded. On a copied stream
     # the keyframes are whatever the source has, and FFmpeg rejects the flag
-    # outright. reencodes_video?/2 above is what decides whether grid_aligned
+    # outright. reencodes_video?/3 above is what decides whether grid_aligned
     # may be true; HlsSession calls it before starting or relocating the
     # encoder and passes the answer straight through as this opt.
     keyframe_args =
