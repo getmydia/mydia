@@ -16,7 +16,8 @@ defmodule MydiaWeb.Api.StreamController do
     FfmpegRemuxer,
     HlsSession,
     HlsSessionSupervisor,
-    DirectPlaySession
+    DirectPlaySession,
+    StreamPlan
   }
 
   alias MydiaWeb.Api.RangeHelper
@@ -527,10 +528,35 @@ defmodule MydiaWeb.Api.StreamController do
           _ -> []
         end
 
+    # Tracked so a remuxing viewer appears in Now Playing at all. Deliberately
+    # never stopped on the way out: a browser seek aborts this request and
+    # immediately opens another, and tearing the session down here would churn
+    # out a second card and a second job row for one viewer. The session's own
+    # inactivity timeout reaps it, fed by the :on_activity heartbeat below.
+    remux_session =
+      case get_user_id(conn) do
+        {:ok, user_id} ->
+          plan = StreamPlan.for_remux(media_file, remux_opts)
+
+          case HlsSessionSupervisor.start_remux_session(media_file.id, user_id, plan) do
+            {:ok, pid, _status} ->
+              pid
+
+            error ->
+              Logger.warning("Failed to start remux session tracker: #{inspect(error)}")
+              nil
+          end
+
+        _ ->
+          nil
+      end
+
     case FfmpegRemuxer.start_remux(file_path, remux_opts) do
       {:ok, port, os_pid} ->
         # Stream the remuxed content to the client
-        FfmpegRemuxer.stream_to_conn(conn, port, os_pid)
+        FfmpegRemuxer.stream_to_conn(conn, port, os_pid,
+          on_activity: fn -> if remux_session, do: DirectPlaySession.heartbeat(remux_session) end
+        )
 
       {:error, :ffmpeg_not_found} ->
         Logger.error("FFmpeg not found on system, cannot remux #{file_path}")

@@ -52,6 +52,11 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   # on either path lands at the same bitrate.
   @audio_bitrate_kbps 128
 
+  # How often a still-running remux reports activity to its tracking session.
+  # The session's inactivity timeout is ten minutes, so this has a wide margin
+  # while staying far below one cast per 64KB chunk.
+  @activity_interval_ms 30_000
+
   @type remux_opts :: [
           seek_seconds: number() | nil,
           duration: number() | nil,
@@ -102,6 +107,15 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
     start_ffmpeg_process(args)
   end
 
+  @doc false
+  # Public only so the throttle can be unit-tested without a live FFmpeg port.
+  @spec throttle_activity(integer() | nil, integer()) :: {boolean(), integer()}
+  def throttle_activity(nil, now), do: {true, now}
+
+  def throttle_activity(last, now) when now - last >= @activity_interval_ms, do: {true, now}
+
+  def throttle_activity(last, _now), do: {false, last}
+
   @doc """
   Streams FFmpeg output to a Plug connection using chunked transfer encoding.
 
@@ -119,6 +133,7 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   @spec stream_to_conn(Plug.Conn.t(), port(), integer(), Keyword.t()) :: Plug.Conn.t()
   def stream_to_conn(conn, port, os_pid, opts \\ []) do
     chunk_size = Keyword.get(opts, :chunk_size, 64 * 1024)
+    on_activity = Keyword.get(opts, :on_activity)
 
     # Set up chunked transfer encoding with video/mp4 content type
     conn =
@@ -128,7 +143,7 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
       |> Plug.Conn.send_chunked(200)
 
     # Stream data from FFmpeg to the connection
-    stream_loop(conn, port, os_pid, chunk_size)
+    stream_loop(conn, port, os_pid, chunk_size, on_activity, nil)
   end
 
   @doc """
@@ -277,13 +292,18 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   end
 
   # Stream data from FFmpeg port to connection
-  defp stream_loop(conn, port, os_pid, chunk_size) do
+  defp stream_loop(conn, port, os_pid, chunk_size, on_activity, last_activity) do
     receive do
       {^port, {:data, data}} ->
+        {fire?, last_activity} =
+          throttle_activity(last_activity, System.monotonic_time(:millisecond))
+
+        if fire? and is_function(on_activity, 0), do: on_activity.()
+
         # Send chunk to client
         case Plug.Conn.chunk(conn, data) do
           {:ok, conn} ->
-            stream_loop(conn, port, os_pid, chunk_size)
+            stream_loop(conn, port, os_pid, chunk_size, on_activity, last_activity)
 
           {:error, :closed} ->
             # Client disconnected
