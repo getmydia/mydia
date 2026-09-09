@@ -160,4 +160,52 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
              |> plays_columns() == 30
     end
   end
+
+  defp kpi_value(html, id) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("##{id} .stat-value")
+    |> LazyHTML.text()
+    |> String.trim()
+    |> String.to_integer()
+  end
+
+  # The whole point of splitting load_history/1 is that these two figures
+  # read a fixed fourteen-day window, independent of what the chart shows.
+  # Seeded with real plays, not zeros, so the assertion can tell "unchanged"
+  # apart from "both stayed zero".
+  test "switching the chart range does not move the stat tiles", %{conn: conn, token: token} do
+    movie1 = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "The Glass Orchard"})
+    file1 = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie1.id})
+    movie2 = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "Harbor of Kites"})
+    file2 = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie2.id})
+    viewer = Mydia.AccountsFixtures.user_fixture()
+
+    :ok = Mydia.Streaming.emit_playback_started(file1.id, viewer.id)
+    :ok = Mydia.Streaming.emit_playback_started(file2.id, viewer.id)
+
+    {:ok, view, html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+    today = kpi_value(html, "kpi-plays-today")
+    week = kpi_value(html, "kpi-plays-week")
+
+    assert today > 0
+    assert week > 0
+
+    html_7 =
+      view
+      |> form("#plays-range", %{"range" => "7"})
+      |> render_change()
+
+    assert kpi_value(html_7, "kpi-plays-today") == today
+    assert kpi_value(html_7, "kpi-plays-week") == week
+
+    html_90 =
+      view
+      |> form("#plays-range", %{"range" => "90"})
+      |> render_change()
+
+    assert kpi_value(html_90, "kpi-plays-today") == today
+    assert kpi_value(html_90, "kpi-plays-week") == week
+  end
 end

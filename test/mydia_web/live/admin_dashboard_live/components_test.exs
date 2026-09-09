@@ -50,6 +50,29 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
       assert html =~ ~s(value="90")
       assert html =~ "plays-range"
     end
+
+    # A wrong or inverted `checked={@range == days}` would leave every
+    # assertion above passing while highlighting the wrong button. Pin the
+    # actual checked state per radio, not just that the values are present.
+    test "checks exactly the radio matching the active range" do
+      days = for i <- 0..6, do: %{date: Date.add(~D[2026-09-03], i), movies: 0, episodes: 0}
+
+      html = render_component(&Components.plays_chart/1, days: days, range: 7)
+      doc = LazyHTML.from_fragment(html)
+
+      checked_values =
+        for range <- [7, 30, 90] do
+          radio_checked? =
+            doc
+            |> LazyHTML.query(~s(input[name="range"][value="#{range}"]))
+            |> LazyHTML.attribute("checked")
+            |> Enum.any?()
+
+          {range, radio_checked?}
+        end
+
+      assert checked_values == [{7, true}, {30, false}, {90, false}]
+    end
   end
 
   describe "recent_watch_card/1" do
