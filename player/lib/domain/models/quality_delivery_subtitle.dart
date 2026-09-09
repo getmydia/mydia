@@ -1,6 +1,9 @@
 /// User-facing subtitles for how a quality rung will be delivered.
 ///
 /// See `docs/superpowers/specs/2026-08-09-player-quality-delivery-labels-design.md`.
+library;
+
+import '../../core/player/hls_strategy_selection.dart';
 
 const kOriginalDirectPlaySubtitle = 'Direct Play';
 const kOriginalLosslessSubtitle = 'Original · no re-encoding';
@@ -13,7 +16,8 @@ const kOriginalPreferenceSubtitle = 'Source quality';
 ///
 /// [canDirectPlay] means native and the same candidate gate as
 /// `PlayerScreen._canDirectPlay` (ignore the currently selected rung).
-/// [hasLosslessDelivery] means any candidate is HLS_COPY or REMUX.
+/// [hasLosslessDelivery] means the HLS session will copy the video rather
+/// than re-encode it, per [hlsDeliveryIsLossless].
 /// Ordering: Direct Play, then lossless, then re-encoding required.
 String originalDeliverySubtitle({
   required bool canDirectPlay,
@@ -57,13 +61,26 @@ bool firstStrategyAllowsDirectPlay(Iterable<String> strategyValues) {
   return first == 'DIRECT_PLAY' || first == 'REMUX';
 }
 
-/// Whether any candidate is a no-re-encode delivery (HLS_COPY or REMUX).
+/// Whether the HLS session this list produces will copy the video rather
+/// than re-encode it.
 ///
-/// A bare DIRECT_PLAY without HLS_COPY/REMUX is intentionally false: on web
-/// that list still plays via TRANSCODE HLS today.
-bool strategiesAllowLosslessDelivery(Iterable<String> strategyValues) {
-  for (final value in strategyValues) {
-    if (value == 'HLS_COPY' || value == 'REMUX') return true;
-  }
-  return false;
+/// Delegates to [pickHlsStrategy], the function that actually chooses what
+/// `PlayerScreen._pickHlsStrategy` asks the streaming-session mutation for,
+/// so the label can only ever describe the delivery the player requested.
+///
+/// This used to scan the whole list for any HLS_COPY or REMUX, which read
+/// the server's *offer* instead of the player's *choice*. The two part
+/// company on a leading HLS_COPY: that is the `:needs_transcoding` verdict,
+/// [pickHlsStrategy] refuses it and falls back to TRANSCODE, and the scan
+/// still called the result lossless. A 1080p HEVC episode on web therefore
+/// showed "Original · no re-encoding" against a server dashboard reporting
+/// `hevc -> h264 (VAAPI)` at 3.0 Mbps.
+///
+/// Callers who can also direct-play must check that first: this only
+/// answers for the HLS path, and [originalDeliverySubtitle] already orders
+/// Direct Play ahead of lossless. A bare DIRECT_PLAY + TRANSCODE list is
+/// false here for the same reason it always was, since on web that list
+/// still plays via TRANSCODE HLS.
+bool hlsDeliveryIsLossless(Iterable<String> strategyValues) {
+  return pickHlsStrategy(strategyValues.toList()) == 'HLS_COPY';
 }
