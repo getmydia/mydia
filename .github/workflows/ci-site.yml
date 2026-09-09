@@ -9,6 +9,7 @@ name: CI / Site
 # few seconds when site/ is untouched.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: "ci-site-${{ github.ref }}"

@@ -9,6 +9,7 @@ name: CI / Appcast
 # pointing at it would sit Pending forever. The job costs a few seconds.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - master

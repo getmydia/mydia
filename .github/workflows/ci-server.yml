@@ -13,6 +13,7 @@ on:
       - "priv/graphql/schema.graphql"
       - ".github/workflows/ci-server.yml"
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "server/**"
       # See the push.paths comment above: this entry is inert for the same
