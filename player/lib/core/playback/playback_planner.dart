@@ -117,8 +117,13 @@ bool _leadsWithDirect(List<CandidateStrategy> candidates) {
 
 /// A copy candidate that is not the leading entry. A leading HLS_COPY is the
 /// server's :needs_transcoding verdict and carries the codec it just said
-/// this device cannot decode, so it is never a candidate here.
+/// this device cannot decode. Older servers can emit more HLS_COPY variants
+/// after that verdict, so none of that list is a candidate here.
 CandidateStrategy? _nonLeadingCopy(List<CandidateStrategy> candidates) {
+  if (candidates.isNotEmpty && candidates.first.strategy == 'HLS_COPY') {
+    return null;
+  }
+
   for (var i = 1; i < candidates.length; i++) {
     if (candidates[i].strategy == 'HLS_COPY') return candidates[i];
   }

@@ -40,6 +40,23 @@ const _leadingCopyList = [
   CandidateStrategy(strategy: 'TRANSCODE', mime: 'video/mp2t'),
 ];
 
+/// Older servers can emit one HLS_COPY candidate for each codec variant after
+/// deciding the source needs transcoding. None are safe: the leading verdict
+/// applies to the whole list, not just its first item.
+const _leadingCopyVariantsList = [
+  CandidateStrategy(
+    strategy: 'HLS_COPY',
+    mime: 'video/mp2t; codecs="$_hevc, mp4a.40.2"',
+    videoCodec: _hevc,
+  ),
+  CandidateStrategy(
+    strategy: 'HLS_COPY',
+    mime: 'video/mp2t; codecs="$_h264, mp4a.40.2"',
+    videoCodec: _h264,
+  ),
+  CandidateStrategy(strategy: 'TRANSCODE', mime: 'video/mp2t'),
+];
+
 const _transcodeOnly = [
   CandidateStrategy(strategy: 'TRANSCODE', mime: 'video/mp2t'),
 ];
@@ -218,6 +235,13 @@ void main() {
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       // No DIRECT_PLAY or REMUX led the list, and the only HLS_COPY was the
       // leading one, so the structural blocker is what gets reported.
+      expect(plan.reason, PlanReason.noDirectPlayCandidate);
+    });
+
+    test('leading HLS_COPY rejects every copy variant on native', () {
+      final plan = planPlayback(_inputs(candidates: _leadingCopyVariantsList));
+
+      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.noDirectPlayCandidate);
     });
 
