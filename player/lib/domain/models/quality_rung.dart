@@ -92,6 +92,19 @@ List<QualityRung> deriveQualityLadder({int? sourceHeight}) {
   ];
 }
 
+/// The ladder an adaptive session moves along for a source of
+/// [sourceHeight] pixels.
+///
+/// Unlike [deriveQualityLadder] this includes the rung equal to the source
+/// height, so a 1080p file adapting under transcode tops out at 1080p rather
+/// than 720p. A 2160p source has no 2160 rung and tops out at 1080p. A source
+/// below every rung, or of unknown height, yields an empty ladder, and the
+/// caller treats that as "cannot adapt".
+List<QualityRung> deriveAdaptiveLadder({int? sourceHeight}) {
+  if (sourceHeight == null || sourceHeight <= 0) return const [];
+  return _allRungs.where((rung) => rung.height! <= sourceHeight).toList();
+}
+
 /// Names what the server actually applied, for labelling the control.
 ///
 /// The server may clamp below what was requested, and a relay clamps to a

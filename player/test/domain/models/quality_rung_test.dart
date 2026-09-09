@@ -2,6 +2,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/quality_rung.dart';
 
 void main() {
+  group('deriveAdaptiveLadder', () {
+    test('includes the source-height rung, unlike the manual ladder', () {
+      final ladder = deriveAdaptiveLadder(sourceHeight: 1080);
+
+      expect(ladder.map((r) => r.label), ['1080p', '720p', '480p', '360p']);
+    });
+
+    test('a 2160p source tops out at 1080p', () {
+      expect(deriveAdaptiveLadder(sourceHeight: 2160).first.label, '1080p');
+    });
+
+    test('a 720p source starts at 720p', () {
+      expect(
+        deriveAdaptiveLadder(sourceHeight: 720).map((r) => r.label),
+        ['720p', '480p', '360p'],
+      );
+    });
+
+    test('a source below every rung, or unknown, yields nothing', () {
+      expect(deriveAdaptiveLadder(sourceHeight: 359), isEmpty);
+      expect(deriveAdaptiveLadder(sourceHeight: null), isEmpty);
+      expect(deriveAdaptiveLadder(sourceHeight: 0), isEmpty);
+    });
+  });
+
   group('deriveQualityLadder', () {
     test('offers only Original when the source height is unknown', () {
       // Without metadata there is no honest way to know which rungs would
