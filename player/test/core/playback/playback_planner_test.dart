@@ -95,12 +95,23 @@ void main() {
     });
 
     test('a shape known to fail goes to transcode', () {
-      final plan = planPlayback(_inputs(knownFailures: {
-        const FailureKey(videoCodec: _hevc, heightBucket: 1080),
-      }));
+      final plan = planPlayback(_inputs(
+        choice: QualityChoice.auto,
+        knownFailures: {
+          const FailureKey(videoCodec: _hevc, heightBucket: 1080),
+        },
+      ));
       expect(plan, isA<HlsPlan>());
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.shapeKnownToFail);
+    });
+
+    test('Original ignores a known failure and attempts direct play', () {
+      final plan = planPlayback(_inputs(knownFailures: {
+        const FailureKey(videoCodec: _hevc, heightBucket: 1080),
+      }));
+      expect(plan, isA<DirectPlayPlan>());
+      expect(plan.reason, PlanReason.directPlayAccepted);
     });
 
     test('a bitrate that does not fit throughput with headroom transcodes', () {
@@ -150,6 +161,7 @@ void main() {
       // asking typeSupported, which rejects everything here.
       final plan = planPlayback(_inputs(
         candidates: _remuxList,
+        choice: QualityChoice.auto,
         typeSupported: _reject,
         knownFailures: {
           const FailureKey(videoCodec: _h264, heightBucket: 1080),
@@ -159,6 +171,18 @@ void main() {
       // reason, and the reason names the memory rather than the MIME.
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.shapeKnownToFail);
+    });
+
+    test('Original ignores a known failure and attempts copy', () {
+      final plan = planPlayback(_inputs(
+        candidates: _remuxList,
+        isWeb: true,
+        knownFailures: {
+          const FailureKey(videoCodec: _h264, heightBucket: 1080),
+        },
+      ));
+      expect((plan as HlsPlan).strategy, HlsStrategy.copy);
+      expect(plan.reason, PlanReason.copyAccepted);
     });
 
     test('a leading HLS_COPY is the needs_transcoding verdict, never taken',

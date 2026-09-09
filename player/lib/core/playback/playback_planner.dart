@@ -127,7 +127,8 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   }
 
   final failureKey = FailureKey.fromShape(inputs.shape);
-  final knownToFail = inputs.knownFailures.contains(failureKey);
+  final knownToFail = choice.kind == QualityChoiceKind.auto &&
+      inputs.knownFailures.contains(failureKey);
   final fits = bitrateFits(
     fileBitrateKbps: inputs.fileBitrateKbps,
     throughputKbps: inputs.knownThroughputKbps,
