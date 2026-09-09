@@ -8,7 +8,12 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   # Now Playing updates on PubSub push; only the day-bucketed figures need a
   # timer, since a daily bucket does not move often.
   @history_refresh :timer.seconds(60)
-  @history_days 30
+  @default_range 30
+  @ranges [7, 30, 90]
+
+  # The stat tiles compare this week against the week before, so they need a
+  # fixed fourteen days that does not move when the chart's range does.
+  @stat_window 14
 
   @impl true
   def mount(_params, _session, socket) do
@@ -22,6 +27,7 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
      socket
      |> assign(:page_title, "Dashboard")
      |> assign(:active_tab, :dashboard)
+     |> assign(:range_days, @default_range)
      |> load_now_playing()
      |> load_history()}
   end
@@ -42,6 +48,14 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   # act on. Ignore them rather than crashing the LiveView.
   def handle_info(_message, socket), do: {:noreply, socket}
 
+  @impl true
+  def handle_event("set_range", %{"range" => range}, socket) do
+    {:noreply,
+     socket
+     |> assign(:range_days, parse_range(range))
+     |> load_history()}
+  end
+
   defp load_now_playing(socket) do
     sessions = Streaming.list_active_sessions()
 
@@ -59,12 +73,31 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   end
 
   defp load_history(socket) do
-    days = Playback.Stats.plays_by_day(@history_days)
+    range = socket.assigns.range_days
+    days = Playback.Stats.plays_by_day(max(range, @stat_window))
+    stat_days = Enum.take(days, -@stat_window)
 
     socket
-    |> assign(:days, days)
-    |> assign(:plays_today, plays_on(List.last(days)))
-    |> assign(:plays_week, days |> Enum.take(-7) |> Enum.map(&plays_on/1) |> Enum.sum())
+    |> assign(:days, Enum.take(days, -range))
+    |> assign(:stat_days, stat_days)
+    |> assign(:plays_today, plays_on(List.last(stat_days)))
+    |> assign(:plays_week, week_total(stat_days, 0))
+  end
+
+  defp parse_range(value) do
+    case Integer.parse(value) do
+      {days, ""} when days in @ranges -> days
+      _ -> @default_range
+    end
+  end
+
+  # `weeks_back: 0` is the last seven days, `1` the seven before those.
+  defp week_total(days, weeks_back) do
+    days
+    |> Enum.take(-(7 * (weeks_back + 1)))
+    |> Enum.take(7)
+    |> Enum.map(&plays_on/1)
+    |> Enum.sum()
   end
 
   defp plays_on(nil), do: 0

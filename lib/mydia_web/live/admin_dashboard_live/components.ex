@@ -37,7 +37,10 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
     """
   end
 
+  @ranges [7, 30, 90]
+
   attr :days, :list, required: true
+  attr :range, :integer, required: true
 
   def plays_chart(assigns) do
     assigns =
@@ -52,10 +55,26 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
       |> assign(:pad_t, @pad_t)
       |> assign(:view_w, @chart_w + @pad_l)
       |> assign(:view_h, @chart_h + @pad_t + @pad_b)
+      |> assign(:ranges, @ranges)
 
     ~H"""
     <div class="space-y-2">
-      <h3 class="font-semibold text-base-content">Plays</h3>
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="font-semibold text-base-content">Plays</h3>
+        <form id="plays-range" phx-change="set_range">
+          <div class="join">
+            <input
+              :for={days <- @ranges}
+              type="radio"
+              name="range"
+              value={days}
+              class="join-item btn btn-sm"
+              aria-label={"#{days}d"}
+              checked={@range == days}
+            />
+          </div>
+        </form>
+      </div>
       <div id="plays-chart">
         <svg viewBox={"0 0 #{@view_w} #{@view_h}"} class="w-full h-48">
           <g transform={"translate(#{@pad_l}, #{@pad_t})"}>

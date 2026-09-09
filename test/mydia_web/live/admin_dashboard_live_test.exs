@@ -119,4 +119,45 @@ defmodule MydiaWeb.AdminDashboardLiveTest do
     assert has_element?(view, "#now-playing-#{media_file.id}")
     assert render(view) =~ "House of the Dragon"
   end
+
+  # LazyHTML.filter/2 matches only the fragment's root nodes (see
+  # test/README.md), and #plays-chart is nested deep in the full page here, so
+  # a descendant selector needs query/2 instead.
+  defp plays_columns(html) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query(~s(#plays-chart rect[fill="transparent"]))
+    |> Enum.to_list()
+    |> length()
+  end
+
+  describe "plays range picker" do
+    test "defaults to thirty days", %{conn: conn, token: token} do
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+      assert plays_columns(render(view)) == 30
+    end
+
+    test "switching the range redraws the chart at the new width", %{conn: conn, token: token} do
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+      assert view
+             |> form("#plays-range", %{"range" => "7"})
+             |> render_change()
+             |> plays_columns() == 7
+
+      assert view
+             |> form("#plays-range", %{"range" => "90"})
+             |> render_change()
+             |> plays_columns() == 90
+    end
+
+    test "an unrecognised range falls back to the default", %{conn: conn, token: token} do
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/dashboard")
+
+      assert view
+             |> render_change("set_range", %{"range" => "not-a-number"})
+             |> plays_columns() == 30
+    end
+  end
 end

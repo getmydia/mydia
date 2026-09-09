@@ -9,7 +9,7 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
     test "draws an axis rather than an empty box when every day is zero" do
       days = for i <- 0..6, do: %{date: Date.add(~D[2026-09-03], i), movies: 0, episodes: 0}
 
-      html = render_component(&Components.plays_chart/1, days: days)
+      html = render_component(&Components.plays_chart/1, days: days, range: 30)
 
       refute html =~ "plays-chart-empty"
       assert html =~ "plays-chart"
@@ -22,7 +22,7 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
         %{date: ~D[2026-09-02], movies: 0, episodes: 3}
       ]
 
-      html = render_component(&Components.plays_chart/1, days: days)
+      html = render_component(&Components.plays_chart/1, days: days, range: 30)
 
       assert html =~ "plays-chart"
       assert html =~ "<rect"
@@ -34,10 +34,21 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
         %{date: ~D[2026-09-02], movies: 0, episodes: 1}
       ]
 
-      html = render_component(&Components.plays_chart/1, days: days)
+      html = render_component(&Components.plays_chart/1, days: days, range: 30)
 
       assert html =~ ">6</text>"
       assert html =~ ">0</text>"
+    end
+
+    test "marks the active range and offers the other two" do
+      days = for i <- 0..6, do: %{date: Date.add(~D[2026-09-03], i), movies: 0, episodes: 0}
+
+      html = render_component(&Components.plays_chart/1, days: days, range: 7)
+
+      assert html =~ ~s(value="7")
+      assert html =~ ~s(value="30")
+      assert html =~ ~s(value="90")
+      assert html =~ "plays-range"
     end
   end
 
