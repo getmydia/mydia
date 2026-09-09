@@ -29,6 +29,8 @@ defmodule Mydia.Streaming.DirectPlaySession do
       :media_file_id,
       :user_id,
       :mode,
+      :kind,
+      :plan,
       :last_activity,
       :timeout_ref,
       :db_job_id
@@ -75,8 +77,10 @@ defmodule Mydia.Streaming.DirectPlaySession do
     media_file_id = Keyword.fetch!(opts, :media_file_id)
     user_id = Keyword.fetch!(opts, :user_id)
     started_at = Keyword.get(opts, :started_at, DateTime.utc_now())
+    kind = Keyword.get(opts, :kind, :direct)
+    plan = Keyword.get(opts, :plan)
 
-    Logger.info("Starting Direct Play session for file #{media_file_id}, user #{user_id}")
+    Logger.info("Starting #{kind} playback session for file #{media_file_id}, user #{user_id}")
 
     # Note: Registration in HlsSessionRegistry is handled by the :via tuple in start_link
     # passed from HlsSessionSupervisor.start_direct_session/2.
@@ -88,7 +92,7 @@ defmodule Mydia.Streaming.DirectPlaySession do
       |> TranscodeJob.changeset(%{
         media_file_id: media_file_id,
         user_id: user_id,
-        type: "direct",
+        type: to_string(kind),
         status: "playing",
         resolution: "original",
         progress: 0.0,
@@ -107,7 +111,9 @@ defmodule Mydia.Streaming.DirectPlaySession do
       session_id: session_id,
       media_file_id: media_file_id,
       user_id: user_id,
-      mode: :direct,
+      mode: kind,
+      kind: kind,
+      plan: plan,
       db_job_id: job.id,
       last_activity: DateTime.utc_now()
     }
@@ -127,6 +133,8 @@ defmodule Mydia.Streaming.DirectPlaySession do
       session_id: state.session_id,
       media_file_id: state.media_file_id,
       mode: state.mode,
+      kind: state.kind,
+      plan: state.plan,
       last_activity: state.last_activity,
       # Flags for compatibility with HLS interface
       ready: true,

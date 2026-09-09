@@ -264,6 +264,60 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   end
 
   @doc """
+  Starts or reuses a remux tracking session.
+
+  Keyed separately from both HLS and direct sessions so a viewer remuxing one
+  file and direct-playing another appears as two cards rather than one
+  displacing the other.
+  """
+  def start_remux_session(media_file_id, user_id, plan) do
+    session_key = {:remux_session, media_file_id, user_id}
+    started_at = DateTime.utc_now()
+
+    metadata = %{
+      media_file_id: media_file_id,
+      user_id: user_id,
+      mode: :remux,
+      kind: :remux,
+      plan: plan,
+      started_at: started_at
+    }
+
+    name = {:via, Registry, {@registry_name, session_key, metadata}}
+
+    child_spec = %{
+      id: {DirectPlaySession, :remux, media_file_id, user_id},
+      start:
+        {DirectPlaySession, :start_link,
+         [
+           [
+             media_file_id: media_file_id,
+             user_id: user_id,
+             name: name,
+             started_at: started_at,
+             kind: :remux,
+             plan: plan
+           ]
+         ]},
+      restart: :temporary
+    }
+
+    case DynamicSupervisor.start_child(__MODULE__, child_spec) do
+      {:ok, pid} -> {:ok, pid, :started}
+      {:error, {:already_started, pid}} -> {:ok, pid, :existing}
+      error -> error
+    end
+  end
+
+  @doc "Stops a remux tracking session."
+  def stop_remux_session(media_file_id, user_id) do
+    case Registry.lookup(@registry_name, {:remux_session, media_file_id, user_id}) do
+      [{pid, _}] -> DynamicSupervisor.terminate_child(__MODULE__, pid)
+      [] -> :ok
+    end
+  end
+
+  @doc """
   Gets an existing HLS session for a media file and user combination.
 
   ## Returns
