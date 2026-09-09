@@ -1059,7 +1059,20 @@ defmodule Mydia.Streaming.HlsSession do
     # Capture self() to notify when FFmpeg is ready
     session_pid = self()
 
-    # Build transcoder opts, including max_bitrate and max_height if set
+    # Build transcoder opts, including max_bitrate and max_height if set.
+    #
+    # This whitelist is why HlsSession.State.plan (built from `opts`, i.e.
+    # backend_opts) and FfmpegHlsTranscoder's own plan (built from
+    # `transcoder_opts`, i.e. this filtered base_opts ++ the callbacks below)
+    # agree today: StreamPlan.for_hls/2 also reads :video_codec, :crf and
+    # :preset, none of which backend_opts currently sets, so both builds see
+    # the same defaults for every key actually populated. That agreement is
+    # by construction only for the keys listed here -- it is NOT "the two
+    # calls share one keyword list". Adding a plan-relevant key (:video_codec,
+    # :crf, :preset, or any future StreamPlan input) to backend_opts without
+    # also forwarding it through this filter will desynchronise the two
+    # plans silently: the dashboard (reading HlsSession.State.plan) would
+    # describe an encode the transcoder never actually runs.
     base_opts =
       [
         input_path: absolute_path,
