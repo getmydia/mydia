@@ -86,8 +86,12 @@ class PlaybackMonitor {
   }
 
   Future<void> _tick() async {
+    if (_disposed) return;
+    // Time advances with every timer interval, including intervals skipped by
+    // an in-flight property read.
+    _ticks++;
     // A slow property read must not stack samples.
-    if (_sampling || _disposed) return;
+    if (_sampling) return;
     _sampling = true;
     final generation = _generation;
     try {
@@ -100,7 +104,6 @@ class PlaybackMonitor {
           ? null
           : stats.droppedFrames - previous;
       _lastDropped = stats?.droppedFrames;
-      _ticks++;
 
       final ahead = _buffer - _position;
       final sample = HealthSample(

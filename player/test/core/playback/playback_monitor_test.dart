@@ -36,6 +36,29 @@ class _ScriptedSampler implements FrameStatsSampler {
   }
 }
 
+class _DelayedFirstSampler implements FrameStatsSampler {
+  final _first = Completer<FrameStats?>();
+  var calls = 0;
+  var activeCalls = 0;
+  var peakActiveCalls = 0;
+
+  void completeFirst(FrameStats stats) => _first.complete(stats);
+
+  @override
+  Future<FrameStats?> sample() {
+    calls++;
+    activeCalls++;
+    peakActiveCalls =
+        activeCalls > peakActiveCalls ? activeCalls : peakActiveCalls;
+
+    final result = calls == 1
+        ? _first.future
+        : Future.value(const FrameStats(droppedFrames: 0));
+
+    return result.whenComplete(() => activeCalls--);
+  }
+}
+
 void main() {
   test('emits one sample per interval from the latest signal values', () {
     fakeAsync((async) {
@@ -138,6 +161,36 @@ void main() {
       expect(seen[2].at, const Duration(seconds: 1));
       expect(seen[2].droppedFrames, isNull);
       expect(seen[3].droppedFrames, 3);
+      monitor.dispose();
+    });
+  });
+
+  test('keeps elapsed timestamps while a slow sample prevents overlap', () {
+    fakeAsync((async) {
+      final s = _Signals();
+      final sampler = _DelayedFirstSampler();
+      final monitor = PlaybackMonitor(signals: s.signals, sampler: sampler);
+      final seen = <HealthSample>[];
+      monitor.samples.listen(seen.add);
+      monitor.start();
+
+      async.elapse(const Duration(seconds: 3));
+      async.flushMicrotasks();
+      expect(sampler.calls, 1);
+      expect(sampler.peakActiveCalls, 1);
+      expect(seen, isEmpty);
+
+      sampler.completeFirst(const FrameStats(droppedFrames: 0));
+      async.flushMicrotasks();
+      expect(seen.single.at, const Duration(seconds: 3));
+
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(seen.map((sample) => sample.at), [
+        const Duration(seconds: 3),
+        const Duration(seconds: 4),
+      ]);
+      expect(sampler.peakActiveCalls, 1);
       monitor.dispose();
     });
   });
