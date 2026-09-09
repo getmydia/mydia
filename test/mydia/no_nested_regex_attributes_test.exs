@@ -66,15 +66,55 @@ defmodule Mydia.NoNestedRegexAttributesTest do
            """) == ["lookup"]
   end
 
+  test "the scan covers the other ways a regex reaches an attribute" do
+    # ~R builds the same struct with interpolation and escapes turned off, and
+    # it is the natural sigil for a pattern full of backslashes, so it is what
+    # a future author of one of these lists is most likely to reach for.
+    assert nested_regex_attributes(~S"""
+             @patterns [~R/a\d/, ~R/b/]
+           """) == ["patterns"]
+
+    # Any sigil delimiter, not only //.
+    assert nested_regex_attributes(~S"""
+             @patterns [~r{a}, ~r|b|]
+           """) == ["patterns"]
+
+    # An attribute's value is evaluated at compile time, so a built regex lands
+    # in it carrying a reference exactly as a sigil does.
+    assert nested_regex_attributes(~S"""
+             @patterns [Regex.compile!("a")]
+           """) == ["patterns"]
+  end
+
   test "the scan leaves a bare regex attribute alone" do
     assert nested_regex_attributes(~S"""
              @pattern ~r/^(disc|disk)\d+$/i
            """) == []
+
+    assert nested_regex_attributes(~S"""
+             @pattern ~R/^(disc|disk)\d+$/i
+           """) == []
+
+    # The name alone is not the tell. A false positive here would block an
+    # attribute holding no regex at all.
+    assert nested_regex_attributes(~S"""
+             @labels ["Regex.compile_options"]
+           """) == []
   end
+
+  # `~r` and `~R` build the same struct -- the uppercase sigil only turns off
+  # interpolation and escape processing -- and an attribute's value is
+  # evaluated at compile time, so a `Regex.compile` call in one lands a
+  # reference there just as a sigil does. All three forms count.
+  # The call syntax is required, not just the name: a bare `Regex.compile`
+  # substring also matches longer identifiers and ordinary text, so
+  # `@labels ["Regex.compile_options"]` would be flagged for containing no
+  # regex at all.
+  @regex_forms ~r/~[rR][\/|"'({\[<]|Regex\.compile!?\s*\(/
 
   # Matches `@name` followed by an opening `[`, `{` or `%{` on the same line,
   # then scans forward to the line that closes it at the same indentation. A
-  # regex sigil anywhere in that span is the failure. Deliberately textual:
+  # regex anywhere in that span is the failure. Deliberately textual:
   # `Code.string_to_quoted/1` would expand the sigils and hit the very escape
   # error this guard exists to keep out of the tree.
   defp nested_regex_attributes(source) do
@@ -86,7 +126,7 @@ defmodule Mydia.NoNestedRegexAttributesTest do
       case Regex.run(~r/^(\s*)@([a-z_][a-zA-Z0-9_]*)\s+(%?[\[{].*)$/, line) do
         [_, indent, name, rest] ->
           span = collect_span(lines, index, rest, indent)
-          if String.contains?(span, "~r"), do: [name], else: []
+          if Regex.match?(@regex_forms, span), do: [name], else: []
 
         nil ->
           []
