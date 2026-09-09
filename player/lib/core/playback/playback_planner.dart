@@ -41,6 +41,17 @@ class PlanInputs {
   /// Shapes that failed to decode against this server.
   final Set<FailureKey> knownFailures;
 
+  PlanInputs copyWith({QualityChoice? choice}) => PlanInputs(
+        candidates: candidates,
+        isWeb: isWeb,
+        typeSupported: typeSupported,
+        choice: choice ?? this.choice,
+        sourceHeight: sourceHeight,
+        fileBitrateKbps: fileBitrateKbps,
+        knownThroughputKbps: knownThroughputKbps,
+        knownFailures: knownFailures,
+      );
+
   FileShape get shape =>
       FileShape.fromCandidates(candidates, sourceHeight: sourceHeight);
 }

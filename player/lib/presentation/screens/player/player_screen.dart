@@ -9,7 +9,6 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:http/http.dart' as http;
 import '../../../core/auth/auth_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
@@ -28,7 +27,12 @@ import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_error.dart';
 import '../../../core/player/stream_timeline.dart';
-import '../../../core/player/web_session_limits.dart';
+import '../../../core/playback/candidates_from_graphql.dart';
+import '../../../core/playback/playback_controller.dart';
+import '../../../core/playback/playback_memory.dart';
+import '../../../core/playback/playback_memory_providers.dart';
+import '../../../core/playback/playback_plan.dart';
+import '../../../core/playback/playback_planner.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
@@ -64,10 +68,6 @@ import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
-import '../../../graphql/mutations/start_streaming_session.graphql.dart';
-import '../../../graphql/mutations/start_streaming_session_compat.dart';
-import '../../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
-import '../../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
@@ -75,12 +75,12 @@ import '../../../graphql/queries/subtitle_search.graphql.dart';
 import '../../../graphql/queries/subtitle_track_settings.graphql.dart';
 import '../../../graphql/mutations/download_subtitle.graphql.dart';
 import '../../../graphql/mutations/set_subtitle_offset.graphql.dart';
-import '../../../graphql/schema.graphql.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
+import '../../../core/playback/server_features.dart';
+import '../../../core/playback/stream_urls.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
-import '../../../core/player/hls_strategy_selection.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/remote/remote_control_intent.dart';
 import '../../../core/remote/remote_target_controller.dart';
@@ -563,6 +563,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // Whether current playback is direct play (vs HLS)
   bool _isDirectPlay = false;
 
+  /// Owns the streaming session for the source now playing. Rebuilt on every
+  /// online initialization, since the connection mode it needs can change
+  /// between them; the previous one's session is ended first.
+  PlaybackController? _playback;
+
+  /// What is playing now and why. Null until the online branch plans, and
+  /// on the offline and downloaded branches, which have nothing to plan.
+  // ignore: unused_field
+  PlaybackPlan? _plan;
+
+  /// The inputs the current plan was made from, kept for re-planning on a
+  /// quality change and for the failure memory's key.
+  // ignore: unused_field
+  PlanInputs? _planInputs;
+
+  /// The file id the source was opened for: the route's, or the server's
+  /// choice on the two fall-through paths.
+  // ignore: unused_field
+  String? _playFileId;
+
+  /// Null when the memory box could not be opened; every read treats that
+  /// as an empty memory.
+  // ignore: unused_field
+  PlaybackMemory? _memory;
+
+  /// Keys memory by server: the node address over p2p, the URL over HTTP.
+  // ignore: unused_field
+  String? _serverKey;
+
   /// Whether the server is serving a playlist covering the whole file.
   ///
   /// False against a server too old to know about `playlistMode`, which is the
@@ -651,16 +680,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [_initializePlayer]. Defaults to re-encoding required until candidates
   /// resolve (honest worst case; matches the spec fallback).
   String _originalDeliverySubtitle = kOriginalTranscodeSubtitle;
-
-  /// Set when this server rejected the maxHeight argument, meaning it
-  /// predates height support. Rungs still work through maxBitrate alone;
-  /// they just land at whatever resolution the old server picks. Sticky for
-  /// the widget's lifetime so the detection costs one extra round trip per
-  /// session rather than one per request.
-  bool _serverLacksHeightSupport = false;
-
-  // HLS session tracking for cleanup
-  String? _hlsSessionId;
 
   // Total duration from server (for HLS streams where playlist duration is incomplete)
   Duration? _totalDuration;
@@ -1270,21 +1289,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           : widget.fileId;
 
       await _resolveQualityForFile(candidatesResult);
-      _rememberOriginalDeliverySubtitle(candidatesResult?.candidates);
 
-      // Determine if direct play is possible.
-      //
-      // A chosen rung vetoes direct play. Direct play hands the file over
-      // untouched, so there is no encoder to give a cap to — honouring the
-      // choice means going through a transcoded HLS session instead. Original
-      // is the only rung with nothing to ask for, so it is the only one that
-      // leaves the cheap path available.
-      final canDirect = !kIsWeb &&
-          candidatesResult != null &&
-          _canDirectPlay(candidatesResult.candidates) &&
-          _selectedQuality.isOriginal;
+      final memory = await _openPlaybackMemory();
+      // The p2p branch threw above if the node address was missing, so the
+      // cast is safe there; HTTP keys by URL.
+      final serverKey = isP2PMode ? connectionState.serverNodeAddr! : serverUrl;
+      _memory = memory;
+      _serverKey = serverKey;
+      _playFileId = playFileId;
 
-      _isDirectPlay = canDirect;
+      final inputs = PlanInputs(
+        candidates: candidateStrategiesFrom(candidatesResult?.candidates),
+        isWeb: kIsWeb,
+        typeSupported: CodecSupport.isTypeSupported,
+        choice: QualityChoice.fromRung(_selectedQuality),
+        sourceHeight: candidatesResult?.metadata.height,
+        fileBitrateKbps:
+            kbpsFromBitsPerSecond(candidatesResult?.metadata.bitrate),
+        knownThroughputKbps: memory?.throughputKbps(serverKey),
+        knownFailures:
+            memory?.failuresFor(serverKey, now: DateTime.now()) ?? const {},
+      );
+      final playbackPlan = planPlayback(inputs);
+      // The one line that turns "it picked the wrong path" into a lookup.
+      debugPrint('[PlayerScreen] Plan: ${playbackPlan.describe()} '
+          'shape=${inputs.shape.videoCodec}/${inputs.shape.heightBucket} '
+          'bitrateKbps=${inputs.fileBitrateKbps} '
+          'throughputKbps=${inputs.knownThroughputKbps}');
+      _plan = playbackPlan;
+      _planInputs = inputs;
+      _rememberOriginalDeliverySubtitle(inputs);
+      _isDirectPlay = playbackPlan is DirectPlayPlan;
 
       // Resolve the real runtime before anything asks the player for it. On a
       // cold HLS stream media_kit only sees a partial, still-growing playlist,
@@ -1320,38 +1355,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       if (await _castToTargetIfSet(plan, fileId: playFileId)) return;
 
-      String mediaSource;
-      Map<String, String> httpHeaders = {};
-
-      if (canDirect) {
-        // Direct play path (native only)
-        debugPrint('[PlayerScreen] Direct play for file_id=$playFileId');
-
-        if (isP2PMode) {
-          mediaSource =
-              ref.read(mediaProxyProvider).buildDirectStreamUrl(playFileId);
-        } else {
-          // Get media token for URL (if available)
-          final mediaTokenService =
-              await ref.read(asyncMediaTokenServiceProvider.future);
-          await mediaTokenService.ensureValidToken();
-          final mediaToken = await mediaTokenService.getToken();
-
-          mediaSource =
-              '$serverUrl/api/v1/stream/file/$playFileId?strategy=DIRECT_PLAY';
-          if (mediaToken != null) {
-            mediaSource += '&token=$mediaToken';
-          } else {
-            httpHeaders = {'Authorization': 'Bearer $token'};
-          }
-        }
-      } else {
-        // HLS path (both web and native fallback)
-
-        // Caught here, before a streaming session is even requested. Anything
-        // past this point starts an FFmpeg transcode on the instance and pulls
-        // relay bytes we pay for, so a browser that cannot play the result has
-        // to be turned away first, not after.
+      if (playbackPlan is HlsPlan) {
+        // Before a session is requested: past this point an FFmpeg transcode
+        // runs on the instance and relay bytes are spent.
         final blocker = _relayedPlaybackBlocker();
         if (blocker != null) {
           if (mounted) {
@@ -1362,126 +1368,50 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           }
           return;
         }
+      }
 
-        if (mounted) {
-          setState(() {
-            _loadingMessage = 'Starting stream...';
-          });
-        }
-
-        // Determine HLS strategy from candidates
-        final hlsStrategy = _pickHlsStrategy(candidatesResult?.candidates);
-
-        // The resume decision was already made above, before the cast fork —
-        // it has to be: the offset is an input to FFmpeg, not something that
-        // can be seeked to once a live-style playlist is already running.
-        final startPositionSeconds = plan.position.inSeconds;
-
-        // Start HLS session via GraphQL mutation (works for both modes)
-        final result = await _startSessionMutation(
-          graphqlClient: graphqlClient,
-          fileId: playFileId,
-          hlsStrategy: hlsStrategy,
-          startPositionSeconds: startPositionSeconds,
-        );
-
-        if (result.hasException) {
-          throw Exception(
-              'Failed to start streaming session: ${result.exception}');
-        }
-
-        final sessionData = Mutation$StartStreamingSession.fromJson(
-          withPlaylistModeDefault(result.data!),
-        );
-        final sessionResult = sessionData.startStreamingSession;
-        if (sessionResult == null) {
-          throw Exception('No session data returned from server');
-        }
-
-        _hlsSessionId = sessionResult.sessionId;
-        debugPrint('[PlayerScreen] HLS session started: $_hlsSessionId');
-
-        // Label from what the server applied, not what was asked for: a relay
-        // connection clamps to kWebMaxBitrateKbps and kWebMaxHeight (3000kbps,
-        // 720p) regardless of the request.
-        //
-        // Only a server that echoes at all gets to decide the label. The
-        // legacy request does not select the echo fields, so reading them
-        // there would report "no caps applied" for every rung and label a
-        // capped stream Original. Null instead, which falls the label back to
-        // what was requested and suppresses the clamp note — the honest
-        // answer when the server never said.
-        _effectiveQuality = _serverLacksHeightSupport
-            ? null
-            : effectiveRungLabel(
-                maxHeight: sessionResult.maxHeight,
-                maxBitrateKbps: sessionResult.maxBitrate,
-              );
-
-        // Use the echoed offset, not the requested one. The server clamps the
-        // value, and `-ss` lands on the nearest keyframe, so the stream can
-        // legitimately start earlier than asked. An older server omits the
-        // field entirely, which correctly yields offset zero.
-        final serverOffset = sessionResult.startPosition ?? 0;
-
-        // What the server actually served, not what was asked for: a server
-        // that cannot determine the media duration answers WINDOW even when
-        // FULL was requested, and a server too old to know `playlistMode` at
-        // all is normalized to WINDOW by `withPlaylistModeDefault` above.
-        _fullPlaylist = sessionResult.playlistMode == Enum$PlaylistMode.FULL;
-
-        if (_totalDuration == null && sessionResult.duration != null) {
-          _totalDuration = Duration(
-            milliseconds: (sessionResult.duration! * 1000).round(),
-          );
-        }
-
-        // A full playlist starts at zero and carries the real runtime in its
-        // EXT-X-ENDLIST, so player coordinates are already real coordinates and
-        // the timeline has nothing to correct. The offset form is kept only for
-        // a windowed session, where FFmpeg's -ss shifted the timestamps.
-        _timeline = _fullPlaylist
-            ? StreamTimeline(totalDuration: _totalDuration)
-            : StreamTimeline(
-                startOffset: Duration(seconds: serverOffset),
-                totalDuration: _totalDuration,
-              );
-        debugPrint('[PlayerScreen] Stream timeline: $_timeline');
-
-        // Build HLS URL based on mode
-        if (isP2PMode) {
-          mediaSource =
-              ref.read(mediaProxyProvider).buildHlsUrl(_hlsSessionId!);
-        } else {
-          mediaSource = '$serverUrl/api/v1/hls/$_hlsSessionId/index.m3u8';
-        }
-        debugPrint('[PlayerScreen] HLS URL: $mediaSource');
-
-        // Wait for playlist to be ready
-        // In P2P mode, proxy handles auth; in direct mode, pass bearer token
-        await _waitForPlaylist(
-          mediaSource,
-          headers: isP2PMode ? null : {'Authorization': 'Bearer $token'},
+      final StreamUrls urls;
+      if (isP2PMode) {
+        urls = ProxyStreamUrls(_mediaProxy);
+      } else {
+        urls = HttpStreamUrls(
+          serverUrl: serverUrl,
+          bearerToken: token,
+          mediaToken: () async {
+            final service =
+                await ref.read(asyncMediaTokenServiceProvider.future);
+            await service.ensureValidToken();
+            return service.getToken();
+          },
         );
       }
 
-      // `canDirect` is exactly the HLS/non-HLS split of this method for a
-      // windowed session: the HLS branch above has already baked the resume
-      // decision into the session's start offset, so acting on `plan` again
-      // here would double-apply it via a seek on top of that offset. The
-      // direct-play branch has no server-side offset to bake it into and
-      // must resume with a plain seek, which is what passing `plan` through
-      // does. A full-playlist HLS session joins the direct-play side of this
-      // split: its playlist starts at zero regardless of where FFmpeg's
-      // window began, so it needs the same client-side seek. Passing the
-      // real `plan` through here is the *only* thing that makes that seek
-      // happen -- `_openPlayerAndStart`'s own `if (plan.resumes)` block
-      // already does it, unmodified, once it receives a nonzero position, so
-      // there is no separate `_fullPlaylist` branch to look for there.
+      // A previous controller's session, from a cast stop or a proxy
+      // handoff re-running this method, is ended before it is dropped.
+      await _playback?.endSession();
+      final playback = PlaybackController(
+        client: () => _graphqlClient,
+        urls: urls,
+        features: ref.read(serverFeaturesProvider),
+        relayed: _relayed,
+      );
+      _playback = playback;
+
+      final source = await playback.open(
+        playbackPlan,
+        fileId: playFileId,
+        startAt: plan.position,
+        totalDuration: _totalDuration,
+        onProgress: _setLoadingMessage,
+      );
+      _applySource(source);
+
+      // A windowed session baked the resume offset into FFmpeg's -ss, so it
+      // opens at zero; every other source seeks to the real position.
       await _openPlayerAndStart(
-        mediaSource,
-        httpHeaders,
-        plan: canDirect || _fullPlaylist ? plan : ResumePlan.fromStart,
+        source.url,
+        source.headers,
+        plan: source.seekOnOpen ? plan : ResumePlan.fromStart,
       );
     } catch (e) {
       debugPrint('Error initializing player: $e');
@@ -1516,25 +1446,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return null;
   }
 
-  /// Pick the best HLS strategy from streaming candidates.
-  ///
-  /// Delegates to [pickHlsStrategy], which reads the leading candidate as
-  /// the server's compatibility verdict for this file: a leading `HLS_COPY`
-  /// means `:needs_transcoding`, and `HLS_COPY` never re-encodes, so it is
-  /// never a safe choice in that case. See that function's doc comment for
-  /// why this is correct against both an old server and one carrying the
-  /// #564 fix.
-  Enum$StreamingStrategy _pickHlsStrategy(
-    List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
-  ) {
-    final values = candidates?.map((c) => c.strategy.toJson()).toList() ??
-        const <String>[];
-
-    return pickHlsStrategy(values) == 'HLS_COPY'
-        ? Enum$StreamingStrategy.HLS_COPY
-        : Enum$StreamingStrategy.TRANSCODE;
-  }
-
   /// Rebuilds the quality ladder for the file about to play and settles which
   /// rung this playback will request.
   ///
@@ -1561,6 +1472,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _qualityLadder.contains(requested) ? requested : QualityRung.original;
   }
 
+  Future<PlaybackMemory?> _openPlaybackMemory() async {
+    try {
+      return await ref.read(playbackMemoryProvider.future);
+    } catch (e) {
+      debugPrint('[PlayerScreen] Playback memory unavailable: $e');
+      return null;
+    }
+  }
+
+  /// Everything the screen keeps from a source the controller opened.
+  void _applySource(PlaybackSource source) {
+    _fullPlaylist = source.fullPlaylist;
+    _timeline = source.timeline;
+    _effectiveQuality = source.effectiveRung;
+    _totalDuration ??= source.timeline.totalDuration;
+    _progressService?.timeline = _timeline;
+    debugPrint('[PlayerScreen] Stream timeline: $_timeline');
+  }
+
+  void _setLoadingMessage(String message) {
+    if (mounted) setState(() => _loadingMessage = message);
+  }
+
+  /// The Original rung's subtitle: what the planner would do with the
+  /// Original choice, whatever rung is selected now. Labels only.
+  void _rememberOriginalDeliverySubtitle(PlanInputs inputs) {
+    _originalDeliverySubtitle = deliverySubtitleForPlan(
+      planPlayback(inputs.copyWith(choice: QualityChoice.original)),
+    );
+  }
+
   /// The rung stored as this install's default, for the first session of a
   /// playback.
   ///
@@ -1576,106 +1518,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Could not read default quality: $e');
       return QualityRung.original;
     }
-  }
-
-  /// Starts the streaming session, degrading gracefully on a server that
-  /// predates the height cap.
-  ///
-  /// Mydia installs update on their own schedule and the native player ships
-  /// separately from the server, so a newer player routinely meets an older
-  /// one. Against such a server the current document is rejected outright —
-  /// the `maxHeight` argument and the echo fields it selects are both
-  /// validation errors, which fail the whole request rather than degrading —
-  /// so the first failure of that shape is retried through the legacy
-  /// document, which asks only for what every server since the bitrate cap
-  /// has had. [_serverLacksHeightSupport] makes that a once-per-session cost
-  /// rather than once per request.
-  Future<QueryResult<Object?>> _startSessionMutation({
-    required GraphQLClient graphqlClient,
-    required String fileId,
-    required Enum$StreamingStrategy hlsStrategy,
-    required int startPositionSeconds,
-  }) async {
-    final startPosition =
-        startPositionSeconds > 0 ? startPositionSeconds : null;
-
-    // Public web (web.mydia.dev) is relay-only forever, since a browser
-    // cannot hole-punch, so every byte of that session is bandwidth we pay
-    // for. The instance-hosted `/player` build reaches its own origin over
-    // plain HTTP and costs us nothing, so it stays uncapped. Whichever of the
-    // viewer's own choice or the relay ceiling is more restrictive wins: a
-    // viewer who already picked a lower rung than the cap keeps that choice
-    // instead of being pushed up to it.
-    final webLimits = webSessionLimits(relayed: _relayed);
-    final maxBitrate =
-        tighterCap(_selectedQuality.maxBitrateKbps, webLimits.maxBitrate);
-    final maxHeight = tighterCap(_selectedQuality.height, webLimits.maxHeight);
-
-    Future<QueryResult<Object?>> runLegacy() {
-      return graphqlClient.mutate(
-        MutationOptions(
-          document: documentNodeMutationStartStreamingSessionLegacy,
-          variables: Variables$Mutation$StartStreamingSessionLegacy(
-            fileId: fileId,
-            strategy: hlsStrategy,
-            maxBitrate: maxBitrate,
-            startPosition: startPosition,
-          ).toJson(),
-        ),
-      );
-    }
-
-    if (_serverLacksHeightSupport) return runLegacy();
-
-    final result = await graphqlClient.mutate(
-      MutationOptions(
-        document: documentNodeMutationStartStreamingSession,
-        variables: Variables$Mutation$StartStreamingSession(
-          fileId: fileId,
-          strategy: hlsStrategy,
-          maxBitrate: maxBitrate,
-          maxHeight: maxHeight,
-          startPosition: startPosition,
-          playlistMode: Enum$PlaylistMode.FULL,
-        ).toJson(),
-      ),
-    );
-
-    if (_looksLikeMissingHeightSupport(result)) {
-      debugPrint(
-        '[PlayerScreen] Server does not know maxHeight; '
-        'retrying without the height cap',
-      );
-      _serverLacksHeightSupport = true;
-      return runLegacy();
-    }
-
-    return result;
-  }
-
-  /// True when the failure is this server's schema not knowing about
-  /// `maxHeight` or `playlistMode`, rather than a transport, authorization,
-  /// or resolver problem. Only these are worth retrying through the legacy
-  /// document.
-  ///
-  /// All four messages are Absinthe's verbatim validation text — see
-  /// `Absinthe.Phase.Document.Validation.KnownArgumentNames` and
-  /// `.FieldsOnCorrectType`. An old server emits both of a pair at once (the
-  /// argument and the echoed field arrived in the same change), so any one
-  /// is enough. `playlistMode` shipped in a later change than `maxHeight`,
-  /// so a server updated only as far as height caps reaches this same
-  /// fallback — exactly the compatibility window this feature is built for.
-  /// Matching the exact phrasing rather than loose keywords keeps a genuine
-  /// failure from being mistaken for version skew and silently retried.
-  bool _looksLikeMissingHeightSupport(QueryResult<Object?> result) {
-    final graphqlErrors = result.exception?.graphqlErrors ?? const [];
-    return graphqlErrors.any((error) {
-      final message = error.message;
-      return message.contains('Unknown argument "maxHeight"') ||
-          message.contains('Cannot query field "maxHeight"') ||
-          message.contains('Unknown argument "playlistMode"') ||
-          message.contains('Cannot query field "playlistMode"');
-    });
   }
 
   /// Shared tail of _initializePlayer: create player, open the media, start
@@ -1859,54 +1701,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     return null;
-  }
-
-  /// Check if the first candidate supports direct play on native.
-  ///
-  /// Delegates to [firstStrategyAllowsDirectPlay], which accepts only
-  /// DIRECT_PLAY and REMUX. HLS_COPY is deliberately excluded even when it
-  /// leads the list: the server only ever leads with HLS_COPY from its
-  /// `:needs_transcoding` branch, and HLS_COPY repackages the stream
-  /// without re-encoding it, so it still carries the exact video codec the
-  /// server just said this device cannot decode. Treating a leading
-  /// HLS_COPY as direct-playable is what let a Fire HD 10 — whose HEVC
-  /// decoder is Main 8-bit only, with no Main 10 support — stream an HEVC
-  /// Main 10 file untouched, straight into mpv's "Could not open codec.".
-  ///
-  /// This guard used to stay permissive on the theory that the native
-  /// device profile the server checks against hadn't been validated on real
-  /// hardware and might under-report a device's true decoder support. That
-  /// hedge no longer applies: `android_codec_capabilities.dart`'s
-  /// `MediaCodecList` probe against a Fire HD 10 confirmed its decoder is
-  /// exactly as limited as the server's verdict assumed — `video/hevc`
-  /// capped at 8-bit, `video/vp9` capped at 10-bit — so a
-  /// `:needs_transcoding` verdict for a codec this device cannot decode is
-  /// trustworthy, and HLS_COPY must not be used to second-guess it. REMUX
-  /// stays accepted because it only repackages a codec the compatibility
-  /// check already found acceptable into a different container — an
-  /// unrelated case.
-  bool _canDirectPlay(
-    List<Query$StreamingCandidates$streamingCandidates$candidates> candidates,
-  ) {
-    final values = candidates.map((c) => c.strategy.toJson()).toList();
-    return firstStrategyAllowsDirectPlay(values);
-  }
-
-  /// Cache the Original-rung delivery subtitle from resolved candidates.
-  ///
-  /// Labels only — does not change the [_canDirectPlay] playback gate.
-  void _rememberOriginalDeliverySubtitle(
-    List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
-  ) {
-    final values = candidates?.map((c) => c.strategy.toJson()).toList() ??
-        const <String>[];
-
-    final canDirect = !kIsWeb && firstStrategyAllowsDirectPlay(values);
-    final lossless = strategiesAllowLosslessDelivery(values);
-    _originalDeliverySubtitle = originalDeliverySubtitle(
-      canDirectPlay: canDirect,
-      hasLosslessDelivery: lossless,
-    );
   }
 
   /// Fetch streaming candidates from the server via GraphQL.
@@ -3054,92 +2848,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         .toList();
   }
 
-  /// Wait for HLS playlist to be ready with enough segments.
-  ///
-  /// Polls the playlist URL with exponential backoff until it has at least 3 segments.
-  /// Pass [headers] for direct mode (auth); omit for P2P (proxy handles auth).
-  Future<void> _waitForPlaylist(
-    String playlistUrl, {
-    Map<String, String>? headers,
-  }) async {
-    const maxRetries = 20;
-    const minSegments = 3;
-    const baseDelay = Duration(milliseconds: 500);
-    const maxDelay = Duration(milliseconds: 3000);
-
-    for (var i = 0; i < maxRetries; i++) {
-      try {
-        final response = await http.get(
-          Uri.parse(playlistUrl),
-          headers: headers ?? {},
-        );
-
-        if (response.statusCode == 200) {
-          final playlistText = response.body;
-          // Count .ts segments in playlist
-          final segmentCount = '.ts'.allMatches(playlistText).length;
-
-          if (segmentCount >= minSegments) {
-            if (i > 0) {
-              debugPrint(
-                  '[PlayerScreen] Playlist ready after ${i + 1} attempt(s) with $segmentCount segments');
-            }
-            return;
-          }
-
-          final percentage = (segmentCount / minSegments * 100).round();
-          debugPrint(
-              '[PlayerScreen] Playlist has $segmentCount/$minSegments segments ($percentage%)');
-          if (mounted) {
-            setState(() {
-              _loadingMessage = 'Preparing stream... $percentage%';
-            });
-          }
-        } else {
-          debugPrint(
-              '[PlayerScreen] Playlist not ready (${response.statusCode}), retrying...');
-          if (mounted) {
-            setState(() {
-              _loadingMessage =
-                  'Starting transcoding... (${i + 1}/$maxRetries)';
-            });
-          }
-        }
-
-        // Exponential backoff with max cap
-        final delay = Duration(
-          milliseconds: (baseDelay.inMilliseconds * (1.5 * i + 1))
-              .clamp(
-                baseDelay.inMilliseconds,
-                maxDelay.inMilliseconds,
-              )
-              .toInt(),
-        );
-        await Future.delayed(delay);
-      } catch (e) {
-        debugPrint(
-            '[PlayerScreen] Error checking playlist (attempt ${i + 1}/$maxRetries): $e');
-        if (mounted) {
-          setState(() {
-            _loadingMessage = 'Starting transcoding... (${i + 1}/$maxRetries)';
-          });
-        }
-
-        final delay = Duration(
-          milliseconds: (baseDelay.inMilliseconds * (1.5 * i + 1))
-              .clamp(
-                baseDelay.inMilliseconds,
-                maxDelay.inMilliseconds,
-              )
-              .toInt(),
-        );
-        await Future.delayed(delay);
-      }
-    }
-
-    throw Exception('Playlist not ready after maximum retry attempts');
-  }
-
   Future<void> _navigateToEpisode(
     String episodeId,
     String fileId,
@@ -3305,10 +3013,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // away, so an interrupted restart does not lose their place.
         await _saveProgress();
 
-        final sessionId = _hlsSessionId;
-        if (sessionId != null) {
-          await _endStreamingSession(sessionId);
-        }
+        await _playback?.endSession();
 
         await _positionSubscription?.cancel();
         _positionSubscription = null;
@@ -3325,38 +3030,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         await _initializePlayer();
       },
     );
-  }
-
-  /// Terminates the server-side HLS session. Safe to call more than once.
-  ///
-  /// Distinct from [_terminateHlsSession]: this is called mid-session, while
-  /// the widget is still live, so it resolves the GraphQL client fresh via
-  /// `ref.read` rather than through the captured field that dispose-time
-  /// cleanup is forced to use. It also does not stop the local P2P proxy —
-  /// unlike a final teardown, a seek-driven restart immediately starts a new
-  /// session over the same proxy.
-  Future<void> _endStreamingSession(String sessionId) async {
-    debugPrint('[PlayerScreen] Terminating HLS session: $sessionId');
-    try {
-      final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
-      final result = await graphqlClient.mutate(
-        MutationOptions(
-          document: documentNodeMutationEndStreamingSession,
-          variables: Variables$Mutation$EndStreamingSession(
-            sessionId: sessionId,
-          ).toJson(),
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint(
-            '[PlayerScreen] Failed to terminate HLS session: ${result.exception}');
-      } else {
-        debugPrint('[PlayerScreen] HLS session terminated successfully');
-      }
-    } catch (e) {
-      debugPrint('[PlayerScreen] Error terminating HLS session: $e');
-    }
   }
 
   /// Refreshes everything that reflects watched state. Deliberately not called
@@ -3404,38 +3077,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Error stopping local proxy: $e');
     }
 
-    // End HLS session via GraphQL (works for both modes)
-    final sessionId = _hlsSessionId;
-    final graphqlClient = _graphqlClient;
-    if (sessionId != null && graphqlClient != null) {
-      debugPrint('[PlayerScreen] Terminating HLS session: $sessionId');
-      try {
-        final result = await graphqlClient.mutate(
-          MutationOptions(
-            document: documentNodeMutationEndStreamingSession,
-            variables: Variables$Mutation$EndStreamingSession(
-              sessionId: sessionId,
-            ).toJson(),
-          ),
-        );
-
-        if (result.hasException) {
-          debugPrint(
-              '[PlayerScreen] Failed to terminate HLS session: ${result.exception}');
-        } else {
-          debugPrint('[PlayerScreen] HLS session terminated successfully');
-        }
-      } catch (e) {
-        debugPrint('[PlayerScreen] Error terminating HLS session: $e');
-      }
-    } else if (sessionId != null) {
-      // Extremely narrow window: disposed before `asyncGraphqlClientProvider`
-      // ever resolved once. The old code awaited it fresh every time (from
-      // inside `dispose()`, which is what made it unsafe); this only has
-      // whatever `ref.listenManual` had captured by now.
-      debugPrint(
-          '[PlayerScreen] Cannot terminate HLS session $sessionId: no GraphQL client resolved yet');
-    }
+    // The controller resolves the client through the same captured field
+    // `ref.listenManual` keeps fresh, so this is safe from dispose().
+    await _playback?.endSession();
   }
 
   // Note: Subtitle tracks are now loaded via GraphQL in _fetchProgressAndEpisodes

@@ -5,20 +5,17 @@
 // captured `_graphqlClient` rather than the dispose()-time `ref.read` that
 // used to throw before any of this could happen.
 //
-// Reaching a real, non-null `_hlsSessionId` means going through the whole
-// HLS negotiation path, including `_waitForPlaylist`'s (unstubbed) HTTP
-// polling. `flutter_test`'s own `HttpOverrides` turns every such call into
-// an instant 400 response (never touching the network), and `FakeAsync`
-// governs the retry backoff, so `pumpAndSettle` drains the retry loop to
-// exhaustion quickly and deterministically — `_initializePlayer`'s own
-// try/catch then absorbs the resulting "playlist not ready" failure exactly
-// as it would absorb a real one, leaving `_hlsSessionId` set from before.
+// The controller owns every session it starts and immediately cleans one up
+// when its playlist never becomes ready. This test must therefore give it a
+// ready in-memory playlist, so its pre-dispose assertion reaches the source
+// that is still live and its post-dispose assertion exercises screen cleanup.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/graphql/mutations/end_streaming_session.graphql.dart';
 
+import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
@@ -46,40 +43,41 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    await pumpPlayerScreen(tester, container);
+    await mockHttpResponse(
+      () async {
+        await pumpPlayerScreen(tester, container);
+        await tester.pumpAndSettle();
 
-    // Let `_initializePlayer` run to completion: the mutation resolves
-    // (setting `_hlsSessionId`), then `_waitForPlaylist` exhausts its
-    // retries against the framework's synthetic 400s and the outer
-    // try/catch absorbs the resulting exception.
-    await tester.pumpAndSettle();
+        expect(
+          link.requests
+              .where((r) =>
+                  r.operation.document ==
+                  documentNodeMutationEndStreamingSession)
+              .toList(),
+          isEmpty,
+          reason: 'sanity check: the session must not already be ended before '
+              'dispose, or this test proves nothing about dispose() specifically',
+        );
 
-    expect(
-      link.requests
-          .where((r) =>
-              r.operation.document == documentNodeMutationEndStreamingSession)
-          .toList(),
-      isEmpty,
-      reason: 'sanity check: the session must not already be ended before '
-          'dispose, or this test proves nothing about dispose() specifically',
+        // Unmount. Before the fix, this throws `StateError` on the very first
+        // line of `_terminateHlsSession` (see `player_screen_dispose_cleanup_
+        // test.dart`'s header for why); the exception is asserted null
+        // explicitly for the same reason it is there.
+        await tester.pumpWidget(const SizedBox());
+        expect(tester.takeException(), isNull);
+
+        final endSessionRequests = link.requests
+            .where((r) =>
+                r.operation.document == documentNodeMutationEndStreamingSession)
+            .toList();
+        expect(endSessionRequests, hasLength(1),
+            reason: '_terminateHlsSession must have sent the '
+                'EndStreamingSession mutation during dispose()');
+        expect(endSessionRequests.single.variables['sessionId'], 'sess-42',
+            reason: 'must end the session this screen actually started, using '
+                'the sessionId captured from the startStreamingSession response');
+      },
+      responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
     );
-
-    // Unmount. Before the fix, this throws `StateError` on the very first
-    // line of `_terminateHlsSession` (see `player_screen_dispose_cleanup_
-    // test.dart`'s header for why); the exception is asserted null
-    // explicitly for the same reason it is there.
-    await tester.pumpWidget(const SizedBox());
-    expect(tester.takeException(), isNull);
-
-    final endSessionRequests = link.requests
-        .where((r) =>
-            r.operation.document == documentNodeMutationEndStreamingSession)
-        .toList();
-    expect(endSessionRequests, hasLength(1),
-        reason: '_terminateHlsSession must have sent the EndStreamingSession '
-            'mutation during dispose()');
-    expect(endSessionRequests.single.variables['sessionId'], 'sess-42',
-        reason: 'must end the session this screen actually started, using '
-            'the sessionId captured from the startStreamingSession response');
   });
 }

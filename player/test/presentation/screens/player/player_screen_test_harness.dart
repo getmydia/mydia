@@ -28,6 +28,8 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
+import 'package:player/core/playback/playback_memory.dart';
+import 'package:player/core/playback/playback_memory_providers.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/settings/settings_service.dart';
@@ -484,6 +486,7 @@ Map<String, dynamic> streamingCandidatesResponse({
   double? duration,
   bool directPlay = false,
   int? height,
+  int? bitrate,
   String fileId = 'file-1',
   List<String>? preferredAudioLanguages,
 }) {
@@ -512,6 +515,7 @@ Map<String, dynamic> streamingCandidatesResponse({
         'duration': duration,
         'width': null,
         'height': height,
+        'bitrate': bitrate,
         'preferredAudioLanguages': preferredAudioLanguages,
       },
     },
@@ -633,6 +637,8 @@ ProviderContainer buildPlayerScreenContainer({
         .overrideWith((ref) => castSessionStream ?? Stream.value(null)),
     playbackProgressStoreProvider.overrideWith(
         (ref) async => progressStore ?? InMemoryPlaybackProgressStore()),
+    playbackMemoryProvider
+        .overrideWith((ref) async => InMemoryPlaybackMemory()),
   ]);
 }
 

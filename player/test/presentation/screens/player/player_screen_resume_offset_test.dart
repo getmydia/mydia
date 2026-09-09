@@ -9,15 +9,15 @@
 //
 // `_timeline` is private state with no public getter, so these tests read it
 // through the `debugPrint('[PlayerScreen] Stream timeline: $_timeline')` line
-// immediately after it's built — genuine production log output, not a
-// reflection hack, and it fires before `_waitForPlaylist`'s real (unstubbed)
-// HTTP polling would otherwise need to be reached.
+// immediately after the controller returns a ready source — genuine
+// production log output, not a reflection hack.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 
+import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
@@ -80,24 +80,19 @@ void main() {
     addTearDown(container.dispose);
 
     final loggedLines = <String>[];
-    await withCapturedDebugPrint(loggedLines, () async {
-      await pumpPlayerScreen(tester, container);
-      await answerResumeDialog(tester);
+    await mockHttpResponse(
+      () => withCapturedDebugPrint(loggedLines, () async {
+        await pumpPlayerScreen(tester, container);
+        await answerResumeDialog(tester);
 
-      await pumpUntil(
-        tester,
-        () => loggedLines.any((l) => l.contains('Stream timeline:')),
-      );
-    });
+        await pumpUntil(
+          tester,
+          () => loggedLines.any((l) => l.contains('Stream timeline:')),
+        );
+      }),
+      responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
+    );
 
-    // The timeline assertion this test cares about has already been
-    // captured above; this just drains `_waitForPlaylist`'s background
-    // retry loop (real HTTP calls, but `flutter_test`'s `HttpOverrides`
-    // makes every one an instant 400, and `FakeAsync` governs the retry
-    // backoff timers) so no pending timer survives into the framework's
-    // own end-of-test check. `_waitForPlaylist` has no `mounted` guard on
-    // the loop itself — only around the `setState` calls inside it — so it
-    // keeps running to exhaustion regardless of widget disposal.
     await tester.pumpAndSettle();
 
     final timelineLine = loggedLines.firstWhere(
@@ -136,15 +131,18 @@ void main() {
     addTearDown(container.dispose);
 
     final loggedLines = <String>[];
-    await withCapturedDebugPrint(loggedLines, () async {
-      await pumpPlayerScreen(tester, container);
-      await answerResumeDialog(tester);
+    await mockHttpResponse(
+      () => withCapturedDebugPrint(loggedLines, () async {
+        await pumpPlayerScreen(tester, container);
+        await answerResumeDialog(tester);
 
-      await pumpUntil(
-        tester,
-        () => loggedLines.any((l) => l.contains('Stream timeline:')),
-      );
-    });
+        await pumpUntil(
+          tester,
+          () => loggedLines.any((l) => l.contains('Stream timeline:')),
+        );
+      }),
+      responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits,
+    );
 
     await tester.pumpAndSettle();
 

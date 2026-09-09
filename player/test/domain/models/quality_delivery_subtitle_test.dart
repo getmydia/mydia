@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/domain/models/quality_delivery_subtitle.dart';
+import 'package:player/domain/models/quality_rung.dart';
 
 void main() {
   group('originalDeliverySubtitle', () {
@@ -54,52 +56,31 @@ void main() {
     });
   });
 
-  group('firstStrategyAllowsDirectPlay', () {
-    test('true when first is DIRECT_PLAY or REMUX', () {
+  group('deliverySubtitleForPlan', () {
+    test('names the plan', () {
       expect(
-        firstStrategyAllowsDirectPlay(['DIRECT_PLAY', 'TRANSCODE']),
-        isTrue,
+        deliverySubtitleForPlan(
+          const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+        ),
+        kOriginalDirectPlaySubtitle,
       );
       expect(
-        firstStrategyAllowsDirectPlay(['REMUX', 'HLS_COPY', 'TRANSCODE']),
-        isTrue,
-      );
-    });
-
-    test('false when first is HLS_COPY, even with nothing else ahead of it',
-        () {
-      // A leading HLS_COPY is the server's :needs_transcoding verdict
-      // (Mydia.Streaming.Candidates.build_streaming_candidates/2) and
-      // HLS_COPY never re-encodes, so it still carries a codec the device
-      // was just told it cannot decode.
-      expect(
-        firstStrategyAllowsDirectPlay(['HLS_COPY', 'TRANSCODE']),
-        isFalse,
-      );
-    });
-
-    test('false when empty or first is TRANSCODE', () {
-      expect(firstStrategyAllowsDirectPlay([]), isFalse);
-      expect(firstStrategyAllowsDirectPlay(['TRANSCODE']), isFalse);
-    });
-  });
-
-  group('strategiesAllowLosslessDelivery', () {
-    test('true when any HLS_COPY or REMUX is present', () {
-      expect(
-        strategiesAllowLosslessDelivery(['REMUX', 'TRANSCODE']),
-        isTrue,
+        deliverySubtitleForPlan(const HlsPlan(
+          strategy: HlsStrategy.copy,
+          rung: QualityRung.original,
+          adaptive: false,
+          reason: PlanReason.copyAccepted,
+        )),
+        kOriginalLosslessSubtitle,
       );
       expect(
-        strategiesAllowLosslessDelivery(['HLS_COPY', 'TRANSCODE']),
-        isTrue,
-      );
-    });
-
-    test('false for DIRECT_PLAY + TRANSCODE only (web direct-play shape)', () {
-      expect(
-        strategiesAllowLosslessDelivery(['DIRECT_PLAY', 'TRANSCODE']),
-        isFalse,
+        deliverySubtitleForPlan(const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: QualityRung.original,
+          adaptive: false,
+          reason: PlanReason.noCopyCandidate,
+        )),
+        kOriginalTranscodeSubtitle,
       );
     });
   });

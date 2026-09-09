@@ -69,6 +69,33 @@ PlanInputs _inputs({
     );
 
 void main() {
+  group('PlanInputs.copyWith', () {
+    test('replaces quality choice without losing planning context', () {
+      final inputs = _inputs(
+        candidates: _remuxList,
+        isWeb: true,
+        typeSupported: _reject,
+        sourceHeight: 2160,
+        fileBitrateKbps: 20000,
+        knownThroughputKbps: 25000,
+        knownFailures: {
+          const FailureKey(videoCodec: _h264, heightBucket: 2160),
+        },
+      );
+
+      final copied = inputs.copyWith(choice: QualityChoice.auto);
+
+      expect(copied.choice, QualityChoice.auto);
+      expect(copied.candidates, same(inputs.candidates));
+      expect(copied.isWeb, inputs.isWeb);
+      expect(copied.typeSupported, same(inputs.typeSupported));
+      expect(copied.sourceHeight, inputs.sourceHeight);
+      expect(copied.fileBitrateKbps, inputs.fileBitrateKbps);
+      expect(copied.knownThroughputKbps, inputs.knownThroughputKbps);
+      expect(copied.knownFailures, same(inputs.knownFailures));
+    });
+  });
+
   group('rule 1, direct play', () {
     test('native, leading DIRECT_PLAY, Original: direct play', () {
       final plan = planPlayback(_inputs());
