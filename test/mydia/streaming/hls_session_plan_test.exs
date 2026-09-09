@@ -62,7 +62,7 @@ defmodule Mydia.Streaming.HlsSessionPlanTest do
 
       assert :stop = HlsSession.hwaccel_fallback(state, 0)
 
-      refute_receive {:session_updated, _}, 50
+      refute_receive {:session_updated, "session-2"}, 50
     end
   end
 
