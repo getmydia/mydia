@@ -32,15 +32,23 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
   # VAProfile names map onto codec atoms. Profile variants (Main, Main10,
   # High, Profile0) collapse onto the codec, because the tier decision only
   # asks "can this device decode av1 at all".
-  @profile_patterns [
-    {~r/VAProfileH264/, :h264},
-    {~r/VAProfileHEVC/, :hevc},
-    {~r/VAProfileAV1/, :av1},
-    {~r/VAProfileVP9/, :vp9},
-    {~r/VAProfileVP8/, :vp8},
-    {~r/VAProfileMPEG2/, :mpeg2video},
-    {~r/VAProfileVC1/, :vc1}
-  ]
+  #
+  # A private function rather than a module attribute: under OTP 28 a compiled
+  # regex holds a reference, and Elixir 1.18 can only escape one at the top
+  # level of an attribute, not nested inside a list or tuple. The Nix release
+  # builds on 1.18 while devenv and the Docker image are on 1.19, so nesting
+  # these in an attribute compiles here and breaks the NixOS module job.
+  defp profile_patterns do
+    [
+      {~r/VAProfileH264/, :h264},
+      {~r/VAProfileHEVC/, :hevc},
+      {~r/VAProfileAV1/, :av1},
+      {~r/VAProfileVP9/, :vp9},
+      {~r/VAProfileVP8/, :vp8},
+      {~r/VAProfileMPEG2/, :mpeg2video},
+      {~r/VAProfileVC1/, :vc1}
+    ]
+  end
 
   @spec run(keyword()) :: Capabilities.t()
   def run(opts \\ []) do
@@ -167,7 +175,7 @@ defmodule Mydia.Streaming.HardwareAccel.Probe do
     lines
     |> Enum.filter(&Regex.match?(entrypoint, &1))
     |> Enum.flat_map(fn line ->
-      Enum.filter(@profile_patterns, fn {pattern, _codec} -> Regex.match?(pattern, line) end)
+      Enum.filter(profile_patterns(), fn {pattern, _codec} -> Regex.match?(pattern, line) end)
     end)
     |> Enum.map(fn {_pattern, codec} -> codec end)
     |> Enum.uniq()
