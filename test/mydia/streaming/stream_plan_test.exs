@@ -255,8 +255,8 @@ defmodule Mydia.Streaming.StreamPlanTest do
     test "a compatible mapped audio track is copied" do
       # The mapped stream, not media_file.audio_codec, decides this: without an
       # analysed audio stream select_for_playback/2 returns nil, and a nil
-      # selection always copies regardless of codec (see the next test), which
-      # would make this pass for the wrong reason.
+      # selection always copies regardless of codec (see "no analysed audio
+      # stream copies" below), which would make this pass for the wrong reason.
       file =
         media_file(
           audio_codec: "aac",
@@ -289,6 +289,19 @@ defmodule Mydia.Streaming.StreamPlanTest do
 
       assert plan.audio.action == :encode
       assert plan.audio.to_codec == "aac"
+    end
+
+    test "no analysed audio stream copies, matching the pre-existing blanket -c copy" do
+      # media_file(audio_codec: "eac3") here has no metadata.streams, so
+      # select_for_playback/2 returns nil: no compatibility check is
+      # possible. The old remux_codec_args(nil, _device_profile) emitted a
+      # blanket "-c copy" for exactly this shape, regardless of
+      # media_file.audio_codec, and anything else here would change the
+      # arguments this refactor must leave untouched.
+      plan = StreamPlan.for_remux(media_file(audio_codec: "eac3"), [])
+
+      assert plan.selected_audio == nil
+      assert plan.audio.action == :copy
     end
 
     test "geometry is the source's, unchanged" do

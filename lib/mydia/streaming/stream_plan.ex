@@ -156,13 +156,7 @@ defmodule Mydia.Streaming.StreamPlan do
   def for_remux(media_file, opts) do
     {from_width, from_height} = source_dimensions(media_file)
     selected = AudioTrackSelector.select_for_playback(media_file, opts)
-
-    from_codec =
-      case selected do
-        %StreamInfo{codec: codec} when is_binary(codec) -> codec
-        _ -> media_file && media_file.audio_codec
-      end
-
+    from_codec = mapped_audio_codec(media_file, selected)
     action = if remux_audio_compatible?(selected, opts), do: :copy, else: :encode
 
     %__MODULE__{
@@ -176,14 +170,7 @@ defmodule Mydia.Streaming.StreamPlan do
         to_height: from_height,
         tier: nil
       },
-      audio: %Audio{
-        action: action,
-        from_codec: from_codec,
-        to_codec: if(action == :copy, do: from_codec, else: @audio_target_codec),
-        language: selected && selected.language,
-        stream_index: selected && selected.index,
-        channels: selected && selected.channels
-      },
+      audio: build_audio(from_codec, selected, action),
       container: :fmp4,
       max_bitrate_kbps: nil,
       accel: nil,
@@ -280,12 +267,7 @@ defmodule Mydia.Streaming.StreamPlan do
 
   defp hls_audio(media_file, opts) do
     selected = AudioTrackSelector.select_for_playback(media_file, opts)
-
-    from_codec =
-      case selected do
-        %StreamInfo{codec: codec} when is_binary(codec) -> codec
-        _ -> media_file && media_file.audio_codec
-      end
+    from_codec = mapped_audio_codec(media_file, selected)
 
     action =
       case Keyword.get(opts, :audio_codec) do
@@ -304,7 +286,26 @@ defmodule Mydia.Streaming.StreamPlan do
           :encode
       end
 
-    audio = %Audio{
+    {build_audio(from_codec, selected, action), selected}
+  end
+
+  # The mapped stream's codec, or `media_file.audio_codec` (the *first*
+  # audio stream, the one that chose the candidate strategy) when nothing
+  # was selected: no analysed streams at all, or no match among them. Shared
+  # by for_hls/2 and for_remux/2 so the fallback rule cannot drift between
+  # the two ffmpeg paths.
+  defp mapped_audio_codec(media_file, selected) do
+    case selected do
+      %StreamInfo{codec: codec} when is_binary(codec) -> codec
+      _ -> media_file && media_file.audio_codec
+    end
+  end
+
+  # The reported Audio struct for the stream actually mapped. Shared by
+  # for_hls/2 and for_remux/2, which only disagree on how `action` itself is
+  # decided; from_codec must already be `mapped_audio_codec/2`'s answer.
+  defp build_audio(from_codec, selected, action) do
+    %Audio{
       action: action,
       from_codec: from_codec,
       to_codec: if(action == :copy, do: from_codec, else: @audio_target_codec),
@@ -312,8 +313,6 @@ defmodule Mydia.Streaming.StreamPlan do
       stream_index: selected && selected.index,
       channels: selected && selected.channels
     }
-
-    {audio, selected}
   end
 
   # Mirrors FfmpegHlsTranscoder.reencodes_video?/2 and build_ffmpeg_args/3,
