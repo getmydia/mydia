@@ -1,9 +1,22 @@
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_plan.dart';
+import 'package:player/core/playback/playback_memory_providers.dart';
+
+class _UnreadableBox extends Fake implements Box<Map> {
+  @override
+  Map? get(dynamic key, {Map? defaultValue}) =>
+      throw StateError('corrupt record');
+
+  @override
+  Future<void> delete(dynamic key) => Future<void>.error(
+        StateError('could not delete corrupt record'),
+      );
+}
 
 void main() {
   const server = 'https://mydia.example';
@@ -61,6 +74,8 @@ void main() {
         final later =
             now.add(kFailureMemoryTtl).add(const Duration(seconds: 1));
         expect(memory.failuresFor(server, now: later), isEmpty);
+        expect(memory.failuresFor(server, now: now.add(kFailureMemoryTtl)),
+            isEmpty);
         final justBefore =
             now.add(kFailureMemoryTtl).subtract(const Duration(seconds: 1));
         expect(memory.failuresFor(server, now: justBefore), {key});
@@ -107,5 +122,28 @@ void main() {
     final memory = HivePlaybackMemory(box);
     expect(memory.failuresFor(server, now: now), isEmpty);
     expect(memory.throughputKbps(server), isNull);
+  });
+
+  test('HivePlaybackMemory survives errors reading and deleting a record',
+      () async {
+    final memory = HivePlaybackMemory(_UnreadableBox());
+
+    expect(memory.failuresFor(server, now: now), isEmpty);
+    expect(memory.throughputKbps(server), isNull);
+    await pumpEventQueue();
+  });
+
+  test('playback memory provider falls back when its box will not open',
+      () async {
+    final container = ProviderContainer(overrides: [
+      playbackMemoryBoxProvider.overrideWith(
+        (ref) async => throw StateError('box unavailable'),
+      ),
+    ]);
+    addTearDown(container.dispose);
+
+    final memory = await container.read(playbackMemoryProvider.future);
+
+    expect(memory, isA<InMemoryPlaybackMemory>());
   });
 }

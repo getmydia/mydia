@@ -144,14 +144,22 @@ class HivePlaybackMemory implements PlaybackMemory {
   final Box<Map> _box;
 
   _ServerRecord _read(String serverKey) {
-    final raw = _box.get(serverKey);
-    if (raw == null) return _ServerRecord.empty();
     try {
+      final raw = _box.get(serverKey);
+      if (raw == null) return _ServerRecord.empty();
       return _ServerRecord.fromMap(raw);
     } catch (e) {
       debugPrint('[PlaybackMemory] Discarding unreadable record: $e');
-      unawaited(_box.delete(serverKey));
+      unawaited(_discard(serverKey));
       return _ServerRecord.empty();
+    }
+  }
+
+  Future<void> _discard(String serverKey) async {
+    try {
+      await _box.delete(serverKey);
+    } catch (e) {
+      debugPrint('[PlaybackMemory] Could not discard unreadable record: $e');
     }
   }
 
