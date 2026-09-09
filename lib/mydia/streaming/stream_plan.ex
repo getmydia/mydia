@@ -113,7 +113,18 @@ defmodule Mydia.Streaming.StreamPlan do
             max_height: max_height,
             video_bitrate_kbps: video_bitrate_kbps(max_bitrate),
             crf: Keyword.get(opts, :crf, 23),
-            preset: Keyword.get(opts, :preset, "medium"),
+            # "veryfast", not x264's own "medium" default. This preset governs
+            # a live HLS encode a player is already waiting on, so the only
+            # quality that matters is the quality reachable before the viewer
+            # gives up. On an AV1 source "medium" took 29.6s to write the first
+            # playlist against the 30s budget in `Mydia.P2p.Server`, which is a
+            # black screen, not better video. An operator who would rather
+            # spend the wall clock can still pass :preset.
+            #
+            # This default lived in `FfmpegHlsTranscoder.build_ffmpeg_args/3`
+            # until the plan took over the encode decisions; it moved here so
+            # there is still exactly one place that decides it.
+            preset: Keyword.get(opts, :preset, "veryfast"),
             # The caller's override, not a hardcoded literal: this branch is
             # only reached when video_action is :encode, so an explicit
             # "copy" never arrives here. Falling back to "libx264" reproduces

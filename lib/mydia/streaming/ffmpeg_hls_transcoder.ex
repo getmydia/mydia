@@ -119,7 +119,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       why.
     * `:video_codec` - (optional) Video codec (default: auto-detect from media_file or "libx264")
     * `:audio_codec` - (optional) Audio codec (default: auto-detect from media_file or "aac")
-    * `:preset` - (optional) FFmpeg preset (default: "medium")
+    * `:preset` - (optional) FFmpeg preset (default: "veryfast")
     * `:crf` - (optional) Constant Rate Factor for quality (default: 23)
     * `:max_bitrate` - (optional) Total kbps cap; forces a transcode when set
     * `:max_height` - (optional) Output height ceiling in pixels. Preserves

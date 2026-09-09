@@ -30,10 +30,24 @@ defmodule Mydia.P2p.Server do
   @opaque_failure "Request failed"
 
   # How long one peer request may run before its task is killed and its slot
-  # returned. Matches the Rust core's `RESPONSE_TIMEOUT`: past that the peer has
-  # already been handed a timeout error and stopped waiting, so anything still
-  # running is work whose result nothing will read.
-  @request_timeout :timer.seconds(30)
+  # returned. Deliberately *under* the Rust core's 30s `RESPONSE_TIMEOUT` rather
+  # than equal to it. Equal, the two deadlines race: a request that overruns is
+  # abandoned by the peer at the same instant the host decides to answer it, and
+  # the peer is left to infer a timeout from silence. Landing first means the
+  # host always gets to send the error, which is the whole point of the deadline
+  # (see `serve_request/5`). The gap has to cover sending that response back
+  # over the wire, so it is seconds, not milliseconds.
+  @request_timeout :timer.seconds(25)
+
+  # How long a peer's first HLS request waits for FFmpeg to write a playlist.
+  # This is not the request/response path and has no `RESPONSE_TIMEOUT` over it:
+  # the peer holds a QUIC stream open and waits as long as the host takes, so
+  # the only thing this bounds is how long a genuinely dead encoder ties up a
+  # slot. It used to be 30s, which a cold software transcode of an AV1 source
+  # missed by 400ms, turning a slow start into a 503 the player showed as a
+  # failure. Sized for the worst realistic cold start rather than the typical
+  # one, because being late costs a spinner and being early costs playback.
+  @session_ready_timeout :timer.minutes(2)
 
   @doc """
   Status information about the p2p host.
@@ -595,9 +609,19 @@ defmodule Mydia.P2p.Server do
     :ok
   end
 
-  defp stream_hls_response(resource, stream_id, req) do
-    # Spawn a task to handle the streaming so we don't block the GenServer
-    Task.start(fn ->
+  # Public only so the regression test can fill the bound and drive the refusal
+  # without a live NIF resource, the same reason `serve_request/5` is public.
+  # Nothing outside this module should call it.
+  @doc false
+  def stream_hls_response(resource, stream_id, req) do
+    # Spawn a task to handle the streaming so we don't block the GenServer, under
+    # a supervisor that bounds how many can be in flight. A bare `Task.start`
+    # here was unbounded: iroh gates inbound connections on ALPN alone, and every
+    # request against a session still warming up parks a task for the whole
+    # `@session_ready_timeout` plus a waiter inside the session. Raising that
+    # budget to two minutes stretched the window in which a peer could pile them
+    # up, so the bound is what makes the longer wait safe to have.
+    task = fn ->
       t0 = System.monotonic_time(:millisecond)
       handle_hls_stream(resource, stream_id, req)
       elapsed = System.monotonic_time(:millisecond) - t0
@@ -605,7 +629,22 @@ defmodule Mydia.P2p.Server do
       Logger.info(
         "p2p_metrics_elixir: handler_complete total_ms=#{elapsed} session=#{req.session_id} path=#{req.path}"
       )
-    end)
+    end
+
+    case Task.Supervisor.start_child(Mydia.P2p.StreamSupervisor, task) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, :max_children} ->
+        # 503 rather than a silent drop: the peer can back off and retry, which
+        # is the behaviour it already has for a session that is not ready.
+        Logger.warning("P2P HLS stream refused: too many streams in flight")
+        send_hls_error(resource, stream_id, 503, "Too many streams in flight")
+
+      {:error, reason} ->
+        Logger.error("P2P HLS stream could not be started: #{inspect(reason)}")
+        send_hls_error(resource, stream_id, 503, "Stream failed to start")
+    end
 
     :ok
   end
@@ -647,7 +686,7 @@ defmodule Mydia.P2p.Server do
     case lookup_hls_session(req.session_id) do
       {:ok, pid, session_info} ->
         # Wait for the session to be ready (FFmpeg has created initial files)
-        case HlsSession.await_ready(pid, 30_000) do
+        case HlsSession.await_ready(pid, @session_ready_timeout) do
           :ok ->
             case resolve_session_file(session_info, req.path) do
               {:ok, file_path} ->
