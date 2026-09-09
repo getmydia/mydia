@@ -43,7 +43,7 @@ Future<({int status, String body})> _readyProbe(
     (status: 200, body: 'a.ts\nb.ts\nc.ts\n');
 
 PlaybackController _controller(
-  StubLink link, {
+  Link link, {
   bool relayed = false,
   ServerFeatures? features,
   PlaylistProbe probe = _readyProbe,
@@ -74,6 +74,26 @@ const _transcode480 = HlsPlan(
 );
 
 const _direct = DirectPlayPlan(reason: PlanReason.directPlayAccepted);
+
+Link _delayedStartLink({
+  required List<Request> requests,
+  required Future<Map<String, dynamic>> Function(int index) start,
+  void Function(String sessionId)? onEnd,
+}) {
+  var starts = 0;
+  return Link.function((request, [forward]) async* {
+    requests.add(request);
+    final sessionId = request.variables['sessionId'] as String?;
+    final Map<String, dynamic> data;
+    if (sessionId == null) {
+      data = await start(starts++);
+    } else {
+      onEnd?.call(sessionId);
+      data = _endOk;
+    }
+    yield Response(data: data, response: const {});
+  });
+}
 
 void main() {
   group('open', () {
@@ -567,6 +587,213 @@ void main() {
   });
 
   group('endSession', () {
+    test('cleans up an initial start that returns after teardown', () async {
+      final requested = Completer<void>();
+      final response = Completer<Map<String, dynamic>>();
+      final ended = Completer<void>();
+      final requests = <Request>[];
+      final link = _delayedStartLink(
+        requests: requests,
+        start: (_) {
+          requested.complete();
+          return response.future;
+        },
+        onEnd: (_) => ended.complete(),
+      );
+      final controller = _controller(link);
+      final opened = controller
+          .open(_copy, fileId: 'file-1', startAt: Duration.zero)
+          .then<Object?>(
+            (_) => null,
+            onError: (Object error) => error,
+          );
+      await requested.future;
+      await controller.endSession();
+      response.complete(startStreamingSessionResponse(sessionId: 'late'));
+
+      expect(await opened, isA<StateError>());
+      await ended.future;
+      expect(controller.sessionId, isNull);
+      expect(requests.map((request) => request.variables['sessionId']),
+          [null, 'late']);
+    });
+
+    test('ends the retained old session and a late replacement start',
+        () async {
+      final requested = Completer<void>();
+      final response = Completer<Map<String, dynamic>>();
+      final lateEnded = Completer<void>();
+      final requests = <Request>[];
+      final link = _delayedStartLink(
+        requests: requests,
+        start: (index) {
+          if (index == 0) {
+            return Future.value(
+                startStreamingSessionResponse(sessionId: 'old'));
+          }
+          requested.complete();
+          return response.future;
+        },
+        onEnd: (id) {
+          if (id == 'late') lateEnded.complete();
+        },
+      );
+      final controller = _controller(link);
+      await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
+      var attached = false;
+      final switched = controller.replaceSource(
+        _transcode480,
+        fileId: 'file-1',
+        realPosition: Duration.zero,
+        attach: (_) async {
+          attached = true;
+          return Stream.fromIterable(
+              const [Duration.zero, Duration(seconds: 1)]);
+        },
+      ).then<Object?>(
+        (_) => null,
+        onError: (Object error) => error,
+      );
+      await requested.future;
+      await controller.endSession();
+      final endedBeforeResponse = requests
+          .map((request) => request.variables['sessionId'])
+          .whereType<String>()
+          .toList();
+      response.complete(startStreamingSessionResponse(sessionId: 'late'));
+
+      expect(await switched, isA<StateError>());
+      await lateEnded.future;
+      expect(endedBeforeResponse, ['old']);
+      expect(attached, isFalse);
+      expect(controller.sessionId, isNull);
+      expect(controller.switching, isFalse);
+      expect(
+          requests
+              .map((request) => request.variables['sessionId'])
+              .whereType<String>(),
+          ['old', 'late']);
+    });
+
+    test('ends both sessions without restoring old after an advance wait',
+        () async {
+      final link = _link(starts: [
+        startStreamingSessionResponse(sessionId: 'old'),
+        startStreamingSessionResponse(sessionId: 'new'),
+      ]);
+      final controller = _controller(link);
+      await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
+      final listening = Completer<void>();
+      final positions = StreamController<Duration>.broadcast(
+        onListen: listening.complete,
+      );
+      final switched = controller
+          .replaceSource(
+            _transcode480,
+            fileId: 'file-1',
+            realPosition: Duration.zero,
+            attach: (_) async => positions.stream,
+          )
+          .then<Object?>(
+            (_) => null,
+            onError: (Object error) => error,
+          );
+      await listening.future;
+      await controller.endSession();
+      final retainedListener = positions.hasListener;
+      await positions.close();
+
+      expect(await switched, isA<StateError>());
+      expect(controller.sessionId, isNull);
+      expect(controller.switching, isFalse);
+      expect(retainedListener, isFalse);
+      expect(
+          link.requests
+              .map((request) => request.variables['sessionId'])
+              .whereType<String>(),
+          unorderedEquals(['old', 'new']));
+      await controller.endSession();
+      expect(link.requests, hasLength(4));
+    });
+
+    test('a delayed attach cannot finish a switch after teardown', () async {
+      final link = _link(starts: [
+        startStreamingSessionResponse(sessionId: 'old'),
+        startStreamingSessionResponse(sessionId: 'new'),
+      ]);
+      final controller = _controller(link);
+      await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
+      final attaching = Completer<void>();
+      final attached = Completer<Stream<Duration>>();
+      final switched = controller.replaceSource(
+        _transcode480,
+        fileId: 'file-1',
+        realPosition: Duration.zero,
+        attach: (_) {
+          attaching.complete();
+          return attached.future;
+        },
+      ).then<Object?>(
+        (_) => null,
+        onError: (Object error) => error,
+      );
+      await attaching.future;
+      await controller.endSession();
+      attached.complete(Stream.fromIterable(const [
+        Duration.zero,
+        Duration(seconds: 1),
+      ]));
+
+      expect(await switched, isA<StateError>());
+      expect(controller.sessionId, isNull);
+      expect(controller.switching, isFalse);
+      expect(
+          link.requests
+              .map((request) => request.variables['sessionId'])
+              .whereType<String>(),
+          unorderedEquals(['old', 'new']));
+    });
+
+    test('a torn-down playlist cannot replace a later open', () async {
+      final link = _link(starts: [
+        startStreamingSessionResponse(sessionId: 'old'),
+        startStreamingSessionResponse(sessionId: 'current'),
+      ]);
+      final probing = Completer<void>();
+      final probeResult = Completer<({int status, String body})>();
+      final controller = _controller(link, probe: (url, headers) {
+        if (url == 'hls://old') {
+          probing.complete();
+          return probeResult.future;
+        }
+        return _readyProbe(url, headers);
+      });
+      final oldOpen = controller
+          .open(_copy, fileId: 'file-1', startAt: Duration.zero)
+          .then<Object?>(
+            (_) => null,
+            onError: (Object error) => error,
+          );
+      await probing.future;
+      await controller.endSession();
+      await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
+      probeResult.complete((status: 200, body: 'a.ts\nb.ts\nc.ts\n'));
+
+      expect(await oldOpen, isA<StateError>());
+      expect(controller.sessionId, 'current');
+      expect(
+          link.requests
+              .map((request) => request.variables['sessionId'])
+              .whereType<String>(),
+          ['old']);
+      await controller.endSession();
+      expect(
+          link.requests
+              .map((request) => request.variables['sessionId'])
+              .whereType<String>(),
+          ['old', 'current']);
+    });
+
     test('resolves the current client and tolerates a failed end', () async {
       final starts =
           _link(starts: [startStreamingSessionResponse(sessionId: 's1')]);

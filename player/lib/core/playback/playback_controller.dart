@@ -75,6 +75,21 @@ class PlaybackSource {
 Future<void> awaitFirstAdvance(
   Stream<Duration> positions, {
   required Duration timeout,
+}) =>
+    _awaitFirstAdvance(positions, timeout: timeout);
+
+Future<T> _untilEnded<T>(Future<T> pending, Future<void>? ended) {
+  if (ended == null) return pending;
+  return Future.any([
+    pending,
+    ended.then<T>((_) => throw StateError('Playback ended')),
+  ]);
+}
+
+Future<void> _awaitFirstAdvance(
+  Stream<Duration> positions, {
+  required Duration timeout,
+  Future<void>? ended,
 }) async {
   final iterator = StreamIterator(positions);
   Future<void> waitForAdvance() async {
@@ -88,7 +103,7 @@ Future<void> awaitFirstAdvance(
   }
 
   try {
-    await waitForAdvance().timeout(timeout);
+    await _untilEnded(waitForAdvance().timeout(timeout), ended);
   } finally {
     // Future.timeout does not cancel its input. Explicitly release the
     // position listener when a failed source never sends another event.
@@ -125,6 +140,12 @@ class PlaybackController {
 
   String? _sessionId;
   bool _switching = false;
+  Completer<void> _lifetime = Completer<void>();
+
+  // Includes the previous source retained during a switch. A pending start
+  // joins this set as soon as the server gives it an ID, even after teardown.
+  final _ownedSessions = <String>{};
+  final _endingSessions = <String, Future<void>>{};
 
   String? get sessionId => _sessionId;
 
@@ -138,9 +159,12 @@ class PlaybackController {
     Duration? totalDuration,
     void Function(String message)? onProgress,
   }) async {
+    final lifetime = _lifetime;
     switch (plan) {
       case DirectPlayPlan():
-        final resolved = await _urls.directPlay(fileId);
+        final resolved =
+            await _untilEnded(_urls.directPlay(fileId), lifetime.future);
+        _requireActive(lifetime);
         debugPrint('[PlaybackController] Direct play for file_id=$fileId');
         return PlaybackSource(
           url: resolved.url,
@@ -150,11 +174,14 @@ class PlaybackController {
           seekOnOpen: true,
         );
       case HlsPlan():
-        return _openHls(plan,
-            fileId: fileId,
-            startAt: startAt,
-            totalDuration: totalDuration,
-            onProgress: onProgress);
+        return _untilEnded(
+            _openHls(plan,
+                fileId: fileId,
+                startAt: startAt,
+                totalDuration: totalDuration,
+                onProgress: onProgress,
+                lifetime: lifetime),
+            lifetime.future);
     }
   }
 
@@ -164,40 +191,50 @@ class PlaybackController {
     required Duration startAt,
     required Duration? totalDuration,
     required void Function(String message)? onProgress,
+    required Completer<void> lifetime,
   }) async {
+    _requireActive(lifetime);
     onProgress?.call('Starting stream...');
-    final session = await _startSession(plan, fileId: fileId, startAt: startAt);
-    _sessionId = session.sessionId;
-    debugPrint(
-        '[PlaybackController] HLS session started: ${session.sessionId}');
-
-    final full = session.playlistMode == Enum$PlaylistMode.FULL;
-    final echoedDuration = session.duration;
-    final duration = totalDuration ??
-        (echoedDuration == null
-            ? null
-            : Duration(milliseconds: (echoedDuration * 1000).round()));
-    // The echoed offset, not the requested one: the server clamps it and
-    // `-ss` lands on a keyframe. A FULL playlist starts at zero regardless.
-    final timeline = full
-        ? StreamTimeline(totalDuration: duration)
-        : StreamTimeline(
-            startOffset: Duration(seconds: session.startPosition ?? 0),
-            totalDuration: duration,
-          );
-    // Only a server that echoes caps gets to label the stream. The legacy
-    // document selects none, so reading them there would label a capped
-    // stream Original.
-    final effective = _features.heightCap
-        ? effectiveRungLabel(
-            maxHeight: session.maxHeight, maxBitrateKbps: session.maxBitrate)
-        : null;
-
+    // Do not abandon the mutation itself on teardown: a late response can
+    // still create a server session, and must be observed and ended here.
+    final session = await _startSession(plan,
+        fileId: fileId, startAt: startAt, lifetime: lifetime);
+    _ownedSessions.add(session.sessionId);
     try {
+      _requireActive(lifetime);
+      _sessionId = session.sessionId;
+      debugPrint(
+          '[PlaybackController] HLS session started: ${session.sessionId}');
+
+      final full = session.playlistMode == Enum$PlaylistMode.FULL;
+      final echoedDuration = session.duration;
+      final duration = totalDuration ??
+          (echoedDuration == null
+              ? null
+              : Duration(milliseconds: (echoedDuration * 1000).round()));
+      // The echoed offset, not the requested one: the server clamps it and
+      // `-ss` lands on a keyframe. A FULL playlist starts at zero regardless.
+      final timeline = full
+          ? StreamTimeline(totalDuration: duration)
+          : StreamTimeline(
+              startOffset: Duration(seconds: session.startPosition ?? 0),
+              totalDuration: duration,
+            );
+      // Only a server that echoes caps gets to label the stream. The legacy
+      // document selects none, so reading them there would label a capped
+      // stream Original.
+      final effective = _features.heightCap
+          ? effectiveRungLabel(
+              maxHeight: session.maxHeight, maxBitrateKbps: session.maxBitrate)
+          : null;
+
       final resolved = _urls.hls(session.sessionId);
       debugPrint('[PlaybackController] HLS URL: ${resolved.url}');
       await _awaitPlaylist(resolved.url,
-          headers: resolved.probeHeaders, onProgress: onProgress);
+          headers: resolved.probeHeaders,
+          onProgress: onProgress,
+          lifetime: lifetime);
+      _requireActive(lifetime);
 
       return PlaybackSource(
         url: resolved.url,
@@ -209,10 +246,16 @@ class PlaybackController {
         effectiveRung: effective,
       );
     } catch (_) {
-      _sessionId = null;
-      await _end(session.sessionId);
+      if (identical(lifetime, _lifetime) && _sessionId == session.sessionId) {
+        _sessionId = null;
+      }
+      await _endOwned(session.sessionId);
       rethrow;
     }
+  }
+
+  void _requireActive(Completer<void> lifetime) {
+    if (lifetime.isCompleted) throw StateError('Playback ended');
   }
 
   GraphQLClient _requireClient() {
@@ -230,7 +273,9 @@ class PlaybackController {
     HlsPlan plan, {
     required String fileId,
     required Duration startAt,
+    required Completer<void> lifetime,
   }) async {
+    _requireActive(lifetime);
     final client = _requireClient();
     final strategy = plan.strategy == HlsStrategy.copy
         ? Enum$StreamingStrategy.HLS_COPY
@@ -268,6 +313,7 @@ class PlaybackController {
         ),
       );
       if (_looksLikeMissingHeightSupport(result)) {
+        _requireActive(lifetime);
         debugPrint('[PlaybackController] Server does not know maxHeight; '
             'retrying without the height cap');
         _features.heightCap = false;
@@ -309,6 +355,7 @@ class PlaybackController {
     String url, {
     required Map<String, String>? headers,
     required void Function(String message)? onProgress,
+    required Completer<void> lifetime,
   }) async {
     const maxRetries = 20;
     const minSegments = 3;
@@ -316,8 +363,11 @@ class PlaybackController {
     const maxDelay = Duration(milliseconds: 3000);
 
     for (var i = 0; i < maxRetries; i++) {
+      _requireActive(lifetime);
       try {
-        final response = await _probe(url, headers);
+        final response =
+            await _untilEnded(_probe(url, headers), lifetime.future);
+        _requireActive(lifetime);
         if (response.status == 200) {
           final segments = '.ts'.allMatches(response.body).length;
           if (segments >= minSegments) return;
@@ -327,6 +377,7 @@ class PlaybackController {
           onProgress?.call('Starting transcoding... (${i + 1}/$maxRetries)');
         }
       } catch (e) {
+        if (lifetime.isCompleted) rethrow;
         debugPrint('[PlaybackController] Playlist probe failed '
             '(attempt ${i + 1}/$maxRetries): $e');
         onProgress?.call('Starting transcoding... (${i + 1}/$maxRetries)');
@@ -336,7 +387,7 @@ class PlaybackController {
             .clamp(baseDelay.inMilliseconds, maxDelay.inMilliseconds)
             .toInt(),
       );
-      await _wait(delay);
+      await _untilEnded(_wait(delay), lifetime.future);
     }
     throw Exception('Playlist not ready after maximum retry attempts');
   }
@@ -358,41 +409,60 @@ class PlaybackController {
   }) async {
     if (_switching) throw StateError('a source switch is already in flight');
     _switching = true;
+    final lifetime = _lifetime;
     final previous = _sessionId;
     _sessionId = null;
+    PlaybackSource? source;
     try {
-      final PlaybackSource source;
-      try {
-        source = await open(plan,
-            fileId: fileId,
-            startAt: realPosition,
-            totalDuration: totalDuration,
-            onProgress: onProgress);
-      } catch (_) {
-        _sessionId = previous;
-        rethrow;
-      }
-      try {
-        final positions = await attach(source);
-        await awaitFirstAdvance(positions, timeout: firstAdvanceTimeout);
-      } catch (_) {
-        final failed = _sessionId;
-        _sessionId = previous;
-        if (failed != null) await _end(failed);
-        rethrow;
-      }
-      if (previous != null) await _end(previous);
+      source = await open(plan,
+          fileId: fileId,
+          startAt: realPosition,
+          totalDuration: totalDuration,
+          onProgress: onProgress);
+      _requireActive(lifetime);
+      final positions = await _untilEnded(attach(source), lifetime.future);
+      _requireActive(lifetime);
+      await _awaitFirstAdvance(positions,
+          timeout: firstAdvanceTimeout, ended: lifetime.future);
+      _requireActive(lifetime);
+      if (previous != null) await _endOwned(previous);
+      _requireActive(lifetime);
       return source;
+    } catch (_) {
+      if (!lifetime.isCompleted) _sessionId = previous;
+      final failed = source?.sessionId;
+      if (failed != null) await _endOwned(failed);
+      rethrow;
     } finally {
-      _switching = false;
+      if (identical(lifetime, _lifetime)) _switching = false;
     }
   }
 
-  /// Ends the current session, if any. Safe to call more than once.
+  /// Invalidates pending work and ends every owned session, including the
+  /// previous source retained by a switch. A late start cleans itself up
+  /// when its response arrives; it cannot attach or become current.
+  ///
+  /// Safe to call more than once. A later open starts a fresh lifetime.
   Future<void> endSession() async {
-    final id = _sessionId;
+    _lifetime.complete();
+    _lifetime = Completer<void>();
     _sessionId = null;
-    if (id != null) await _end(id);
+    _switching = false;
+    await Future.wait([
+      ..._endingSessions.values,
+      for (final id in _ownedSessions.toList()) _endOwned(id),
+    ]);
+  }
+
+  Future<void> _endOwned(String sessionId) {
+    final ending = _endingSessions[sessionId];
+    if (ending != null) return ending;
+    if (!_ownedSessions.remove(sessionId)) return Future.value();
+    final ended = _end(sessionId).whenComplete(() {
+      _endingSessions.remove(sessionId);
+    });
+    _endingSessions[sessionId] = ended;
+    return ended;
   }
 
   Future<void> _end(String sessionId) async {
