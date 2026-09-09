@@ -24,7 +24,8 @@ defmodule Mydia.Streaming do
       :bitrate_bps,
       :position_seconds,
       :duration_seconds,
-      :poster_path
+      :poster_path,
+      :plan
     ]
   end
 
@@ -66,6 +67,11 @@ defmodule Mydia.Streaming do
           Map.get(meta, :ready, false)
         end
 
+      # The registry's copy is the fallback for the window where the process
+      # died between the registry read and the get_info call, matching how
+      # started_at and ready are already resolved here.
+      plan = if info, do: Map.get(info, :plan), else: Map.get(meta, :plan)
+
       # Fetch User
       user = Repo.get(User, user_id)
 
@@ -98,7 +104,8 @@ defmodule Mydia.Streaming do
             bitrate_bps: media_file.bitrate,
             position_seconds: progress && progress.position_seconds,
             duration_seconds: progress && progress.duration_seconds,
-            poster_path: poster_path(artwork_item)
+            poster_path: poster_path(artwork_item),
+            plan: plan
           }
       end
     end)

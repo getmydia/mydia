@@ -264,6 +264,92 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   end
 
   @doc """
+  Starts or reuses a remux tracking session.
+
+  Keyed separately from both HLS and direct sessions so a viewer remuxing one
+  file and direct-playing another appears as two cards rather than one
+  displacing the other.
+  """
+  def start_remux_session(media_file_id, user_id, plan) do
+    session_key = {:remux_session, media_file_id, user_id}
+    started_at = DateTime.utc_now()
+
+    metadata = %{
+      media_file_id: media_file_id,
+      user_id: user_id,
+      mode: :remux,
+      kind: :remux,
+      plan: plan,
+      started_at: started_at
+    }
+
+    name = {:via, Registry, {@registry_name, session_key, metadata}}
+
+    child_spec = %{
+      id: {DirectPlaySession, :remux, media_file_id, user_id},
+      start:
+        {DirectPlaySession, :start_link,
+         [
+           [
+             media_file_id: media_file_id,
+             user_id: user_id,
+             name: name,
+             started_at: started_at,
+             kind: :remux,
+             plan: plan
+           ]
+         ]},
+      restart: :temporary
+    }
+
+    case DynamicSupervisor.start_child(__MODULE__, child_spec) do
+      {:ok, pid} ->
+        {:ok, pid, :started}
+
+      {:error, {:already_started, pid}} ->
+        refresh_remux_plan(pid, plan)
+        {:ok, pid, :existing}
+
+      error ->
+        error
+    end
+  end
+
+  # The reused tracker still carries the plan from the request that started it.
+  # A later request can resolve a different audio track, so without this the
+  # dashboard reports an encode that is not the one FFmpeg is running — the
+  # precise failure this whole feature exists to remove.
+  defp refresh_remux_plan(pid, plan) do
+    DirectPlaySession.update_plan(pid, plan)
+  catch
+    # The session died between the start attempt and this call. It is on its
+    # way out and its plan no longer describes anything.
+    :exit, _reason -> :ok
+  end
+
+  @doc "Stops a remux tracking session."
+  def stop_remux_session(media_file_id, user_id) do
+    case Registry.lookup(@registry_name, {:remux_session, media_file_id, user_id}) do
+      [{pid, _}] -> stop_tracking_session(pid)
+      [] -> :ok
+    end
+  end
+
+  # Deliberately NOT DynamicSupervisor.terminate_child/2, for the same reason
+  # stop_gracefully/1 above avoids it: `DirectPlaySession` does not trap exits,
+  # so a `:shutdown` kills it outright and its `terminate/2` never runs —
+  # leaving the `"playing"` `TranscodeJob` row in the queue UI forever and
+  # never broadcasting `:session_ended`, so the Now Playing card never clears.
+  # `GenServer.stop/2` is equally synchronous and does run `terminate/2`.
+  defp stop_tracking_session(pid) do
+    DirectPlaySession.stop(pid)
+  catch
+    # Died on its own between the registry lookup and this call (inactivity
+    # timeout). Its `terminate/2` has already run; nothing left to stop.
+    :exit, _reason -> :ok
+  end
+
+  @doc """
   Gets an existing HLS session for a media file and user combination.
 
   ## Returns

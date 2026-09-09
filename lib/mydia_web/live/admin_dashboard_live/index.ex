@@ -54,6 +54,9 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   def handle_info(:session_ended, socket), do: {:noreply, load_now_playing(socket)}
   def handle_info({:job_updated, _id}, socket), do: {:noreply, load_now_playing(socket)}
 
+  def handle_info({:session_updated, _session_id}, socket),
+    do: {:noreply, load_now_playing(socket)}
+
   # The transcodes and hls_sessions topics carry messages this page does not
   # act on. Ignore them rather than crashing the LiveView.
   def handle_info(_message, socket), do: {:noreply, socket}

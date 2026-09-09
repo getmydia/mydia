@@ -46,7 +46,7 @@ defmodule Mydia.Downloads.TranscodeJob do
 
   @valid_statuses ~w(pending transcoding playing ready failed)
   @valid_resolutions ~w(original 1080p 720p 480p)
-  @valid_types ~w(download stream direct)
+  @valid_types ~w(download stream direct remux)
 
   @doc """
   Changeset for creating or updating a transcode job.

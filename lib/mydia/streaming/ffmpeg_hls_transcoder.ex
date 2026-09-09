@@ -34,10 +34,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   use GenServer
   require Logger
 
-  alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.AudioTrackSelector
-  alias Mydia.Streaming.HardwareAccel
   alias Mydia.Streaming.HardwareAccel.Args, as: AccelArgs
+  alias Mydia.Streaming.StreamPlan
 
   @type transcode_opts :: [
           input_path: String.t(),
@@ -214,21 +213,15 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     on_segments = Keyword.get(opts, :on_segments)
     on_hwaccel_failed = Keyword.get(opts, :on_hwaccel_failed)
 
-    # Build FFmpeg command
-    args = build_ffmpeg_args(input_path, output_dir, opts)
+    # Built once and handed down to build_ffmpeg_args/3 via :plan, so the
+    # audio selector and AccelArgs.build/2 are not paid for twice.
+    plan = StreamPlan.for_hls(Keyword.get(opts, :media_file), opts)
+    args = build_ffmpeg_args(input_path, output_dir, Keyword.put(opts, :plan, plan))
 
-    # Derived from the argument list rather than by calling AccelArgs.build/2
-    # again: re-deriving from inputs risks drift, and build_ffmpeg_args/3's
-    # return shape can't change without breaking the six regression test
-    # files that assert its exact output. The gate below only needs to know
-    # whether this was a hardware attempt at all, but deriving the precise
-    # tier costs nothing and keeps the log line below accurate.
-    accel_tier =
-      cond do
-        "-hwaccel" in args -> :full_hardware
-        "-init_hw_device" in args -> :hybrid
-        true -> :software
-      end
+    # Read from the plan rather than recovered from the argument list. The old
+    # `"-hwaccel" in args` sniff was a symptom of the decision being made
+    # inside build_ffmpeg_args/3 and discarded; it cannot drift now.
+    accel_tier = plan.video.tier || :software
 
     Logger.info("Starting FFmpeg HLS transcoding: #{input_path}")
     Logger.debug("FFmpeg args: #{inspect(args)}")
@@ -513,50 +506,20 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     _ -> false
   end
 
-  # Determines if a video codec is compatible with browsers and can be copied instead of re-encoded
-  defp should_copy_video?(nil), do: false
-
-  defp should_copy_video?(codec) when is_binary(codec) do
-    normalized = String.downcase(codec)
-
-    # H.264 (AVC) is universally supported by browsers
-    normalized in ["h264", "avc", "avc1"]
-  end
-
-  # Determines if an audio codec is compatible with browsers and can be copied instead of re-encoded
-  defp should_copy_audio?(nil), do: false
-
-  defp should_copy_audio?(codec) when is_binary(codec) do
-    normalized = String.downcase(codec)
-
-    # AAC is universally supported by browsers
-    normalized in ["aac", "mp4a"]
-  end
-
   # Audio bitrate budget (kbps) subtracted from total when calculating video bitrate
   @audio_bitrate_kbps 128
 
   @doc """
   Whether the video stream will be re-encoded rather than copied.
 
-  This is the single place that decision gets made; `build_ffmpeg_args/3`
-  calls it too, so the two can never disagree. Only a re-encode can have its
-  keyframes forced onto the segment grid, so this is also what decides
-  whether `grid_aligned` may be set: `HlsSession` calls it before starting or
-  relocating the encoder, to decide what to pass as `grid_aligned`.
+  Delegates to `StreamPlan.encodes_video?/3` so this and `build_ffmpeg_args/3`
+  cannot answer differently. `HlsSession` calls it to decide whether to lease a
+  hardware slot and whether `grid_aligned` may be set.
   """
-  @spec reencodes_video?(Mydia.Library.MediaFile.t() | nil, integer() | nil) :: boolean()
-  def reencodes_video?(media_file, max_bitrate) do
-    transcode_policy =
-      Application.get_env(:mydia, :streaming, [])
-      |> Keyword.get(:transcode_policy, :copy_when_compatible)
-
-    cond do
-      not is_nil(max_bitrate) -> true
-      transcode_policy != :copy_when_compatible -> true
-      is_nil(media_file) -> true
-      true -> not should_copy_video?(media_file.codec)
-    end
+  @spec reencodes_video?(Mydia.Library.MediaFile.t() | nil, integer() | nil, integer() | nil) ::
+          boolean()
+  def reencodes_video?(media_file, max_bitrate, max_height) do
+    StreamPlan.encodes_video?(media_file, max_bitrate, effective_max_height(max_height))
   end
 
   # Build FFmpeg command arguments for HLS transcoding
@@ -565,97 +528,55 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # nothing outside this module should call it.
   def build_ffmpeg_args(input_path, output_dir, opts) do
     media_file = Keyword.get(opts, :media_file)
-    max_bitrate = Keyword.get(opts, :max_bitrate)
-    max_height = effective_max_height(Keyword.get(opts, :max_height))
 
-    # Get transcode policy from config
-    transcode_policy =
-      Application.get_env(:mydia, :streaming, [])
-      |> Keyword.get(:transcode_policy, :copy_when_compatible)
+    # get_lazy, not get: a caller that already built the plan (start_transcoding/1
+    # does, to read the tier) passes it in rather than paying for the audio
+    # selector and AccelArgs twice. Direct unit tests of this function pass no
+    # :plan and get one built here.
+    plan = Keyword.get_lazy(opts, :plan, fn -> StreamPlan.for_hls(media_file, opts) end)
 
-    # When max_bitrate is set, force transcoding (no video stream copy)
-    # since we need to control the output bitrate
-    force_transcode = not is_nil(max_bitrate)
-
-    # Determine video codec - use copy if compatible and policy allows, otherwise
-    # transcode. An explicit opt always wins; short of that, reencodes_video?/2
-    # is the single decider, so this can never disagree with what HlsSession
-    # used to decide `grid_aligned`.
+    # An explicit codec opt still passes through verbatim, exactly as the
+    # `explicit -> explicit` clause did before. The plan decides only the
+    # nil case. Collapsing this to `if plan.video.action == :copy` would
+    # rewrite an explicit "libx265" into "libx264" and break the
+    # byte-identical-arguments constraint.
+    #
+    # The plan cannot supply the encoder name itself: plan.video.to_codec is
+    # a codec name for display ("h264"), while FFmpeg needs an encoder name
+    # ("libx264"). Keeping the mapping here is what stops the display value
+    # leaking into the command line.
     video_codec =
       case Keyword.get(opts, :video_codec) do
-        nil when force_transcode ->
-          Logger.info("Bitrate cap set (#{max_bitrate}kbps), forcing video transcode to H.264")
-          "libx264"
-
-        nil ->
-          if reencodes_video?(media_file, max_bitrate) do
-            Logger.info(
-              "Video codec #{(media_file && media_file.codec) || "unknown"} needs transcoding to H.264"
-            )
-
-            "libx264"
-          else
-            Logger.info(
-              "Video codec #{media_file.codec} is compatible, using stream copy (fast, no quality loss)"
-            )
-
-            "copy"
-          end
-
-        explicit ->
-          explicit
+        nil -> if plan.video.action == :copy, do: "copy", else: "libx264"
+        explicit -> explicit
       end
 
-    # Which audio stream this playback carries, resolved before the codec
-    # decision because that decision has to be about the stream actually being
-    # mapped. `media_file.audio_codec` describes the *first* audio stream
-    # (see Mydia.Library.FileAnalyzer), so on a file whose first track is
-    # stereo AAC and whose second is 5.1 DTS, deciding "aac, so copy" from the
-    # first and then mapping the second puts a DTS stream in an HLS segment no
-    # browser can decode. Silent audio, no error.
-    selected_audio = AudioTrackSelector.select_for_playback(media_file, opts)
-
-    audio_source_codec =
-      case selected_audio do
-        %StreamInfo{codec: codec} when is_binary(codec) -> codec
-        _ -> media_file && media_file.audio_codec
-      end
-
-    # Determine audio codec - use copy if compatible and policy allows, otherwise transcode
     audio_codec =
       case Keyword.get(opts, :audio_codec) do
-        nil when not is_nil(media_file) and transcode_policy == :copy_when_compatible ->
-          if should_copy_audio?(audio_source_codec) do
-            Logger.info(
-              "Audio codec #{audio_source_codec} is compatible, using stream copy (fast, no quality loss)"
-            )
-
-            "copy"
-          else
-            Logger.info("Audio codec #{audio_source_codec || "unknown"} needs transcoding to AAC")
-
-            "aac"
-          end
-
-        nil ->
-          if transcode_policy == :always do
-            Logger.debug("Transcode policy is :always, transcoding audio to AAC")
-          end
-
-          "aac"
-
-        codec ->
-          codec
+        nil -> if plan.audio.action == :copy, do: "copy", else: "aac"
+        explicit -> explicit
       end
 
-    # "veryfast", not x264's own "medium" default. This preset governs a live
-    # HLS encode a player is already waiting on, so the only quality that
-    # matters is the quality reachable before the viewer gives up. On an AV1
-    # source "medium" took 29.6s to write the first playlist against the 30s
-    # budget in `Mydia.P2p.Server`, which is a black screen, not better video.
-    # An operator who would rather spend the wall clock can still pass :preset.
-    preset = Keyword.get(opts, :preset, "veryfast")
-    crf = Keyword.get(opts, :crf, 23)
+    selected_audio = plan.selected_audio
+
+    if video_codec == "copy" do
+      Logger.info("Video codec #{plan.video.from_codec} is compatible, using stream copy")
+    else
+      Logger.info("Video codec #{plan.video.from_codec || "unknown"} needs transcoding to H.264")
+    end
+
+    if audio_codec == "copy" do
+      Logger.info("Audio codec #{plan.audio.from_codec} is compatible, using stream copy")
+    else
+      Logger.info("Audio codec #{plan.audio.from_codec || "unknown"} needs transcoding to AAC")
+    end
+
+    # Acceleration lives on the plan. A copied stream has no accel, and the
+    # empty argument lists below preserve the previous behaviour exactly:
+    # nothing here can turn a copy into a transcode.
+    accel = plan.accel || %AccelArgs{tier: :software, input: [], video: []}
+
+    Logger.info("Encoding tier: #{accel.tier}")
 
     # Use index.m3u8 to match HLS controller expectations
     playlist_path = Path.join(output_dir, "index.m3u8")
@@ -675,34 +596,6 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
         pos when is_integer(pos) and pos > 0 -> ["-ss", to_string(pos)]
         _ -> []
       end
-
-    # Acceleration is decided only on the encode branch. A stream copy returns
-    # empty argument lists, so nothing here can turn a copy into a transcode.
-    accel =
-      if video_codec == "copy" do
-        %AccelArgs{tier: :software, input: [], video: []}
-      else
-        capabilities =
-          Keyword.get_lazy(opts, :capabilities, fn -> HardwareAccel.capabilities() end)
-
-        video_bitrate_kbps =
-          if max_bitrate do
-            kbps = max(max_bitrate - @audio_bitrate_kbps, 100)
-            Logger.info("Using ABR mode: video=#{kbps}kbps, total_cap=#{max_bitrate}kbps")
-            kbps
-          end
-
-        AccelArgs.build(capabilities,
-          source_codec: media_file && media_file.codec,
-          max_height: max_height,
-          video_bitrate_kbps: video_bitrate_kbps,
-          crf: crf,
-          preset: preset,
-          video_codec: video_codec
-        )
-      end
-
-    Logger.info("Encoding tier: #{accel.tier}")
 
     # -hwaccel flags must precede -i. After it, ffmpeg has already selected a
     # decoder and silently ignores them.
@@ -797,7 +690,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
 
     # Only meaningful when the video stream is re-encoded. On a copied stream
     # the keyframes are whatever the source has, and FFmpeg rejects the flag
-    # outright. reencodes_video?/2 above is what decides whether grid_aligned
+    # outright. reencodes_video?/3 above is what decides whether grid_aligned
     # may be true; HlsSession calls it before starting or relocating the
     # encoder and passes the answer straight through as this opt.
     keyframe_args =

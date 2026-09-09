@@ -52,29 +52,29 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
     end
   end
 
-  describe "grid_aligned?/3" do
+  describe "grid_aligned?/4" do
     # Nothing previously asserted what HlsSession actually passes for
     # FFmpeg's grid_aligned opt. Covering it directly here, rather than only
     # through hand-built %HlsSession.State{} fixtures elsewhere in this file
     # that could quietly encode the same mistake this guards against.
     test "is false for a :window session even when the video would be re-encoded" do
       media_file = %MediaFile{codec: "hevc"}
-      refute HlsSession.grid_aligned?(:window, media_file, nil)
+      refute HlsSession.grid_aligned?(:window, media_file, nil, nil)
     end
 
     test "is true for a :full session whose video is re-encoded" do
       media_file = %MediaFile{codec: "hevc"}
-      assert HlsSession.grid_aligned?(:full, media_file, nil)
+      assert HlsSession.grid_aligned?(:full, media_file, nil, nil)
     end
 
     test "is false for a :full session whose video is copied" do
       media_file = %MediaFile{codec: "h264"}
-      refute HlsSession.grid_aligned?(:full, media_file, nil)
+      refute HlsSession.grid_aligned?(:full, media_file, nil, nil)
     end
 
     test "is true for a :full session forced to transcode by a bitrate cap" do
       media_file = %MediaFile{codec: "h264"}
-      assert HlsSession.grid_aligned?(:full, media_file, 4000)
+      assert HlsSession.grid_aligned?(:full, media_file, 4000, nil)
     end
   end
 

@@ -225,10 +225,11 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
       |> assign(:username, user_label(session.user))
       |> assign(:progress_pct, progress_pct)
       |> assign(:mbps, mbps)
-      |> assign(
-        :mode_label,
-        if(session.mode == :transcode, do: "Transcode", else: "Direct Play")
-      )
+      |> assign(:mode_label, mode_label(session.plan))
+      |> assign(:mode_class, mode_class(session.plan))
+      |> assign(:video_line, video_line(session.plan))
+      |> assign(:resolution_line, resolution_line(session.plan))
+      |> assign(:audio_line, audio_line(session.plan))
 
     ~H"""
     <div
@@ -262,10 +263,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
             <div class="text-xs opacity-60 truncate">{@username}</div>
           </div>
           <div class="flex flex-col items-end gap-1">
-            <span class={[
-              "badge badge-xs badge-outline",
-              if(@session.mode == :transcode, do: "badge-warning", else: "badge-success")
-            ]}>
+            <span class={["badge badge-xs badge-outline", @mode_class]}>
               {@mode_label}
             </span>
             <%= if @mbps do %>
@@ -284,6 +282,20 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
             <span>{format_clock(@session.duration_seconds)}</span>
           </div>
         <% end %>
+        <div
+          :if={@video_line || @resolution_line || @audio_line}
+          class="text-xs font-mono opacity-60 space-y-0.5"
+        >
+          <div :if={@video_line} id={"now-playing-video-#{@session.media_file_id}"}>
+            <span class="opacity-60">Video</span> {@video_line}
+          </div>
+          <div :if={@resolution_line} id={"now-playing-resolution-#{@session.media_file_id}"}>
+            <span class="opacity-60">Res</span> {@resolution_line}
+          </div>
+          <div :if={@audio_line} id={"now-playing-audio-#{@session.media_file_id}"}>
+            <span class="opacity-60">Audio</span> {@audio_line}
+          </div>
+        </div>
       </div>
     </div>
     """
@@ -473,6 +485,58 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
         if path, do: Path.basename(path), else: "Unknown"
     end
   end
+
+  # The badge follows the VIDEO action, not "either stream encodes". A
+  # video-copy stream that converts audio is a remux, and calling that a
+  # transcode would have an operator hunting for CPU load that is not there.
+  defp mode_label(nil), do: "Direct Play"
+  defp mode_label(%{video: %{action: :copy}}), do: "Remux"
+  defp mode_label(_plan), do: "Transcode"
+
+  defp mode_class(nil), do: "badge-success"
+  defp mode_class(%{video: %{action: :copy}}), do: "badge-info"
+  defp mode_class(_plan), do: "badge-warning"
+
+  defp video_line(nil), do: nil
+
+  defp video_line(%{video: %{action: :copy, from_codec: codec}}) when is_binary(codec) do
+    "#{codec} (copy)"
+  end
+
+  defp video_line(%{video: %{action: :encode} = video}) do
+    tier = tier_label(video.tier)
+    base = "#{video.from_codec || "unknown"} -> #{video.to_codec}"
+    if tier, do: "#{base} (#{tier})", else: base
+  end
+
+  defp video_line(_plan), do: nil
+
+  defp tier_label(:full_hardware), do: "VAAPI"
+  defp tier_label(:hybrid), do: "hybrid"
+  defp tier_label(:software), do: "software"
+  defp tier_label(_other), do: nil
+
+  # Omitted rather than guessed when the source dimensions are unknown, which
+  # is roughly 2% of the production library.
+  defp resolution_line(%{video: %{from_width: fw, from_height: fh, to_width: tw, to_height: th}})
+       when is_integer(fw) and is_integer(fh) and is_integer(tw) and is_integer(th) do
+    if {fw, fh} == {tw, th} do
+      "#{fw}x#{fh}"
+    else
+      "#{fw}x#{fh} -> #{tw}x#{th}"
+    end
+  end
+
+  defp resolution_line(_plan), do: nil
+
+  defp audio_line(nil), do: nil
+
+  defp audio_line(%{audio: %{action: action, from_codec: from, to_codec: to} = audio}) do
+    codecs = if action == :copy, do: "#{from} (copy)", else: "#{from || "unknown"} -> #{to}"
+    if audio.language, do: "#{codecs} - #{audio.language}", else: codecs
+  end
+
+  defp audio_line(_plan), do: nil
 
   defp user_label(nil), do: "Unknown"
   defp user_label(%{username: username}) when is_binary(username) and username != "", do: username

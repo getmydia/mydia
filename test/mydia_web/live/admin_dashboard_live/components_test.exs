@@ -242,13 +242,148 @@ defmodule MydiaWeb.AdminDashboardLive.ComponentsTest do
 
     test "labels direct play and transcode distinctly" do
       direct =
-        render_component(&Components.now_playing_card/1, session: session(%{mode: :direct}))
+        render_component(&Components.now_playing_card/1, session: session(%{plan: nil}))
+
+      transcode_plan = %Mydia.Streaming.StreamPlan{
+        video: %Mydia.Streaming.StreamPlan.Video{
+          action: :encode,
+          from_codec: "h264",
+          to_codec: "h264"
+        },
+        audio: %Mydia.Streaming.StreamPlan.Audio{
+          action: :copy,
+          from_codec: "aac",
+          to_codec: "aac"
+        },
+        container: :hls_ts
+      }
 
       transcode =
-        render_component(&Components.now_playing_card/1, session: session(%{mode: :transcode}))
+        render_component(&Components.now_playing_card/1,
+          session: session(%{plan: transcode_plan})
+        )
 
       assert direct =~ "Direct Play"
       assert transcode =~ "Transcode"
+    end
+  end
+
+  describe "now_playing_card/1 badges" do
+    alias Mydia.Streaming.ActiveSession
+    alias Mydia.Streaming.StreamPlan
+
+    defp card(plan) do
+      session = %ActiveSession{
+        session_id: "s1",
+        # A plain map, not a User struct: user_label/1 matches on %{username: _},
+        # so the card does not need the schema and this test does not couple to it.
+        user: %{username: "dana"},
+        media_title: "The Lantern Quarter",
+        media_type: :movie,
+        episode_info: nil,
+        mode: :copy,
+        started_at: ~U[2026-09-08 10:00:00Z],
+        ready: true,
+        media_file_id: "file-1",
+        bitrate_bps: 4_200_000,
+        plan: plan
+      }
+
+      render_component(&Components.now_playing_card/1, session: session)
+    end
+
+    test "a capped HLS_COPY session reads Transcode, not Direct Play" do
+      # The reported bug, exactly. The client asked for HLS_COPY and the
+      # session's mode is :copy, but the 480p rung's bitrate cap makes FFmpeg
+      # re-encode. The badge must follow FFmpeg, not the request.
+      plan = %StreamPlan{
+        video: %StreamPlan.Video{
+          action: :encode,
+          from_codec: "hevc",
+          to_codec: "h264",
+          from_width: 1920,
+          from_height: 1080,
+          to_width: 854,
+          to_height: 480,
+          tier: :full_hardware
+        },
+        audio: %StreamPlan.Audio{
+          action: :encode,
+          from_codec: "eac3",
+          to_codec: "aac",
+          language: "eng"
+        },
+        container: :hls_ts,
+        max_bitrate_kbps: 1500
+      }
+
+      html = card(plan)
+
+      assert html =~ "Transcode"
+      refute html =~ "Direct Play"
+      assert html =~ "1920x1080"
+      assert html =~ "854x480"
+      assert html =~ "hevc"
+      assert html =~ "h264"
+    end
+
+    test "a video-copy stream reads Remux even when audio is converted" do
+      # Keying the badge off "either stream encodes" would call a routine
+      # audio conversion a full transcode. Video is the expensive stream and
+      # the one an operator scans for.
+      plan = %StreamPlan{
+        video: %StreamPlan.Video{
+          action: :copy,
+          from_codec: "h264",
+          to_codec: "h264",
+          from_width: 1920,
+          from_height: 1080,
+          to_width: 1920,
+          to_height: 1080
+        },
+        audio: %StreamPlan.Audio{
+          action: :encode,
+          from_codec: "eac3",
+          to_codec: "aac",
+          language: "eng"
+        },
+        container: :fmp4
+      }
+
+      html = card(plan)
+
+      assert html =~ "Remux"
+      refute html =~ "Transcode"
+      refute html =~ "Direct Play"
+    end
+
+    test "no plan reads Direct Play" do
+      html = card(nil)
+
+      assert html =~ "Direct Play"
+      refute html =~ "Transcode"
+    end
+
+    test "an unknown source height omits the resolution row" do
+      plan = %StreamPlan{
+        video: %StreamPlan.Video{
+          action: :encode,
+          from_codec: "hevc",
+          to_codec: "h264",
+          from_width: nil,
+          from_height: nil,
+          to_width: nil,
+          to_height: nil,
+          tier: :software
+        },
+        audio: %StreamPlan.Audio{action: :copy, from_codec: "aac", to_codec: "aac"},
+        container: :hls_ts
+      }
+
+      html = card(plan)
+
+      assert html =~ "Transcode"
+      refute html =~ "now-playing-resolution"
     end
   end
 end

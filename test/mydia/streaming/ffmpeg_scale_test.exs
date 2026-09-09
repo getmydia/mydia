@@ -101,5 +101,69 @@ defmodule Mydia.Streaming.FfmpegScaleTest do
       assert List.last(args(video_codec: "libx264", max_height: 720)) ==
                "/tmp/out/index.m3u8"
     end
+
+    test "a height-only request re-encodes instead of stream-copying" do
+      # The old reencodes_video?/2 ignored max_height, so asking a compatible
+      # H.264 source for 480p emitted "-c:v copy" and shipped the file at full
+      # resolution. The scale filter cannot run on a copied stream, so the
+      # downscale was silently dropped. No player rung reaches this today
+      # (each carries a bitrate) but the GraphQL mutation accepts it directly.
+      media_file = %Mydia.Library.MediaFile{
+        codec: "h264",
+        audio_codec: "aac",
+        relative_path: "film.mkv",
+        library_path: %Mydia.Settings.LibraryPath{path: "/tmp"},
+        metadata: %Mydia.Library.Structs.FileMetadata{width: 1920, height: 1080}
+      }
+
+      result =
+        args(
+          media_file: media_file,
+          max_height: 480,
+          capabilities: Mydia.Streaming.HardwareAccel.Capabilities.software("test")
+        )
+
+      # Not `refute "copy" in result`: this media_file's audio_codec is "aac",
+      # a browser-compatible codec, so the audio stream legitimately copies
+      # ("-c:a copy") regardless of this fix. The behaviour under test is
+      # specifically the video codec no longer being "copy".
+      assert Enum.at(result, index_of(result, "-c:v") + 1) == "libx264"
+      assert filter(result) == "scale=-2:2*trunc(min(480\\,ih)/2)"
+    end
+
+    test "a height at or above the source still stream-copies" do
+      # The MAX_TRANSCODE_HEIGHT trap: effective_max_height/1 folds the
+      # operator's ceiling into every request, so treating "a height is set"
+      # as an encode would transcode a 720p file under a 1080p ceiling.
+      media_file = %Mydia.Library.MediaFile{
+        codec: "h264",
+        audio_codec: "aac",
+        relative_path: "film.mkv",
+        library_path: %Mydia.Settings.LibraryPath{path: "/tmp"},
+        metadata: %Mydia.Library.Structs.FileMetadata{width: 1280, height: 720}
+      }
+
+      result =
+        args(
+          media_file: media_file,
+          max_height: 1080,
+          capabilities: Mydia.Streaming.HardwareAccel.Capabilities.software("test")
+        )
+
+      assert "-c:v" in result
+      assert Enum.at(result, index_of(result, "-c:v") + 1) == "copy"
+    end
+
+    test "an explicit non-default codec reaches -c:v, not the plan's own libx264 default" do
+      # StreamPlan.for_hls/2 builds its accel's video args by calling
+      # AccelArgs.build/2 with a video_codec of its own -- previously a
+      # hardcoded "libx264" regardless of what the caller asked for. Since
+      # build_ffmpeg_args/3 takes video_args straight from accel.video on the
+      # encode path, an explicit override that isn't "libx264" or "copy" was
+      # silently discarded: the emitted -c:v was "libx264" no matter what.
+      result = args(video_codec: "libx265")
+
+      assert Enum.at(result, index_of(result, "-c:v") + 1) == "libx265"
+    end
   end
 end

@@ -77,4 +77,38 @@ defmodule Mydia.Streaming.ListActiveSessionsTest do
       assert session.duration_seconds == 3389
     end
   end
+
+  describe "list_active_sessions/0 plans" do
+    test "a direct play session carries no plan" do
+      # nil is the honest encoding of "nothing is being done to this stream".
+      # A plan claiming two copies would imply FFmpeg is involved when it is not.
+      media_file = MediaFixtures.media_file_fixture(%{})
+      user = Mydia.AccountsFixtures.user_fixture()
+
+      session = start_direct_play(media_file, user)
+
+      assert session
+      assert session.plan == nil
+    end
+
+    test "a remux session carries its plan" do
+      media_file = MediaFixtures.media_file_fixture(%{})
+      user = Mydia.AccountsFixtures.user_fixture()
+      plan = Mydia.Streaming.StreamPlan.for_remux(media_file, [])
+
+      {:ok, _pid, :started} =
+        Mydia.Streaming.HlsSessionSupervisor.start_remux_session(media_file.id, user.id, plan)
+
+      on_exit(fn ->
+        Mydia.Streaming.HlsSessionSupervisor.stop_remux_session(media_file.id, user.id)
+      end)
+
+      session =
+        Enum.find(Streaming.list_active_sessions(), &(&1.media_file_id == media_file.id))
+
+      assert session
+      assert session.plan.container == :fmp4
+      assert session.plan.video.action == :copy
+    end
+  end
 end

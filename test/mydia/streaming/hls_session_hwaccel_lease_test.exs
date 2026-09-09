@@ -11,7 +11,7 @@ defmodule Mydia.Streaming.HlsSessionHwaccelLeaseTest do
   why: the transcoder is restarted on every seek, and a per-transcoder lease
   would churn HardwareAccel on every one of them). That means the meaningful
   units to test are: the gating decision
-  (`maybe_acquire_hwaccel_lease/2`, whether a session bothers leasing at
+  (`maybe_acquire_hwaccel_lease/3`, whether a session bothers leasing at
   all), the "not running" fallback shape (`acquire_hwaccel_lease/0`, which
   `mix test` always exercises since `HardwareAccel` is never started in this
   suite), and the two release sites (`hwaccel_fallback/2` and `terminate/2`).
@@ -40,33 +40,33 @@ defmodule Mydia.Streaming.HlsSessionHwaccelLeaseTest do
     library_path: %LibraryPath{path: "/tmp"}
   }
 
-  describe "maybe_acquire_hwaccel_lease/2" do
+  describe "maybe_acquire_hwaccel_lease/3" do
     test "a session that will re-encode attempts a lease" do
       # HardwareAccel is never started under mix test (see
       # hardware_accel_test.exs), so this exercises the refusal branch: a
       # session that WOULD lease still gets software capabilities rather than
       # nil, so build_ffmpeg_args/3 never reaches for hardware it was refused.
       assert {%Capabilities{backend: :none, reason: reason}, nil} =
-               HlsSession.maybe_acquire_hwaccel_lease(@reencode_media_file, nil)
+               HlsSession.maybe_acquire_hwaccel_lease(@reencode_media_file, nil, nil)
 
       assert reason =~ "no hardware slot free"
     end
 
     test "a bitrate cap forces a re-encode and therefore a lease attempt" do
-      # max_bitrate forces reencodes_video?/2 to true regardless of codec --
+      # max_bitrate forces reencodes_video?/3 to true regardless of codec --
       # even an already-compatible h264 source is transcoded to control the
       # output bitrate.
       assert {%Capabilities{backend: :none}, nil} =
-               HlsSession.maybe_acquire_hwaccel_lease(@copy_media_file, 2000)
+               HlsSession.maybe_acquire_hwaccel_lease(@copy_media_file, 2000, nil)
     end
 
     test "a stream-copy session never attempts a lease" do
-      assert {nil, nil} = HlsSession.maybe_acquire_hwaccel_lease(@copy_media_file, nil)
+      assert {nil, nil} = HlsSession.maybe_acquire_hwaccel_lease(@copy_media_file, nil, nil)
     end
 
     test "no media file (mode unknown) is treated as re-encoding, matching build_ffmpeg_args/3" do
       assert {%Capabilities{backend: :none}, nil} =
-               HlsSession.maybe_acquire_hwaccel_lease(nil, nil)
+               HlsSession.maybe_acquire_hwaccel_lease(nil, nil, nil)
     end
   end
 
