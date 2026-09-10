@@ -649,6 +649,20 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         >
           <.icon name="hero-star" class="w-4 h-4" />
         </button>
+        <%!-- Recovery for a file the matcher attached to the wrong episode,
+              whether it belongs to another show or to another episode of this
+              one. Same handler as the movie row's "Not this movie". --%>
+        <button
+          id={"not-this-item-#{@file.id}"}
+          type="button"
+          phx-click="not_this_item"
+          phx-value-file-id={@file.id}
+          class="btn btn-ghost btn-square @md/eprow:btn-xs"
+          aria-label="This file is not this episode"
+          title="Not this episode"
+        >
+          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
+        </button>
         <button
           id={"file-delete-#{@file.id}"}
           type="button"

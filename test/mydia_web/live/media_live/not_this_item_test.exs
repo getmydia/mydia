@@ -5,6 +5,8 @@ defmodule MydiaWeb.MediaLive.NotThisItemTest do
 
   import Phoenix.LiveViewTest
   import Mydia.Factory
+  import Mydia.MediaFixtures
+  import Mydia.SettingsFixtures
 
   alias Mydia.Events
   alias Mydia.ImportCandidates
@@ -228,5 +230,52 @@ defmodule MydiaWeb.MediaLive.NotThisItemTest do
 
     # The row is untouched: neither deleted nor sent anywhere.
     assert Mydia.Repo.get(Mydia.Library.MediaFile, file.id)
+  end
+
+  describe "an episode file" do
+    test "its row offers Not this episode" do
+      file = %Mydia.Library.MediaFile{
+        id: "mf-1",
+        relative_path: "Quillmoor/Season 01/Quillmoor.S01E01.mkv",
+        library_path: %Mydia.Settings.LibraryPath{path: "/media/series"}
+      }
+
+      html =
+        render_component(&MydiaWeb.MediaLive.Show.Components.episode_file_row/1,
+          file: file,
+          episode: %Mydia.Media.Episode{id: "ep-1", monitored: true, media_files: [file]},
+          playback_enabled: false,
+          transcode_jobs: []
+        )
+
+      refute html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#not-this-item-mf-1[title='Not this episode']")
+             |> Enum.empty?()
+    end
+
+    test "is sent to Review as a held tv_show candidate", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      show = media_item_fixture(%{type: "tv_show", title: "Undertow", year: 2030})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      file =
+        media_file_fixture(%{
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: "Quillmoor/Season 01/Quillmoor.S01E01.mkv"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/tv/#{show.id}")
+
+      # The row only renders once its episode is expanded, so this sends the
+      # event the button carries instead of clicking through the season UI.
+      render_click(view, "not_this_item", %{"file-id" => file.id})
+
+      refute Mydia.Repo.get(Mydia.Library.MediaFile, file.id)
+
+      assert %{media_type: "tv_show", returned_at: %DateTime{}} =
+               ImportCandidates.get_by_path(lp.id, "Quillmoor/Season 01/Quillmoor.S01E01.mkv")
+    end
   end
 end
