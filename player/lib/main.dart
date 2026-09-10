@@ -6,6 +6,9 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/downloads/download_service.dart';
+import 'core/crash_reporting/crash_report.dart';
+import 'core/crash_reporting/crash_reporter.dart';
+import 'core/crash_reporting/crash_reporter_provider.dart';
 import 'package:flutter/services.dart';
 
 import 'core/graphql/watch/fetch_log.dart';
@@ -52,12 +55,10 @@ const kWebP2pEnabled = bool.fromEnvironment('MYDIA_WEB_P2P');
 const _rustInitTimeout = Duration(seconds: 60);
 
 void main() async {
-  // Add error logging for debugging
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    debugPrint('Flutter error: ${details.exception}');
-    debugPrint('Stack trace: ${details.stack}');
-  };
+  // Presents and logs every Flutter framework error, as this spot always has,
+  // and reports it to the relay once the user opts in. See
+  // core/crash_reporting/crash_reporter.dart.
+  final crashReporter = CrashReporter.production()..install();
 
   runZonedGuarded(
     () async {
@@ -74,17 +75,18 @@ void main() async {
         yield LicenseEntryWithLineBreaks(<String>['Inter'], license);
       });
 
-      await _startApp();
+      await _startApp(crashReporter);
     },
     (error, stack) {
       // `_startApp` guarantees `runApp` has already run by the time control
       // reaches here, falling back to a startup-error screen along the way
-      // if a step failed fatally. This handler only logs whatever slips
-      // through afterwards (e.g. an error from deep inside a running widget
-      // tree) — it must never again be the sole handler of a fatal startup
-      // failure, silently leaving the window black.
+      // if a step failed fatally. This handler only logs and reports
+      // whatever slips through afterwards (e.g. an error from deep inside a
+      // running widget tree). It must never again be the sole handler of a
+      // fatal startup failure, silently leaving the window black.
       debugPrint('Caught error: $error');
       debugPrint('Stack trace: $stack');
+      unawaited(crashReporter.report(error, stack, capture: CrashCapture.zone));
     },
   );
 }
@@ -99,7 +101,7 @@ void main() async {
 /// app pointed at the same user-data directory will otherwise leave the
 /// window completely black forever with no indication why (the bug this
 /// function exists to fix).
-Future<void> _startApp() async {
+Future<void> _startApp(CrashReporter crashReporter) async {
   // Initialize the Rust bridge. This MUST complete before any p2p code runs.
   //
   // On native there is no reasonable degraded mode without it, so a failure
@@ -124,7 +126,14 @@ Future<void> _startApp() async {
     } catch (e, st) {
       debugPrint('[RustLib] Failed to initialize Rust bridge: $e');
       debugPrint('Stack trace: $st');
-      runApp(StartupErrorApp.generic(e));
+      // Never throws, so this path still reaches runApp. Null on web, where
+      // the screen shows no Send report button.
+      runApp(
+        StartupErrorApp.generic(
+          e,
+          report: crashReporter.reportStartupFailure(e, st),
+        ),
+      );
       return;
     }
   } else {
@@ -252,6 +261,7 @@ Future<void> _startApp() async {
   runApp(
     ProviderScope(
       overrides: [
+        crashReporterProvider.overrideWithValue(crashReporter),
         fetchLogProvider.overrideWithValue(fetchLog),
         sidebarLayoutStoreProvider.overrideWithValue(sidebarLayoutStore),
       ],

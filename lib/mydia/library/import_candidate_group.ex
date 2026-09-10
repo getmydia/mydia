@@ -19,6 +19,11 @@ defmodule Mydia.Library.ImportCandidateGroup do
   is true when the group was read at `status: "queued"`, and `queue_error`
   carries the message a terminal refusal left behind when a queued accept or
   re-match was cleared without promoting -- see `Mydia.ImportCandidates.drain_accepted/2`.
+
+  `returned_count` counts the group's candidates an operator sent back from
+  the duplicates page (`Mydia.ImportCandidates.return_to_review/2`). Any
+  returned candidate keeps the group out of the ready band and out of "Import
+  all"; see `Mydia.ImportCandidates.band/1`.
   """
 
   @enforce_keys [:id, :anchor_key, :library_path_id, :file_count]
@@ -37,7 +42,8 @@ defmodule Mydia.Library.ImportCandidateGroup do
     :provider_count,
     :dismissed?,
     :queued?,
-    :queue_error
+    :queue_error,
+    returned_count: 0
   ]
 
   @type t :: %__MODULE__{
@@ -55,7 +61,8 @@ defmodule Mydia.Library.ImportCandidateGroup do
           provider_count: non_neg_integer() | nil,
           dismissed?: boolean() | nil,
           queued?: boolean() | nil,
-          queue_error: String.t() | nil
+          queue_error: String.t() | nil,
+          returned_count: non_neg_integer()
         }
 
   @doc """

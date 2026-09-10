@@ -1,5 +1,6 @@
 defmodule Mydia.ImportCandidatesTest do
   use Mydia.DataCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Ecto.Query
   import Mydia.MediaFixtures
@@ -73,6 +74,21 @@ defmodule Mydia.ImportCandidatesTest do
     assert {[], nil} = ImportCandidates.page(candidate.library_path_id)
   end
 
+  test "returned_at survives a fresh import upsert" do
+    returned_at = DateTime.utc_now() |> DateTime.truncate(:second)
+    candidate = import_candidate_fixture(%{returned_at: returned_at})
+
+    # Discovery never carries returned_at, so a rescan's upsert must leave it
+    # alone, the same way it leaves dismissed_at alone.
+    assert {:ok, _} =
+             ImportCandidates.upsert(
+               Map.from_struct(candidate)
+               |> Map.take([:library_path_id, :relative_path, :anchor_key, :size, :discovered_at])
+             )
+
+    assert Repo.reload!(candidate).returned_at == returned_at
+  end
+
   describe "band/1" do
     defp group(attrs) do
       Map.merge(
@@ -107,6 +123,11 @@ defmodule Mydia.ImportCandidatesTest do
 
     test "a local provider_type is never ready, whatever its confidence" do
       g = group(provider_id: "local-abc", provider_type: "local", min_confidence: 1.0)
+      assert ImportCandidates.band(g) == :needs_attention
+    end
+
+    test "a group holding a returned candidate is never ready" do
+      g = group(provider_id: "1", min_confidence: 1.0, returned_count: 1)
       assert ImportCandidates.band(g) == :needs_attention
     end
   end
@@ -913,6 +934,159 @@ defmodule Mydia.ImportCandidatesTest do
 
       assert is_nil(Mydia.Repo.get!(Mydia.Library.ImportCandidate, queued.id).dismissed_at)
       refute is_nil(Mydia.Repo.get!(Mydia.Library.ImportCandidate, newcomer.id).dismissed_at)
+    end
+  end
+
+  describe "return_to_review/2" do
+    test "detaches a movie file into a held, rematch-queued movie candidate" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+
+      file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: "Starveil (2031)/Starveil.2031.1080p.mkv"
+        })
+
+      assert {:ok, %MediaFile{id: id}} = ImportCandidates.return_to_review(file, "42")
+      assert id == file.id
+      refute Repo.get(MediaFile, file.id)
+
+      candidate = ImportCandidates.get_by_path(lp.id, "Starveil (2031)/Starveil.2031.1080p.mkv")
+      assert candidate.media_type == "movie"
+      assert %DateTime{} = candidate.returned_at
+      assert candidate.queued_op == "rematch"
+      assert is_nil(candidate.dismissed_at)
+
+      assert_enqueued(
+        worker: Mydia.Jobs.RematchImportCandidates,
+        args: %{"library_path_id" => lp.id}
+      )
+    end
+
+    test "detaches an episode file into a tv_show candidate and leaves the episode's other file" do
+      lp = library_path_fixture(%{type: "series"})
+      show = media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      kept =
+        media_file_fixture(%{
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: "Harbor Lights/Season 01/Harbor.Lights.S01E01.mkv"
+        })
+
+      stray =
+        media_file_fixture(%{
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: "Quillmoor/Season 01/Quillmoor.S01E01.mkv"
+        })
+
+      assert {:ok, _deleted} = ImportCandidates.return_to_review(stray, "42")
+
+      assert Repo.get(MediaFile, kept.id)
+      refute Repo.get(MediaFile, stray.id)
+
+      assert %{media_type: "tv_show"} =
+               ImportCandidates.get_by_path(lp.id, "Quillmoor/Season 01/Quillmoor.S01E01.mkv")
+    end
+
+    test "un-dismisses a candidate already sitting at the file's path" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+      path = "Starveil (2031)/Starveil.2031.1080p.mkv"
+
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: path,
+        dismissed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+
+      file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: path
+        })
+
+      assert {:ok, _deleted} = ImportCandidates.return_to_review(file, "42")
+
+      candidate = ImportCandidates.get_by_path(lp.id, path)
+      assert is_nil(candidate.dismissed_at)
+      assert %DateTime{} = candidate.returned_at
+    end
+
+    test "refuses a legacy row with no library path and writes nothing" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+
+      file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: "Zephyr Station (2030)/Zephyr.Station.2030.mkv"
+        })
+
+      # MediaFile.changeset/2 requires both fields, so the legacy shape is only
+      # reachable by bypassing it, as eligibility_test.exs does.
+      Repo.update_all(from(f in MediaFile, where: f.id == ^file.id),
+        set: [library_path_id: nil, relative_path: nil]
+      )
+
+      assert {:error, :no_library_path} =
+               ImportCandidates.return_to_review(Repo.reload!(file), "42")
+
+      assert Repo.get(MediaFile, file.id)
+      assert Repo.aggregate(ImportCandidate, :count) == 0
+      refute_enqueued(worker: Mydia.Jobs.RematchImportCandidates)
+    end
+  end
+
+  describe "a group holding a returned candidate" do
+    setup do
+      lp = library_path_fixture(%{type: "series"})
+
+      returned =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Quillmoor/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: "9002",
+          title: "Quillmoor",
+          media_type: "tv_show",
+          confidence: 0.99,
+          returned_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      %{lp: lp, returned: returned}
+    end
+
+    test "is never ready, in band/1 and in the SQL bands alike", %{lp: lp, returned: returned} do
+      assert {[group], nil} = ImportCandidates.page(lp.id)
+      assert group.returned_count == 1
+      assert ImportCandidates.band(group) == :needs_attention
+
+      assert %{ready: 0, needs_attention: 1, no_match: 0, total: 1} =
+               ImportCandidates.band_counts(lp.id)
+
+      assert {[], nil} = ImportCandidates.page(lp.id, band: :ready)
+
+      {attention, _cursor} = ImportCandidates.page(lp.id, band: :needs_attention)
+      assert Enum.map(attention, & &1.anchor_key) == [returned.anchor_key]
+    end
+
+    test "is skipped by Import all results", %{lp: lp, returned: returned} do
+      assert {:ok, %{queued: 0, skipped: 1}} = ImportCandidates.queue_accept_all_matched(lp.id)
+      assert is_nil(Repo.get!(ImportCandidate, returned.id).queued_op)
+    end
+
+    test "is still accepted from an explicit selection", %{lp: lp, returned: returned} do
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page([returned.anchor_key])
+
+      assert {:ok, %{queued: 1}} = ImportCandidates.queue_accept(scope)
+      assert Repo.get!(ImportCandidate, returned.id).queued_op == "accept"
     end
   end
 end

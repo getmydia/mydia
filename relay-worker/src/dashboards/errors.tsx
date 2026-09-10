@@ -1,11 +1,44 @@
 import type { Hono } from "hono";
 import type { Env } from "../env";
-import type { ErrorRow, OccurrenceRow } from "../crashes/ingest";
+import type { CrashSource, ErrorRow, OccurrenceRow } from "../crashes/ingest";
 import { listErrors, getError, setErrorStatus } from "../crashes/queries";
 import { page, when, parsePage } from "./layout";
 import { Tabs, DataTable, Badge, PostButton, Pager, FLOOR_TITLE } from "./ui";
 
 const PAGE_SIZE = 50;
+
+// The two values crashSourceOf (src/crashes/ingest.ts) can store. Anything
+// else in ?source= is ignored rather than passed to D1, so the tabs and the
+// query never disagree about what a source is.
+const SOURCES: readonly CrashSource[] = ["server", "player"];
+
+function parseSource(value: string | undefined): CrashSource | undefined {
+  return SOURCES.find((candidate) => candidate === value);
+}
+
+// Every list link on this page is built here. URLSearchParams percent-encodes
+// each value for the URL layer, which is what `status` needs: it is
+// unvalidated caller input, and an HTML entity in its place would be decoded
+// back to a raw "&" before the browser parses the query, splitting one
+// parameter into two (the pager test in test/dashboards/errors.test.ts pins
+// this). hono/jsx still escapes the finished string for the HTML attribute;
+// the two encodings guard different layers and neither replaces the other.
+function errorsHref(params: { status?: string; source?: CrashSource; page?: number }): string {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", String(params.page));
+  if (params.status) query.set("status", params.status);
+  if (params.source) query.set("source", params.source);
+  const qs = query.toString();
+  return qs === "" ? "/admin/errors" : `/admin/errors?${qs}`;
+}
+
+const PLAYER_TITLE = "Sent by the Flutter player, not a mydia server";
+
+// Server rows are the default and carry no badge, so the list reads exactly
+// as it did before for every existing install. Only a player report is marked.
+function SourceBadge({ source }: { source: string }) {
+  return source === "player" ? <Badge label="player" title={PLAYER_TITLE} /> : null;
+}
 
 // fingerprintOf (src/crashes/ingest.ts) always produces exactly 32 lowercase
 // hex characters (the first 32 hex chars of a SHA-256 digest). Anything else
@@ -59,7 +92,8 @@ function ErrorTableRow({ error }: { error: ErrorRow }) {
   return (
     <tr>
       <td>
-        <a href={`/admin/errors/${error.fingerprint}`}>{error.kind}</a>
+        <a href={`/admin/errors/${error.fingerprint}`}>{error.kind}</a>{" "}
+        <SourceBadge source={error.source} />
       </td>
       <td class="wrap">{error.message}</td>
       <td class="muted">{sourceRef(error)}</td>
@@ -77,37 +111,47 @@ const HEADERS = ["Kind", "Message", "Source", "Count", "Last seen", "Status"];
 function ErrorsPage({
   rows,
   status,
+  source,
   page: pageNumber,
 }: {
   rows: ErrorRow[];
   status: string | undefined;
+  source: CrashSource | undefined;
   page: number;
 }) {
-  // Deliberate, reviewed departure from a byte-for-byte port: the replaced
-  // errors.ts ran `status` through escapeHtml here, which is the wrong tool
-  // for this position. `status` is unvalidated caller input straight from
-  // `c.req.query("status")` -- unlike `fingerprint`, it carries no shape
-  // guard -- and it is being placed inside a URL query string, not HTML
-  // markup. HTML-escaping doesn't protect a query string: a literal "&" in
-  // `status` would survive escapeHtml as "&amp;", the browser decodes that
-  // back to "&" before parsing the query, and one parameter silently splits
-  // into two. `encodeURIComponent` is the correct encoding for this
-  // position. hono/jsx still escapes the finished href string for the HTML
-  // attribute layer on top of this -- the two encodings guard different
-  // layers (URL structure vs. HTML markup) and neither substitutes for the
-  // other.
   const next =
-    rows.length === PAGE_SIZE
-      ? `/admin/errors?page=${pageNumber + 1}${status ? `&status=${encodeURIComponent(status)}` : ""}`
-      : null;
+    rows.length === PAGE_SIZE ? errorsHref({ page: pageNumber + 1, status, source }) : null;
 
   return (
     <>
       <Tabs
         links={[
-          { href: "/admin/errors", label: "all", active: status === undefined },
-          { href: "/admin/errors?status=unresolved", label: "unresolved", active: status === "unresolved" },
-          { href: "/admin/errors?status=resolved", label: "resolved", active: status === "resolved" },
+          { href: errorsHref({ source }), label: "all", active: status === undefined },
+          {
+            href: errorsHref({ status: "unresolved", source }),
+            label: "unresolved",
+            active: status === "unresolved",
+          },
+          {
+            href: errorsHref({ status: "resolved", source }),
+            label: "resolved",
+            active: status === "resolved",
+          },
+        ]}
+      />
+      <Tabs
+        links={[
+          { href: errorsHref({ status }), label: "all sources", active: source === undefined },
+          {
+            href: errorsHref({ status, source: "server" }),
+            label: "server",
+            active: source === "server",
+          },
+          {
+            href: errorsHref({ status, source: "player" }),
+            label: "player",
+            active: source === "player",
+          },
         ]}
       />
       <DataTable headers={HEADERS}>
@@ -124,8 +168,8 @@ function OccurrenceDetails({ occurrence }: { occurrence: OccurrenceRow }) {
   return (
     <details>
       <summary>
-        {when(occurrence.occurred_at)} &middot; {occurrence.version ?? "unknown"} &middot;{" "}
-        {occurrence.environment ?? ""}
+        {when(occurrence.occurred_at)} &middot; {occurrence.source} &middot;{" "}
+        {occurrence.version ?? "unknown"} &middot; {occurrence.environment ?? ""}
       </summary>
       <pre>{occurrence.stacktrace}</pre>
       <pre>{occurrence.context}</pre>
@@ -146,7 +190,7 @@ function ErrorDetailPage({
   return (
     <>
       <p>
-        <strong>{error.kind}</strong>: {error.message}
+        <strong>{error.kind}</strong>: {error.message} <SourceBadge source={error.source} />
         <br />
         <span class="muted">
           <Count count={error.occurrence_count} isFloor={error.count_is_floor === 1} /> occurrences,
@@ -168,14 +212,18 @@ function ErrorDetailPage({
 export function registerErrorDashboard(app: Hono<{ Bindings: Env }>): void {
   app.get("/admin/errors", async (c) => {
     const status = c.req.query("status") ?? undefined;
+    const source = parseSource(c.req.query("source"));
     const pageNumber = parsePage(c.req.query("page"));
     const rows = await listErrors(c.env, {
       status,
+      source,
       limit: PAGE_SIZE,
       offset: pageNumber * PAGE_SIZE,
     });
 
-    return c.html(page("Errors", <ErrorsPage rows={rows} status={status} page={pageNumber} />));
+    return c.html(
+      page("Errors", <ErrorsPage rows={rows} status={status} source={source} page={pageNumber} />),
+    );
   });
 
   app.get("/admin/errors/:fingerprint", async (c) => {

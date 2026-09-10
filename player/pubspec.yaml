@@ -27,7 +27,9 @@ dependencies:
   flutter_secure_storage: ^11.0.0
   cached_network_image: ^4.0.0
   flutter_cache_manager: ^3.3.0
-  http: ^1.1.0
+  # 1.5.0 added AbortableRequest, which the crash reporter uses to cancel a
+  # send that timed out instead of leaving it running.
+  http: ^1.5.0
   shimmer: ^4.0.0
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
@@ -47,6 +49,10 @@ dependencies:
   connectivity_plus: ^7.3.1
   device_info_plus: ^13.2.0
   package_info_plus: ^10.2.1
+  # Parses crash stack traces into frames for core/crash_reporting. Already
+  # resolved transitively; declared so the import is not an undeclared
+  # dependency.
+  stack_trace: ^1.12.1
   mobile_scanner: ^7.0.1
   url_launcher: ^6.3.0
   flutter_rust_bridge: ^2.13.0

@@ -387,6 +387,193 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#flaresolverr-panel")
     end
 
+    test "row Test probes the saved URL even while FlareSolverr is disabled", %{conn: conn} do
+      bypass = Bypass.open()
+      put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
+      expect_flaresolverr_ok(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element("#flaresolverr-row-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+    end
+
+    test "row Test on an enabled config probes once and marks the row healthy", %{conn: conn} do
+      bypass = Bypass.open()
+      # Mount disabled so its async status probe stays quiet, then enable before
+      # the click. expect_once then fails the test if the click probes twice.
+      put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      await_mount_status(view)
+
+      put_saved_flaresolverr(enabled: true, url: "http://localhost:#{bypass.port}")
+      expect_flaresolverr_ok(bypass)
+      view |> element("#flaresolverr-row-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+      assert has_element?(view, "#flaresolverr-panel .badge", "Healthy")
+    end
+
+    test "a failed row Test on an enabled config marks the row unhealthy", %{conn: conn} do
+      bypass = Bypass.open()
+      put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      await_mount_status(view)
+
+      put_saved_flaresolverr(enabled: true, url: "http://localhost:#{bypass.port}")
+
+      Bypass.expect_once(bypass, "POST", "/v1", fn conn ->
+        Plug.Conn.resp(conn, 500, "")
+      end)
+
+      view |> element("#flaresolverr-row-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "FlareSolverr returned HTTP 500")
+      assert has_element?(view, "#flaresolverr-panel .badge", "Unhealthy")
+    end
+
+    test "row Test with no saved URL points the operator at Edit", %{conn: conn} do
+      put_saved_flaresolverr(enabled: false, url: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element("#flaresolverr-row-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "No FlareSolverr URL configured")
+    end
+
+    test "modal Test probes the typed URL before the first save (#764)", %{conn: conn} do
+      bypass = Bypass.open()
+      put_saved_flaresolverr(enabled: false, url: nil)
+      expect_flaresolverr_ok(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form",
+        flaresolverr: %{
+          enabled: "true",
+          url: "http://localhost:#{bypass.port}",
+          timeout: "60000",
+          max_timeout: "120000"
+        }
+      )
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+      assert has_element?(view, "#flaresolverr-form")
+      assert is_nil(Settings.get_config_setting_by_key("flaresolverr.url"))
+      assert is_nil(Settings.get_config_setting_by_key("flaresolverr.enabled"))
+    end
+
+    test "modal Test ignores the Enabled checkbox", %{conn: conn} do
+      bypass = Bypass.open()
+      put_saved_flaresolverr(enabled: false, url: nil)
+      expect_flaresolverr_ok(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form",
+        flaresolverr: %{enabled: "false", url: "http://localhost:#{bypass.port}"}
+      )
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+    end
+
+    test "modal Test probes the edited URL, not the saved one", %{conn: conn} do
+      saved = Bypass.open()
+      edited = Bypass.open()
+      # No expectation on `saved`: Bypass fails the test on exit if it is hit.
+      put_saved_flaresolverr(enabled: false, url: "http://localhost:#{saved.port}")
+      expect_flaresolverr_ok(edited)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form", flaresolverr: %{url: "http://localhost:#{edited.port}"})
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+    end
+
+    test "modal Test with a blank URL asks for one", %{conn: conn} do
+      put_saved_flaresolverr(enabled: false, url: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "Enter a FlareSolverr URL to test")
+      assert has_element?(view, "#flaresolverr-form")
+    end
+
+    test "modal Test rejects a URL without an http(s) scheme", %{conn: conn} do
+      put_saved_flaresolverr(enabled: false, url: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form", flaresolverr: %{url: "flaresolverr:8191"})
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "Not a valid FlareSolverr URL")
+      assert has_element?(view, "#flaresolverr-form")
+    end
+
+    test "modal Test reports a connection failure", %{conn: conn} do
+      bypass = Bypass.open()
+      Bypass.down(bypass)
+      put_saved_flaresolverr(enabled: false, url: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form", flaresolverr: %{url: "http://localhost:#{bypass.port}"})
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "FlareSolverr connection failed")
+    end
+
+    test "modal Test probes the env URL when the URL field is env-locked", %{conn: conn} do
+      bypass = Bypass.open()
+      # The describe setup deletes FLARESOLVERR_* and restores :runtime_config on
+      # exit, and this module is async: false, so the env write cannot leak.
+      System.put_env("FLARESOLVERR_URL", "http://localhost:#{bypass.port}")
+      {:ok, _config} = Mydia.Config.Loader.reload()
+      expect_flaresolverr_ok(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      # The URL input is disabled, so a browser never submits it and the
+      # changeset drops it on the first validate event.
+      view
+      |> form("#flaresolverr-form",
+        flaresolverr: %{enabled: "false", timeout: "60000", max_timeout: "120000"}
+      )
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+    end
+
     test "enabling with a blank URL shows a required-error and keeps the modal open", %{
       conn: conn
     } do
@@ -571,5 +758,47 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert Mydia.Indexers.FlareSolverr.enabled?()
       assert has_element?(view, "#flaresolverr-panel .badge-success", "Enabled")
     end
+  end
+
+  # Seeds the merged runtime config the way a completed save leaves it. The
+  # "FlareSolverr panel" setup restores :runtime_config on exit. Keep
+  # `enabled: false` in tests that count requests: with it on, mount's async
+  # status probe would hit the same URL a second time.
+  defp put_saved_flaresolverr(attrs) do
+    config =
+      case Application.get_env(:mydia, :runtime_config) do
+        %Mydia.Config.Schema{} = config -> config
+        _ -> Mydia.Config.Schema.defaults()
+      end
+
+    fs = struct(Mydia.Config.Schema.FlareSolverr, attrs)
+    Application.put_env(:mydia, :runtime_config, %{config | flaresolverr: fs})
+  end
+
+  # mount/3 reads the FlareSolverr status in a Task, and the Task reads the
+  # config whenever it runs. Wait for its answer so a config change made after
+  # mount cannot race it.
+  defp await_mount_status(view) do
+    MydiaWeb.FeatureCase.eventually(
+      fn ->
+        if has_element?(view, "#flaresolverr-panel .badge", "Checking"),
+          do: :error,
+          else: {:ok, :done}
+      end,
+      timeout: 2_000,
+      interval: 10,
+      description: "the FlareSolverr row to leave its Checking state"
+    )
+  end
+
+  defp expect_flaresolverr_ok(bypass) do
+    Bypass.expect_once(bypass, "POST", "/v1", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        200,
+        Jason.encode!(%{"status" => "ok", "version" => "3.3.21", "sessions" => []})
+      )
+    end)
   end
 end
