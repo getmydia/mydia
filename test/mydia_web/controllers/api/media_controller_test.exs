@@ -233,6 +233,7 @@ defmodule MydiaWeb.Api.MediaControllerTest do
       skip_episode_refresh: true
     )
   end
+
   describe "serialization" do
     setup do
       Provider.Registry.register(:metadata_relay, LiveActionProvider)
@@ -241,78 +242,78 @@ defmodule MydiaWeb.Api.MediaControllerTest do
     end
 
     test "a successful match serializes without raising", %{conn: conn} do
-    {:ok, movie} =
-      Media.create_media_item(
-        Scope.system(),
-        %{
-          type: "movie",
-          title: "Placeholder Title",
-          year: 1999,
-          tmdb_id: System.unique_integer([:positive]),
-          metadata: %MediaMetadata{
-            provider_id: "1",
-            provider: :tmdb,
-            media_type: :movie,
-            genres: ["Drama"]
-          }
-        },
-        skip_episode_refresh: true
-      )
+      {:ok, movie} =
+        Media.create_media_item(
+          Scope.system(),
+          %{
+            type: "movie",
+            title: "Placeholder Title",
+            year: 1999,
+            tmdb_id: System.unique_integer([:positive]),
+            metadata: %MediaMetadata{
+              provider_id: "1",
+              provider: :tmdb,
+              media_type: :movie,
+              genres: ["Drama"]
+            }
+          },
+          skip_episode_refresh: true
+        )
 
-    conn =
-      conn
-      |> log_in_user(create_test_user())
-      |> post(~p"/api/v1/media/#{movie.id}/match", %{
-        "provider_id" => "12345",
-        "provider_type" => "tmdb"
-      })
+      conn =
+        conn
+        |> log_in_user(create_test_user())
+        |> post(~p"/api/v1/media/#{movie.id}/match", %{
+          "provider_id" => "12345",
+          "provider_type" => "tmdb"
+        })
 
-    assert %{"data" => data} = json_response(conn, 200)
+      assert %{"data" => data} = json_response(conn, 200)
 
-    # These used to raise KeyError: serialize_media_item/1 read them straight
-    # off %MediaItem{}, which carries no such top-level columns, instead of
-    # off media_item.metadata (see LiveActionProvider's fetch_by_id/3 above).
-    assert data["title"] == "Live Action Rematch"
-    assert data["year"] == 2015
-    assert data["genres"] == ["Action"]
-    assert data["overview"] == nil
-    assert data["poster_url"] == nil
-    assert data["backdrop_url"] == nil
-    assert data["runtime"] == nil
-    assert data["status"] == nil
-  end
+      # These used to raise KeyError: serialize_media_item/1 read them straight
+      # off %MediaItem{}, which carries no such top-level columns, instead of
+      # off media_item.metadata (see LiveActionProvider's fetch_by_id/3 above).
+      assert data["title"] == "Live Action Rematch"
+      assert data["year"] == 2015
+      assert data["genres"] == ["Action"]
+      assert data["overview"] == nil
+      assert data["poster_url"] == nil
+      assert data["backdrop_url"] == nil
+      assert data["runtime"] == nil
+      assert data["status"] == nil
+    end
 
-  test "an episode with metadata serializes without raising", %{conn: conn} do
-    {:ok, show} =
-      Media.create_media_item(
-        Scope.system(),
-        %{type: "tv_show", title: "Stub Series", year: 2010},
-        skip_episode_refresh: true
-      )
+    test "an episode with metadata serializes without raising", %{conn: conn} do
+      {:ok, show} =
+        Media.create_media_item(
+          Scope.system(),
+          %{type: "tv_show", title: "Stub Series", year: 2010},
+          skip_episode_refresh: true
+        )
 
-    {:ok, _episode} =
-      Media.create_episode(%{
-        media_item_id: show.id,
-        season_number: 1,
-        episode_number: 1,
-        title: "Pilot",
-        metadata: %EpisodeData{
+      {:ok, _episode} =
+        Media.create_episode(%{
+          media_item_id: show.id,
           season_number: 1,
           episode_number: 1,
-          overview: "The one where it all begins.",
-          still_path: "/pilot-still.jpg"
-        }
-      })
+          title: "Pilot",
+          metadata: %EpisodeData{
+            season_number: 1,
+            episode_number: 1,
+            overview: "The one where it all begins.",
+            still_path: "/pilot-still.jpg"
+          }
+        })
 
-    conn =
-      conn
-      |> log_in_user(create_test_user())
-      |> get(~p"/api/v1/media/#{show.id}")
+      conn =
+        conn
+        |> log_in_user(create_test_user())
+        |> get(~p"/api/v1/media/#{show.id}")
 
-    # serialize_episodes/1 read episode.overview and episode.still_url
-    # directly off %Episode{}, which -- like MediaItem -- carries neither as a
-    # top-level column; both live under episode.metadata.
-    assert %{"data" => %{"episodes" => [episode]}} = json_response(conn, 200)
+      # serialize_episodes/1 read episode.overview and episode.still_url
+      # directly off %Episode{}, which -- like MediaItem -- carries neither as a
+      # top-level column; both live under episode.metadata.
+      assert %{"data" => %{"episodes" => [episode]}} = json_response(conn, 200)
       assert episode["overview"] == "The one where it all begins."
       assert episode["still_url"] =~ "pilot-still.jpg"
     end
