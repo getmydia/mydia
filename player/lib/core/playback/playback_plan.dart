@@ -1,7 +1,7 @@
 /// What the player decided to play, and why.
 ///
-/// See docs/superpowers/specs/2026-09-08-playback-decision-and-adaptation-design.md,
-/// "The decision".
+/// See player/docs/playback.md, "The decision, and where to look when it is
+/// wrong".
 library;
 
 import '../../domain/models/quality_rung.dart';

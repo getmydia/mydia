@@ -1,7 +1,8 @@
 /// Turns the server's candidates and this install's memory into a plan.
 ///
-/// Pure. Every rule and its order is spelled out in the spec under "The
-/// decision"; the reason on the returned plan names the rule that decided.
+/// Pure. Every rule and its order is spelled out in player/docs/playback.md,
+/// "The decision, and where to look when it is wrong"; the reason on the
+/// returned plan names the rule that decided.
 library;
 
 import '../../domain/models/quality_rung.dart';

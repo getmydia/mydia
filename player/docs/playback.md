@@ -21,8 +21,8 @@ The initial decision, made once when a file starts, logs one line:
 `[PlayerScreen] Plan: <plan> shape=<codec>/<bucket> bitrateKbps=<n>
 throughputKbps=<n>`, where `<plan>` is `directPlay (<reason>)` for a direct
 play, or `<strategy> <rung> (<reason>)` for an HLS plan (copy or transcode
-carry a rung; direct play does not). The reason names the rule from the spec
-that fired. Read that line before reading code. A later switch, from
+carry a rung; direct play does not). The reason names the rule that fired.
+Read that line before reading code. A later switch, from
 verification or a manual quality change, logs a different line; see
 "Verification" and "The switch".
 

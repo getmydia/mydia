@@ -48,7 +48,7 @@ AdaptationAction _drive(
 }
 
 void main() {
-  test('fallbackMessage is the spec copy', () {
+  test('fallbackMessage copy', () {
     expect(fallbackMessage(FailureReason.decodeFailed),
         'Switched to transcoding: your device dropped frames');
     expect(fallbackMessage(FailureReason.decodeTooSlow),

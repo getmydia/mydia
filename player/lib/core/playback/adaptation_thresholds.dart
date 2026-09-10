@@ -1,6 +1,6 @@
 /// Every number the adaptation policy compares against, in one place.
 ///
-/// Values are the spec's. Tests shrink them through the constructor.
+/// Tests shrink them through the constructor.
 library;
 
 class AdaptationThresholds {

@@ -165,7 +165,7 @@ class AdaptationPolicy {
   }
 }
 
-/// The OSD line for a fallback. Copy is the spec's, verbatim.
+/// The OSD line for a fallback.
 String fallbackMessage(FailureReason reason) => switch (reason) {
       FailureReason.decodeFailed ||
       FailureReason.decodeTooSlow =>

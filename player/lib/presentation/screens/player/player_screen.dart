@@ -1538,7 +1538,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Native keeps the `Player`: the last frame holds and every subscription
   /// stays bound. Web recreates it, because media_kit 1.2.6's web backend
   /// stacks an hls.js instance per `open()` and never destroys the previous
-  /// one. See the spec's web caveat.
+  /// one. See "The switch" in player/docs/playback.md.
   ///
   /// Never arms verification, on either platform: a switch is already the
   /// policy's own decision (or a seek/quality change the viewer made), and
