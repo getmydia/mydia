@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../crash_reporting/startup_report_controller.dart';
 
 /// Last-resort UI for when startup cannot proceed to [MyApp].
 ///
@@ -13,6 +14,7 @@ class StartupErrorApp extends StatelessWidget {
     required this.title,
     required this.message,
     this.details,
+    this.report,
   });
 
   /// Shown when another instance of the app is already running and holding
@@ -28,11 +30,16 @@ class StartupErrorApp extends StatelessWidget {
 
   /// Shown for any other fatal startup failure, with whatever underlying
   /// error text is available so the user (or a bug report) has something to
-  /// go on.
-  factory StartupErrorApp.generic(Object error) => StartupErrorApp(
+  /// go on. [report], when given, adds a Send report button.
+  factory StartupErrorApp.generic(
+    Object error, {
+    StartupReportController? report,
+  }) =>
+      StartupErrorApp(
         title: "Mydia Player couldn't start",
         message: 'Something went wrong while starting the app.',
         details: '$error',
+        report: report,
         key: const Key('startup-error-generic'),
       );
 
@@ -40,8 +47,13 @@ class StartupErrorApp extends StatelessWidget {
   final String message;
   final String? details;
 
+  /// Drives the Send report button. Null hides it: on web, where nothing is
+  /// sent, and on the already-running screen, which is not a crash.
+  final StartupReportController? report;
+
   @override
   Widget build(BuildContext context) {
+    final report = this.report;
     return MaterialApp(
       title: 'Mydia Player',
       debugShowCheckedModeBanner: false,
@@ -81,11 +93,62 @@ class StartupErrorApp extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (report != null) ...[
+                  const SizedBox(height: 24),
+                  _SendReportButton(controller: report),
+                ],
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One button whose label and enabled state follow the controller.
+class _SendReportButton extends StatelessWidget {
+  const _SendReportButton({required this.controller});
+
+  final StartupReportController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<StartupReportState>(
+      valueListenable: controller,
+      builder: (context, state, _) {
+        final (icon, label, onPressed) = switch (state) {
+          StartupReportState.idle => (
+              const Icon(Icons.send_outlined),
+              'Send report',
+              controller.send,
+            ),
+          StartupReportState.sending => (
+              const SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              'Sending report',
+              null,
+            ),
+          StartupReportState.sent => (
+              const Icon(Icons.check),
+              'Report sent',
+              null,
+            ),
+          StartupReportState.failed => (
+              const Icon(Icons.refresh),
+              "Couldn't send. Try again",
+              controller.send,
+            ),
+        };
+        return OutlinedButton.icon(
+          key: const Key('startup-report-button'),
+          onPressed: onPressed,
+          icon: icon,
+          label: Text(label),
+        );
+      },
     );
   }
 }
