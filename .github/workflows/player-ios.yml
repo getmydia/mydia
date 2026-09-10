@@ -133,7 +133,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Run code generation
         working-directory: ${{ env.PLAYER_PATH }}

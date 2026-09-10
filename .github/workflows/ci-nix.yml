@@ -24,9 +24,10 @@ jobs:
       # the exact regression this pin exists to prevent. So scan every file that
       # can select an SDK (workflows, Dockerfiles, compose files, nix modules,
       # scripts) for a version literal sitting in Flutter context. Dart package
-      # manifests are deliberately out of scope: their constraints pin packages,
-      # not the SDK this repo builds with. Needs only the checkout, so it runs
-      # first and fails in seconds.
+      # manifests are out of scope: their constraints pin packages, not the SDK
+      # this repo builds with. The one exception, environment.flutter in
+      # player/pubspec.yaml, is checked against .fvmrc by the next step. Needs
+      # only the checkout, so it runs first and fails in seconds.
       #
       # `uses:` lines are skipped because an action reference is not an SDK
       # selection. Without that, SHA-pinning the setup action in the usual
@@ -59,6 +60,35 @@ jobs:
             exit 1
           fi
           echo "OK: player/.fvmrc is the only file naming a Flutter version."
+
+      # Dependabot never reads .fvmrc. It resolves player/pubspec.lock with the
+      # newest stable Flutter that pubspec.yaml's environment.flutter allows, and
+      # every Flutter release pins several packages exactly, so that range must
+      # name the pinned minor. Otherwise Dependabot and each local `pub get`
+      # rewrite the lock in opposite directions. Pub enforces only the lower
+      # bound, so nothing else notices when a bump leaves the range behind.
+      - name: Assert pubspec.yaml bounds Dependabot to the pinned minor
+        run: |
+          set -euo pipefail
+          pinned="$(jq -r .flutter player/.fvmrc)"
+          IFS=. read -r major minor _ <<< "$pinned"
+          expected=">=$pinned <$major.$((minor + 1)).0"
+          actual="$(
+            awk '/^environment:/ { e = 1; next }
+                 /^[^[:space:]#]/ { e = 0 }
+                 e && $1 == "flutter:" { sub(/^[^:]*:[[:space:]]*/, ""); print; exit }' \
+              player/pubspec.yaml | tr -d "\"'"
+          )"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::environment.flutter in player/pubspec.yaml does not match player/.fvmrc"
+            echo "  found:    ${actual:-<missing>}"
+            echo "  expected: $expected"
+            echo
+            echo "Set it to '$expected' and re-run \`flutter pub get\` in player/"
+            echo "so pubspec.lock is resolved against the pinned SDK."
+            exit 1
+          fi
+          echo "OK: environment.flutter is '$expected'."
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main

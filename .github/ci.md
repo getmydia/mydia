@@ -235,6 +235,34 @@ either alone reproduces the panic. They have to land together with a codegen
 regen. Dependabot's grouping does not know about cross-language version coupling
 and will keep splitting this.
 
+## Dependabot resolves pubspec.lock with its own Flutter
+
+Dependabot never reads `player/.fvmrc`. Its pub updater installs the newest
+stable Flutter release that `environment.sdk` and `environment.flutter` in
+`player/pubspec.yaml` allow, and resolves `pubspec.lock` on that. Each Flutter
+release pins `meta`, `matcher`, `test_api`, `vector_math` and `intl` to its own
+versions through `flutter_test` and its siblings, so a lock resolved on a newer
+minor cannot resolve on the pinned SDK.
+
+With no `environment.flutter` range, #613 and #740 were resolved on the next
+minor. CI ran plain `flutter pub get`, which quietly re-resolved those packages
+down on the `.fvmrc` SDK and passed, so the gate merged both. Every local
+`pub get` then wrote the lock back, and it showed as modified in every checkout.
+Restoring it did not help: the devenv `mydia:flutter` task reruns `pub get` on
+shell entry whenever the lock changes, so the restore was itself the trigger.
+
+Two checks now hold the line:
+
+- `environment.flutter` must read `>=<.fvmrc> <<next minor>.0`, enforced by
+  `Check / Flutter Pin`. Pub enforces only the lower bound of that range
+  (flutter/flutter#95472), so the upper bound constrains Dependabot alone, and
+  only that check notices when a `.fvmrc` bump leaves it behind.
+- Every CI and release `flutter pub get` passes `--enforce-lockfile`. A lock that
+  does not resolve on the pinned SDK fails `Test / Player`, and the gate reports
+  `BLOCKED`. The E2E runner is the exception: `player/Dockerfile.test` builds on
+  cirruslabs' floating `stable` image rather than `.fvmrc`, and cannot satisfy
+  the lock as committed.
+
 ## Quality gates
 
 PR #186 (merged 2026-06-05) removed dead-code and duplicate-code grandfathering.
