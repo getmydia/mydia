@@ -741,6 +741,62 @@ defmodule Mydia.IndexersTest do
       assert {:ok, info} = Indexers.test_connection(config)
       assert info.version == "1.25.0"
     end
+
+    test "raw config map with a trailing slash reaches the API path (#765)" do
+      bypass = Bypass.open()
+      IndexerMock.mock_prowlarr_status(bypass, version: "1.25.0")
+
+      config = %{
+        type: :prowlarr,
+        base_url: "http://localhost:#{bypass.port}/",
+        api_key: "test-api-key"
+      }
+
+      assert {:ok, %{version: "1.25.0"}} = Indexers.test_connection(config)
+    end
+
+    test "stored config with a trailing slash reaches the API path (#765)" do
+      bypass = Bypass.open()
+      IndexerMock.mock_prowlarr_status(bypass, version: "1.25.0")
+
+      # Built directly, skipping the changeset, the way env and YAML configs
+      # and rows saved before normalization reach the adapter.
+      config = %Settings.IndexerConfig{
+        name: "Stored Prowlarr",
+        type: :prowlarr,
+        base_url: "http://localhost:#{bypass.port}/",
+        api_key: "test-api-key"
+      }
+
+      assert {:ok, %{version: "1.25.0"}} = Indexers.test_connection(config)
+    end
+
+    test "keeps a URL base prefix while dropping its trailing slash (#765)" do
+      bypass = Bypass.open()
+      IndexerMock.mock_prowlarr_status(bypass, version: "1.25.0", base_path: "/prowlarr")
+
+      config = %Settings.IndexerConfig{
+        name: "Prefixed Prowlarr",
+        type: :prowlarr,
+        base_url: "http://localhost:#{bypass.port}/prowlarr/",
+        api_key: "test-api-key"
+      }
+
+      assert {:ok, %{version: "1.25.0"}} = Indexers.test_connection(config)
+    end
+  end
+
+  describe "list_prowlarr_indexers/1" do
+    test "raw connection details with a trailing slash reach the API path (#765)" do
+      bypass = Bypass.open()
+      IndexerMock.mock_prowlarr_indexers(bypass)
+
+      assert {:ok, [%{id: 1, name: "Fictional Tracker", enabled: true}]} =
+               Indexers.list_prowlarr_indexers(%{
+                 base_url: "http://localhost:#{bypass.port}/",
+                 api_key: "test-api-key"
+               })
+    end
   end
 
   describe "rank_and_dedupe/3" do

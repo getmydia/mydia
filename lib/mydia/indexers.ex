@@ -453,16 +453,16 @@ defmodule Mydia.Indexers do
   def list_prowlarr_indexers(%{base_url: base_url, api_key: api_key})
       when is_binary(base_url) and is_binary(api_key) do
     # Build a minimal adapter config from raw connection details
-    uri = URI.parse(base_url)
+    fields = connection_fields(base_url)
 
     adapter_config = %{
       type: :prowlarr,
-      host: uri.host || "localhost",
-      port: uri.port || default_port(uri.scheme),
+      host: fields.host,
+      port: fields.port,
       api_key: api_key,
-      use_ssl: uri.scheme == "https",
+      use_ssl: fields.use_ssl,
       options: %{
-        base_path: uri.path
+        base_path: fields.base_path
       }
     }
 
@@ -691,8 +691,7 @@ defmodule Mydia.Indexers do
     # Resolve environment variable inheritance if env_name is set
     resolved_config = Settings.resolve_env_inheritance(config)
 
-    # Parse base_url to extract host, port, and use_ssl
-    uri = URI.parse(resolved_config.base_url)
+    fields = connection_fields(resolved_config.base_url)
 
     # Get timeout from connection_settings or use default
     timeout =
@@ -704,16 +703,16 @@ defmodule Mydia.Indexers do
     %{
       type: resolved_config.type,
       name: resolved_config.name,
-      host: uri.host || "localhost",
-      port: uri.port || default_port(uri.scheme),
+      host: fields.host,
+      port: fields.port,
       api_key: resolved_config.api_key,
-      use_ssl: uri.scheme == "https",
+      use_ssl: fields.use_ssl,
       options: %{
         indexer_ids: resolved_config.indexer_ids || [],
         categories: resolved_config.categories || [],
         rate_limit: resolved_config.rate_limit,
         timeout: timeout,
-        base_path: uri.path
+        base_path: fields.base_path
       }
     }
   end
@@ -722,21 +721,35 @@ defmodule Mydia.Indexers do
   # This handles the case where test_connection is called from the UI with a raw config map
   # rather than an IndexerConfig struct.
   defp maybe_convert_base_url(%{base_url: base_url} = config) when is_binary(base_url) do
-    uri = URI.parse(base_url)
+    fields = connection_fields(base_url)
 
     config
-    |> Map.put(:host, uri.host || "localhost")
-    |> Map.put(:port, uri.port || default_port(uri.scheme))
-    |> Map.put(:use_ssl, uri.scheme == "https")
+    |> Map.put(:host, fields.host)
+    |> Map.put(:port, fields.port)
+    |> Map.put(:use_ssl, fields.use_ssl)
     |> Map.put(:name, Map.get(config, :name, "Test"))
     |> Map.put_new(:options, %{
       indexer_ids: [],
       categories: [],
-      base_path: uri.path
+      base_path: fields.base_path
     })
   end
 
   defp maybe_convert_base_url(config), do: config
+
+  # Splits a base URL into the fields adapters build request URLs from. Every
+  # source (form, env, YAML, stored rows) goes through the same normalizer, so
+  # base_path is nil or a prefix like "/prowlarr" and never "/" (#765).
+  defp connection_fields(base_url) do
+    uri = base_url |> Settings.IndexerConfig.normalize_url() |> URI.parse()
+
+    %{
+      host: uri.host || "localhost",
+      port: uri.port || default_port(uri.scheme),
+      use_ssl: uri.scheme == "https",
+      base_path: uri.path
+    }
+  end
 
   defp default_port("https"), do: 443
   defp default_port("http"), do: 80
