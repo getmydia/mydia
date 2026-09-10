@@ -1,12 +1,22 @@
 <Layouts.app {assigns}>
   <.admin_page active_tab={@active_tab}>
-    <MydiaWeb.AdminDuplicatesLive.Components.duplicates_tab
-      decisions={@decisions}
-      refusals={@refusals}
-      selected={@selected}
-      reclaimable={@reclaimable}
-      retention_days={@retention_days}
-    />
+    <div class="p-4 sm:p-6 space-y-4">
+      <MydiaWeb.AdminDuplicatesLive.Components.duplicates_tab
+        decisions={@decisions}
+        refusals={@refusals}
+        selected={@selected}
+        reclaimable={@reclaimable}
+        retention_days={@retention_days}
+      />
+
+      <MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention
+        :if={@refusals != []}
+        refusals={@refusals}
+        suspects={@suspects}
+        returning={@returning}
+        overridden?={@review_overrides != %{}}
+      />
+    </div>
 
     <%!-- Trash Confirmation Modal --%>
     <%= if @show_trash_modal do %>
@@ -18,6 +28,14 @@
       />
     <% end %>
 
-    <MydiaWeb.AdminDuplicatesLive.Components.undo_toast :if={@last_run} run={@last_run} />
+    <%!-- Send to Review Confirmation Modal --%>
+    <%= if @show_review_modal do %>
+      <MydiaWeb.AdminDuplicatesLive.ReviewComponents.review_confirm_modal
+        count={MapSet.size(@returning)}
+        items={@returning_items}
+      />
+    <% end %>
+
+    <MydiaWeb.AdminDuplicatesLive.Components.run_toast :if={@last_run} run={@last_run} />
   </.admin_page>
 </Layouts.app>

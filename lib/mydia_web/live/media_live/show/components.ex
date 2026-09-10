@@ -543,7 +543,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           The strip below is `flex-shrink-0` at 136px. Against a 245px row on a
           375px phone that left the filename 69px, which rendered 8 characters
           of a 92-character name and wrapped the badge line underneath onto
-          four lines. --%>
+          four lines.
+
+          With every action present the strip is six 40px squares, 260px, which is
+          wider than that same 245px row, so it wraps rather than overflowing to the
+          left; justify-end keeps the wrapped button on the right. --%>
     <div
       id={"episode-file-row-#{@file.id}"}
       class="flex flex-col gap-3 py-1 @md/eprow:flex-row @md/eprow:items-start @md/eprow:justify-between @md/eprow:gap-4"
@@ -585,7 +589,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         />
       </div>
       <%!-- File actions --%>
-      <div class="flex items-center justify-end gap-1 flex-shrink-0">
+      <div class="flex flex-wrap items-center justify-end gap-1 flex-shrink-0">
         <button
           id={"subtitle-open-#{@file.id}"}
           type="button"
@@ -648,6 +652,20 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           title="Mark as preferred"
         >
           <.icon name="hero-star" class="w-4 h-4" />
+        </button>
+        <%!-- Recovery for a file the matcher attached to the wrong episode,
+              whether it belongs to another show or to another episode of this
+              one. Same handler as the movie row's "Not this movie". --%>
+        <button
+          id={"not-this-item-#{@file.id}"}
+          type="button"
+          phx-click="not_this_item"
+          phx-value-file-id={@file.id}
+          class="btn btn-ghost btn-square @md/eprow:btn-xs"
+          aria-label="This file is not this episode"
+          title="Not this episode"
+        >
+          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
         </button>
         <button
           id={"file-delete-#{@file.id}"}

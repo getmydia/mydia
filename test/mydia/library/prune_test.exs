@@ -1,5 +1,6 @@
 defmodule Mydia.Library.PruneTest do
   use Mydia.DataCase, async: true
+  use Oban.Testing, repo: Mydia.Repo
 
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
@@ -40,6 +41,35 @@ defmodule Mydia.Library.PruneTest do
 
     {episode, files}
   end
+
+  # A movie holding its own file plus one from another title's folder, with
+  # lengths far enough apart that Eligibility refuses the group.
+  defp misfiled_movie do
+    movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+    lp = library_path_fixture(%{type: "movies"})
+
+    [own, stray] =
+      for {path, seconds} <- [
+            {"Zephyr Station (2030)/Zephyr.Station.2030.1080p.mkv", 6000.0},
+            {"Starveil (2031)/Starveil.2031.1080p.mkv", 7000.0}
+          ] do
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: path,
+          metadata: %{"container" => "mkv", "duration" => seconds}
+        })
+      end
+
+    {movie, own, stray}
+  end
+
+  @same_episode_twice [
+    {"Harbor Lights/Season 02/Harbor.Lights.S02E03.1080p.BluRay.x265.mp4",
+     %{resolution: "1080p", codec: "hevc", bitrate: 2_002_656}},
+    {"Harbor Lights/Season 02/Harbor.Lights.S02E03.360p.WEBRip.x264.mp4",
+     %{resolution: "360p", codec: "h264", bitrate: 1_000_000}}
+  ]
 
   describe "plan/0" do
     test "separates prunable decisions from refusals" do
@@ -347,6 +377,84 @@ defmodule Mydia.Library.PruneTest do
 
       assert event_a.metadata["restored"] == [loser_a.relative_path]
       assert event_b.metadata["restored"] == [loser_b.relative_path]
+    end
+  end
+
+  describe "plan/1 suspects" do
+    test "names the stray file of a refused group" do
+      {movie, _own, stray} = misfiled_movie()
+
+      assert %{suspects: suspects} = Prune.plan()
+      assert suspects[movie.id] == MapSet.new([stray.id])
+    end
+
+    test "leaves eligible groups out" do
+      {episode, _files} = episode_with(@same_episode_twice, 1320.0)
+
+      assert %{suspects: suspects} = Prune.plan()
+      refute Map.has_key?(suspects, episode.id)
+    end
+  end
+
+  describe "send_to_review/2" do
+    test "sends the requested file to Review and leaves the rest attached" do
+      {_movie, own, stray} = misfiled_movie()
+
+      assert %{returned: [%MediaFile{id: id}], failed: [], aborted: []} =
+               Prune.send_to_review([stray.id], "42")
+
+      assert id == stray.id
+      refute Mydia.Repo.get(MediaFile, stray.id)
+      assert Mydia.Repo.get(MediaFile, own.id)
+      assert_enqueued(worker: Mydia.Jobs.RematchImportCandidates)
+    end
+
+    test "refuses to send every file of a group" do
+      {_movie, own, stray} = misfiled_movie()
+
+      assert %{returned: [], failed: [], aborted: aborted} =
+               Prune.send_to_review([own.id, stray.id], "42")
+
+      assert Enum.sort(aborted) ==
+               Enum.sort([{own.id, :would_leave_no_file}, {stray.id, :would_leave_no_file}])
+
+      assert Mydia.Repo.get(MediaFile, own.id)
+      assert Mydia.Repo.get(MediaFile, stray.id)
+    end
+
+    test "refuses a file that is not in a refused group" do
+      {_episode, [file | _]} = episode_with(@same_episode_twice, 1320.0)
+
+      assert %{returned: [], aborted: [{id, :not_in_any_group}]} =
+               Prune.send_to_review([file.id], "42")
+
+      assert id == file.id
+      assert Mydia.Repo.get(MediaFile, file.id)
+    end
+
+    test "reports a file it could not send and still sends the others" do
+      {movie, _own, stray} = misfiled_movie()
+      lp = library_path_fixture(%{type: "movies"})
+
+      legacy =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: "Legacy/legacy.mkv",
+          metadata: %{"container" => "mkv", "duration" => 9000.0}
+        })
+
+      # The legacy shape (no library path, no relative path) is only reachable
+      # by bypassing MediaFile.changeset/2.
+      Mydia.Repo.update_all(from(f in MediaFile, where: f.id == ^legacy.id),
+        set: [library_path_id: nil, relative_path: nil]
+      )
+
+      assert %{returned: [%MediaFile{id: returned_id}], failed: [{failed_id, :no_library_path}]} =
+               Prune.send_to_review([stray.id, legacy.id], "42")
+
+      assert returned_id == stray.id
+      assert failed_id == legacy.id
     end
   end
 end

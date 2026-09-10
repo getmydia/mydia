@@ -2,6 +2,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
+  import Ecto.Query, only: [from: 2]
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
@@ -80,6 +81,30 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
     movie
   end
 
+  # A movie holding its own file plus one from another title's folder. The
+  # lengths differ by far more than 2%, so the group is refused, and only the
+  # stray fails to bind to the title.
+  defp misfiled_movie(title \\ "Zephyr Station", stray_title \\ "Starveil") do
+    movie = media_item_fixture(%{type: "movie", title: title, year: 2030})
+    lp = library_path_fixture(%{type: "movies"})
+    dotted = &String.replace(&1, " ", ".")
+
+    [own, stray] =
+      for {path, seconds} <- [
+            {"#{title} (2030)/#{dotted.(title)}.2030.1080p.mkv", 6000.0},
+            {"#{stray_title} (2031)/#{dotted.(stray_title)}.2031.1080p.mkv", 7000.0}
+          ] do
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: path,
+          metadata: %{"container" => "mkv", "duration" => seconds}
+        })
+      end
+
+    {movie, own, stray}
+  end
+
   defp trashed?(file),
     do: not is_nil(Mydia.Repo.get!(Mydia.Library.MediaFile, file.id).trashed_at)
 
@@ -147,7 +172,135 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
 
       assert has_element?(view, "#duplicates-refusal-#{movie.id}")
+      refute has_element?(view, "#duplicates-refusal-#{movie.id} input[aria-label='Keep']")
+      refute has_element?(view, "#duplicates-refusal-#{movie.id} input[aria-label='Trash']")
+    end
+
+    test "a stray file starts on Review with a Doesn't match badge, its sibling on Leave",
+         %{conn: conn} do
+      {movie, own, stray} = misfiled_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      assert has_element?(view, "#duplicates-suspect-#{stray.id}")
+      refute has_element?(view, "#duplicates-suspect-#{own.id}")
+      assert has_element?(view, "#duplicates-review-#{stray.id}[checked]")
+      assert has_element?(view, "#duplicates-leave-#{own.id}[checked]")
+      refute has_element?(view, "#duplicates-review-group-#{movie.id}[disabled]")
+    end
+
+    test "a group with nothing flagged starts all on Leave", %{conn: conn} do
+      # refused_movie/0 is a feature plus bonus content in the feature's own
+      # folder, which suspect_files/1 deliberately does not flag.
+      movie = refused_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      refute has_element?(view, "#duplicates-refusal-#{movie.id} [id^='duplicates-suspect-']")
+      assert has_element?(view, "#duplicates-review-group-#{movie.id}[disabled]")
+    end
+
+    test "a group's last Leave file cannot be put on Review", %{conn: conn} do
+      {movie, own, _stray} = misfiled_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      assert has_element?(view, "#duplicates-review-#{own.id}[disabled]")
+
+      # The radio is disabled, so only a forged event reaches the handler.
+      render_click(view, "review_file", %{"subject" => movie.id, "file" => own.id})
+
+      assert has_element?(view, "#duplicates-leave-#{own.id}[checked]")
+    end
+
+    test "Leave takes a stray back off Review", %{conn: conn} do
+      {movie, _own, stray} = misfiled_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-leave-#{stray.id}") |> render_click()
+
+      assert has_element?(view, "#duplicates-leave-#{stray.id}[checked]")
+      assert has_element?(view, "#duplicates-review-group-#{movie.id}[disabled]")
+    end
+
+    test "a subject paired with another group's file moves nothing", %{conn: conn} do
+      {_movie, _own, stray} = misfiled_movie()
+      other = refused_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      render_click(view, "leave_file", %{"subject" => other.id, "file" => stray.id})
+
+      assert has_element?(view, "#duplicates-review-#{stray.id}[checked]")
+    end
+
+    test "sending a group detaches its marked file and links to Review", %{conn: conn} do
+      {movie, own, stray} = misfiled_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-review-group-#{movie.id}") |> render_click()
+
+      refute has_element?(view, "#duplicates-refusal-#{movie.id}")
+      refute Mydia.Repo.get(Mydia.Library.MediaFile, stray.id)
+      assert Mydia.Repo.get(Mydia.Library.MediaFile, own.id)
+      assert has_element?(view, "#duplicates-open-review")
+      refute has_element?(view, "#duplicates-undo")
+    end
+
+    test "a legacy row with no relative_path gets a Leave/Review group named by file id",
+         %{conn: conn} do
+      {movie, _own, _stray} = misfiled_movie()
+      other_lp = library_path_fixture(%{type: "movies"})
+
+      legacy =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: other_lp.id,
+          relative_path: "Orphaned/orphan.mkv",
+          metadata: %{"container" => "mkv", "duration" => 100.0}
+        })
+
+      Mydia.Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^legacy.id),
+        set: [library_path_id: nil, relative_path: nil]
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      assert has_element?(
+               view,
+               "#duplicates-refusal-#{movie.id} [role='radiogroup'][aria-label='What to do with file #{legacy.id}']"
+             )
+    end
+
+    test "a group registered twice gets no Leave/Review controls", %{conn: conn} do
+      movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+      lp = library_path_fixture(%{type: "movies"})
+
+      files =
+        for path <- ["ZS/a.mkv", "ZS/b.mkv"] do
+          media_file_fixture(%{
+            media_item_id: movie.id,
+            library_path_id: lp.id,
+            relative_path: path,
+            metadata: %{"container" => "mkv", "duration" => 6000.0}
+          })
+        end
+
+      ids = Enum.map(files, & &1.id)
+
+      # Two orphaned rows share the {nil, nil} key, the only shape
+      # :duplicate_registration still guards (see eligibility_test.exs).
+      Mydia.Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id in ^ids),
+        set: [library_path_id: nil, relative_path: nil]
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      assert has_element?(view, "#duplicates-refusal-#{movie.id}")
       refute has_element?(view, "#duplicates-refusal-#{movie.id} input")
+      refute has_element?(view, "#duplicates-review-group-#{movie.id}")
     end
 
     test "explains a duration mismatch refusal with the actual spread and tolerance",
@@ -578,6 +731,61 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
 
       assert has_element?(view, "#duplicates-undo-toast")
       assert render(view) =~ "2 items"
+    end
+
+    test "the page-level send confirms first, then detaches every marked file", %{conn: conn} do
+      {_movie_a, own_a, stray_a} = misfiled_movie("Zephyr Station", "Starveil")
+      {_movie_b, own_b, stray_b} = misfiled_movie("Emberline", "Quillmoor")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-review-selected") |> render_click()
+      assert has_element?(view, "#duplicates-review-modal")
+
+      view |> element("#duplicates-review-confirm") |> render_click()
+
+      refute has_element?(view, "#duplicates-review-modal")
+      refute Mydia.Repo.get(Mydia.Library.MediaFile, stray_a.id)
+      refute Mydia.Repo.get(Mydia.Library.MediaFile, stray_b.id)
+      assert Mydia.Repo.get(Mydia.Library.MediaFile, own_a.id)
+      assert Mydia.Repo.get(Mydia.Library.MediaFile, own_b.id)
+      assert has_element?(view, "#duplicates-open-review")
+    end
+
+    test "Cancel closes the confirm modal and sends nothing", %{conn: conn} do
+      {_movie, _own, stray} = misfiled_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-review-selected") |> render_click()
+      view |> element("#duplicates-review-cancel") |> render_click()
+
+      refute has_element?(view, "#duplicates-review-modal")
+      assert Mydia.Repo.get(Mydia.Library.MediaFile, stray.id)
+    end
+
+    test "the page-level send is disabled when nothing is marked", %{conn: conn} do
+      _movie = refused_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      assert has_element?(view, "#duplicates-review-selected[disabled]")
+    end
+
+    test "Mark flagged puts the operator's changes back to the defaults", %{conn: conn} do
+      {_movie, _own, stray} = misfiled_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      refute has_element?(view, "#duplicates-review-reset")
+
+      view |> element("#duplicates-leave-#{stray.id}") |> render_click()
+      assert has_element?(view, "#duplicates-review-reset")
+
+      view |> element("#duplicates-review-reset") |> render_click()
+
+      assert has_element?(view, "#duplicates-review-#{stray.id}[checked]")
+      refute has_element?(view, "#duplicates-review-reset")
     end
   end
 end

@@ -96,6 +96,107 @@ defmodule Mydia.ImportCandidates do
   end
 
   @doc """
+  Detaches a media file the matcher filed against the wrong item and returns it
+  to the review inbox.
+
+  The row goes and the bytes stay. A candidate is written at the file's current
+  `(library_path_id, relative_path)` so `/review` can match it against the right
+  item, with three fields set so the correction sticks:
+
+    * `returned_at`, which holds it out of unattended promotion
+      (`Mydia.Library.FileIngest`) and, here, out of the ready band and
+      `queue_accept_all_matched/1`, so only a person can put it back;
+    * `queued_op: "rematch"`, so `Mydia.Jobs.RematchImportCandidates` gives it
+      a fresh suggestion under the `:review` policy, which never promotes.
+      The job is enqueued inside the same transaction as the detach, so a
+      failed enqueue rolls the whole detach back rather than leaving the
+      candidate queued with nothing to drain it;
+    * `dismissed_at: nil`, because a dismissed candidate already at that path
+      would otherwise hide the file from the inbox it was just sent to.
+
+  The owning item comes from the file itself (the movie for a movie file, the
+  show for an episode file) and supplies the candidate's `media_type`. Without
+  it `ImportCandidate.parsed_info/1` defaults a nil type to movie, so a
+  returned episode would be matched as a film.
+
+  A legacy row carrying only `path` has no `(library_path_id, relative_path)`
+  pair to key a candidate by, and returns `{:error, :no_library_path}`.
+  """
+  @spec return_to_review(MediaFile.t(), String.t()) ::
+          {:ok, MediaFile.t()} | {:error, :no_library_path} | {:error, term()}
+  def return_to_review(%MediaFile{} = file, actor_id) when is_binary(actor_id) do
+    file = Repo.preload(file, [:library_path, :media_item, episode: :media_item])
+
+    case {file.library_path, file.relative_path, owning_item(file)} do
+      {%LibraryPath{} = library_path, relative_path, %Media.MediaItem{} = media_item}
+      when is_binary(relative_path) ->
+        detach_to_review(file, library_path, media_item, actor_id)
+
+      _ ->
+        {:error, :no_library_path}
+    end
+  end
+
+  defp owning_item(%MediaFile{episode: %Episode{media_item: %Media.MediaItem{} = item}}),
+    do: item
+
+  defp owning_item(%MediaFile{media_item: %Media.MediaItem{} = item}), do: item
+  defp owning_item(%MediaFile{}), do: nil
+
+  defp detach_to_review(file, library_path, media_item, actor_id) do
+    now = now()
+
+    anchor =
+      PathAnchor.anchor_for(Path.join(library_path.path, file.relative_path), library_path.path)
+
+    attrs = %{
+      library_path_id: library_path.id,
+      relative_path: file.relative_path,
+      anchor_key: anchor.cluster_key,
+      size: file.size,
+      media_type: media_item.type,
+      discovered_at: now,
+      returned_at: now,
+      dismissed_at: nil,
+      queued_op: "rematch",
+      queued_at: now,
+      queue_error: nil
+    }
+
+    # All three -- the candidate appearing, the media_files row disappearing,
+    # and the rematch job -- must succeed or fail together. Two independent
+    # Repo calls would let a hard interruption between them leave the file
+    # both still attached to the wrong item and duplicated into
+    # import_candidates; enqueueing outside the transaction would let a job
+    # insert failure leave the candidate queued with nothing left to drain it.
+    #
+    # The activity event is recorded inside the same transaction on purpose:
+    # Mydia.Repo.transaction/2 defers its PubSub broadcast until the outermost
+    # transaction commits and discards it on rollback, so the feed never
+    # reports something that did not happen.
+    result =
+      Repo.transaction(fn ->
+        with {:ok, _candidate} <- upsert(attrs),
+             {:ok, deleted} <- Mydia.Library.delete_media_file(file, delete_files: false),
+             {:ok, _job} <- enqueue(Mydia.Jobs.RematchImportCandidates, library_path.id) do
+          Mydia.Events.file_returned_to_review(deleted, media_item, actor_id)
+          deleted
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    case result do
+      {:ok, _deleted} ->
+        broadcast(library_path.id)
+        result
+
+      {:error, _reason} ->
+        result
+    end
+  end
+
+  @doc """
   Reaps candidates for `library_path_id` whose `relative_path` is absent from
   `relative_paths` (the paths a scan just found on disk).
 
@@ -236,10 +337,18 @@ defmodule Mydia.ImportCandidates do
   this function has always called it `:needs_attention` via its explicit
   `provider_type: "local"` clause below. `import_candidates_test.exs` proves
   the two paths agree, including for that exact shape.
+
+  A group holding a returned candidate (`returned_count > 0`) is never ready
+  either. An operator sent that file back from an item it was wrongly filed
+  under, and a confident suggestion can name that same item, so a person has
+  to look at it. `ready_condition/0` carries the same rule in SQL.
   """
   @spec band(ImportCandidateGroup.t()) :: :ready | :needs_attention | :no_match
   def band(%ImportCandidateGroup{provider_id: nil}), do: :no_match
   def band(%ImportCandidateGroup{provider_type: "local"}), do: :needs_attention
+
+  def band(%ImportCandidateGroup{returned_count: count}) when is_integer(count) and count > 0,
+    do: :needs_attention
 
   def band(%ImportCandidateGroup{} = group) do
     cond do
@@ -299,7 +408,8 @@ defmodule Mydia.ImportCandidates do
       suggested_year: max(c.year),
       media_type: max(c.media_type),
       queued_op: max(c.queued_op),
-      queue_error: max(c.queue_error)
+      queue_error: max(c.queue_error),
+      returned_count: count(c.returned_at)
     })
   end
 
@@ -361,7 +471,8 @@ defmodule Mydia.ImportCandidates do
       [c],
       count(c.provider_id, :distinct) == 1 and
         fragment("COALESCE(?, 0.0)", min(c.confidence)) >= ^threshold and
-        (is_nil(max(c.provider_type)) or max(c.provider_type) != "local")
+        (is_nil(max(c.provider_type)) or max(c.provider_type) != "local") and
+        count(c.returned_at) == 0
     )
   end
 
@@ -514,7 +625,8 @@ defmodule Mydia.ImportCandidates do
       provider_count: row.provider_count,
       dismissed?: status == "ignored",
       queued?: status == "queued",
-      queue_error: row.queue_error
+      queue_error: row.queue_error,
+      returned_count: row.returned_count
     }
   end
 
@@ -897,12 +1009,17 @@ defmodule Mydia.ImportCandidates do
   synthetic `"local"` provider can never be promoted, so letting it move into
   Queued and bounce straight back with an error would be churn on the most
   common bulk path.
+
+  `exclude_returned: true` also skips groups holding a candidate an operator
+  returned to review. Only `queue_accept_all_matched/1` passes it: an explicit
+  selection is a person looking at the group, which is what a returned file
+  is waiting for.
   """
-  @spec queue_accept(SelectionScope.t()) ::
+  @spec queue_accept(SelectionScope.t(), keyword()) ::
           {:ok, %{queued: non_neg_integer(), skipped: non_neg_integer()}}
-  def queue_accept(%SelectionScope{} = scope) do
+  def queue_accept(%SelectionScope{} = scope, opts \\ []) do
     now = now()
-    eligible = eligible_accept_keys(scope)
+    eligible = eligible_accept_keys(scope, opts)
 
     # Both counts have to be read before the UPDATE. Marking a row sets
     # `queued_op`, which `filter_status/2` excludes from "pending", so the same
@@ -939,7 +1056,9 @@ defmodule Mydia.ImportCandidates do
   Queues every pending provider-matched group for one library path.
 
   Confidence is deliberately not filtered: this is the explicit human override
-  behind the review page's "Import all" control.
+  behind the review page's "Import all" control. Groups holding a returned
+  candidate are skipped, because a returned file's suggestion can name the very
+  item it was sent back from, and this control accepts without showing it.
   """
   @spec queue_accept_all_matched(binary()) ::
           {:ok, %{queued: non_neg_integer(), skipped: non_neg_integer()}}
@@ -947,21 +1066,25 @@ defmodule Mydia.ImportCandidates do
     library_path_id
     |> SelectionScope.new()
     |> SelectionScope.select_all_matching(%{})
-    |> queue_accept()
+    |> queue_accept(exclude_returned: true)
   end
 
   # The selected anchors that `accept_group/2` would actually accept, as a
   # grouped subquery of anchor keys. `count(provider_id, :distinct) == 1`
   # subsumes the no-match case as well: SQL counts of a nullable column ignore
   # NULLs, so a group with no provider match counts zero.
-  defp eligible_accept_keys(%SelectionScope{} = scope) do
+  defp eligible_accept_keys(%SelectionScope{} = scope, opts) do
     scope
     |> SelectionScope.to_query()
     |> exclude(:select)
     |> having([c], count(c.provider_id, :distinct) == 1)
     |> having([c], is_nil(max(c.provider_type)) or max(c.provider_type) != "local")
+    |> maybe_exclude_returned(Keyword.get(opts, :exclude_returned, false))
     |> select([c], c.anchor_key)
   end
+
+  defp maybe_exclude_returned(query, true), do: having(query, [c], count(c.returned_at) == 0)
+  defp maybe_exclude_returned(query, false), do: query
 
   # Oban's engine is disabled in test (config/test.exs sets `engine: false`), so
   # Oban.insert/1 raises there. See test/README.md and

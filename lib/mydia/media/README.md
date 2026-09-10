@@ -234,6 +234,17 @@ the selection math wrong trashes real files. And hyphen-slug filenames
 (`Muppets-Most-Wanted-2014-1080p.mkv`) fail `ReleaseParser` title extraction, so
 those movies are refused rather than pruned, which fails safe.
 
+Needs Attention is where misidentification surfaces, so each file there carries
+a Leave/Review choice, and a send goes through `Prune.send_to_review/2`, which
+re-plans and never empties a subject, the same way `execute/3` never trashes a
+keeper. A file starts on Review when `Eligibility.suspect_files/1` names it: its
+name does not bind to the item and it sits under a different anchor folder from
+every file that does, or it names a different episode. The folder test is what
+keeps loose bonus content (the Monsters University shape above) from being sent
+away. The returned candidate carries `returned_at`, which keeps it out of
+unattended promotion (`FileIngest`), out of the ready band, and out of
+`queue_accept_all_matched/1`. Only an explicit Accept in `/review` puts it back.
+
 ## An empty scan trashes the whole library
 
 A library scan returning zero files classifies every existing `media_file` under

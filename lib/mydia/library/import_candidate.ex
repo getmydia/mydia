@@ -29,6 +29,7 @@ defmodule Mydia.Library.ImportCandidate do
     field :queued_at, :utc_datetime
     field :queue_error, :string
     field :discovered_at, :utc_datetime
+    field :returned_at, :utc_datetime
 
     belongs_to :library_path, Mydia.Settings.LibraryPath
 
@@ -38,7 +39,7 @@ defmodule Mydia.Library.ImportCandidate do
   @castable ~w(
     library_path_id relative_path anchor_key size mtime parsed_info provider_type provider_id
     title year media_type confidence attempts last_error next_retry_at dismissed_at discovered_at
-    queued_op queued_at queue_error
+    queued_op queued_at queue_error returned_at
   )a
 
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
