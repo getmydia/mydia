@@ -93,8 +93,8 @@ defmodule Mydia.Media.AddTest do
       assert {:error, {:metadata, _reason}} =
                Add.resolve_attrs({:tvdb, tvdb_id}, :movie, relay_config(bypass))
 
-      refute Mydia.Media.find_by_external_ids(%{tmdb: tvdb_id})
-      refute Mydia.Media.find_by_external_ids(%{tvdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: tvdb_id})
     end
   end
 

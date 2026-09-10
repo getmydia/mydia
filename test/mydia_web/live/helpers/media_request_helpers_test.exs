@@ -123,7 +123,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       tvdb_id = System.unique_integer([:positive])
 
       assert {:ok, request, map} =
-               MediaRequestHelpers.handle_request_media(tvdb_item(tvdb_id), :tv_show, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 tvdb_item(tvdb_id),
+                 :tv_show,
+                 user.id
+               )
 
       assert request.tvdb_id == tvdb_id
       assert is_nil(request.tmdb_id)
@@ -147,7 +152,12 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       mistagged_item = Map.put(item(tvdb_id), :provider, :tvdb)
 
       assert {:error, {:metadata, :tvdb_ref_for_movie}} =
-               MediaRequestHelpers.handle_request_media(mistagged_item, :movie, user.id)
+               MediaRequestHelpers.handle_request_media(
+                 Scope.unrestricted(),
+                 mistagged_item,
+                 :movie,
+                 user.id
+               )
 
       refute MediaRequests.list_requests(status: "pending")
              |> Enum.any?(&(&1.tmdb_id == tvdb_id))
@@ -179,7 +189,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       tvdb_id = System.unique_integer([:positive])
 
       {:ok, _request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "tv_show",
           title: "Someone Else's Series",
           tvdb_id: tvdb_id,

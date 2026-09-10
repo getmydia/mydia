@@ -37,6 +37,10 @@ defmodule MydiaWeb.DiscoverLive.RemoteFilterWiringTest do
       library_status_map: %{},
       request_status_map: %{},
       selected_recommendations: [],
+      selected_item: nil,
+      hide_owned: false,
+      visible_items: [],
+      loading_more: false,
       items: [],
       page: 1,
       total_pages: 1,
@@ -155,7 +159,11 @@ defmodule MydiaWeb.DiscoverLive.RemoteFilterWiringTest do
       socket = stub_socket(%{current_scope: scope})
 
       {:noreply, updated} =
-        Index.handle_async(:load_recommendations, {:ok, {:ok, [recommendation()]}}, socket)
+        Index.handle_async(
+          {:load_recommendations, nil},
+          {:ok, {:ok, [recommendation()]}},
+          socket
+        )
 
       assert updated.assigns.selected_recommendations == []
     end
@@ -164,7 +172,11 @@ defmodule MydiaWeb.DiscoverLive.RemoteFilterWiringTest do
       socket = stub_socket(%{current_scope: Scope.unrestricted()})
 
       {:noreply, updated} =
-        Index.handle_async(:load_recommendations, {:ok, {:ok, [recommendation()]}}, socket)
+        Index.handle_async(
+          {:load_recommendations, nil},
+          {:ok, {:ok, [recommendation()]}},
+          socket
+        )
 
       assert length(updated.assigns.selected_recommendations) == 1
     end

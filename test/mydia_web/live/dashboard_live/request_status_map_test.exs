@@ -29,7 +29,7 @@ defmodule MydiaWeb.DashboardLive.RequestStatusMapTest do
     requester = user_fixture(%{role: "guest"})
 
     {:ok, request} =
-      Mydia.MediaRequests.create_request(%{
+      Mydia.MediaRequests.create_request(Mydia.Accounts.Scope.unrestricted(), %{
         media_type: "movie",
         title: "A Placeholder Title",
         tmdb_id: tmdb_id,

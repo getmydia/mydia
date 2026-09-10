@@ -4,6 +4,7 @@ defmodule Mydia.Library.EpisodeMintingTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.{FileIngest, ImportCandidate, MediaFile}
   alias Mydia.{Media, Repo}
 
@@ -41,7 +42,7 @@ defmodule Mydia.Library.EpisodeMintingTest do
              FileIngest.ingest(candidate, match, policy: :unattended)
 
     assert %{id: ^episode_id, title: "La chorale", provider_episode_id: nil} =
-             Media.get_episode_by_number(show.id, 1, 3)
+             Media.get_episode_by_number(Scope.unrestricted(), show.id, 1, 3)
 
     refute Repo.get(ImportCandidate, candidate.id)
   end

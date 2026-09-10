@@ -32,13 +32,13 @@ defmodule MydiaWeb.Api.MediaControllerTest do
     def search(_config, _query, _opts), do: {:ok, []}
 
     @impl true
-    def fetch_by_id(_config, id, _opts) do
+    def fetch_by_ref(_config, {_provider, id}, _opts) do
       {:ok,
        %MediaMetadata{
-         provider_id: id,
+         provider_id: to_string(id),
          provider: :metadata_relay,
          media_type: :movie,
-         id: String.to_integer(id),
+         id: id,
          title: "Live Action Rematch",
          release_date: ~D[2015-06-01],
          genres: ["Action"]
@@ -46,11 +46,11 @@ defmodule MydiaWeb.Api.MediaControllerTest do
     end
 
     @impl true
-    def fetch_images(_config, _id, _opts),
+    def fetch_images_by_ref(_config, _ref, _opts),
       do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
 
     @impl true
-    def fetch_season(_config, _id, _season, _opts), do: {:ok, %{}}
+    def fetch_season_by_ref(_config, _ref, _season, _opts), do: {:ok, %{}}
 
     @impl true
     def fetch_trending(_config, _opts), do: {:ok, []}
