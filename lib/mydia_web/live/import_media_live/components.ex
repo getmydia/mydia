@@ -333,6 +333,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
         <span class={["badge badge-sm shrink-0 font-medium", band_class(@band)]}>
           {band_label(@band)}
         </span>
+        <span
+          :if={Map.get(@group, :returned_count, 0) > 0}
+          id={"group-returned-#{@dom_key}"}
+          class="badge badge-sm badge-info badge-outline shrink-0"
+          title="Sent back from the duplicates page. Never imported automatically."
+        >
+          Returned
+        </span>
         <span :if={@group.queued?} class="badge badge-sm badge-info gap-1 shrink-0">
           <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> Queued
         </span>

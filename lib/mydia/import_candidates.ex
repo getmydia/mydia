@@ -348,10 +348,18 @@ defmodule Mydia.ImportCandidates do
   this function has always called it `:needs_attention` via its explicit
   `provider_type: "local"` clause below. `import_candidates_test.exs` proves
   the two paths agree, including for that exact shape.
+
+  A group holding a returned candidate (`returned_count > 0`) is never ready
+  either. An operator sent that file back from an item it was wrongly filed
+  under, and a confident suggestion can name that same item, so a person has
+  to look at it. `ready_condition/0` carries the same rule in SQL.
   """
   @spec band(ImportCandidateGroup.t()) :: :ready | :needs_attention | :no_match
   def band(%ImportCandidateGroup{provider_id: nil}), do: :no_match
   def band(%ImportCandidateGroup{provider_type: "local"}), do: :needs_attention
+
+  def band(%ImportCandidateGroup{returned_count: count}) when is_integer(count) and count > 0,
+    do: :needs_attention
 
   def band(%ImportCandidateGroup{} = group) do
     cond do
@@ -411,7 +419,8 @@ defmodule Mydia.ImportCandidates do
       suggested_year: max(c.year),
       media_type: max(c.media_type),
       queued_op: max(c.queued_op),
-      queue_error: max(c.queue_error)
+      queue_error: max(c.queue_error),
+      returned_count: count(c.returned_at)
     })
   end
 
@@ -473,7 +482,8 @@ defmodule Mydia.ImportCandidates do
       [c],
       count(c.provider_id, :distinct) == 1 and
         fragment("COALESCE(?, 0.0)", min(c.confidence)) >= ^threshold and
-        (is_nil(max(c.provider_type)) or max(c.provider_type) != "local")
+        (is_nil(max(c.provider_type)) or max(c.provider_type) != "local") and
+        count(c.returned_at) == 0
     )
   end
 
@@ -626,7 +636,8 @@ defmodule Mydia.ImportCandidates do
       provider_count: row.provider_count,
       dismissed?: status == "ignored",
       queued?: status == "queued",
-      queue_error: row.queue_error
+      queue_error: row.queue_error,
+      returned_count: row.returned_count
     }
   end
 
@@ -1009,12 +1020,17 @@ defmodule Mydia.ImportCandidates do
   synthetic `"local"` provider can never be promoted, so letting it move into
   Queued and bounce straight back with an error would be churn on the most
   common bulk path.
+
+  `exclude_returned: true` also skips groups holding a candidate an operator
+  returned to review. Only `queue_accept_all_matched/1` passes it: an explicit
+  selection is a person looking at the group, which is what a returned file
+  is waiting for.
   """
-  @spec queue_accept(SelectionScope.t()) ::
+  @spec queue_accept(SelectionScope.t(), keyword()) ::
           {:ok, %{queued: non_neg_integer(), skipped: non_neg_integer()}}
-  def queue_accept(%SelectionScope{} = scope) do
+  def queue_accept(%SelectionScope{} = scope, opts \\ []) do
     now = now()
-    eligible = eligible_accept_keys(scope)
+    eligible = eligible_accept_keys(scope, opts)
 
     # Both counts have to be read before the UPDATE. Marking a row sets
     # `queued_op`, which `filter_status/2` excludes from "pending", so the same
@@ -1051,7 +1067,9 @@ defmodule Mydia.ImportCandidates do
   Queues every pending provider-matched group for one library path.
 
   Confidence is deliberately not filtered: this is the explicit human override
-  behind the review page's "Import all" control.
+  behind the review page's "Import all" control. Groups holding a returned
+  candidate are skipped, because a returned file's suggestion can name the very
+  item it was sent back from, and this control accepts without showing it.
   """
   @spec queue_accept_all_matched(binary()) ::
           {:ok, %{queued: non_neg_integer(), skipped: non_neg_integer()}}
@@ -1059,21 +1077,25 @@ defmodule Mydia.ImportCandidates do
     library_path_id
     |> SelectionScope.new()
     |> SelectionScope.select_all_matching(%{})
-    |> queue_accept()
+    |> queue_accept(exclude_returned: true)
   end
 
   # The selected anchors that `accept_group/2` would actually accept, as a
   # grouped subquery of anchor keys. `count(provider_id, :distinct) == 1`
   # subsumes the no-match case as well: SQL counts of a nullable column ignore
   # NULLs, so a group with no provider match counts zero.
-  defp eligible_accept_keys(%SelectionScope{} = scope) do
+  defp eligible_accept_keys(%SelectionScope{} = scope, opts) do
     scope
     |> SelectionScope.to_query()
     |> exclude(:select)
     |> having([c], count(c.provider_id, :distinct) == 1)
     |> having([c], is_nil(max(c.provider_type)) or max(c.provider_type) != "local")
+    |> maybe_exclude_returned(Keyword.get(opts, :exclude_returned, false))
     |> select([c], c.anchor_key)
   end
+
+  defp maybe_exclude_returned(query, true), do: having(query, [c], count(c.returned_at) == 0)
+  defp maybe_exclude_returned(query, false), do: query
 
   # Oban's engine is disabled in test (config/test.exs sets `engine: false`), so
   # Oban.insert/1 raises there. See test/README.md and

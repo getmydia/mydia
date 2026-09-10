@@ -125,6 +125,11 @@ defmodule Mydia.ImportCandidatesTest do
       g = group(provider_id: "local-abc", provider_type: "local", min_confidence: 1.0)
       assert ImportCandidates.band(g) == :needs_attention
     end
+
+    test "a group holding a returned candidate is never ready" do
+      g = group(provider_id: "1", min_confidence: 1.0, returned_count: 1)
+      assert ImportCandidates.band(g) == :needs_attention
+    end
   end
 
   describe "group disagreement" do
@@ -1035,6 +1040,52 @@ defmodule Mydia.ImportCandidatesTest do
 
       assert Repo.get(MediaFile, file.id)
       assert Repo.aggregate(ImportCandidate, :count) == 0
+    end
+  end
+
+  describe "a group holding a returned candidate" do
+    setup do
+      lp = library_path_fixture(%{type: "series"})
+
+      returned =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Quillmoor/s01e01.mkv",
+          provider_type: "tvdb",
+          provider_id: "9002",
+          title: "Quillmoor",
+          media_type: "tv_show",
+          confidence: 0.99,
+          returned_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      %{lp: lp, returned: returned}
+    end
+
+    test "is never ready, in band/1 and in the SQL bands alike", %{lp: lp, returned: returned} do
+      assert {[group], nil} = ImportCandidates.page(lp.id)
+      assert group.returned_count == 1
+      assert ImportCandidates.band(group) == :needs_attention
+
+      assert %{ready: 0, needs_attention: 1, no_match: 0, total: 1} =
+               ImportCandidates.band_counts(lp.id)
+
+      assert {[], nil} = ImportCandidates.page(lp.id, band: :ready)
+
+      {attention, _cursor} = ImportCandidates.page(lp.id, band: :needs_attention)
+      assert Enum.map(attention, & &1.anchor_key) == [returned.anchor_key]
+    end
+
+    test "is skipped by Import all results", %{lp: lp, returned: returned} do
+      assert {:ok, %{queued: 0, skipped: 1}} = ImportCandidates.queue_accept_all_matched(lp.id)
+      assert is_nil(Repo.get!(ImportCandidate, returned.id).queued_op)
+    end
+
+    test "is still accepted from an explicit selection", %{lp: lp, returned: returned} do
+      scope = lp.id |> SelectionScope.new() |> SelectionScope.select_page([returned.anchor_key])
+
+      assert {:ok, %{queued: 1}} = ImportCandidates.queue_accept(scope)
+      assert Repo.get!(ImportCandidate, returned.id).queued_op == "accept"
     end
   end
 end
