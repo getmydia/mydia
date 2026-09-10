@@ -214,10 +214,14 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
   defp review_file_row(assigns) do
     relative_path = assigns.file.relative_path || ""
 
+    path_label =
+      if relative_path != "", do: relative_path, else: "file #{assigns.file.id}"
+
     assigns =
       assigns
       |> assign(:name, Path.basename(relative_path))
       |> assign(:folder, Components.folder_of(relative_path))
+      |> assign(:path_label, path_label)
 
     ~H"""
     <div class="flex items-center gap-3 px-3 py-2">
@@ -240,7 +244,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
       <div
         class="join shrink-0"
         role="radiogroup"
-        aria-label={"What to do with #{@file.relative_path}"}
+        aria-label={"What to do with #{@path_label}"}
       >
         <input
           type="radio"

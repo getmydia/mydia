@@ -249,6 +249,31 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       refute has_element?(view, "#duplicates-undo")
     end
 
+    test "a legacy row with no relative_path gets a Leave/Review group named by file id",
+         %{conn: conn} do
+      {movie, _own, _stray} = misfiled_movie()
+      other_lp = library_path_fixture(%{type: "movies"})
+
+      legacy =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: other_lp.id,
+          relative_path: "Orphaned/orphan.mkv",
+          metadata: %{"container" => "mkv", "duration" => 100.0}
+        })
+
+      Mydia.Repo.update_all(from(f in Mydia.Library.MediaFile, where: f.id == ^legacy.id),
+        set: [library_path_id: nil, relative_path: nil]
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      assert has_element?(
+               view,
+               "#duplicates-refusal-#{movie.id} [role='radiogroup'][aria-label='What to do with file #{legacy.id}']"
+             )
+    end
+
     test "a group registered twice gets no Leave/Review controls", %{conn: conn} do
       movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
       lp = library_path_fixture(%{type: "movies"})
