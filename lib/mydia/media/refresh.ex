@@ -12,6 +12,7 @@ defmodule Mydia.Media.Refresh do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.ExternalIds
   alias Mydia.Media.MediaItem
@@ -158,7 +159,9 @@ defmodule Mydia.Media.Refresh do
       ExternalIds.write(
         attrs,
         [type: media_item.type, exclude_id: media_item.id, title: metadata.title],
-        fn attrs -> Media.update_media_item(media_item, attrs, reason: "Metadata refreshed") end
+        fn attrs ->
+          Media.update_media_item(Scope.system(), media_item, attrs, reason: "Metadata refreshed")
+        end
       )
 
     case result do

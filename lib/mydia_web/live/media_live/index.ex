@@ -138,9 +138,15 @@ defmodule MydiaWeb.MediaLive.Index do
     pinned = Collections.pinned_categories(socket.assigns[:sections] || [])
 
     cond do
-      Accounts.anime_nudge_dismissed?(user) -> false
-      Enum.any?(anime, &(&1 in pinned)) -> false
-      true -> Media.count_media_items(category_in: anime) >= @anime_nudge_threshold
+      Accounts.anime_nudge_dismissed?(user) ->
+        false
+
+      Enum.any?(anime, &(&1 in pinned)) ->
+        false
+
+      true ->
+        Media.count_media_items(socket.assigns.current_scope, category_in: anime) >=
+          @anime_nudge_threshold
     end
   end
 

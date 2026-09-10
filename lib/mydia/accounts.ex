@@ -13,6 +13,7 @@ defmodule Mydia.Accounts do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
+
   alias Mydia.Accounts.{
     User,
     ApiKey,

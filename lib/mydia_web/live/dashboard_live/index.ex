@@ -431,7 +431,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:error, :restricted} ->
         {:noreply,
          socket
-         |> clear_adding(provider_id)
+         |> clear_adding(ref)
          |> put_flash(:error, Media.restricted_message())}
 
       {:error, {:changeset, changeset}} ->

@@ -501,14 +501,14 @@ defmodule Mydia.Media do
   end
 
   defp apply_initial_season_monitoring(%MediaItem{} = media_item, "first") do
-    episodes = list_episodes(media_item.id)
+    episodes = list_episodes(Scope.system(), media_item.id)
     {to_monitor, to_unmonitor} = Enum.split_with(episodes, fn ep -> ep.season_number == 1 end)
     set_episodes_monitored(to_monitor, true)
     set_episodes_monitored(to_unmonitor, false)
   end
 
   defp apply_initial_season_monitoring(%MediaItem{} = media_item, "latest") do
-    episodes = list_episodes(media_item.id)
+    episodes = list_episodes(Scope.system(), media_item.id)
 
     regular_seasons =
       episodes

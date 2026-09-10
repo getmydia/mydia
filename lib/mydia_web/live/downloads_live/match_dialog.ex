@@ -14,6 +14,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   matching `MydiaWeb.Live.Helpers.MediaAddHelpers`.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.ReleaseParser
   alias Mydia.Media
   alias Mydia.Media.Add
@@ -25,6 +26,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   @relay_down "Couldn't reach the metadata service. Showing library results only."
 
   defstruct [
+    :scope,
     :download_id,
     :mode,
     :query,
@@ -41,6 +43,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   @type media_type :: :movie | :tv_show
 
   @type t :: %__MODULE__{
+          scope: Scope.t(),
           download_id: binary() | nil,
           mode: mode() | nil,
           query: String.t() | nil,
@@ -57,13 +60,18 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   Builds a dialog for `download` in `mode`.
 
   The download must have `:media_item` preloaded; the type fallback reads it.
+
+  `scope` is carried on the struct rather than passed to each transition,
+  because every Media read the dialog makes belongs to the operator who opened
+  it, and a per-call argument is one more place to forget it.
   """
-  @spec open(map(), mode()) :: t()
-  def open(download, mode) when mode in [:inflight, :postimport] do
+  @spec open(Scope.t(), map(), mode()) :: t()
+  def open(%Scope{} = scope, download, mode) when mode in [:inflight, :postimport] do
     title = download.title || ""
     parsed = ReleaseParser.parse(title)
 
     %__MODULE__{
+      scope: scope,
       download_id: download.id,
       mode: mode,
       query: seed_query(parsed, title),
@@ -85,7 +93,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
     if String.length(String.trim(query)) < 2 do
       %{dialog | library_results: [], external_results: [], search_warning: nil}
     else
-      library = Media.list_media_items(search: query, limit: @result_limit)
+      library = Media.list_media_items(dialog.scope, search: query, limit: @result_limit)
       {external, warning} = provider_search(dialog.type, query, library)
 
       %{dialog | library_results: library, external_results: external, search_warning: warning}
@@ -113,7 +121,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   """
   @spec select(t(), binary()) :: {:submit, {binary(), binary() | nil}} | {:episodes, t()}
   def select(%__MODULE__{} = dialog, media_item_id) do
-    item = Media.get_media_item!(media_item_id)
+    item = Media.get_media_item!(dialog.scope, media_item_id)
 
     if item.type == "tv_show" and dialog.mode == :postimport do
       {:episodes, put_selected(dialog, item)}
@@ -130,7 +138,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   """
   @spec show_episodes(t(), binary()) :: t()
   def show_episodes(%__MODULE__{} = dialog, media_item_id) do
-    put_selected(dialog, Media.get_media_item!(media_item_id))
+    put_selected(dialog, Media.get_media_item!(dialog.scope, media_item_id))
   end
 
   @doc """
@@ -198,7 +206,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
     %{
       dialog
       | selected: %{id: item.id, title: item.title, type: item.type},
-        episodes: Media.list_episodes(item.id),
+        episodes: Media.list_episodes(dialog.scope, item.id),
         error: nil
     }
   end
@@ -238,7 +246,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
         {:error, %{dialog | error: "That result is no longer available. Search again."}}
 
       result ->
-        case Add.from_provider(Ref.from_search_result(result), dialog.type, nil, add_opts()) do
+        case Add.from_provider(
+               dialog.scope,
+               Ref.from_search_result(result),
+               dialog.type,
+               nil,
+               add_opts()
+             ) do
           {:ok, item} -> {:added, item}
           {:error, {:already_in_library, item}} -> {:added, item}
           {:error, reason} -> {:error, %{dialog | error: add_error(reason)}}

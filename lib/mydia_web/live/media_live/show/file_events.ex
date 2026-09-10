@@ -430,7 +430,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         {:ok, _deleted} ->
           {:noreply,
            socket
-           |> assign(:media_item, load_media_item(media_item.id))
+           |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
              "File removed from this item and sent to Review. The file is untouched on disk."
@@ -645,7 +645,10 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         {:ok, _updated} ->
           {:noreply,
            socket
-           |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+           |> assign(
+             :media_item,
+             load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+           )
            |> put_flash(:info, "File reclassified")}
 
         {:error, _changeset} ->
