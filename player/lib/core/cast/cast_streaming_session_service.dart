@@ -24,9 +24,10 @@ abstract class CastStreamingSessionService {
   /// offset the server actually used.
   ///
   /// The echoed value, not the requested one, is authoritative: the server
-  /// clamps the request against the runtime and FFmpeg's `-ss` lands on the
-  /// nearest keyframe, so the stream can legitimately begin earlier than
-  /// asked. An older server omits the field, which correctly yields zero.
+  /// clamps the request against the runtime, and a copied stream can only
+  /// begin on a keyframe, which the server finds and echoes for MKV and MP4
+  /// sources (MPEG-TS still echoes the requested offset). An older server
+  /// omits the field, which correctly yields zero.
   ///
   /// Throws [CastBackendException] when the server refuses, so the manager's
   /// existing escalation ladder can treat it like any other route failure.
