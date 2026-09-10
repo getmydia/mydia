@@ -68,7 +68,7 @@ defmodule MydiaWeb.MediaLive.NotThisItemTest do
     # And the file is now waiting in the review inbox at its current path,
     # carrying the item's type as a hint so a mixed-type library's match
     # search does not default it to "movie" (review finding 3).
-    assert %{media_type: "movie"} =
+    assert %{media_type: "movie", queued_op: "rematch", returned_at: %DateTime{}} =
              ImportCandidates.get_by_path(
                library_path.id,
                "Starveil (2031)/Starveil.2031.1080p.mkv"

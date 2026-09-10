@@ -96,6 +96,118 @@ defmodule Mydia.ImportCandidates do
   end
 
   @doc """
+  Detaches a media file the matcher filed against the wrong item and returns it
+  to the review inbox.
+
+  The row goes and the bytes stay. A candidate is written at the file's current
+  `(library_path_id, relative_path)` so `/review` can match it against the right
+  item, with three fields set so the correction sticks:
+
+    * `returned_at`, which holds it out of unattended promotion
+      (`Mydia.Library.FileIngest`) and, here, out of the ready band and
+      `queue_accept_all_matched/1`, so only a person can put it back;
+    * `queued_op: "rematch"`, so `Mydia.Jobs.RematchImportCandidates` gives it
+      a fresh suggestion under the `:review` policy, which never promotes;
+    * `dismissed_at: nil`, because a dismissed candidate already at that path
+      would otherwise hide the file from the inbox it was just sent to.
+
+  The owning item comes from the file itself (the movie for a movie file, the
+  show for an episode file) and supplies the candidate's `media_type`. Without
+  it `ImportCandidate.parsed_info/1` defaults a nil type to movie, so a
+  returned episode would be matched as a film.
+
+  A legacy row carrying only `path` has no `(library_path_id, relative_path)`
+  pair to key a candidate by, and returns `{:error, :no_library_path}`.
+  """
+  @spec return_to_review(MediaFile.t(), String.t()) ::
+          {:ok, MediaFile.t()} | {:error, :no_library_path} | {:error, term()}
+  def return_to_review(%MediaFile{} = file, actor_id) when is_binary(actor_id) do
+    file = Repo.preload(file, [:library_path, :media_item, episode: :media_item])
+
+    case {file.library_path, file.relative_path, owning_item(file)} do
+      {%LibraryPath{} = library_path, relative_path, %Media.MediaItem{} = media_item}
+      when is_binary(relative_path) ->
+        detach_to_review(file, library_path, media_item, actor_id)
+
+      _ ->
+        {:error, :no_library_path}
+    end
+  end
+
+  defp owning_item(%MediaFile{episode: %Episode{media_item: %Media.MediaItem{} = item}}),
+    do: item
+
+  defp owning_item(%MediaFile{media_item: %Media.MediaItem{} = item}), do: item
+  defp owning_item(%MediaFile{}), do: nil
+
+  defp detach_to_review(file, library_path, media_item, actor_id) do
+    now = now()
+
+    anchor =
+      PathAnchor.anchor_for(Path.join(library_path.path, file.relative_path), library_path.path)
+
+    attrs = %{
+      library_path_id: library_path.id,
+      relative_path: file.relative_path,
+      anchor_key: anchor.cluster_key,
+      size: file.size,
+      media_type: media_item.type,
+      discovered_at: now,
+      returned_at: now,
+      dismissed_at: nil,
+      queued_op: "rematch",
+      queued_at: now,
+      queue_error: nil
+    }
+
+    # Both writes (the candidate appearing, the media_files row disappearing)
+    # must succeed or fail together. Two independent Repo calls would let a
+    # hard interruption between them leave the file both still attached to the
+    # wrong item and duplicated into import_candidates.
+    #
+    # The activity event is recorded inside the same transaction on purpose:
+    # Mydia.Repo.transaction/2 defers its PubSub broadcast until the outermost
+    # transaction commits and discards it on rollback, so the feed never
+    # reports something that did not happen.
+    result =
+      Repo.transaction(fn ->
+        with {:ok, _candidate} <- upsert(attrs),
+             {:ok, deleted} <- Mydia.Library.delete_media_file(file, delete_files: false) do
+          Mydia.Events.file_returned_to_review(deleted, media_item, actor_id)
+          deleted
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    case result do
+      {:ok, _deleted} ->
+        enqueue_rematch(library_path.id)
+        broadcast(library_path.id)
+        result
+
+      {:error, _reason} ->
+        result
+    end
+  end
+
+  # The candidate already carries `queued_op: "rematch"`, so a failed enqueue
+  # only delays its suggestion: the next enqueue for this library path, from
+  # any caller, drains it too.
+  defp enqueue_rematch(library_path_id) do
+    case enqueue(Mydia.Jobs.RematchImportCandidates, library_path_id) do
+      {:ok, _job} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Could not enqueue a re-match for a returned file",
+          library_path_id: library_path_id,
+          reason: inspect(reason)
+        )
+    end
+  end
+
+  @doc """
   Reaps candidates for `library_path_id` whose `relative_path` is absent from
   `relative_paths` (the paths a scan just found on disk).
 

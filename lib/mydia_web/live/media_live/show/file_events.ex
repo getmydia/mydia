@@ -397,24 +397,24 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   Detaches a file the matcher filed against the wrong item and sends it back to
   the review inbox.
 
-  The row goes, the bytes stay. An import candidate is created at the file's
-  current path so `/review` can match it against the right item with the search
-  and rematch controls it already has, rather than duplicating an item picker
-  here.
+  The row goes, the bytes stay. `Mydia.ImportCandidates.return_to_review/2`
+  writes an import candidate at the file's current path and holds it for a
+  person, so `/review` can match it against the right item with the search and
+  rematch controls it already has, rather than duplicating an item picker here.
+  Movie rows and episode rows both use this handler.
   """
   def not_this_item(%{"file-id" => file_id}, socket) do
     # The id arrives on the event payload, so ownership is checked against the
     # files already on screen before anything is fetched or written. Without
     # this, any authenticated user allowed to delete media could detach a file
-    # belonging to a different item, and `detach_to_review/3` would then stamp
-    # this item's type onto that file's review candidate and event metadata.
+    # belonging to an item they are not looking at.
     with :ok <- Authorization.authorize_delete_media(socket),
          true <- owns_media_file?(socket.assigns.media_item, file_id) do
-      file = Library.get_media_file!(file_id) |> Mydia.Repo.preload(:library_path)
+      file = Library.get_media_file!(file_id)
       media_item = socket.assigns.media_item
       actor_id = to_string(socket.assigns.current_user.id)
 
-      case detach_to_review(file, media_item, actor_id) do
+      case Mydia.ImportCandidates.return_to_review(file, actor_id) do
         {:ok, _deleted} ->
           {:noreply,
            socket
@@ -444,59 +444,6 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         {:noreply, put_flash(socket, :error, "Could not send this file to Review")}
     end
   end
-
-  # A legacy row carrying only `path` has no `(library_path_id, relative_path)`
-  # pair, and import candidates are keyed by exactly that, so there is nowhere
-  # for it to go.
-  defp detach_to_review(
-         %{library_path: %{} = library_path, relative_path: relative_path} = file,
-         media_item,
-         actor_id
-       )
-       when is_binary(relative_path) do
-    absolute_path = Path.join(library_path.path, relative_path)
-    anchor = Mydia.Library.PathAnchor.anchor_for(absolute_path, library_path.path)
-
-    attrs = %{
-      library_path_id: library_path.id,
-      relative_path: relative_path,
-      anchor_key: anchor.cluster_key,
-      size: file.size,
-      # Mirrors LibraryScanner.discovered_candidate_attrs/4: without a type
-      # hint, ImportCandidate.parsed_info/1 defaults a nil media_type to
-      # :movie, so a returned TV episode would land in a mixed-type library's
-      # match search flagged as a movie. media_item.type is already the
-      # "movie" / "tv_show" string this column expects.
-      media_type: media_item.type,
-      discovered_at: DateTime.utc_now() |> DateTime.truncate(:second)
-    }
-
-    # Both writes -- the candidate appearing, the media_files row disappearing
-    # -- must succeed or fail together. Two independent Repo calls here would
-    # let a hard interruption (a killed process, a dropped connection) between
-    # them leave the file both still attached to the wrong item and
-    # duplicated into import_candidates.
-    #
-    # The activity event is recorded inside this same transaction on purpose,
-    # matching Media.update_media_items_monitored/2 and
-    # Media.apply_episode_monitoring/2: Mydia.Repo.transaction/2 defers the
-    # event's PubSub broadcast until the outermost transaction call actually
-    # commits, and discards it on rollback (see that module's moduledoc), so
-    # the feed never reports something that did not happen, and there is no
-    # need to thread the file/media_item back out to broadcast after the
-    # fact.
-    Mydia.Repo.transaction(fn ->
-      with {:ok, _candidate} <- Mydia.ImportCandidates.upsert(attrs),
-           {:ok, deleted} <- Library.delete_media_file(file, delete_files: false) do
-        Mydia.Events.file_returned_to_review(deleted, media_item, actor_id)
-        deleted
-      else
-        {:error, reason} -> Mydia.Repo.rollback(reason)
-      end
-    end)
-  end
-
-  defp detach_to_review(_file, _media_item, _actor_id), do: {:error, :no_library_path}
 
   def show_file_details(%{"file-id" => file_id}, socket) do
     # Without the preload, MediaFile.absolute_path/1 hits its

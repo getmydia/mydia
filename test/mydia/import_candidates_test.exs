@@ -1,5 +1,6 @@
 defmodule Mydia.ImportCandidatesTest do
   use Mydia.DataCase, async: false
+  use Oban.Testing, repo: Mydia.Repo
 
   import Ecto.Query
   import Mydia.MediaFixtures
@@ -928,6 +929,112 @@ defmodule Mydia.ImportCandidatesTest do
 
       assert is_nil(Mydia.Repo.get!(Mydia.Library.ImportCandidate, queued.id).dismissed_at)
       refute is_nil(Mydia.Repo.get!(Mydia.Library.ImportCandidate, newcomer.id).dismissed_at)
+    end
+  end
+
+  describe "return_to_review/2" do
+    test "detaches a movie file into a held, rematch-queued movie candidate" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+
+      file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: "Starveil (2031)/Starveil.2031.1080p.mkv"
+        })
+
+      assert {:ok, %MediaFile{id: id}} = ImportCandidates.return_to_review(file, "42")
+      assert id == file.id
+      refute Repo.get(MediaFile, file.id)
+
+      candidate = ImportCandidates.get_by_path(lp.id, "Starveil (2031)/Starveil.2031.1080p.mkv")
+      assert candidate.media_type == "movie"
+      assert %DateTime{} = candidate.returned_at
+      assert candidate.queued_op == "rematch"
+      assert is_nil(candidate.dismissed_at)
+
+      assert_enqueued(
+        worker: Mydia.Jobs.RematchImportCandidates,
+        args: %{"library_path_id" => lp.id}
+      )
+    end
+
+    test "detaches an episode file into a tv_show candidate and leaves the episode's other file" do
+      lp = library_path_fixture(%{type: "series"})
+      show = media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      kept =
+        media_file_fixture(%{
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: "Harbor Lights/Season 01/Harbor.Lights.S01E01.mkv"
+        })
+
+      stray =
+        media_file_fixture(%{
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: "Quillmoor/Season 01/Quillmoor.S01E01.mkv"
+        })
+
+      assert {:ok, _deleted} = ImportCandidates.return_to_review(stray, "42")
+
+      assert Repo.get(MediaFile, kept.id)
+      refute Repo.get(MediaFile, stray.id)
+
+      assert %{media_type: "tv_show"} =
+               ImportCandidates.get_by_path(lp.id, "Quillmoor/Season 01/Quillmoor.S01E01.mkv")
+    end
+
+    test "un-dismisses a candidate already sitting at the file's path" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+      path = "Starveil (2031)/Starveil.2031.1080p.mkv"
+
+      import_candidate_fixture(%{
+        library_path_id: lp.id,
+        relative_path: path,
+        dismissed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+
+      file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: path
+        })
+
+      assert {:ok, _deleted} = ImportCandidates.return_to_review(file, "42")
+
+      candidate = ImportCandidates.get_by_path(lp.id, path)
+      assert is_nil(candidate.dismissed_at)
+      assert %DateTime{} = candidate.returned_at
+    end
+
+    test "refuses a legacy row with no library path and writes nothing" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+
+      file =
+        media_file_fixture(%{
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: "Zephyr Station (2030)/Zephyr.Station.2030.mkv"
+        })
+
+      # MediaFile.changeset/2 requires both fields, so the legacy shape is only
+      # reachable by bypassing it, as eligibility_test.exs does.
+      Repo.update_all(from(f in MediaFile, where: f.id == ^file.id),
+        set: [library_path_id: nil, relative_path: nil]
+      )
+
+      assert {:error, :no_library_path} =
+               ImportCandidates.return_to_review(Repo.reload!(file), "42")
+
+      assert Repo.get(MediaFile, file.id)
+      assert Repo.aggregate(ImportCandidate, :count) == 0
     end
   end
 end
