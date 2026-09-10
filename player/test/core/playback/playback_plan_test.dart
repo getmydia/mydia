@@ -97,4 +97,56 @@ void main() {
       );
     });
   });
+
+  group('sameDelivery', () {
+    const r720 = QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+
+    test('two direct plays deliver the same bytes whatever the reason', () {
+      expect(
+        sameDelivery(
+          const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+          const DirectPlayPlan(reason: PlanReason.fallbackFromFailure),
+        ),
+        isTrue,
+      );
+    });
+
+    test('HLS plans match on strategy and rung, not the adaptive flag', () {
+      const auto720 = HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: r720,
+        adaptive: true,
+        reason: PlanReason.noDirectPlayCandidate,
+      );
+      const fixed720 = HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: r720,
+        adaptive: false,
+        reason: PlanReason.fixedRungRequested,
+      );
+      const copy = HlsPlan(
+        strategy: HlsStrategy.copy,
+        rung: QualityRung.original,
+        adaptive: false,
+        reason: PlanReason.copyAccepted,
+      );
+      expect(sameDelivery(auto720, fixed720), isTrue);
+      expect(sameDelivery(auto720, copy), isFalse);
+    });
+
+    test('direct play and HLS never match', () {
+      expect(
+        sameDelivery(
+          const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+          const HlsPlan(
+            strategy: HlsStrategy.copy,
+            rung: QualityRung.original,
+            adaptive: false,
+            reason: PlanReason.copyAccepted,
+          ),
+        ),
+        isFalse,
+      );
+    });
+  });
 }

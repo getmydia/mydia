@@ -218,11 +218,13 @@ void main() {
       (tester) async {
     final decoder = _Decoder(failFirstOpen: true);
     final link = _server(directPlay: true);
+    final settings = FakeSettingsService(defaultQuality: 'original');
     final container = buildPlayerScreenContainer(
       link: link,
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
+      settingsService: settings,
     );
     addTearDown(container.dispose);
     var playersCreated = 0;
@@ -249,6 +251,9 @@ void main() {
         contains(
             const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080)),
       );
+      expect(settings.defaultQuality, 'original',
+          reason: 'a fallback turns this playback to Auto in memory only');
+      expect(settings.setDefaultQualityCalls, 0);
 
       decoder.advance(const Duration(seconds: 1));
       await tester.pump();

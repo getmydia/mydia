@@ -23,26 +23,34 @@ throughputKbps=<n>`, where `<plan>` is `directPlay (<reason>)` for a direct
 play, or `<strategy> <rung> (<reason>)` for an HLS plan (copy or transcode
 carry a rung; direct play does not). The reason names the rule that fired.
 Read that line before reading code. A later switch, from
-verification or a manual quality change, logs a different line; see
+verification or a quality change, logs a different line; see
 "Verification" and "The switch".
 
-Three rules, in order. Direct play needs native, a leading DIRECT_PLAY or
+The viewer's choice is Auto (the default), Original, or a fixed rung. Auto
+direct plays or copies when the rules below allow it, and otherwise
+transcodes at the top rung of the adaptive ladder that fits remembered
+throughput (the top rung when throughput is unknown). Original is the
+viewer's override: it bypasses remembered decode failures, wherever that
+choice came from. A fixed rung pins its own caps and always transcodes,
+skipping both checks below.
+
+Three rules, in order, decide between direct play, copy and transcode for
+Auto and Original alike. Direct play needs native, a leading DIRECT_PLAY or
 REMUX, no fixed rung chosen, and a bitrate that fits remembered throughput
 with 30% headroom. Copy needs the same bitrate condition plus a non-leading
 HLS_COPY, and on web a MIME string `MediaSource.isTypeSupported` accepts.
 Otherwise transcode.
 
 A shape known to fail here (the failure memory below) also blocks direct play
-and copy, unless the choice is a manually picked Original: `QualityChoice`
-carries a `manual` flag, true only when the viewer just tapped Original in the
-quality selector, and that is the one case that bypasses the memory. Auto and
-a default Original (a stored default, or a rung carried over from the
-previous episode) both stay screened against it. The quality picker has no
-Auto row yet (a later phase), so today's two reachable choices are Original,
-which respects the memory unless the viewer picked it just now, and a fixed
-rung, which skips straight to transcode without ever consulting memory. The
-bandwidth check has no such carve-out: it applies to every choice, Original
-included, manual or not.
+and copy for Auto; picking Original in the quality menu tries it anyway,
+whether that choice was just tapped, seeded from storage, or carried over
+from the previous episode. The bandwidth check has no such carve-out: it
+applies to every choice, Auto and Original alike.
+
+The stored `default_quality` key: `auto` reads back as Auto, `original` as
+Original. Before the Auto rung existed, Original was the default and was
+itself stored under the `auto` key, so an existing install's stored
+preference now reads as Auto rather than Original.
 
 A leading HLS_COPY is the server's `:needs_transcoding` verdict and is never
 taken; see `lib/mydia/streaming/README.md`.
@@ -67,14 +75,12 @@ fallback's own `describe()` (always ends `(fallbackFromFailure)`, since
 A decode fallback always records the file's shape (RFC 6381 video codec plus
 height bucket) against the server, regardless of the quality choice in play.
 Whether that record is later consulted follows the same rule as "The
-decision": a remembered shape skips direct play and copy on the next play,
-unless the viewer picks Original in the quality menu right then, which
-bypasses it. A default Original, whether seeded from storage or carried over
-from the previous episode, still respects the memory, and so does Auto once
-it ships. A bandwidth fallback lowers the remembered throughput, and that
-check applies unconditionally, so a slow link is remembered on the very next
-attempt regardless of choice. Settings has a "Forget playback problems" row
-that clears the box.
+decision": a remembered shape skips direct play and copy for Auto on the next
+play, and Original bypasses it regardless of where that choice came from. A
+bandwidth fallback lowers the remembered throughput, and that check applies
+unconditionally, so a slow link is remembered on the very next attempt
+regardless of choice. Settings has a "Forget playback problems" row that
+clears the box.
 
 ## The switch
 
@@ -89,12 +95,32 @@ both platforms: a fault on the incoming source before then surfaces as an
 error page rather than a fallback, and a fallback requested while a switch is
 already in flight is silently dropped rather than queued.
 
-Seeks past a WINDOW playlist (servers older than full-playlist support) and
-manual quality changes use the same switch. There is no restart path.
+Seeks past a WINDOW playlist (servers older than full-playlist support) and a
+quality change that needs different bytes use the same switch. There is no
+restart path.
 
-A manual quality change logs its own line too:
-`[PlayerScreen] Quality change: <plan>`, `<plan>` again being the new plan's
-`describe()`.
+The quality picker offers Auto above Original, then the ladder
+`deriveQualityLadder` builds for the source. Auto's subtitle names what it is
+doing right now: `Auto · Direct Play`, `Auto · Original, no re-encoding`, or
+`Auto · <rung>` for a transcode (`Auto · Original, re-encoding required` when
+the adaptive ladder has nothing to offer for this source). Settings shows the
+same Auto row with the neutral `Adapts to your connection`, since there is no
+plan to describe there.
+
+A quality change logs `[PlayerScreen] Quality change: <plan>` and switches,
+unless the new plan delivers the same bytes as what is already playing:
+`sameDelivery` compares both plans as direct play, or the same HLS strategy
+at the same rung, ignoring the reason and the adaptive flag. Auto and
+Original often agree on a lossless file, and picking one over the other then
+changes nothing about what is on screen. That case does not reopen the
+source; it only updates which choice is selected, and logs
+`[PlayerScreen] Quality change: <plan> (already playing)` instead.
+
+A fallback (see "Verification" above) always lands the session on Auto for
+the rest of the playback, in memory only: the stored default is the viewer's
+own preference, and one file failing to decode here says nothing about the
+next, so a fallback never writes it. Auto does not change rung again on its
+own mid-session; that needs a server-side rendition switch, not built yet.
 
 ## Compatibility
 

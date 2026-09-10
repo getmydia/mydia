@@ -1719,6 +1719,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
+    // A choice that could not be honoured becomes Auto for the rest of this
+    // playback. Only in memory: the stored default is the viewer's, and one
+    // file failing here says nothing about the next.
+    if (mounted) setState(() => _settledQuality = QualityRung.auto);
     _showPlaybackSnackBar(fallbackMessage(action.reason));
     try {
       await _switchSource(plan, at: position);
@@ -3983,6 +3987,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (inputs == null) return;
         final plan =
             planPlayback(inputs.copyWith(choice: QualityChoice.fromRung(rung)));
+        final current = _plan;
+        if (current != null && sameDelivery(plan, current)) {
+          // Auto and Original both direct play this file, say: the choice
+          // changes and the bytes do not, so there is nothing to reopen.
+          debugPrint('[PlayerScreen] Quality change: ${plan.describe()} '
+              '(already playing)');
+          if (mounted) setState(() => _plan = plan);
+          return;
+        }
         debugPrint('[PlayerScreen] Quality change: ${plan.describe()}');
         _showPlaybackSnackBar(isFallback
             ? 'Returning to ${rung.label}'

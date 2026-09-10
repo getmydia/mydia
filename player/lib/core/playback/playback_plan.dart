@@ -158,3 +158,16 @@ final class HlsPlan extends PlaybackPlan {
       '${strategy.name} ${rung.label}${adaptive ? ' adaptive' : ''} '
       '(${reason.name})';
 }
+
+/// Whether [a] and [b] put the same bytes on screen: both direct play, or the
+/// same HLS strategy at the same rung. The reason and the adaptive flag are
+/// ignored; nothing acts on the flag until Auto adapts mid-session.
+bool sameDelivery(PlaybackPlan a, PlaybackPlan b) => switch ((a, b)) {
+      (DirectPlayPlan(), DirectPlayPlan()) => true,
+      (
+        HlsPlan(strategy: final s1, rung: final r1),
+        HlsPlan(strategy: final s2, rung: final r2)
+      ) =>
+        s1 == s2 && r1 == r2,
+      _ => false,
+    };

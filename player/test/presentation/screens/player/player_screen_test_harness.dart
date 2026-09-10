@@ -159,6 +159,11 @@ class FakeSettingsService extends Fake implements SettingsService {
   /// it across every later re-initialization.
   int getDefaultQualityCalls = 0;
 
+  /// How many times the screen has written a new default rung to storage.
+  /// A fallback moves the session to Auto in memory only, so this must stay
+  /// 0 across one.
+  int setDefaultQualityCalls = 0;
+
   @override
   Future<String> getDefaultQuality() async {
     getDefaultQualityCalls++;
@@ -169,6 +174,7 @@ class FakeSettingsService extends Fake implements SettingsService {
 
   @override
   Future<void> setDefaultQuality(String quality) async {
+    setDefaultQualityCalls++;
     final error = writeError;
     if (error != null) throw error;
     defaultQuality = quality;
