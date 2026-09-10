@@ -176,6 +176,54 @@ void main() {
         expect(enabled, isFalse);
       });
     });
+
+    test('a consent read in flight cannot undo an opt-out', () {
+      fakeAsync((async) {
+        final read = Completer<bool>();
+        final h = _Harness(async, loadConsent: () => read.future);
+
+        h.reporter.report(StateError('x'), _at('a.dart', 1),
+            capture: CrashCapture.zone);
+        async.flushMicrotasks();
+        h.reporter.setEnabled(false);
+        async.flushMicrotasks();
+        // The stored value from before the opt-out arrives late.
+        read.complete(true);
+        async.flushMicrotasks();
+        h.reporter.report(StateError('x'), _at('b.dart', 1),
+            capture: CrashCapture.zone);
+        async.flushMicrotasks();
+
+        expect(h.requests, isEmpty);
+      });
+    });
+
+    test('the later of two overlapping choices wins', () {
+      fakeAsync((async) {
+        final saves = <Completer<void>>[];
+        final h = _Harness(
+          async,
+          consent: false,
+          saveConsent: (_) {
+            final save = Completer<void>();
+            saves.add(save);
+            return save.future;
+          },
+        );
+
+        h.reporter.setEnabled(true);
+        h.reporter.setEnabled(false);
+        async.flushMicrotasks();
+        saves[1].complete();
+        saves[0].complete();
+        async.flushMicrotasks();
+        h.reporter.report(StateError('x'), _at('a.dart', 1),
+            capture: CrashCapture.zone);
+        async.flushMicrotasks();
+
+        expect(h.requests, isEmpty);
+      });
+    });
   });
 
   group('payload', () {

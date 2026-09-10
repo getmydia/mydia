@@ -97,6 +97,9 @@ class CrashReporter {
   final CrashReportQueue _queue;
   final Set<String> _seen = {};
   bool? _consent;
+  // Bumped by every setEnabled. A consent read or an earlier write that
+  // finishes after a newer choice was made must not overwrite it.
+  int _consentRevision = 0;
   CrashAppContext? _appContext;
 
   /// Routes Flutter framework errors, and errors raised outside any zone,
@@ -201,15 +204,20 @@ class CrashReporter {
   /// Throws when the choice could not be stored, leaving the previous one in
   /// force.
   Future<void> setEnabled(bool enabled) async {
+    final revision = ++_consentRevision;
     await _saveConsent(enabled);
-    _consent = enabled;
+    if (revision == _consentRevision) _consent = enabled;
   }
 
   Future<bool> _consentGranted() async {
     final cached = _consent;
     if (cached != null) return cached;
+    final revision = _consentRevision;
     try {
       final granted = await _loadConsent().timeout(_consentTimeout);
+      // A choice made while the read was in flight wins; the read is not
+      // cached in that case.
+      if (revision != _consentRevision) return _consent ?? false;
       _consent = granted;
       return granted;
     } catch (e) {
