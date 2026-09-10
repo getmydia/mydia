@@ -134,7 +134,7 @@ Future<void> _mount(
         mediaId: 'movie-1',
         mediaType: 'movie',
         fileId: 'file-1',
-        title: 'Arrival',
+        title: 'The Long Aurora',
         createPlayer: createPlayer,
       ),
     ),
@@ -171,7 +171,7 @@ void main() {
       sessions.add(const CastSession(
         device: testDevice,
         mediaInfo: CastMediaInfo(
-            title: 'Arrival',
+            title: 'The Long Aurora',
             duration: Duration(seconds: 5400),
             position: Duration.zero),
         playbackState: CastPlaybackState.playing,

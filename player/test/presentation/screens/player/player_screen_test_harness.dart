@@ -307,7 +307,7 @@ DownloadedMedia downloadedItem({
     DownloadedMedia(
       id: 'dl-1',
       mediaId: 'movie-1',
-      title: 'Arrival',
+      title: 'The Long Aurora',
       quality: '1080p',
       filePath: filePath,
       fileSize: 1,
@@ -357,7 +357,7 @@ Map<String, dynamic> movieDetailResponse({
     'movie': {
       '__typename': 'Movie',
       'id': 'movie-1',
-      'title': 'Arrival',
+      'title': 'The Long Aurora',
       'monitored': false,
       'addedAt': '2026-01-01T00:00:00Z',
       'isFavorite': false,
@@ -663,7 +663,7 @@ Future<void> pumpPlayerScreen(
         mediaId: mediaId,
         mediaType: mediaType,
         fileId: fileId,
-        title: 'Arrival',
+        title: 'The Long Aurora',
       ),
     ),
   ));
