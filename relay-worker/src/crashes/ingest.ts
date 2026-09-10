@@ -8,6 +8,16 @@ export interface CrashFrame {
   line: number | null;
 }
 
+// Which client sent a report. Mydia.CrashReporter never sends the field, so
+// its absence means a server; the Flutter player sends "player". A closed set
+// because POST /crashes/report is unauthenticated and the value is stored and
+// rendered. metadata-relay's router.ex crash_source/1 mirrors this.
+export type CrashSource = "server" | "player";
+
+export function crashSourceOf(value: unknown): CrashSource {
+  return value === "player" ? "player" : "server";
+}
+
 export interface NormalizedCrash {
   kind: string;
   message: string;
@@ -18,6 +28,7 @@ export interface NormalizedCrash {
   environment: string | null;
   occurredAt: number;
   context: Record<string, unknown>;
+  source: CrashSource;
 }
 
 export interface ErrorRow {
@@ -34,6 +45,8 @@ export interface ErrorRow {
   // saturates, never reset back to 0. See 0002_crash_reports.sql for why
   // this can't be answered from ingest_buckets.saturated alone.
   count_is_floor: number;
+  // 'server' or 'player'; see 0005_crash_source.sql.
+  source: string;
 }
 
 export interface OccurrenceRow {
@@ -45,6 +58,7 @@ export interface OccurrenceRow {
   instance_key: string | null;
   context: string;
   stacktrace: string;
+  source: string;
 }
 
 // Occurrence rows written per fingerprint per instance per hour. Beyond this
@@ -279,6 +293,7 @@ export function normalizeCrashReport(
     environment: truncateOrNull(body.environment, MAX_FRAME_STRING_CHARS),
     occurredAt: parseOccurredAt(body.occurred_at),
     context: boundContext(isPlainObject(body.metadata) ? body.metadata : {}),
+    source: crashSourceOf(body.source),
   };
 }
 
@@ -526,8 +541,8 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
       c.env.DB.prepare(
         `INSERT INTO errors (fingerprint, kind, message, source_file, source_line,
                              status, first_seen_at, last_seen_at, occurrence_count,
-                             count_is_floor)
-         VALUES (?, ?, ?, ?, ?, 'unresolved', ?, ?, 1, ?)
+                             count_is_floor, source)
+         VALUES (?, ?, ?, ?, ?, 'unresolved', ?, ?, 1, ?, ?)
          ON CONFLICT(fingerprint) DO UPDATE SET
            last_seen_at = excluded.last_seen_at,
            occurrence_count = errors.occurrence_count + 1,
@@ -542,11 +557,12 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
         crash.occurredAt,
         crash.occurredAt,
         bucket.saturated,
+        crash.source,
       ),
       c.env.DB.prepare(
         `INSERT INTO occurrences
-           (id, fingerprint, occurred_at, version, environment, instance_key, context, stacktrace)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, fingerprint, occurred_at, version, environment, instance_key, context, stacktrace, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         crypto.randomUUID(),
         fingerprint,
@@ -556,6 +572,7 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
         instanceKey,
         JSON.stringify(crash.context),
         JSON.stringify(crash.stacktrace),
+        crash.source,
       ),
     ]);
     const writes = bucket.writes + errorsResult.meta.rows_written + occurrenceResult.meta.rows_written;
