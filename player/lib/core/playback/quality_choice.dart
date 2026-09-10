@@ -32,7 +32,7 @@ bool qualityPickNeedsReopen({
 /// the riskiest decision in the quality change and the one most worth
 /// pinning, so it lives where a fake [restart] that throws can exercise it.
 ///
-/// [adopt] puts a rung into effect in memory, synchronously and first — it
+/// [adopt] puts a rung into effect in memory, synchronously and first: it
 /// is the only channel [restart] reads the rung from, so nothing can happen
 /// between choosing a rung and the restart seeing it. [restart] tears the
 /// session down and brings it back at that rung: it resolves to `true` once
