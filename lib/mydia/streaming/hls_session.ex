@@ -705,6 +705,11 @@ defmodule Mydia.Streaming.HlsSession do
   def segment_plan_for(media_file, :full), do: plan_from_media_file(media_file)
   def segment_plan_for(_media_file, :window), do: nil
 
+  # :full or :window for a session asking for `requested_mode`, by the same
+  # rule init/1 applies (see segment_plan_for/2).
+  #
+  # Public only so this decision can be asserted directly; nothing outside
+  # this module should call it.
   @doc false
   @spec effective_playlist_mode(MediaFile.t(), :full | :window) :: :full | :window
   def effective_playlist_mode(media_file, requested_mode) do
