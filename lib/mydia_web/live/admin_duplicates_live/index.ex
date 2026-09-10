@@ -47,6 +47,23 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   has already refused every group that is not proven to be the same content.
   A group that reaches `:decisions` holds redundant copies of one file; the
   refused ones are listed separately and have nothing selectable on them.
+
+  ## Needs Attention
+
+  Refused groups are mostly files filed against the wrong item, and the fix is
+  to send the stray to Review. The operator's choices there are stored as
+  overrides (`:review_overrides`, a file id mapped to `:leave` or `:review`)
+  rather than as a selection, for the same reason `:kept` is an exclusion set:
+  the defaults come from the plan (`Mydia.Library.Prune.Eligibility.suspect_files/1`),
+  and a re-plan must be free to move them without losing what the operator
+  changed by hand. `:returning` is derived from the two.
+
+  One group's send runs at once, like `trash_group_now`, and the page-level
+  send gets a confirmation modal, like the page-level trash. Neither destroys
+  anything: the bytes stay put and `/review` can reattach any file, which is
+  also why a send has no Undo of its own. `Mydia.Library.Prune.send_to_review/2`
+  re-verifies every id and refuses to empty an item, so the page is not the
+  security boundary here either.
   """
 
   use MydiaWeb, :live_view
@@ -66,6 +83,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
      |> assign(:keepers, %{})
      |> assign(:review_overrides, %{})
      |> assign(:show_trash_modal, false)
+     |> assign(:show_review_modal, false)
      |> assign(:last_run, nil)
      |> assign(:retention_days, retention_days)
      |> load_plan()}
@@ -134,6 +152,29 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     else
       _ -> {:noreply, socket}
     end
+  end
+
+  def handle_event("open_review_modal", _params, socket) do
+    {:noreply, assign(socket, :show_review_modal, MapSet.size(socket.assigns.returning) > 0)}
+  end
+
+  def handle_event("close_review_modal", _params, socket) do
+    {:noreply, assign(socket, :show_review_modal, false)}
+  end
+
+  def handle_event("confirm_review", _params, socket) do
+    # Built before run_send/3 reloads the plan, which recomputes the count
+    # against what is left.
+    label = "across #{Components.item_count(socket.assigns.returning_items)}"
+
+    {:noreply,
+     socket
+     |> assign(:show_review_modal, false)
+     |> run_send(MapSet.to_list(socket.assigns.returning), label)}
+  end
+
+  def handle_event("reset_review_marks", _params, socket) do
+    {:noreply, socket |> assign(:review_overrides, %{}) |> assign_review_selection()}
   end
 
   # Runs the trash for one group instead of the whole library. The ids are

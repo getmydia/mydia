@@ -29,6 +29,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
   attr :refusals, :list, required: true
   attr :suspects, :map, required: true
   attr :returning, :any, required: true
+  attr :overridden?, :boolean, required: true
 
   def needs_attention(assigns) do
     ~H"""
@@ -37,6 +38,27 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
         <.icon name="hero-exclamation-triangle" class="w-5 h-5 opacity-60" /> Needs Attention
         <span class="badge badge-ghost">{length(@refusals)}</span>
       </h2>
+      <div class="join">
+        <button
+          :if={@overridden?}
+          id="duplicates-review-reset"
+          type="button"
+          class="btn btn-sm btn-ghost join-item"
+          phx-click="reset_review_marks"
+        >
+          <.icon name="hero-arrow-path" class="w-4 h-4" /> Mark flagged
+        </button>
+        <button
+          id="duplicates-review-selected"
+          type="button"
+          class="btn btn-sm btn-primary join-item"
+          disabled={MapSet.size(@returning) == 0}
+          phx-click="open_review_modal"
+        >
+          <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
+          Send {Components.file_count(MapSet.size(@returning))} to Review
+        </button>
+      </div>
     </div>
 
     <p class="text-sm text-base-content/60">
@@ -55,6 +77,60 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
         suspects={Map.get(@suspects, group.subject_id, MapSet.new())}
         returning={@returning}
       />
+    </div>
+    """
+  end
+
+  @doc """
+  Confirms a page-level send to Review.
+
+  The per-group button needs no confirmation, but this one detaches every
+  marked file across the whole section in one go, so the scope is worth a
+  click. Nothing is destroyed, which is why the copy talks about where the
+  files go rather than warning.
+  """
+  attr :count, :integer, required: true
+  attr :items, :integer, required: true
+
+  def review_confirm_modal(assigns) do
+    ~H"""
+    <div id="duplicates-review-modal" class="modal modal-open">
+      <div class="modal-box">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+            <.icon name="hero-arrow-uturn-left" class="w-5 h-5 text-primary" />
+          </div>
+          <h3 class="font-bold text-lg">
+            Send {Components.file_count(@count)} from {Components.item_count(@items)} to Review?
+          </h3>
+        </div>
+
+        <p class="py-2">
+          They stay on disk and wait in Review until someone matches them. Nothing is
+          re-attached automatically.
+        </p>
+
+        <div class="modal-action mt-6 pt-4 border-t border-base-300">
+          <button
+            id="duplicates-review-cancel"
+            type="button"
+            class="btn btn-ghost"
+            phx-click="close_review_modal"
+          >
+            Cancel
+          </button>
+          <button
+            id="duplicates-review-confirm"
+            type="button"
+            class="btn btn-primary"
+            phx-click="confirm_review"
+            phx-disable-with="Sending..."
+          >
+            <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Send to Review
+          </button>
+        </div>
+      </div>
+      <div class="modal-backdrop bg-black/50" phx-click="close_review_modal"></div>
     </div>
     """
   end

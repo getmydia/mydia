@@ -14,6 +14,7 @@
         refusals={@refusals}
         suspects={@suspects}
         returning={@returning}
+        overridden?={@review_overrides != %{}}
       />
     </div>
 
@@ -24,6 +25,14 @@
         items={@affected_items}
         bytes={@reclaimable}
         retention_days={@retention_days}
+      />
+    <% end %>
+
+    <%!-- Send to Review Confirmation Modal --%>
+    <%= if @show_review_modal do %>
+      <MydiaWeb.AdminDuplicatesLive.ReviewComponents.review_confirm_modal
+        count={MapSet.size(@returning)}
+        items={@returning_items}
       />
     <% end %>
 

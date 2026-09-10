@@ -707,5 +707,60 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       assert has_element?(view, "#duplicates-undo-toast")
       assert render(view) =~ "2 items"
     end
+
+    test "the page-level send confirms first, then detaches every marked file", %{conn: conn} do
+      {_movie_a, own_a, stray_a} = misfiled_movie("Zephyr Station", "Starveil")
+      {_movie_b, own_b, stray_b} = misfiled_movie("Emberline", "Quillmoor")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-review-selected") |> render_click()
+      assert has_element?(view, "#duplicates-review-modal")
+
+      view |> element("#duplicates-review-confirm") |> render_click()
+
+      refute has_element?(view, "#duplicates-review-modal")
+      refute Mydia.Repo.get(Mydia.Library.MediaFile, stray_a.id)
+      refute Mydia.Repo.get(Mydia.Library.MediaFile, stray_b.id)
+      assert Mydia.Repo.get(Mydia.Library.MediaFile, own_a.id)
+      assert Mydia.Repo.get(Mydia.Library.MediaFile, own_b.id)
+      assert has_element?(view, "#duplicates-open-review")
+    end
+
+    test "Cancel closes the confirm modal and sends nothing", %{conn: conn} do
+      {_movie, _own, stray} = misfiled_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      view |> element("#duplicates-review-selected") |> render_click()
+      view |> element("#duplicates-review-cancel") |> render_click()
+
+      refute has_element?(view, "#duplicates-review-modal")
+      assert Mydia.Repo.get(Mydia.Library.MediaFile, stray.id)
+    end
+
+    test "the page-level send is disabled when nothing is marked", %{conn: conn} do
+      _movie = refused_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      assert has_element?(view, "#duplicates-review-selected[disabled]")
+    end
+
+    test "Mark flagged puts the operator's changes back to the defaults", %{conn: conn} do
+      {_movie, _own, stray} = misfiled_movie()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+
+      refute has_element?(view, "#duplicates-review-reset")
+
+      view |> element("#duplicates-leave-#{stray.id}") |> render_click()
+      assert has_element?(view, "#duplicates-review-reset")
+
+      view |> element("#duplicates-review-reset") |> render_click()
+
+      assert has_element?(view, "#duplicates-review-#{stray.id}[checked]")
+      refute has_element?(view, "#duplicates-review-reset")
+    end
   end
 end
