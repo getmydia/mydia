@@ -88,14 +88,15 @@ the three rules and `player/docs/playback.md` explains them. The server's
 candidate shapes are unchanged; an old player against a new server behaves
 exactly as before.
 
-## Four deadlines sit between "play" and the first segment
+## Five deadlines sit between "play" and the first segment
 
-Starting playback on a file that needs transcoding crosses four independent
-timeouts, in three languages. They are not redundant, and changing one without
-reading the others produces a failure that looks like the network.
+Starting playback crosses up to five independent timeouts, in three languages.
+They are not redundant, and changing one without reading the others produces a
+failure that looks like the network.
 
 | budget | where | covers |
 | --- | --- | --- |
+| 1.5s | `@timeout_ms`, `keyframe_locator.ex` | the keyframe lookup, only for a new `:window` stream-copy resume from MKV or MP4 |
 | 25s | `@request_timeout`, `p2p/server.ex` | one GraphQL request, host side |
 | 30s | `RESPONSE_TIMEOUT`, `mydia_p2p_core/src/lib.rs` | one GraphQL request, peer side |
 | 2min | `@session_ready_timeout`, `p2p/server.ex` | FFmpeg writing its first playlist |
@@ -158,3 +159,48 @@ The lasting lesson is that time-to-first-segment is a budget chain, not a single
 number, and that a transcode preset is part of it: `veryfast` is the default in
 `ffmpeg_hls_transcoder.ex` because a preset chosen for offline encoding spends
 wall clock the viewer is sitting through.
+
+## Seeking with copied streams
+
+Every resume and relocation seeks with `-ss` before `-i`, so FFmpeg starts
+reading at a keyframe at or near the target. What the viewer gets depends on
+which streams are copied. Measured with FFmpeg 8.1 on a source with a keyframe
+every 10s:
+
+| video | audio | stream begins | handled by |
+| --- | --- | --- | --- |
+| encoded | encoded | at the target | accurate seek, FFmpeg's default |
+| encoded | copied | at the target | `-copypriorss:a 0` |
+| copied | either | at the keyframe | `KeyframeLocator` and `:seek_keyframe`, `:window` only |
+
+Copied audio skips the decoder, so accurate seek never trims it. Without
+`-copypriorss:a 0`, a resume at 27s into a file with keyframes at 20 and 30
+carried 7.2s of audio ahead of its first frame. Jellyfin fixed the same bug
+with an output-side `-ss`. Under `-copyts` that rebases every timestamp to
+zero, which would break `:full`, so it is not used here.
+
+Where a copy seek lands depends on the container:
+
+- MKV seeks back to the keyframe at or before the target.
+- MP4 does too, but compares decode timestamps. A keyframe with B-frames
+  behind it decodes a little before it displays (a quarter second on the
+  source measured), so a target inside that window lands on that keyframe,
+  just after the target. The lookup reports it either way.
+- MPEG-TS has no seek index. A copy lands after the target and an ffprobe
+  lookup lands mid-GOP, so TS sessions are never pinned and echo their
+  requested offset.
+
+FFmpeg also pulls every input seek back by 3/23s when the video has B-frame
+delay and the container cannot seek by PTS. Seeking to a keyframe's exact
+timestamp in an MKV therefore lands a whole GOP early: `-ss 20.001` against a
+keyframe at 20.000 started at 10. A pinned keyframe is sought at
+`keyframe + 0.2` for that reason.
+
+A `:full` session's first encoder starts on the segment grid, like every
+relocated one. Started at the raw resume second, forced keyframes follow the
+start instead: resumed at 30s, the segments declared as 28-32, 32-36 and 36-40
+began at 30.00, 33.92 and 37.93.
+
+`hls_seek_alignment_integration_test.exs` re-measures all of this against the
+installed FFmpeg. It is tagged `:ffmpeg`, so run it with `--include ffmpeg`
+after any FFmpeg upgrade.

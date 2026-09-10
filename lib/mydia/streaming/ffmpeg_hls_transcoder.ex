@@ -728,10 +728,9 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # stream has B-frame delay and the container cannot seek by PTS, which covers
   # every MKV with B-frames. Seeking to a keyframe's exact timestamp therefore
   # lands a whole GOP early: -ss 20.001 against an MKV keyframe at 20.000
-  # started at the keyframe at 10. 0.2s clears the pull-back and still sits far
-  # nearer this keyframe than the next one, so MKV (which seeks back to the
-  # keyframe at or before the point) and MP4 (which seeks to the nearest) both
-  # land on it.
+  # started the stream from the previous keyframe, at 10. 0.2s clears the
+  # pull-back and still sits far nearer this keyframe than the next one, so
+  # MKV and MP4 both land on it.
   @keyframe_seek_margin_seconds 0.2
 
   # A pinned keyframe (see Mydia.Streaming.KeyframeLocator) wins over the

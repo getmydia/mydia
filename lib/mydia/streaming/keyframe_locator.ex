@@ -9,10 +9,12 @@ defmodule Mydia.Streaming.KeyframeLocator do
   by up to a GOP.
 
   `ffprobe -read_intervals T%+#1` seeks the way FFmpeg's `-ss` does and reads
-  one packet. Measured: MKV lands on the keyframe at or before T, MP4 on the
-  nearest keyframe, and in both cases on the one FFmpeg itself starts from.
-  MPEG-TS has no seek index and lands mid-GOP, which is why only a keyframe
-  packet counts as an answer. `HlsSession` also only asks about MKV and MP4.
+  one packet, and measured on MKV and MP4 it lands on the same keyframe FFmpeg
+  itself starts from. That is usually the keyframe at or before T, but MP4
+  compares decode timestamps, so a target inside the B-frame delay just before
+  a keyframe lands on that keyframe, after T. MPEG-TS has no seek index and
+  lands mid-GOP, which is why only a keyframe packet counts as an answer.
+  `HlsSession` also only asks about MKV and MP4.
   """
 
   require Logger
