@@ -11,6 +11,7 @@
 // same reason.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/core/playback/quality_choice.dart';
 
@@ -229,5 +230,64 @@ void main() {
     expect(recorder.restarts, hasLength(2));
     expect(recorder.gaveUp, isEmpty,
         reason: 'no error screen to put it on; the widget is gone');
+  });
+
+  group('qualityPickNeedsReopen', () {
+    const directPlay = DirectPlayPlan(reason: PlanReason.directPlayAccepted);
+    const otherDirectPlay =
+        DirectPlayPlan(reason: PlanReason.fallbackFromFailure);
+    const copy720 = HlsPlan(
+      strategy: HlsStrategy.copy,
+      rung: QualityRung.original,
+      adaptive: false,
+      reason: PlanReason.copyAccepted,
+    );
+
+    test('same delivery on a first attempt needs no reopen', () {
+      expect(
+        qualityPickNeedsReopen(
+          next: directPlay,
+          current: otherDirectPlay,
+          isFallback: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('same delivery on a rollback needs a reopen', () {
+      // The attempt the rollback undoes may already have moved the player
+      // onto failing media before it threw, so the plan on record cannot be
+      // trusted to describe what is actually on screen.
+      expect(
+        qualityPickNeedsReopen(
+          next: directPlay,
+          current: otherDirectPlay,
+          isFallback: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('different delivery needs a reopen', () {
+      expect(
+        qualityPickNeedsReopen(
+          next: directPlay,
+          current: copy720,
+          isFallback: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('no current plan needs a reopen', () {
+      expect(
+        qualityPickNeedsReopen(
+          next: directPlay,
+          current: null,
+          isFallback: false,
+        ),
+        isTrue,
+      );
+    });
   });
 }

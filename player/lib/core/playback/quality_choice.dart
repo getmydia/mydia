@@ -5,6 +5,21 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/quality_rung.dart';
+import 'playback_plan.dart';
+
+/// Whether a quality pick has to reopen the source.
+///
+/// A first attempt whose plan delivers the same bytes as what is playing
+/// reopens nothing: only the choice changes. A rollback always reopens,
+/// because the attempt it undoes may have failed after the player had
+/// already moved to the new media, and the plan on record would then
+/// describe bytes that are no longer on screen.
+bool qualityPickNeedsReopen({
+  required PlaybackPlan next,
+  required PlaybackPlan? current,
+  required bool isFallback,
+}) =>
+    isFallback || current == null || !sameDelivery(next, current);
 
 /// Puts [selected] into effect, restoring [previous] if that fails.
 ///

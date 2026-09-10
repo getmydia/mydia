@@ -3988,9 +3988,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         final plan =
             planPlayback(inputs.copyWith(choice: QualityChoice.fromRung(rung)));
         final current = _plan;
-        if (current != null && sameDelivery(plan, current)) {
+        if (!qualityPickNeedsReopen(
+            next: plan, current: current, isFallback: isFallback)) {
           // Auto and Original both direct play this file, say: the choice
-          // changes and the bytes do not, so there is nothing to reopen.
+          // changes and the bytes do not, so there is nothing to reopen. Only
+          // on the viewer's first attempt: a rollback always reopens, since
+          // the attempt it undoes may have already moved the player onto
+          // failing media before it threw, leaving the recorded plan stale.
           debugPrint('[PlayerScreen] Quality change: ${plan.describe()} '
               '(already playing)');
           if (mounted) setState(() => _plan = plan);
