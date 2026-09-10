@@ -19,9 +19,10 @@ class _Script {
     int? dropped = 0,
     int? kbps,
     bool fault = false,
+    int step = 1,
   }) {
-    _t++;
-    if (playing && !buffering) _pos++;
+    _t += step;
+    if (playing && !buffering) _pos += step;
     return HealthSample(
       at: Duration(seconds: _t),
       position: Duration(seconds: _pos),
@@ -200,6 +201,84 @@ void main() {
         FailureReason.decodeTooSlow,
       );
       expect(policy.done, isTrue);
+    });
+  });
+
+  group('elapsed time, not sample count', () {
+    test(
+        'two-second samples at exactly the drop limit never fall back, '
+        'through a full window and well beyond', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      // 2 drops every 2 s is 1 drop/s once spread across both seconds the
+      // sample covers: at the limit, not over it. Thirty samples covers 60 s
+      // of elapsed time, well past both the verification window and a full
+      // sustained-drops history.
+      expect(
+        _drive(
+          policy,
+          List.generate(30, (_) => s.next(dropped: 2, step: 2)),
+        ),
+        isA<NoAction>(),
+      );
+    });
+
+    test('two-second samples over the drop limit do fall back', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      // 3 drops every 2 s is 1.5 drops/s once spread: over the 1/s limit.
+      final action = _drive(
+        policy,
+        List.generate(10, (_) => s.next(dropped: 3, step: 2)),
+      );
+      expect(action, isA<FallbackToTranscode>());
+      expect(
+        (action as FallbackToTranscode).reason,
+        FailureReason.decodeTooSlow,
+      );
+    });
+
+    test(
+        'verification tracks elapsed time: two-second samples end it in '
+        'about half as many samples as one-second ones', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      expect(policy.verifying, isTrue);
+      // 10 two-second samples cover 19 s of playing time (the first sample
+      // is always one second, since there is no previous `at` to diff
+      // against): still short of the 20 s window, same as 19 one-second
+      // samples above.
+      _drive(policy, List.generate(10, (_) => s.next(step: 2)));
+      expect(policy.verifying, isTrue);
+      policy.observe(s.next(step: 2));
+      expect(policy.verifying, isFalse);
+    });
+
+    test(
+        'unknown seconds do not fill the drop window; known seconds still '
+        'decide on their own', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      // Nine seconds of unknown drops would complete a 10-sample window if
+      // nulls counted as zero-drop seconds; they must not.
+      expect(
+        _drive(policy, List.generate(9, (_) => s.next(dropped: null))),
+        isA<NoAction>(),
+      );
+      // Nine known seconds at 2 drops/s: the window is still incomplete,
+      // since the null seconds contributed no buckets of their own.
+      expect(
+        _drive(policy, List.generate(9, (_) => s.next(dropped: 2))),
+        isA<NoAction>(),
+      );
+      // The tenth known second completes a window on the known seconds
+      // alone: 10 x 2 drops/s over 10 s is well over the 1 drop/s limit.
+      final action = policy.observe(s.next(dropped: 2));
+      expect(action, isA<FallbackToTranscode>());
+      expect(
+        (action as FallbackToTranscode).reason,
+        FailureReason.decodeTooSlow,
+      );
     });
   });
 

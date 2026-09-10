@@ -43,8 +43,9 @@ class AdaptationPolicy {
   bool _inStall = false;
   final List<Duration> _stalls = [];
   Duration? _previousAhead;
+  Duration? _previousAt;
   int _drainRun = 0;
-  final List<int> _recentDrops = [];
+  final List<double> _recentDrops = [];
   int? _lastThroughput;
   bool _done = false;
 
@@ -74,8 +75,11 @@ class AdaptationPolicy {
     if (stalled && !_inStall) _stalls.add(sample.at);
     _inStall = stalled;
 
+    final elapsed = _elapsedSince(sample.at);
+    _previousAt = sample.at;
+
     if (sample.playing && !sample.buffering) {
-      _playingTime += const Duration(seconds: 1);
+      _playingTime += elapsed;
     }
 
     final previous = _previousAhead;
@@ -88,7 +92,34 @@ class AdaptationPolicy {
     }
     _previousAhead = sample.bufferedAhead;
 
-    _recentDrops.add(sample.droppedFrames ?? 0);
+    _addDropBuckets(sample.droppedFrames, elapsed);
+  }
+
+  /// Time this sample covers. The monitor's timer keeps advancing while a
+  /// slow property read is in flight, so a sample can follow the previous
+  /// one by several seconds; that whole gap belongs to this sample, not one
+  /// second of it. The very first sample has no previous `at` to diff
+  /// against, so it counts as one second, and a diff is never allowed to
+  /// read as less than that.
+  Duration _elapsedSince(Duration at) {
+    final previousAt = _previousAt;
+    if (previousAt == null) return const Duration(seconds: 1);
+    final raw = at - previousAt;
+    return raw < const Duration(seconds: 1) ? const Duration(seconds: 1) : raw;
+  }
+
+  /// Spreads this sample's drops evenly across the one-second buckets its
+  /// [elapsed] time covers, so `_recentDrops` keeps meaning "the last N
+  /// seconds with a known count". A null count is unknown, not zero, and
+  /// adds no bucket at all.
+  void _addDropBuckets(int? droppedFrames, Duration elapsed) {
+    if (droppedFrames != null) {
+      final buckets = elapsed.inSeconds;
+      final perSecond = droppedFrames / buckets;
+      for (var i = 0; i < buckets; i++) {
+        _recentDrops.add(perSecond);
+      }
+    }
     final keep =
         thresholds.dropWindow.inSeconds * thresholds.sustainedDropWindows;
     while (_recentDrops.length > keep) {
@@ -103,10 +134,10 @@ class AdaptationPolicy {
       _recentDrops.length >= thresholds.dropWindow.inSeconds;
 
   /// Drops in the most recent [AdaptationThresholds.dropWindow].
-  int _lastWindowDrops() {
+  double _lastWindowDrops() {
     final size = thresholds.dropWindow.inSeconds;
     final start = _recentDrops.length > size ? _recentDrops.length - size : 0;
-    var sum = 0;
+    var sum = 0.0;
     for (var i = start; i < _recentDrops.length; i++) {
       sum += _recentDrops[i];
     }
@@ -120,7 +151,7 @@ class AdaptationPolicy {
     final windows = thresholds.sustainedDropWindows;
     if (_recentDrops.length < size * windows) return false;
     for (var w = 0; w < windows; w++) {
-      var sum = 0;
+      var sum = 0.0;
       final end = _recentDrops.length - w * size;
       for (var i = end - size; i < end; i++) {
         sum += _recentDrops[i];
