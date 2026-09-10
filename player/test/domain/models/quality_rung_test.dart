@@ -2,6 +2,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/quality_rung.dart';
 
 void main() {
+  group('deriveAdaptiveLadder', () {
+    test('includes the source-height rung, unlike the manual ladder', () {
+      final ladder = deriveAdaptiveLadder(sourceHeight: 1080);
+
+      expect(ladder.map((r) => r.label), ['1080p', '720p', '480p', '360p']);
+    });
+
+    test('a 2160p source tops out at 1080p', () {
+      expect(deriveAdaptiveLadder(sourceHeight: 2160).first.label, '1080p');
+    });
+
+    test('a 720p source starts at 720p', () {
+      expect(
+        deriveAdaptiveLadder(sourceHeight: 720).map((r) => r.label),
+        ['720p', '480p', '360p'],
+      );
+    });
+
+    test('a source below every rung, or unknown, yields nothing', () {
+      expect(deriveAdaptiveLadder(sourceHeight: 359), isEmpty);
+      expect(deriveAdaptiveLadder(sourceHeight: null), isEmpty);
+      expect(deriveAdaptiveLadder(sourceHeight: 0), isEmpty);
+    });
+  });
+
   group('deriveQualityLadder', () {
     test('offers only Original when the source height is unknown', () {
       // Without metadata there is no honest way to know which rungs would
@@ -68,12 +93,13 @@ void main() {
   });
 
   group('storage round-trip', () {
-    test('Original uses the legacy "auto" key already in secure storage', () {
-      // settings_service.dart has persisted 'auto' as the default since
-      // before any of this worked; treating it as Original means an existing
-      // install does not silently start capping quality after an update.
-      expect(QualityRung.original.storageKey, 'auto');
-      expect(QualityRung.fromStorageKey('auto'), QualityRung.original);
+    test('auto is Auto and original is Original', () {
+      // A clean break: before the Auto rung, Original persisted as `auto`.
+      // Existing installs therefore move to Auto, the new default.
+      expect(QualityRung.auto.storageKey, 'auto');
+      expect(QualityRung.fromStorageKey('auto'), QualityRung.auto);
+      expect(QualityRung.original.storageKey, 'original');
+      expect(QualityRung.fromStorageKey('original'), QualityRung.original);
     });
 
     test('round-trips a capped rung', () {
@@ -86,23 +112,37 @@ void main() {
 
     test('returns null for an unrecognised key', () {
       // A key written by a newer build, or corrupted storage. Callers fall
-      // back to Original rather than crashing on startup.
+      // back to Auto rather than crashing on startup.
       expect(QualityRung.fromStorageKey('4320p'), isNull);
       expect(QualityRung.fromStorageKey(''), isNull);
     });
 
-    test('an unreadable stored key falls back to Original for display', () {
-      // Exactly the expression the Settings tile renders. A key written by a
-      // newer build, or corrupted storage, must show a sensible label rather
-      // than an empty subtitle or a crash on the settings screen.
+    test('an unreadable stored key falls back to Auto for display', () {
+      // Exactly the expression the Settings tile renders.
       String label(String stored) =>
-          QualityRung.fromStorageKey(stored)?.label ??
-          QualityRung.original.label;
+          QualityRung.fromStorageKey(stored)?.label ?? QualityRung.auto.label;
 
       expect(label('720p'), '720p');
-      expect(label('auto'), 'Original');
-      expect(label('4320p'), 'Original');
-      expect(label(''), 'Original');
+      expect(label('auto'), 'Auto');
+      expect(label('original'), 'Original');
+      expect(label('4320p'), 'Auto');
+      expect(label(''), 'Auto');
+    });
+  });
+
+  group('Auto', () {
+    test('is neither Original nor a capped rung', () {
+      expect(QualityRung.auto.isAuto, isTrue);
+      expect(QualityRung.auto.isOriginal, isFalse);
+      expect(QualityRung.original.isAuto, isFalse);
+      expect(QualityRung.original.isOriginal, isTrue);
+      expect(QualityRung.auto, isNot(QualityRung.original));
+    });
+
+    test('is not on the manual ladder', () {
+      expect(deriveQualityLadder(sourceHeight: 1080),
+          isNot(contains(QualityRung.auto)));
+      expect(deriveQualityLadder(), [QualityRung.original]);
     });
   });
 

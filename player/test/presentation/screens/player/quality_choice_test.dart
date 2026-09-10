@@ -7,12 +7,13 @@
 // that owns the quality button is never built under `flutter test`, because
 // `_waitForPlaylist` polls a real URL that `flutter_test`'s `HttpOverrides`
 // answers with 400 every time, so the screen reaches its error state first.
-// Same precedent as `trackRestartInFlight` and `shouldRestartForSeek`, both
-// pulled out of this file for the same reason.
+// Same precedent as `shouldRestartForSeek`, pulled out of this file for the
+// same reason.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/domain/models/quality_rung.dart';
-import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/core/playback/quality_choice.dart';
 
 const _selected = QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
 const _previous = QualityRung.original;
@@ -28,13 +29,21 @@ class _RestartCall {
   String toString() => '${rung.label}(isFallback: $isFallback)';
 }
 
-/// Records every callback `applyQualityChoice` makes, and fails whichever
-/// restarts [failing] names.
+/// Records every callback `applyQualityChoice` makes, and fails or abandons
+/// whichever restarts [failing] or [abandoned] name.
 class _Recorder {
-  _Recorder({this.failing = const <int>{}, this.storageFails = false});
+  _Recorder({
+    this.failing = const <int>{},
+    this.abandoned = const <int>{},
+    this.storageFails = false,
+  });
 
   /// Zero-based indices of `restart` calls that throw.
   final Set<int> failing;
+
+  /// Zero-based indices of `restart` calls that report `false`: another
+  /// source switch took over before this one could apply.
+  final Set<int> abandoned;
 
   /// Stands in for secure storage being unavailable — a locked or missing
   /// keyring on Linux desktop, which `flutter_secure_storage` needs.
@@ -67,13 +76,14 @@ class _Recorder {
     remembered.add(rung);
   }
 
-  Future<void> restart(QualityRung rung, {required bool isFallback}) async {
+  Future<bool> restart(QualityRung rung, {required bool isFallback}) async {
     final index = restarts.length;
     restarts.add(_RestartCall(rung, isFallback));
     inEffectAtRestart.add(adopted ?? QualityRung.original);
     if (failing.contains(index)) {
       throw StateError('restart #$index refused ${rung.label}');
     }
+    return !abandoned.contains(index);
   }
 
   bool stillActive() => active;
@@ -108,25 +118,52 @@ void main() {
   });
 
   test(
-      'adopts in memory before writing to storage, and both before the '
-      'restart', () async {
+      'adopts in memory before restarting, and remembers only after the '
+      'restart lands', () async {
     // Ordering is load-bearing rather than cosmetic. `_resolveQualityForFile`
     // carries the in-memory rung into the session it negotiates, so a restart
     // that ran before `adopt` would request the *old* rung and the viewer's
-    // choice would silently not apply.
+    // choice would silently not apply. Persisting before the restart lands
+    // could race a fallback that starts mid-await and store a rung that
+    // never actually played.
     final order = <String>[];
     await applyQualityChoice(
       selected: _selected,
       previous: _previous,
       adopt: (rung) => order.add('adopt:${rung.label}'),
       remember: (rung) async => order.add('remember:${rung.label}'),
-      restart: (rung, {required bool isFallback}) async =>
-          order.add('restart:${rung.label}'),
+      restart: (rung, {required bool isFallback}) async {
+        order.add('restart:${rung.label}');
+        return true;
+      },
       stillActive: () => true,
       onGaveUp: (_) {},
     );
 
-    expect(order, ['adopt:720p', 'remember:720p', 'restart:720p']);
+    expect(order, ['adopt:720p', 'restart:720p', 'remember:720p']);
+  });
+
+  test('remember runs only after a successful restart, never before it',
+      () async {
+    final recorder = _Recorder();
+    var rememberedBeforeRestart = <QualityRung>[];
+
+    await applyQualityChoice(
+      selected: _selected,
+      previous: _previous,
+      adopt: recorder.adopt,
+      remember: recorder.remember,
+      restart: (rung, {required bool isFallback}) async {
+        rememberedBeforeRestart = List.of(recorder.remembered);
+        return recorder.restart(rung, isFallback: isFallback);
+      },
+      stillActive: recorder.stillActive,
+      onGaveUp: recorder.onGaveUp,
+    );
+
+    expect(rememberedBeforeRestart, isEmpty,
+        reason: 'nothing is persisted until the restart has reported success');
+    expect(recorder.remembered, [_selected]);
   });
 
   test('a restart still gets the chosen rung when persistence fails', () async {
@@ -156,7 +193,10 @@ void main() {
     expect(recorder.adoptedRungs, [_selected, _previous],
         reason: 'the rung that was working has to be back in effect, or the '
             'retry re-requests the failing one');
-    expect(recorder.remembered, [_selected, _previous]);
+    expect(recorder.remembered, [_previous],
+        reason: 'the failed restart never put `_selected` into effect, so '
+            'there is nothing about it worth remembering; the rollback that '
+            'did land is the only thing worth keeping');
     expect(recorder.restarts.map((c) => c.rung), [_selected, _previous]);
     expect(recorder.inEffectAtRestart, [_selected, _previous]);
     expect(recorder.restarts.last.isFallback, isTrue);
@@ -175,6 +215,39 @@ void main() {
         reason: 'an unwritable keyring must not strand the viewer at a rung '
             'that could not be served');
     expect(recorder.gaveUp, isEmpty);
+  });
+
+  test(
+      'a restart that reports false is abandoned quietly: no persist, no '
+      'rollback, no giving up', () async {
+    // Another source switch (a fallback, a seek restart) took over while
+    // this one was mid-flight; `restart` says so by returning `false`
+    // instead of throwing. Retrying against it or persisting a rung that
+    // never took effect would both be wrong.
+    final recorder = _Recorder(abandoned: {0});
+
+    await recorder.run();
+
+    expect(recorder.restarts, hasLength(1),
+        reason: 'no rollback: the first attempt was not a failure, just '
+            'pre-empted');
+    expect(recorder.remembered, isEmpty);
+    expect(recorder.gaveUp, isEmpty);
+  });
+
+  test('a rollback that reports false persists nothing and does not give up',
+      () async {
+    final recorder = _Recorder(failing: {0}, abandoned: {1});
+
+    await recorder.run();
+
+    expect(recorder.restarts, hasLength(2));
+    expect(recorder.remembered, isEmpty,
+        reason: 'neither the failed first attempt nor the pre-empted '
+            'rollback ever took effect');
+    expect(recorder.gaveUp, isEmpty,
+        reason: 'the rollback was pre-empted, not a second failure; there is '
+            'nothing to show an error for');
   });
 
   test('a second failure gives up instead of retrying again', () async {
@@ -229,5 +302,64 @@ void main() {
     expect(recorder.restarts, hasLength(2));
     expect(recorder.gaveUp, isEmpty,
         reason: 'no error screen to put it on; the widget is gone');
+  });
+
+  group('qualityPickNeedsReopen', () {
+    const directPlay = DirectPlayPlan(reason: PlanReason.directPlayAccepted);
+    const otherDirectPlay =
+        DirectPlayPlan(reason: PlanReason.fallbackFromFailure);
+    const copy720 = HlsPlan(
+      strategy: HlsStrategy.copy,
+      rung: QualityRung.original,
+      adaptive: false,
+      reason: PlanReason.copyAccepted,
+    );
+
+    test('same delivery on a first attempt needs no reopen', () {
+      expect(
+        qualityPickNeedsReopen(
+          next: directPlay,
+          current: otherDirectPlay,
+          isFallback: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('same delivery on a rollback needs a reopen', () {
+      // The attempt the rollback undoes may already have moved the player
+      // onto failing media before it threw, so the plan on record cannot be
+      // trusted to describe what is actually on screen.
+      expect(
+        qualityPickNeedsReopen(
+          next: directPlay,
+          current: otherDirectPlay,
+          isFallback: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('different delivery needs a reopen', () {
+      expect(
+        qualityPickNeedsReopen(
+          next: directPlay,
+          current: copy720,
+          isFallback: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('no current plan needs a reopen', () {
+      expect(
+        qualityPickNeedsReopen(
+          next: directPlay,
+          current: null,
+          isFallback: false,
+        ),
+        isTrue,
+      );
+    });
   });
 }

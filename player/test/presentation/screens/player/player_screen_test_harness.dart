@@ -28,6 +28,8 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
+import 'package:player/core/playback/playback_memory.dart';
+import 'package:player/core/playback/playback_memory_providers.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/settings/settings_service.dart';
@@ -140,8 +142,8 @@ class FakeSettingsService extends Fake implements SettingsService {
     this.autoSkipSegments = false,
   });
 
-  /// The persisted `default_quality` key. `auto` — the real service's own
-  /// default — reads back as `QualityRung.original`.
+  /// The persisted `default_quality` key. `auto`, the real service's own
+  /// default, reads back as `QualityRung.auto`.
   String defaultQuality;
 
   /// When set, reads throw it. `flutter_secure_storage` needs a keyring on
@@ -157,6 +159,11 @@ class FakeSettingsService extends Fake implements SettingsService {
   /// it across every later re-initialization.
   int getDefaultQualityCalls = 0;
 
+  /// How many times the screen has written a new default rung to storage.
+  /// A fallback moves the session to Auto in memory only, so this must stay
+  /// 0 across one.
+  int setDefaultQualityCalls = 0;
+
   @override
   Future<String> getDefaultQuality() async {
     getDefaultQualityCalls++;
@@ -167,6 +174,7 @@ class FakeSettingsService extends Fake implements SettingsService {
 
   @override
   Future<void> setDefaultQuality(String quality) async {
+    setDefaultQualityCalls++;
     final error = writeError;
     if (error != null) throw error;
     defaultQuality = quality;
@@ -299,7 +307,7 @@ DownloadedMedia downloadedItem({
     DownloadedMedia(
       id: 'dl-1',
       mediaId: 'movie-1',
-      title: 'Arrival',
+      title: 'The Long Aurora',
       quality: '1080p',
       filePath: filePath,
       fileSize: 1,
@@ -349,7 +357,7 @@ Map<String, dynamic> movieDetailResponse({
     'movie': {
       '__typename': 'Movie',
       'id': 'movie-1',
-      'title': 'Arrival',
+      'title': 'The Long Aurora',
       'monitored': false,
       'addedAt': '2026-01-01T00:00:00Z',
       'isFavorite': false,
@@ -484,6 +492,7 @@ Map<String, dynamic> streamingCandidatesResponse({
   double? duration,
   bool directPlay = false,
   int? height,
+  int? bitrate,
   String fileId = 'file-1',
   List<String>? preferredAudioLanguages,
 }) {
@@ -512,6 +521,7 @@ Map<String, dynamic> streamingCandidatesResponse({
         'duration': duration,
         'width': null,
         'height': height,
+        'bitrate': bitrate,
         'preferredAudioLanguages': preferredAudioLanguages,
       },
     },
@@ -633,6 +643,8 @@ ProviderContainer buildPlayerScreenContainer({
         .overrideWith((ref) => castSessionStream ?? Stream.value(null)),
     playbackProgressStoreProvider.overrideWith(
         (ref) async => progressStore ?? InMemoryPlaybackProgressStore()),
+    playbackMemoryProvider
+        .overrideWith((ref) async => InMemoryPlaybackMemory()),
   ]);
 }
 
@@ -651,7 +663,7 @@ Future<void> pumpPlayerScreen(
         mediaId: mediaId,
         mediaType: mediaType,
         fileId: fileId,
-        title: 'Arrival',
+        title: 'The Long Aurora',
       ),
     ),
   ));

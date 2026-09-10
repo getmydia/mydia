@@ -35,6 +35,7 @@ const kMydiaHiveBoxes = <String>[
   'window_geometry',
   'sidebar_layout',
   'playback_progress',
+  'playback_memory',
   'cast_session',
   'subtitle_search_languages',
   'remote_control_settings',

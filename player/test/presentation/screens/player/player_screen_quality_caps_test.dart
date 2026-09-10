@@ -5,12 +5,14 @@
 // These assert on `StubLink.requests` rather than on the chrome. The rung a
 // viewer picks only matters if it reaches the mutation, and the request is
 // where that is decidable — the control's own visibility is a function of
-// `_qualityLadder.length`, which `quality_rung_test.dart` already pins.
+// `qualityControlAvailable`, which `quality_display_test.dart` pins.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/core/playback/playback_memory.dart';
+import 'package:player/core/playback/playback_memory_providers.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
@@ -90,7 +92,7 @@ void main() {
   });
 
   testWidgets(
-      'falls back to Original when the source cannot offer the '
+      'falls back to Auto when the source cannot offer the '
       'stored rung', (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
@@ -116,10 +118,10 @@ void main() {
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
-    expect(variables.containsKey('maxBitrate'), isFalse);
-    expect(variables.containsKey('maxHeight'), isFalse,
-        reason: 'Original asks for no caps, which is what keeps the '
-            'copy-when-compatible path available');
+    expect(variables['maxHeight'], 720,
+        reason: 'a stored rung that would upscale falls back to Auto, which '
+            "starts at the top of this 720p file's adaptive ladder");
+    expect(variables['maxBitrate'], 4000);
   });
 
   testWidgets('a chosen rung takes precedence over direct play',
@@ -272,7 +274,7 @@ void main() {
         reason: 'the rung in effect wins over whatever storage now holds');
   });
 
-  testWidgets('an unreadable preference plays at Original rather than failing',
+  testWidgets('an unreadable preference plays at Auto rather than failing',
       (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
@@ -299,9 +301,10 @@ void main() {
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
-    expect(variables.containsKey('maxHeight'), isFalse,
-        reason: 'a locked keyring costs the preference, not the playback, and '
-            'the safe answer is the cheapest one for the server');
+    expect(variables['maxHeight'], 1080,
+        reason: 'a locked keyring costs the preference, not the playback; '
+            'Auto, the default, starts at the top of the adaptive ladder');
+    expect(variables['maxBitrate'], 8000);
   });
 
   testWidgets('does not retry a genuine failure', (tester) async {
@@ -335,5 +338,97 @@ void main() {
     expect(sessionRequests(link).length, 1,
         reason: 'a resolver failure is not version skew; retrying it would '
             'double every real error');
+  });
+
+  testWidgets('a remembered decode failure keeps Auto from direct playing',
+      (tester) async {
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
+      streamingCandidatesResponse(
+          duration: 5400, height: 1080, directPlay: true),
+      startStreamingSessionResponse(),
+      endStreamingSessionResponse(),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    // Seeded before the screen ever reads it, matching the exact shape
+    // `streamingCandidatesResponse(directPlay: true, height: 1080)`'s
+    // candidate produces (`avc1.640028` / bucket 1080). `serverUrlProvider`
+    // is overridden to this same URL, which is the memory key for a
+    // non-p2p connection.
+    final memory = await container.read(playbackMemoryProvider.future);
+    await memory.recordFailure(
+      'https://mydia.test',
+      const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080),
+      FailureReason.decodeFailed,
+      now: DateTime.now(),
+    );
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntilSessionStarted(tester, link);
+
+    // Direct play sends no `startStreamingSession` mutation at all; only an
+    // HLS plan does, identified by the `strategy` variable `sessionRequests`
+    // filters on. Regression coverage for `playback_planner.dart`'s
+    // `knownToFail` gate actually reaching the live app: Auto is the default
+    // now that nothing has settled a rung, and Auto consults the memory, so
+    // if the gate stopped being keyed to `QualityChoiceKind.auto` this would
+    // direct play despite the remembered failure.
+    expect(sessionRequests(link), hasLength(1),
+        reason: 'Auto must respect the remembered failure and transcode '
+            'instead of direct playing');
+    expect(sessionRequests(link).single.variables['maxHeight'], 1080);
+  });
+
+  testWidgets(
+      'a stored Original direct plays despite a remembered decode failure',
+      (tester) async {
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
+      streamingCandidatesResponse(
+          duration: 5400, height: 1080, directPlay: true),
+      endStreamingSessionResponse(),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      settingsService: FakeSettingsService(defaultQuality: 'original'),
+    );
+    addTearDown(container.dispose);
+
+    final memory = await container.read(playbackMemoryProvider.future);
+    await memory.recordFailure(
+      'https://mydia.test',
+      const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080),
+      FailureReason.decodeFailed,
+      now: DateTime.now(),
+    );
+
+    final logs = <String>[];
+    await withCapturedDebugPrint(logs, () async {
+      await pumpPlayerScreen(tester, container);
+      await pumpUntil(
+          tester, () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')));
+    });
+
+    final planLine =
+        logs.firstWhere((l) => l.startsWith('[PlayerScreen] Plan: '));
+    expect(planLine, contains('directPlay'),
+        reason: 'Original is the viewer overriding the memory');
+    expect(sessionRequests(link), isEmpty);
   });
 }

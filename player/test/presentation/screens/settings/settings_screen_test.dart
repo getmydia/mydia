@@ -12,6 +12,8 @@ import 'package:http/testing.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/playback/playback_memory.dart';
+import 'package:player/core/playback/playback_memory_providers.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
@@ -100,6 +102,9 @@ class _FakeSettingsController extends SettingsController {
   /// Records what the screen asked us to change.
   static final skipCalls = <bool>[];
 
+  /// Records what the screen asked us to store as the default quality.
+  static final qualityCalls = <String>[];
+
   @override
   Future<UserSettings> build() async {
     if (fail) throw Exception('storage unavailable');
@@ -109,6 +114,11 @@ class _FakeSettingsController extends SettingsController {
   @override
   Future<void> setAutoSkipSegments(bool enabled) async {
     skipCalls.add(enabled);
+  }
+
+  @override
+  Future<void> setDefaultQuality(String quality) async {
+    qualityCalls.add(quality);
   }
 }
 
@@ -162,6 +172,7 @@ Future<void> _pump(
   RegistrationStatus registration = const RegistrationIdle(),
   UpdateState? updateState,
   CrashReporter? crashReporter,
+  List<dynamic> extraOverrides = const [],
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -204,6 +215,7 @@ Future<void> _pump(
         ),
         if (crashReporter != null)
           crashReporterProvider.overrideWithValue(crashReporter),
+        ...extraOverrides,
       ],
       child: MaterialApp.router(
         routerConfig: GoRouter(
@@ -234,6 +246,7 @@ Future<void> _pump(
 
 void main() {
   setUp(_FakeSettingsController.skipCalls.clear);
+  setUp(_FakeSettingsController.qualityCalls.clear);
 
   setUp(() async {
     _remoteControlBoxCounter += 1;
@@ -330,6 +343,36 @@ void main() {
 
     expect(find.text('Default quality'), findsOneWidget);
     expect(find.text('1080p'), findsOneWidget);
+  });
+
+  testWidgets('the default quality picker offers Auto with a neutral subtitle',
+      (tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('default-quality-row')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('quality-rung-Auto')), findsOneWidget);
+    expect(find.text('Adapts to your connection'), findsOneWidget);
+  });
+
+  testWidgets('picking Auto stores auto and picking Original stores original',
+      (tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('default-quality-row')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Auto'));
+    await tester.pumpAndSettle();
+
+    expect(_FakeSettingsController.qualityCalls, ['auto']);
+
+    await tester.tap(find.byKey(const Key('default-quality-row')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Original'));
+    await tester.pumpAndSettle();
+
+    expect(_FakeSettingsController.qualityCalls, ['auto', 'original']);
   });
 
   testWidgets('the skip toggle reports its change to the controller',
@@ -559,6 +602,32 @@ void main() {
       expect(find.byKey(const Key('remote-control-retry-row')), findsNothing);
       expect(find.text('Discoverable by your other devices'), findsOneWidget);
     });
+  });
+
+  testWidgets('forget playback problems clears the memory', (tester) async {
+    final memory = InMemoryPlaybackMemory();
+    await memory.recordFailure(
+      'https://mydia.example',
+      const FailureKey(videoCodec: 'hvc1.2.4.L120.B0', heightBucket: 2160),
+      FailureReason.decodeTooSlow,
+      now: DateTime.now(),
+    );
+
+    await _pump(tester, extraOverrides: [
+      playbackMemoryProvider.overrideWith((ref) async => memory),
+    ]);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('forget-playback-problems-row')),
+      200,
+    );
+    await tester.tap(find.byKey(const Key('forget-playback-problems-row')));
+    await tester.pumpAndSettle();
+
+    expect(memory.failuresFor('https://mydia.example', now: DateTime.now()),
+        isEmpty);
+    expect(find.text('Playback problems forgotten'), findsOneWidget);
   });
 
   testWidgets('hides the crash-reporting row when the reporter cannot send',

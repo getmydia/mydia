@@ -82,6 +82,12 @@ lists means the client never claimed it, which still leaves stream-copy on the
 table for a browser that judges codec strings itself. Breaking that distinction
 would silently force Safari to transcode HEVC.
 
+Since 2026-09 the player no longer reads the candidate list in
+`player_screen.dart`. `player/lib/core/playback/playback_planner.dart` holds
+the three rules and `player/docs/playback.md` explains them. The server's
+candidate shapes are unchanged; an old player against a new server behaves
+exactly as before.
+
 ## Four deadlines sit between "play" and the first segment
 
 Starting playback on a file that needs transcoding crosses four independent

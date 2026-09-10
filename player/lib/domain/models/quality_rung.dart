@@ -1,9 +1,9 @@
-/// One rung of the playback quality ladder.
+/// One rung of the playback quality ladder, or Auto, which lets the player
+/// choose.
 ///
 /// A rung is a deliberate viewer choice, not an adaptive-bitrate level: the
 /// server emits a single rendition per session, so switching rungs restarts
-/// the session at new encoder settings. See
-/// `docs/superpowers/specs/2026-08-04-player-quality-switcher-design.md`.
+/// the session at new encoder settings.
 class QualityRung {
   /// Shown in the picker and on the control's tooltip.
   final String label;
@@ -28,23 +28,33 @@ class QualityRung {
   /// cheapest option for the server.
   static const original = QualityRung(label: 'Original');
 
-  bool get isOriginal => height == null;
+  /// The player decides: direct play or copy when this device can, otherwise
+  /// the rung the connection supports. The default choice. It carries no caps
+  /// of its own; the planner picks them.
+  static const auto = QualityRung(label: 'Auto');
+
+  bool get isAuto => this == auto;
+
+  bool get isOriginal => height == null && !isAuto;
 
   /// Key used in secure storage.
   ///
-  /// Original persists as `auto` rather than `Original` because
-  /// `settings_service.dart` has defaulted `default_quality` to `auto` since
-  /// long before any of this was wired up. Reusing that key means an
-  /// existing install reads its stored value as Original instead of failing
-  /// to parse it.
-  String get storageKey => isOriginal ? 'auto' : label;
+  /// `auto` is Auto and `original` is Original. Before the Auto rung existed
+  /// Original persisted as `auto`, so an existing install now reads its
+  /// stored value as Auto, the new default. That break is deliberate.
+  String get storageKey => isAuto
+      ? 'auto'
+      : isOriginal
+          ? 'original'
+          : label;
 
   /// Parses a stored key, returning null if it is unrecognised.
   ///
-  /// Callers fall back to [original] rather than treating an unknown value
-  /// as fatal: it may have been written by a newer build.
+  /// Callers fall back to [auto] rather than treating an unknown value as
+  /// fatal: it may have been written by a newer build.
   static QualityRung? fromStorageKey(String key) {
-    if (key == 'auto') return original;
+    if (key == 'auto') return auto;
+    if (key == 'original') return original;
     for (final rung in _allRungs) {
       if (rung.label == key) return rung;
     }
@@ -90,6 +100,19 @@ List<QualityRung> deriveQualityLadder({int? sourceHeight}) {
     QualityRung.original,
     ..._allRungs.where((rung) => rung.height! < sourceHeight),
   ];
+}
+
+/// The ladder an adaptive session moves along for a source of
+/// [sourceHeight] pixels.
+///
+/// Unlike [deriveQualityLadder] this includes the rung equal to the source
+/// height, so a 1080p file adapting under transcode tops out at 1080p rather
+/// than 720p. A 2160p source has no 2160 rung and tops out at 1080p. A source
+/// below every rung, or of unknown height, yields an empty ladder, and the
+/// caller treats that as "cannot adapt".
+List<QualityRung> deriveAdaptiveLadder({int? sourceHeight}) {
+  if (sourceHeight == null || sourceHeight <= 0) return const [];
+  return _allRungs.where((rung) => rung.height! <= sourceHeight).toList();
 }
 
 /// Names what the server actually applied, for labelling the control.

@@ -6,17 +6,21 @@ import '../../domain/models/quality_rung.dart';
 /// Shows the playback quality picker and returns the chosen rung, or null if
 /// the viewer dismissed it.
 ///
-/// [ladder] comes from `deriveQualityLadder`, so it already excludes rungs
-/// that would upscale the source. [clampNote], when present, explains that
-/// the server is limiting the stream below what was chosen, which happens on
-/// a relay connection where the cap is not negotiable by the client.
+/// [rungs] is Auto followed by `deriveQualityLadder`'s ladder, which already
+/// excludes rungs that would upscale the source. [clampNote], when present,
+/// explains that the server is limiting the stream below what was chosen,
+/// which happens on a relay connection where the cap is not negotiable by
+/// the client.
 ///
-/// [originalSubtitle] is the delivery-mode line for the Original rung
-/// (Direct Play / lossless / re-encoding), computed by the caller.
+/// [autoSubtitle] is what Auto is doing or would do (see
+/// `autoDeliverySubtitle`). [originalSubtitle] is the delivery-mode line for
+/// the Original rung (Direct Play / lossless / re-encoding), computed by the
+/// caller.
 Future<QualityRung?> showQualityPicker(
   BuildContext context,
-  List<QualityRung> ladder,
+  List<QualityRung> rungs,
   QualityRung current, {
+  required String autoSubtitle,
   required String originalSubtitle,
   String? clampNote,
 }) {
@@ -43,8 +47,8 @@ Future<QualityRung?> showQualityPicker(
                   style: TextStyle(color: Colors.amber[300], fontSize: 12),
                 ),
               ),
-            for (final rung in ladder)
-              _rungTile(context, rung, current, originalSubtitle),
+            for (final rung in rungs)
+              _rungTile(context, rung, current, autoSubtitle, originalSubtitle),
           ],
         ),
       ),
@@ -62,12 +66,15 @@ Widget _rungTile(
   BuildContext context,
   QualityRung rung,
   QualityRung current,
+  String autoSubtitle,
   String originalSubtitle,
 ) {
   final isSelected = rung == current;
-  final subtitle = rung.isOriginal
-      ? originalSubtitle
-      : cappedRungDeliverySubtitle(rung.maxBitrateKbps);
+  final subtitle = rung.isAuto
+      ? autoSubtitle
+      : rung.isOriginal
+          ? originalSubtitle
+          : cappedRungDeliverySubtitle(rung.maxBitrateKbps);
   return ListTile(
     key: isSelected
         ? Key('quality-rung-selected-${rung.label}')
