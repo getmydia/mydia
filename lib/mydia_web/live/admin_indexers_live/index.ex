@@ -1137,13 +1137,13 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     )
   end
 
-  defp flash_flaresolverr_test(socket, {:error, :invalid_url}),
-    do:
-      put_flash(
-        socket,
-        :error,
-        "Not a valid FlareSolverr URL. Use the form http://flaresolverr:8191."
-      )
+  defp flash_flaresolverr_test(socket, {:error, :invalid_url}) do
+    put_flash(
+      socket,
+      :error,
+      "Not a valid FlareSolverr URL. Use the form http://flaresolverr:8191."
+    )
+  end
 
   defp flash_flaresolverr_test(socket, {:error, {:connection_error, reason}}) do
     put_flash(
