@@ -2,7 +2,9 @@ defmodule Mydia.Downloads.BlacklistsTest do
   use Mydia.DataCase, async: true
 
   alias Mydia.Downloads.Blacklists
+  alias Mydia.Downloads.Queue
   alias Mydia.Downloads.ReleaseBlacklist
+  alias Mydia.Indexers.SearchResult
   alias Mydia.Repo
 
   import Mydia.DownloadsFixtures
@@ -212,6 +214,89 @@ defmodule Mydia.Downloads.BlacklistsTest do
       future = DateTime.add(DateTime.utc_now(), 3600, :second)
       {:ok, _} = Blacklists.add("a", "1", "T", "x", expires_at: future)
       assert 0 == Blacklists.cleanup_expired()
+    end
+  end
+
+  describe "reject_blacklisted/2" do
+    defp search_result(attrs) do
+      struct!(
+        SearchResult,
+        Map.merge(
+          %{
+            title: "Stillwater Bay S03E04 1080p WEB H264-NTb",
+            size: 1_073_741_824,
+            seeders: 0,
+            leechers: 0,
+            download_url: "https://example.test/info/1",
+            indexer: "MagnetDownload"
+          },
+          attrs
+        )
+      )
+    end
+
+    # Blacklists what the grab path records, so the test pins the parity
+    # between the two sides rather than either side's hashing.
+    defp blacklist_as_grabbed(result) do
+      guid = Queue.build_download_metadata(result).guid
+      {:ok, _} = Blacklists.add(result.indexer, guid, result.title, "no_importable_files")
+    end
+
+    test "drops a result whose indexer-supplied guid is blacklisted" do
+      result = search_result(%{guid: "abc123"})
+      blacklist_as_grabbed(result)
+
+      assert [] = Blacklists.reject_blacklisted([result])
+    end
+
+    # Production loop: an indexer without guids re-served a rejected malware
+    # release, and every re-grab was rejected again until the auto-reject cap
+    # stopped rejecting and the payload downloaded.
+    test "drops a guid-less result blacklisted under the grab-time fallback guid" do
+      result = search_result(%{guid: nil})
+      blacklist_as_grabbed(result)
+
+      assert [] = Blacklists.reject_blacklisted([result])
+    end
+
+    test "drops a result with an empty-string guid blacklisted when grabbed" do
+      result = search_result(%{guid: ""})
+      blacklist_as_grabbed(result)
+
+      assert [] = Blacklists.reject_blacklisted([result])
+    end
+
+    test "keeps a guid-less result from a different release" do
+      blacklist_as_grabbed(search_result(%{guid: nil}))
+      other = search_result(%{guid: nil, title: "Stillwater Bay S03E05 1080p WEB H264-NTb"})
+
+      assert [^other] = Blacklists.reject_blacklisted([other])
+    end
+
+    test "keeps a result with no indexer" do
+      result = %{indexer: nil, guid: nil, title: "Stillwater Bay S03E04", size: 1}
+
+      assert [^result] = Blacklists.reject_blacklisted([result])
+    end
+  end
+
+  describe "release_guid/1" do
+    test "returns the indexer-supplied guid" do
+      assert "abc123" = Blacklists.release_guid(%{indexer: "nyaa", guid: "abc123"})
+    end
+
+    # Existing blacklist rows carry fallback guids written at grab time, so
+    # the format is a stored contract: changing it orphans every such row.
+    test "falls back to SHA-256 of indexer, title and size" do
+      result = %{
+        indexer: "MagnetDownload",
+        guid: nil,
+        title: "Stillwater Bay S03E04 1080p WEB H264-NTb",
+        size: 1_073_741_824
+      }
+
+      assert "sha256:c9283b621de8b5f024da89b600a87a5093c206a295d6bab9b107f8911068bf4e" =
+               Blacklists.release_guid(result)
     end
   end
 

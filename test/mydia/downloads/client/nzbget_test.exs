@@ -2,7 +2,7 @@ defmodule Mydia.Downloads.Client.NzbgetTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Downloads.Client.Nzbget
-  alias Mydia.Downloads.Structs.DownloadStatus
+  alias Mydia.Downloads.Structs.{ClientInfo, DownloadStatus}
 
   @config %{
     type: :nzbget,
@@ -213,6 +213,28 @@ defmodule Mydia.Downloads.Client.NzbgetTest do
       # Should fail with connection error, not path error
       {:error, error} = Nzbget.test_connection(timeout_config)
       assert error.type in [:connection_failed, :network_error, :timeout]
+    end
+
+    test "strips a trailing slash from url_base (#765)" do
+      bypass = Bypass.open()
+      config = %{@config | host: "localhost", port: bypass.port, url_base: "/nzbget/"}
+
+      Mydia.BypassHelpers.stub_exact_json(
+        bypass,
+        "POST",
+        "/nzbget/jsonrpc",
+        ~s({"result": "21.1"})
+      )
+
+      assert {:ok, %ClientInfo{version: "21.1"}} = Nzbget.test_connection(config)
+    end
+
+    test "treats a url_base of \"/\" as no base (#765)" do
+      bypass = Bypass.open()
+      config = %{@config | host: "localhost", port: bypass.port, url_base: "/"}
+      Mydia.BypassHelpers.stub_exact_json(bypass, "POST", "/jsonrpc", ~s({"result": "21.1"}))
+
+      assert {:ok, %ClientInfo{version: "21.1"}} = Nzbget.test_connection(config)
     end
   end
 

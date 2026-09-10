@@ -100,7 +100,7 @@ defmodule Mydia.Settings.IndexerConfig do
     end
   end
 
-  # Auto-prepend http:// if no scheme is provided
+  # Stores the same normalized URL that reads use, see normalize_url/1
   defp normalize_base_url(changeset) do
     case get_change(changeset, :base_url) do
       nil ->
@@ -117,24 +117,38 @@ defmodule Mydia.Settings.IndexerConfig do
     end
   end
 
-  defp normalize_url(url) when is_binary(url) do
-    trimmed = String.trim(url)
+  @doc """
+  Normalizes an indexer base URL from any source: the admin form, env vars,
+  YAML config, or a row saved before normalization existed.
 
-    case URI.parse(trimmed) do
+  Trims whitespace, prepends `http://` when the scheme is missing, and strips
+  trailing slashes. Adapters append paths such as `/api/v1/system/status`, so a
+  trailing slash would otherwise produce `//api/...` (#765).
+  """
+  @spec normalize_url(String.t()) :: String.t()
+  def normalize_url(url) when is_binary(url) do
+    url
+    |> String.trim()
+    |> ensure_scheme()
+    |> String.trim_trailing("/")
+  end
+
+  defp ensure_scheme(url) do
+    case URI.parse(url) do
       # URL with valid http/https scheme - keep as-is
       %URI{scheme: scheme} when scheme in ["http", "https"] ->
-        trimmed
+        url
 
       # URL with another scheme (ftp://, etc.) - keep as-is, let validation reject it
       %URI{scheme: scheme, host: host} when is_binary(scheme) and is_binary(host) ->
-        trimmed
+        url
 
       # If scheme is missing, prepend http://
       # URI.parse("192.168.1.1:9696") -> %URI{scheme: nil, path: "192.168.1.1:9696"}
       # URI.parse("localhost:9696") -> %URI{scheme: "localhost", host: nil, path: "9696"}
       # In both cases, we need to prepend http://
       _ ->
-        "http://#{trimmed}"
+        "http://#{url}"
     end
   end
 

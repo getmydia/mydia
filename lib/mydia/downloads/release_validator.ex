@@ -28,11 +28,13 @@ defmodule Mydia.Downloads.ReleaseValidator do
      - Example: `yenc movie title`
      - These are raw usenet posts, not proper releases
 
-  6. **Suspicious executable extensions** - Release name ends in an executable
-     extension (.exe, .scr, .bat, .cmd, .com, .msi, .vbs, .js, .jar, .pif)
+  6. **Suspicious executable or archive extensions** - Release name ends in an
+     executable extension (.exe, .scr, .bat, .cmd, .com, .msi, .vbs, .js, .jar,
+     .pif) or an archive extension (.zip, .zipx, .rar, .7z)
      - Example: `From.S04E05.1080p.WEB.h264-ETHEL.exe`
      - These are malware torrents disguised as 1080p video releases. A
-       legitimate video release never carries an executable extension.
+       legitimate video release never carries an executable extension, and
+       archives are how the same payload returns once the .exe is filtered.
 
   ## Usage
 
@@ -62,7 +64,7 @@ defmodule Mydia.Downloads.ReleaseValidator do
   - `:reversed_pattern` - Strange reversed naming
   - `:yenc_pattern` - Raw usenet binary encoding
   - `:no_meaningful_content` - No extractable title content
-  - `:suspicious_extension` - Release name ends in an executable extension
+  - `:suspicious_extension` - Release name ends in an executable or archive extension
   - `:no_title` - Release has a nil title (malformed result)
   """
   @spec validate_release(String.t() | nil) :: {:ok, String.t()} | {:error, atom()}
@@ -71,7 +73,10 @@ defmodule Mydia.Downloads.ReleaseValidator do
   def validate_release(name) when is_binary(name) do
     cond do
       suspicious_extension?(name) ->
-        Logger.warning("Rejecting release with suspicious executable extension: #{name}")
+        Logger.warning(
+          "Rejecting release with suspicious executable or archive extension: #{name}"
+        )
+
         {:error, :suspicious_extension}
 
       is_hashed_release?(name) ->
@@ -109,7 +114,15 @@ defmodule Mydia.Downloads.ReleaseValidator do
   # — a legitimate 1080p video release never has a .exe extension. These show
   # up periodically from public indexers using real-looking release-group
   # names (e.g. "ETHEL") to slip past automatic-grab filters.
-  @suspicious_extensions ~w(.exe .scr .bat .cmd .com .msi .vbs .js .jar .pif)
+  #
+  # The same payload also comes back wrapped in an archive once the .exe name
+  # is filtered: production grabbed a ".zipx" whose only entry was a 1.1 GB
+  # ".exe", from a search whose fourteen bare-.exe siblings this check had
+  # already dropped. Nothing in the import pipeline unpacks archives, so an
+  # archive release can never import, and rejecting one by name costs nothing.
+  @executable_extensions ~w(.exe .scr .bat .cmd .com .msi .vbs .js .jar .pif)
+  @archive_extensions ~w(.zip .zipx .rar .7z)
+  @suspicious_extensions @executable_extensions ++ @archive_extensions
 
   defp suspicious_extension?(name) do
     trimmed = String.trim(name)

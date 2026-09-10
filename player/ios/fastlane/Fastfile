@@ -29,11 +29,17 @@ platform :ios do
     # we can't skip waiting here. The first build of each new version goes
     # through Apple's Beta App Review; that is per version, not per group, so
     # routing a stable release to a second group does not trigger another one.
+    #
+    # notify_external_testers is what releases an approved build to external
+    # testers, and the email comes with it. Set to false, every build waits at
+    # "Approved" for a manual "Notify Testers" click in App Store Connect, and
+    # once the last released build expires the public links refuse new testers
+    # (#746). scripts/check-ios-fastlane-metadata.sh fails if this changes.
     upload_to_testflight(
       distribute_external: true,
       groups: testflight_groups,
       changelog: testflight_changelog,
-      notify_external_testers: false
+      notify_external_testers: true
     )
   end
 

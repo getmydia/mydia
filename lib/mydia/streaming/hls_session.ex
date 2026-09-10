@@ -36,6 +36,7 @@ defmodule Mydia.Streaming.HlsSession do
   alias Mydia.Streaming.HardwareAccel
   alias Mydia.Streaming.HardwareAccel.Capabilities
   alias Mydia.Streaming.SegmentPlan
+  alias Mydia.Streaming.StreamPlan
   alias Mydia.Streaming.TranscodeWindow
   alias Mydia.Repo
   alias Mydia.Downloads.TranscodeJob
@@ -70,6 +71,7 @@ defmodule Mydia.Streaming.HlsSession do
       :segment_plan,
       :backend_opts,
       :hwaccel_lease,
+      :plan,
       playlist_mode: :window,
       window: nil,
       segment_waiters: %{},
@@ -97,6 +99,7 @@ defmodule Mydia.Streaming.HlsSession do
             segment_plan: Mydia.Streaming.SegmentPlan.t() | nil,
             backend_opts: keyword(),
             hwaccel_lease: reference() | nil,
+            plan: StreamPlan.t() | nil,
             playlist_mode: :full | :window,
             window: Mydia.Streaming.TranscodeWindow.t() | nil,
             segment_waiters: %{non_neg_integer() => [GenServer.from()]},
@@ -423,7 +426,8 @@ defmodule Mydia.Streaming.HlsSession do
         # A :playback lease is claimed once for the whole session, not once
         # per FfmpegHlsTranscoder process -- see acquire_hwaccel_lease/0 for
         # why.
-        {capabilities, hwaccel_lease} = maybe_acquire_hwaccel_lease(media_file, max_bitrate)
+        {capabilities, hwaccel_lease} =
+          maybe_acquire_hwaccel_lease(media_file, max_bitrate, max_height)
 
         # The keyword list a relocation reuses verbatim (see relocate/2), so it
         # has to carry everything start_backend/6 needs beyond the offset and
@@ -436,13 +440,17 @@ defmodule Mydia.Streaming.HlsSession do
           max_height: max_height,
           start_position: start_position,
           start_number: first_index,
-          grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate),
+          grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate, max_height),
           absolute_timestamps: playlist_mode == :full,
           playlist_mode: playlist_mode,
           audio_language: playback.audio_language,
           show_audio_language: playback.show_audio_language,
           capabilities: capabilities
         ]
+
+        # Computed from the same opts the backend receives, so the plan and the
+        # arguments describe the same encode by construction.
+        plan = StreamPlan.for_hls(media_file, backend_opts)
 
         # Start FFmpeg backend
         case start_backend(:ffmpeg, media_file, temp_dir, job.id, backend_opts, 0) do
@@ -468,7 +476,8 @@ defmodule Mydia.Streaming.HlsSession do
               playlist_mode: playlist_mode,
               window: if(playlist_mode == :full, do: TranscodeWindow.new(first_index), else: nil),
               backend_opts: backend_opts,
-              hwaccel_lease: hwaccel_lease
+              hwaccel_lease: hwaccel_lease,
+              plan: plan
             }
 
             # Schedule initial timeout check
@@ -496,7 +505,7 @@ defmodule Mydia.Streaming.HlsSession do
 
   # Decides whether this session is worth leasing a hardware slot for at all.
   # Only a re-encoding session ever reaches the hardware encoder --
-  # reencodes_video?/2 is the exact same decision build_ffmpeg_args/3 makes
+  # reencodes_video?/3 is the exact same decision build_ffmpeg_args/3 makes
   # between "copy" and "libx264"/"h264_vaapi" -- so a stream-copy session
   # leasing a slot it will never use would only starve a session that does.
   #
@@ -504,10 +513,13 @@ defmodule Mydia.Streaming.HlsSession do
   # plain MediaFile struct, without a live HardwareAccel process, a DB row, or
   # a real init/1; nothing outside this module should call it.
   @doc false
-  @spec maybe_acquire_hwaccel_lease(Mydia.Library.MediaFile.t() | nil, integer() | nil) ::
-          {Capabilities.t() | nil, reference() | nil}
-  def maybe_acquire_hwaccel_lease(media_file, max_bitrate) do
-    if FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate) do
+  @spec maybe_acquire_hwaccel_lease(
+          Mydia.Library.MediaFile.t() | nil,
+          integer() | nil,
+          integer() | nil
+        ) :: {Capabilities.t() | nil, reference() | nil}
+  def maybe_acquire_hwaccel_lease(media_file, max_bitrate, max_height) do
+    if FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate, max_height) do
       acquire_hwaccel_lease()
     else
       {nil, nil}
@@ -570,10 +582,15 @@ defmodule Mydia.Streaming.HlsSession do
   # job row, a real media file), which is unrelated to whether the decision
   # itself is right. Nothing outside this module should call it.
   @doc false
-  @spec grid_aligned?(:full | :window, Mydia.Library.MediaFile.t() | nil, integer() | nil) ::
-          boolean()
-  def grid_aligned?(playlist_mode, media_file, max_bitrate) do
-    playlist_mode == :full and FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate)
+  @spec grid_aligned?(
+          :full | :window,
+          Mydia.Library.MediaFile.t() | nil,
+          integer() | nil,
+          integer() | nil
+        ) :: boolean()
+  def grid_aligned?(playlist_mode, media_file, max_bitrate, max_height) do
+    playlist_mode == :full and
+      FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate, max_height)
   end
 
   @doc """
@@ -601,13 +618,25 @@ defmodule Mydia.Streaming.HlsSession do
       |> Keyword.put(:capabilities, software)
       |> Keyword.put(:start_number, target)
 
+    plan = StreamPlan.for_hls(state.media_file, backend_opts)
+
+    # The dashboard reloads Now Playing on this. Without it a card keeps
+    # advertising VAAPI after the encoder dropped to software, which is a
+    # smaller copy of the bug this whole change exists to fix.
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      "hls_sessions",
+      {:session_updated, state.session_id}
+    )
+
     {:retry,
      %{
        state
        | accel: :none,
          accel_fallbacks: state.accel_fallbacks + 1,
          backend_opts: backend_opts,
-         hwaccel_lease: nil
+         hwaccel_lease: nil,
+         plan: plan
      }}
   end
 
@@ -633,7 +662,8 @@ defmodule Mydia.Streaming.HlsSession do
       last_activity: state.last_activity,
       backend_alive?: is_pid(state.backend_pid) and Process.alive?(state.backend_pid),
       playlist_mode: state.playlist_mode,
-      duration: state.segment_plan && state.segment_plan.duration
+      duration: state.segment_plan && state.segment_plan.duration,
+      plan: state.plan
     }
 
     {:reply, {:ok, info}, state}
@@ -1029,7 +1059,20 @@ defmodule Mydia.Streaming.HlsSession do
     # Capture self() to notify when FFmpeg is ready
     session_pid = self()
 
-    # Build transcoder opts, including max_bitrate and max_height if set
+    # Build transcoder opts, including max_bitrate and max_height if set.
+    #
+    # This whitelist is why HlsSession.State.plan (built from `opts`, i.e.
+    # backend_opts) and FfmpegHlsTranscoder's own plan (built from
+    # `transcoder_opts`, i.e. this filtered base_opts ++ the callbacks below)
+    # agree today: StreamPlan.for_hls/2 also reads :video_codec, :crf and
+    # :preset, none of which backend_opts currently sets, so both builds see
+    # the same defaults for every key actually populated. That agreement is
+    # by construction only for the keys listed here -- it is NOT "the two
+    # calls share one keyword list". Adding a plan-relevant key (:video_codec,
+    # :crf, :preset, or any future StreamPlan input) to backend_opts without
+    # also forwarding it through this filter will desynchronise the two
+    # plans silently: the dashboard (reading HlsSession.State.plan) would
+    # describe an encode the transcoder never actually runs.
     base_opts =
       [
         input_path: absolute_path,

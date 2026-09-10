@@ -44,14 +44,18 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
 
   require Logger
 
-  alias Mydia.Library.Structs.StreamInfo
   alias Mydia.Streaming.AudioTrackSelector
-  alias Mydia.Streaming.Compatibility
   alias Mydia.Streaming.DeviceProfile
+  alias Mydia.Streaming.StreamPlan
 
   # Matches FfmpegHlsTranscoder's budget, so a stream that has to be encoded
   # on either path lands at the same bitrate.
   @audio_bitrate_kbps 128
+
+  # How often a still-running remux reports activity to its tracking session.
+  # The session's inactivity timeout is ten minutes, so this has a wide margin
+  # while staying far below one cast per 64KB chunk.
+  @activity_interval_ms 30_000
 
   @type remux_opts :: [
           seek_seconds: number() | nil,
@@ -103,6 +107,15 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
     start_ffmpeg_process(args)
   end
 
+  @doc false
+  # Public only so the throttle can be unit-tested without a live FFmpeg port.
+  @spec throttle_activity(integer() | nil, integer()) :: {boolean(), integer()}
+  def throttle_activity(nil, now), do: {true, now}
+
+  def throttle_activity(last, now) when now - last >= @activity_interval_ms, do: {true, now}
+
+  def throttle_activity(last, _now), do: {false, last}
+
   @doc """
   Streams FFmpeg output to a Plug connection using chunked transfer encoding.
 
@@ -120,6 +133,7 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   @spec stream_to_conn(Plug.Conn.t(), port(), integer(), Keyword.t()) :: Plug.Conn.t()
   def stream_to_conn(conn, port, os_pid, opts \\ []) do
     chunk_size = Keyword.get(opts, :chunk_size, 64 * 1024)
+    on_activity = Keyword.get(opts, :on_activity)
 
     # Set up chunked transfer encoding with video/mp4 content type
     conn =
@@ -129,7 +143,7 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
       |> Plug.Conn.send_chunked(200)
 
     # Stream data from FFmpeg to the connection
-    stream_loop(conn, port, os_pid, chunk_size)
+    stream_loop(conn, port, os_pid, chunk_size, on_activity, nil)
   end
 
   @doc """
@@ -179,34 +193,32 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
 
     input_args = ["-i", input_path]
 
+    # The plan is the single record of what ffmpeg will do to a stream. Video
+    # is always copied: it is the expensive stream and the REMUX strategy was
+    # offered precisely because the client can decode it. Audio is copied
+    # only when the *mapped* stream (not media_file.audio_codec, the first
+    # stream, that chose the strategy) is one the caller's device profile
+    # accepts.
+    media_file = Keyword.get(opts, :media_file)
+    plan = StreamPlan.for_remux(media_file, opts)
+
     # Which audio stream survives the remux. `-c copy` copies the codec, not
     # every stream: without an explicit -map ffmpeg still reduces to one
     # stream per type and picks the audio track with the most channels, so a
     # dual-language file silently loses its original-language track here just
     # as it does on the transcode path.
-    selected_audio =
-      opts
-      |> Keyword.get(:media_file)
-      |> AudioTrackSelector.select_for_playback(opts)
+    map_args = AudioTrackSelector.ffmpeg_map_args(plan.selected_audio)
 
-    map_args = AudioTrackSelector.ffmpeg_map_args(selected_audio)
+    codec_args =
+      if plan.audio.action == :copy do
+        ["-c", "copy"]
+      else
+        Logger.info(
+          "Remux: mapped audio stream is #{plan.audio.from_codec}, encoding to AAC for playability"
+        )
 
-    # Video is always copied: it is the expensive stream and the REMUX
-    # strategy was offered precisely because the client can decode it.
-    #
-    # Audio is copied only when the *mapped* stream is one the client can
-    # decode. The strategy was chosen from `media_file.audio_codec`, which
-    # describes the first audio stream; when language selection maps a
-    # different one, a blanket `-c copy` would put e.g. AC3 into the fMP4
-    # while the advertised MIME still said `mp4a.40.2`. Encoding that one
-    # stream to AAC keeps the promise the candidate made, and still avoids
-    # touching the video.
-    #
-    # The decision is made against the caller's device profile, not the
-    # hardcoded browser table: a client that declared it can decode e.g. AC3
-    # should get the stream copy REMUX implies, not a silent downmix to
-    # stereo AAC.
-    codec_args = remux_codec_args(selected_audio, Keyword.get(opts, :device_profile))
+        ["-c:v", "copy", "-c:a", "aac", "-b:a", "#{@audio_bitrate_kbps}k", "-ac", "2"]
+      end
 
     # Duration args - tell FFmpeg the total duration so it writes correct metadata
     # This prevents the browser from showing progressively increasing duration
@@ -240,27 +252,6 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
     ]
 
     seek_args ++ input_args ++ map_args ++ codec_args ++ duration_args ++ output_args
-  end
-
-  # No stream was selected, so no -map was emitted and ffmpeg's implicit
-  # selection stands. That is the pre-existing behaviour for an unanalysed
-  # file, and the codec the strategy was chosen from is the one it will pick.
-  defp remux_codec_args(nil, _device_profile), do: ["-c", "copy"]
-
-  defp remux_codec_args(%StreamInfo{codec: codec}, device_profile) do
-    compatible? =
-      case device_profile do
-        nil -> Compatibility.compatible_audio_codec?(codec)
-        %DeviceProfile{} = profile -> Compatibility.compatible_audio_codec?(codec, profile)
-      end
-
-    if compatible? do
-      ["-c", "copy"]
-    else
-      Logger.info("Remux: mapped audio stream is #{codec}, encoding to AAC for playability")
-
-      ["-c:v", "copy", "-c:a", "aac", "-b:a", "#{@audio_bitrate_kbps}k", "-ac", "2"]
-    end
   end
 
   # Start FFmpeg process using Port
@@ -301,13 +292,18 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   end
 
   # Stream data from FFmpeg port to connection
-  defp stream_loop(conn, port, os_pid, chunk_size) do
+  defp stream_loop(conn, port, os_pid, chunk_size, on_activity, last_activity) do
     receive do
       {^port, {:data, data}} ->
+        {fire?, last_activity} =
+          throttle_activity(last_activity, System.monotonic_time(:millisecond))
+
+        if fire? and is_function(on_activity, 0), do: on_activity.()
+
         # Send chunk to client
         case Plug.Conn.chunk(conn, data) do
           {:ok, conn} ->
-            stream_loop(conn, port, os_pid, chunk_size)
+            stream_loop(conn, port, os_pid, chunk_size, on_activity, last_activity)
 
           {:error, :closed} ->
             # Client disconnected

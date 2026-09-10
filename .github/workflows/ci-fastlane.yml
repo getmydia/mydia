@@ -6,6 +6,7 @@ name: CI / Fastlane
 # Master ruleset, so both have to report on every pull request.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: "ci-fastlane-${{ github.ref }}"

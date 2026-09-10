@@ -6,6 +6,10 @@
 # plain-Ruby file to be testable here. ci-fastlane.yml separately proves the
 # Fastfile still parses and that the file is reachable via require_relative;
 # this proves the logic inside it.
+#
+# It also reads the Fastfile as text to pin one setting whose failure is
+# silent: notify_external_testers must stay true. The comment on it there says
+# why.
 set -euo pipefail
 export LC_ALL=C.UTF-8
 
@@ -62,6 +66,15 @@ real.write("\nWhat changed.\n\n")
 real.flush
 ENV["TESTFLIGHT_CHANGELOG_PATH"] = real.path
 check.call("real notes are read and stripped", testflight_changelog, "What changed.")
+
+# The Fastfile only loads under fastlane, so this reads it as text, skipping
+# comments. notify_external_testers is what releases an approved build to
+# external testers. While it was false every build waited at "Approved", and the
+# public links closed once the last released build expired (#746).
+fastfile = File.read(File.join(File.dirname(File.expand_path(ARGV[0])), "Fastfile"))
+code = fastfile.lines.reject { |l| l.lstrip.start_with?("#") }.join
+check.call("the Fastfile notifies external testers",
+           code.scan(/notify_external_testers:\s*(\w+)/).flatten, ["true"])
 
 if failures.empty?
   puts "ios fastlane metadata: all cases pass"

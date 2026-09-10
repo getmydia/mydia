@@ -195,6 +195,28 @@ defmodule Mydia.Downloads.ReleaseValidatorTest do
       end
     end
 
+    # Malware that the .exe filter already stops comes back wrapped in an
+    # archive: this name held a single .exe inside a .zipx. Mydia imports
+    # video files only, so an archive release cannot import either way.
+    test "rejects archive-wrapped release disguised as TV episode" do
+      name = "Stillwater Bay S03E04 1080p ATVP WEB-DL DDP5 1 Atmos.zipx"
+
+      assert {:error, :suspicious_extension} = ReleaseValidator.validate_release(name)
+    end
+
+    test "rejects other archive extensions" do
+      for ext <- ~w(.zip .zipx .rar .7z .ZIPX) do
+        name = "Movie.Title.2020.1080p.BluRay.x264#{ext}"
+        assert {:error, :suspicious_extension} = ReleaseValidator.validate_release(name)
+      end
+    end
+
+    test "rejects archive extension hidden behind a trailing site tag" do
+      name = "Stillwater Bay S03E04 1080p WEB H264-NTb.zipx[EZTVx.to]"
+
+      assert {:error, :suspicious_extension} = ReleaseValidator.validate_release(name)
+    end
+
     test "accepts release without an extension" do
       name = "From.S04E05.1080p.WEB.h264-ETHEL"
 

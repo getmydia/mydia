@@ -1244,7 +1244,7 @@ defmodule Mydia.Downloads.Queue do
     |> DownloadMetadata.new()
     |> DownloadMetadata.to_map()
     |> Map.put(:indexer, search_result.indexer)
-    |> Map.put(:guid, search_result.guid || fallback_release_guid(search_result))
+    |> Map.put(:guid, Blacklists.release_guid(search_result))
   end
 
   defp create_download_record(search_result, client_config, client_id, opts) do
@@ -1263,18 +1263,6 @@ defmodule Mydia.Downloads.Queue do
     }
 
     History.create_download(attrs)
-  end
-
-  # Synthesizes a stable fallback identifier when the indexer didn't provide
-  # a `guid`. SHA-256 of `(indexer, title, size)` is deterministic across
-  # processes so the same release hashes to the same key — good enough for
-  # blacklist dedup.
-  defp fallback_release_guid(%SearchResult{} = sr) do
-    parts = [sr.indexer || "", sr.title || "", to_string(sr.size || 0)]
-    payload = Enum.join(parts, "|")
-
-    "sha256:" <>
-      (:crypto.hash(:sha256, payload) |> Base.encode16(case: :lower))
   end
 
   defp create_download_record_with_retry(search_result, client_config, client_id, opts) do

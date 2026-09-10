@@ -6,9 +6,11 @@ import '../../window/window_fullscreen.dart';
 import '../platform_features.dart';
 import 'fullscreen_backend.dart';
 import 'fullscreen_mode.dart';
+import 'fullscreen_report.dart';
 
 FullscreenBackend createFullscreenBackend({
   required ValueChanged<bool> onChange,
+  required FullscreenFailureSink onFailure,
 }) =>
     NativeFullscreenBackend(onChange: onChange);
 
@@ -22,15 +24,31 @@ FullscreenBackend createFullscreenBackend({
 /// button, the View menu and Cmd+Ctrl+F are all reflected — the exact reason
 /// `WindowFullscreenController` was written. That controller stays the only
 /// writer of the signal; this only listens.
+///
+/// It takes no `onFailure`: neither `defaultEnterNativeFullscreen` nor
+/// `defaultExitNativeFullscreen` reports one, so inventing failures here would
+/// be the same guessing the web backend was fixed to stop doing.
 class NativeFullscreenBackend implements FullscreenBackend {
   NativeFullscreenBackend({required this.onChange});
 
   final ValueChanged<bool> onChange;
 
+  /// Both native routes exist unconditionally, so this never moves. It is a
+  /// notifier rather than a constant only because the interface is shaped for
+  /// web, where readiness genuinely changes.
+  final ValueNotifier<bool> _ready = ValueNotifier<bool>(true);
+
+  @override
+  ValueListenable<bool> get ready => _ready;
+
   @override
   FullscreenMode get mode => PlatformFeatures.isDesktop
       ? FullscreenMode.osWindow
       : FullscreenMode.systemUi;
+
+  @override
+  FullscreenReport get report =>
+      FullscreenReport(mode: mode, ready: _ready.value);
 
   bool _listening = false;
 
@@ -65,5 +83,6 @@ class NativeFullscreenBackend implements FullscreenBackend {
       windowFullscreen.removeListener(_republish);
       _listening = false;
     }
+    _ready.dispose();
   }
 }

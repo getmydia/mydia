@@ -15,6 +15,8 @@ defmodule Mydia.Streaming.DirectPlaySession do
   alias Mydia.Repo
   alias Mydia.Downloads.TranscodeJob
 
+  @registry_name Mydia.Streaming.HlsSessionRegistry
+
   # Default timeout is 10 minutes
   @session_timeout Application.compile_env(
                      :mydia,
@@ -29,6 +31,8 @@ defmodule Mydia.Streaming.DirectPlaySession do
       :media_file_id,
       :user_id,
       :mode,
+      :kind,
+      :plan,
       :last_activity,
       :timeout_ref,
       :db_job_id
@@ -68,6 +72,22 @@ defmodule Mydia.Streaming.DirectPlaySession do
     GenServer.stop(pid, :normal)
   end
 
+  @doc """
+  Replaces this session's stream plan.
+
+  A remux tracker is reused across requests: a browser seek aborts the response
+  and immediately opens another, and `start_remux_session/3` hands back the
+  running session rather than starting a second one. A later request can
+  resolve a different audio track, and therefore a different plan, so the plan
+  the session was started with goes stale. Leaving it stale is the exact
+  failure this feature exists to remove — the dashboard describing an encode
+  that is not the one running.
+  """
+  @spec update_plan(pid(), Mydia.Streaming.StreamPlan.t()) :: :ok
+  def update_plan(pid, plan) do
+    GenServer.call(pid, {:update_plan, plan})
+  end
+
   ## Server Callbacks
 
   @impl true
@@ -75,8 +95,10 @@ defmodule Mydia.Streaming.DirectPlaySession do
     media_file_id = Keyword.fetch!(opts, :media_file_id)
     user_id = Keyword.fetch!(opts, :user_id)
     started_at = Keyword.get(opts, :started_at, DateTime.utc_now())
+    kind = Keyword.get(opts, :kind, :direct)
+    plan = Keyword.get(opts, :plan)
 
-    Logger.info("Starting Direct Play session for file #{media_file_id}, user #{user_id}")
+    Logger.info("Starting #{kind} playback session for file #{media_file_id}, user #{user_id}")
 
     # Note: Registration in HlsSessionRegistry is handled by the :via tuple in start_link
     # passed from HlsSessionSupervisor.start_direct_session/2.
@@ -88,7 +110,7 @@ defmodule Mydia.Streaming.DirectPlaySession do
       |> TranscodeJob.changeset(%{
         media_file_id: media_file_id,
         user_id: user_id,
-        type: "direct",
+        type: to_string(kind),
         status: "playing",
         resolution: "original",
         progress: 0.0,
@@ -107,7 +129,9 @@ defmodule Mydia.Streaming.DirectPlaySession do
       session_id: session_id,
       media_file_id: media_file_id,
       user_id: user_id,
-      mode: :direct,
+      mode: kind,
+      kind: kind,
+      plan: plan,
       db_job_id: job.id,
       last_activity: DateTime.utc_now()
     }
@@ -127,6 +151,8 @@ defmodule Mydia.Streaming.DirectPlaySession do
       session_id: state.session_id,
       media_file_id: state.media_file_id,
       mode: state.mode,
+      kind: state.kind,
+      plan: state.plan,
       last_activity: state.last_activity,
       # Flags for compatibility with HLS interface
       ready: true,
@@ -134,6 +160,21 @@ defmodule Mydia.Streaming.DirectPlaySession do
     }
 
     {:reply, {:ok, info}, state}
+  end
+
+  def handle_call({:update_plan, plan}, _from, state) do
+    # Both copies, deliberately. `Streaming.list_active_sessions/0` reads the
+    # live process when it can and falls back to the Registry metadata when
+    # that call races a shutdown, so a plan refreshed in only one place still
+    # leaves a path that reports the stale one.
+    #
+    # `Registry.update_value/3` may only be called by the key's owner. That is
+    # this process: the `:via` tuple in the child spec registered the key from
+    # inside `start_link`, so the call has to happen here rather than in the
+    # supervisor that asked for the refresh.
+    Registry.update_value(@registry_name, registry_key(state), &Map.put(&1, :plan, plan))
+
+    {:reply, :ok, %{state | plan: plan}}
   end
 
   @impl true
@@ -186,6 +227,13 @@ defmodule Mydia.Streaming.DirectPlaySession do
   end
 
   ## Helpers
+
+  # Mirrors the keys HlsSessionSupervisor registers these sessions under.
+  defp registry_key(%State{kind: :remux, media_file_id: id, user_id: user_id}),
+    do: {:remux_session, id, user_id}
+
+  defp registry_key(%State{media_file_id: id, user_id: user_id}),
+    do: {:direct_session, id, user_id}
 
   defp update_activity(state) do
     if state.timeout_ref, do: Process.cancel_timer(state.timeout_ref)

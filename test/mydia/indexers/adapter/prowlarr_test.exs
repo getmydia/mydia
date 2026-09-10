@@ -72,6 +72,24 @@ defmodule Mydia.Indexers.Adapter.ProwlarrTest do
     end
   end
 
+  describe "test_connection/1 against a page that isn't the Prowlarr API (#765)" do
+    test "returns an error for a 200 HTML page" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(
+        bypass,
+        "GET",
+        "/api/v1/system/status",
+        &Mydia.IndexerMock.prowlarr_web_ui/1
+      )
+
+      assert {:error, %Error{type: :connection_failed, message: message}} =
+               Prowlarr.test_connection(build_config(bypass))
+
+      assert message =~ "Unexpected response"
+    end
+  end
+
   describe "search/3" do
     @tag :skip
     test "successfully searches Prowlarr" do

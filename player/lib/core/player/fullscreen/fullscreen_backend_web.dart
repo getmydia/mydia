@@ -10,12 +10,17 @@ import 'package:media_kit/media_kit.dart';
 import 'package:web/web.dart' as web;
 
 import 'fullscreen_backend.dart';
+import 'fullscreen_failure.dart';
 import 'fullscreen_mode.dart';
+import 'fullscreen_report.dart';
+import 'fullscreen_web_core.dart';
+import 'fullscreen_web_platform.dart';
 
 FullscreenBackend createFullscreenBackend({
   required ValueChanged<bool> onChange,
+  required FullscreenFailureSink onFailure,
 }) =>
-    WebFullscreenBackend(onChange: onChange);
+    WebFullscreenBackend(onChange: onChange, onFailure: onFailure);
 
 /// Browser fullscreen, over whichever route the browser actually offers.
 ///
@@ -23,37 +28,69 @@ FullscreenBackend createFullscreenBackend({
 /// `defaultEnterNativeFullscreen` catches every failure to `debugPrint` and
 /// returns, leaving the caller believing it worked, which is exactly how the
 /// icon came to lie on iPhone Safari.
-class WebFullscreenBackend implements FullscreenBackend {
-  WebFullscreenBackend({required this.onChange}) {
-    _mode = resolveWebMode(
-      documentFullscreenEnabled: _documentFullscreenEnabled,
-      videoElementFullscreenSupported: _videoElementFullscreenSupported,
+///
+/// Every decision lives in [WebFullscreenCore]; this class is the
+/// [WebFullscreenPlatform] half, and holds nothing but the `package:web` calls
+/// and the element handles they need. The split is what makes any of it
+/// testable: this file compiles only under `dart.library.js_interop`, so
+/// `flutter test`, which always runs non-web, can never reach it.
+class WebFullscreenBackend implements FullscreenBackend, WebFullscreenPlatform {
+  WebFullscreenBackend({
+    required ValueChanged<bool> onChange,
+    required FullscreenFailureSink onFailure,
+  }) {
+    _core = WebFullscreenCore(
+      platform: this,
+      onChange: onChange,
+      onFailure: onFailure,
     );
-    if (_mode == FullscreenMode.documentElement) {
-      _documentListener = _onDocumentFullscreenChange.toJS;
-      web.document.addEventListener('fullscreenchange', _documentListener);
-    }
   }
 
-  final ValueChanged<bool> onChange;
+  late final WebFullscreenCore _core;
 
-  late final FullscreenMode _mode;
   JSFunction? _documentListener;
   web.HTMLVideoElement? _video;
   JSFunction? _beginListener;
   JSFunction? _endListener;
+  final List<FullscreenFailure> _probeFailures = <FullscreenFailure>[];
+
+  // --- FullscreenBackend ---------------------------------------------------
 
   @override
-  FullscreenMode get mode => _mode;
+  FullscreenMode get mode => _core.mode;
+
+  @override
+  ValueListenable<bool> get ready => _core.ready;
+
+  @override
+  FullscreenReport get report => _core.report;
+
+  @override
+  void attach(Player player) => _core.attach(player);
+
+  @override
+  void enter() => _core.enter();
+
+  @override
+  void exit() => _core.exit();
+
+  @override
+  void dispose() => _core.dispose();
+
+  // --- WebFullscreenPlatform: capability probes ----------------------------
 
   /// `document.fullscreenEnabled`, not a probe for `requestFullscreen`. It is
   /// also false inside an iframe lacking `allow="fullscreen"`, so one read
   /// covers both cases that must fall back.
-  static bool get _documentFullscreenEnabled {
+  @override
+  bool get documentFullscreenEnabled {
     try {
       return web.document.fullscreenEnabled;
     } catch (e) {
-      debugPrint('[Fullscreen] fullscreenEnabled read failed: $e');
+      _probeFailures.add(FullscreenFailure(
+        FullscreenFailureCause.documentEnabledProbeFailed,
+        detail: '$e',
+      ));
       return false;
     }
   }
@@ -61,7 +98,8 @@ class WebFullscreenBackend implements FullscreenBackend {
   /// Probed on the prototype, never on a live element:
   /// `video.webkitSupportsFullscreen` stays false until metadata loads, and
   /// the button has to decide whether to exist before then.
-  static bool get _videoElementFullscreenSupported {
+  @override
+  bool get videoElementFullscreenSupported {
     try {
       final ctor = globalContext['HTMLVideoElement'];
       if (ctor.isUndefinedOrNull) return false;
@@ -69,13 +107,146 @@ class WebFullscreenBackend implements FullscreenBackend {
       if (proto.isUndefinedOrNull) return false;
       return (proto as JSObject).has('webkitEnterFullscreen');
     } catch (e) {
-      debugPrint('[Fullscreen] video prototype probe failed: $e');
+      _probeFailures.add(FullscreenFailure(
+        FullscreenFailureCause.videoSupportProbeFailed,
+        detail: '$e',
+      ));
       return false;
     }
   }
 
-  void _onDocumentFullscreenChange(web.Event _) {
-    onChange(web.document.fullscreenElement != null);
+  @override
+  List<FullscreenFailure> get probeFailures => _probeFailures;
+
+  // --- WebFullscreenPlatform: the document route ---------------------------
+
+  @override
+  void listenDocumentFullscreen(void Function(bool fullscreen) onChange) {
+    if (_documentListener != null) return;
+    _documentListener = ((web.Event _) {
+      onChange(web.document.fullscreenElement != null);
+    }).toJS;
+    web.document.addEventListener('fullscreenchange', _documentListener!);
+  }
+
+  @override
+  void stopListeningDocumentFullscreen() {
+    final listener = _documentListener;
+    if (listener == null) return;
+    web.document.removeEventListener('fullscreenchange', listener);
+    _documentListener = null;
+  }
+
+  @override
+  void requestDocumentFullscreen(void Function(Object error) onRejected) {
+    final element = web.document.documentElement;
+    if (element == null) {
+      onRejected('document.documentElement is null');
+      return;
+    }
+    element.requestFullscreen().toDart.catchError((Object e) {
+      debugPrint('[Fullscreen] requestFullscreen rejected: $e');
+      onRejected(e);
+      return null;
+    });
+  }
+
+  @override
+  void exitDocumentFullscreen(void Function(Object error) onRejected) {
+    if (web.document.fullscreenElement == null) return;
+    web.document.exitFullscreen().toDart.catchError((Object e) {
+      debugPrint('[Fullscreen] exitFullscreen rejected: $e');
+      onRejected(e);
+      return null;
+    });
+  }
+
+  // --- WebFullscreenPlatform: the media element route ----------------------
+
+  @override
+  FullscreenFailureCause? bindVideo(
+    Object player, {
+    required void Function(bool fullscreen) onChange,
+  }) {
+    unbindVideo();
+
+    if (player is! Player) return FullscreenFailureCause.playerNotWebPlayer;
+
+    // media_kit exports its web player publicly:
+    // `package:media_kit/media_kit.dart` re-exports
+    // `src/player/web/player/player.dart`, itself
+    // `export 'stub.dart' if (dart.library.js_interop) 'real.dart';`. On a web
+    // build that resolves to `WebPlayer`, whose `element` field is public. This
+    // file only compiles on web, so the cast is safe and needs no `src/`
+    // import, no `$com.alexmercerind.media_kit.instances` global, and no
+    // `querySelector` guessing.
+    final platform = player.platform;
+    if (platform is! WebPlayer) {
+      debugPrint('[Fullscreen] player.platform is not a WebPlayer');
+      return FullscreenFailureCause.playerNotWebPlayer;
+    }
+    // `WebPlayer.element` exists on media_kit's web `real.dart`, which
+    // `flutter build web` resolves. `dart analyze` / `flutter analyze` resolve
+    // the same conditional export to `stub.dart`, which has no `element`, so
+    // a static read fails analysis even though the web compiler accepts it.
+    // Same runtime API the plan specifies; dynamic only bridges the stub gap.
+    final video = (platform as dynamic).element as web.HTMLVideoElement?;
+    if (video == null) return FullscreenFailureCause.noVideoElement;
+    _video = video;
+
+    _beginListener = ((web.Event _) {
+      // Apple renders only the video element, so hand the browser the cues
+      // media_kit normally keeps hidden and paints through Flutter.
+      _setTextTrackMode('showing');
+      onChange(true);
+    }).toJS;
+    _endListener = ((web.Event _) {
+      _setTextTrackMode('hidden');
+      onChange(false);
+    }).toJS;
+
+    video.addEventListener('webkitbeginfullscreen', _beginListener!);
+    video.addEventListener('webkitendfullscreen', _endListener!);
+    return null;
+  }
+
+  /// Releases the bound element.
+  ///
+  /// The player screen mounts repeatedly across SPA navigations and builds a
+  /// fresh `Player` on every source load, so leaked listeners would accumulate
+  /// on elements nobody is playing any more.
+  @override
+  void unbindVideo() {
+    final video = _video;
+    if (video != null) {
+      final begin = _beginListener;
+      final end = _endListener;
+      if (begin != null) {
+        video.removeEventListener('webkitbeginfullscreen', begin);
+      }
+      if (end != null) {
+        video.removeEventListener('webkitendfullscreen', end);
+      }
+    }
+    _beginListener = null;
+    _endListener = null;
+    _video = null;
+  }
+
+  @override
+  void enterVideoFullscreen() {
+    final video = _video;
+    if (video == null) throw StateError('no video element attached');
+    // Called synchronously on the tap frame. `webkitEnterFullscreen` requires
+    // live user activation and any await above would spend it.
+    (video as JSObject).callMethod('webkitEnterFullscreen'.toJS);
+  }
+
+  @override
+  void exitVideoFullscreen() {
+    final video = _video;
+    if (video == null) return;
+    (video as JSObject).callMethod('webkitExitFullscreen'.toJS);
   }
 
   /// Flips media_kit's subtitle `<track>` between browser-rendered and
@@ -105,125 +276,5 @@ class WebFullscreenBackend implements FullscreenBackend {
     } catch (e) {
       debugPrint('[Fullscreen] text track mode $mode failed: $e');
     }
-  }
-
-  @override
-  void attach(Player player) {
-    if (_mode != FullscreenMode.nativeVideoElement || _video != null) return;
-
-    // media_kit exports its web player publicly:
-    // `package:media_kit/media_kit.dart` re-exports
-    // `src/player/web/player/player.dart`, itself
-    // `export 'stub.dart' if (dart.library.js_interop) 'real.dart';`. On a web
-    // build that resolves to `WebPlayer`, whose `element` field is public. This
-    // file only compiles on web, so the cast is safe and needs no `src/`
-    // import, no `$com.alexmercerind.media_kit.instances` global, and no
-    // `querySelector` guessing.
-    final platform = player.platform;
-    if (platform is! WebPlayer) {
-      debugPrint('[Fullscreen] player.platform is not a WebPlayer');
-      return;
-    }
-    // `WebPlayer.element` exists on media_kit's web `real.dart`, which
-    // `flutter build web` resolves. `dart analyze` / `flutter analyze` resolve
-    // the same conditional export to `stub.dart`, which has no `element`, so
-    // a static read fails analysis even though the web compiler accepts it.
-    // Same runtime API the plan specifies; dynamic only bridges the stub gap.
-    final video = (platform as dynamic).element as web.HTMLVideoElement;
-    _video = video;
-
-    _beginListener = ((web.Event _) {
-      // Apple renders only the video element, so hand the browser the cues
-      // media_kit normally keeps hidden and paints through Flutter.
-      _setTextTrackMode('showing');
-      onChange(true);
-    }).toJS;
-    _endListener = ((web.Event _) {
-      _setTextTrackMode('hidden');
-      onChange(false);
-    }).toJS;
-
-    video.addEventListener('webkitbeginfullscreen', _beginListener!);
-    video.addEventListener('webkitendfullscreen', _endListener!);
-  }
-
-  @override
-  void enter() {
-    switch (_mode) {
-      case FullscreenMode.documentElement:
-        final element = web.document.documentElement;
-        if (element == null) return;
-        element.requestFullscreen().toDart.catchError((Object e) {
-          debugPrint('[Fullscreen] requestFullscreen rejected: $e');
-          return null;
-        });
-      case FullscreenMode.nativeVideoElement:
-        final video = _video;
-        if (video == null) {
-          debugPrint('[Fullscreen] no video element attached');
-          return;
-        }
-        try {
-          // Called synchronously on the tap frame. `webkitEnterFullscreen`
-          // requires live user activation and any await above would spend it.
-          (video as JSObject).callMethod('webkitEnterFullscreen'.toJS);
-        } catch (e) {
-          debugPrint('[Fullscreen] webkitEnterFullscreen failed: $e');
-        }
-      case FullscreenMode.osWindow:
-      case FullscreenMode.systemUi:
-      case FullscreenMode.unsupported:
-        return;
-    }
-  }
-
-  @override
-  void exit() {
-    switch (_mode) {
-      case FullscreenMode.documentElement:
-        if (web.document.fullscreenElement == null) return;
-        web.document.exitFullscreen().toDart.catchError((Object e) {
-          debugPrint('[Fullscreen] exitFullscreen rejected: $e');
-          return null;
-        });
-      case FullscreenMode.nativeVideoElement:
-        final video = _video;
-        if (video == null) return;
-        try {
-          (video as JSObject).callMethod('webkitExitFullscreen'.toJS);
-        } catch (e) {
-          debugPrint('[Fullscreen] webkitExitFullscreen failed: $e');
-        }
-      case FullscreenMode.osWindow:
-      case FullscreenMode.systemUi:
-      case FullscreenMode.unsupported:
-        return;
-    }
-  }
-
-  @override
-  void dispose() {
-    final documentListener = _documentListener;
-    if (documentListener != null) {
-      web.document.removeEventListener('fullscreenchange', documentListener);
-      _documentListener = null;
-    }
-
-    // The player screen mounts repeatedly across SPA navigations, so leaked
-    // listeners on a long-lived video element would accumulate.
-    final video = _video;
-    if (video != null) {
-      final begin = _beginListener;
-      final end = _endListener;
-      if (begin != null) {
-        video.removeEventListener('webkitbeginfullscreen', begin);
-      }
-      if (end != null) {
-        video.removeEventListener('webkitendfullscreen', end);
-      }
-    }
-    _beginListener = null;
-    _endListener = null;
-    _video = null;
   }
 }

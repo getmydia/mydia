@@ -4,20 +4,21 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   alias Mydia.Downloads
   alias Mydia.Playback
   alias Mydia.Streaming
-  alias Mydia.Streaming.SessionSampler
+  alias MydiaWeb.AdminDashboardLive.Components
 
-  # The live chart is driven by sampler broadcasts. Only the day-bucketed
-  # figures need a timer, and a daily bucket does not move often.
+  # Now Playing updates on PubSub push; only the day-bucketed figures need a
+  # timer, since a daily bucket does not move often.
   @history_refresh :timer.seconds(60)
-  @history_days 30
+  @default_range 30
+  @ranges [7, 30, 90]
 
-  # Matches SessionSampler's ring buffer: 30 minutes at one sample per 5s.
-  @window_size 360
+  # The stat tiles compare this week against the week before, so they need a
+  # fixed fourteen days that does not move when the chart's range does.
+  @stat_window 14
 
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Mydia.PubSub, SessionSampler.topic())
       Phoenix.PubSub.subscribe(Mydia.PubSub, "hls_sessions")
       Phoenix.PubSub.subscribe(Mydia.PubSub, "transcodes")
       :timer.send_interval(@history_refresh, self(), :refresh_history)
@@ -27,25 +28,12 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
      socket
      |> assign(:page_title, "Dashboard")
      |> assign(:active_tab, :dashboard)
-     |> assign(:samples, SessionSampler.window())
+     |> assign(:range_days, @default_range)
      |> load_now_playing()
      |> load_history()}
   end
 
   @impl true
-  def handle_info({:sample, sample}, socket) do
-    # Append rather than re-reading the sampler: the broadcast already carries
-    # the new point, and a call per tick per mounted dashboard is wasteful.
-    #
-    # The negative count is load-bearing. `samples` is oldest-first, so a
-    # positive Enum.take/2 would keep the OLDEST 360 and silently drop every new
-    # sample once the window filled, freezing the chart after ~30 minutes on any
-    # long-lived dashboard session.
-    samples = Enum.take(socket.assigns.samples ++ [sample], -@window_size)
-
-    {:noreply, assign(socket, :samples, samples)}
-  end
-
   def handle_info(:refresh_history, socket) do
     {:noreply, load_history(socket)}
   end
@@ -54,9 +42,20 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
   def handle_info(:session_ended, socket), do: {:noreply, load_now_playing(socket)}
   def handle_info({:job_updated, _id}, socket), do: {:noreply, load_now_playing(socket)}
 
+  def handle_info({:session_updated, _session_id}, socket),
+    do: {:noreply, load_now_playing(socket)}
+
   # The transcodes and hls_sessions topics carry messages this page does not
   # act on. Ignore them rather than crashing the LiveView.
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("set_range", %{"range" => range}, socket) do
+    {:noreply,
+     socket
+     |> assign(:range_days, parse_range(range))
+     |> load_history()}
+  end
 
   defp load_now_playing(socket) do
     sessions = Streaming.list_active_sessions()
@@ -68,23 +67,56 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
       )
       |> Enum.filter(&(&1.type == "download"))
 
+    {activity, last_play_at} = recent_activity()
+
     socket
     |> assign(:active_sessions, sessions)
     |> assign(:background_jobs, background_jobs)
-    |> assign(:recent_activity, recent_activity())
+    |> assign(:recent_activity, activity)
+    |> assign(:last_play_at, last_play_at)
   end
 
   defp load_history(socket) do
-    days = Playback.Stats.plays_by_day(@history_days)
+    range = socket.assigns.range_days
+    days = Playback.Stats.plays_by_day(max(range, @stat_window))
+    stat_days = Enum.take(days, -@stat_window)
 
     socket
-    |> assign(:days, days)
-    |> assign(:plays_today, plays_on(List.last(days)))
-    |> assign(:plays_week, days |> Enum.take(-7) |> Enum.map(&plays_on/1) |> Enum.sum())
+    |> assign(:days, Enum.take(days, -range))
+    |> assign(:stat_days, stat_days)
+    |> assign(:plays_today, plays_on(List.last(stat_days)))
+    |> assign(:plays_yesterday, plays_on(Enum.at(stat_days, -2)))
+    |> assign(:plays_week, week_total(stat_days, 0))
+    |> assign(:plays_prior_week, week_total(stat_days, 1))
+  end
+
+  defp parse_range(value) do
+    case Integer.parse(value) do
+      {days, ""} when days in @ranges -> days
+      _ -> @default_range
+    end
+  end
+
+  # `weeks_back: 0` is the last seven days, `1` the seven before those.
+  defp week_total(days, weeks_back) do
+    days
+    |> Enum.take(-(7 * (weeks_back + 1)))
+    |> Enum.take(7)
+    |> Enum.map(&plays_on/1)
+    |> Enum.sum()
   end
 
   defp plays_on(nil), do: 0
   defp plays_on(day), do: day.movies + day.episodes
+
+  # `recent_plays/1` reads playback.started events, so this is when a play
+  # began. There is no durable session-end record, and claiming a stream
+  # "ended" would be a lie the data cannot support.
+  defp now_playing_idle_text(nil), do: "Nobody is watching."
+
+  defp now_playing_idle_text(at) do
+    "Nobody is watching. Last played #{Components.elapsed_label(at)} ago."
+  end
 
   defp recent_activity do
     job_preloads = [:user, media_file: [:media_item, episode: [:media_item]]]
@@ -94,7 +126,7 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
 
     # Plays, not progress rows: a media-server sync writes progress for watches
     # that happened elsewhere and stamps it with the sync time, which flooded
-    # this list with imported Plex history the moment a sync ran.
+    # this list with imported history the moment a sync ran.
     plays = Playback.Stats.recent_plays(15)
 
     job_items =
@@ -103,8 +135,12 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
     history_items =
       Enum.map(plays, &%{type: :watch_history, data: &1, timestamp: &1.last_watched_at})
 
-    (job_items ++ history_items)
-    |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
-    |> Enum.take(20)
+    items =
+      (job_items ++ history_items)
+      |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
+      |> Enum.take(20)
+
+    # recent_plays/1 is ordered newest first, so the head is the last play.
+    {items, plays |> List.first() |> then(&(&1 && &1.last_watched_at))}
   end
 end

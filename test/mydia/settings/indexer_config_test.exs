@@ -77,5 +77,41 @@ defmodule Mydia.Settings.IndexerConfigTest do
       assert changeset.valid?
       assert get_change(changeset, :base_url) == "http://localhost:9696"
     end
+
+    test "strips a trailing slash (#765)" do
+      attrs = Map.put(@valid_attrs, :base_url, "http://192.168.68.66:9696/")
+      changeset = IndexerConfig.changeset(%IndexerConfig{}, attrs)
+      assert changeset.valid?
+      assert get_change(changeset, :base_url) == "http://192.168.68.66:9696"
+    end
+  end
+
+  describe "normalize_url/1" do
+    test "strips one or more trailing slashes" do
+      assert IndexerConfig.normalize_url("http://192.168.68.66:9696/") ==
+               "http://192.168.68.66:9696"
+
+      assert IndexerConfig.normalize_url("http://192.168.68.66:9696//") ==
+               "http://192.168.68.66:9696"
+    end
+
+    test "keeps a path prefix and drops only its trailing slash" do
+      assert IndexerConfig.normalize_url("http://localhost/prowlarr/") ==
+               "http://localhost/prowlarr"
+    end
+
+    test "prepends http:// and strips the slash in one pass" do
+      assert IndexerConfig.normalize_url("192.168.68.66:9696/") == "http://192.168.68.66:9696"
+      assert IndexerConfig.normalize_url("localhost:9696/") == "http://localhost:9696"
+    end
+
+    test "trims surrounding whitespace, including a newline from a mounted secret" do
+      assert IndexerConfig.normalize_url("  http://localhost:9696/\n") == "http://localhost:9696"
+    end
+
+    test "leaves a clean URL alone" do
+      assert IndexerConfig.normalize_url("https://secure.example.com:443") ==
+               "https://secure.example.com:443"
+    end
   end
 end
