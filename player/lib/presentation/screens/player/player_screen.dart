@@ -28,6 +28,12 @@ import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_error.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/playback/candidates_from_graphql.dart';
+import '../../../core/playback/adaptation_policy.dart';
+import '../../../core/playback/frame_stats_sampler.dart';
+import '../../../core/playback/health_sample.dart';
+import '../../../core/playback/playback_monitor.dart';
+import '../../../core/playback/quality_choice.dart';
+import '../../../core/playback/seek_decision.dart';
 import '../../../core/playback/playback_controller.dart';
 import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_memory_providers.dart';
@@ -95,22 +101,6 @@ export '../../../core/player/resume_plan.dart'
         kWatchedThreshold,
         shouldOfferResume;
 
-/// How far past the transcoded window a seek may land before the HLS session
-/// is torn down and restarted at the new position.
-///
-/// Restarting is expensive and visible: it ends the session, disposes the
-/// player, makes two GraphQL round trips, starts a fresh FFmpeg and waits for
-/// a playlist, all behind a spinner. Early in a session only a few seconds
-/// have been transcoded — and that is exactly the state playback returns to
-/// after every resume and every restart — so without a tolerance a single
-/// 10-second arrow-key skip or double-tap-forward would overshoot the
-/// seekable end and pay that cost, over and over, potentially looping.
-///
-/// Within this tolerance the seek is clamped to the seekable end instead,
-/// which is what the player did before restarts existed. Only a deliberate
-/// jump well beyond what has been transcoded is worth a restart.
-const Duration kSeekRestartTolerance = Duration(seconds: 30);
-
 /// What an arrow key press means in the player.
 ///
 /// A remote's D-pad and a keyboard's arrows deliver the same key codes, so one
@@ -157,6 +147,9 @@ class PlayerScreen extends ConsumerStatefulWidget {
   /// cued up without starting it.
   final bool autoplay;
 
+  /// Creates the playback engine. Reused across native source switches.
+  final Player Function()? createPlayer;
+
   const PlayerScreen({
     super.key,
     required this.mediaId,
@@ -169,6 +162,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.audioTrack,
     this.subtitleTrack,
     this.autoplay = true,
+    this.createPlayer,
   });
 
   @override
@@ -393,17 +387,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return value;
   }
 
-  /// True for the entire duration of [_restartSessionAt], including while it
-  /// awaits — `_player` is not set to null until partway through that method,
-  /// so [seekToReal] cannot rely on the null check alone to reject a seek
-  /// that arrives mid-restart. Nothing disables the keyboard/gesture
-  /// callbacks that reach `seekToReal` while the loading spinner is showing,
-  /// so without this flag a second seek near the transcoded boundary would
-  /// independently reach the same restart decision on the still-live old
-  /// player and start a second, concurrent `_initializePlayer()` — leaking
-  /// an HLS session and its FFmpeg process. Always cleared, including on the
-  /// error paths, by [trackRestartInFlight].
-  bool _isRestartingSession = false;
   int? _runtimeMinutes;
   List<Query$SeasonEpisodes$seasonEpisodes>? _seasonEpisodes;
   int? _currentEpisodeIndex;
@@ -567,29 +550,36 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// online initialization, since the connection mode it needs can change
   /// between them; the previous one's session is ended first.
   PlaybackController? _playback;
+  PlaybackMonitor? _monitor;
+  AdaptationPolicy? _policy;
+  StreamSubscription<HealthSample>? _healthSubscription;
+
+  /// Samples seen since the last throughput write; one write a minute.
+  int _throughputSamples = 0;
+
+  /// Includes the progress save before the controller claims its switch.
+  bool _sourceSwitchInFlight = false;
+
+  bool get _switchingSource =>
+      _sourceSwitchInFlight || _playback?.switching == true;
 
   /// What is playing now and why. Null until the online branch plans, and
   /// on the offline and downloaded branches, which have nothing to plan.
-  // ignore: unused_field
   PlaybackPlan? _plan;
 
   /// The inputs the current plan was made from, kept for re-planning on a
   /// quality change and for the failure memory's key.
-  // ignore: unused_field
   PlanInputs? _planInputs;
 
   /// The file id the source was opened for: the route's, or the server's
   /// choice on the two fall-through paths.
-  // ignore: unused_field
   String? _playFileId;
 
   /// Null when the memory box could not be opened; every read treats that
   /// as an empty memory.
-  // ignore: unused_field
   PlaybackMemory? _memory;
 
   /// Keys memory by server: the node address over p2p, the URL over HTTP.
-  // ignore: unused_field
   String? _serverKey;
 
   /// Whether the server is serving a playlist covering the whole file.
@@ -602,14 +592,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The rung in effect, or null before anything has settled one for this
   /// playback.
   ///
-  /// Null is what makes secure storage a *seed* rather than a channel.
-  /// [_resolveQualityForFile] consults storage only while this is null; once
-  /// a rung is settled, every later re-initialization — a quality change, a
-  /// seek past the transcoded window, the next episode — carries this value
-  /// forward. A viewer's choice therefore reaches the restart it triggers in
-  /// memory, and never has to survive a round trip through a platform
-  /// channel that can fail. [_resumeOverrideSeconds] hands the position
-  /// across the same restart for the same reason.
+  /// Storage seeds this once; quality changes adopt the chosen rung here
+  /// before persisting it, so a failed preference write cannot undo the pick.
   QualityRung? _settledQuality;
 
   /// The rung the viewer chose, which is what gets requested.
@@ -1412,9 +1396,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         source.url,
         source.headers,
         plan: source.seekOnOpen ? plan : ResumePlan.fromStart,
+        verificationPlan: playbackPlan,
       );
     } catch (e) {
       debugPrint('Error initializing player: $e');
+      // The player and its verification monitor, not the streaming session:
+      // that stays owned by this screen until `dispose()`'s own
+      // `_terminateHlsSession` ends it, same as every other error path here.
+      // A widget test's `Player()` throws for an unrelated reason (no
+      // `MediaKit.ensureInitialized`), and ending the session on that throw
+      // would tear it down before the screen is ever unmounted.
+      _stopVerification();
+      await _disposePlayer();
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -1491,6 +1484,215 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     debugPrint('[PlayerScreen] Stream timeline: $_timeline');
   }
 
+  /// Opens [source] on the live player at [at], and returns the position
+  /// stream the controller waits on before ending the old session.
+  ///
+  /// Native keeps the `Player`: the last frame holds and every subscription
+  /// stays bound. Web recreates it, because media_kit 1.2.6's web backend
+  /// stacks an hls.js instance per `open()` and never destroys the previous
+  /// one. See the spec's web caveat.
+  ///
+  /// [plan] only labels the source for verification: on web it is handed
+  /// to `_openPlayerAndStart` so the fresh player is armed before its own
+  /// `open()`, the same gap the initial online open closes; on native the
+  /// caller arms it once this attach completes.
+  Future<Stream<Duration>> _attachSource(
+    Player player,
+    PlaybackSource source, {
+    required Duration at,
+    required PlaybackPlan plan,
+  }) async {
+    // The live subscriptions observe the new source as soon as open starts,
+    // including while the controller still waits for its first advance.
+    _applySource(source);
+    if (kIsWeb) {
+      await _disposePlayer();
+      final fresh = await _openPlayerAndStart(
+        source.url,
+        source.headers,
+        plan: source.seekOnOpen ? ResumePlan(at) : ResumePlan.fromStart,
+        verificationPlan: plan,
+      );
+      return fresh.stream.position;
+    }
+
+    // Same bookkeeping `_openPlayerAndStart` does for a new player: nothing
+    // this source has done has been observed yet.
+    final playerTarget =
+        source.seekOnOpen ? source.timeline.toPlayer(at) : Duration.zero;
+    _playbackAdvanced = false;
+    _furthestPosition = playerTarget;
+    await player.open(Media(source.url, httpHeaders: source.headers),
+        play: false);
+    _detectTracks();
+    if (source.seekOnOpen) await player.seek(playerTarget);
+    await player.play();
+    return player.stream.position;
+  }
+
+  /// Replaces what is playing with [plan] at [at], keeping the player.
+  ///
+  /// Serialised by the controller: a switch while one is in flight throws,
+  /// and every caller checks `switching` first.
+  Future<void> _switchSource(PlaybackPlan plan, {required Duration at}) async {
+    if (_switchingSource) return;
+    final playback = _playback;
+    final player = _player;
+    final fileId = _playFileId;
+    if (playback == null || player == null || fileId == null) return;
+
+    _sourceSwitchInFlight = true;
+    try {
+      // Persist where the viewer actually is before the old source goes away.
+      await _saveProgress();
+      if (!mounted || !identical(playback, _playback)) return;
+      _stopVerification();
+
+      final source = await playback.replaceSource(
+        plan,
+        fileId: fileId,
+        realPosition: at,
+        totalDuration: _totalDuration,
+        attach: (source) => _attachSource(player, source, at: at, plan: plan),
+        onProgress: (message) => debugPrint('[PlayerScreen] $message'),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _plan = plan;
+        _isDirectPlay = plan is DirectPlayPlan;
+        _applySource(source);
+      });
+      _startVerification(plan);
+    } finally {
+      _sourceSwitchInFlight = false;
+    }
+  }
+
+  /// Monitors a source and lets the policy decide when to replace it.
+  ///
+  /// Never armed for a downloaded or offline file, which has no server to
+  /// fall back to, and never for a cast session.
+  void _startVerification(PlaybackPlan plan) {
+    _stopVerification();
+    final player = _player;
+    if (player == null || _isDownloadedSource) return;
+
+    final kind = switch (plan) {
+      DirectPlayPlan() => SourceKind.direct,
+      HlsPlan(strategy: HlsStrategy.copy) => SourceKind.copy,
+      HlsPlan() => SourceKind.transcode,
+    };
+    final monitor = PlaybackMonitor(
+      signals: PlayerSignals.of(player),
+      sampler: frameStatsSamplerFor(player),
+    );
+    final policy = AdaptationPolicy(source: kind);
+    _monitor = monitor;
+    _policy = policy;
+    _throughputSamples = 0;
+    _healthSubscription =
+        monitor.samples.listen((sample) => _onHealthSample(sample, policy));
+    monitor.start();
+    debugPrint('[PlayerScreen] Verifying ${kind.name} source');
+  }
+
+  void _stopVerification() {
+    unawaited(_healthSubscription?.cancel());
+    _healthSubscription = null;
+    unawaited(_monitor?.dispose());
+    _monitor = null;
+    _policy = null;
+  }
+
+  void _onHealthSample(HealthSample sample, AdaptationPolicy policy) {
+    // A sample from a monitor that has since been replaced.
+    if (!mounted || !identical(policy, _policy)) return;
+
+    _recordThroughput(sample);
+
+    final action = policy.observe(sample);
+    if (action is FallbackToTranscode) {
+      unawaited(_fallbackToTranscode(action));
+    }
+  }
+
+  /// One throughput write a minute, from samples taken while playing
+  /// cleanly. Only native reports throughput.
+  void _recordThroughput(HealthSample sample) {
+    final kbps = sample.throughputKbps;
+    final memory = _memory;
+    final serverKey = _serverKey;
+    if (kbps == null || memory == null || serverKey == null) return;
+    if (!sample.playing || sample.buffering) return;
+    _throughputSamples++;
+    if (_throughputSamples % 60 != 0) return;
+    unawaited(memory.observeThroughput(serverKey, kbps).catchError((Object e) {
+      debugPrint('[PlayerScreen] Could not record throughput: $e');
+    }));
+  }
+
+  Future<void> _fallbackToTranscode(FallbackToTranscode action) async {
+    final playback = _playback;
+    final player = _player;
+    final inputs = _planInputs;
+    if (playback == null || player == null || inputs == null) return;
+    if (_switchingSource) return;
+
+    final position = _timeline.toReal(player.state.position);
+    final throughput = action.throughputKbps ?? inputs.knownThroughputKbps;
+    final plan = fallbackPlan(
+      sourceHeight: inputs.sourceHeight,
+      throughputKbps: throughput,
+    );
+    debugPrint('[PlayerScreen] Falling back to ${plan.describe()}: '
+        '${action.reason.name} at ${position.inSeconds}s');
+
+    final memory = _memory;
+    final serverKey = _serverKey;
+    if (memory != null && serverKey != null) {
+      try {
+        switch (action.reason) {
+          case FailureReason.decodeFailed:
+          case FailureReason.decodeTooSlow:
+            await memory.recordFailure(
+              serverKey,
+              FailureKey.fromShape(inputs.shape),
+              action.reason,
+              now: DateTime.now(),
+            );
+          case FailureReason.bandwidth:
+            // The bytes that would not fit were the file's own.
+            final bound = inputs.fileBitrateKbps;
+            if (bound != null) {
+              await memory.boundThroughput(serverKey, (bound * 0.9).round());
+            }
+        }
+      } catch (e) {
+        debugPrint('[PlayerScreen] Could not update playback memory: $e');
+      }
+    }
+
+    _showPlaybackSnackBar(fallbackMessage(action.reason));
+    try {
+      await _switchSource(plan, at: position);
+    } catch (e) {
+      debugPrint('[PlayerScreen] Fallback failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showPlaybackSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
   void _setLoadingMessage(String message) {
     if (mounted) setState(() => _loadingMessage = message);
   }
@@ -1534,10 +1736,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// hold or expose the whole file at real coordinates and have nothing to
   /// bake an offset into, so for them resuming is a plain [Player.seek] after
   /// the media opens.
-  Future<void> _openPlayerAndStart(
+  Future<Player> _openPlayerAndStart(
     String mediaSource,
     Map<String, String> httpHeaders, {
     required ResumePlan plan,
+    PlaybackPlan? verificationPlan,
   }) async {
     if (mounted) {
       setState(() {
@@ -1546,7 +1749,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     // Create media_kit player
-    final player = Player();
+    final player = widget.createPlayer?.call() ?? Player();
     _player = player;
     _videoController = VideoController(player);
     // Hands the backend the media_kit player so the web backend can reach the
@@ -1587,6 +1790,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // dual-language release is routinely the dub — the reason an English show
     // could open in Russian.
     await AudioLanguage.apply(player, _preferredAudioLanguages);
+
+    // Broadcast errors and playing events can arrive during open/play.
+    // Subscribe now so verification sees even a decoder's first failure.
+    if (verificationPlan != null) _startVerification(verificationPlan);
 
     // Open media
     await player.open(
@@ -1663,6 +1870,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     debugPrint('Loaded ${_subtitleTracks.length} subtitle tracks from GraphQL');
+    return player;
   }
 
   /// Resolve the actual file path for a downloaded media file.
@@ -2536,6 +2744,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     debugPrint('[PlayerScreen] Playback error: $message');
     if (!mounted) return;
 
+    // A direct or copy source reports faults to the policy so it can fall
+    // back. Only a fallback that fails reaches the error page.
+    final policy = _policy;
+    if (policy != null &&
+        policy.source != SourceKind.transcode &&
+        !policy.done) {
+      debugPrint('[PlayerScreen] Deferring error to verification: $message');
+      return;
+    }
+
     if (_playbackAdvanced) {
       // Already playing, so this is something the stream can survive. Killing
       // the video over it would be the regression, not the fix.
@@ -2933,13 +3151,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     if (player == null) return;
 
-    // A restart already in flight is dropped outright, not queued: the
-    // player this call would act on is on its way out (see
-    // `_isRestartingSession`'s dartdoc), and by the time the in-flight
-    // restart finishes, this target is stale anyway — the next seek the
-    // user makes will land in real coordinates against whatever the new
-    // session actually starts at.
-    if (_isRestartingSession) return;
+    // A switch owns the current player, including while saving progress.
+    // The next request can use the new source's real-coordinate timeline.
+    if (_switchingSource) return;
 
     final clamped = target.isNegative ? Duration.zero : target;
 
@@ -2966,7 +3180,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       seekableEnd: seekableEnd,
       startOffset: _timeline.startOffset,
     )) {
-      await _restartSessionAt(clamped);
+      // A WINDOW playlist needs a fresh session for an out-of-range seek.
+      final plan = _plan;
+      if (plan == null) return;
+      try {
+        await _switchSource(plan, at: clamped);
+      } catch (e) {
+        debugPrint('[PlayerScreen] Seek restart failed: $e');
+      }
       return;
     }
 
@@ -2981,55 +3202,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         : local;
 
     await player.seek(seekTarget);
-  }
-
-  /// Tears down the current HLS session and starts a new one at [target].
-  ///
-  /// The whole body runs under [trackRestartInFlight], which flips
-  /// [_isRestartingSession] on before anything else and guarantees it is
-  /// cleared afterward — including if any step throws — so [seekToReal]'s
-  /// re-entrancy guard can never wedge shut for the rest of the session.
-  ///
-  /// [loadingMessage] names what the viewer asked for, since a restart is the
-  /// same machinery behind two different requests: seeking past the
-  /// transcoded window, and changing quality. Telling someone who picked
-  /// 720p that the player is "Seeking" describes the implementation rather
-  /// than what they did.
-  Future<void> _restartSessionAt(
-    Duration target, {
-    String loadingMessage = 'Seeking...',
-  }) async {
-    await trackRestartInFlight(
-      (inFlight) => _isRestartingSession = inFlight,
-      () async {
-        if (mounted) {
-          setState(() {
-            _loadingMessage = loadingMessage;
-            _isLoading = true;
-          });
-        }
-
-        // Persist where the user actually is before the old session goes
-        // away, so an interrupted restart does not lose their place.
-        await _saveProgress();
-
-        await _playback?.endSession();
-
-        await _positionSubscription?.cancel();
-        _positionSubscription = null;
-        await _tracksSubscription?.cancel();
-        _tracksSubscription = null;
-        await _errorSubscription?.cancel();
-        _errorSubscription = null;
-        _progressService?.stopSync();
-        await _player?.dispose();
-        _player = null;
-        _videoController = null;
-
-        _resumeOverrideSeconds = target.inSeconds;
-        await _initializePlayer();
-      },
-    );
   }
 
   /// Refreshes everything that reflects watched state. Deliberately not called
@@ -3706,20 +3878,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Shows the quality picker and applies the choice by restarting the
-  /// session at the current position.
-  ///
-  /// A rung change cannot be applied to a running session: its segments are
-  /// already encoded at the old settings, and the playlist is live-style, so
-  /// there is nothing to re-request. [_restartSessionAt] already handles the
-  /// teardown correctly, including saving progress before the old session
-  /// goes away, and guards against a concurrent restart leaking an FFmpeg
-  /// process.
+  /// Shows the quality picker and switches sources at the current position.
   Future<void> _showQualitySelector() async {
     // A restart already in flight owns the player this would act on, exactly
     // as in [seekToReal]. Dropping the request beats queueing one against a
     // session on its way out.
-    if (_isRestartingSession) return;
+    if (_switchingSource) return;
 
     final previous = _selectedQuality;
 
@@ -3731,18 +3895,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       clampNote: _clampNote(),
     );
 
-    // `_isRestartingSession` is re-checked, not just `mounted`: the modal
-    // barrier stops taps, not the position stream. [_maybeAutoSkipSegment]
-    // fires on every tick and reaches [_restartSessionAt] through
-    // `seekToReal` whenever the segment end lies past what FFmpeg has
-    // transcoded, so a restart can begin behind the open dialog. Applying a
-    // rung on top of that would run a second teardown concurrently, leaving
-    // the first session id overwritten and its FFmpeg process never ended —
-    // the exact leak [trackRestartInFlight] exists to prevent.
+    // A fallback or automatic seek can start while the dialog is open.
     if (selected == null ||
         selected == _selectedQuality ||
         !mounted ||
-        _isRestartingSession) {
+        _switchingSource) {
       return;
     }
 
@@ -3752,7 +3909,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     //
     // Real coordinates, not the player's: on a resumed session the player's
     // zero is [StreamTimeline.startOffset] into the media, and
-    // [_restartSessionAt] takes a real target.
+    // [_switchSource] takes a real target.
     final position = _timeline.toReal(_player?.state.position ?? Duration.zero);
 
     await applyQualityChoice(
@@ -3767,12 +3924,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       },
       remember: (rung) =>
           ref.read(settingsServiceProvider).setDefaultQuality(rung.storageKey),
-      restart: (rung, {required bool isFallback}) => _restartSessionAt(
-        position,
-        loadingMessage: isFallback
-            ? 'Returning to ${rung.label}...'
-            : 'Switching to ${rung.label}...',
-      ),
+      restart: (rung, {required bool isFallback}) async {
+        final inputs = _planInputs;
+        if (inputs == null) return;
+        final plan =
+            planPlayback(inputs.copyWith(choice: QualityChoice.fromRung(rung)));
+        debugPrint('[PlayerScreen] Quality change: ${plan.describe()}');
+        _showPlaybackSnackBar(isFallback
+            ? 'Returning to ${rung.label}'
+            : 'Switching to ${rung.label}');
+        await _switchSource(plan, at: position);
+      },
       stillActive: () => mounted,
       onGaveUp: (error) => setState(() {
         _error = error.toString();
@@ -4042,6 +4204,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _saveProgress().whenComplete(_invalidateAfterPlayback);
 
     // Terminate HLS session on server to stop FFmpeg (fire and forget)
+    _stopVerification();
     _terminateHlsSession();
 
     // Unregister beforeunload handler on web
@@ -4236,6 +4399,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (previous == true && next == false) {
         unawaited(_restartLocalPlayback());
       }
+      // The receiver is now the thing the viewer is watching. A fault on the
+      // backgrounded local player is not theirs to see, so it must not spend
+      // a fallback or a failure-memory write on a source nothing is showing.
+      if (previous == false && next == true) {
+        _stopVerification();
+      }
     });
 
     // Auto-skip while casting. Local playback rides the player's own position
@@ -4323,11 +4492,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
-  /// Tear the local player down and rebuild it from scratch.
-  ///
-  /// Used when casting stops: the media source the old [Player] was opened
-  /// with no longer resolves, and media_kit gives no way to re-point it.
-  Future<void> _restartLocalPlayback() async {
+  /// Cancels every subscription bound to the current player and disposes it.
+  Future<void> _disposePlayer() async {
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     await _tracksSubscription?.cancel();
@@ -4338,18 +4504,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final player = _player;
     _player = null;
+    _videoController = null;
+    await player?.dispose();
+  }
+
+  /// Rebuilds local playback when casting stops.
+  Future<void> _restartLocalPlayback() async {
+    _stopVerification();
+    await _disposePlayer();
     if (mounted) {
       setState(() {
-        _videoController = null;
         _isLoading = true;
         _error = null;
         _autoplayBlocked = false;
       });
-    } else {
-      _videoController = null;
     }
-
-    await player?.dispose();
 
     if (!mounted) return;
     await _initializePlayer();
@@ -4837,166 +5006,6 @@ KeyEventResult handleEpisodeNavKey(
   }
 }
 
-/// Whether [_PlayerScreenState.seekToReal] must restart the HLS session
-/// rather than seek the live player in place.
-///
-/// Extracted as a free function so the seek boundary math can be
-/// unit-tested without a widget tree or a live `Player` — constructing a
-/// real (non-fake-backed) `Player` requires native mpv/FFI
-/// (`NativePlayer`'s constructor calls `DynamicLibrary.open` synchronously),
-/// which is not available under `flutter test`; every other test in this
-/// suite that needs a `Player` injects a fake `platformPlayer` for exactly
-/// this reason, and `PlayerScreen` itself does not offer a way to do that.
-/// Same pattern as [shouldOfferResume] and [handleEpisodeNavKey].
-///
-/// [seekableEnd] must be the player's own **raw**, unresolved
-/// `player.state.duration` — see `seekToReal`'s own comment at its call site
-/// for why that is deliberate rather than a bug: it is exactly how much of
-/// the stream has been transcoded and can currently be seeked into, which a
-/// [StreamTimeline]-resolved duration would not tell you.
-///
-/// Overshooting [seekableEnd] by up to [kSeekRestartTolerance] does not
-/// restart: `seekToReal` clamps those to the seekable end instead. See that
-/// constant for why a small skip on a cold stream must not cost a restart.
-///
-/// [fullPlaylist] short-circuits everything below it: once the server has
-/// published a playlist covering the whole file, it relocates its own
-/// encoder on demand, so every position is already addressable and no seek
-/// ever needs a restart. The boundary math below only still exists for a
-/// server too old to serve a full playlist, which is the sole remaining
-/// reason a far seek must restart the session.
-@visibleForTesting
-bool shouldRestartForSeek({
-  required bool isDirectPlay,
-  required bool fullPlaylist,
-  required Duration realTarget,
-  required Duration localTarget,
-  required Duration seekableEnd,
-  required Duration startOffset,
-}) {
-  // Direct play and offline playback hold the whole file locally — there is
-  // no HLS session to restart, and the player's own duration is already the
-  // true one, so seeking is always local for them.
-  if (isDirectPlay) return false;
-
-  // A full-length playlist covers the whole file and the server relocates its
-  // encoder on demand, so every position is already addressable. This is the
-  // path that makes a far scrub buffer rather than reload.
-  if (fullPlaylist) return false;
-
-  return localTarget > seekableEnd + kSeekRestartTolerance ||
-      realTarget < startOffset;
-}
-
-/// Runs [restart], reporting in-flight state through [setInFlight] for the
-/// restart's entire duration — set `true` before anything else, guaranteed
-/// to be set back to `false` afterward even if [restart] throws.
-///
-/// Extracted from [_PlayerScreenState._restartSessionAt] so this exact
-/// set-before-any-await / always-cleared bookkeeping — the property
-/// [_PlayerScreenState.seekToReal]'s re-entrancy guard depends on — can be
-/// exercised with a controllable fake body (including one that throws),
-/// independent of `_restartSessionAt`'s own player/GraphQL machinery, which
-/// cannot be constructed in this test suite (see [shouldRestartForSeek]'s
-/// dartdoc). A restart that throws without clearing the flag would wedge
-/// [seekToReal] shut for the rest of the session — this is what guards
-/// against that.
-@visibleForTesting
-Future<void> trackRestartInFlight(
-  void Function(bool inFlight) setInFlight,
-  Future<void> Function() restart,
-) async {
-  setInFlight(true);
-  try {
-    await restart();
-  } finally {
-    setInFlight(false);
-  }
-}
-
-/// Puts [selected] into effect, restoring [previous] if that fails.
-///
-/// Extracted from [_PlayerScreenState._showQualitySelector] for the same
-/// reason as [trackRestartInFlight]: the widget path cannot be driven under
-/// `flutter test`. `_waitForPlaylist` polls a real URL that `flutter_test`'s
-/// `HttpOverrides` answers with 400 on every attempt, so the screen reaches
-/// its error state before the chrome that owns the quality button is ever
-/// built, and the picker can never be tapped. This is the riskiest decision
-/// in the quality change and the one most worth pinning, so it lives where a
-/// fake [restart] that throws can exercise it.
-///
-/// [adopt] puts a rung into effect in memory — the widget both requests and
-/// displays it from there. [remember] writes it to storage for the *next*
-/// playback and is allowed to fail. [restart] tears the session down and
-/// brings it back at that rung, throwing if it cannot; [isFallback]
-/// distinguishes the two attempts, which the viewer is told apart.
-/// [stillActive] reports whether the caller can still act at all (its widget
-/// is still mounted). [onGaveUp] receives the second failure.
-///
-/// The retry is deliberately single. If returning to the rung that was
-/// already working also fails, the problem is not the quality choice, and
-/// another teardown would only cost the viewer more time before showing them
-/// the same error. [onGaveUp] is where they land on the error screen instead.
-@visibleForTesting
-Future<void> applyQualityChoice({
-  required QualityRung selected,
-  required QualityRung previous,
-  required void Function(QualityRung rung) adopt,
-  required Future<void> Function(QualityRung rung) remember,
-  required Future<void> Function(QualityRung rung, {required bool isFallback})
-      restart,
-  required bool Function() stillActive,
-  required void Function(Object error) onGaveUp,
-}) async {
-  await _adoptAndRemember(selected, adopt, remember);
-
-  try {
-    await restart(selected, isFallback: false);
-  } catch (error) {
-    // Fall back to the rung that was working rather than stranding the
-    // viewer on a black screen at a rung this file or server cannot serve.
-    debugPrint(
-        '[PlayerScreen] Quality change to ${selected.label} failed: $error');
-    if (!stillActive()) return;
-    await _adoptAndRemember(previous, adopt, remember);
-
-    try {
-      await restart(previous, isFallback: true);
-    } catch (fallbackError) {
-      debugPrint('[PlayerScreen] Restoring ${previous.label} failed too: '
-          '$fallbackError');
-      if (!stillActive()) return;
-      onGaveUp(fallbackError);
-    }
-  }
-}
-
-/// Puts [rung] into effect in memory, then tries to remember it for the next
-/// playback.
-///
-/// Both the order and the swallow are load-bearing. [adopt] is the only
-/// channel the restart reads the rung from, so it happens first and is
-/// synchronous — nothing can fail between choosing a rung and the restart
-/// seeing it. [remember] goes through secure storage, which needs a keyring
-/// on Linux desktop and can genuinely be unavailable, so its failure costs
-/// the preference for next time and nothing else. Before this split, the
-/// choice reached the restart *through* storage, and a swallowed write
-/// failure silently restarted the session at the rung the viewer had just
-/// replaced.
-Future<void> _adoptAndRemember(
-  QualityRung rung,
-  void Function(QualityRung rung) adopt,
-  Future<void> Function(QualityRung rung) remember,
-) async {
-  adopt(rung);
-
-  try {
-    await remember(rung);
-  } catch (e) {
-    debugPrint('[PlayerScreen] Could not save default quality: $e');
-  }
-}
-
 /// media_kit's current audio track list mapped onto the app's own model,
 /// together with the reverse lookup needed to hand a chosen track back to
 /// media_kit.
@@ -5171,7 +5180,7 @@ FlutterPlaybackState remoteControlPlaybackState({
 /// what turns that exception into a snackbar instead of a crash.
 ///
 /// Extracted as a free function for the same reason as [applyQualityChoice]
-/// and [trackRestartInFlight]: proving this ordering under `flutter test`
+/// and [shouldRestartForSeek]: proving this ordering under `flutter test`
 /// needs to observe whether local playback kept running, and this suite can
 /// never construct a real, playing media_kit `Player` to observe that
 /// against (see [shouldRestartForSeek]'s dartdoc) — so the ordering itself

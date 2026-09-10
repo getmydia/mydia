@@ -15,10 +15,8 @@
 // pins down the actual restart/no-restart boundary — the part of the logic
 // most likely to regress — directly and deterministically.
 
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/core/playback/seek_decision.dart';
 
 void main() {
   group('shouldRestartForSeek', () {
@@ -285,40 +283,6 @@ void main() {
         ),
         isTrue,
       );
-    });
-  });
-
-  group('trackRestartInFlight', () {
-    test('sets in-flight before the body runs, clears it once it completes',
-        () async {
-      final states = <bool>[];
-      final completer = Completer<void>();
-
-      final future = trackRestartInFlight(states.add, () => completer.future);
-
-      // The flag must already be true synchronously, before the body has
-      // had any chance to run — `seekToReal`'s guard depends on this being
-      // visible to a re-entrant call arriving before the first `await`.
-      expect(states, [true]);
-
-      completer.complete();
-      await future;
-
-      expect(states, [true, false]);
-    });
-
-    test('clears in-flight even when the body throws', () async {
-      final states = <bool>[];
-
-      await expectLater(
-        trackRestartInFlight(states.add, () async => throw Exception('boom')),
-        throwsException,
-      );
-
-      // A restart that throws without clearing the flag would wedge
-      // `seekToReal` shut for the rest of the session — this is the
-      // property that guards against that.
-      expect(states, [true, false]);
     });
   });
 }

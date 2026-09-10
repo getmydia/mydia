@@ -164,3 +164,11 @@ class AdaptationPolicy {
     return const NoAction();
   }
 }
+
+/// The OSD line for a fallback. Copy is the spec's, verbatim.
+String fallbackMessage(FailureReason reason) => switch (reason) {
+      FailureReason.decodeFailed ||
+      FailureReason.decodeTooSlow =>
+        'Switched to transcoding: your device dropped frames',
+      FailureReason.bandwidth => 'Switched to transcoding for your connection',
+    };

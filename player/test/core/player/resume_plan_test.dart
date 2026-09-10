@@ -139,10 +139,10 @@ void main() {
         'an override of exactly 0 is honored as a real target, not treated '
         'as unset — the exact collision a value-based check would miss',
         () async {
-      // `resumeOverride: 0` is what `_restartSessionAt` sets when the user
-      // sought back to the very start. A regression that checked
-      // `resumeOverride != 0` instead of `resumeOverride != null` would call
-      // `ask` here instead, and prompt about the unrelated, stale
+      // `resumeOverride: 0` is a real target a caller can hand in (the route's
+      // own `resumeSeconds`, seeking back to the very start). A regression
+      // that checked `resumeOverride != 0` instead of `resumeOverride != null`
+      // would call `ask` here instead, and prompt about the unrelated, stale
       // `savedPositionSeconds` below.
       final plan = await resolveResumePlan(
         savedPositionSeconds: 2700,

@@ -7,12 +7,12 @@
 // that owns the quality button is never built under `flutter test`, because
 // `_waitForPlaylist` polls a real URL that `flutter_test`'s `HttpOverrides`
 // answers with 400 every time, so the screen reaches its error state first.
-// Same precedent as `trackRestartInFlight` and `shouldRestartForSeek`, both
-// pulled out of this file for the same reason.
+// Same precedent as `shouldRestartForSeek`, pulled out of this file for the
+// same reason.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/quality_rung.dart';
-import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/core/playback/quality_choice.dart';
 
 const _selected = QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
 const _previous = QualityRung.original;
