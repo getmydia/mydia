@@ -103,6 +103,8 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
   A standard `modal-box` form (`Save` / `Cancel` / `Test`) over the four
   `flaresolverr.*` fields. Each field shows its ENV/DB/Default source; env-sourced
   fields render disabled (read-only) since environment variables win at runtime.
+  `Test` probes the URL currently in the form, saved or not, regardless of the
+  Enabled checkbox.
 
   `form` is the schemaless changeset form. `sources` maps each `flaresolverr.*` key
   to `:env`/`:database`/`:default`.
@@ -163,7 +165,12 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
           />
 
           <div class="modal-action">
-            <button type="button" class="btn btn-ghost btn-sm gap-1.5" phx-click="test_flaresolverr">
+            <button
+              id="flaresolverr-modal-test"
+              type="button"
+              class="btn btn-ghost btn-sm gap-1.5"
+              phx-click="test_flaresolverr_form"
+            >
               <.icon name="hero-signal" class="w-4 h-4" /> Test
             </button>
             <button type="button" class="btn btn-ghost btn-sm" phx-click="close_flaresolverr_modal">

@@ -350,6 +350,139 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#flash-error", "No FlareSolverr URL configured")
     end
 
+    test "modal Test probes the typed URL before the first save (#764)", %{conn: conn} do
+      bypass = Bypass.open()
+      put_saved_flaresolverr(enabled: false, url: nil)
+      expect_flaresolverr_ok(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form",
+        flaresolverr: %{
+          enabled: "true",
+          url: "http://localhost:#{bypass.port}",
+          timeout: "60000",
+          max_timeout: "120000"
+        }
+      )
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+      assert has_element?(view, "#flaresolverr-form")
+      assert is_nil(Settings.get_config_setting_by_key("flaresolverr.url"))
+      assert is_nil(Settings.get_config_setting_by_key("flaresolverr.enabled"))
+    end
+
+    test "modal Test ignores the Enabled checkbox", %{conn: conn} do
+      bypass = Bypass.open()
+      put_saved_flaresolverr(enabled: false, url: nil)
+      expect_flaresolverr_ok(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form",
+        flaresolverr: %{enabled: "false", url: "http://localhost:#{bypass.port}"}
+      )
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+    end
+
+    test "modal Test probes the edited URL, not the saved one", %{conn: conn} do
+      saved = Bypass.open()
+      edited = Bypass.open()
+      # No expectation on `saved`: Bypass fails the test on exit if it is hit.
+      put_saved_flaresolverr(enabled: false, url: "http://localhost:#{saved.port}")
+      expect_flaresolverr_ok(edited)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form", flaresolverr: %{url: "http://localhost:#{edited.port}"})
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+    end
+
+    test "modal Test with a blank URL asks for one", %{conn: conn} do
+      put_saved_flaresolverr(enabled: false, url: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "Enter a FlareSolverr URL to test")
+      assert has_element?(view, "#flaresolverr-form")
+    end
+
+    test "modal Test rejects a URL without an http(s) scheme", %{conn: conn} do
+      put_saved_flaresolverr(enabled: false, url: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form", flaresolverr: %{url: "flaresolverr:8191"})
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "Not a valid FlareSolverr URL")
+      assert has_element?(view, "#flaresolverr-form")
+    end
+
+    test "modal Test reports a connection failure", %{conn: conn} do
+      bypass = Bypass.open()
+      Bypass.down(bypass)
+      put_saved_flaresolverr(enabled: false, url: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      view
+      |> form("#flaresolverr-form", flaresolverr: %{url: "http://localhost:#{bypass.port}"})
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "FlareSolverr connection failed")
+    end
+
+    test "modal Test probes the env URL when the URL field is env-locked", %{conn: conn} do
+      bypass = Bypass.open()
+      # The describe setup deletes FLARESOLVERR_* and restores :runtime_config on
+      # exit, and this module is async: false, so the env write cannot leak.
+      System.put_env("FLARESOLVERR_URL", "http://localhost:#{bypass.port}")
+      {:ok, _config} = Mydia.Config.Loader.reload()
+      expect_flaresolverr_ok(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
+
+      # The URL input is disabled, so a browser never submits it and the
+      # changeset drops it on the first validate event.
+      view
+      |> form("#flaresolverr-form",
+        flaresolverr: %{enabled: "false", timeout: "60000", max_timeout: "120000"}
+      )
+      |> render_change()
+
+      view |> element("#flaresolverr-modal-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+    end
+
     test "enabling with a blank URL shows a required-error and keeps the modal open", %{
       conn: conn
     } do

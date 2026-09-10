@@ -640,6 +640,17 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   end
 
   @impl true
+  def handle_event("test_flaresolverr_form", _params, socket) do
+    case form_flaresolverr_url(socket) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Enter a FlareSolverr URL to test.")}
+
+      url ->
+        {:noreply, flash_flaresolverr_test(socket, FlareSolverr.health_check(url))}
+    end
+  end
+
+  @impl true
   def handle_event("edit_flaresolverr", _params, socket) do
     {values, sources} = flaresolverr_values_and_sources()
 
@@ -1086,6 +1097,21 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     case FlareSolverr.config() do
       %{url: url} -> blank_to_nil(url)
       nil -> nil
+    end
+  end
+
+  # The URL the modal's Test probes: whatever is typed in the form, except when
+  # the URL comes from the environment. That input renders disabled, so the
+  # browser never submits it and the changeset loses it after the first
+  # validate event; env wins at runtime anyway, so probe the effective value.
+  defp form_flaresolverr_url(socket) do
+    if Map.get(socket.assigns.flaresolverr_sources, "flaresolverr.url") == :env do
+      saved_flaresolverr_url()
+    else
+      socket.assigns.flaresolverr_form.source
+      |> Ecto.Changeset.apply_changes()
+      |> Map.get(:url)
+      |> blank_to_nil()
     end
   end
 
