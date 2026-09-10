@@ -20,7 +20,12 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   alias Mydia.Library.MediaFile
 
   @doc """
-  Renders the Duplicates tab content.
+  Renders the Duplicates section of the page.
+
+  The Needs Attention section below it is
+  `MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention/1`. The page
+  template stacks the two inside one padded column, so this returns sibling
+  elements rather than a wrapper of its own.
   """
   attr :decisions, :list, required: true
   attr :refusals, :list, required: true
@@ -35,84 +40,59 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
     assigns = assign(assigns, :all_selected?, MapSet.size(assigns.selected) == total_losers)
 
     ~H"""
-    <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-document-duplicate" class="w-5 h-5 opacity-60" /> Duplicates
-          <span class="badge badge-ghost">{length(@decisions)}</span>
-        </h2>
-        <div class="join">
-          <button
-            :if={not @all_selected?}
-            id="duplicates-trash-all"
-            type="button"
-            class="btn btn-sm btn-ghost join-item"
-            phx-click="trash_all_duplicates"
-          >
-            <.icon name="hero-check-circle" class="w-4 h-4" /> Mark all for trash
-          </button>
-          <button
-            id="duplicates-trash-selected"
-            type="button"
-            class="btn btn-sm btn-error join-item"
-            disabled={MapSet.size(@selected) == 0}
-            phx-click="open_trash_modal"
-          >
-            <.icon name="hero-trash" class="w-4 h-4" />
-            Trash {file_count(MapSet.size(@selected))} ({humanize_bytes(@reclaimable)})
-          </button>
-        </div>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <h2 class="text-lg font-semibold flex items-center gap-2">
+        <.icon name="hero-document-duplicate" class="w-5 h-5 opacity-60" /> Duplicates
+        <span class="badge badge-ghost">{length(@decisions)}</span>
+      </h2>
+      <div class="join">
+        <button
+          :if={not @all_selected?}
+          id="duplicates-trash-all"
+          type="button"
+          class="btn btn-sm btn-ghost join-item"
+          phx-click="trash_all_duplicates"
+        >
+          <.icon name="hero-check-circle" class="w-4 h-4" /> Mark all for trash
+        </button>
+        <button
+          id="duplicates-trash-selected"
+          type="button"
+          class="btn btn-sm btn-error join-item"
+          disabled={MapSet.size(@selected) == 0}
+          phx-click="open_trash_modal"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" />
+          Trash {file_count(MapSet.size(@selected))} ({humanize_bytes(@reclaimable)})
+        </button>
       </div>
-
-      <p class="text-sm text-base-content/60">
-        Items holding more than one file, where every copy is proven to be the same content.
-        Each file is set to either <span class="font-medium text-base-content">Keep</span>
-        or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
-        kept, the rest are already marked for trash. Trash one item with its own button, or
-        every item with the button above. Every item always keeps at least one file. Trashed
-        files are held for {@retention_days} days before permanent deletion, and a run can be
-        undone until you leave this page.
-      </p>
-
-      <%= if @decisions == [] do %>
-        <div class="alert alert-info">
-          <.icon name="hero-information-circle" class="w-5 h-5" />
-          <span :if={@refusals == []}>
-            No item holds more than one file. There are no duplicates to review.
-          </span>
-          <span :if={@refusals != []}>
-            Nothing can be trashed safely right now. Every item below needs attention first.
-          </span>
-        </div>
-      <% else %>
-        <div class="bg-base-200 rounded-box divide-y divide-base-300">
-          <.decision_row :for={decision <- @decisions} decision={decision} selected={@selected} />
-        </div>
-      <% end %>
-
-      <%= if @refusals != [] do %>
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-          <h2 class="text-lg font-semibold flex items-center gap-2">
-            <.icon name="hero-exclamation-triangle" class="w-5 h-5 opacity-60" /> Needs Attention
-            <span class="badge badge-ghost">{length(@refusals)}</span>
-          </h2>
-        </div>
-
-        <p class="text-sm text-base-content/60">
-          These were left alone. Each one is a matching or scanning problem rather than a
-          duplicate, and acting on them would remove real media.
-        </p>
-
-        <div class="bg-base-200 rounded-box divide-y divide-base-300">
-          <.refusal_row
-            :for={{group, reason, detail} <- @refusals}
-            group={group}
-            reason={reason}
-            detail={detail}
-          />
-        </div>
-      <% end %>
     </div>
+
+    <p class="text-sm text-base-content/60">
+      Items holding more than one file, where every copy is proven to be the same content.
+      Each file is set to either <span class="font-medium text-base-content">Keep</span>
+      or <span class="font-medium text-error">Trash</span>; the best copy is listed first and
+      kept, the rest are already marked for trash. Trash one item with its own button, or
+      every item with the button above. Every item always keeps at least one file. Trashed
+      files are held for {@retention_days} days before permanent deletion, and a run can be
+      undone until you leave this page.
+    </p>
+
+    <%= if @decisions == [] do %>
+      <div class="alert alert-info">
+        <.icon name="hero-information-circle" class="w-5 h-5" />
+        <span :if={@refusals == []}>
+          No item holds more than one file. There are no duplicates to review.
+        </span>
+        <span :if={@refusals != []}>
+          Nothing can be trashed safely right now. Every item below needs attention first.
+        </span>
+      </div>
+    <% else %>
+      <div class="bg-base-200 rounded-box divide-y divide-base-300">
+        <.decision_row :for={decision <- @decisions} decision={decision} selected={@selected} />
+      </div>
+    <% end %>
     """
   end
 
@@ -266,38 +246,18 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
     """
   end
 
-  # Library-relative folder for a file, or nil when the file sits at the root
-  # of its library path and there is nothing useful to show.
-  defp folder_of(relative_path) do
+  @doc """
+  The library-relative folder for a file, or nil when the file sits at the root
+  of its library path and there is nothing useful to show. Public because the
+  Needs Attention rows in `MydiaWeb.AdminDuplicatesLive.ReviewComponents` show
+  files the same way.
+  """
+  def folder_of(relative_path) do
     case Path.dirname(relative_path) do
       "." -> nil
       "/" -> nil
       folder -> folder
     end
-  end
-
-  attr :group, :map, required: true
-  attr :reason, :atom, required: true
-  attr :detail, :map, required: true
-
-  defp refusal_row(assigns) do
-    ~H"""
-    <div class="p-3 sm:p-4" id={"duplicates-refusal-#{@group.subject_id}"}>
-      <div class="flex items-center gap-3">
-        <div class="flex-1 min-w-0">
-          <div class="font-medium truncate">{subject_label(@group)}</div>
-          <div class="text-xs opacity-60 truncate">{file_count(length(@group.files))}</div>
-        </div>
-        <span class="badge badge-sm badge-outline badge-warning">{refusal_label(@reason)}</span>
-      </div>
-
-      <p class="text-sm text-base-content/60 mt-2">{refusal_explanation(@reason, @detail)}</p>
-
-      <ul class="text-xs opacity-60 list-disc pl-5 mt-1">
-        <li :for={file <- @group.files}>{file.relative_path}</li>
-      </ul>
-    </div>
-    """
   end
 
   @doc """
@@ -360,22 +320,30 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   end
 
   @doc """
-  The undo affordance for a completed trash run.
+  The toast for a completed run on this page.
+
+  A trash run (`kind: :trash`) offers Undo, which `Mydia.Library.Prune.undo/2`
+  honors until the page is left. A send to Review (`kind: :review`) has no undo
+  of its own, since `/review` can reattach any file it sent, so it links there
+  instead.
 
   This cannot be a flash. `core_components.ex` puts
   `phx-click="lv:clear-flash"` on the whole flash container, which would
-  swallow a nested Undo button, and flash values are strings, so the file ids
-  would need an assign regardless.
+  swallow a nested button or link, and flash values are strings, so the file
+  ids would need an assign regardless.
 
   It sits bottom-end because the flash group sits top-end, and a partial run
   shows both: an error flash for what could not move, and this for what did.
 
   There is no auto-dismiss timer. Any interval is a guess, and an operator
   reading filenames to check they trashed the right copy will lose that race.
+
+  The DOM ids keep their `duplicates-undo` prefix from when this was only the
+  undo toast; tests select on them.
   """
   attr :run, :map, required: true
 
-  def undo_toast(assigns) do
+  def run_toast(assigns) do
     ~H"""
     <div id="duplicates-undo-toast" class="toast toast-bottom toast-end z-50" role="status">
       <div class="alert alert-success w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap">
@@ -383,6 +351,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         <span class="text-sm">{@run.label}</span>
         <div class="flex-1" />
         <button
+          :if={@run.kind == :trash}
           id="duplicates-undo"
           type="button"
           class="btn btn-sm btn-ghost"
@@ -391,6 +360,14 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         >
           <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Undo
         </button>
+        <.link
+          :if={@run.kind == :review}
+          id="duplicates-open-review"
+          navigate={~p"/review"}
+          class="btn btn-sm btn-ghost"
+        >
+          <.icon name="hero-inbox-arrow-down" class="w-4 h-4" /> Open Review
+        </.link>
         <button
           id="duplicates-undo-dismiss"
           type="button"
@@ -434,39 +411,6 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
 
   def item_count(1), do: "1 item"
   def item_count(n), do: "#{n} items"
-
-  defp refusal_label(:duplicate_registration), do: "Registered twice"
-  defp refusal_label(:unanalyzed), do: "Not analyzed"
-  defp refusal_label(:duration_mismatch), do: "Different lengths"
-  defp refusal_label(:name_mismatch), do: "Names disagree"
-  defp refusal_label(:episode_mismatch), do: "Wrong episode"
-  defp refusal_label(:nothing_to_prune), do: "Nothing to trash"
-
-  defp refusal_explanation(:duplicate_registration, detail) do
-    "One file on disk is registered twice (#{detail.path}). Trashing a copy would move the only real file. Rescan this library path instead."
-  end
-
-  defp refusal_explanation(:unanalyzed, detail) do
-    "#{detail.unanalyzed_count} file(s) have no duration, so they cannot be compared. Run analysis first."
-  end
-
-  defp refusal_explanation(:duration_mismatch, detail) do
-    "These files are #{percent(detail.spread)} apart in length, more than the #{percent(detail.tolerance)} allowed, so they are not the same content. This is usually bonus features or a file matched to the wrong item."
-  end
-
-  defp refusal_explanation(:name_mismatch, _detail) do
-    "At least one filename does not belong to this item. Fix the match before trashing anything."
-  end
-
-  defp refusal_explanation(:episode_mismatch, _detail) do
-    "At least one filename names a different episode than the one it is attached to."
-  end
-
-  defp refusal_explanation(:nothing_to_prune, _detail), do: "Only one file remains."
-
-  # Formats a fraction (0.093) as a percentage string ("9.3%") for the
-  # duration mismatch explanation.
-  defp percent(fraction), do: "#{Float.round(fraction * 100, 1)}%"
 
   @doc """
   Formats a byte count for display. Public because the page template uses it

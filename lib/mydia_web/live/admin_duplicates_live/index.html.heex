@@ -1,12 +1,21 @@
 <Layouts.app {assigns}>
   <.admin_page active_tab={@active_tab}>
-    <MydiaWeb.AdminDuplicatesLive.Components.duplicates_tab
-      decisions={@decisions}
-      refusals={@refusals}
-      selected={@selected}
-      reclaimable={@reclaimable}
-      retention_days={@retention_days}
-    />
+    <div class="p-4 sm:p-6 space-y-4">
+      <MydiaWeb.AdminDuplicatesLive.Components.duplicates_tab
+        decisions={@decisions}
+        refusals={@refusals}
+        selected={@selected}
+        reclaimable={@reclaimable}
+        retention_days={@retention_days}
+      />
+
+      <MydiaWeb.AdminDuplicatesLive.ReviewComponents.needs_attention
+        :if={@refusals != []}
+        refusals={@refusals}
+        suspects={@suspects}
+        returning={@returning}
+      />
+    </div>
 
     <%!-- Trash Confirmation Modal --%>
     <%= if @show_trash_modal do %>
@@ -18,6 +27,6 @@
       />
     <% end %>
 
-    <MydiaWeb.AdminDuplicatesLive.Components.undo_toast :if={@last_run} run={@last_run} />
+    <MydiaWeb.AdminDuplicatesLive.Components.run_toast :if={@last_run} run={@last_run} />
   </.admin_page>
 </Layouts.app>

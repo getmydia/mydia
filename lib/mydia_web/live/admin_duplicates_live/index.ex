@@ -64,6 +64,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
      |> assign(:active_tab, :duplicates)
      |> assign(:kept, MapSet.new())
      |> assign(:keepers, %{})
+     |> assign(:review_overrides, %{})
      |> assign(:show_trash_modal, false)
      |> assign(:last_run, nil)
      |> assign(:retention_days, retention_days)
@@ -114,6 +115,32 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     end
   end
 
+  def handle_event("leave_file", %{"subject" => subject_id, "file" => file_id}, socket) do
+    {:noreply, put_review_override(socket, subject_id, file_id, :leave)}
+  end
+
+  def handle_event("review_file", %{"subject" => subject_id, "file" => file_id}, socket) do
+    {:noreply, put_review_override(socket, subject_id, file_id, :review)}
+  end
+
+  # Sends one refused group's marked files at once, with no modal, for the same
+  # reason trash_group_now has none: one item's files are a small, visible
+  # blast radius. Nothing is destroyed either; /review can reattach them.
+  def handle_event("send_group_to_review", %{"subject" => subject_id}, socket) do
+    with group when not is_nil(group) <- find_refused_group(socket, subject_id),
+         ids =
+           for(
+             file <- group.files,
+             MapSet.member?(socket.assigns.returning, file.id),
+             do: file.id
+           ),
+         false <- ids == [] do
+      {:noreply, run_send(socket, ids, "from #{Components.subject_label(group)}")}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
   # Runs the trash for one group instead of the whole library. The ids are
   # narrowed to that group's marked losers, and `keepers` still goes through:
   # `execute/3` rebuilds the plan, and without the overrides it would re-rank
@@ -137,6 +164,12 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   end
 
   def handle_event("undo_trash", _params, %{assigns: %{last_run: nil}} = socket) do
+    {:noreply, socket}
+  end
+
+  # A send to Review has nothing to undo here; its toast links to /review
+  # instead, so only a forged event arrives with this shape.
+  def handle_event("undo_trash", _params, %{assigns: %{last_run: %{kind: :review}}} = socket) do
     {:noreply, socket}
   end
 
@@ -279,8 +312,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     plan = Prune.plan(socket.assigns.keepers)
 
     socket
-    |> assign(decisions: plan.decisions, refusals: plan.refusals)
+    |> assign(decisions: plan.decisions, refusals: plan.refusals, suspects: plan.suspects)
     |> assign_selection()
+    |> prune_review_overrides()
+    |> assign_review_selection()
   end
 
   # `:selected` is derived, never stored: every loser of an eligible group is
@@ -316,6 +351,116 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     |> assign(:affected_items, affected)
   end
 
+  # `:returning` is derived, never stored, the same way `:selected` is for the
+  # trash. A file follows the operator's override if there is one. Otherwise it
+  # goes to Review only when it is a suspect in a group that also holds a real
+  # version that is not: a group whose only other files are extras, or that has
+  # none, is left alone, because nothing in it says which file is right.
+  defp assign_review_selection(socket) do
+    %{refusals: refusals, suspects: suspects, review_overrides: overrides} = socket.assigns
+
+    per_group =
+      for {group, reason, _detail} <- refusals, reason != :duplicate_registration do
+        group_suspects = Map.get(suspects, group.subject_id, MapSet.new())
+
+        anchored? =
+          Enum.any?(
+            group.files,
+            &(is_nil(&1.extra_kind) and not MapSet.member?(group_suspects, &1.id))
+          )
+
+        Enum.filter(group.files, &review?(&1, group_suspects, anchored?, overrides))
+      end
+
+    socket
+    |> assign(:returning, per_group |> List.flatten() |> MapSet.new(& &1.id))
+    |> assign(:returning_items, Enum.count(per_group, &(&1 != [])))
+  end
+
+  defp review?(file, group_suspects, anchored?, overrides) do
+    case Map.fetch(overrides, file.id) do
+      {:ok, disposition} -> disposition == :review
+      :error -> anchored? and MapSet.member?(group_suspects, file.id)
+    end
+  end
+
+  # A Leave/Review click moves one file's override, but only for a file of the
+  # refused group the event names, and never onto Review for that group's last
+  # file still on Leave: an item always keeps a file. That radio is disabled,
+  # so reaching the refusal here means a forged event.
+  defp put_review_override(socket, subject_id, file_id, disposition) do
+    group = find_refused_group(socket, subject_id)
+
+    cond do
+      is_nil(group) ->
+        socket
+
+      not Enum.any?(group.files, &(&1.id == file_id)) ->
+        socket
+
+      disposition == :review and last_left?(socket, group, file_id) ->
+        socket
+
+      true ->
+        socket
+        |> assign(
+          :review_overrides,
+          Map.put(socket.assigns.review_overrides, file_id, disposition)
+        )
+        |> assign_review_selection()
+    end
+  end
+
+  defp last_left?(socket, group, file_id) do
+    case Enum.reject(group.files, &MapSet.member?(socket.assigns.returning, &1.id)) do
+      [%{id: ^file_id}] -> true
+      _ -> false
+    end
+  end
+
+  defp find_refused_group(socket, subject_id) do
+    Enum.find_value(socket.assigns.refusals, fn {group, reason, _detail} ->
+      if reason != :duplicate_registration and group.subject_id == subject_id, do: group
+    end)
+  end
+
+  # An override lives only as long as its file is on the page. Files that were
+  # sent, trashed or rescanned away drop out, so no later group can inherit a
+  # choice made about a file it does not hold.
+  defp prune_review_overrides(socket) do
+    present =
+      for {group, _reason, _detail} <- socket.assigns.refusals,
+          file <- group.files,
+          into: MapSet.new(),
+          do: file.id
+
+    overrides =
+      Map.filter(socket.assigns.review_overrides, fn {id, _disposition} ->
+        MapSet.member?(present, id)
+      end)
+
+    assign(socket, :review_overrides, overrides)
+  end
+
+  defp run_send(socket, ids, scope_label) do
+    actor_id = to_string(socket.assigns.current_scope.user.id)
+    result = Prune.send_to_review(ids, actor_id)
+
+    socket
+    |> maybe_flash_problems(result)
+    |> maybe_set_review_run(result, scope_label)
+    |> load_plan()
+  end
+
+  defp maybe_set_review_run(socket, %{returned: []}, _scope_label), do: socket
+
+  defp maybe_set_review_run(socket, %{returned: returned}, scope_label) do
+    assign(socket, :last_run, %{
+      kind: :review,
+      label: "Sent #{Components.file_count(length(returned))} #{scope_label} to Review"
+    })
+  end
+
   # A clean run says everything it needs to in the undo toast, so no info flash
   # is raised: two success messages saying the same thing is noise. Failures
   # and aborts still go through the flash, so a partial run shows the error at
@@ -346,6 +491,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     bytes = trashed |> Enum.map(&(&1.size || 0)) |> Enum.sum()
 
     assign(socket, :last_run, %{
+      kind: :trash,
       file_ids: Enum.map(trashed, & &1.id),
       label:
         "Trashed #{Components.file_count(length(trashed))} #{scope_label} " <>
