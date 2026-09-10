@@ -171,7 +171,8 @@ every 10s:
 | --- | --- | --- | --- |
 | encoded | encoded | at the target | accurate seek, FFmpeg's default |
 | encoded | copied | at the target | `-copypriorss:a 0` |
-| copied | either | at the keyframe | `KeyframeLocator` and `:seek_keyframe`, `:window` only |
+| copied | copied | at the keyframe; copied audio can lead by the container's interleave (0.25s measured) | `KeyframeLocator` and `:seek_keyframe`, `:window` only |
+| copied | encoded | video at the keyframe, audio 0.18s later: accurate seek trims decoded audio to the pinned seek point | `KeyframeLocator` and `:seek_keyframe`, `:window` only |
 
 Copied audio skips the decoder, so accurate seek never trims it. Without
 `-copypriorss:a 0`, a resume at 27s into a file with keyframes at 20 and 30

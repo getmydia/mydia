@@ -28,7 +28,7 @@ defmodule Mydia.Streaming.HlsSeekAlignmentIntegrationTest do
 
   # Measured 3-13ms with -copypriorss:a 0 and 7.2s without it.
   @sync_tolerance 0.05
-  # About one frame at 24fps.
+  # Just over one frame at 24fps (0.042s).
   @grid_tolerance 0.05
 
   setup_all do
@@ -154,6 +154,31 @@ defmodule Mydia.Streaming.HlsSeekAlignmentIntegrationTest do
     assert_pinned_copy_starts_on(mp4, Path.join(tmp, "pinned_mp4"), keyframe, 27)
   end
 
+  test "a pinned stream copy that re-encodes its audio stays in sync", %{tmp: tmp, mkv: mkv} do
+    # Common in practice: H.264 video the client plays, with DTS or TrueHD
+    # audio it cannot, so the audio is re-encoded. Accurate seek trims decoded
+    # audio to the seek point, keyframe + 0.2s, so the audio starts that much
+    # after the first video frame: a short silent lead-in, not drift. Measured
+    # 0.18s, with every flash and beep still together.
+    assert {:ok, keyframe} = KeyframeLocator.locate(mkv, 27)
+
+    out =
+      run_hls(mkv, Path.join(tmp, "pinned_mkv_audio_encode"),
+        seek_keyframe: keyframe,
+        start_position: 27,
+        video_codec: "copy",
+        audio_codec: "aac"
+      )
+
+    segment = Path.join(out, SegmentPlan.segment_name(0))
+    lead_in = first_pts(segment, "a:0") - first_pts(segment, "v:0")
+
+    assert lead_in >= 0.0 and lead_in <= 0.25,
+           "expected audio to start up to 0.25s after the first frame, got #{lead_in}s"
+
+    assert_markers_in_sync(out)
+  end
+
   test "an MPEG-TS source has no keyframe to pin", %{ts: ts} do
     # If this ever returns a keyframe, do not trust it: a TS copy seek lands
     # after its target. HlsSession.seek_opts/3 excludes TS by container for
@@ -258,6 +283,9 @@ defmodule Mydia.Streaming.HlsSeekAlignmentIntegrationTest do
 
     flashes = Regex.scan(~r/black_end:([\d.]+)/, log) |> Enum.map(fn [_, t] -> to_seconds(t) end)
     beeps = Regex.scan(~r/silence_end: ([\d.]+)/, log) |> Enum.map(fn [_, t] -> to_seconds(t) end)
+
+    assert length(flashes) == length(beeps),
+           "detected #{length(flashes)} flashes but #{length(beeps)} beeps in #{out}"
 
     # The last black and silent stretch runs to the end of the file, so its
     # "end" is EOF rather than a marker (measured 52ms apart), and is dropped.
