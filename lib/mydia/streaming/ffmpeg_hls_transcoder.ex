@@ -612,7 +612,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     audio_args =
       if audio_codec == "copy" do
         # Stream copy - no encoding parameters needed
-        ["-c:a", "copy"]
+        ["-c:a", "copy"] ++ trim_copied_audio(seek_args, video_codec)
       else
         # Full transcoding with encoding parameters
         [
@@ -706,6 +706,25 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       AudioTrackSelector.ffmpeg_map_args(selected_audio) ++
       video_args ++ audio_args ++ keyframe_args ++ timestamp_args ++ hls_args
   end
+
+  # -copypriorss:a 0 drops copied audio packets from before the seek point.
+  #
+  # An input seek starts reading at the keyframe before the target. Accurate
+  # seek (FFmpeg's default) discards the decoded video before the target, but
+  # copied audio never reaches a decoder, so without this it starts back at
+  # the keyframe. Measured on a source with a keyframe every 10s, resumed at
+  # 27s: 7.2s of audio ahead of the first video frame, 3ms with the flag. It
+  # holds under -copyts too, where the timestamps stay absolute.
+  #
+  # Jellyfin fixed the same bug with an output-side -ss. Measured and rejected
+  # here: under -copyts that rebases every timestamp to zero, which breaks the
+  # real-time segments of a :full playlist.
+  #
+  # Never for copied video. That starts on the keyframe as well, so its audio
+  # has to start there too, or the frames before the target play silent.
+  defp trim_copied_audio([], _video_codec), do: []
+  defp trim_copied_audio(_seek_args, "copy"), do: []
+  defp trim_copied_audio(_seek_args, _video_codec), do: ["-copypriorss:a", "0"]
 
   # Start FFmpeg process using Port
   defp start_ffmpeg_process(args) do
