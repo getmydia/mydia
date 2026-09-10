@@ -1492,15 +1492,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// stacks an hls.js instance per `open()` and never destroys the previous
   /// one. See the spec's web caveat.
   ///
-  /// [plan] only labels the source for verification: on web it is handed
-  /// to `_openPlayerAndStart` so the fresh player is armed before its own
-  /// `open()`, the same gap the initial online open closes; on native the
-  /// caller arms it once this attach completes.
+  /// Never arms verification, on either platform: a switch is already the
+  /// policy's own decision (or a seek/quality change the viewer made), and
+  /// the controller serialises it against a second switch or a fallback —
+  /// `_switchSource` re-arms only once `replaceSource` has actually landed
+  /// the new source. Arming here would let a fault on the incoming source
+  /// be deferred to a policy that is about to mark itself done and hand
+  /// back a `FallbackToTranscode` `_fallbackToTranscode` immediately drops
+  /// (`_switchingSource` is still true), silently swallowing the fault for
+  /// up to `replaceSource`'s 60s first-advance bound.
   Future<Stream<Duration>> _attachSource(
     Player player,
     PlaybackSource source, {
     required Duration at,
-    required PlaybackPlan plan,
   }) async {
     // The live subscriptions observe the new source as soon as open starts,
     // including while the controller still waits for its first advance.
@@ -1511,7 +1515,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         source.url,
         source.headers,
         plan: source.seekOnOpen ? ResumePlan(at) : ResumePlan.fromStart,
-        verificationPlan: plan,
       );
       return fresh.stream.position;
     }
@@ -1553,7 +1556,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         fileId: fileId,
         realPosition: at,
         totalDuration: _totalDuration,
-        attach: (source) => _attachSource(player, source, at: at, plan: plan),
+        attach: (source) => _attachSource(player, source, at: at),
         onProgress: (message) => debugPrint('[PlayerScreen] $message'),
       );
 

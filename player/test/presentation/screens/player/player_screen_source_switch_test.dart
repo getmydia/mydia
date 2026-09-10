@@ -315,4 +315,54 @@ void main() {
       await tester.pump();
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
+
+  testWidgets(
+      'a fault on the incoming source during a switch is not deferred to '
+      'verification', (tester) async {
+    final decoder = _Decoder();
+    final link = _server(directPlay: false);
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(
+          tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+      expect(find.byType(PlaybackChrome), findsOneWidget);
+      decoder.advance(const Duration(seconds: 15));
+      await tester.pump();
+      final binding =
+          tester.state(find.byType(PlayerScreen)) as RemotePlayerBinding;
+
+      // A WINDOW-mode seek past the transcoded window switches sources.
+      // Nothing advances the incoming source's position, so `replaceSource`
+      // is still waiting on it (see the previous test's same assumption)
+      // when the fault below arrives.
+      unawaited(binding.seek(const Duration(seconds: 600)));
+      await pumpUntil(tester, () => decoder.opened.length == 2);
+
+      // `_switchSource` stopped verification before this switch even
+      // started and only re-arms it once `replaceSource` lands — which it
+      // has not, since nothing has advanced the new source's position. A
+      // fault here must therefore reach the plain error path, not a policy
+      // that would immediately mark itself done and hand back a
+      // `FallbackToTranscode` `_fallbackToTranscode` silently drops because
+      // a switch is already in flight.
+      decoder.emitError('Failed to initialize video decoder');
+      await tester.pump();
+
+      expect(find.textContaining('Playback failed'), findsOneWidget);
+      expect(find.textContaining('Switched to transcoding'), findsNothing,
+          reason: 'a deferred-then-dropped fallback is the bug: no snackbar '
+              'means the fault was not silently swallowed');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
 }
