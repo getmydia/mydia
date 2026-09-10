@@ -592,12 +592,12 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # The consequence is that playlist timestamps start at ~0 rather than at the
     # offset, which is why the client has to carry a StreamTimeline to map
     # stream-local positions back onto real media positions.
-    seek_args =
+    seek_flags =
       seek_args(Keyword.get(opts, :seek_keyframe), Keyword.get(opts, :start_position, 0))
 
     # -hwaccel flags must precede -i. After it, ffmpeg has already selected a
     # decoder and silently ignores them.
-    base_args = seek_args ++ accel.input ++ ["-i", input_path]
+    base_args = seek_flags ++ accel.input ++ ["-i", input_path]
 
     video_args =
       if video_codec == "copy" do
@@ -610,7 +610,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     audio_args =
       if audio_codec == "copy" do
         # Stream copy - no encoding parameters needed
-        ["-c:a", "copy"] ++ trim_copied_audio(seek_args, video_codec)
+        ["-c:a", "copy"] ++ trim_copied_audio(seek_flags, video_codec)
       else
         # Full transcoding with encoding parameters
         [
@@ -721,8 +721,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   # Never for copied video. That starts on the keyframe as well, so its audio
   # has to start there too, or the frames before the target play silent.
   defp trim_copied_audio([], _video_codec), do: []
-  defp trim_copied_audio(_seek_args, "copy"), do: []
-  defp trim_copied_audio(_seek_args, _video_codec), do: ["-copypriorss:a", "0"]
+  defp trim_copied_audio(_seek_flags, "copy"), do: []
+  defp trim_copied_audio(_seek_flags, _video_codec), do: ["-copypriorss:a", "0"]
 
   # FFmpeg pulls an input seek back by 3/23s (about 0.13s) whenever a video
   # stream has B-frame delay and the container cannot seek by PTS, which covers
