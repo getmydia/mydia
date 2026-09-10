@@ -88,4 +88,42 @@ defmodule Mydia.Streaming.FfmpegSeekAlignmentArgsTest do
       refute "-copypriorss:a" in args(start_position: 27, video_codec: "libx264")
     end
   end
+
+  describe "a pinned keyframe" do
+    test "seeks just past the keyframe" do
+      result =
+        args(seek_keyframe: 20.0, start_position: 27, video_codec: "copy", audio_codec: "copy")
+
+      assert value_after(result, "-ss") == "20.200"
+    end
+
+    test "wins over the requested position" do
+      result = args(seek_keyframe: 1233.458, start_position: 1234, video_codec: "copy")
+
+      assert value_after(result, "-ss") == "1233.658"
+    end
+
+    test "stays an input seek" do
+      result = args(seek_keyframe: 20.0, start_position: 27, video_codec: "copy")
+
+      assert index_of(result, "-ss") < index_of(result, "-i")
+    end
+
+    test "a keyframe at zero is the start of the file, so no seek at all" do
+      refute "-ss" in args(seek_keyframe: 0.0, start_position: 5, video_codec: "copy")
+    end
+
+    test "never trims audio, because only copied video is ever pinned" do
+      refute "-copypriorss:a" in args(
+               seek_keyframe: 20.0,
+               start_position: 27,
+               video_codec: "copy",
+               audio_codec: "copy"
+             )
+    end
+
+    test "without one, the whole-second position is used as before" do
+      assert value_after(args(start_position: 27, video_codec: "copy"), "-ss") == "27"
+    end
+  end
 end

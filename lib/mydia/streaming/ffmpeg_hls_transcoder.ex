@@ -51,7 +51,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           preset: String.t(),
           crf: integer(),
           max_bitrate: integer() | nil,
-          max_height: integer() | nil
+          max_height: integer() | nil,
+          seek_keyframe: float() | nil
         ]
 
   defmodule State do
@@ -592,10 +593,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # offset, which is why the client has to carry a StreamTimeline to map
     # stream-local positions back onto real media positions.
     seek_args =
-      case Keyword.get(opts, :start_position, 0) do
-        pos when is_integer(pos) and pos > 0 -> ["-ss", to_string(pos)]
-        _ -> []
-      end
+      seek_args(Keyword.get(opts, :seek_keyframe), Keyword.get(opts, :start_position, 0))
 
     # -hwaccel flags must precede -i. After it, ffmpeg has already selected a
     # decoder and silently ignores them.
@@ -725,6 +723,30 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
   defp trim_copied_audio([], _video_codec), do: []
   defp trim_copied_audio(_seek_args, "copy"), do: []
   defp trim_copied_audio(_seek_args, _video_codec), do: ["-copypriorss:a", "0"]
+
+  # FFmpeg pulls an input seek back by 3/23s (about 0.13s) whenever a video
+  # stream has B-frame delay and the container cannot seek by PTS, which covers
+  # every MKV with B-frames. Seeking to a keyframe's exact timestamp therefore
+  # lands a whole GOP early: -ss 20.001 against an MKV keyframe at 20.000
+  # started at the keyframe at 10. 0.2s clears the pull-back and still sits far
+  # nearer this keyframe than the next one, so MKV (which seeks back to the
+  # keyframe at or before the point) and MP4 (which seeks to the nearest) both
+  # land on it.
+  @keyframe_seek_margin_seconds 0.2
+
+  # A pinned keyframe (see Mydia.Streaming.KeyframeLocator) wins over the
+  # requested whole-second position. A keyframe at zero is the start of the
+  # file and needs no seek at all.
+  defp seek_args(keyframe, _start_position) when is_number(keyframe) and keyframe > 0 do
+    ["-ss", :erlang.float_to_binary(keyframe + @keyframe_seek_margin_seconds, decimals: 3)]
+  end
+
+  defp seek_args(keyframe, _start_position) when is_number(keyframe), do: []
+
+  defp seek_args(nil, start_position) when is_integer(start_position) and start_position > 0,
+    do: ["-ss", to_string(start_position)]
+
+  defp seek_args(nil, _start_position), do: []
 
   # Start FFmpeg process using Port
   defp start_ffmpeg_process(args) do
