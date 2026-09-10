@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
+import '../../../core/crash_reporting/crash_reporter_provider.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/platform_features.dart';
@@ -24,6 +25,7 @@ import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
 import 'settings_controller.dart';
 import 'widgets/beta_channel_row.dart';
+import 'widgets/crash_reporting_row.dart';
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
@@ -267,6 +269,10 @@ class _ManageSection extends ConsumerWidget {
         // Flatpak branch, chosen at install time rather than in-app, and
         // Windows has no channel support at all.
         if (PlatformFeatures.isMacOS) const BetaChannelRow(),
+        // Hidden where nothing would be sent: web builds, and the inert
+        // reporter whole-app tests run with. See CrashReporter.isAvailable.
+        if (ref.watch(crashReporterProvider).isAvailable)
+          const CrashReportingRow(),
         if (updateState.manualCheck != ManualCheckBehaviour.unavailable)
           SettingsRow.action(
             key: const Key('check-for-updates-row'),
