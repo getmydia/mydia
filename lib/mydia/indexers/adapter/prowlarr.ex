@@ -64,13 +64,19 @@ defmodule Mydia.Indexers.Adapter.Prowlarr do
     headers = build_headers(config)
 
     case Req.get(url, headers: headers, receive_timeout: 10_000, retry: false) do
-      {:ok, %Req.Response{status: 200, body: body}} ->
+      {:ok, %Req.Response{status: 200, body: %{} = body}} ->
         {:ok,
          %{
            name: "Prowlarr",
            version: body["version"] || "unknown",
            app_name: body["appName"]
          }}
+
+      # Any other 200 isn't the Prowlarr API: usually its web UI, which it
+      # serves for paths the API doesn't own, or a proxy's login page (#765).
+      {:ok, %Req.Response{status: 200}} ->
+        {:error,
+         Error.connection_failed("Unexpected response, check that the URL points at Prowlarr")}
 
       {:ok, %Req.Response{status: 401}} ->
         {:error, Error.connection_failed("Authentication failed - invalid API key")}
