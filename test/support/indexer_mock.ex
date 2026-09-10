@@ -6,6 +6,8 @@ defmodule Mydia.IndexerMock do
   responses in tests, preventing real API calls that consume quotas.
   """
 
+  alias Mydia.BypassHelpers
+
   @doc """
   Sets up a Bypass server to mock Prowlarr search endpoint.
 
@@ -41,22 +43,60 @@ defmodule Mydia.IndexerMock do
 
   @doc """
   Sets up a Bypass server to mock Prowlarr system status endpoint.
+
+  Answers the way real Prowlarr does: JSON only when the raw request path is
+  exactly `<base_path>/api/v1/system/status`, and its web UI (a 200 HTML page)
+  for anything else. See `Mydia.BypassHelpers.stub_exact_json/5` for why the
+  raw path matters (#765).
+
+  ## Options
+
+    - `:status` - HTTP status code for the JSON response (default: 200)
+    - `:version` - version string in the JSON body (default: "1.0.0")
+    - `:base_path` - URL base Prowlarr runs under, e.g. "/prowlarr" (default: "")
   """
   def mock_prowlarr_status(bypass, opts \\ []) do
     status = Keyword.get(opts, :status, 200)
     version = Keyword.get(opts, :version, "1.0.0")
+    path = Keyword.get(opts, :base_path, "") <> "/api/v1/system/status"
+    body = Jason.encode!(%{"appName" => "Prowlarr", "version" => version})
 
-    Bypass.stub(bypass, "GET", "/api/v1/system/status", fn conn ->
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(
-        status,
-        Jason.encode!(%{
-          "appName" => "Prowlarr",
-          "version" => version
-        })
-      )
-    end)
+    BypassHelpers.stub_exact_json(bypass, "GET", path, body,
+      status: status,
+      fallback: &prowlarr_web_ui/1
+    )
+  end
+
+  @doc """
+  Sets up a Bypass server to mock Prowlarr's indexer list endpoint, with the
+  same exact-path rule as `mock_prowlarr_status/2`.
+
+  ## Options
+
+    - `:indexers` - list of Prowlarr indexer maps (default: one enabled torrent indexer)
+  """
+  def mock_prowlarr_indexers(bypass, opts \\ []) do
+    indexers =
+      Keyword.get(opts, :indexers, [
+        %{"id" => 1, "name" => "Fictional Tracker", "enable" => true, "protocol" => "torrent"}
+      ])
+
+    BypassHelpers.stub_exact_json(bypass, "GET", "/api/v1/indexer", Jason.encode!(indexers),
+      fallback: &prowlarr_web_ui/1
+    )
+  end
+
+  @doc """
+  Answers like Prowlarr does for any path its API doesn't own: a 200 with the
+  web UI's HTML.
+  """
+  def prowlarr_web_ui(conn) do
+    conn
+    |> Plug.Conn.put_resp_content_type("text/html")
+    |> Plug.Conn.resp(
+      200,
+      "<!doctype html><html><head><title>Prowlarr</title></head><body></body></html>"
+    )
   end
 
   @doc """
