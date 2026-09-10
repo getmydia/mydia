@@ -116,6 +116,35 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#flash-info", "Connection successful")
     end
 
+    test "test connection shows an error when the URL answers with a web page (#765)",
+         %{view: view} do
+      bypass = Bypass.open()
+      Bypass.stub(bypass, "GET", "/api/v1/system/status", &Mydia.IndexerMock.prowlarr_web_ui/1)
+
+      view
+      |> element(~s{button[phx-click="new_indexer"]})
+      |> render_click()
+
+      view
+      |> form("#indexer-form",
+        indexer_config: %{
+          name: "Web Page Prowlarr",
+          type: "prowlarr",
+          base_url: "http://localhost:#{bypass.port}",
+          api_key: "test-api-key",
+          enabled: "true",
+          priority: "1"
+        }
+      )
+      |> render_change()
+
+      view
+      |> element(~s{button[phx-click="test_indexer_connection"]})
+      |> render_click()
+
+      assert has_element?(view, "#flash-error", "Unexpected response")
+    end
+
     @tag :skip
     test "test connection succeeds with valid prowlarr server", %{view: view} do
       bypass = Bypass.open()
