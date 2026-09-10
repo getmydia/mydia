@@ -107,7 +107,10 @@ defmodule Mydia.ImportCandidates do
       (`Mydia.Library.FileIngest`) and, here, out of the ready band and
       `queue_accept_all_matched/1`, so only a person can put it back;
     * `queued_op: "rematch"`, so `Mydia.Jobs.RematchImportCandidates` gives it
-      a fresh suggestion under the `:review` policy, which never promotes;
+      a fresh suggestion under the `:review` policy, which never promotes.
+      The job is enqueued inside the same transaction as the detach, so a
+      failed enqueue rolls the whole detach back rather than leaving the
+      candidate queued with nothing to drain it;
     * `dismissed_at: nil`, because a dismissed candidate already at that path
       would otherwise hide the file from the inbox it was just sent to.
 
@@ -160,10 +163,12 @@ defmodule Mydia.ImportCandidates do
       queue_error: nil
     }
 
-    # Both writes (the candidate appearing, the media_files row disappearing)
-    # must succeed or fail together. Two independent Repo calls would let a
-    # hard interruption between them leave the file both still attached to the
-    # wrong item and duplicated into import_candidates.
+    # All three -- the candidate appearing, the media_files row disappearing,
+    # and the rematch job -- must succeed or fail together. Two independent
+    # Repo calls would let a hard interruption between them leave the file
+    # both still attached to the wrong item and duplicated into
+    # import_candidates; enqueueing outside the transaction would let a job
+    # insert failure leave the candidate queued with nothing left to drain it.
     #
     # The activity event is recorded inside the same transaction on purpose:
     # Mydia.Repo.transaction/2 defers its PubSub broadcast until the outermost
@@ -172,7 +177,8 @@ defmodule Mydia.ImportCandidates do
     result =
       Repo.transaction(fn ->
         with {:ok, _candidate} <- upsert(attrs),
-             {:ok, deleted} <- Mydia.Library.delete_media_file(file, delete_files: false) do
+             {:ok, deleted} <- Mydia.Library.delete_media_file(file, delete_files: false),
+             {:ok, _job} <- enqueue(Mydia.Jobs.RematchImportCandidates, library_path.id) do
           Mydia.Events.file_returned_to_review(deleted, media_item, actor_id)
           deleted
         else
@@ -182,28 +188,11 @@ defmodule Mydia.ImportCandidates do
 
     case result do
       {:ok, _deleted} ->
-        enqueue_rematch(library_path.id)
         broadcast(library_path.id)
         result
 
       {:error, _reason} ->
         result
-    end
-  end
-
-  # The candidate already carries `queued_op: "rematch"`, so a failed enqueue
-  # only delays its suggestion: the next enqueue for this library path, from
-  # any caller, drains it too.
-  defp enqueue_rematch(library_path_id) do
-    case enqueue(Mydia.Jobs.RematchImportCandidates, library_path_id) do
-      {:ok, _job} ->
-        :ok
-
-      {:error, reason} ->
-        Logger.warning("Could not enqueue a re-match for a returned file",
-          library_path_id: library_path_id,
-          reason: inspect(reason)
-        )
     end
   end
 

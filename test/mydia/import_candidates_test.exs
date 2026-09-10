@@ -1040,6 +1040,7 @@ defmodule Mydia.ImportCandidatesTest do
 
       assert Repo.get(MediaFile, file.id)
       assert Repo.aggregate(ImportCandidate, :count) == 0
+      refute_enqueued(worker: Mydia.Jobs.RematchImportCandidates)
     end
   end
 
