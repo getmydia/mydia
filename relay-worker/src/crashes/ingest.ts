@@ -460,7 +460,15 @@ export function registerCrashRoutes(app: Hono<{ Bindings: Env }>): void {
     const topKey = top
       ? `${top.module ?? ""}:${top.function ?? ""}:${top.file ?? ""}:${top.line ?? ""}`
       : "no-frame";
-    const fingerprint = await fingerprintOf(crash.kind, topKey);
+    // Player reports get groups of their own. Otherwise a frameless Dart
+    // ArgumentError and a frameless Elixir one share a fingerprint, and the
+    // group's source (fixed by its first insert) hides the other client's
+    // crashes behind the dashboard's source filter. Server fingerprints are
+    // unchanged, so every existing group keeps its identity.
+    const fingerprint = await fingerprintOf(
+      crash.kind,
+      crash.source === "player" ? `${topKey}|player` : topKey,
+    );
 
     const instanceKey =
       c.req.header("cf-connecting-ip") ?? crash.version ?? "unknown";

@@ -4,8 +4,8 @@
 -- install that predates the field, which is why the default is 'server'
 -- rather than NULL. src/crashes/ingest.ts's crashSourceOf is the only writer.
 --
--- On `errors` it is the source of the report that first created the group.
--- Player frames are package:player/ URIs and server frames are lib/mydia/
--- paths, so a fingerprint never mixes the two in practice.
+-- On `errors` it is the source of the report that created the group. Player
+-- fingerprints are salted with the source in src/crashes/ingest.ts, so a
+-- group never mixes the two clients.
 ALTER TABLE errors ADD COLUMN source TEXT NOT NULL DEFAULT 'server';
 ALTER TABLE occurrences ADD COLUMN source TEXT NOT NULL DEFAULT 'server';

@@ -774,6 +774,34 @@ describe("POST /crashes/report", () => {
       .first<{ source: string }>();
     expect(occurrence!.source).toBe("server");
   });
+
+  it("keeps a player crash and a server crash with the same kind and top frame in separate groups", async () => {
+    const shared = { error_type: "SharedSiteError", error_message: "bad", stacktrace: [] };
+
+    const serverRes = await SELF.fetch(REPORT_URL, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify(shared),
+    });
+    const playerRes = await SELF.fetch(REPORT_URL, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ ...shared, source: "player" }),
+    });
+    const serverId = (await serverRes.json<ReportResponse>()).id;
+    const playerId = (await playerRes.json<ReportResponse>()).id;
+
+    expect(playerId).not.toBe(serverId);
+    const { results } = await env.DB.prepare(
+      "SELECT fingerprint, source FROM errors WHERE fingerprint IN (?, ?)",
+    )
+      .bind(serverId, playerId)
+      .all<{ fingerprint: string; source: string }>();
+    expect(Object.fromEntries(results.map((r) => [r.fingerprint, r.source]))).toEqual({
+      [serverId]: "server",
+      [playerId]: "player",
+    });
+  });
 });
 
 describe("0005_crash_source migration", () => {
