@@ -38,12 +38,12 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
         <.icon name="hero-exclamation-triangle" class="w-5 h-5 opacity-60" /> Needs Attention
         <span class="badge badge-ghost">{length(@refusals)}</span>
       </h2>
-      <div class="join">
+      <div class="flex items-center gap-2">
         <button
           :if={@overridden?}
           id="duplicates-review-reset"
           type="button"
-          class="btn btn-sm btn-ghost join-item"
+          class="btn btn-sm btn-ghost"
           phx-click="reset_review_marks"
         >
           <.icon name="hero-arrow-path" class="w-4 h-4" /> Mark flagged
@@ -51,7 +51,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
         <button
           id="duplicates-review-selected"
           type="button"
-          class="btn btn-sm btn-primary join-item"
+          class="btn btn-sm btn-primary"
           disabled={MapSet.size(@returning) == 0}
           phx-click="open_review_modal"
         >

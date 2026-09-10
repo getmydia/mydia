@@ -170,18 +170,18 @@ defmodule Mydia.Library.Prune do
       for {group, reason, _detail} <- refusals, reason != :duplicate_registration, do: group
 
     {sendable, whole_group} =
-      Enum.reduce(groups, {[], []}, fn group, {send, abort} ->
+      Enum.reduce(groups, {[], []}, fn group, {to_send, to_abort} ->
         picked = Enum.filter(group.files, &MapSet.member?(requested, &1.id))
 
         cond do
           picked == [] ->
-            {send, abort}
+            {to_send, to_abort}
 
           length(picked) == length(group.files) ->
-            {send, abort ++ Enum.map(picked, &{&1.id, :would_leave_no_file})}
+            {to_send, to_abort ++ Enum.map(picked, &{&1.id, :would_leave_no_file})}
 
           true ->
-            {send ++ picked, abort}
+            {to_send ++ picked, to_abort}
         end
       end)
 
