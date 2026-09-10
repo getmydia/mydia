@@ -63,6 +63,25 @@ defmodule Mydia.Library.FileIngestTest do
     refute Repo.exists?(MediaFile)
   end
 
+  test "unattended mode keeps a returned candidate in review at full confidence" do
+    # An operator sent this file back from an item it was filed under by
+    # mistake. A confident match can name that same item again, so it waits
+    # for a person.
+    candidate =
+      candidate()
+      |> Ecto.Changeset.change(returned_at: DateTime.utc_now() |> DateTime.truncate(:second))
+      |> Repo.update!()
+
+    movie = media_item_fixture(%{type: "movie", tmdb_id: 60_311})
+
+    assert {:candidate, %ImportCandidate{id: id, provider_id: provider_id}} =
+             FileIngest.ingest(candidate, match(movie, 1.0), policy: :unattended)
+
+    assert id == candidate.id
+    assert provider_id == Integer.to_string(movie.tmdb_id)
+    refute Repo.exists?(MediaFile)
+  end
+
   test "a nil match records retry backoff on the same candidate" do
     candidate = candidate()
 

@@ -71,6 +71,13 @@ defmodule Mydia.Library.FileIngest do
   defp decide(_candidate, nil, _policy, _threshold), do: :candidate
   defp decide(_candidate, _match, :review, _threshold), do: :candidate
 
+  # An operator sent this file back from an item it had been filed under by
+  # mistake (Mydia.ImportCandidates.return_to_review/2). A confident match can
+  # name that same item again, so it waits for a person whatever the
+  # confidence. Matching still ran, so /review shows the suggestion.
+  defp decide(%ImportCandidate{returned_at: %DateTime{}}, _match, :unattended, _threshold),
+    do: :candidate
+
   defp decide(candidate, match, :unattended, threshold) do
     cond do
       extra?(candidate, match) -> :candidate

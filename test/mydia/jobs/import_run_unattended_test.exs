@@ -159,4 +159,21 @@ defmodule Mydia.Jobs.ImportRunUnattendedTest do
       assert ImportCandidates.count_outstanding(lp.id) == 0
     end
   end
+
+  describe "a candidate an operator returned to review" do
+    test "is matched but never promoted by an unattended run" do
+      {lp, run} = library_with("movies", ["#{MetadataStubProvider.movie_title()} (1999).mkv"])
+
+      [candidate] = Repo.all(from c in ImportCandidate, where: c.library_path_id == ^lp.id)
+
+      candidate
+      |> Ecto.Changeset.change(returned_at: DateTime.utc_now() |> DateTime.truncate(:second))
+      |> Repo.update!()
+
+      assert :ok = match_within(run)
+
+      assert Library.list_media_files(library_path_id: lp.id) == []
+      assert Repo.reload!(candidate).provider_id
+    end
+  end
 end
