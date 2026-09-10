@@ -365,4 +365,69 @@ void main() {
       await tester.pump();
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
+
+  testWidgets(
+      'a fault on the incoming source during a switch is forgotten once the '
+      'switch lands', (tester) async {
+    final decoder = _Decoder();
+    final link = _server(directPlay: false);
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(
+          tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+      expect(find.byType(PlaybackChrome), findsOneWidget);
+      decoder.advance(const Duration(seconds: 15));
+      await tester.pump();
+      final binding =
+          tester.state(find.byType(PlayerScreen)) as RemotePlayerBinding;
+
+      // Same setup as the previous test: a WINDOW-mode seek switches sources
+      // and nothing has advanced the incoming source's position yet, so the
+      // fault below surfaces as the plain error page rather than being
+      // deferred to a not-yet-armed policy.
+      var switchCompleted = false;
+      final switchFuture = binding
+          .seek(const Duration(seconds: 600))
+          .whenComplete(() => switchCompleted = true);
+      await pumpUntil(tester, () => decoder.opened.length == 2);
+
+      decoder.emitError('Failed to initialize video decoder');
+      await tester.pump();
+      expect(find.textContaining('Playback failed'), findsOneWidget);
+
+      // The incoming source was never actually broken: it goes on to
+      // advance normally, and the switch lands. Two increasing positions are
+      // needed because `_awaitFirstAdvance` treats the first value it sees
+      // as the baseline and waits for one past it. The same
+      // `runAsync`-then-`pumpUntil(switchCompleted)` sequence as "a second
+      // seek during progress saving cannot replace the first" above: the
+      // switch's mutations go through real `dart:io` HTTP mocking, which
+      // does not fully resolve under plain `pump()`s alone.
+      decoder.advance(const Duration(seconds: 1));
+      await tester.pump();
+      decoder.advance(const Duration(seconds: 2));
+      await tester.pump();
+      await pumpUntil(tester,
+          () => link.requests.any((r) => r.variables['sessionId'] == 'sess-4'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await pumpUntil(tester, () => switchCompleted);
+      await switchFuture;
+
+      expect(find.textContaining('Playback failed'), findsNothing,
+          reason: 'the switch landed after the fault; the error page must '
+              'not be left over a working video');
+      expect(find.byType(PlaybackChrome), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
 }

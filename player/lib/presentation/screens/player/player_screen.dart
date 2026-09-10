@@ -1565,6 +1565,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _plan = plan;
         _isDirectPlay = plan is DirectPlayPlan;
         _applySource(source);
+        // A fault that landed on `player.stream.error` while this switch was
+        // in flight (verification is deliberately unarmed until it lands,
+        // see `_attachSource`) can still have set `_error` even though the
+        // switch just succeeded. Clear it here so a working video is never
+        // left behind the error page.
+        _error = null;
       });
       _startVerification(plan);
     } finally {
