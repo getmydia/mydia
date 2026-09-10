@@ -376,6 +376,9 @@ defmodule Mydia.Streaming.HlsSession do
     first_index =
       if segment_plan, do: SegmentPlan.index_for_time(segment_plan, start_position), else: 0
 
+    # Where the first encoder seeks to. See encoder_start_position/3.
+    encoder_start = encoder_start_position(segment_plan, first_index, start_position)
+
     # Generate session ID and create temp directory
     session_id = generate_session_id()
     temp_dir = Path.join(@temp_base_dir, session_id)
@@ -438,7 +441,7 @@ defmodule Mydia.Streaming.HlsSession do
         backend_opts = [
           max_bitrate: max_bitrate,
           max_height: max_height,
-          start_position: start_position,
+          start_position: encoder_start,
           start_number: first_index,
           grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate, max_height),
           absolute_timestamps: playlist_mode == :full,
@@ -592,6 +595,29 @@ defmodule Mydia.Streaming.HlsSession do
     playlist_mode == :full and
       FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate, max_height)
   end
+
+  # Where the session's first encoder seeks to.
+  #
+  # A :full session starts it on the segment grid, exactly where relocate/2
+  # starts every later one. Forced keyframes follow the encoder's start rather
+  # than the grid, so an encoder started at the raw resume second cut every
+  # segment it wrote that far off the published plan. Measured: resumed at 30s,
+  # the segments declared as 28-32, 32-36 and 36-40 began at 30.00, 33.92 and
+  # 37.93, and a later on-grid relocation met them with a 2s gap. The viewer
+  # never sees the extra lead-in: the player seeks to the resume point inside
+  # the full playlist.
+  #
+  # A :window session has no grid and starts where it was asked to.
+  #
+  # Public only so this decision can be asserted directly; nothing outside
+  # this module should call it.
+  @doc false
+  @spec encoder_start_position(SegmentPlan.t() | nil, non_neg_integer(), non_neg_integer()) ::
+          non_neg_integer()
+  def encoder_start_position(nil, _first_index, start_position), do: start_position
+
+  def encoder_start_position(segment_plan, first_index, _start_position),
+    do: trunc(SegmentPlan.start_time(segment_plan, first_index))
 
   @doc """
   Decides what to do when the backend died of a hardware initialisation failure.
