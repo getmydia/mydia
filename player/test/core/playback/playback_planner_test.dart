@@ -150,10 +150,24 @@ void main() {
       expect(plan.reason, PlanReason.shapeKnownToFail);
     });
 
-    test('Original ignores a known failure and attempts direct play', () {
+    test('a default Original respects a known failure', () {
       final plan = planPlayback(_inputs(knownFailures: {
         const FailureKey(videoCodec: _hevc, heightBucket: 1080),
       }));
+      expect(plan, isA<HlsPlan>());
+      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
+      expect(plan.reason, PlanReason.shapeKnownToFail);
+    });
+
+    test(
+        'a manually chosen Original bypasses a known failure and attempts '
+        'direct play', () {
+      final plan = planPlayback(_inputs(
+        choice: QualityChoice.fromRung(QualityRung.original, manual: true),
+        knownFailures: {
+          const FailureKey(videoCodec: _hevc, heightBucket: 1080),
+        },
+      ));
       expect(plan, isA<DirectPlayPlan>());
       expect(plan.reason, PlanReason.directPlayAccepted);
     });
@@ -217,10 +231,25 @@ void main() {
       expect(plan.reason, PlanReason.shapeKnownToFail);
     });
 
-    test('Original ignores a known failure and attempts copy', () {
+    test('a default Original respects a known failure and does not copy', () {
       final plan = planPlayback(_inputs(
         candidates: _remuxList,
         isWeb: true,
+        knownFailures: {
+          const FailureKey(videoCodec: _h264, heightBucket: 1080),
+        },
+      ));
+      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
+      expect(plan.reason, PlanReason.shapeKnownToFail);
+    });
+
+    test(
+        'a manually chosen Original bypasses a known failure and attempts '
+        'copy', () {
+      final plan = planPlayback(_inputs(
+        candidates: _remuxList,
+        isWeb: true,
+        choice: QualityChoice.fromRung(QualityRung.original, manual: true),
         knownFailures: {
           const FailureKey(videoCodec: _h264, heightBucket: 1080),
         },

@@ -33,12 +33,16 @@ HLS_COPY, and on web a MIME string `MediaSource.isTypeSupported` accepts.
 Otherwise transcode.
 
 A shape known to fail here (the failure memory below) also blocks direct play
-and copy, but only when the request is the Auto choice; a manually chosen
-Original bypasses it and always retries. The quality picker has no Auto row
-yet (a later phase), so today's two reachable choices are Original, which
-always retries direct play and copy regardless of memory, and a fixed rung,
-which skips straight to transcode. The bandwidth check has no such carve-out:
-it applies to every choice, Original included.
+and copy, unless the choice is a manually picked Original: `QualityChoice`
+carries a `manual` flag, true only when the viewer just tapped Original in the
+quality selector, and that is the one case that bypasses the memory. Auto and
+a default Original (a stored default, or a rung carried over from the
+previous episode) both stay screened against it. The quality picker has no
+Auto row yet (a later phase), so today's two reachable choices are Original,
+which respects the memory unless the viewer picked it just now, and a fixed
+rung, which skips straight to transcode without ever consulting memory. The
+bandwidth check has no such carve-out: it applies to every choice, Original
+included, manual or not.
 
 A leading HLS_COPY is the server's `:needs_transcoding` verdict and is never
 taken; see `lib/mydia/streaming/README.md`.
@@ -62,12 +66,15 @@ fallback's own `describe()` (always ends `(fallbackFromFailure)`, since
 
 A decode fallback always records the file's shape (RFC 6381 video codec plus
 height bucket) against the server, regardless of the quality choice in play.
-Whether that record is later consulted follows the same Auto/Original split
-as "The decision": only a session planned as Auto skips a shape already known
-to fail, so this only takes effect once Auto ships. A bandwidth fallback
-lowers the remembered throughput, and that check applies unconditionally, so
-a slow link is remembered on the very next attempt regardless of choice.
-Settings has a "Forget playback problems" row that clears the box.
+Whether that record is later consulted follows the same rule as "The
+decision": a remembered shape skips direct play and copy on the next play,
+unless the viewer picks Original in the quality menu right then, which
+bypasses it. A default Original, whether seeded from storage or carried over
+from the previous episode, still respects the memory, and so does Auto once
+it ships. A bandwidth fallback lowers the remembered throughput, and that
+check applies unconditionally, so a slow link is remembered on the very next
+attempt regardless of choice. Settings has a "Forget playback problems" row
+that clears the box.
 
 ## The switch
 

@@ -24,6 +24,48 @@ void main() {
         isFalse,
       );
     });
+
+    test('fromRung defaults Original to not manual', () {
+      final choice = QualityChoice.fromRung(QualityRung.original);
+      expect(choice.manual, isFalse);
+      expect(choice, QualityChoice.original);
+    });
+
+    test('fromRung(original, manual: true) is a distinct, manual choice', () {
+      final choice = QualityChoice.fromRung(QualityRung.original, manual: true);
+      expect(choice.kind, QualityChoiceKind.original);
+      expect(choice.manual, isTrue);
+      expect(choice, isNot(QualityChoice.original));
+      expect(choice.hashCode, isNot(QualityChoice.original.hashCode));
+    });
+
+    test('manual is ignored for a fixed rung', () {
+      const rung =
+          QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+      final choice = QualityChoice.fromRung(rung, manual: true);
+      expect(choice.kind, QualityChoiceKind.fixed);
+      expect(choice.manual, isFalse);
+    });
+
+    test('equality and hashCode account for manual', () {
+      final manual = QualityChoice.fromRung(QualityRung.original, manual: true);
+      final manualAgain =
+          QualityChoice.fromRung(QualityRung.original, manual: true);
+      expect(manual, manualAgain);
+      expect(manual.hashCode, manualAgain.hashCode);
+      expect(manual, isNot(QualityChoice.original));
+    });
+
+    test('toString notes a manual choice', () {
+      // `QualityChoice.original` carries no rung (that is only set for a
+      // fixed choice), so it falls back to the enum name, not the rung
+      // label.
+      expect(QualityChoice.original.toString(), 'QualityChoice(original)');
+      expect(
+        QualityChoice.fromRung(QualityRung.original, manual: true).toString(),
+        'QualityChoice(original, manual)',
+      );
+    });
   });
 
   group('FileShape.fromCandidates', () {

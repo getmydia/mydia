@@ -143,8 +143,13 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   }
 
   final failureKey = FailureKey.fromShape(inputs.shape);
-  final knownToFail = choice.kind == QualityChoiceKind.auto &&
-      inputs.knownFailures.contains(failureKey);
+  // A manually chosen Original is the one shape that bypasses the memory,
+  // since the viewer can always override it. Auto and a default/carried
+  // Original (not picked by the viewer just now) both stay screened against it.
+  final manualOriginal =
+      choice.kind == QualityChoiceKind.original && choice.manual;
+  final knownToFail =
+      !manualOriginal && inputs.knownFailures.contains(failureKey);
   final fits = bitrateFits(
     fileBitrateKbps: inputs.fileBitrateKbps,
     throughputKbps: inputs.knownThroughputKbps,

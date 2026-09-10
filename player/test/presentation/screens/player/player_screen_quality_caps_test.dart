@@ -11,6 +11,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/core/playback/playback_memory.dart';
+import 'package:player/core/playback/playback_memory_providers.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
@@ -335,5 +337,54 @@ void main() {
     expect(sessionRequests(link).length, 1,
         reason: 'a resolver failure is not version skew; retrying it would '
             'double every real error');
+  });
+
+  testWidgets(
+      'a remembered decode failure blocks a default Original from direct '
+      'playing', (tester) async {
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
+      streamingCandidatesResponse(
+          duration: 5400, height: 1080, directPlay: true),
+      startStreamingSessionResponse(),
+      endStreamingSessionResponse(),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    // Seeded before the screen ever reads it, matching the exact shape
+    // `streamingCandidatesResponse(directPlay: true, height: 1080)`'s
+    // candidate produces (`avc1.640028` / bucket 1080). `serverUrlProvider`
+    // is overridden to this same URL, which is the memory key for a
+    // non-p2p connection.
+    final memory = await container.read(playbackMemoryProvider.future);
+    await memory.recordFailure(
+      'https://mydia.test',
+      const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080),
+      FailureReason.decodeFailed,
+      now: DateTime.now(),
+    );
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntilSessionStarted(tester, link);
+
+    // Direct play sends no `startStreamingSession` mutation at all; only an
+    // HLS plan does, identified by the `strategy` variable `sessionRequests`
+    // filters on. Regression coverage for `playback_planner.dart`'s
+    // `knownToFail` gate actually reaching the live app: the screen never
+    // offers Auto in this phase, so if the gate stayed keyed to
+    // `QualityChoiceKind.auto` the memory above would go unconsulted and
+    // this would direct play despite the remembered failure.
+    expect(sessionRequests(link), hasLength(1),
+        reason: 'a default Original must respect the remembered failure and '
+            'transcode instead of direct playing');
   });
 }
