@@ -73,6 +73,21 @@ defmodule Mydia.ImportCandidatesTest do
     assert {[], nil} = ImportCandidates.page(candidate.library_path_id)
   end
 
+  test "returned_at survives a fresh import upsert" do
+    returned_at = DateTime.utc_now() |> DateTime.truncate(:second)
+    candidate = import_candidate_fixture(%{returned_at: returned_at})
+
+    # Discovery never carries returned_at, so a rescan's upsert must leave it
+    # alone, the same way it leaves dismissed_at alone.
+    assert {:ok, _} =
+             ImportCandidates.upsert(
+               Map.from_struct(candidate)
+               |> Map.take([:library_path_id, :relative_path, :anchor_key, :size, :discovered_at])
+             )
+
+    assert Repo.reload!(candidate).returned_at == returned_at
+  end
+
   describe "band/1" do
     defp group(attrs) do
       Map.merge(
