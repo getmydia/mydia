@@ -5,6 +5,8 @@ defmodule Mydia.Library.Prune.EligibilityTest do
   import Mydia.SettingsFixtures
 
   alias Mydia.Library.Prune.{Eligibility, Group}
+  alias Mydia.Library.ReleaseParser
+  alias Mydia.Library.ReleaseParser.TargetContext
 
   # Builds a movie group whose files differ only in the attrs given.
   defp movie_group(file_attrs) do
@@ -79,6 +81,18 @@ defmodule Mydia.Library.Prune.EligibilityTest do
 
   defp suspect_paths(group),
     do: group |> Eligibility.suspect_files() |> Enum.map(& &1.relative_path) |> Enum.sort()
+
+  # A precondition for the "does not flag..." tests below: if the given
+  # relative_path actually binds to the group's item, the test proves nothing
+  # because the folder rule (or the extras exclusion) is never reached.
+  defp assert_name_unbound!(group, relative_path) do
+    target = TargetContext.from_media_item(group.media_item)
+    flags = ReleaseParser.parse_with_path(relative_path, target: target).engine_flags || %{}
+
+    assert flags[:binding_suspect],
+           "precondition: #{relative_path} must not bind to #{group.media_item.title}, " <>
+             "or this test proves nothing"
+  end
 
   # Builds a group with two rows sharing the same (library_path_id,
   # relative_path) key. Two ACTIVE rows genuinely at the same library path
@@ -350,22 +364,24 @@ defmodule Mydia.Library.Prune.EligibilityTest do
     end
 
     test "does not flag bonus content in the feature's own folder" do
+      bonus_path = "Zephyr Station (2030)/Gag Reel.mkv"
+
       group =
         zephyr_group([
           %{
             relative_path: "Zephyr Station (2030)/Zephyr.Station.2030.1080p.mkv",
             metadata: duration(6000.0)
           },
-          %{
-            relative_path: "Zephyr Station (2030)/Orientation Week.mkv",
-            metadata: duration(280.0)
-          }
+          %{relative_path: bonus_path, metadata: duration(280.0)}
         ])
 
+      assert_name_unbound!(group, bonus_path)
       assert suspect_paths(group) == []
     end
 
     test "never flags a classified extra, whatever folder it sits in" do
+      extra_path = "Zephyr Station (2030)/Featurettes/Outtakes.mkv"
+
       group =
         zephyr_group([
           %{
@@ -373,13 +389,14 @@ defmodule Mydia.Library.Prune.EligibilityTest do
             metadata: duration(6000.0)
           },
           %{
-            relative_path: "Zephyr Station (2030)/Featurettes/Behind the Scenes.mkv",
+            relative_path: extra_path,
             metadata: duration(600.0),
             extra_kind: :other,
             extra_source: :operator
           }
         ])
 
+      assert_name_unbound!(group, extra_path)
       assert suspect_paths(group) == []
     end
 
@@ -388,13 +405,13 @@ defmodule Mydia.Library.Prune.EligibilityTest do
         zephyr_group([
           %{relative_path: "Starveil (2031)/Starveil.2031.1080p.mkv", metadata: duration(7000.0)},
           %{
-            relative_path: "Emberline (2029)/Emberline.2029.1080p.mkv",
+            relative_path: "Quillmoor (2029)/Quillmoor.2029.1080p.mkv",
             metadata: duration(5000.0)
           }
         ])
 
       assert suspect_paths(group) == [
-               "Emberline (2029)/Emberline.2029.1080p.mkv",
+               "Quillmoor (2029)/Quillmoor.2029.1080p.mkv",
                "Starveil (2031)/Starveil.2031.1080p.mkv"
              ]
     end
