@@ -27,11 +27,14 @@ class NativeFrameStatsSampler implements FrameStatsSampler {
       final decoder = int.tryParse(
         await _platform.getProperty('decoder-frame-drop-count'),
       );
-      if (vo == null && decoder == null) return null;
+      // A read where either counter fails to parse cannot be trusted: the
+      // cumulative total would silently drop, and the next good read would
+      // make the monitor count that whole gap as new drops.
+      if (vo == null || decoder == null) return null;
       // `cache-speed` is bytes per second of network read.
       final speed = double.tryParse(await _platform.getProperty('cache-speed'));
       return FrameStats(
-        droppedFrames: (vo ?? 0) + (decoder ?? 0),
+        droppedFrames: vo + decoder,
         throughputKbps: speed == null ? null : (speed * 8 / 1000).round(),
       );
     } catch (e) {
