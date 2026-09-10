@@ -4709,9 +4709,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           onCastTap: _showCastDevicePicker,
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
-          // Hidden when Auto and Original could never differ for this file —
-          // a local file, no plan yet, or a lossy source with no adaptive
-          // ladder — matching how audio disables itself at zero tracks
+          // Hidden when Auto and Original could never differ for this file
+          // (a local file, no plan yet, or a lossy source with no adaptive
+          // ladder), matching how audio disables itself at zero tracks
           // rather than opening a one-item menu.
           onQualityTap: qualityControlAvailable(
                   localFile: _isDownloadedSource,

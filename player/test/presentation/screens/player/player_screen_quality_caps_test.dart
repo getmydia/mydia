@@ -4,7 +4,7 @@
 //
 // These assert on `StubLink.requests` rather than on the chrome. The rung a
 // viewer picks only matters if it reaches the mutation, and the request is
-// where that is decidable — the control's own visibility is
+// where that is decidable — the control's own visibility is a function of
 // `qualityControlAvailable`, which `quality_display_test.dart` pins.
 
 import 'package:flutter/foundation.dart';
