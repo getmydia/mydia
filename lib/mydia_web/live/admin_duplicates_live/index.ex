@@ -128,12 +128,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   # blast radius. Nothing is destroyed either; /review can reattach them.
   def handle_event("send_group_to_review", %{"subject" => subject_id}, socket) do
     with group when not is_nil(group) <- find_refused_group(socket, subject_id),
-         ids =
-           for(
-             file <- group.files,
-             MapSet.member?(socket.assigns.returning, file.id),
-             do: file.id
-           ),
+         ids = group_returning(socket, group),
          false <- ids == [] do
       {:noreply, run_send(socket, ids, "from #{Components.subject_label(group)}")}
     else
@@ -306,6 +301,11 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     for file <- decision.losers,
         MapSet.member?(socket.assigns.selected, file.id),
         do: file.id
+  end
+
+  # The marked files of one refused group, for its Send button.
+  defp group_returning(socket, group) do
+    for file <- group.files, MapSet.member?(socket.assigns.returning, file.id), do: file.id
   end
 
   defp load_plan(socket) do
