@@ -17,10 +17,10 @@ defmodule Mydia.Downloads.Blacklists do
   ## Guid plumbing
 
   The blacklist key is `(indexer, guid)`. Some indexers return a stable
-  `guid` per release; others don't. The producer (`DownloadMonitor`) is
-  responsible for materializing a fallback guid — typically a SHA-256 of
-  `(indexer, title, size)` — when one is missing. This module performs no
-  fallback synthesis of its own.
+  `guid` per release; others don't. `release_guid/1` supplies a SHA-256 of
+  `(indexer, title, size)` for the ones that don't, and both sides of the
+  blacklist go through it: the grab path records it on the download, and
+  `reject_blacklisted/2` checks search results against it.
   """
 
   import Ecto.Query
@@ -37,6 +37,36 @@ defmodule Mydia.Downloads.Blacklists do
           expires_at: DateTime.t() | nil,
           ttl_days: non_neg_integer() | nil
         ]
+
+  @doc """
+  Returns the guid a search result is blacklisted under: the indexer's own
+  guid, or `"sha256:"` plus a SHA-256 of `(indexer, title, size)` when the
+  indexer supplies none.
+
+  The grab path and `reject_blacklisted/2` must agree on this. When only the
+  grab path synthesized it, a release from a guid-less indexer was blacklisted
+  under the fallback but checked under nothing, so every search re-grabbed
+  the release it had just rejected.
+
+  The fallback format is stored in existing blacklist rows, so changing it
+  orphans them.
+  """
+  @spec release_guid(map()) :: String.t()
+  def release_guid(%{guid: guid}) when is_binary(guid) and guid != "", do: guid
+
+  def release_guid(result) do
+    payload =
+      Enum.join(
+        [
+          Map.get(result, :indexer) || "",
+          Map.get(result, :title) || "",
+          to_string(Map.get(result, :size) || 0)
+        ],
+        "|"
+      )
+
+    "sha256:" <> (:crypto.hash(:sha256, payload) |> Base.encode16(case: :lower))
+  end
 
   @doc """
   Pulls the `(indexer, guid)` blacklist key off a download.
@@ -136,8 +166,9 @@ defmodule Mydia.Downloads.Blacklists do
   Filters out results whose `(indexer, guid)` is currently blacklisted, in
   one DB roundtrip regardless of result-list size.
 
-  Each search result is expected to expose `:indexer` and `:guid` keys.
-  Results missing either are kept (no blacklist key to compare). Rejected
+  Each search result is expected to expose `:indexer`, and `:guid` or the
+  `:title` and `:size` that `release_guid/1` falls back to. Results with no
+  indexer are kept (no blacklist key to compare). Rejected
   rows are logged at `:info` along with the supplied `log_context` keyword
   list so callers can attach episode/movie ids for traceability.
 
@@ -156,7 +187,7 @@ defmodule Mydia.Downloads.Blacklists do
       if pair && MapSet.member?(blacklisted, pair) do
         Logger.info(
           "Rejected blacklisted release",
-          [indexer: result.indexer, guid: result.guid, title: Map.get(result, :title)] ++
+          [indexer: result.indexer, guid: elem(pair, 1), title: Map.get(result, :title)] ++
             log_context
         )
 
@@ -207,9 +238,8 @@ defmodule Mydia.Downloads.Blacklists do
     end
   end
 
-  defp blacklist_key(%{indexer: indexer, guid: guid})
-       when is_binary(indexer) and is_binary(guid) and guid != "" do
-    {ReleaseBlacklist.normalize_indexer(indexer), guid}
+  defp blacklist_key(%{indexer: indexer} = result) when is_binary(indexer) and indexer != "" do
+    {ReleaseBlacklist.normalize_indexer(indexer), release_guid(result)}
   end
 
   defp blacklist_key(_), do: nil
