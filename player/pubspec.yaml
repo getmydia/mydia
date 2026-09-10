@@ -47,6 +47,10 @@ dependencies:
   connectivity_plus: ^7.3.1
   device_info_plus: ^13.2.0
   package_info_plus: ^10.2.1
+  # Parses crash stack traces into frames for core/crash_reporting. Already
+  # resolved transitively; declared so the import is not an undeclared
+  # dependency.
+  stack_trace: ^1.12.1
   mobile_scanner: ^7.0.1
   url_launcher: ^6.3.0
   flutter_rust_bridge: ^2.13.0
