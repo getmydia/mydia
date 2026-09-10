@@ -290,6 +290,58 @@ defmodule Mydia.Indexers.FlareSolverrTest do
     end
   end
 
+  describe "health_check/0 gating" do
+    # health_check/0 is the saved-config check that status/0 and available?/0
+    # build on. Only the admin Test buttons skip the enabled gate, through
+    # health_check/1; this pins that the gate itself did not move.
+    test "still returns :disabled when the saved config is switched off" do
+      put_flaresolverr_config(enabled: false, url: "http://localhost:8191")
+      assert {:error, :disabled} = FlareSolverr.health_check()
+    end
+
+    test "returns :not_configured when there is no FlareSolverr config" do
+      clear_flaresolverr_config()
+      assert {:error, :not_configured} = FlareSolverr.health_check()
+    end
+  end
+
+  describe "health_check/1" do
+    test "probes the given URL even while FlareSolverr is disabled" do
+      bypass = Bypass.open()
+      put_flaresolverr_config(enabled: false, url: nil)
+
+      Bypass.expect_once(bypass, "POST", "/v1", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert %{"cmd" => "sessions.list"} = Jason.decode!(body)
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{"status" => "ok", "version" => "3.3.21", "sessions" => []})
+        )
+      end)
+
+      assert {:ok, %{version: "3.3.21", sessions: []}} =
+               FlareSolverr.health_check("http://localhost:#{bypass.port}")
+    end
+
+    test "returns connection_error when nothing answers at the given URL" do
+      bypass = Bypass.open()
+      Bypass.down(bypass)
+
+      assert {:error, {:connection_error, _reason}} =
+               FlareSolverr.health_check("http://localhost:#{bypass.port}")
+    end
+
+    test "rejects anything but an absolute http(s) URL without making a request" do
+      for url <- [nil, "", "   ", "flaresolverr:8191", "ftp://flaresolverr.test", "http://"] do
+        assert {:error, :invalid_url} = FlareSolverr.health_check(url),
+               "expected #{inspect(url)} to be rejected"
+      end
+    end
+  end
+
   describe "get/2 via HTTP" do
     setup do
       bypass = Bypass.open()
