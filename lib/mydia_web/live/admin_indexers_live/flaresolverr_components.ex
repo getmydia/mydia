@@ -75,6 +75,7 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
 
             <div class="join ml-auto sm:ml-2">
               <button
+                id="flaresolverr-row-test"
                 class="btn btn-sm btn-ghost join-item"
                 phx-click="test_flaresolverr"
                 title="Test Connection"
@@ -236,6 +237,7 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
   defp fs_format_error(:timeout), do: "Connection timed out"
   defp fs_format_error(:not_configured), do: "Not configured"
   defp fs_format_error(:disabled), do: "Service is disabled"
+  defp fs_format_error(:invalid_url), do: "Not a valid http(s) URL"
   defp fs_format_error(error) when is_binary(error), do: error
   defp fs_format_error(error), do: inspect(error)
 end

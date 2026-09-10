@@ -330,6 +330,26 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#flaresolverr-panel")
     end
 
+    test "row Test probes the saved URL even while FlareSolverr is disabled", %{conn: conn} do
+      bypass = Bypass.open()
+      put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
+      expect_flaresolverr_ok(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element("#flaresolverr-row-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+    end
+
+    test "row Test with no saved URL points the operator at Edit", %{conn: conn} do
+      put_saved_flaresolverr(enabled: false, url: nil)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      view |> element("#flaresolverr-row-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "No FlareSolverr URL configured")
+    end
+
     test "enabling with a blank URL shows a required-error and keeps the modal open", %{
       conn: conn
     } do
@@ -514,5 +534,31 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert Mydia.Indexers.FlareSolverr.enabled?()
       assert has_element?(view, "#flaresolverr-panel .badge-success", "Enabled")
     end
+  end
+
+  # Seeds the merged runtime config the way a completed save leaves it. The
+  # "FlareSolverr panel" setup restores :runtime_config on exit. Keep
+  # `enabled: false` in tests that count requests: with it on, mount's async
+  # status probe would hit the same URL a second time.
+  defp put_saved_flaresolverr(attrs) do
+    config =
+      case Application.get_env(:mydia, :runtime_config) do
+        %Mydia.Config.Schema{} = config -> config
+        _ -> Mydia.Config.Schema.defaults()
+      end
+
+    fs = struct(Mydia.Config.Schema.FlareSolverr, attrs)
+    Application.put_env(:mydia, :runtime_config, %{config | flaresolverr: fs})
+  end
+
+  defp expect_flaresolverr_ok(bypass) do
+    Bypass.expect_once(bypass, "POST", "/v1", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(
+        200,
+        Jason.encode!(%{"status" => "ok", "version" => "3.3.21", "sessions" => []})
+      )
+    end)
   end
 end
