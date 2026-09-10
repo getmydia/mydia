@@ -302,10 +302,11 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       session_start_position = info.start_position
 
       # A full playlist covers the file from zero, so there is no offset for the
-      # client to map by. Reporting the encoder's current window here would
-      # shift every position the client derives.
+      # client to map by. A windowed one reports where its stream really
+      # begins, which for a stream copy is the keyframe before the requested
+      # offset (see HlsSession.prepare_start/2).
       reported_start_position =
-        if info.playlist_mode == :full, do: 0, else: info.start_position
+        if info.playlist_mode == :full, do: 0, else: info.effective_start_position
 
       Logger.info(
         "Started streaming session #{info.session_id} for file #{file_id}, user #{user_id}" <>

@@ -46,6 +46,16 @@ defmodule MydiaWeb.Schema.StreamingTest do
   }
   """
 
+  @start_at_offset_capped_mutation """
+  mutation StartStreamingSession($fileId: ID!, $strategy: StreamingStrategy!, $startPosition: Int, $maxBitrate: Int) {
+    startStreamingSession(fileId: $fileId, strategy: $strategy, startPosition: $startPosition, maxBitrate: $maxBitrate) {
+      sessionId
+      duration
+      startPosition
+    }
+  }
+  """
+
   @end_streaming_session_mutation """
   mutation EndStreamingSession($sessionId: String!) {
     endStreamingSession(sessionId: $sessionId)
@@ -97,17 +107,22 @@ defmodule MydiaWeb.Schema.StreamingTest do
       #
       # Requesting 10s on a 2s file exercises the clamp too: 10 pins to
       # `trunc(2) - 1`, and the session starts (and must report) 1s.
+      #
+      # The bitrate cap is what makes this a transcode: without it this H.264
+      # file is stream-copied, and a copied stream is pinned to its keyframe
+      # (see the stream-copy test below), which for this file is 0.
       user = AccountsFixtures.user_fixture()
       media_file = cold_media_file(tmp_dir)
 
       result =
         Absinthe.run(
-          @start_at_offset_mutation,
+          @start_at_offset_capped_mutation,
           MydiaWeb.Schema,
           variables: %{
             "fileId" => media_file.id,
             "strategy" => "TRANSCODE",
-            "startPosition" => 10
+            "startPosition" => 10,
+            "maxBitrate" => 1000
           },
           context: %{current_user: user}
         )
@@ -148,6 +163,54 @@ defmodule MydiaWeb.Schema.StreamingTest do
       try do
         assert session["maxHeight"] == 480
         assert session["maxBitrate"] == nil
+      after
+        stop_session(session["sessionId"], user)
+      end
+    end
+
+    @tag :tmp_dir
+    test "echoes the keyframe a stream-copy resume really starts on", %{tmp_dir: tmp_dir} do
+      # A copied video stream can only begin on a keyframe. This file has one
+      # every 10s, so a resume at 17s begins at 10s, and the player's
+      # StreamTimeline has to be told 10, or every position it shows and saves
+      # runs 7s ahead. MKV because it is what most releases ship; the pin only
+      # applies to MKV and MP4.
+      user = AccountsFixtures.user_fixture()
+      media_file = long_gop_mkv_media_file(tmp_dir)
+
+      result =
+        Absinthe.run(
+          @start_at_offset_mutation,
+          MydiaWeb.Schema,
+          variables: %{
+            "fileId" => media_file.id,
+            "strategy" => "HLS_COPY",
+            "startPosition" => 17
+          },
+          context: %{current_user: user}
+        )
+
+      assert {:ok, %{data: %{"startStreamingSession" => session}}} = result
+
+      try do
+        assert session["startPosition"] == 10
+
+        # The same request again reuses the running session: the supervisor
+        # matches on the requested 17, never on the pinned 10.
+        assert {:ok, %{data: %{"startStreamingSession" => again}}} =
+                 Absinthe.run(
+                   @start_at_offset_mutation,
+                   MydiaWeb.Schema,
+                   variables: %{
+                     "fileId" => media_file.id,
+                     "strategy" => "HLS_COPY",
+                     "startPosition" => 17
+                   },
+                   context: %{current_user: user}
+                 )
+
+        assert again["sessionId"] == session["sessionId"]
+        assert again["startPosition"] == 10
       after
         stop_session(session["sessionId"], user)
       end
@@ -202,6 +265,54 @@ defmodule MydiaWeb.Schema.StreamingTest do
       # row specifically so tests don't accidentally shell out to ffprobe;
       # these tests override that on purpose.
       analyzed_at: nil
+    })
+  end
+
+  # 30s of H.264 with a keyframe exactly every 10s (no scene-cut keyframes,
+  # B-frames on as in most real releases) plus AAC, in MKV: the pair a session
+  # copies untouched. Already analyzed, with the container the keyframe pin
+  # checks, so nothing here depends on the cold-file probe.
+  defp long_gop_mkv_media_file(tmp_dir) do
+    library_path = SettingsFixtures.library_path_fixture(%{path: tmp_dir, type: "movies"})
+    video_path = Path.join(tmp_dir, "long_gop.mkv")
+
+    {_, 0} =
+      System.cmd(
+        "ffmpeg",
+        [
+          "-f",
+          "lavfi",
+          "-i",
+          "testsrc=duration=30:size=320x240:rate=25",
+          "-f",
+          "lavfi",
+          "-i",
+          "sine=frequency=1000:duration=30",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-g",
+          "250",
+          "-keyint_min",
+          "250",
+          "-sc_threshold",
+          "0",
+          "-c:a",
+          "aac",
+          "-y",
+          video_path
+        ],
+        stderr_to_stdout: true
+      )
+
+    MediaFixtures.media_file_fixture(%{
+      library_path_id: library_path.id,
+      relative_path: "long_gop.mkv",
+      size: File.stat!(video_path).size,
+      codec: "h264",
+      audio_codec: "aac",
+      metadata: %{"container" => "mkv", "duration" => 30.0}
     })
   end
 

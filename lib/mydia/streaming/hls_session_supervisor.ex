@@ -179,6 +179,11 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   end
 
   defp start_new_session(media_file_id, user_id, mode, opts, session_key) do
+    # In the caller's process, before start_child/2: HlsSession.init/1 runs
+    # inside this supervisor, and a keyframe lookup there would hold up every
+    # other session start behind it.
+    opts = HlsSession.prepare_start(media_file_id, opts)
+
     session_opts =
       [
         media_file_id: media_file_id,
