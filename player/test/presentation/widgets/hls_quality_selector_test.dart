@@ -27,6 +27,7 @@ void main() {
           context,
           ladder,
           QualityRung.original,
+          autoSubtitle: 'Auto · Direct Play',
           originalSubtitle: kOriginalDirectPlaySubtitle,
         ),
       ),
@@ -47,6 +48,7 @@ void main() {
           context,
           ladder,
           QualityRung.original,
+          autoSubtitle: 'Auto · Direct Play',
           originalSubtitle: kOriginalDirectPlaySubtitle,
         );
       }),
@@ -70,6 +72,7 @@ void main() {
           context,
           ladder,
           QualityRung.original,
+          autoSubtitle: 'Auto · Direct Play',
           originalSubtitle: kOriginalDirectPlaySubtitle,
         );
         completed = true;
@@ -94,6 +97,7 @@ void main() {
           context,
           ladder,
           current,
+          autoSubtitle: 'Auto · Direct Play',
           originalSubtitle: kOriginalDirectPlaySubtitle,
         ),
       ),
@@ -113,6 +117,7 @@ void main() {
             context,
             ladder,
             QualityRung.original,
+            autoSubtitle: 'Auto · Direct Play',
             originalSubtitle: kOriginalDirectPlaySubtitle,
             clampNote: 'Limited to 720p by your remote connection',
           )),
@@ -133,6 +138,7 @@ void main() {
           context,
           ladder,
           QualityRung.original,
+          autoSubtitle: 'Auto · Direct Play',
           originalSubtitle: kOriginalDirectPlaySubtitle,
         ),
       ),
@@ -150,6 +156,7 @@ void main() {
           context,
           ladder,
           QualityRung.original,
+          autoSubtitle: 'Auto · Direct Play',
           originalSubtitle: kOriginalTranscodeSubtitle,
         ),
       ),
@@ -173,6 +180,7 @@ void main() {
             context,
             ladder,
             QualityRung.original,
+            autoSubtitle: 'Auto · Direct Play',
             originalSubtitle: subtitle,
           ),
         ),
@@ -193,6 +201,7 @@ void main() {
           context,
           ladder,
           QualityRung.original,
+          autoSubtitle: 'Auto · Direct Play',
           originalSubtitle: kOriginalDirectPlaySubtitle,
         ),
       ),
@@ -202,5 +211,51 @@ void main() {
 
     expect(find.text('Transcodes · up to 4000 kbps'), findsOneWidget);
     expect(find.text('Up to 4000 kbps'), findsNothing);
+  });
+
+  testWidgets('offers Auto above Original with its own subtitle',
+      (tester) async {
+    await tester.pumpWidget(
+      _host(
+        (context) => showQualityPicker(
+          context,
+          [QualityRung.auto, ...ladder],
+          QualityRung.auto,
+          autoSubtitle: 'Auto · 720p',
+          originalSubtitle: kOriginalLosslessSubtitle,
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('quality-rung-selected-Auto')), findsOneWidget);
+    expect(find.text('Auto · 720p'), findsOneWidget);
+    expect(find.text(kOriginalLosslessSubtitle), findsOneWidget);
+    final autoTop = tester.getTopLeft(find.text('Auto')).dy;
+    final originalTop = tester.getTopLeft(find.text('Original')).dy;
+    expect(autoTop, lessThan(originalTop));
+  });
+
+  testWidgets('returns Auto when tapped', (tester) async {
+    QualityRung? result;
+    await tester.pumpWidget(
+      _host((context) async {
+        result = await showQualityPicker(
+          context,
+          [QualityRung.auto, ...ladder],
+          QualityRung.original,
+          autoSubtitle: kAutoPreferenceSubtitle,
+          originalSubtitle: kOriginalPreferenceSubtitle,
+        );
+      }),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Auto'));
+    await tester.pumpAndSettle();
+
+    expect(result, QualityRung.auto);
   });
 }

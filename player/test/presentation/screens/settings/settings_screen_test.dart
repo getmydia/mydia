@@ -97,6 +97,9 @@ class _FakeSettingsController extends SettingsController {
   /// Records what the screen asked us to change.
   static final skipCalls = <bool>[];
 
+  /// Records what the screen asked us to store as the default quality.
+  static final qualityCalls = <String>[];
+
   @override
   Future<UserSettings> build() async {
     if (fail) throw Exception('storage unavailable');
@@ -106,6 +109,11 @@ class _FakeSettingsController extends SettingsController {
   @override
   Future<void> setAutoSkipSegments(bool enabled) async {
     skipCalls.add(enabled);
+  }
+
+  @override
+  Future<void> setDefaultQuality(String quality) async {
+    qualityCalls.add(quality);
   }
 }
 
@@ -230,6 +238,7 @@ Future<void> _pump(
 
 void main() {
   setUp(_FakeSettingsController.skipCalls.clear);
+  setUp(_FakeSettingsController.qualityCalls.clear);
 
   setUp(() async {
     _remoteControlBoxCounter += 1;
@@ -326,6 +335,36 @@ void main() {
 
     expect(find.text('Default quality'), findsOneWidget);
     expect(find.text('1080p'), findsOneWidget);
+  });
+
+  testWidgets('the default quality picker offers Auto with a neutral subtitle',
+      (tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('default-quality-row')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('quality-rung-Auto')), findsOneWidget);
+    expect(find.text('Adapts to your connection'), findsOneWidget);
+  });
+
+  testWidgets('picking Auto stores auto and picking Original stores original',
+      (tester) async {
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('default-quality-row')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Auto'));
+    await tester.pumpAndSettle();
+
+    expect(_FakeSettingsController.qualityCalls, ['auto']);
+
+    await tester.tap(find.byKey(const Key('default-quality-row')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Original'));
+    await tester.pumpAndSettle();
+
+    expect(_FakeSettingsController.qualityCalls, ['auto', 'original']);
   });
 
   testWidgets('the skip toggle reports its change to the controller',

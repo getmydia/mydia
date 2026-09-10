@@ -84,4 +84,67 @@ void main() {
       );
     });
   });
+
+  group('autoDeliverySubtitle', () {
+    const r720 = QualityRung(label: '720p', height: 720, maxBitrateKbps: 4000);
+    const r1080 =
+        QualityRung(label: '1080p', height: 1080, maxBitrateKbps: 8000);
+
+    test('names direct play, copy and the transcode rung', () {
+      expect(
+        autoDeliverySubtitle(
+            const DirectPlayPlan(reason: PlanReason.directPlayAccepted)),
+        'Auto · Direct Play',
+      );
+      expect(
+        autoDeliverySubtitle(const HlsPlan(
+          strategy: HlsStrategy.copy,
+          rung: QualityRung.original,
+          adaptive: false,
+          reason: PlanReason.copyAccepted,
+        )),
+        'Auto · Original, no re-encoding',
+      );
+      expect(
+        autoDeliverySubtitle(const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: r720,
+          adaptive: true,
+          reason: PlanReason.noDirectPlayCandidate,
+        )),
+        'Auto · 720p',
+      );
+    });
+
+    test('a transcode with no adaptive ladder re-encodes at Original', () {
+      expect(
+        autoDeliverySubtitle(const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: QualityRung.original,
+          adaptive: true,
+          reason: PlanReason.noDirectPlayCandidate,
+        )),
+        'Auto · Original, re-encoding required',
+      );
+    });
+
+    test('names what the server applied over what Auto asked for', () {
+      expect(
+        autoDeliverySubtitle(
+          const HlsPlan(
+            strategy: HlsStrategy.transcode,
+            rung: r1080,
+            adaptive: true,
+            reason: PlanReason.noDirectPlayCandidate,
+          ),
+          effective: r720,
+        ),
+        'Auto · 720p',
+      );
+    });
+
+    test('the preference subtitle is neutral', () {
+      expect(kAutoPreferenceSubtitle, 'Adapts to your connection');
+    });
+  });
 }

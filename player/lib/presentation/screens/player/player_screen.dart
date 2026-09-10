@@ -41,6 +41,7 @@ import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_memory_providers.dart';
 import '../../../core/playback/playback_plan.dart';
 import '../../../core/playback/playback_planner.dart';
+import '../../../core/playback/quality_display.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
@@ -983,6 +984,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _qualityLadder = const [QualityRung.original];
     _effectiveQuality = null;
     _originalDeliverySubtitle = kOriginalTranscodeSubtitle;
+    // A stale plan from the previous file must not offer a control, or
+    // narrate its old delivery, for the one about to load.
+    _plan = null;
+    _planInputs = null;
 
     try {
       setState(() {
@@ -3937,10 +3942,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final selected = await showQualityPicker(
       context,
-      _qualityLadder,
+      [QualityRung.auto, ..._qualityLadder],
       _selectedQuality,
+      autoSubtitle: _autoDeliverySubtitle(),
       originalSubtitle: _originalDeliverySubtitle,
-      clampNote: _clampNote(),
+      clampNote: qualityClampNote(plan: _plan, effective: _effectiveQuality),
     );
 
     // A fallback or automatic seek can start while the dialog is open.
@@ -3991,12 +3997,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
-  /// Explains a server-side limit when the applied rung is below the chosen
-  /// one, or null when the viewer got what they picked.
-  String? _clampNote() {
-    final effective = _effectiveQuality;
-    if (effective == null || effective == _selectedQuality) return null;
-    return 'Limited to ${effective.label} by your connection';
+  /// The Auto row's subtitle: what is playing now when Auto is in effect,
+  /// otherwise what Auto would do for this file.
+  String _autoDeliverySubtitle() {
+    final plan = _plan;
+    if (_selectedQuality.isAuto && plan != null) {
+      return autoDeliverySubtitle(plan, effective: _effectiveQuality);
+    }
+    final inputs = _planInputs;
+    if (inputs == null) return kAutoPreferenceSubtitle;
+    return autoDeliverySubtitle(
+        planPlayback(inputs.copyWith(choice: QualityChoice.auto)));
   }
 
   /// Handle keyboard shortcuts (desktop only)
@@ -4698,11 +4709,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           onCastTap: _showCastDevicePicker,
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
-          // Hidden when the ladder collapsed to Original alone — a source
-          // shorter than every rung, a local file, or a height the server
-          // never reported — matching how audio disables itself at zero
-          // tracks rather than opening a one-item menu.
-          onQualityTap: _qualityLadder.length > 1 ? _showQualitySelector : null,
+          // Hidden when Auto and Original could never differ for this file —
+          // a local file, no plan yet, or a lossy source with no adaptive
+          // ladder — matching how audio disables itself at zero tracks
+          // rather than opening a one-item menu.
+          onQualityTap: qualityControlAvailable(
+                  localFile: _isDownloadedSource,
+                  plan: _plan,
+                  sourceHeight: _planInputs?.sourceHeight)
+              ? _showQualitySelector
+              : null,
           // Null where no fullscreen route exists, which hides the button
           // rather than leaving a dead one — matching how `onQualityTap`
           // above hides itself at a single quality rung.
@@ -4717,7 +4733,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           audioTrackCount: _audioTracks.length,
           selectedAudioLabel: _selectedAudioTrack?.displayName,
           selectedSubtitleLabel: _selectedSubtitleTrack?.displayName,
-          selectedQualityLabel: (_effectiveQuality ?? _selectedQuality).label,
+          selectedQualityLabel: qualityControlLabel(
+              selected: _selectedQuality, effective: _effectiveQuality),
         ),
         fill: Colors.black,
       ),

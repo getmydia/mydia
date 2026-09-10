@@ -208,14 +208,15 @@ class _PlaybackSection extends ConsumerWidget {
   ) async {
     // The full ladder, not a per-file one: this is a standing preference set
     // outside playback, where there is no source to derive against. Playback
-    // narrows it per file and falls back to Original if the stored rung would
+    // narrows it per file and falls back to Auto if the stored rung would
     // upscale.
     final picked = await showQualityPicker(
       context,
-      deriveQualityLadder(sourceHeight: 2160),
+      [QualityRung.auto, ...deriveQualityLadder(sourceHeight: 2160)],
       current,
-      // The preference picker has no streaming candidates to derive delivery
-      // from, so keep a neutral Original subtitle rather than asserting one.
+      // A standing preference has no streaming candidates to derive delivery
+      // from, so both open rows keep a neutral subtitle.
+      autoSubtitle: kAutoPreferenceSubtitle,
       originalSubtitle: kOriginalPreferenceSubtitle,
     );
 
