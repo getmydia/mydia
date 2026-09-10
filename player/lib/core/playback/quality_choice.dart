@@ -32,13 +32,21 @@ bool qualityPickNeedsReopen({
 /// the riskiest decision in the quality change and the one most worth
 /// pinning, so it lives where a fake [restart] that throws can exercise it.
 ///
-/// [adopt] puts a rung into effect in memory — the widget both requests and
-/// displays it from there. [remember] writes it to storage for the *next*
-/// playback and is allowed to fail. [restart] tears the session down and
-/// brings it back at that rung, throwing if it cannot; [isFallback]
-/// distinguishes the two attempts, which the viewer is told apart.
-/// [stillActive] reports whether the caller can still act at all (its widget
-/// is still mounted). [onGaveUp] receives the second failure.
+/// [adopt] puts a rung into effect in memory, synchronously and first — it
+/// is the only channel [restart] reads the rung from, so nothing can happen
+/// between choosing a rung and the restart seeing it. [restart] tears the
+/// session down and brings it back at that rung: it resolves to `true` once
+/// the rung is actually in effect (including a same-delivery pick that
+/// reopens nothing, since the choice is then in effect either way), to
+/// `false` if some other source switch took over first and this pick is
+/// abandoned quietly, and throws if the attempt itself failed. [remember]
+/// writes the rung to storage for the *next* playback and is allowed to
+/// fail; it only runs once [restart] reports `true`, since persisting a rung
+/// before the restart has landed can race a fallback that starts mid-await
+/// and store a rung that never actually played. [isFallback] distinguishes
+/// the two attempts, which the viewer is told apart. [stillActive] reports
+/// whether the caller can still act at all (its widget is still mounted).
+/// [onGaveUp] receives the second failure.
 ///
 /// The retry is deliberately single. If returning to the rung that was
 /// already working also fails, the problem is not the quality choice, and
@@ -49,25 +57,35 @@ Future<void> applyQualityChoice({
   required QualityRung previous,
   required void Function(QualityRung rung) adopt,
   required Future<void> Function(QualityRung rung) remember,
-  required Future<void> Function(QualityRung rung, {required bool isFallback})
+  required Future<bool> Function(QualityRung rung, {required bool isFallback})
       restart,
   required bool Function() stillActive,
   required void Function(Object error) onGaveUp,
 }) async {
-  await _adoptAndRemember(selected, adopt, remember);
+  adopt(selected);
 
   try {
-    await restart(selected, isFallback: false);
+    if (!await restart(selected, isFallback: false)) {
+      debugPrint('[PlayerScreen] Quality change to ${selected.label} '
+          'abandoned: another source switch took over');
+      return;
+    }
+    await _remember(selected, remember);
   } catch (error) {
     // Fall back to the rung that was working rather than stranding the
     // viewer on a black screen at a rung this file or server cannot serve.
     debugPrint(
         '[PlayerScreen] Quality change to ${selected.label} failed: $error');
     if (!stillActive()) return;
-    await _adoptAndRemember(previous, adopt, remember);
+    adopt(previous);
 
     try {
-      await restart(previous, isFallback: true);
+      if (!await restart(previous, isFallback: true)) {
+        debugPrint('[PlayerScreen] Restoring ${previous.label} abandoned: '
+            'another source switch took over');
+        return;
+      }
+      await _remember(previous, remember);
     } catch (fallbackError) {
       debugPrint('[PlayerScreen] Restoring ${previous.label} failed too: '
           '$fallbackError');
@@ -77,25 +95,16 @@ Future<void> applyQualityChoice({
   }
 }
 
-/// Puts [rung] into effect in memory, then tries to remember it for the next
-/// playback.
+/// Persists [rung] for the next playback, swallowing failure.
 ///
-/// Both the order and the swallow are load-bearing. [adopt] is the only
-/// channel the restart reads the rung from, so it happens first and is
-/// synchronous — nothing can fail between choosing a rung and the restart
-/// seeing it. [remember] goes through secure storage, which needs a keyring
-/// on Linux desktop and can genuinely be unavailable, so its failure costs
-/// the preference for next time and nothing else. Before this split, the
-/// choice reached the restart *through* storage, and a swallowed write
-/// failure silently restarted the session at the rung the viewer had just
-/// replaced.
-Future<void> _adoptAndRemember(
+/// Only called once [restart] has reported the rung is actually in effect;
+/// see [applyQualityChoice]. [remember] goes through secure storage, which
+/// needs a keyring on Linux desktop and can genuinely be unavailable, so its
+/// failure costs the preference for next time and nothing else.
+Future<void> _remember(
   QualityRung rung,
-  void Function(QualityRung rung) adopt,
   Future<void> Function(QualityRung rung) remember,
 ) async {
-  adopt(rung);
-
   try {
     await remember(rung);
   } catch (e) {

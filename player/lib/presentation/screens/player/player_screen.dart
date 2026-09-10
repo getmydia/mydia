@@ -1573,19 +1573,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Replaces what is playing with [plan] at [at], keeping the player.
   ///
   /// Serialised by the controller: a switch while one is in flight throws,
-  /// and every caller checks `switching` first.
-  Future<void> _switchSource(PlaybackPlan plan, {required Duration at}) async {
-    if (_switchingSource) return;
+  /// and every caller checks `switching` first. Returns whether the new
+  /// source actually took effect: `false` when this call did nothing (a
+  /// switch was already in flight, the playback, player or file id was
+  /// missing, or the widget was unmounted or `_playback` had already been
+  /// replaced before the new source landed), `true` once it applied.
+  Future<bool> _switchSource(PlaybackPlan plan, {required Duration at}) async {
+    if (_switchingSource) return false;
     final playback = _playback;
     final player = _player;
     final fileId = _playFileId;
-    if (playback == null || player == null || fileId == null) return;
+    if (playback == null || player == null || fileId == null) return false;
 
     _sourceSwitchInFlight = true;
     try {
       // Persist where the viewer actually is before the old source goes away.
       await _saveProgress();
-      if (!mounted || !identical(playback, _playback)) return;
+      if (!mounted || !identical(playback, _playback)) return false;
       _stopVerification();
 
       final source = await playback.replaceSource(
@@ -1597,7 +1601,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         onProgress: (message) => debugPrint('[PlayerScreen] $message'),
       );
 
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _plan = plan;
         _isDirectPlay = plan is DirectPlayPlan;
@@ -1610,6 +1614,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _error = null;
       });
       _startVerification(plan);
+      return true;
     } finally {
       _sourceSwitchInFlight = false;
     }
@@ -3984,7 +3989,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ref.read(settingsServiceProvider).setDefaultQuality(rung.storageKey),
       restart: (rung, {required bool isFallback}) async {
         final inputs = _planInputs;
-        if (inputs == null) return;
+        if (inputs == null) return false;
         final plan =
             planPlayback(inputs.copyWith(choice: QualityChoice.fromRung(rung)));
         final current = _plan;
@@ -3998,13 +4003,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           debugPrint('[PlayerScreen] Quality change: ${plan.describe()} '
               '(already playing)');
           if (mounted) setState(() => _plan = plan);
-          return;
+          return true;
         }
         debugPrint('[PlayerScreen] Quality change: ${plan.describe()}');
         _showPlaybackSnackBar(isFallback
             ? 'Returning to ${rung.label}'
             : 'Switching to ${rung.label}');
-        await _switchSource(plan, at: position);
+        return _switchSource(plan, at: position);
       },
       stillActive: () => mounted,
       onGaveUp: (error) => setState(() {
