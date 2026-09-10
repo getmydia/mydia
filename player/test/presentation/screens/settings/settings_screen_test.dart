@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
@@ -14,6 +16,9 @@ import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
 import 'package:player/core/remote/remote_control_settings.dart';
+import 'package:player/core/crash_reporting/crash_report.dart';
+import 'package:player/core/crash_reporting/crash_reporter.dart';
+import 'package:player/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
@@ -156,6 +161,7 @@ Future<void> _pump(
   Size size = const Size(1000, 1400),
   RegistrationStatus registration = const RegistrationIdle(),
   UpdateState? updateState,
+  CrashReporter? crashReporter,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -196,6 +202,8 @@ Future<void> _pump(
         nodeRegistrationProvider.overrideWith(
           () => _StubRegistration(registration),
         ),
+        if (crashReporter != null)
+          crashReporterProvider.overrideWithValue(crashReporter),
       ],
       child: MaterialApp.router(
         routerConfig: GoRouter(
@@ -551,5 +559,35 @@ void main() {
       expect(find.byKey(const Key('remote-control-retry-row')), findsNothing);
       expect(find.text('Discoverable by your other devices'), findsOneWidget);
     });
+  });
+
+  testWidgets('hides the crash-reporting row when the reporter cannot send',
+      (tester) async {
+    // The default, inert reporter: what web builds and whole-app tests get.
+    await _pump(tester);
+
+    expect(find.byKey(const Key('crash-reporting-switch')), findsNothing);
+  });
+
+  testWidgets('shows the crash-reporting row when the reporter can send',
+      (tester) async {
+    await _pump(
+      tester,
+      crashReporter: CrashReporter(
+        client: MockClient((_) async => http.Response('{}', 201)),
+        endpoint: Uri.parse('https://relay.test/crashes/report'),
+        loadConsent: () async => false,
+        saveConsent: (_) async {},
+        loadAppContext: () async => const CrashAppContext(
+          version: '',
+          buildNumber: '',
+          platform: '',
+          osVersion: '',
+          environment: '',
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('crash-reporting-switch')), findsOneWidget);
   });
 }

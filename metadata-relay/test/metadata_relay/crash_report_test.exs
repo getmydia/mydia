@@ -35,6 +35,33 @@ defmodule MetadataRelay.CrashReportTest do
     MetadataRelay.Repo.all(from(e in ErrorTracker.Error, order_by: e.id))
   end
 
+  defp stored_occurrences do
+    MetadataRelay.Repo.all(from(o in ErrorTracker.Occurrence, order_by: o.id))
+  end
+
+  # The body the Flutter player's CrashReporter sends, varying only the crash
+  # site so two reports land in two groups.
+  defp player_report(file, line) do
+    %{
+      "source" => "player",
+      "error_type" => "StateError",
+      "error_message" => "Bad state: No element",
+      "stacktrace" => [
+        %{"function" => "PlayerController.seek", "file" => file, "line" => line}
+      ],
+      "version" => "0.52.1",
+      "environment" => "prod",
+      "metadata" => %{
+        "capture" => "zone",
+        "manual" => false,
+        "platform" => "android",
+        "function" => "PlayerController.seek",
+        "file" => file,
+        "line" => line
+      }
+    }
+  end
+
   describe "POST /crashes/report" do
     test "successfully stores a crash report with valid data" do
       crash_report = %{
@@ -148,6 +175,44 @@ defmodule MetadataRelay.CrashReportTest do
       assert conn.status == 429
       assert %{"error" => "Too many requests"} = Jason.decode!(conn.resp_body)
       assert ["60"] = Plug.Conn.get_resp_header(conn, "retry-after")
+    end
+
+    test "a player report is labelled player and its Dart frames keep crash sites apart" do
+      assert report(player_report("package:player/core/player/player_controller.dart", 412)).status ==
+               201
+
+      assert report(player_report("package:player/core/cast/cast_session_manager.dart", 88)).status ==
+               201
+
+      errors = stored_errors()
+      assert length(errors) == 2
+      assert Enum.any?(errors, &(&1.source_line =~ "player_controller.dart:412"))
+      assert Enum.any?(errors, &(&1.source_line =~ "cast_session_manager.dart:88"))
+
+      assert Enum.map(stored_occurrences(), & &1.context["source"]) == ["player", "player"]
+    end
+
+    test "a report without a source is labelled server" do
+      assert report(%{
+               "error_type" => "RuntimeError",
+               "error_message" => "boom",
+               "stacktrace" => [%{"file" => "lib/mydia/a.ex", "line" => 1}]
+             }).status == 201
+
+      assert [occurrence] = stored_occurrences()
+      assert occurrence.context["source"] == "server"
+    end
+
+    test "a source outside the closed set is labelled server" do
+      assert report(%{
+               "source" => "web",
+               "error_type" => "RuntimeError",
+               "error_message" => "boom",
+               "stacktrace" => [%{"file" => "lib/mydia/a.ex", "line" => 1}]
+             }).status == 201
+
+      assert [occurrence] = stored_occurrences()
+      assert occurrence.context["source"] == "server"
     end
   end
 

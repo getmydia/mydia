@@ -5,6 +5,40 @@ import { normalizeCrashReport, MAX_OCCURRENCE_ROWS_PER_BUCKET } from "../../src/
 const json = { "content-type": "application/json" };
 const REPORT_URL = "https://relay.mydia.dev/crashes/report";
 
+// The body the Flutter player's CrashReporter sends (see
+// player/lib/core/crash_reporting/crash_report.dart). Literal rather than
+// generated, so drift on either side shows up as a failing test here.
+const PLAYER_REPORT = {
+  source: "player",
+  error_type: "StateError",
+  error_message: "Bad state: No element",
+  stacktrace: [
+    {
+      function: "PlayerController.seek",
+      file: "package:player/core/player/player_controller.dart",
+      line: 412,
+    },
+    {
+      function: "_PlayerScreenState._onSeek",
+      file: "package:player/presentation/screens/player/player_screen.dart",
+      line: 2201,
+    },
+  ],
+  version: "0.52.1",
+  environment: "prod",
+  occurred_at: "2026-09-10T12:00:00.000Z",
+  metadata: {
+    capture: "zone",
+    manual: false,
+    platform: "android",
+    os_version: "Android 15 (SDK 35)",
+    build_number: "5201",
+    function: "PlayerController.seek",
+    file: "package:player/core/player/player_controller.dart",
+    line: 412,
+  },
+};
+
 interface ReportResponse {
   status: string;
   message: string;
@@ -300,6 +334,33 @@ describe("normalizeCrashReport", () => {
     });
 
     expect(out.context).toEqual(metadata);
+  });
+
+  it("labels a report without a source as a server report", () => {
+    const out = normalizeCrashReport({
+      error_type: "RuntimeError",
+      error_message: "boom",
+      stacktrace: [],
+    });
+    expect(out.source).toBe("server");
+  });
+
+  it("labels a player report as a player report", () => {
+    expect(normalizeCrashReport(PLAYER_REPORT).source).toBe("player");
+  });
+
+  // POST /crashes/report is unauthenticated and the value is stored and
+  // rendered, so only the two known values survive.
+  it("falls back to server for any source outside the closed set", () => {
+    for (const source of ["Player", "web", 1, null, { player: true }]) {
+      const out = normalizeCrashReport({
+        source,
+        error_type: "E",
+        error_message: "m",
+        stacktrace: [],
+      });
+      expect(out.source).toBe("server");
+    }
   });
 });
 
@@ -653,5 +714,106 @@ describe("POST /crashes/report", () => {
       .first<{ written: number; saturated: number }>();
     expect(bucket!.written).toBe(MAX_OCCURRENCE_ROWS_PER_BUCKET);
     expect(bucket!.saturated).toBe(1);
+  });
+
+  it("stores a player report's source on the error group and the occurrence", async () => {
+    const res = await SELF.fetch(REPORT_URL, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify(PLAYER_REPORT),
+    });
+    expect(res.status).toBe(201);
+    const { id } = await res.json<ReportResponse>();
+
+    const error = await env.DB.prepare(
+      "SELECT source, kind, source_file, source_line FROM errors WHERE fingerprint = ?",
+    )
+      .bind(id)
+      .first();
+    expect(error).toMatchObject({
+      source: "player",
+      kind: "StateError",
+      source_file: "package:player/core/player/player_controller.dart",
+      source_line: 412,
+    });
+
+    const occurrence = await env.DB.prepare(
+      "SELECT source, context FROM occurrences WHERE fingerprint = ?",
+    )
+      .bind(id)
+      .first<{ source: string; context: string }>();
+    expect(occurrence!.source).toBe("player");
+    expect(JSON.parse(occurrence!.context)).toMatchObject({
+      capture: "zone",
+      platform: "android",
+    });
+  });
+
+  it("stores a report without a source as a server report", async () => {
+    const res = await SELF.fetch(REPORT_URL, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({
+        error_type: "SourcelessError",
+        error_message: "boom",
+        stacktrace: [{ module: "M", function: "f/0", file: "sourceless.ex", line: 7 }],
+      }),
+    });
+    expect(res.status).toBe(201);
+    const { id } = await res.json<ReportResponse>();
+
+    const error = await env.DB.prepare("SELECT source FROM errors WHERE fingerprint = ?")
+      .bind(id)
+      .first<{ source: string }>();
+    expect(error!.source).toBe("server");
+
+    const occurrence = await env.DB.prepare(
+      "SELECT source FROM occurrences WHERE fingerprint = ?",
+    )
+      .bind(id)
+      .first<{ source: string }>();
+    expect(occurrence!.source).toBe("server");
+  });
+
+  it("keeps a player crash and a server crash with the same kind and top frame in separate groups", async () => {
+    const shared = { error_type: "SharedSiteError", error_message: "bad", stacktrace: [] };
+
+    const serverRes = await SELF.fetch(REPORT_URL, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify(shared),
+    });
+    const playerRes = await SELF.fetch(REPORT_URL, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ ...shared, source: "player" }),
+    });
+    const serverId = (await serverRes.json<ReportResponse>()).id;
+    const playerId = (await playerRes.json<ReportResponse>()).id;
+
+    expect(playerId).not.toBe(serverId);
+    const { results } = await env.DB.prepare(
+      "SELECT fingerprint, source FROM errors WHERE fingerprint IN (?, ?)",
+    )
+      .bind(serverId, playerId)
+      .all<{ fingerprint: string; source: string }>();
+    expect(Object.fromEntries(results.map((r) => [r.fingerprint, r.source]))).toEqual({
+      [serverId]: "server",
+      [playerId]: "player",
+    });
+  });
+});
+
+describe("0005_crash_source migration", () => {
+  it("adds a NOT NULL source defaulting to server on errors and occurrences", async () => {
+    for (const table of ["errors", "occurrences"]) {
+      const { results } = await env.DB.prepare(`PRAGMA table_info(${table})`).all<{
+        name: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>();
+      const column = results.find((c) => c.name === "source");
+      expect(column, `${table}.source`).toMatchObject({ notnull: 1, dflt_value: "'server'" });
+    }
   });
 });
