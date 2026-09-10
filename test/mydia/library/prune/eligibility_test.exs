@@ -31,6 +31,55 @@ defmodule Mydia.Library.Prune.EligibilityTest do
 
   defp duration(seconds), do: %{"container" => "mkv", "duration" => seconds}
 
+  # A movie group attached to an invented title, so a test controls which
+  # filenames bind to it.
+  defp zephyr_group(file_specs) do
+    movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+    lp = library_path_fixture(%{type: "movies"})
+
+    files =
+      Enum.map(file_specs, fn attrs ->
+        attrs
+        |> Map.merge(%{media_item_id: movie.id, library_path_id: lp.id})
+        |> media_file_fixture()
+      end)
+
+    %Group{
+      subject_type: :movie,
+      subject_id: movie.id,
+      subject: movie,
+      media_item: Mydia.Repo.preload(movie, :episodes),
+      files: Mydia.Repo.preload(files, :library_path)
+    }
+  end
+
+  defp harbor_episode_group(paths) do
+    show = media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013})
+    episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+    lp = library_path_fixture(%{type: "series"})
+
+    files =
+      for path <- paths do
+        media_file_fixture(%{
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: path,
+          metadata: %{"container" => "mkv", "duration" => 3000.0}
+        })
+      end
+
+    %Group{
+      subject_type: :episode,
+      subject_id: episode.id,
+      subject: episode,
+      media_item: Mydia.Repo.preload(show, :episodes),
+      files: Mydia.Repo.preload(files, :library_path)
+    }
+  end
+
+  defp suspect_paths(group),
+    do: group |> Eligibility.suspect_files() |> Enum.map(& &1.relative_path) |> Enum.sort()
+
   # Builds a group with two rows sharing the same (library_path_id,
   # relative_path) key. Two ACTIVE rows genuinely at the same library path
   # and relative path are no longer reachable: migration
@@ -280,6 +329,94 @@ defmodule Mydia.Library.Prune.EligibilityTest do
       }
 
       assert {:ok, ^group} = Eligibility.check(group)
+    end
+  end
+
+  describe "suspect_files/1" do
+    test "flags the file from another title's folder in a duration-mismatch group" do
+      group =
+        zephyr_group([
+          %{
+            relative_path: "Zephyr Station (2030)/Zephyr.Station.2030.1080p.mkv",
+            metadata: duration(6000.0)
+          },
+          %{relative_path: "Starveil (2031)/Starveil.2031.1080p.mkv", metadata: duration(7000.0)}
+        ])
+
+      # The gate stops at duration and never reaches the name check, which is
+      # why the page needs this separate signal.
+      assert {:refused, :duration_mismatch, _} = Eligibility.check(group)
+      assert suspect_paths(group) == ["Starveil (2031)/Starveil.2031.1080p.mkv"]
+    end
+
+    test "does not flag bonus content in the feature's own folder" do
+      group =
+        zephyr_group([
+          %{
+            relative_path: "Zephyr Station (2030)/Zephyr.Station.2030.1080p.mkv",
+            metadata: duration(6000.0)
+          },
+          %{
+            relative_path: "Zephyr Station (2030)/Orientation Week.mkv",
+            metadata: duration(280.0)
+          }
+        ])
+
+      assert suspect_paths(group) == []
+    end
+
+    test "never flags a classified extra, whatever folder it sits in" do
+      group =
+        zephyr_group([
+          %{
+            relative_path: "Zephyr Station (2030)/Zephyr.Station.2030.1080p.mkv",
+            metadata: duration(6000.0)
+          },
+          %{
+            relative_path: "Zephyr Station (2030)/Featurettes/Behind the Scenes.mkv",
+            metadata: duration(600.0),
+            extra_kind: :other,
+            extra_source: :operator
+          }
+        ])
+
+      assert suspect_paths(group) == []
+    end
+
+    test "flags every unbound file when none binds" do
+      group =
+        zephyr_group([
+          %{relative_path: "Starveil (2031)/Starveil.2031.1080p.mkv", metadata: duration(7000.0)},
+          %{
+            relative_path: "Emberline (2029)/Emberline.2029.1080p.mkv",
+            metadata: duration(5000.0)
+          }
+        ])
+
+      assert suspect_paths(group) == [
+               "Emberline (2029)/Emberline.2029.1080p.mkv",
+               "Starveil (2031)/Starveil.2031.1080p.mkv"
+             ]
+    end
+
+    test "flags another show's file in an episode group" do
+      group =
+        harbor_episode_group([
+          "Harbor Lights/Season 01/Harbor.Lights.S01E01.mkv",
+          "Quillmoor/Season 01/Quillmoor.S01E01.mkv"
+        ])
+
+      assert suspect_paths(group) == ["Quillmoor/Season 01/Quillmoor.S01E01.mkv"]
+    end
+
+    test "flags the wrong-episode file even in the show's own folder" do
+      group =
+        harbor_episode_group([
+          "Harbor Lights/Season 01/Harbor.Lights.S01E01.mkv",
+          "Harbor Lights/Season 01/Harbor.Lights.S01E02.mkv"
+        ])
+
+      assert suspect_paths(group) == ["Harbor Lights/Season 01/Harbor.Lights.S01E02.mkv"]
     end
   end
 end
