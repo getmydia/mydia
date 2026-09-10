@@ -398,7 +398,8 @@ defmodule Mydia.Downloads.Client.Nzbget do
   end
 
   defp build_rpc_path(config) do
-    base = config[:url_base] || ""
+    # "/nzbget/" would otherwise give "/nzbget//jsonrpc" (#765)
+    base = String.trim_trailing(config[:url_base] || "", "/")
     "#{base}/jsonrpc"
   end
 

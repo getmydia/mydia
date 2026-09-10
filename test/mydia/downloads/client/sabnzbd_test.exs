@@ -2,7 +2,7 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Downloads.Client.Sabnzbd
-  alias Mydia.Downloads.Structs.DownloadStatus
+  alias Mydia.Downloads.Structs.{ClientInfo, DownloadStatus}
 
   @config %{
     type: :sabnzbd,
@@ -175,6 +175,22 @@ defmodule Mydia.Downloads.Client.SabnzbdTest do
       # Should fail with connection error, not path error
       {:error, error} = Sabnzbd.test_connection(timeout_config)
       assert error.type in [:connection_failed, :network_error, :timeout]
+    end
+
+    test "strips a trailing slash from url_base (#765)" do
+      bypass = Bypass.open()
+      config = %{@config | host: "localhost", port: bypass.port, url_base: "/sabnzbd/"}
+      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/sabnzbd/api", ~s({"version": "4.3.2"}))
+
+      assert {:ok, %ClientInfo{version: "4.3.2"}} = Sabnzbd.test_connection(config)
+    end
+
+    test "treats a url_base of \"/\" as no base (#765)" do
+      bypass = Bypass.open()
+      config = %{@config | host: "localhost", port: bypass.port, url_base: "/"}
+      Mydia.BypassHelpers.stub_exact_json(bypass, "GET", "/api", ~s({"version": "4.3.2"}))
+
+      assert {:ok, %ClientInfo{version: "4.3.2"}} = Sabnzbd.test_connection(config)
     end
   end
 

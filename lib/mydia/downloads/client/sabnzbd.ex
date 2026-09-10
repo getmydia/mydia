@@ -461,7 +461,8 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
   ## Private Functions
 
   defp build_api_path(config) do
-    base = config[:url_base] || ""
+    # "/sabnzbd/" would otherwise give "/sabnzbd//api" (#765)
+    base = String.trim_trailing(config[:url_base] || "", "/")
     "#{base}/api"
   end
 
