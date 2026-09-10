@@ -17,11 +17,14 @@ reports. It does not read the candidate list itself.
 
 ## The decision, and where to look when it is wrong
 
-Every plan logs one line: `[PlayerScreen] Plan: <plan> shape=<codec>/<bucket>
-bitrateKbps=<n> throughputKbps=<n>`, where `<plan>` is `directPlay (<reason>)`
-for a direct play, or `<strategy> <rung> (<reason>)` for an HLS plan (copy or
-transcode carry a rung; direct play does not). The reason names the rule from
-the spec that fired. Read that line before reading code.
+The initial decision, made once when a file starts, logs one line:
+`[PlayerScreen] Plan: <plan> shape=<codec>/<bucket> bitrateKbps=<n>
+throughputKbps=<n>`, where `<plan>` is `directPlay (<reason>)` for a direct
+play, or `<strategy> <rung> (<reason>)` for an HLS plan (copy or transcode
+carry a rung; direct play does not). The reason names the rule from the spec
+that fired. Read that line before reading code. A later switch, from
+verification or a manual quality change, logs a different line; see
+"Verification" and "The switch".
 
 Three rules, in order. Direct play needs native, a leading DIRECT_PLAY or
 REMUX, no fixed rung chosen, and a bitrate that fits remembered throughput
@@ -50,6 +53,13 @@ seconds ahead replace it with a transcode at the same position, on the same
 looser: three stalls in two minutes, or three consecutive 10-second windows
 each over the drop limit. The numbers live in `AdaptationThresholds`.
 
+This kind of switch logs its own line, not the `Plan:` line above:
+`[PlayerScreen] Falling back to <plan>: <reason> at <n>s`. `<plan>` is the
+fallback's own `describe()` (always ends `(fallbackFromFailure)`, since
+`fallbackPlan` only ever builds that reason); `<reason>` is the
+`FailureReason` that triggered it (`decodeFailed`, `decodeTooSlow` or
+`bandwidth`); `<n>s` is the position it switched at.
+
 A decode fallback always records the file's shape (RFC 6381 video codec plus
 height bucket) against the server, regardless of the quality choice in play.
 Whether that record is later consulted follows the same Auto/Original split
@@ -74,6 +84,10 @@ already in flight is silently dropped rather than queued.
 
 Seeks past a WINDOW playlist (servers older than full-playlist support) and
 manual quality changes use the same switch. There is no restart path.
+
+A manual quality change logs its own line too:
+`[PlayerScreen] Quality change: <plan>`, `<plan>` again being the new plan's
+`describe()`.
 
 ## Compatibility
 
