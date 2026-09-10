@@ -18,6 +18,7 @@ class SettingsService {
   static const _defaultQualityKey = 'default_quality';
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
   static const _librarySortKeyPrefix = 'library_sort_';
+  static const _crashReportingEnabledKey = 'crash_reporting_enabled';
 
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
@@ -42,6 +43,20 @@ class SettingsService {
   /// Set the automatic intro and credits skipping setting.
   Future<void> setAutoSkipSegments(bool enabled) async {
     await _storage.write(_autoSkipSegmentsKey, enabled.toString());
+  }
+
+  /// Whether crash reports are sent to the Mydia developers.
+  ///
+  /// Off by default, matching the server's own opt-in. A device-level choice
+  /// rather than an account preference, so [clearSettings] leaves it alone.
+  Future<bool> getCrashReportingEnabled() async {
+    final value = await _storage.read(_crashReportingEnabledKey);
+    return value == 'true';
+  }
+
+  /// Set whether crash reports are sent to the Mydia developers.
+  Future<void> setCrashReportingEnabled(bool enabled) async {
+    await _storage.write(_crashReportingEnabledKey, enabled.toString());
   }
 
   /// Get the remembered sort for a library, as its encoded string.
