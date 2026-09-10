@@ -22,6 +22,19 @@ CrashReportQueue _queue(
       maxLength: maxLength,
     );
 
+/// Never answers, and records whether the queue aborted the request.
+class _HangingClient extends http.BaseClient {
+  var aborted = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    if (request is http.Abortable) {
+      request.abortTrigger?.then((_) => aborted++);
+    }
+    return Completer<http.StreamedResponse>().future;
+  }
+}
+
 void main() {
   group('SendResult.fromStatus', () {
     test('maps the statuses the relays answer with', () {
@@ -151,8 +164,22 @@ void main() {
       queue.enqueue({'n': 1});
       async.elapse(const Duration(hours: 31));
 
-      expect(attempts.map((d) => d.inHours), [0, 10, 20, 30]);
+      expect(attempts.map((d) => d.inHours), [0, 10, 20]);
       expect(queue.length, 0);
+    });
+  });
+
+  test('aborts a request that times out, so a late success cannot duplicate it',
+      () {
+    fakeAsync((async) {
+      final client = _HangingClient();
+      _queue(async, client).enqueue({'n': 1});
+
+      async.elapse(const Duration(seconds: 9));
+      expect(client.aborted, 0);
+
+      async.elapse(const Duration(seconds: 2));
+      expect(client.aborted, 1);
     });
   });
 

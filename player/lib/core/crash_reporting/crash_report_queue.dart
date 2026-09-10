@@ -90,15 +90,27 @@ class CrashReportQueue {
   }
 
   /// One POST, no retry. Never throws.
+  ///
+  /// A timed-out request is aborted, not just abandoned: left running, a late
+  /// success followed by the queue's retry would store the crash twice.
   Future<SendResult> sendOnce(Map<String, Object?> body) async {
+    final abort = Completer<void>();
+    final request = http.AbortableRequest(
+      'POST',
+      _endpoint,
+      abortTrigger: abort.future,
+    )
+      ..headers['content-type'] = 'application/json'
+      ..body = jsonEncode(body);
     try {
-      final response = await _client
-          .post(
-            _endpoint,
-            headers: const {'content-type': 'application/json'},
-            body: jsonEncode(body),
-          )
-          .timeout(requestTimeout);
+      final response =
+          await _client.send(request).then(http.Response.fromStream).timeout(
+        requestTimeout,
+        onTimeout: () {
+          abort.complete();
+          throw TimeoutException('crash report send timed out', requestTimeout);
+        },
+      );
       return SendResult.fromStatus(
         response.statusCode,
         retryAfterHeader: response.headers['retry-after'],
@@ -135,6 +147,12 @@ class CrashReportQueue {
       // in flight. Anything added meanwhile is picked up by _scheduleNext.
       for (final entry in List.of(_entries)) {
         if (entry.nextAttemptAt.isAfter(_now())) continue;
+        // Too old to send. Checked before the attempt as well as after a
+        // failure, so a long retry-after cannot carry a report past 24 hours.
+        if (_now().difference(entry.queuedAt) >= maxAge) {
+          _entries.remove(entry);
+          continue;
+        }
         final result = await sendOnce(entry.body);
         switch (result.outcome) {
           case SendOutcome.sent:
