@@ -271,7 +271,7 @@ defmodule Mydia.CollectionsTest do
                Collections.add_items(collection, [movie.id, Ecto.UUID.generate()])
 
       # Nothing was inserted: the valid id must not slip through either.
-      assert Collections.list_collection_items(collection) == []
+      assert Collections.list_collection_items(Scope.unrestricted(), collection) == []
     end
 
     test "remove_item/2 removes item from collection" do

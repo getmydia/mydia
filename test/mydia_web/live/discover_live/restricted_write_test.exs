@@ -33,11 +33,13 @@ defmodule MydiaWeb.DiscoverLive.RestrictedWriteTest do
         __changed__: %{},
         flash: %{},
         current_scope: scope,
+        current_user: scope.user,
+        selected_item: nil,
         library_status_map: %{},
         items: [],
         selected_recommendations: [],
         request_status_map: %{},
-        adding_item_ids: MapSet.new([to_string(MetadataStubProvider.movie_tmdb_id())])
+        adding_item_ids: MapSet.new([{:tmdb, MetadataStubProvider.movie_tmdb_id()}])
       }
     }
   end
@@ -48,7 +50,7 @@ defmodule MydiaWeb.DiscoverLive.RestrictedWriteTest do
 
     {:noreply, updated} =
       Index.handle_info(
-        {:add_media_to_library, to_string(MetadataStubProvider.movie_tmdb_id()), :movie, nil},
+        {:add_media_to_library, {:tmdb, MetadataStubProvider.movie_tmdb_id()}, :movie, nil},
         socket
       )
 
@@ -56,12 +58,11 @@ defmodule MydiaWeb.DiscoverLive.RestrictedWriteTest do
 
     refute MapSet.member?(
              updated.assigns.adding_item_ids,
-             to_string(MetadataStubProvider.movie_tmdb_id())
+             {:tmdb, MetadataStubProvider.movie_tmdb_id()}
            )
 
-    refute Media.get_media_item_by_tmdb(
-             Scope.unrestricted(),
-             MetadataStubProvider.movie_tmdb_id()
-           )
+    refute Media.find_by_external_ids(Scope.unrestricted(), %{
+             tmdb: MetadataStubProvider.movie_tmdb_id()
+           })
   end
 end

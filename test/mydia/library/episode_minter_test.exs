@@ -3,6 +3,7 @@ defmodule Mydia.Library.EpisodeMinterTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.EpisodeMinter
   alias Mydia.Media
 
@@ -18,7 +19,7 @@ defmodule Mydia.Library.EpisodeMinterTest do
         })
     end
 
-    Media.get_media_item!(show.id)
+    Media.get_media_item!(Scope.unrestricted(), show.id)
   end
 
   describe "mintable?/3" do
@@ -101,7 +102,7 @@ defmodule Mydia.Library.EpisodeMinterTest do
 
     test "refuses an implausible coordinate without writing", %{show: show} do
       assert {:error, :implausible} = EpisodeMinter.mint(show, 99, 1, "Show - S99E01.mkv")
-      assert is_nil(Media.get_episode_by_number(show.id, 99, 1))
+      assert is_nil(Media.get_episode_by_number(Scope.unrestricted(), show.id, 99, 1))
     end
 
     test "returns the existing row when one is already there", %{show: show} do

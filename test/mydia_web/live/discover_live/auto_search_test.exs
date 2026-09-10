@@ -18,6 +18,7 @@ defmodule MydiaWeb.DiscoverLive.AutoSearchTest do
 
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Config.Schema
   alias Mydia.Media.AddDefaults
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
@@ -68,6 +69,7 @@ defmodule MydiaWeb.DiscoverLive.AutoSearchTest do
 
     {:ok, media_item, _map} =
       MediaAddHelpers.handle_add_media_to_library(
+        Scope.unrestricted(),
         {:tmdb, provider_id},
         :movie,
         %{},
@@ -90,6 +92,7 @@ defmodule MydiaWeb.DiscoverLive.AutoSearchTest do
 
     {:ok, media_item, _map} =
       MediaAddHelpers.handle_add_media_to_library(
+        Scope.unrestricted(),
         {:tmdb, provider_id},
         :movie,
         %{},

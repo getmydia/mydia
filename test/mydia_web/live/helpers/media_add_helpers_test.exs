@@ -232,6 +232,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, updated_map} =
                MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
                  {:tvdb, tvdb_id},
                  :tv_show,
                  %{},

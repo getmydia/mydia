@@ -6,6 +6,7 @@ defmodule Mydia.Jobs.MonitoringRepairTest do
   import Ecto.Query
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Events.Event
   alias Mydia.Jobs.MonitoringRepair
@@ -306,7 +307,10 @@ defmodule Mydia.Jobs.MonitoringRepairTest do
       # manual re-enable has to be stamped later than it to be the newest
       # decision at second precision.
       {:ok, reenabled} =
-        Mydia.Media.update_media_item(Repo.get!(MediaItem, item.id), %{monitored: true},
+        Mydia.Media.update_media_item(
+          Scope.unrestricted(),
+          Repo.get!(MediaItem, item.id),
+          %{monitored: true},
           reason: "Monitoring enabled"
         )
 

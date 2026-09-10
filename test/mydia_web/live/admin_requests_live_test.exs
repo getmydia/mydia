@@ -15,6 +15,7 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
   import Mydia.MetadataStub
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.MediaRequests
   alias Mydia.MetadataStubProvider
 
@@ -25,7 +26,7 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
     admin = create_admin_user()
 
     {:ok, request} =
-      MediaRequests.create_request(%{
+      MediaRequests.create_request(Scope.unrestricted(), %{
         media_type: "movie",
         title: MetadataStubProvider.movie_title(),
         tmdb_id: MetadataStubProvider.movie_tmdb_id(),
@@ -160,7 +161,7 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
       # missing_id/0 is the stub provider's "this does not resolve" id, the
       # same one guest_request_flow_test uses for its unreachable-provider case.
       {:ok, unresolvable} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Unresolvable Movie",
           tmdb_id: MetadataStubProvider.missing_id(),
@@ -199,7 +200,7 @@ defmodule MydiaWeb.AdminRequestsLiveTest do
       guest: guest
     } do
       {:ok, req} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Auto-Approved Movie",
           tmdb_id: 112_233,

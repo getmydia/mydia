@@ -323,7 +323,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
       show = media_item_fixture(%{type: "tv_show"})
       _episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
 
-      loaded = Loaders.load_media_item(show.id)
+      loaded = Loaders.load_media_item(Mydia.Accounts.Scope.unrestricted(), show.id)
 
       {:noreply, socket} = FileEvents.refresh_all_file_metadata(%{}, stub_socket(loaded))
 
@@ -345,7 +345,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
           relative_path: "Show/Season 01/S01E01.mkv"
         })
 
-      loaded = Loaders.load_media_item(show.id)
+      loaded = Loaders.load_media_item(Mydia.Accounts.Scope.unrestricted(), show.id)
 
       # The chain the fix depends on: the preload reaches episode files, and the
       # helper merges them.

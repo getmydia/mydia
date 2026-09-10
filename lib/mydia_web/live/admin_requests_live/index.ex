@@ -245,7 +245,7 @@ defmodule MydiaWeb.AdminRequestsLive.Index do
 
     opts = AddDefaults.to_add_opts_with_search(defaults)
 
-    case MediaRequests.approve_request(request, attrs, opts) do
+    case MediaRequests.approve_request(socket.assigns.current_scope, request, attrs, opts) do
       {:ok, %{request: _updated_request, media_item: media_item}} ->
         {:noreply,
          socket

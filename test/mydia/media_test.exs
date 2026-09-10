@@ -1,6 +1,7 @@
 defmodule Mydia.MediaTest do
   use Mydia.DataCase
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media
 
@@ -17,7 +18,7 @@ defmodule Mydia.MediaTest do
       library = library_path_fixture(%{type: "movies"})
 
       {:ok, item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Targeted Movie",
           year: 2024,
@@ -31,7 +32,7 @@ defmodule Mydia.MediaTest do
       library = library_path_fixture(%{type: "movies"})
 
       {:ok, item} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Orphaned Target",
           year: 2024,
@@ -45,12 +46,12 @@ defmodule Mydia.MediaTest do
 
     test "list_media_items/0 returns all media items" do
       media_item = media_item_fixture()
-      assert Media.list_media_items() == [media_item]
+      assert Media.list_media_items(Scope.unrestricted()) == [media_item]
     end
 
     test "get_media_item!/1 returns the media item with given id" do
       media_item = media_item_fixture()
-      assert Media.get_media_item!(media_item.id) == media_item
+      assert Media.get_media_item!(Scope.unrestricted(), media_item.id) == media_item
     end
 
     test "create_media_item/1 with valid data creates a media item" do
@@ -62,7 +63,9 @@ defmodule Mydia.MediaTest do
         monitored: true
       }
 
-      assert {:ok, %MediaItem{} = media_item} = Media.create_media_item(valid_attrs)
+      assert {:ok, %MediaItem{} = media_item} =
+               Media.create_media_item(Scope.unrestricted(), valid_attrs)
+
       assert media_item.type == "movie"
       assert media_item.title == "Test Movie"
       assert media_item.year == 2024
@@ -71,7 +74,8 @@ defmodule Mydia.MediaTest do
     end
 
     test "create_media_item/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} = Media.create_media_item(@invalid_attrs)
+      assert {:error, %Ecto.Changeset{}} =
+               Media.create_media_item(Scope.unrestricted(), @invalid_attrs)
     end
 
     test "create_media_item/1 requires year for movies" do
@@ -83,7 +87,7 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:error, %Ecto.Changeset{} = changeset} =
-               Media.create_media_item(attrs_without_year)
+               Media.create_media_item(Scope.unrestricted(), attrs_without_year)
 
       assert %{year: ["is required for movies"]} = errors_on(changeset)
     end
@@ -97,7 +101,9 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.create_media_item(attrs_without_year, skip_episode_refresh: true)
+               Media.create_media_item(Scope.unrestricted(), attrs_without_year,
+                 skip_episode_refresh: true
+               )
 
       assert media_item.type == "tv_show"
       assert media_item.title == "Test Show"
@@ -109,7 +115,7 @@ defmodule Mydia.MediaTest do
       update_attrs = %{title: "Updated Title", monitored: false}
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.update_media_item(media_item, update_attrs)
+               Media.update_media_item(Scope.unrestricted(), media_item, update_attrs)
 
       assert media_item.title == "Updated Title"
       assert media_item.monitored == false
@@ -117,8 +123,8 @@ defmodule Mydia.MediaTest do
 
     test "delete_media_item/1 deletes the media item" do
       media_item = media_item_fixture()
-      assert {:ok, %MediaItem{}, %DiskRemoval{}} = Media.delete_media_item(media_item)
-      assert_raise Ecto.NoResultsError, fn -> Media.get_media_item!(media_item.id) end
+      assert {:ok, %MediaItem{}, %DiskRemoval{}} = Media.delete_media_item(Scope.unrestricted(),media_item)
+      assert_raise Ecto.NoResultsError, fn -> Media.get_media_item!(Scope.unrestricted(), media_item.id) end
     end
 
     test "change_media_item/1 returns a media item changeset" do
@@ -172,7 +178,7 @@ defmodule Mydia.MediaTest do
           monitor_new?: Media.should_monitor_new_episode?(media_item, 3)
         )
 
-      new_episode = Media.get_episode_by_number(media_item.id, 3, 11)
+      new_episode = Media.get_episode_by_number(Scope.unrestricted(), media_item.id, 3, 11)
       refute new_episode.monitored
     end
 
@@ -193,7 +199,9 @@ defmodule Mydia.MediaTest do
       {:ok, count} = Media.apply_episode_monitoring(media_item, :all)
 
       assert count == 1
-      assert Media.get_media_item!(media_item.id).monitor_new_seasons == :none
+
+      assert Media.get_media_item!(Scope.unrestricted(), media_item.id).monitor_new_seasons ==
+               :none
     end
 
     test "apply_episode_monitoring/2 returns an error for movies" do
@@ -212,7 +220,7 @@ defmodule Mydia.MediaTest do
       {:ok, updated} = Media.set_monitor_new_seasons(media_item, :none)
 
       assert updated.monitor_new_seasons == :none
-      assert Enum.all?(Media.list_episodes(media_item.id), & &1.monitored)
+      assert Enum.all?(Media.list_episodes(Scope.unrestricted(), media_item.id), & &1.monitored)
       refute Media.should_monitor_new_episode?(updated, 9)
       assert Media.should_monitor_new_episode?(updated, 1)
     end
@@ -225,7 +233,8 @@ defmodule Mydia.MediaTest do
       # change and skip the write.
       {:ok, _} = Media.set_monitor_new_seasons(media_item, :all)
 
-      assert Media.get_media_item!(media_item.id).monitor_new_seasons == :all
+      assert Media.get_media_item!(Scope.unrestricted(), media_item.id).monitor_new_seasons ==
+               :all
     end
 
     test "derive_monitoring_preset/1 says :none when nothing is monitored" do
@@ -242,7 +251,7 @@ defmodule Mydia.MediaTest do
       )
 
       {:ok, _} = Media.apply_episode_monitoring(media_item, :none)
-      episodes = Media.list_episodes(media_item.id, preload: [:media_files])
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id, preload: [:media_files])
 
       assert Media.derive_monitoring_preset(episodes) == :none
     end
@@ -257,7 +266,7 @@ defmodule Mydia.MediaTest do
 
       for preset <- Media.monitoring_presets() do
         {:ok, _} = Media.apply_episode_monitoring(media_item, preset)
-        special = Media.get_episode_by_number(media_item.id, 0, 1)
+        special = Media.get_episode_by_number(Scope.unrestricted(), media_item.id, 0, 1)
 
         refute special.monitored, "#{preset} monitored a special"
       end
@@ -276,12 +285,12 @@ defmodule Mydia.MediaTest do
       episode_fixture(media_item_id: media_item.id, season_number: 2, episode_number: 1)
 
       {:ok, _} = Media.apply_episode_monitoring(media_item, :all)
-      episodes = Media.list_episodes(media_item.id, preload: [:media_files])
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id, preload: [:media_files])
       assert Media.derive_monitoring_preset(episodes) == :all
 
       # A manual season toggle is exactly what used to leave the label lying.
       {:ok, _} = Media.update_season_monitoring(media_item.id, 2, false)
-      episodes = Media.list_episodes(media_item.id, preload: [:media_files])
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id, preload: [:media_files])
       assert Media.derive_monitoring_preset(episodes) == :custom
     end
 
@@ -289,11 +298,11 @@ defmodule Mydia.MediaTest do
       media_item = media_item_fixture(%{type: "movie"})
 
       assert {:error, :not_found} =
-               Media.update_media_items_batch([media_item.id], %{
+               Media.update_media_items_batch(Scope.unrestricted(), [media_item.id], %{
                  quality_profile_id: Ecto.UUID.generate()
                })
 
-      assert Media.get_media_item!(media_item.id).quality_profile_id == nil
+      assert Media.get_media_item!(Scope.unrestricted(), media_item.id).quality_profile_id == nil
     end
 
     test "update_media_items_batch/2 applies a valid quality_profile_id" do
@@ -301,11 +310,12 @@ defmodule Mydia.MediaTest do
       profile = quality_profile_fixture()
 
       assert {:ok, 1} =
-               Media.update_media_items_batch([media_item.id], %{
+               Media.update_media_items_batch(Scope.unrestricted(), [media_item.id], %{
                  quality_profile_id: profile.id
                })
 
-      assert Media.get_media_item!(media_item.id).quality_profile_id == profile.id
+      assert Media.get_media_item!(Scope.unrestricted(), media_item.id).quality_profile_id ==
+               profile.id
     end
 
     test "update_media_items_batch/2 records a monitoring decision per item when it sets monitored" do
@@ -313,10 +323,12 @@ defmodule Mydia.MediaTest do
       item_b = media_item_fixture(%{type: "movie", monitored: false})
 
       assert {:ok, 2} =
-               Media.update_media_items_batch([item_a.id, item_b.id], %{monitored: true})
+               Media.update_media_items_batch(Scope.unrestricted(), [item_a.id, item_b.id], %{
+                 monitored: true
+               })
 
-      assert Media.get_media_item!(item_a.id).monitored
-      assert Media.get_media_item!(item_b.id).monitored
+      assert Media.get_media_item!(Scope.unrestricted(), item_a.id).monitored
+      assert Media.get_media_item!(Scope.unrestricted(), item_b.id).monitored
 
       for item <- [item_a, item_b] do
         assert [event] =
@@ -339,7 +351,7 @@ defmodule Mydia.MediaTest do
       profile = quality_profile_fixture()
 
       assert {:ok, 1} =
-               Media.update_media_items_batch([media_item.id], %{
+               Media.update_media_items_batch(Scope.unrestricted(), [media_item.id], %{
                  quality_profile_id: profile.id
                })
 
@@ -490,7 +502,7 @@ defmodule Mydia.MediaTest do
 
       {:ok, 1} = Media.upsert_episodes_from_season(show, season_data, monitor_new?: true)
 
-      episode = Media.find_episode(show.id, 1, 52)
+      episode = Media.find_episode(Scope.unrestricted(), show.id, 1, 52)
       assert episode.absolute_number == 52
       assert episode.provider_episode_id == "6832458"
     end
@@ -511,7 +523,7 @@ defmodule Mydia.MediaTest do
       }
 
       {:ok, 1} = Media.upsert_episodes_from_season(show, official, monitor_new?: true)
-      original_id = Media.find_episode(show.id, 1, 52).id
+      original_id = Media.find_episode(Scope.unrestricted(), show.id, 1, 52).id
 
       # The same provider episode, presented under DVD ordering as S2E1.
       dvd = %Mydia.Metadata.Structs.SeasonData{
@@ -528,9 +540,9 @@ defmodule Mydia.MediaTest do
 
       {:ok, 1} = Media.upsert_episodes_from_season(show, dvd, monitor_new?: true)
 
-      assert Media.find_episode(show.id, 1, 52) == nil
+      assert Media.find_episode(Scope.unrestricted(), show.id, 1, 52) == nil
 
-      moved = Media.find_episode(show.id, 2, 1)
+      moved = Media.find_episode(Scope.unrestricted(), show.id, 2, 1)
       assert moved.provider_episode_id == "6832458"
 
       # Same row moved in place, not deleted-and-recreated: an implementation
@@ -538,7 +550,7 @@ defmodule Mydia.MediaTest do
       # assertion above while destroying that row's file links, watch
       # history and monitored flag — the entire reason to key on provider id.
       assert moved.id == original_id
-      assert length(Media.list_episodes(show.id)) == 1
+      assert length(Media.list_episodes(Scope.unrestricted(), show.id)) == 1
     end
 
     test "upsert_episodes_from_season/3 does not retag a row already tagged with a different provider id" do
@@ -580,7 +592,8 @@ defmodule Mydia.MediaTest do
       # count, rather than silently transferring "X"'s identity to "Y".
       assert {:ok, 0} = Media.upsert_episodes_from_season(show, renumbered, monitor_new?: true)
 
-      assert %{provider_episode_id: "X"} = Media.find_episode(show.id, 1, 52)
+      assert %{provider_episode_id: "X"} =
+               Media.find_episode(Scope.unrestricted(), show.id, 1, 52)
     end
 
     test "upsert_episodes_from_season/3 rejects a move onto coordinates another episode already occupies" do
@@ -628,8 +641,8 @@ defmodule Mydia.MediaTest do
 
       # Neither episode moved: "A" is untouched, and "B" stayed at its
       # original coordinates rather than landing somewhere unexpected.
-      assert %{provider_episode_id: "A"} = Media.find_episode(show.id, 1, 1)
-      assert %{provider_episode_id: "B"} = Media.find_episode(show.id, 1, 2)
+      assert %{provider_episode_id: "A"} = Media.find_episode(Scope.unrestricted(), show.id, 1, 1)
+      assert %{provider_episode_id: "B"} = Media.find_episode(Scope.unrestricted(), show.id, 1, 2)
     end
   end
 
@@ -687,8 +700,8 @@ defmodule Mydia.MediaTest do
       # returning {:ok, 0} instead, or (if the unique index were somehow
       # bypassed) would leave two rows here.
       matching =
-        show.id
-        |> Media.list_episodes()
+        Scope.unrestricted()
+        |> Media.list_episodes(show.id)
         |> Enum.filter(&(&1.season_number == 4 and &1.episode_number == 1))
 
       assert [adopted] = matching
@@ -714,13 +727,13 @@ defmodule Mydia.MediaTest do
     test "list_episodes/1 returns all episodes for a media item" do
       media_item = media_item_fixture(%{type: "tv_show"})
       episode = episode_fixture(media_item_id: media_item.id)
-      assert Media.list_episodes(media_item.id) == [episode]
+      assert Media.list_episodes(Scope.unrestricted(), media_item.id) == [episode]
     end
 
     test "get_episode!/1 returns the episode with given id" do
       media_item = media_item_fixture(%{type: "tv_show"})
       episode = episode_fixture(media_item_id: media_item.id)
-      assert Media.get_episode!(episode.id) == episode
+      assert Media.get_episode!(Scope.unrestricted(), episode.id) == episode
     end
 
     test "create_episode/1 with valid data creates an episode" do
@@ -756,7 +769,10 @@ defmodule Mydia.MediaTest do
       media_item = media_item_fixture(%{type: "tv_show"})
       episode = episode_fixture(media_item_id: media_item.id)
       assert {:ok, %Episode{}} = Media.delete_episode(episode)
-      assert_raise Ecto.NoResultsError, fn -> Media.get_episode!(episode.id) end
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Media.get_episode!(Scope.unrestricted(), episode.id)
+      end
     end
 
     test "deleting an episode demotes its file without leaving an orphan" do
@@ -831,7 +847,7 @@ defmodule Mydia.MediaTest do
       assert episode.provider_episode_id == "6832458"
 
       # Round-trip through the database, not just the in-memory struct.
-      reloaded = Media.get_episode!(episode.id)
+      reloaded = Media.get_episode!(Scope.unrestricted(), episode.id)
       assert reloaded.absolute_number == 52
       assert reloaded.provider_episode_id == "6832458"
     end
@@ -893,7 +909,7 @@ defmodule Mydia.MediaTest do
                  episode_number: 3
                })
 
-      assert length(Media.list_episodes(media_item.id)) == 3
+      assert length(Media.list_episodes(Scope.unrestricted(), media_item.id)) == 3
     end
   end
 
@@ -910,7 +926,9 @@ defmodule Mydia.MediaTest do
         metadata: %{genres: ["Drama", "Action"]}
       }
 
-      assert {:ok, %MediaItem{} = media_item} = Media.create_media_item(attrs)
+      assert {:ok, %MediaItem{} = media_item} =
+               Media.create_media_item(Scope.unrestricted(), attrs)
+
       assert media_item.category == "movie"
       assert media_item.category_override == false
     end
@@ -927,7 +945,9 @@ defmodule Mydia.MediaTest do
         }
       }
 
-      assert {:ok, %MediaItem{} = media_item} = Media.create_media_item(attrs)
+      assert {:ok, %MediaItem{} = media_item} =
+               Media.create_media_item(Scope.unrestricted(), attrs)
+
       assert media_item.category == "anime_movie"
     end
 
@@ -943,7 +963,9 @@ defmodule Mydia.MediaTest do
         }
       }
 
-      assert {:ok, %MediaItem{} = media_item} = Media.create_media_item(attrs)
+      assert {:ok, %MediaItem{} = media_item} =
+               Media.create_media_item(Scope.unrestricted(), attrs)
+
       assert media_item.category == "cartoon_movie"
     end
 
@@ -955,7 +977,7 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.create_media_item(attrs, skip_episode_refresh: true)
+               Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
 
       assert media_item.category == "tv_show"
     end
@@ -971,7 +993,7 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.create_media_item(attrs, skip_episode_refresh: true)
+               Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
 
       assert media_item.category == "anime_series"
     end
@@ -987,7 +1009,7 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:ok, %MediaItem{} = media_item} =
-               Media.create_media_item(attrs, skip_episode_refresh: true)
+               Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
 
       assert media_item.category == "cartoon_series"
     end
@@ -1029,12 +1051,12 @@ defmodule Mydia.MediaTest do
         metadata: %{genres: ["Drama"]}
       }
 
-      {:ok, media_item} = Media.create_media_item(attrs)
+      {:ok, media_item} = Media.create_media_item(Scope.unrestricted(), attrs)
       assert media_item.category == "movie"
 
       # Update metadata to make it anime
       {:ok, media_item} =
-        Media.update_media_item(media_item, %{
+        Media.update_media_item(Scope.unrestricted(), media_item, %{
           metadata: %{
             genres: ["Animation"],
             origin_country: ["JP"],
@@ -1053,7 +1075,7 @@ defmodule Mydia.MediaTest do
 
       # Update metadata to indicate anime
       {:ok, media_item} =
-        Media.update_media_item(media_item, %{
+        Media.update_media_item(Scope.unrestricted(), media_item, %{
           metadata: %{genres: ["Animation"], origin_country: ["JP"]}
         })
 
@@ -1068,7 +1090,7 @@ defmodule Mydia.MediaTest do
 
       # Update metadata to indicate anime
       {:ok, media_item} =
-        Media.update_media_item(media_item, %{
+        Media.update_media_item(Scope.unrestricted(), media_item, %{
           metadata: %{genres: ["Animation"], origin_country: ["JP"]}
         })
 
@@ -1080,7 +1102,7 @@ defmodule Mydia.MediaTest do
     test "list_media_items/1 filters by category" do
       # Create movies with different categories
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Regular Movie",
           year: 2024,
@@ -1088,7 +1110,7 @@ defmodule Mydia.MediaTest do
         })
 
       {:ok, anime} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Anime Movie",
           year: 2024,
@@ -1096,12 +1118,12 @@ defmodule Mydia.MediaTest do
         })
 
       # Filter by category (atom)
-      movies = Media.list_media_items(category: :movie)
+      movies = Media.list_media_items(Scope.unrestricted(), category: :movie)
       assert length(movies) == 1
       assert hd(movies).id == movie.id
 
       # Filter by category (string)
-      anime_movies = Media.list_media_items(category: "anime_movie")
+      anime_movies = Media.list_media_items(Scope.unrestricted(), category: "anime_movie")
       assert length(anime_movies) == 1
       assert hd(anime_movies).id == anime.id
     end
@@ -1109,7 +1131,7 @@ defmodule Mydia.MediaTest do
     test "reclassify_all_media_items/0 reclassifies all non-override items" do
       # Create some items - they will be auto-classified
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Test Movie 1",
           year: 2024,
@@ -1117,7 +1139,7 @@ defmodule Mydia.MediaTest do
         })
 
       {:ok, _anime} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Test Movie 2",
           year: 2024,
@@ -1133,14 +1155,14 @@ defmodule Mydia.MediaTest do
       assert count >= 1
 
       # Overridden item should remain unchanged
-      updated_movie = Media.get_media_item!(movie.id)
+      updated_movie = Media.get_media_item!(Scope.unrestricted(), movie.id)
       assert updated_movie.category == "cartoon_movie"
     end
 
     test "reclassify_media_items/2 reclassifies selected items by ID" do
       # Create items with specific metadata
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Regular Movie",
           year: 2024,
@@ -1148,7 +1170,7 @@ defmodule Mydia.MediaTest do
         })
 
       {:ok, anime} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Anime Movie",
           year: 2024,
@@ -1171,13 +1193,13 @@ defmodule Mydia.MediaTest do
       assert summary.unchanged == 0
 
       # Verify it was reclassified correctly
-      updated_anime = Media.get_media_item!(anime.id)
+      updated_anime = Media.get_media_item!(Scope.unrestricted(), anime.id)
       assert updated_anime.category == "anime_movie"
     end
 
     test "reclassify_media_items/2 respects category_override flag" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Overridden Movie",
           year: 2024,
@@ -1200,13 +1222,13 @@ defmodule Mydia.MediaTest do
       assert summary.skipped == 1
 
       # Verify category unchanged
-      still_overridden = Media.get_media_item!(movie.id)
+      still_overridden = Media.get_media_item!(Scope.unrestricted(), movie.id)
       assert still_overridden.category == "movie"
     end
 
     test "reclassify_media_items/2 with force: true ignores override" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Force Reclassify Movie",
           year: 2024,
@@ -1225,13 +1247,13 @@ defmodule Mydia.MediaTest do
       assert summary.skipped == 0
 
       # Verify it was reclassified
-      updated = Media.get_media_item!(movie.id)
+      updated = Media.get_media_item!(Scope.unrestricted(), movie.id)
       assert updated.category == "anime_movie"
     end
 
     test "reclassify_media_items/2 returns correct summary with unchanged items" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Already Correct Movie",
           year: 2024,
@@ -1305,7 +1327,7 @@ defmodule Mydia.MediaTest do
       assert count == 4
 
       # Verify episode states
-      episodes = Media.list_episodes(media_item.id)
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id)
       special = Enum.find(episodes, &(&1.season_number == 0))
       s1e1 = Enum.find(episodes, &(&1.season_number == 1 && &1.episode_number == 1))
       s1e2 = Enum.find(episodes, &(&1.season_number == 1 && &1.episode_number == 2))
@@ -1340,7 +1362,7 @@ defmodule Mydia.MediaTest do
       assert count == 2
 
       # Verify all episodes are unmonitored
-      episodes = Media.list_episodes(media_item.id)
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id)
       assert Enum.all?(episodes, &(!&1.monitored))
     end
 
@@ -1371,7 +1393,7 @@ defmodule Mydia.MediaTest do
       {:ok, _count} = Media.apply_episode_monitoring(media_item, :future)
 
       # Verify episode states
-      episodes = Media.list_episodes(media_item.id)
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id)
       past_ep = Enum.find(episodes, &(&1.air_date == past_date))
       future_ep = Enum.find(episodes, &(&1.air_date == future_date))
 
@@ -1417,7 +1439,7 @@ defmodule Mydia.MediaTest do
       {:ok, _count} = Media.apply_episode_monitoring(media_item, :missing)
 
       # Verify episode states
-      episodes = Media.list_episodes(media_item.id, preload: [:media_files])
+      episodes = Media.list_episodes(Scope.unrestricted(), media_item.id, preload: [:media_files])
 
       ep_with = Enum.find(episodes, &(&1.episode_number == 1))
       ep_missing = Enum.find(episodes, &(&1.episode_number == 2))
@@ -1463,7 +1485,8 @@ defmodule Mydia.MediaTest do
         }
       })
 
-      entries = Media.list_movies_by_release_date(~D[2025-06-01], ~D[2025-06-30])
+      entries =
+        Media.list_movies_by_release_date(Scope.unrestricted(), ~D[2025-06-01], ~D[2025-06-30])
 
       assert [%CalendarEntry{} = entry] = entries
       assert entry.title == "In Range Movie"
@@ -1496,7 +1519,9 @@ defmodule Mydia.MediaTest do
         }
       })
 
-      entries = Media.list_movies_by_release_date(~D[2025-06-01], ~D[2025-06-30])
+      entries =
+        Media.list_movies_by_release_date(Scope.unrestricted(), ~D[2025-06-01], ~D[2025-06-30])
+
       assert entries == []
     end
 
@@ -1508,7 +1533,9 @@ defmodule Mydia.MediaTest do
         metadata: %{genres: ["Drama"]}
       })
 
-      entries = Media.list_movies_by_release_date(~D[2025-01-01], ~D[2025-12-31])
+      entries =
+        Media.list_movies_by_release_date(Scope.unrestricted(), ~D[2025-01-01], ~D[2025-12-31])
+
       assert entries == []
     end
 
@@ -1537,7 +1564,9 @@ defmodule Mydia.MediaTest do
         }
       })
 
-      entries = Media.list_movies_by_release_date(~D[2025-06-01], ~D[2025-06-30])
+      entries =
+        Media.list_movies_by_release_date(Scope.unrestricted(), ~D[2025-06-01], ~D[2025-06-30])
+
       assert length(entries) == 2
       titles = Enum.map(entries, & &1.title)
       assert "Start Boundary" in titles
@@ -1560,7 +1589,8 @@ defmodule Mydia.MediaTest do
 
       media_file_fixture(media_item_id: movie.id)
 
-      entries = Media.list_movies_by_release_date(~D[2025-06-01], ~D[2025-06-30])
+      entries =
+        Media.list_movies_by_release_date(Scope.unrestricted(), ~D[2025-06-01], ~D[2025-06-30])
 
       assert [%CalendarEntry{} = entry] = entries
       assert entry.has_files == true
@@ -1586,7 +1616,8 @@ defmodule Mydia.MediaTest do
         trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
       )
 
-      entries = Media.list_movies_by_release_date(~D[2025-06-01], ~D[2025-06-30])
+      entries =
+        Media.list_movies_by_release_date(Scope.unrestricted(), ~D[2025-06-01], ~D[2025-06-30])
 
       assert [%CalendarEntry{} = entry] = entries
       assert entry.has_files == false
@@ -1613,7 +1644,12 @@ defmodule Mydia.MediaTest do
 
     test "returns only movies inside the range, with both bounds included", ctx do
       titles =
-        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        Mydia.Media.list_movies_by_release_date(
+          Scope.unrestricted(),
+          ~D[2026-08-01],
+          ~D[2026-08-31],
+          monitored: nil
+        )
         |> Enum.map(& &1.media_item_title)
         |> Enum.sort()
 
@@ -1625,7 +1661,12 @@ defmodule Mydia.MediaTest do
       Mydia.MediaFixtures.media_file_fixture(%{media_item_id: ctx.inside.id})
 
       entries =
-        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        Mydia.Media.list_movies_by_release_date(
+          Scope.unrestricted(),
+          ~D[2026-08-01],
+          ~D[2026-08-31],
+          monitored: nil
+        )
 
       with_files = Enum.find(entries, &(&1.media_item_title == "Inside"))
       without_files = Enum.find(entries, &(&1.media_item_title == "EdgeLow"))
@@ -1639,7 +1680,12 @@ defmodule Mydia.MediaTest do
       set_release_date(unmonitored, ~D[2026-08-10])
 
       titles =
-        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        Mydia.Media.list_movies_by_release_date(
+          Scope.unrestricted(),
+          ~D[2026-08-01],
+          ~D[2026-08-31],
+          monitored: nil
+        )
         |> Enum.map(& &1.media_item_title)
 
       assert "Unmonitored" in titles
@@ -1657,7 +1703,12 @@ defmodule Mydia.MediaTest do
       |> Mydia.Repo.update!()
 
       entry =
-        Mydia.Media.list_movies_by_release_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        Mydia.Media.list_movies_by_release_date(
+          Scope.unrestricted(),
+          ~D[2026-08-01],
+          ~D[2026-08-31],
+          monitored: nil
+        )
         |> Enum.find(&(&1.media_item_title == "Inside"))
 
       assert entry.poster_path == "/poster.jpg"
@@ -1724,7 +1775,12 @@ defmodule Mydia.MediaTest do
       })
 
       [entry] =
-        Mydia.Media.list_episodes_by_air_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        Mydia.Media.list_episodes_by_air_date(
+          Scope.unrestricted(),
+          ~D[2026-08-01],
+          ~D[2026-08-31],
+          monitored: nil
+        )
 
       assert entry.poster_path == "/show.jpg"
     end
@@ -1750,7 +1806,12 @@ defmodule Mydia.MediaTest do
       })
 
       entries =
-        Mydia.Media.list_episodes_by_air_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        Mydia.Media.list_episodes_by_air_date(
+          Scope.unrestricted(),
+          ~D[2026-08-01],
+          ~D[2026-08-31],
+          monitored: nil
+        )
 
       [first, second] = Enum.sort_by(entries, & &1.episode_number)
 
@@ -1779,7 +1840,12 @@ defmodule Mydia.MediaTest do
       )
 
       [entry] =
-        Mydia.Media.list_episodes_by_air_date(~D[2026-08-01], ~D[2026-08-31], monitored: nil)
+        Mydia.Media.list_episodes_by_air_date(
+          Scope.unrestricted(),
+          ~D[2026-08-01],
+          ~D[2026-08-31],
+          monitored: nil
+        )
 
       assert entry.has_files == false
     end
@@ -2093,7 +2159,7 @@ defmodule Mydia.MediaTest do
       assert reconciled.metadata_source == :tmdb
 
       # Episodes recreated under the new provider's numbering.
-      episodes = Media.list_episodes(reconciled.id)
+      episodes = Media.list_episodes(Scope.unrestricted(), reconciled.id)
       numbers = episodes |> Enum.map(& &1.episode_number) |> Enum.sort()
       assert numbers == [1, 2]
 
@@ -2125,7 +2191,7 @@ defmodule Mydia.MediaTest do
 
       # No mutation: old episode and provider ids untouched.
       assert Mydia.Repo.get(Mydia.Media.Episode, ctx.old_episode.id)
-      item = Media.get_media_item!(ctx.item.id)
+      item = Media.get_media_item!(Scope.unrestricted(), ctx.item.id)
       assert item.tvdb_id == 555
       assert is_nil(item.tmdb_id)
       assert item.metadata_source == :tvdb
@@ -2150,7 +2216,7 @@ defmodule Mydia.MediaTest do
       # The item is switching providers entirely, so whatever ordering the
       # user picked under the old provider's TVDB ids describes nothing on
       # the new provider — it must not survive the switch.
-      {:ok, item} = Media.update_media_item(ctx.item, %{season_order: :dvd})
+      {:ok, item} = Media.update_media_item(Scope.unrestricted(), ctx.item, %{season_order: :dvd})
       assert item.season_order == :dvd
 
       stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
@@ -2281,7 +2347,7 @@ defmodule Mydia.MediaTest do
       assert reconciled.metadata_source == :tvdb
 
       # Episodes recreated under the new provider's numbering.
-      episodes = Media.list_episodes(reconciled.id)
+      episodes = Media.list_episodes(Scope.unrestricted(), reconciled.id)
       numbers = episodes |> Enum.map(& &1.episode_number) |> Enum.sort()
       assert numbers == [1, 2]
 
@@ -2299,7 +2365,7 @@ defmodule Mydia.MediaTest do
     end
 
     test "clears a stale season_order picked under the old provider", ctx do
-      {:ok, item} = Media.update_media_item(ctx.item, %{season_order: :dvd})
+      {:ok, item} = Media.update_media_item(Scope.unrestricted(), ctx.item, %{season_order: :dvd})
       assert item.season_order == :dvd
 
       tvdb_season_id = System.unique_integer([:positive])
@@ -2331,7 +2397,7 @@ defmodule Mydia.MediaTest do
 
       # Nothing wiped: original episode and provider id intact.
       assert Mydia.Repo.get(Mydia.Media.Episode, ctx.old_episode.id)
-      reloaded = Media.get_media_item!(ctx.item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), ctx.item.id)
       assert reloaded.tmdb_id == 777
       assert is_nil(reloaded.tvdb_id)
       assert reloaded.metadata_source == :tmdb
@@ -2476,7 +2542,7 @@ defmodule Mydia.MediaTest do
 
       # Nothing wiped: original episode and provider id intact.
       assert Mydia.Repo.get(Mydia.Media.Episode, old_episode.id)
-      reloaded = Media.get_media_item!(item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), item.id)
       assert reloaded.tvdb_id == 444
       assert is_nil(reloaded.tmdb_id)
     end
@@ -2541,7 +2607,7 @@ defmodule Mydia.MediaTest do
 
       # Transaction rolled back: original episode and provider id intact.
       assert Mydia.Repo.get(Mydia.Media.Episode, old_episode.id)
-      reloaded = Media.get_media_item!(item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), item.id)
       assert reloaded.tvdb_id == 333
     end
 
@@ -2617,7 +2683,7 @@ defmodule Mydia.MediaTest do
       # Rolled back: original episodes and provider id preserved.
       assert Mydia.Repo.get(Mydia.Media.Episode, old_episode_a.id)
       assert Mydia.Repo.get(Mydia.Media.Episode, old_episode_b.id)
-      reloaded = Media.get_media_item!(item.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), item.id)
       assert reloaded.tvdb_id == 222
       assert is_nil(reloaded.tmdb_id)
       assert reloaded.metadata_source == :tvdb
@@ -2809,7 +2875,7 @@ defmodule Mydia.MediaTest do
       abs = Path.join(lp.path, "movie.mkv")
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_item(item, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(),item, delete_files: true)
 
       refute File.exists?(abs)
     end
@@ -2830,9 +2896,9 @@ defmodule Mydia.MediaTest do
         })
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 1}} =
-               Media.delete_media_item(media_item, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(),media_item, delete_files: true)
 
-      assert_raise Ecto.NoResultsError, fn -> Media.get_media_item!(media_item.id) end
+      assert_raise Ecto.NoResultsError, fn -> Media.get_media_item!(Scope.unrestricted(), media_item.id) end
     end
 
     test "delete_media_items/2 returns count and error count", %{library_path: lp} do
@@ -2840,14 +2906,14 @@ defmodule Mydia.MediaTest do
       item2 = movie_with_file(lp, "b.mkv", "data")
 
       assert {:ok, 2, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_items([item1.id, item2.id], delete_files: true)
+               Media.delete_media_items(Scope.unrestricted(),[item1.id, item2.id], delete_files: true)
     end
 
     test "delete_media_items/2 with delete_files: false reports zero errors", %{library_path: lp} do
       item = movie_with_file(lp, "keep.mkv", "data")
       abs = Path.join(lp.path, "keep.mkv")
 
-      assert {:ok, 1, %DiskRemoval{} = removal} = Media.delete_media_items([item.id])
+      assert {:ok, 1, %DiskRemoval{} = removal} = Media.delete_media_items(Scope.unrestricted(),[item.id])
       assert removal == %DiskRemoval{}
       assert File.exists?(abs)
     end
@@ -2901,7 +2967,7 @@ defmodule Mydia.MediaTest do
       abs = Path.join(lp.path, "Show/S01E01.mkv")
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_item(media_item, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(),media_item, delete_files: true)
 
       refute File.exists?(abs)
       refute candidate_for(file)
@@ -2914,7 +2980,7 @@ defmodule Mydia.MediaTest do
       abs = Path.join(lp.path, "Show/S01E02.mkv")
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_item(media_item)
+               Media.delete_media_item(Scope.unrestricted(),media_item)
 
       assert File.exists?(abs)
       assert candidate_for(file)
@@ -2925,7 +2991,7 @@ defmodule Mydia.MediaTest do
       {media_item, file} = show_with_episode_file(lp, "Show/S01E03.mkv", "data")
 
       assert {:ok, 1, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_items([media_item.id], delete_files: true)
+               Media.delete_media_items(Scope.unrestricted(),[media_item.id], delete_files: true)
 
       refute candidate_for(file)
     end
@@ -2935,7 +3001,7 @@ defmodule Mydia.MediaTest do
     } do
       {media_item, file} = show_with_episode_file(lp, "Show/S01E04.mkv", "data")
 
-      assert {:ok, 1, %DiskRemoval{files_failed: 0}} = Media.delete_media_items([media_item.id])
+      assert {:ok, 1, %DiskRemoval{files_failed: 0}} = Media.delete_media_items(Scope.unrestricted(),[media_item.id])
       assert candidate_for(file)
     end
   end
@@ -2997,7 +3063,7 @@ defmodule Mydia.MediaTest do
 
       assert {:ok, %MediaItem{},
               %DiskRemoval{files_failed: 0, folders_removed: [^folder], folders_kept: []}} =
-               Media.delete_media_item(item, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(),item, delete_files: true)
 
       refute File.exists?(folder)
       assert File.dir?(root)
@@ -3025,7 +3091,7 @@ defmodule Mydia.MediaTest do
       File.write!(Path.join(root, "Tin Kettle/Season 01/season.nfo"), "<season/>")
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0, folders_kept: []}} =
-               Media.delete_media_item(show, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(),show, delete_files: true)
 
       refute File.exists?(Path.join(root, "Tin Kettle"))
     end
@@ -3044,7 +3110,7 @@ defmodule Mydia.MediaTest do
                 folders_kept: [
                   {^folder, {:blocked, [{:media_file, "Shared Reels/Reel Two.mkv"}]}}
                 ]
-              }} = Media.delete_media_item(item, delete_files: true)
+              }} = Media.delete_media_item(Scope.unrestricted(),item, delete_files: true)
 
       refute File.exists?(Path.join(folder, "Reel One.mkv"))
       assert File.exists?(Path.join(folder, "Reel Two.mkv"))
@@ -3060,7 +3126,7 @@ defmodule Mydia.MediaTest do
               %DiskRemoval{
                 files_failed: 1,
                 folders_kept: [{^folder, {:blocked, [{:video, "Locked Reel/Locked Reel.mkv"}]}}]
-              }} = Media.delete_media_item(item, delete_files: true)
+              }} = Media.delete_media_item(Scope.unrestricted(),item, delete_files: true)
 
       assert File.exists?(Path.join(folder, "Locked Reel.mkv"))
     end
@@ -3071,7 +3137,7 @@ defmodule Mydia.MediaTest do
       folder = Path.join(root, "Shared Reels")
 
       assert {:ok, 2, %DiskRemoval{files_failed: 0, folders_removed: [^folder]}} =
-               Media.delete_media_items([one.id, two.id], delete_files: true)
+               Media.delete_media_items(Scope.unrestricted(),[one.id, two.id], delete_files: true)
 
       refute File.exists?(folder)
     end
@@ -3292,7 +3358,7 @@ defmodule Mydia.MediaTest do
     test "matches movies by tmdb id and type" do
       movie = media_item_fixture(%{type: "movie", tmdb_id: 603, monitored: true})
 
-      status = Media.library_status_for_tmdb_ids([603, 999], "movie")
+      status = Media.library_status_for_tmdb_ids(Scope.unrestricted(), [603, 999], "movie")
 
       assert %{in_library: true, monitored: true, type: "movie", id: id} =
                status[{:movie, :tmdb, 603}]
@@ -3304,7 +3370,7 @@ defmodule Mydia.MediaTest do
     test "does not match a tv show when asked for movies" do
       media_item_fixture(%{type: "tv_show", tmdb_id: 603})
 
-      status = Media.library_status_for_tmdb_ids([603], "movie")
+      status = Media.library_status_for_tmdb_ids(Scope.unrestricted(), [603], "movie")
 
       refute Map.has_key?(status, {:movie, :tmdb, 603})
       refute Map.has_key?(status, {:tv_show, :tmdb, 603})
@@ -3313,13 +3379,13 @@ defmodule Mydia.MediaTest do
     test "matches tv shows when asked for tv_show" do
       show = media_item_fixture(%{type: "tv_show", tmdb_id: 1396})
 
-      status = Media.library_status_for_tmdb_ids([1396], "tv_show")
+      status = Media.library_status_for_tmdb_ids(Scope.unrestricted(), [1396], "tv_show")
 
       assert status[{:tv_show, :tmdb, 1396}].id == show.id
     end
 
     test "returns an empty map for an empty id list" do
-      assert Media.library_status_for_tmdb_ids([], "movie") == %{}
+      assert Media.library_status_for_tmdb_ids(Scope.unrestricted(), [], "movie") == %{}
     end
   end
 
@@ -3331,7 +3397,7 @@ defmodule Mydia.MediaTest do
       _b = media_item_fixture(%{type: "movie", title: "B"})
       c = media_item_fixture(%{type: "movie", title: "C"})
 
-      results = Media.list_media_items(ids: [a.id, c.id])
+      results = Media.list_media_items(Scope.unrestricted(), ids: [a.id, c.id])
 
       assert length(results) == 2
       assert Enum.map(results, & &1.id) |> Enum.sort() == Enum.sort([a.id, c.id])
@@ -3340,7 +3406,7 @@ defmodule Mydia.MediaTest do
     test "returns an empty list for an empty id list" do
       media_item_fixture(%{type: "movie"})
 
-      assert Media.list_media_items(ids: []) == []
+      assert Media.list_media_items(Scope.unrestricted(), ids: []) == []
     end
   end
 
@@ -3351,7 +3417,12 @@ defmodule Mydia.MediaTest do
       movie = media_item_fixture(%{type: "movie", title: "Owned Movie"})
       _file = media_file_fixture(%{media_item_id: movie.id})
 
-      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == movie.id))
+      assert [row] =
+               Enum.filter(
+                 Media.list_library_items_page(Scope.unrestricted()),
+                 &(&1.id == movie.id)
+               )
+
       assert row.owned
       assert row.type == "movie"
     end
@@ -3359,7 +3430,12 @@ defmodule Mydia.MediaTest do
     test "marks a movie with no files as not owned" do
       movie = media_item_fixture(%{type: "movie", title: "Catalogued Only"})
 
-      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == movie.id))
+      assert [row] =
+               Enum.filter(
+                 Media.list_library_items_page(Scope.unrestricted()),
+                 &(&1.id == movie.id)
+               )
+
       refute row.owned
     end
 
@@ -3368,7 +3444,12 @@ defmodule Mydia.MediaTest do
       episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
       _file = media_file_fixture(%{episode_id: episode.id})
 
-      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == show.id))
+      assert [row] =
+               Enum.filter(
+                 Media.list_library_items_page(Scope.unrestricted()),
+                 &(&1.id == show.id)
+               )
+
       assert row.owned
     end
 
@@ -3381,14 +3462,24 @@ defmodule Mydia.MediaTest do
           trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
-      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == movie.id))
+      assert [row] =
+               Enum.filter(
+                 Media.list_library_items_page(Scope.unrestricted()),
+                 &(&1.id == movie.id)
+               )
+
       refute row.owned
     end
 
     test "carries the keyset fields the host cursor needs" do
       movie = media_item_fixture(%{type: "movie", title: "Cursor Fields"})
 
-      assert [row] = Enum.filter(Media.list_library_items_page(), &(&1.id == movie.id))
+      assert [row] =
+               Enum.filter(
+                 Media.list_library_items_page(Scope.unrestricted()),
+                 &(&1.id == movie.id)
+               )
+
       assert %DateTime{} = row.updated_at
       assert is_binary(row.id)
     end
@@ -3398,6 +3489,7 @@ defmodule Mydia.MediaTest do
     test "falls through to tvdb when the imdb id matches nothing" do
       {:ok, show} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Cascade Show", type: "tv_show", tvdb_id: 378_982},
           skip_episode_refresh: true
         )
@@ -3405,19 +3497,25 @@ defmodule Mydia.MediaTest do
       # A Plex episode carries all three ids on its show; only tvdb is local.
       # Strings are what Plex GUIDs parse to, and Ecto casts them for the
       # integer column.
-      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-absent", tvdb: "378982"})
+      assert %{id: id} =
+               Media.find_by_external_ids(Scope.unrestricted(), %{
+                 imdb: "tt-absent",
+                 tvdb: "378982"
+               })
+
       assert id == show.id
     end
 
     test "falls through to tmdb when imdb and tvdb both miss" do
       {:ok, show} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Tmdb Show", type: "tv_show", tmdb_id: 108_255},
           skip_episode_refresh: true
         )
 
       assert %{id: id} =
-               Media.find_by_external_ids(%{
+               Media.find_by_external_ids(Scope.unrestricted(), %{
                  imdb: "tt-absent",
                  tvdb: "999999",
                  tmdb: "108255"
@@ -3427,16 +3525,20 @@ defmodule Mydia.MediaTest do
     end
 
     test "returns nil when no ids are given" do
-      assert Media.find_by_external_ids(%{}) == nil
+      assert Media.find_by_external_ids(Scope.unrestricted(), %{}) == nil
     end
 
     test "returns nil when nothing matches" do
-      assert Media.find_by_external_ids(%{imdb: "tt-nope", tvdb: "424242", tmdb: "424243"}) == nil
+      assert Media.find_by_external_ids(Scope.unrestricted(), %{
+               imdb: "tt-nope",
+               tvdb: "424242",
+               tmdb: "424243"
+             }) == nil
     end
 
     test "a wrong-type match does not short-circuit the cascade" do
       {:ok, _decoy} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           title: "Decoy Movie",
           type: "movie",
           year: 2024,
@@ -3445,57 +3547,63 @@ defmodule Mydia.MediaTest do
 
       {:ok, show} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Real Show", type: "tv_show", tvdb_id: 777},
           skip_episode_refresh: true
         )
 
       assert %{id: id} =
-               Media.find_by_external_ids(%{imdb: "tt777", tvdb: "777"}, type: "tv_show")
+               Media.find_by_external_ids(Scope.unrestricted(), %{imdb: "tt777", tvdb: "777"},
+                 type: "tv_show"
+               )
 
       assert id == show.id
     end
 
     test "returns nil when the only match is the wrong type" do
       {:ok, _movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           title: "Only Movie",
           type: "movie",
           year: 2024,
           imdb_id: "tt888"
         })
 
-      assert Media.find_by_external_ids(%{imdb: "tt888"}, type: "tv_show") == nil
+      assert Media.find_by_external_ids(Scope.unrestricted(), %{imdb: "tt888"}, type: "tv_show") ==
+               nil
     end
 
     test "arity-1 calls still resolve" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           title: "Legacy Caller",
           type: "movie",
           year: 2024,
           imdb_id: "tt999"
         })
 
-      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt999"})
+      assert %{id: id} = Media.find_by_external_ids(Scope.unrestricted(), %{imdb: "tt999"})
       assert id == movie.id
     end
 
     test "raises ArgumentError on an unrecognised :type" do
       assert_raise ArgumentError, fn ->
-        Media.find_by_external_ids(%{imdb: "tt1"}, type: "tvshow")
+        Media.find_by_external_ids(Scope.unrestricted(), %{imdb: "tt1"}, type: "tvshow")
       end
     end
 
     test "type: nil applies no filter" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           title: "Untyped Filter",
           type: "movie",
           year: 2024,
           imdb_id: "tt-untyped"
         })
 
-      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-untyped"}, type: nil)
+      assert %{id: id} =
+               Media.find_by_external_ids(Scope.unrestricted(), %{imdb: "tt-untyped"}, type: nil)
+
       assert id == movie.id
     end
 
@@ -3511,6 +3619,7 @@ defmodule Mydia.MediaTest do
       # live relay trying to recover one by title (#530).
       {:ok, older} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{
             title: "Older Duplicate",
             type: "tv_show",
@@ -3521,6 +3630,7 @@ defmodule Mydia.MediaTest do
 
       {:ok, _newer} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{
             title: "Newer Duplicate",
             type: "tv_show",
@@ -3544,7 +3654,7 @@ defmodule Mydia.MediaTest do
           ]
         )
 
-      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-dup-order"})
+      assert %{id: id} = Media.find_by_external_ids(Scope.unrestricted(), %{imdb: "tt-dup-order"})
       assert id == older.id
     end
 
@@ -3558,6 +3668,7 @@ defmodule Mydia.MediaTest do
       for title <- ["Tie A", "Tie B", "Tie C"] do
         {:ok, _} =
           Media.create_media_item(
+            Scope.unrestricted(),
             %{title: title, type: "tv_show", imdb_id: "tt-dup-tie"},
             skip_episode_refresh: true
           )
@@ -3584,58 +3695,67 @@ defmodule Mydia.MediaTest do
         |> limit(1)
         |> Repo.one()
 
-      assert %{id: id} = Media.find_by_external_ids(%{imdb: "tt-dup-tie"})
+      assert %{id: id} = Media.find_by_external_ids(Scope.unrestricted(), %{imdb: "tt-dup-tie"})
       assert id == lowest_id.id
 
       for _ <- 1..5 do
-        assert Media.find_by_external_ids(%{imdb: "tt-dup-tie"}).id == id
+        assert Media.find_by_external_ids(Scope.unrestricted(), %{imdb: "tt-dup-tie"}).id == id
       end
     end
 
     test "a non-numeric tvdb id falls through to tmdb instead of raising" do
       {:ok, show} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Tmdb Fallback Show", type: "tv_show", tmdb_id: 555_555},
           skip_episode_refresh: true
         )
 
-      assert %{id: id} = Media.find_by_external_ids(%{tvdb: "not-a-number", tmdb: "555555"})
+      assert %{id: id} =
+               Media.find_by_external_ids(Scope.unrestricted(), %{
+                 tvdb: "not-a-number",
+                 tmdb: "555555"
+               })
+
       assert id == show.id
     end
 
     test "a non-numeric tmdb id does not raise and returns nil" do
-      assert Media.find_by_external_ids(%{tmdb: "not-a-number"}) == nil
+      assert Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: "not-a-number"}) == nil
     end
 
     test "a tvdb id with trailing garbage does not match" do
       {:ok, _show} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Trailing Garbage Show", type: "tv_show", tvdb_id: 123},
           skip_episode_refresh: true
         )
 
-      assert Media.find_by_external_ids(%{tvdb: "123abc"}) == nil
+      assert Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: "123abc"}) == nil
     end
 
     test "a numeric tvdb string still matches" do
       {:ok, show} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Numeric String Show", type: "tv_show", tvdb_id: 42},
           skip_episode_refresh: true
         )
 
-      assert %{id: id} = Media.find_by_external_ids(%{tvdb: "42"})
+      assert %{id: id} = Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: "42"})
       assert id == show.id
     end
 
     test "an integer tvdb id still matches" do
       {:ok, show} =
         Media.create_media_item(
+          Scope.unrestricted(),
           %{title: "Integer Id Show", type: "tv_show", tvdb_id: 43},
           skip_episode_refresh: true
         )
 
-      assert %{id: id} = Media.find_by_external_ids(%{tvdb: 43})
+      assert %{id: id} = Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: 43})
       assert id == show.id
     end
   end
@@ -3694,7 +3814,9 @@ defmodule Mydia.MediaTest do
       item = media_item_fixture(%{monitored: true})
 
       assert {:ok, _updated} =
-               Media.update_media_item(item, %{monitored: false}, reason: "Monitoring disabled")
+               Media.update_media_item(Scope.unrestricted(), item, %{monitored: false},
+                 reason: "Monitoring disabled"
+               )
 
       event =
         Events.list_events(
@@ -3716,7 +3838,7 @@ defmodule Mydia.MediaTest do
       item = media_item_fixture(%{type: "tv_show", monitor_new_seasons: :all})
 
       assert {:ok, _updated} =
-               Media.update_media_item(item, %{monitor_new_seasons: :none})
+               Media.update_media_item(Scope.unrestricted(), item, %{monitor_new_seasons: :none})
 
       event =
         Events.list_events(

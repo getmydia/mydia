@@ -939,7 +939,9 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       refute updated.media_item_id == wrong.id
       assert updated.episode_id == nil
 
-      added = Mydia.Media.get_media_item!(updated.media_item_id)
+      added =
+        Mydia.Media.get_media_item!(Mydia.Accounts.Scope.unrestricted(), updated.media_item_id)
+
       assert added.title == "Stub Series"
       assert added.tvdb_id == 81_189
     end
@@ -1051,7 +1053,9 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       # The show itself IS legitimately created by this flow; only the
       # download's match must stay unwritten.
-      [added] = Mydia.Media.list_media_items(search: "Stub Series")
+      [added] =
+        Mydia.Media.list_media_items(Mydia.Accounts.Scope.unrestricted(), search: "Stub Series")
+
       assert added.tvdb_id == 81_189
     end
 

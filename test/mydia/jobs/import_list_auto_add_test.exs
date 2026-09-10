@@ -17,6 +17,7 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
 
   use Mydia.DataCase, async: false
 
+  alias Mydia.Accounts.Scope
   alias Mydia.ImportLists
   alias Mydia.Jobs.ImportListAutoAdd
 
@@ -136,7 +137,7 @@ defmodule Mydia.Jobs.ImportListAutoAddTest do
       assert reloaded.status == "added"
       refute is_nil(reloaded.media_item_id)
 
-      media_item = Mydia.Media.get_media_item!(reloaded.media_item_id)
+      media_item = Mydia.Media.get_media_item!(Scope.unrestricted(), reloaded.media_item_id)
       assert media_item.title == "Halcyon Fields"
     end
 

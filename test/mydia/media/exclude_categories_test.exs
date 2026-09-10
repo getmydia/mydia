@@ -1,6 +1,7 @@
 defmodule Mydia.Media.ExcludeCategoriesTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
 
   import Mydia.MediaFixtures
@@ -23,7 +24,7 @@ defmodule Mydia.Media.ExcludeCategoriesTest do
     test "drops the excluded categories", %{live: live, anime: anime} do
       titles =
         [type: "tv_show", exclude_categories: ["anime_series"]]
-        |> Media.list_media_items()
+        |> then(&Media.list_media_items(Scope.unrestricted(), &1))
         |> Enum.map(& &1.title)
 
       assert live.title in titles
@@ -33,7 +34,7 @@ defmodule Mydia.Media.ExcludeCategoriesTest do
     test "keeps items whose category is still nil", %{unclassified: unclassified} do
       titles =
         [type: "tv_show", exclude_categories: ["anime_series"]]
-        |> Media.list_media_items()
+        |> then(&Media.list_media_items(Scope.unrestricted(), &1))
         |> Enum.map(& &1.title)
 
       assert unclassified.title in titles
@@ -42,7 +43,7 @@ defmodule Mydia.Media.ExcludeCategoriesTest do
     test "accepts atoms as well as strings", %{anime: anime} do
       titles =
         [type: "tv_show", exclude_categories: [:anime_series]]
-        |> Media.list_media_items()
+        |> then(&Media.list_media_items(Scope.unrestricted(), &1))
         |> Enum.map(& &1.title)
 
       refute anime.title in titles
@@ -51,7 +52,7 @@ defmodule Mydia.Media.ExcludeCategoriesTest do
     test "an empty exclusion list changes nothing", %{anime: anime} do
       titles =
         [type: "tv_show", exclude_categories: []]
-        |> Media.list_media_items()
+        |> then(&Media.list_media_items(Scope.unrestricted(), &1))
         |> Enum.map(& &1.title)
 
       assert anime.title in titles
@@ -66,7 +67,7 @@ defmodule Mydia.Media.ExcludeCategoriesTest do
 
       titles =
         [base_query: base, type: "tv_show"]
-        |> Media.list_media_items()
+        |> then(&Media.list_media_items(Scope.unrestricted(), &1))
         |> Enum.map(& &1.title)
 
       assert titles == [anime.title]
@@ -75,13 +76,14 @@ defmodule Mydia.Media.ExcludeCategoriesTest do
 
   describe "counts" do
     test "count_tv_shows/1 respects the exclusion" do
-      assert Media.count_tv_shows() == 3
-      assert Media.count_tv_shows(exclude_categories: ["anime_series"]) == 2
+      assert Media.count_tv_shows(Scope.unrestricted()) == 3
+
+      assert Media.count_tv_shows(Scope.unrestricted(), exclude_categories: ["anime_series"]) == 2
     end
 
     test "count_movies/1 respects the exclusion" do
-      assert Media.count_movies() == 1
-      assert Media.count_movies(exclude_categories: ["movie"]) == 0
+      assert Media.count_movies(Scope.unrestricted()) == 1
+      assert Media.count_movies(Scope.unrestricted(), exclude_categories: ["movie"]) == 0
     end
   end
 end

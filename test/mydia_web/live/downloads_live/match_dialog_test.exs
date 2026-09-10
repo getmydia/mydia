@@ -3,20 +3,27 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
   # metadata provider through Provider.Registry, which is an Agent.
   use Mydia.DataCase, async: false
 
+  alias Mydia.Accounts.Scope
   alias MydiaWeb.DownloadsLive.MatchDialog
 
   import Mydia.MediaFixtures
   import Mydia.MetadataStub, only: [setup_metadata_stub: 1]
 
   defp dialog_for(type) do
-    %MatchDialog{download_id: "d1", mode: :inflight, query: "", type: type}
+    %MatchDialog{
+      scope: Scope.unrestricted(),
+      download_id: "d1",
+      mode: :inflight,
+      query: "",
+      type: type
+    }
   end
 
-  describe "open/2" do
+  describe "open/3" do
     test "seeds the query from the parsed release title" do
       download = %{id: "d1", title: "Show.Name.S01-S03.1080p.WEB-DL.x265", media_item: nil}
 
-      dialog = MatchDialog.open(download, :inflight)
+      dialog = MatchDialog.open(Scope.unrestricted(), download, :inflight)
 
       assert dialog.query == "Show Name"
       assert dialog.type == :tv_show
@@ -27,7 +34,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
     test "falls back to the raw title when the parser recovers none" do
       download = %{id: "d2", title: "????", media_item: nil}
 
-      dialog = MatchDialog.open(download, :inflight)
+      dialog = MatchDialog.open(Scope.unrestricted(), download, :inflight)
 
       assert dialog.query == "????"
     end
@@ -35,7 +42,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
     test "falls back to the download's media item type when the parse is unknown" do
       download = %{id: "d3", title: "1234", media_item: %{type: "tv_show"}}
 
-      dialog = MatchDialog.open(download, :postimport)
+      dialog = MatchDialog.open(Scope.unrestricted(), download, :postimport)
 
       assert dialog.type == :tv_show
       assert dialog.mode == :postimport
@@ -44,7 +51,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
     test "defaults to movie when nothing indicates a type" do
       download = %{id: "d4", title: "1234", media_item: nil}
 
-      assert MatchDialog.open(download, :inflight).type == :movie
+      assert MatchDialog.open(Scope.unrestricted(), download, :inflight).type == :movie
     end
 
     test "tolerates an unloaded media_item association" do
@@ -58,13 +65,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
         }
       }
 
-      assert MatchDialog.open(download, :inflight).type == :movie
+      assert MatchDialog.open(Scope.unrestricted(), download, :inflight).type == :movie
     end
 
     test "starts with empty results and no error" do
       download = %{id: "d6", title: "Show.Name.S01", media_item: nil}
 
-      dialog = MatchDialog.open(download, :inflight)
+      dialog = MatchDialog.open(Scope.unrestricted(), download, :inflight)
 
       assert dialog.library_results == []
       assert dialog.external_results == []
@@ -151,7 +158,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
     test "re-runs the search under the new type" do
       dialog =
-        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :movie}
+        %MatchDialog{
+          scope: Scope.unrestricted(),
+          download_id: "d1",
+          mode: :inflight,
+          query: "Stub",
+          type: :movie
+        }
         |> MatchDialog.set_type(:tv_show)
 
       assert dialog.type == :tv_show
@@ -166,7 +179,12 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
       movie = media_item_fixture(%{type: "movie", title: "A Movie"})
 
       for mode <- [:inflight, :postimport] do
-        dialog = %MatchDialog{download_id: "d1", mode: mode, type: :movie}
+        dialog = %MatchDialog{
+          scope: Scope.unrestricted(),
+          download_id: "d1",
+          mode: mode,
+          type: :movie
+        }
 
         assert {:submit, {id, nil}} = MatchDialog.select(dialog, movie.id)
         assert id == movie.id
@@ -175,7 +193,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
     test "a TV show submits show-level in flight" do
       show = media_item_fixture(%{type: "tv_show", title: "A Show"})
-      dialog = %MatchDialog{download_id: "d1", mode: :inflight, type: :tv_show}
+
+      dialog = %MatchDialog{
+        scope: Scope.unrestricted(),
+        download_id: "d1",
+        mode: :inflight,
+        type: :tv_show
+      }
 
       assert {:submit, {id, nil}} = MatchDialog.select(dialog, show.id)
       assert id == show.id
@@ -183,7 +207,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
     test "a TV show opens the episode list after import" do
       show = media_item_fixture(%{type: "tv_show", title: "A Show"})
-      dialog = %MatchDialog{download_id: "d1", mode: :postimport, type: :tv_show}
+
+      dialog = %MatchDialog{
+        scope: Scope.unrestricted(),
+        download_id: "d1",
+        mode: :postimport,
+        type: :tv_show
+      }
 
       assert {:episodes, updated} = MatchDialog.select(dialog, show.id)
       assert updated.selected.id == show.id
@@ -196,7 +226,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
     test "show_episodes loads the show's episodes in flight" do
       show = media_item_fixture(%{type: "tv_show", title: "A Show"})
-      dialog = %MatchDialog{download_id: "d1", mode: :inflight, type: :tv_show}
+
+      dialog = %MatchDialog{
+        scope: Scope.unrestricted(),
+        download_id: "d1",
+        mode: :inflight,
+        type: :tv_show
+      }
 
       updated = MatchDialog.show_episodes(dialog, show.id)
 
@@ -237,7 +273,12 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
     end
 
     test "select_episode returns an error rather than raising when nothing is selected" do
-      dialog = %MatchDialog{download_id: "d1", mode: :postimport, selected: nil}
+      dialog = %MatchDialog{
+        scope: Scope.unrestricted(),
+        download_id: "d1",
+        mode: :postimport,
+        selected: nil
+      }
 
       assert {:error, updated} = MatchDialog.select_episode(dialog, "ep-1")
       assert updated.error =~ "not part of the selected show"
@@ -251,7 +292,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
     test "creates the media item for a provider result" do
       dialog =
-        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :movie}
+        %MatchDialog{
+          scope: Scope.unrestricted(),
+          download_id: "d1",
+          mode: :inflight,
+          query: "Stub",
+          type: :movie
+        }
         |> MatchDialog.search("Stub")
 
       [result | _] = dialog.external_results
@@ -265,7 +312,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
     test "adds a TV result through TVDB rather than TMDB" do
       dialog =
-        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :tv_show}
+        %MatchDialog{
+          scope: Scope.unrestricted(),
+          download_id: "d1",
+          mode: :inflight,
+          query: "Stub",
+          type: :tv_show
+        }
         |> MatchDialog.search("Stub")
 
       [result | _] = dialog.external_results
@@ -280,7 +333,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
       _existing = media_item_fixture(%{type: "movie", title: "Unrelated", tmdb_id: 550})
 
       dialog =
-        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :movie}
+        %MatchDialog{
+          scope: Scope.unrestricted(),
+          download_id: "d1",
+          mode: :inflight,
+          query: "Stub",
+          type: :movie
+        }
         |> MatchDialog.search("Stub")
 
       [result | _] = dialog.external_results
@@ -291,7 +350,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
 
     test "reports an unknown provider id as an inline error" do
       dialog =
-        %MatchDialog{download_id: "d1", mode: :inflight, query: "Stub", type: :movie}
+        %MatchDialog{
+          scope: Scope.unrestricted(),
+          download_id: "d1",
+          mode: :inflight,
+          query: "Stub",
+          type: :movie
+        }
         |> MatchDialog.search("Stub")
 
       assert {:error, updated} = MatchDialog.add_external(dialog, "does-not-exist")
