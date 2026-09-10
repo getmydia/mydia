@@ -142,8 +142,8 @@ class FakeSettingsService extends Fake implements SettingsService {
     this.autoSkipSegments = false,
   });
 
-  /// The persisted `default_quality` key. `auto` — the real service's own
-  /// default — reads back as `QualityRung.original`.
+  /// The persisted `default_quality` key. `auto`, the real service's own
+  /// default, reads back as `QualityRung.auto`.
   String defaultQuality;
 
   /// When set, reads throw it. `flutter_secure_storage` needs a keyring on

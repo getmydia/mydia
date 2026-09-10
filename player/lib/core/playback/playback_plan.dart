@@ -13,10 +13,10 @@ enum QualityChoiceKind { auto, original, fixed }
 
 /// The viewer's quality choice as the planner sees it.
 ///
-/// `auto` exists from this phase so the planner has one shape, but nothing
-/// offers it to the viewer until the Auto rung ships.
+/// Auto is the default and respects remembered decode failures. Original is
+/// always the viewer's own pick, which overrides them. A fixed rung pins caps.
 class QualityChoice {
-  const QualityChoice._(this.kind, this.rung, {this.manual = false});
+  const QualityChoice._(this.kind, this.rung);
 
   const QualityChoice.fixed(QualityRung rung)
       : this._(QualityChoiceKind.fixed, rung);
@@ -24,27 +24,18 @@ class QualityChoice {
   static const auto = QualityChoice._(QualityChoiceKind.auto, null);
   static const original = QualityChoice._(QualityChoiceKind.original, null);
 
-  /// Original maps to [original]; anything with a cap is a fixed rung.
-  ///
-  /// [manual] only ever matters for Original: it is what lets the planner
-  /// tell "the viewer picked Original in the quality menu" apart from "this
-  /// is where a fresh playback starts, or what a carried default settled
-  /// on." A fixed rung has no memory bypass to grant, so it ignores the
-  /// flag.
-  factory QualityChoice.fromRung(QualityRung rung, {bool manual = false}) =>
-      rung.isOriginal
-          ? QualityChoice._(QualityChoiceKind.original, null, manual: manual)
+  /// Auto maps to [auto], Original to [original]; anything with a cap is a
+  /// fixed rung.
+  factory QualityChoice.fromRung(QualityRung rung) => rung.isAuto
+      ? auto
+      : rung.isOriginal
+          ? original
           : QualityChoice.fixed(rung);
 
   final QualityChoiceKind kind;
 
   /// Only set for [QualityChoiceKind.fixed].
   final QualityRung? rung;
-
-  /// True only for a viewer-picked Original: see [fromRung]. Always false
-  /// for [auto] and [fixed], irrelevant to fixed, and Auto has no manual
-  /// pick to make until it ships.
-  final bool manual;
 
   /// A fixed rung has caps to apply and only an encoder can apply them, so
   /// it never direct plays and never stream-copies.
@@ -53,19 +44,13 @@ class QualityChoice {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is QualityChoice &&
-          other.kind == kind &&
-          other.rung == rung &&
-          other.manual == manual;
+      other is QualityChoice && other.kind == kind && other.rung == rung;
 
   @override
-  int get hashCode => Object.hash(kind, rung, manual);
+  int get hashCode => Object.hash(kind, rung);
 
   @override
-  String toString() {
-    final label = rung?.label ?? kind.name;
-    return manual ? 'QualityChoice($label, manual)' : 'QualityChoice($label)';
-  }
+  String toString() => 'QualityChoice(${rung?.label ?? kind.name})';
 }
 
 /// One entry of `streamingCandidates.candidates`, in server order.

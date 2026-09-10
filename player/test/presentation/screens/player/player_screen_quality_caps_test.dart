@@ -92,7 +92,7 @@ void main() {
   });
 
   testWidgets(
-      'falls back to Original when the source cannot offer the '
+      'falls back to Auto when the source cannot offer the '
       'stored rung', (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
@@ -118,10 +118,10 @@ void main() {
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
-    expect(variables.containsKey('maxBitrate'), isFalse);
-    expect(variables.containsKey('maxHeight'), isFalse,
-        reason: 'Original asks for no caps, which is what keeps the '
-            'copy-when-compatible path available');
+    expect(variables['maxHeight'], 720,
+        reason: 'a stored rung that would upscale falls back to Auto, which '
+            "starts at the top of this 720p file's adaptive ladder");
+    expect(variables['maxBitrate'], 4000);
   });
 
   testWidgets('a chosen rung takes precedence over direct play',
@@ -274,7 +274,7 @@ void main() {
         reason: 'the rung in effect wins over whatever storage now holds');
   });
 
-  testWidgets('an unreadable preference plays at Original rather than failing',
+  testWidgets('an unreadable preference plays at Auto rather than failing',
       (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
@@ -301,9 +301,10 @@ void main() {
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
-    expect(variables.containsKey('maxHeight'), isFalse,
-        reason: 'a locked keyring costs the preference, not the playback, and '
-            'the safe answer is the cheapest one for the server');
+    expect(variables['maxHeight'], 1080,
+        reason: 'a locked keyring costs the preference, not the playback; '
+            'Auto, the default, starts at the top of the adaptive ladder');
+    expect(variables['maxBitrate'], 8000);
   });
 
   testWidgets('does not retry a genuine failure', (tester) async {
@@ -339,9 +340,8 @@ void main() {
             'double every real error');
   });
 
-  testWidgets(
-      'a remembered decode failure blocks a default Original from direct '
-      'playing', (tester) async {
+  testWidgets('a remembered decode failure keeps Auto from direct playing',
+      (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
@@ -379,12 +379,56 @@ void main() {
     // Direct play sends no `startStreamingSession` mutation at all; only an
     // HLS plan does, identified by the `strategy` variable `sessionRequests`
     // filters on. Regression coverage for `playback_planner.dart`'s
-    // `knownToFail` gate actually reaching the live app: the screen never
-    // offers Auto in this phase, so if the gate stayed keyed to
-    // `QualityChoiceKind.auto` the memory above would go unconsulted and
-    // this would direct play despite the remembered failure.
+    // `knownToFail` gate actually reaching the live app: Auto is the default
+    // now that nothing has settled a rung, and Auto consults the memory, so
+    // if the gate stopped being keyed to `QualityChoiceKind.auto` this would
+    // direct play despite the remembered failure.
     expect(sessionRequests(link), hasLength(1),
-        reason: 'a default Original must respect the remembered failure and '
-            'transcode instead of direct playing');
+        reason: 'Auto must respect the remembered failure and transcode '
+            'instead of direct playing');
+    expect(sessionRequests(link).single.variables['maxHeight'], 1080);
+  });
+
+  testWidgets(
+      'a stored Original direct plays despite a remembered decode failure',
+      (tester) async {
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
+      streamingCandidatesResponse(
+          duration: 5400, height: 1080, directPlay: true),
+      endStreamingSessionResponse(),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      settingsService: FakeSettingsService(defaultQuality: 'original'),
+    );
+    addTearDown(container.dispose);
+
+    final memory = await container.read(playbackMemoryProvider.future);
+    await memory.recordFailure(
+      'https://mydia.test',
+      const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080),
+      FailureReason.decodeFailed,
+      now: DateTime.now(),
+    );
+
+    final logs = <String>[];
+    await withCapturedDebugPrint(logs, () async {
+      await pumpPlayerScreen(tester, container);
+      await pumpUntil(
+          tester, () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')));
+    });
+
+    final planLine =
+        logs.firstWhere((l) => l.startsWith('[PlayerScreen] Plan: '));
+    expect(planLine, contains('directPlay'),
+        reason: 'Original is the viewer overriding the memory');
+    expect(sessionRequests(link), isEmpty);
   });
 }

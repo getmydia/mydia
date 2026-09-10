@@ -152,9 +152,9 @@ class _PlaybackSection extends ConsumerWidget {
     // instance fields.
     final current = settings;
     final quality = current == null
-        ? QualityRung.original
+        ? QualityRung.auto
         : QualityRung.fromStorageKey(current.defaultQuality) ??
-            QualityRung.original;
+            QualityRung.auto;
 
     return SettingsSection(
       label: 'Playback',

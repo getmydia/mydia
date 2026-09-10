@@ -150,24 +150,12 @@ void main() {
       expect(plan.reason, PlanReason.shapeKnownToFail);
     });
 
-    test('a default Original respects a known failure', () {
+    test('Original bypasses a known failure and attempts direct play', () {
+      // Original is always the viewer's own pick now that Auto is the
+      // default, and the viewer can always override the memory.
       final plan = planPlayback(_inputs(knownFailures: {
         const FailureKey(videoCodec: _hevc, heightBucket: 1080),
       }));
-      expect(plan, isA<HlsPlan>());
-      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
-      expect(plan.reason, PlanReason.shapeKnownToFail);
-    });
-
-    test(
-        'a manually chosen Original bypasses a known failure and attempts '
-        'direct play', () {
-      final plan = planPlayback(_inputs(
-        choice: QualityChoice.fromRung(QualityRung.original, manual: true),
-        knownFailures: {
-          const FailureKey(videoCodec: _hevc, heightBucket: 1080),
-        },
-      ));
       expect(plan, isA<DirectPlayPlan>());
       expect(plan.reason, PlanReason.directPlayAccepted);
     });
@@ -231,31 +219,32 @@ void main() {
       expect(plan.reason, PlanReason.shapeKnownToFail);
     });
 
-    test('a default Original respects a known failure and does not copy', () {
+    test('Original bypasses a known failure and attempts copy', () {
       final plan = planPlayback(_inputs(
         candidates: _remuxList,
         isWeb: true,
-        knownFailures: {
-          const FailureKey(videoCodec: _h264, heightBucket: 1080),
-        },
-      ));
-      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
-      expect(plan.reason, PlanReason.shapeKnownToFail);
-    });
-
-    test(
-        'a manually chosen Original bypasses a known failure and attempts '
-        'copy', () {
-      final plan = planPlayback(_inputs(
-        candidates: _remuxList,
-        isWeb: true,
-        choice: QualityChoice.fromRung(QualityRung.original, manual: true),
         knownFailures: {
           const FailureKey(videoCodec: _h264, heightBucket: 1080),
         },
       ));
       expect((plan as HlsPlan).strategy, HlsStrategy.copy);
       expect(plan.reason, PlanReason.copyAccepted);
+    });
+
+    test('Auto respects a known failure and does not copy', () {
+      final plan = planPlayback(_inputs(
+        candidates: _remuxList,
+        isWeb: true,
+        choice: QualityChoice.auto,
+        knownFailures: {
+          const FailureKey(videoCodec: _h264, heightBucket: 1080),
+        },
+      ));
+      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
+      expect(plan.reason, PlanReason.shapeKnownToFail);
+      expect(plan.rung.height, 1080,
+          reason: 'Auto transcodes at the top of the adaptive ladder when '
+              'throughput is unknown');
     });
 
     test('a leading HLS_COPY is the needs_transcoding verdict, never taken',

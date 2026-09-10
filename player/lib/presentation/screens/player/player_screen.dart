@@ -611,22 +611,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// before persisting it, so a failed preference write cannot undo the pick.
   QualityRung? _settledQuality;
 
-  /// Whether [_settledQuality] is Original because the viewer picked it in
-  /// the quality selector, as opposed to a fresh playback's stored default or
-  /// a carried rung that fell back to Original because it does not fit this
-  /// file's ladder.
-  ///
-  /// This is what lets the planner tell a viewer's deliberate override apart
-  /// from an incidental Original, so only the former bypasses decode-failure
-  /// memory (see `QualityChoice.manual`). Carried alongside
-  /// `_settledQuality` wherever it is deliberately carried forward, including
-  /// the episode-to-episode carry in [_resolveQualityForFile], and reset only
-  /// where that carry itself falls back to Original for a structural reason,
-  /// not a viewer one.
-  bool _qualityChosenManually = false;
-
-  /// The rung the viewer chose, which is what gets requested.
-  QualityRung get _selectedQuality => _settledQuality ?? QualityRung.original;
+  /// The choice in effect, which is what gets requested. Auto until something
+  /// settles one.
+  QualityRung get _selectedQuality => _settledQuality ?? QualityRung.auto;
 
   /// True when this session's bytes cross our relay: public web
   /// (web.mydia.dev) only.
@@ -1326,8 +1313,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         candidates: candidateStrategiesFrom(candidatesResult?.candidates),
         isWeb: kIsWeb,
         typeSupported: CodecSupport.isTypeSupported,
-        choice: QualityChoice.fromRung(_selectedQuality,
-            manual: _qualityChosenManually),
+        choice: QualityChoice.fromRung(_selectedQuality),
         sourceHeight: candidatesResult?.metadata.height,
         fileBitrateKbps:
             kbpsFromBitsPerSecond(candidatesResult?.metadata.bitrate),
@@ -1485,8 +1471,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   ///
   /// The ladder is per-file, not per-widget: it depends on the source height,
   /// and a rung chosen while watching a taller file may not exist in this
-  /// one's ladder. Falling back to Original there beats requesting an
-  /// upscale, which costs encode time to produce a larger, blurrier picture.
+  /// one's ladder. Falling back to Auto there beats requesting an upscale,
+  /// which costs encode time to produce a larger, blurrier picture.
   ///
   /// The rung is *seeded* from storage and then carried in memory. Re-reading
   /// it here on every re-initialization would put a fallible platform channel
@@ -1502,14 +1488,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final requested = _settledQuality ?? await _storedDefaultQuality();
 
-    if (_qualityLadder.contains(requested)) {
+    if (requested.isAuto || _qualityLadder.contains(requested)) {
       _settledQuality = requested;
     } else {
-      // A structural fallback, not a viewer one: the carried rung does not
-      // fit this file's ladder, so it must not inherit "manual" status (see
-      // `_qualityChosenManually`).
-      _settledQuality = QualityRung.original;
-      _qualityChosenManually = false;
+      // The carried rung would upscale this file; Auto, the default, decides
+      // instead.
+      _settledQuality = QualityRung.auto;
     }
   }
 
@@ -1755,35 +1739,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   /// The Original rung's subtitle: what the planner would do with the
-  /// Original choice, whatever rung is selected now. Labels only.
-  ///
-  /// This previews the quality selector's own "Original" row, and tapping
-  /// that row is a manual pick (`_showQualitySelector`'s `restart` closure
-  /// passes `manual: true`), so the preview plans with `manual: true` too:
-  /// otherwise a shape the memory has flagged would show "re-encoding
-  /// required" here while actually direct playing or copying once tapped.
+  /// Original choice, whatever is selected now. Labels only.
   void _rememberOriginalDeliverySubtitle(PlanInputs inputs) {
     _originalDeliverySubtitle = deliverySubtitleForPlan(
-      planPlayback(inputs.copyWith(
-        choice: QualityChoice.fromRung(QualityRung.original, manual: true),
-      )),
+      planPlayback(inputs.copyWith(choice: QualityChoice.original)),
     );
   }
 
   /// The rung stored as this install's default, for the first session of a
   /// playback.
   ///
-  /// Secure storage being unreadable is no reason to fail playback, and the
-  /// safe answer is the cheapest one for the server. Matches how
+  /// Secure storage being unreadable is no reason to fail playback, and
+  /// Auto, the default, is the answer then. Matches how
   /// `_loadAutoSkipPreference` treats the same failure.
   Future<QualityRung> _storedDefaultQuality() async {
     try {
       final storedKey =
           await ref.read(settingsServiceProvider).getDefaultQuality();
-      return QualityRung.fromStorageKey(storedKey) ?? QualityRung.original;
+      return QualityRung.fromStorageKey(storedKey) ?? QualityRung.auto;
     } catch (e) {
       debugPrint('[PlayerScreen] Could not read default quality: $e');
-      return QualityRung.original;
+      return QualityRung.auto;
     }
   }
 
@@ -3992,12 +3968,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // below reads the rung from — [_resolveQualityForFile] carries
         // `_settledQuality` forward rather than re-reading storage.
         _settledQuality = rung;
-        // Reached only from the viewer's own pick in this selector, the
-        // whole reason `applyQualityChoice` is running at all, including
-        // the retry-with-the-previous-rung attempt, which is still a rung
-        // the viewer chose (or the working default they are being kept on)
-        // this same interaction.
-        _qualityChosenManually = true;
         if (mounted) setState(() {});
       },
       remember: (rung) =>
@@ -4005,8 +3975,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       restart: (rung, {required bool isFallback}) async {
         final inputs = _planInputs;
         if (inputs == null) return;
-        final plan = planPlayback(inputs.copyWith(
-            choice: QualityChoice.fromRung(rung, manual: true)));
+        final plan =
+            planPlayback(inputs.copyWith(choice: QualityChoice.fromRung(rung)));
         debugPrint('[PlayerScreen] Quality change: ${plan.describe()}');
         _showPlaybackSnackBar(isFallback
             ? 'Returning to ${rung.label}'
