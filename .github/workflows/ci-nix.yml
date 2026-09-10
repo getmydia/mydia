@@ -67,12 +67,17 @@ jobs:
       # name the pinned minor. Otherwise Dependabot and each local `pub get`
       # rewrite the lock in opposite directions. Pub enforces only the lower
       # bound, so nothing else notices when a bump leaves the range behind.
+      #
+      # The floor is the minor's .0 rather than the .fvmrc patch. Patches of
+      # one minor pin the same packages, and player/Dockerfile.test builds on
+      # cirruslabs' stable tag, which lags patch releases; a patch floor made
+      # pub refuse that image outright.
       - name: Assert pubspec.yaml bounds Dependabot to the pinned minor
         run: |
           set -euo pipefail
           pinned="$(jq -r .flutter player/.fvmrc)"
           IFS=. read -r major minor _ <<< "$pinned"
-          expected=">=$pinned <$major.$((minor + 1)).0"
+          expected=">=$major.$minor.0 <$major.$((minor + 1)).0"
           actual="$(
             awk '/^environment:/ { e = 1; next }
                  /^[^[:space:]#]/ { e = 0 }
