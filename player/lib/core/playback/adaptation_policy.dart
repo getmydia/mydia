@@ -198,7 +198,8 @@ class AdaptationPolicy {
 
 /// The OSD line for a fallback.
 String fallbackMessage(FailureReason reason) => switch (reason) {
-      FailureReason.decodeFailed ||
+      FailureReason.decodeFailed =>
+        "Switched to transcoding: your device can't play this file directly",
       FailureReason.decodeTooSlow =>
         'Switched to transcoding: your device dropped frames',
       FailureReason.bandwidth => 'Switched to transcoding for your connection',

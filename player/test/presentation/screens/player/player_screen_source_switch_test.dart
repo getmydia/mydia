@@ -242,7 +242,10 @@ void main() {
       expect(decoder.disposed, isFalse);
       expect(find.byType(PlaybackChrome), findsOneWidget);
       expect(
-        find.text('Switched to transcoding: your device dropped frames'),
+        find.text(
+          "Switched to transcoding: your device can't play this file "
+          'directly',
+        ),
         findsOneWidget,
       );
       final memory = await container.read(playbackMemoryProvider.future);

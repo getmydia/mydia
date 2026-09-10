@@ -50,8 +50,10 @@ AdaptationAction _drive(
 
 void main() {
   test('fallbackMessage copy', () {
-    expect(fallbackMessage(FailureReason.decodeFailed),
-        'Switched to transcoding: your device dropped frames');
+    expect(
+      fallbackMessage(FailureReason.decodeFailed),
+      "Switched to transcoding: your device can't play this file directly",
+    );
     expect(fallbackMessage(FailureReason.decodeTooSlow),
         'Switched to transcoding: your device dropped frames');
     expect(fallbackMessage(FailureReason.bandwidth),
