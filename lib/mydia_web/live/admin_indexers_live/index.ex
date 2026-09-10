@@ -621,42 +621,35 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   @impl true
   def handle_event("test_flaresolverr", _params, socket) do
-    case FlareSolverr.health_check() do
-      {:ok, info} ->
-        version = info[:version] || "unknown"
-        sessions = length(info[:sessions] || [])
-
+    case saved_flaresolverr_url() do
+      nil ->
         {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           "FlareSolverr connection successful! Version: #{version}, Active sessions: #{sessions}"
-         )
-         |> assign(:flaresolverr_status, FlareSolverr.status())}
+         put_flash(socket, :error, "No FlareSolverr URL configured. Click Edit to set one.")}
 
-      {:error, :disabled} ->
-        {:noreply,
-         put_flash(socket, :error, "FlareSolverr is disabled. Enable it in configuration.")}
+      url ->
+        result = FlareSolverr.health_check(url)
 
-      {:error, :not_configured} ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           "FlareSolverr is not configured. Set FLARESOLVERR_URL in environment."
-         )}
+        # Refresh the row's health badge from this probe rather than probing
+        # again through status/0. Only an enabled config shows a health badge.
+        socket =
+          if FlareSolverr.enabled?() do
+            assign(socket, :flaresolverr_status, FlareSolverr.status_from_probe(url, result))
+          else
+            socket
+          end
 
-      {:error, {:connection_error, reason}} ->
-        {:noreply, put_flash(socket, :error, "FlareSolverr connection failed: #{reason}")}
+        {:noreply, flash_flaresolverr_test(socket, result)}
+    end
+  end
 
-      {:error, reason} ->
-        MydiaLogger.log_error(:liveview, "FlareSolverr health check failed",
-          error: reason,
-          operation: :test_flaresolverr,
-          user_id: socket.assigns.current_user.id
-        )
+  @impl true
+  def handle_event("test_flaresolverr_form", _params, socket) do
+    case form_flaresolverr_url(socket) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Enter a FlareSolverr URL to test.")}
 
-        {:noreply, put_flash(socket, :error, "FlareSolverr test failed: #{inspect(reason)}")}
+      url ->
+        {:noreply, flash_flaresolverr_test(socket, FlareSolverr.health_check(url))}
     end
   end
 
@@ -1099,6 +1092,87 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         "is valid. Check the logs for the validation error."
     )
   end
+
+  # The saved effective URL (the merged runtime config), or nil when unset.
+  # Deliberately ignores `enabled`: Test answers "does this URL respond", and
+  # the row's Enabled/Disabled badge already reports the on/off state.
+  defp saved_flaresolverr_url do
+    case FlareSolverr.config() do
+      %{url: url} -> blank_to_nil(url)
+      nil -> nil
+    end
+  end
+
+  # The URL the modal's Test probes: whatever is typed in the form, except when
+  # the URL comes from the environment. That input renders disabled, so the
+  # browser never submits it and the changeset loses it after the first
+  # validate event; env wins at runtime anyway, so probe the effective value.
+  defp form_flaresolverr_url(socket) do
+    if Map.get(socket.assigns.flaresolverr_sources, "flaresolverr.url") == :env do
+      saved_flaresolverr_url()
+    else
+      socket.assigns.flaresolverr_form.source
+      |> Ecto.Changeset.apply_changes()
+      |> Map.get(:url)
+      |> blank_to_nil()
+    end
+  end
+
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(_value), do: nil
+
+  # One reading of a FlareSolverr.health_check/1 result, shared by the row's
+  # and the modal's Test buttons.
+  defp flash_flaresolverr_test(socket, {:ok, info}) do
+    version = info[:version] || "unknown"
+    sessions = length(info[:sessions] || [])
+
+    put_flash(
+      socket,
+      :info,
+      "FlareSolverr connection successful! Version: #{version}, Active sessions: #{sessions}"
+    )
+  end
+
+  defp flash_flaresolverr_test(socket, {:error, :invalid_url}) do
+    put_flash(
+      socket,
+      :error,
+      "Not a valid FlareSolverr URL. Use the form http://flaresolverr:8191."
+    )
+  end
+
+  defp flash_flaresolverr_test(socket, {:error, {:connection_error, reason}}) do
+    put_flash(
+      socket,
+      :error,
+      "FlareSolverr connection failed: #{format_transport_reason(reason)}"
+    )
+  end
+
+  defp flash_flaresolverr_test(socket, {:error, {:http_error, status, _body}}),
+    do: put_flash(socket, :error, "FlareSolverr returned HTTP #{status}")
+
+  defp flash_flaresolverr_test(socket, {:error, reason}) do
+    MydiaLogger.log_error(:liveview, "FlareSolverr health check failed",
+      error: reason,
+      operation: :test_flaresolverr,
+      user_id: socket.assigns.current_user.id
+    )
+
+    put_flash(socket, :error, "FlareSolverr test failed: #{inspect(reason)}")
+  end
+
+  # Transport reasons are usually atoms (:econnrefused, :timeout) but can be
+  # tuples, such as a TLS alert, which string interpolation cannot render.
+  defp format_transport_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_transport_reason(reason), do: inspect(reason)
 
   defp init_library_assigns(socket) do
     socket

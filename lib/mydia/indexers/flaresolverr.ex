@@ -124,39 +124,33 @@ defmodule Mydia.Indexers.FlareSolverr do
   end
 
   @doc """
-  Performs a health check on the FlareSolverr service.
+  Performs a health check on the saved FlareSolverr service.
 
-  Returns service information if healthy.
+  Returns `{:error, :disabled}` or `{:error, :not_configured}` without making a
+  request when the saved config is switched off or has no URL. To probe a URL
+  regardless of the saved config, use `health_check/1`.
   """
   @spec health_check() :: {:ok, map()} | {:error, term()}
   def health_check do
     with {:ok, config} <- get_config(),
          :ok <- validate_enabled(config) do
-      url = "#{config.url}#{@api_path}"
-
-      body = %{
-        cmd: "sessions.list"
-      }
-
-      case Req.post(url, json: body, connect_options: [timeout: 5_000], receive_timeout: 10_000) do
-        {:ok, %Req.Response{status: 200, body: body}} when is_map(body) ->
-          {:ok,
-           %{
-             status: body["status"],
-             version: body["version"],
-             sessions: body["sessions"] || []
-           }}
-
-        {:ok, %Req.Response{status: status, body: body}} ->
-          {:error, {:http_error, status, body}}
-
-        {:error, %Req.TransportError{reason: reason}} ->
-          {:error, {:connection_error, reason}}
-
-        {:error, reason} ->
-          {:error, {:request_error, reason}}
-      end
+      health_check(config.url)
     end
+  end
+
+  @doc """
+  Probes the FlareSolverr instance at `url`, whether or not FlareSolverr is
+  enabled in the saved config.
+
+  This answers "does this URL respond", which is what the admin UI's Test
+  buttons need, including for values typed into the edit modal but not saved yet.
+
+  Returns `{:error, :invalid_url}` without making a request unless `url` is an
+  absolute http(s) URL with a host.
+  """
+  @spec health_check(String.t() | nil) :: {:ok, map()} | {:error, term()}
+  def health_check(url) do
+    if valid_url?(url), do: probe(url), else: {:error, :invalid_url}
   end
 
   @doc """
@@ -185,24 +179,7 @@ defmodule Mydia.Indexers.FlareSolverr do
     config = config()
 
     if config && config.enabled && is_binary(config.url) && config.url != "" do
-      case health_check() do
-        {:ok, info} ->
-          %{
-            configured: true,
-            status: :healthy,
-            url: config.url,
-            version: info[:version],
-            sessions: info[:sessions] || []
-          }
-
-        {:error, reason} ->
-          %{
-            configured: true,
-            status: :unhealthy,
-            url: config.url,
-            error: reason
-          }
-      end
+      status_from_probe(config.url, health_check())
     else
       %{
         configured: config != nil && is_binary(config[:url]) && config[:url] != "",
@@ -212,7 +189,79 @@ defmodule Mydia.Indexers.FlareSolverr do
     end
   end
 
+  @doc """
+  Builds the `status/0` map for a probe of `url` that has already run.
+
+  Lets a caller holding a `health_check/1` result refresh the displayed status
+  without probing a second time.
+  """
+  @spec status_from_probe(String.t(), {:ok, map()} | {:error, term()}) :: map()
+  def status_from_probe(url, {:ok, info}) do
+    %{
+      configured: true,
+      status: :healthy,
+      url: url,
+      version: info[:version],
+      sessions: info[:sessions] || []
+    }
+  end
+
+  def status_from_probe(url, {:error, reason}) do
+    %{configured: true, status: :unhealthy, url: url, error: reason}
+  end
+
   ## Private Functions
+
+  # FlareSolverr's API lives at /v1 under whatever base the operator gave,
+  # which may carry a reverse-proxy path. Joining at the URI level keeps that
+  # path, avoids "//v1" from a trailing slash, and drops a query or fragment
+  # that string concatenation would put "/v1" inside of. Test and real
+  # requests both go through here, so Test cannot pass on a URL search fails on.
+  defp endpoint(base_url) do
+    uri = URI.parse(base_url)
+    path = String.trim_trailing(uri.path || "", "/") <> @api_path
+    URI.to_string(%URI{uri | path: path, query: nil, fragment: nil})
+  end
+
+  defp probe(base_url) do
+    url = endpoint(base_url)
+    body = %{cmd: "sessions.list"}
+
+    case Req.post(url, json: body, connect_options: [timeout: 5_000], receive_timeout: 10_000) do
+      {:ok, %Req.Response{status: 200, body: body}} when is_map(body) ->
+        {:ok,
+         %{
+           status: body["status"],
+           version: body["version"],
+           sessions: body["sessions"] || []
+         }}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:http_error, status, body}}
+
+      {:error, %Req.TransportError{reason: reason}} ->
+        {:error, {:connection_error, reason}}
+
+      {:error, reason} ->
+        {:error, {:request_error, reason}}
+    end
+  end
+
+  # The admin modal feeds health_check/1 free text. Anything but an absolute
+  # http(s) URL with a host is refused up front, so a typo like
+  # "flaresolverr:8191" never reaches Req.
+  defp valid_url?(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host}
+      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
+        true
+
+      _ ->
+        false
+    end
+  end
+
+  defp valid_url?(_url), do: false
 
   # Reads the merged runtime config (env > DB/UI > YAML > defaults) so that
   # FlareSolverr settings managed in the admin UI actually take effect. The
@@ -246,7 +295,7 @@ defmodule Mydia.Indexers.FlareSolverr do
   end
 
   defp execute_request(cmd, url, opts, config) do
-    flaresolverr_url = "#{config.url}#{@api_path}"
+    flaresolverr_url = endpoint(config.url)
     timeout = opts[:timeout] || config.timeout
     max_timeout = opts[:max_timeout] || config.max_timeout
 
