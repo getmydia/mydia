@@ -20,7 +20,12 @@ const _truncationMarker = '...[truncated]';
 
 final _homeUnix = RegExp(r'/home/[^/\s]+');
 final _homeMac = RegExp(r'/Users/[^/\s]+');
-final _homeWindows = RegExp(r'C:\\Users\\[^\\:\s]+');
+// Any drive, either separator, any case: C:\Users\x, d:\users\x, C:/Users/x.
+// Only the name is replaced; drive, separators and casing are kept.
+final _homeWindows = RegExp(
+  r'([A-Za-z]:)([\\/])(users)([\\/])[^\\/:\s]+',
+  caseSensitive: false,
+);
 
 // scheme://authority path ?query #fragment. The authority must be non-empty,
 // so file:///home/... is left to the home-directory rules.
@@ -119,7 +124,10 @@ String sanitizeString(String input) {
 String redactHomeDirectories(String input) => input
     .replaceAll(_homeUnix, '/home/[USER]')
     .replaceAll(_homeMac, '/Users/[USER]')
-    .replaceAll(_homeWindows, r'C:\Users\[USER]');
+    .replaceAllMapped(
+      _homeWindows,
+      (m) => '${m[1]}${m[2]}${m[3]}${m[4]}[USER]',
+    );
 
 Map<String, Object?> _sanitizeFrame(Map<String, Object?> frame) {
   final out = Map<String, Object?>.of(frame);

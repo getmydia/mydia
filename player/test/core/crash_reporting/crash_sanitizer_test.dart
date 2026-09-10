@@ -151,6 +151,21 @@ void main() {
         'file:///home/[USER]/.local/share/x.db locked',
       );
     });
+
+    test('redacts Windows profiles on any drive, separator and case', () {
+      expect(
+        sanitizeString(r'Cannot open D:\Users\alice\AppData\x.log'),
+        r'Cannot open D:\Users\[USER]\AppData\x.log',
+      );
+      expect(
+        sanitizeString(r'Cannot open c:\users\bob\y.db'),
+        r'Cannot open c:\users\[USER]\y.db',
+      );
+      expect(
+        sanitizeString('Cannot open file:///C:/Users/carol/z.db'),
+        'Cannot open file:///C:/Users/[USER]/z.db',
+      );
+    });
   });
 
   group('sanitizeReport', () {
