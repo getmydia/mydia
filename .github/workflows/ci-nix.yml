@@ -78,12 +78,9 @@ jobs:
           pinned="$(jq -r .flutter player/.fvmrc)"
           IFS=. read -r major minor _ <<< "$pinned"
           expected=">=$major.$minor.0 <$major.$((minor + 1)).0"
-          actual="$(
-            awk '/^environment:/ { e = 1; next }
-                 /^[^[:space:]#]/ { e = 0 }
-                 e && $1 == "flutter:" { sub(/^[^:]*:[[:space:]]*/, ""); print; exit }' \
-              player/pubspec.yaml | tr -d "\"'"
-          )"
+          # yq ships on the runner image and parses the scalar the way pub
+          # does, so quoting and a trailing comment cannot skew the comparison.
+          actual="$(yq -r '.environment.flutter // ""' player/pubspec.yaml)"
           if [ "$actual" != "$expected" ]; then
             echo "::error::environment.flutter in player/pubspec.yaml does not match player/.fvmrc"
             echo "  found:    ${actual:-<missing>}"
