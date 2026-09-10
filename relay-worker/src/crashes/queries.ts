@@ -1,20 +1,27 @@
 import type { Env } from "../env";
-import type { ErrorRow, OccurrenceRow } from "./ingest";
+import type { CrashSource, ErrorRow, OccurrenceRow } from "./ingest";
 
 export async function listErrors(
   env: Env,
-  opts: { status?: string; limit: number; offset: number },
+  opts: { status?: string; source?: CrashSource; limit: number; offset: number },
 ): Promise<ErrorRow[]> {
-  const stmt = opts.status
-    ? env.DB.prepare(
-        `SELECT * FROM errors WHERE status = ?
-         ORDER BY last_seen_at DESC LIMIT ? OFFSET ?`,
-      ).bind(opts.status, opts.limit, opts.offset)
-    : env.DB.prepare(
-        `SELECT * FROM errors ORDER BY last_seen_at DESC LIMIT ? OFFSET ?`,
-      ).bind(opts.limit, opts.offset);
+  const clauses: string[] = [];
+  const binds: unknown[] = [];
+  if (opts.status) {
+    clauses.push("status = ?");
+    binds.push(opts.status);
+  }
+  if (opts.source) {
+    clauses.push("source = ?");
+    binds.push(opts.source);
+  }
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
 
-  const { results } = await stmt.all<ErrorRow>();
+  const { results } = await env.DB.prepare(
+    `SELECT * FROM errors ${where} ORDER BY last_seen_at DESC LIMIT ? OFFSET ?`,
+  )
+    .bind(...binds, opts.limit, opts.offset)
+    .all<ErrorRow>();
   return results;
 }
 

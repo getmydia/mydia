@@ -449,3 +449,67 @@ describe("GET /admin/errors pager link encodes the status filter for the URL, no
     expect(html).not.toContain("status=custom&amp;type");
   });
 });
+
+describe("GET /admin/errors source filter", () => {
+  const PLAYER_FP = "b1c2d3e4f5a60718293a4b5c6d7e8f90";
+  const PLAYER_MESSAGE = "Bad state: No element";
+
+  beforeAll(async () => {
+    const now = Math.floor(Date.now() / 1000);
+    await env.DB.prepare(
+      `INSERT INTO errors (fingerprint, kind, message, source_file, source_line,
+                           status, first_seen_at, last_seen_at, occurrence_count, source)
+       VALUES (?, 'StateError', ?, 'package:player/core/player/player_controller.dart', 412,
+               'unresolved', ?, ?, 2, 'player')`,
+    )
+      .bind(PLAYER_FP, PLAYER_MESSAGE, now, now)
+      .run();
+  });
+
+  async function html(query: string): Promise<string> {
+    const res = await SELF.fetch(`https://relay.mydia.dev/admin/errors${query}`);
+    expect(res.status).toBe(200);
+    return res.text();
+  }
+
+  it("lists only player crashes under ?source=player", async () => {
+    const body = await html("?source=player");
+    expect(body).toContain(PLAYER_MESSAGE);
+    expect(body).not.toContain(`/admin/errors/${FP1}`);
+  });
+
+  // status=unresolved keeps the pager describe's 50 newer 'custom&type' rows
+  // from pushing FP1 off the first page if storage is not isolated between
+  // describe blocks.
+  it("lists only server crashes under ?source=server", async () => {
+    const body = await html("?status=unresolved&source=server");
+    expect(body).toContain(`/admin/errors/${FP1}`);
+    expect(body).not.toContain(PLAYER_MESSAGE);
+  });
+
+  it("ignores a source outside the closed set", async () => {
+    const body = await html("?status=unresolved&source=web");
+    expect(body).toContain(`/admin/errors/${FP1}`);
+    expect(body).toContain(PLAYER_MESSAGE);
+  });
+
+  it("badges player rows and only player rows", async () => {
+    expect(await html("?source=player")).toContain(
+      'title="Sent by the Flutter player, not a mydia server"',
+    );
+    expect(await html("?source=server")).not.toContain(
+      'title="Sent by the Flutter player, not a mydia server"',
+    );
+  });
+
+  it("keeps the source filter on the status tabs and the status filter on the source tabs", async () => {
+    const body = await html("?status=unresolved&source=player");
+    expect(body).toContain('href="/admin/errors?status=resolved&amp;source=player"');
+    expect(body).toContain('href="/admin/errors?status=unresolved&amp;source=server"');
+  });
+
+  it("badges a player error's detail page", async () => {
+    const body = await html(`/${PLAYER_FP}`);
+    expect(body).toContain('title="Sent by the Flutter player, not a mydia server"');
+  });
+});
