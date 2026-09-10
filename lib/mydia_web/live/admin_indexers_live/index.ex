@@ -629,10 +629,13 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
       url ->
         result = FlareSolverr.health_check(url)
 
+        # Refresh the row's health badge from this probe rather than probing
+        # again through status/0. Only an enabled config shows a health badge.
         socket =
-          case result do
-            {:ok, _info} -> assign(socket, :flaresolverr_status, FlareSolverr.status())
-            {:error, _reason} -> socket
+          if FlareSolverr.enabled?() do
+            assign(socket, :flaresolverr_status, FlareSolverr.status_from_probe(url, result))
+          else
+            socket
           end
 
         {:noreply, flash_flaresolverr_test(socket, result)}

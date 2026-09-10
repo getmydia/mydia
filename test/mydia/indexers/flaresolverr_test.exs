@@ -340,6 +340,56 @@ defmodule Mydia.Indexers.FlareSolverrTest do
                "expected #{inspect(url)} to be rejected"
       end
     end
+
+    test "a trailing slash on the URL still reaches /v1, not //v1" do
+      bypass = Bypass.open()
+      expect_sessions_ok(bypass, "/v1")
+
+      assert {:ok, _} = FlareSolverr.health_check("http://localhost:#{bypass.port}/")
+    end
+
+    test "keeps a reverse-proxy base path in front of /v1" do
+      bypass = Bypass.open()
+      expect_sessions_ok(bypass, "/flaresolverr/v1")
+
+      assert {:ok, _} = FlareSolverr.health_check("http://localhost:#{bypass.port}/flaresolverr/")
+    end
+
+    test "drops a query string instead of appending /v1 to it" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "POST", "/v1", fn conn ->
+        assert conn.request_path == "/v1"
+        assert conn.query_string == ""
+        sessions_ok(conn)
+      end)
+
+      assert {:ok, _} = FlareSolverr.health_check("http://localhost:#{bypass.port}/?token=x")
+    end
+  end
+
+  describe "status_from_probe/2" do
+    test "a successful probe is healthy and carries version and sessions" do
+      assert %{
+               configured: true,
+               status: :healthy,
+               url: "http://fs.test:8191",
+               version: "3.3.21",
+               sessions: ["s1"]
+             } =
+               FlareSolverr.status_from_probe(
+                 "http://fs.test:8191",
+                 {:ok, %{status: "ok", version: "3.3.21", sessions: ["s1"]}}
+               )
+    end
+
+    test "a failed probe is unhealthy and carries the error" do
+      assert %{configured: true, status: :unhealthy, error: {:http_error, 500, _}} =
+               FlareSolverr.status_from_probe(
+                 "http://fs.test:8191",
+                 {:error, {:http_error, 500, %{}}}
+               )
+    end
   end
 
   describe "get/2 via HTTP" do
@@ -426,6 +476,23 @@ defmodule Mydia.Indexers.FlareSolverrTest do
       assert {:error, {:connection_error, _}} =
                FlareSolverr.get("https://protected.example.com")
     end
+
+    # The Test buttons and real requests must build the endpoint the same way,
+    # or Test could pass on a URL that search then fails on.
+    test "a saved URL with a trailing slash still reaches /v1", %{bypass: bypass} do
+      put_flaresolverr_config(enabled: true, url: "http://localhost:#{bypass.port}/")
+
+      Bypass.expect_once(bypass, "POST", "/v1", fn conn ->
+        assert conn.request_path == "/v1"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"status" => "error", "message" => "boom"}))
+      end)
+
+      assert {:error, {:unknown_error, "boom"}} =
+               FlareSolverr.get("https://protected.example.com")
+    end
   end
 
   describe "available?/0 via HTTP" do
@@ -457,6 +524,24 @@ defmodule Mydia.Indexers.FlareSolverrTest do
 
       refute FlareSolverr.available?()
     end
+  end
+
+  # Bypass routes on path_info, which drops empty segments, so "//v1" would
+  # match a "/v1" expectation. Assert the raw request_path too.
+  defp expect_sessions_ok(bypass, path) do
+    Bypass.expect_once(bypass, "POST", path, fn conn ->
+      assert conn.request_path == path
+      sessions_ok(conn)
+    end)
+  end
+
+  defp sessions_ok(conn) do
+    conn
+    |> Plug.Conn.put_resp_content_type("application/json")
+    |> Plug.Conn.resp(
+      200,
+      Jason.encode!(%{"status" => "ok", "version" => "3.3.21", "sessions" => []})
+    )
   end
 
   ## Helpers — inject FlareSolverr settings into the layered runtime config.

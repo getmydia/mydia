@@ -341,6 +341,40 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
     end
 
+    test "row Test on an enabled config probes once and marks the row healthy", %{conn: conn} do
+      bypass = Bypass.open()
+      # Mount disabled so its async status probe stays quiet, then enable before
+      # the click. expect_once then fails the test if the click probes twice.
+      put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      await_mount_status(view)
+
+      put_saved_flaresolverr(enabled: true, url: "http://localhost:#{bypass.port}")
+      expect_flaresolverr_ok(bypass)
+      view |> element("#flaresolverr-row-test") |> render_click()
+
+      assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
+      assert has_element?(view, "#flaresolverr-panel .badge", "Healthy")
+    end
+
+    test "a failed row Test on an enabled config marks the row unhealthy", %{conn: conn} do
+      bypass = Bypass.open()
+      put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      await_mount_status(view)
+
+      put_saved_flaresolverr(enabled: true, url: "http://localhost:#{bypass.port}")
+
+      Bypass.expect_once(bypass, "POST", "/v1", fn conn ->
+        Plug.Conn.resp(conn, 500, "")
+      end)
+
+      view |> element("#flaresolverr-row-test") |> render_click()
+
+      assert has_element?(view, "#flash-error", "FlareSolverr returned HTTP 500")
+      assert has_element?(view, "#flaresolverr-panel .badge", "Unhealthy")
+    end
+
     test "row Test with no saved URL points the operator at Edit", %{conn: conn} do
       put_saved_flaresolverr(enabled: false, url: nil)
 
@@ -682,6 +716,22 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
     fs = struct(Mydia.Config.Schema.FlareSolverr, attrs)
     Application.put_env(:mydia, :runtime_config, %{config | flaresolverr: fs})
+  end
+
+  # mount/3 reads the FlareSolverr status in a Task, and the Task reads the
+  # config whenever it runs. Wait for its answer so a config change made after
+  # mount cannot race it.
+  defp await_mount_status(view) do
+    MydiaWeb.FeatureCase.eventually(
+      fn ->
+        if has_element?(view, "#flaresolverr-panel .badge", "Checking"),
+          do: :error,
+          else: {:ok, :done}
+      end,
+      timeout: 2_000,
+      interval: 10,
+      description: "the FlareSolverr row to leave its Checking state"
+    )
   end
 
   defp expect_flaresolverr_ok(bypass) do
