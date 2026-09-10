@@ -180,7 +180,9 @@ void main() {
       await tester.pump();
       decoder.emitError('Failed to initialize video decoder');
       await tester.pump(const Duration(seconds: 1));
-      await pumpUntil(tester, () => decoder.opened.length == 2);
+      // Casting stopped verification, so a second open never happens here;
+      // this is a bounded wait, not a condition to poll for.
+      await tester.pump(const Duration(seconds: 2));
 
       expect(decoder.opened, hasLength(1));
       final memory = await container.read(playbackMemoryProvider.future);

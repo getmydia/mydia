@@ -204,11 +204,18 @@ void main() {
 
     test('native never consults the MIME check', () {
       // Direct play is blocked by memory; copy is then offered without
-      // asking typeSupported, which rejects everything here.
+      // asking typeSupported, which rejects everything here. Count calls
+      // directly rather than trusting `_reject`'s constant answer.
+      var typeSupportedCalls = 0;
+      bool countingReject(String mime) {
+        typeSupportedCalls++;
+        return false;
+      }
+
       final plan = planPlayback(_inputs(
         candidates: _remuxList,
         choice: QualityChoice.auto,
-        typeSupported: _reject,
+        typeSupported: countingReject,
         knownFailures: {
           const FailureKey(videoCodec: _h264, heightBucket: 1080),
         },
@@ -217,6 +224,7 @@ void main() {
       // reason, and the reason names the memory rather than the MIME.
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.shapeKnownToFail);
+      expect(typeSupportedCalls, 0);
     });
 
     test('Original bypasses a known failure and attempts copy', () {
