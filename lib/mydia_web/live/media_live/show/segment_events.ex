@@ -20,7 +20,10 @@ defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
   and there is nothing worth querying.
   """
   def assign_segment_status(socket, media_item) do
-    available? = Fingerprint.available?()
+    # With the player off nothing detects or plays segments, so there is
+    # nothing to query. The template hides the rows and the "chromaprint
+    # missing" note on @player_enabled.
+    available? = Mydia.Player.enabled?() and Fingerprint.available?()
 
     socket
     |> assign(:segment_detection_available, available?)
@@ -35,7 +38,12 @@ defmodule MydiaWeb.MediaLive.Show.SegmentEvents do
   scheduler's next tick, because an operator who just clicked the button
   should not wait five minutes to see anything happen.
   """
-  def re_analyze(%{"season-number" => season_number_str}, socket) do
+  def re_analyze(params, socket) do
+    # The button is hidden with the player off, and its queue never starts.
+    if Mydia.Player.enabled?(), do: do_re_analyze(params, socket), else: {:noreply, socket}
+  end
+
+  defp do_re_analyze(%{"season-number" => season_number_str}, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
       season_number = String.to_integer(season_number_str)
       media_item = socket.assigns.media_item

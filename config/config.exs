@@ -441,11 +441,6 @@ config :mydia, :indexer_search,
 
 # Feature flags
 config :mydia, :features,
-  # Enable/disable media playback feature (Play Movie, Play Episode buttons)
-  # Enables HLS streaming for in-browser video playback with codec transcoding
-  # Set to false to hide playback controls from the UI
-  # Can be overridden via ENABLE_PLAYBACK environment variable
-  playback_enabled: true,
   # Enable/disable Cardigann native indexer support
   # When enabled, provides access to hundreds of torrent indexers without external Prowlarr/Jackett
   # Set to false to disable Cardigann indexers

@@ -242,13 +242,6 @@ if config_env() == :prod do
   config :logger, level: log_level
 
   # Feature flags configuration
-  playback_enabled =
-    case System.get_env("ENABLE_PLAYBACK") do
-      "true" -> true
-      "false" -> false
-      _ -> Application.get_env(:mydia, :features)[:playback_enabled] || true
-    end
-
   cardigann_enabled =
     case System.get_env("ENABLE_CARDIGANN") do
       "true" -> true
@@ -276,7 +269,6 @@ if config_env() == :prod do
     end
 
   config :mydia, :features,
-    playback_enabled: playback_enabled,
     cardigann_enabled: cardigann_enabled,
     import_lists_enabled: import_lists_enabled
 
@@ -407,13 +399,6 @@ end
 
 # Feature flags configuration for dev/test (reads from environment variable)
 if config_env() in [:dev, :test] do
-  playback_enabled =
-    case System.get_env("ENABLE_PLAYBACK") do
-      "true" -> true
-      "false" -> false
-      _ -> Application.get_env(:mydia, :features)[:playback_enabled] || true
-    end
-
   cardigann_enabled =
     case System.get_env("ENABLE_CARDIGANN") do
       "true" -> true
@@ -441,7 +426,6 @@ if config_env() in [:dev, :test] do
     end
 
   config :mydia, :features,
-    playback_enabled: playback_enabled,
     cardigann_enabled: cardigann_enabled,
     import_lists_enabled: import_lists_enabled
 end

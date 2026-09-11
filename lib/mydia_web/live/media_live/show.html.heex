@@ -65,7 +65,7 @@
         <%!-- Left Column: Hero Section (Poster & Quick Actions) --%>
         <Components.hero_section
           media_item={@media_item}
-          playback_enabled={@playback_enabled}
+          player_enabled={@player_enabled}
           next_episode={@next_episode}
           next_episode_state={@next_episode_state}
           auto_searching={@auto_searching}
@@ -261,7 +261,7 @@
             rescanning_season={@rescanning_season}
             fetching_season_subtitles={@fetching_season_subtitles}
             auto_searching_episode={@auto_searching_episode}
-            playback_enabled={@playback_enabled}
+            player_enabled={@player_enabled}
             transcode_jobs={@transcode_jobs}
             media_file_subtitle_tracks={@media_file_subtitle_tracks}
             segment_statuses={@segment_statuses}

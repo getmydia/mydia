@@ -201,6 +201,16 @@ defmodule MydiaWeb.PlayerVisibilityTest do
 
       assert UserPreference.hide_player?(Accounts.get_user_preference!(user))
     end
+
+    test "the movie Play button is gone", %{conn: conn} do
+      _library = library_path_fixture(%{type: "movies"})
+      item = media_item_fixture(%{type: "movie", title: "Quiet Harbour", year: 2024})
+      _file = media_file_fixture(%{media_item_id: item.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies/#{item.id}")
+
+      refute has_element?(view, ~s{a[href^="/player/#/player/movie/"]})
+    end
   end
 
   describe "with the player on" do

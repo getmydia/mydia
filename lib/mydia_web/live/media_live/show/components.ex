@@ -16,7 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   Hero section with backdrop image, poster, and quick action buttons.
   """
   attr :media_item, :map, required: true
-  attr :playback_enabled, :boolean, required: true
+  attr :player_enabled, :boolean, required: true
   attr :next_episode, :map, default: nil
   attr :next_episode_state, :atom, default: nil
   attr :auto_searching, :boolean, required: true
@@ -89,7 +89,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       <%!-- Quick Actions --%>
       <div class="flex flex-col gap-2">
         <%!-- Play Button (for content with media files) --%>
-        <%= if @playback_enabled && @media_item.type == "movie" && length(@media_item.media_files) > 0 do %>
+        <%= if @player_enabled && @media_item.type == "movie" && length(@media_item.media_files) > 0 do %>
           <% best_file = get_best_media_file(@media_item.media_files) %>
           <a
             href={
@@ -107,7 +107,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
         <% end %>
 
         <%!-- Play Next Button (for TV shows with next episode) --%>
-        <%= if @playback_enabled && @media_item.type == "tv_show" && @next_episode do %>
+        <%= if @player_enabled && @media_item.type == "tv_show" && @next_episode do %>
           <% next_best_file = get_best_media_file(@next_episode.media_files) %>
           <%= if next_best_file do %>
             <a
@@ -403,7 +403,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :rescanning_season, :any, default: nil
   attr :fetching_season_subtitles, :any, default: nil
   attr :auto_searching_episode, :any, default: nil
-  attr :playback_enabled, :boolean, required: true
+  attr :player_enabled, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
   attr :media_file_subtitle_tracks, :map, default: %{}
   attr :segment_statuses, :map, default: %{}
@@ -486,7 +486,9 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </div>
             </div>
           </div>
-          <SegmentComponents.segment_unavailable_note :if={!@segment_detection_available} />
+          <SegmentComponents.segment_unavailable_note :if={
+            @player_enabled and !@segment_detection_available
+          } />
         </div>
 
         <div class="card-body p-4 pb-0 pt-0">
@@ -511,7 +513,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               rescanning_season={@rescanning_season}
               fetching_season_subtitles={@fetching_season_subtitles}
               auto_searching_episode={@auto_searching_episode}
-              playback_enabled={@playback_enabled}
+              player_enabled={@player_enabled}
               transcode_jobs={@transcode_jobs}
               media_file_subtitle_tracks={@media_file_subtitle_tracks}
               segment_statuses={@segment_statuses}
@@ -529,7 +531,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   """
   attr :file, :map, required: true
   attr :episode, :map, required: true
-  attr :playback_enabled, :boolean, required: true
+  attr :player_enabled, :boolean, required: true
   attr :transcode_jobs, :list, default: []
   attr :subtitle_tracks, :list, default: []
 
@@ -633,7 +635,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             </ul>
           </div>
         <% end %>
-        <%= if @playback_enabled do %>
+        <%= if @player_enabled do %>
           <a
             href={
               flutter_player_url("episode", @episode.id, file_id: @file.id, title: @episode.title)

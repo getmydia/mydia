@@ -107,6 +107,24 @@ defmodule Mydia.PlayerTest do
     end
   end
 
+  describe "log_boot_state/1" do
+    import ExUnit.CaptureLog
+
+    test "warns that ENABLE_PLAYBACK is no longer read" do
+      getenv = fn
+        "ENABLE_PLAYBACK" -> "false"
+        _ -> nil
+      end
+
+      assert capture_log(fn -> Player.log_boot_state(getenv) end) =~
+               "ENABLE_PLAYBACK is no longer read"
+    end
+
+    test "says nothing about it when it is unset" do
+      refute capture_log(fn -> Player.log_boot_state(fn _ -> nil end) end) =~ "ENABLE_PLAYBACK"
+    end
+  end
+
   defp restore({:ok, value}), do: Application.put_env(:mydia, :player_enabled, value)
   defp restore(:error), do: Application.delete_env(:mydia, :player_enabled)
 end

@@ -110,9 +110,18 @@ defmodule Mydia.Player do
   defp player_cron_entry?({_expression, worker, _opts}), do: worker in @player_cron_workers
   defp player_cron_entry?(_entry), do: false
 
-  @doc "Logs, once at boot, what the switch left out."
-  @spec log_boot_state() :: :ok
-  def log_boot_state do
+  @doc """
+  Logs, once at boot, what the switch left out, and warns about the variable
+  it replaced. `getenv` replaces `System.get_env/1` in tests.
+  """
+  @spec log_boot_state((String.t() -> String.t() | nil)) :: :ok
+  def log_boot_state(getenv \\ &System.get_env/1) do
+    if getenv.("ENABLE_PLAYBACK") do
+      Logger.warning(
+        "ENABLE_PLAYBACK is no longer read. Use ENABLE_PLAYER=false to turn the player off."
+      )
+    end
+
     unless enabled?() do
       Logger.info(
         "Player disabled by ENABLE_PLAYER: p2p, pairing, streaming, offline-download " <>

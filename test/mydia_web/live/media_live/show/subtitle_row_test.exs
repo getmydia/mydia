@@ -38,7 +38,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleRowTest do
     render_component(&Components.episode_file_row/1,
       file: file(),
       episode: %{id: "ep-1", title: "Sundae", season_number: 2, episode_number: 3},
-      playback_enabled: false,
+      player_enabled: false,
       transcode_jobs: [],
       subtitle_tracks: tracks
     )
