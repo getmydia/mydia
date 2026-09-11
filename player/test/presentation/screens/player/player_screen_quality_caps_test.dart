@@ -92,8 +92,8 @@ void main() {
   });
 
   testWidgets(
-      'falls back to Auto when the source cannot offer the '
-      'stored rung', (tester) async {
+      'falls back to Auto, transcoding at the source, when the source '
+      'cannot offer the stored rung', (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
@@ -118,10 +118,11 @@ void main() {
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
-    expect(variables['maxHeight'], 720,
+    expect(variables.containsKey('maxHeight'), isFalse,
         reason: 'a stored rung that would upscale falls back to Auto, which '
-            "starts at the top of this 720p file's adaptive ladder");
-    expect(variables['maxBitrate'], 4000);
+            'transcodes at the source resolution: nothing here says this '
+            "720p file's link cannot carry it");
+    expect(variables.containsKey('maxBitrate'), isFalse);
   });
 
   testWidgets('a chosen rung takes precedence over direct play',
@@ -274,8 +275,9 @@ void main() {
         reason: 'the rung in effect wins over whatever storage now holds');
   });
 
-  testWidgets('an unreadable preference plays at Auto rather than failing',
-      (tester) async {
+  testWidgets(
+      'an unreadable preference plays at Auto, transcoding at the '
+      'source, rather than failing', (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
@@ -301,10 +303,11 @@ void main() {
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
-    expect(variables['maxHeight'], 1080,
+    expect(variables.containsKey('maxHeight'), isFalse,
         reason: 'a locked keyring costs the preference, not the playback; '
-            'Auto, the default, starts at the top of the adaptive ladder');
-    expect(variables['maxBitrate'], 8000);
+            'Auto, the default, transcodes at the source resolution when '
+            'nothing says the connection cannot carry it');
+    expect(variables.containsKey('maxBitrate'), isFalse);
   });
 
   testWidgets('does not retry a genuine failure', (tester) async {
@@ -386,7 +389,50 @@ void main() {
     expect(sessionRequests(link), hasLength(1),
         reason: 'Auto must respect the remembered failure and transcode '
             'instead of direct playing');
-    expect(sessionRequests(link).single.variables['maxHeight'], 1080);
+    // No remembered throughput says this link cannot carry the file, so the
+    // transcode Auto falls back to is uncapped, like Original.
+    final variables = sessionRequests(link).single.variables;
+    expect(variables.containsKey('maxHeight'), isFalse);
+    expect(variables.containsKey('maxBitrate'), isFalse);
+  });
+
+  testWidgets(
+      'Auto caps to the highest fitting rung when remembered throughput '
+      'says the file will not fit', (tester) async {
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
+      // 20000000 bps = 20000 kbps. 1080p needs 8000 * 1.3 = 10400 > 6000;
+      // 720p needs 4000 * 1.3 = 5200 <= 6000.
+      streamingCandidatesResponse(
+          duration: 5400, height: 2160, bitrate: 20000000),
+      startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
+      endStreamingSessionResponse(),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    // Seeded before the screen ever reads memory, at the same key
+    // `serverUrlProvider` resolves to for a non-p2p connection.
+    final memory = await container.read(playbackMemoryProvider.future);
+    await memory.observeThroughput('https://mydia.test', 6000);
+
+    await pumpPlayerScreen(tester, container);
+    await pumpUntilSessionStarted(tester, link);
+
+    final variables = sessionRequests(link).single.variables;
+    expect(variables['maxHeight'], 720,
+        reason: 'remembered throughput says this file will not fit, which '
+            'is evidence Auto acts on: it asks for the highest adaptive '
+            'rung that does');
+    expect(variables['maxBitrate'], 4000);
   });
 
   testWidgets(
