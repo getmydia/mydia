@@ -190,6 +190,7 @@ defmodule Mydia.Config.Loader do
       logging: load_logging_env(),
       oban: load_oban_env(),
       flaresolverr: load_flaresolverr_env(),
+      remote_access: load_remote_access_env(),
       download_clients: load_download_clients_env(),
       indexers: load_indexers_env(),
       media_servers: load_media_servers_env(),
@@ -349,6 +350,18 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(:url, System.get_env("FLARESOLVERR_URL"))
     |> put_if_present(:timeout, System.get_env("FLARESOLVERR_TIMEOUT"), &parse_integer/1)
     |> put_if_present(:max_timeout, System.get_env("FLARESOLVERR_MAX_TIMEOUT"), &parse_integer/1)
+  end
+
+  # parse_boolean_or_invalid/1, not parse_boolean/1: this switch puts a network
+  # listener on the internet, so a typo has to fail validation by name instead
+  # of falling back to the default, which is on.
+  defp load_remote_access_env do
+    %{}
+    |> put_if_present(
+      :enabled,
+      System.get_env("ENABLE_REMOTE_ACCESS"),
+      &parse_boolean_or_invalid/1
+    )
   end
 
   defp load_download_clients_env do
@@ -647,6 +660,16 @@ defmodule Mydia.Config.Loader do
   defp parse_boolean("1"), do: {:ok, true}
   defp parse_boolean("0"), do: {:ok, false}
   defp parse_boolean(_), do: :error
+
+  # Keeps a value it cannot read instead of dropping it. :invalid does not cast
+  # to a boolean, so config validation rejects the field by name. The config
+  # README explains why a dropped value is worse than a rejected one.
+  defp parse_boolean_or_invalid(value) do
+    case parse_boolean(value) do
+      {:ok, boolean} -> {:ok, boolean}
+      :error -> {:ok, :invalid}
+    end
+  end
 
   defp parse_json(value) when is_map(value), do: {:ok, value}
 

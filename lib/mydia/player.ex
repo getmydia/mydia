@@ -26,6 +26,14 @@ defmodule Mydia.Player do
   def enabled?, do: Application.get_env(:mydia, :player_enabled, true)
 
   @doc """
+  Whether remote access is live. The one question every remote-access gate
+  asks: media-token auth, the p2p request handlers, pairing. See
+  `Mydia.Player.RemoteAccess.enabled?/0`.
+  """
+  @spec remote_access_enabled?() :: boolean()
+  defdelegate remote_access_enabled?(), to: Mydia.Player.RemoteAccess, as: :enabled?
+
+  @doc """
   Parses `ENABLE_PLAYER`. Unset or empty means on.
 
   Anything other than `true`, `false`, `1` or `0` raises, which stops boot. A

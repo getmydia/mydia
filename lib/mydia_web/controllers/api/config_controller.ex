@@ -384,7 +384,8 @@ defmodule MydiaWeb.Api.ConfigController do
       "auth.local_enabled" => "LOCAL_AUTH_ENABLED",
       "media.movies_path" => "MOVIES_PATH",
       "media.tv_path" => "TV_PATH",
-      "logging.level" => "LOG_LEVEL"
+      "logging.level" => "LOG_LEVEL",
+      "remote_access.enabled" => "ENABLE_REMOTE_ACCESS"
     }
 
     Map.get(mapping, key)
