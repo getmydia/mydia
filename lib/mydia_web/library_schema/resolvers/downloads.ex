@@ -10,9 +10,12 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
   lookup.
   """
 
+  require Logger
+
   alias Mydia.Downloads
   alias Mydia.Media
   alias Mydia.LibraryApi.Principal
+  alias MydiaWeb.LibrarySchema.Loaders
   alias MydiaWeb.LibrarySchema.MediaItemView
   alias MydiaWeb.LibrarySchema.UserError
 
@@ -53,7 +56,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
   def cancel_download(_parent, %{id: id}, resolution) do
     opts = Principal.actor_opts(resolution.context.principal)
 
-    with {:ok, download} <- load_download(id),
+    with {:ok, download} <- Loaders.download(id, ["id"]),
          {:ok, _cancelled} <- Downloads.cancel_download(download, opts) do
       {:ok, removed(download.id)}
     else
@@ -61,9 +64,14 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
         {:ok, not_removed(error)}
 
       # cancel_download/2 stops at the client and keeps the row when the client
-      # cannot remove the item, so the download is still there to retry.
+      # cannot remove the item, so the download is still there to retry. The
+      # reason can carry a raw adapter response, so it is logged, not returned.
       {:error, reason} ->
-        message = "The download client could not remove it: #{inspect(reason)}"
+        Logger.warning(
+          "Library API cancelDownload failed to remove from client: #{inspect(reason)}"
+        )
+
+        message = "The download client could not remove it"
         {:ok, not_removed(UserError.new(:client_unavailable, message, ["id"]))}
     end
   end
@@ -72,22 +80,17 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
           {:ok, map()} | {:error, String.t()}
   def reject_release(_parent, %{id: id} = args, resolution) do
     with {:ok, days} <- blocklist_days(Map.get(args, :blocklist_days)),
-         {:ok, download} <- load_download(id),
+         {:ok, download} <- Loaders.download(id, ["id"]),
          opts = reject_opts(resolution.context.principal, days),
          {:ok, :rejected} <- Downloads.reject_release(download, opts) do
       {:ok, removed(download.id)}
     else
-      {:error, %UserError{} = error} -> {:ok, not_removed(error)}
-      {:error, reason} -> {:error, "Could not reject the release: #{inspect(reason)}"}
-    end
-  end
+      {:error, %UserError{} = error} ->
+        {:ok, not_removed(error)}
 
-  defp load_download(id) do
-    with {:ok, id} <- UserError.cast_id(id, ["id"]) do
-      case Downloads.get_download(id) do
-        nil -> {:error, UserError.not_found("download", ["id"])}
-        download -> {:ok, download}
-      end
+      {:error, reason} ->
+        Logger.warning("Library API rejectRelease failed: #{inspect(reason)}")
+        {:error, "Could not reject the release"}
     end
   end
 

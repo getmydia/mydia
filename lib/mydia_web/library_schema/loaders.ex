@@ -7,6 +7,8 @@ defmodule MydiaWeb.LibrarySchema.Loaders do
   run, so they live here once.
   """
 
+  alias Mydia.Downloads
+  alias Mydia.Downloads.Download
   alias Mydia.Library.MediaFile
   alias Mydia.Media
   alias Mydia.Media.Episode
@@ -51,6 +53,17 @@ defmodule MydiaWeb.LibrarySchema.Loaders do
         {:ok, Media.get_episode!(id, preload: [media_files: MediaFile.versions()])}
       rescue
         Ecto.NoResultsError -> {:error, UserError.not_found("episode", field)}
+      end
+    end
+  end
+
+  @doc "The download `id` names."
+  @spec download(term(), [String.t()]) :: {:ok, Download.t()} | {:error, UserError.t()}
+  def download(id, field) do
+    with {:ok, id} <- UserError.cast_id(id, field) do
+      case Downloads.get_download(id) do
+        nil -> {:error, UserError.not_found("download", field)}
+        download -> {:ok, download}
       end
     end
   end
