@@ -1277,5 +1277,12 @@ defmodule Mydia.Config.LoaderTest do
       assert {:error, %Ecto.Changeset{valid?: false}} =
                Loader.load(config_file: "nonexistent.yml")
     end
+
+    test "an empty ENABLE_REMOTE_ACCESS is treated as unset" do
+      System.put_env("ENABLE_REMOTE_ACCESS", "")
+
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.remote_access.enabled == true
+    end
   end
 end

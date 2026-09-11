@@ -360,8 +360,7 @@ defmodule MydiaWeb.Api.ConfigController do
 
   defp is_env_var_setting?(key) do
     # Map config keys to their environment variable names
-    env_var_name = config_key_to_env_var(key)
-    env_var_name != nil and System.get_env(env_var_name) != nil
+    Settings.env_var_set?(config_key_to_env_var(key))
   end
 
   defp config_key_to_env_var(key) do

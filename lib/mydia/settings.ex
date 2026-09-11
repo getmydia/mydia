@@ -817,6 +817,13 @@ defmodule Mydia.Settings do
   defdelegate config_source(env_var_name, key, all_db_settings), to: Mydia.Settings.RuntimeConfig
 
   @doc """
+  Whether an environment variable is set and non-empty, the same presence
+  check `config_source/3` uses. See `Mydia.Settings.RuntimeConfig.env_var_set?/2`.
+  """
+  @spec env_var_set?(String.t() | nil, (String.t() -> String.t() | nil)) :: boolean()
+  defdelegate env_var_set?(name, getenv \\ &System.get_env/1), to: Mydia.Settings.RuntimeConfig
+
+  @doc """
   Creates or updates a `ConfigSetting` by key from an attrs map (or struct)
   carrying `:key`, `:value`, `:category`, and optionally `:updated_by_id`.
   """

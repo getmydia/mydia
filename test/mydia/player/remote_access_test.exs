@@ -104,9 +104,9 @@ defmodule Mydia.Player.RemoteAccessTest do
   end
 
   describe "env_locked?/1" do
-    test "is locked whenever the variable is present, even empty" do
+    test "is locked only when the variable is present and non-empty" do
       assert RemoteAccess.env_locked?(fn "ENABLE_REMOTE_ACCESS" -> "true" end)
-      assert RemoteAccess.env_locked?(fn "ENABLE_REMOTE_ACCESS" -> "" end)
+      refute RemoteAccess.env_locked?(fn "ENABLE_REMOTE_ACCESS" -> "" end)
       refute RemoteAccess.env_locked?(fn "ENABLE_REMOTE_ACCESS" -> nil end)
     end
   end

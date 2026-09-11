@@ -38,13 +38,13 @@ defmodule Mydia.Player.RemoteAccess do
   @doc """
   Whether `ENABLE_REMOTE_ACCESS` is set, which makes the toggle read-only.
 
-  Set means present, even when empty, the same test
-  `Mydia.Settings.config_source/3` applies, so the lock and the ENV badge
-  agree. `getenv` replaces `System.get_env/1` in tests, which must never set
-  a real environment variable.
+  Empty means unset, the same test `Mydia.Settings.config_source/3` and the
+  Loader's `put_if_present/4` apply, so the lock and the ENV badge agree with
+  what actually controls the setting. `getenv` replaces `System.get_env/1` in
+  tests, which must never set a real environment variable.
   """
   @spec env_locked?((String.t() -> String.t() | nil)) :: boolean()
-  def env_locked?(getenv \\ &System.get_env/1), do: getenv.(@env_var) != nil
+  def env_locked?(getenv \\ &System.get_env/1), do: Mydia.Settings.env_var_set?(@env_var, getenv)
 
   @doc """
   Whether remote access is live for this boot: the player is on, the setting
