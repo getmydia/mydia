@@ -73,7 +73,7 @@ COPY priv/graphql/schema.graphql ./lib/graphql/schema.graphql
 # load and playback cycle. Flutter's own build prints that its service worker
 # is deprecated and slated for removal.
 RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
-    flutter pub get && \
+    flutter pub get --enforce-lockfile && \
     dart run build_runner build && \
     flutter build web --release --base-href /player/ --tree-shake-icons --pwa-strategy=none
 

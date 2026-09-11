@@ -41,6 +41,10 @@ if [ ! -f "$TEST_TARGET" ]; then
 fi
 
 echo "Resolving Flutter dependencies..."
+# Deliberately without --enforce-lockfile, unlike every other CI `pub get`:
+# player/Dockerfile.test runs on cirruslabs' floating stable image, not the
+# .fvmrc SDK, so once that tag moves to a newer minor the SDK-pinned packages
+# in pubspec.lock no longer resolve as committed.
 flutter pub get >/tmp/flutter-pub-get.log 2>&1 || {
     echo "ERROR: flutter pub get failed" >&2
     cat /tmp/flutter-pub-get.log >&2

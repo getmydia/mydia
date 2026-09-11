@@ -9,6 +9,19 @@ environment:
   # newer Dart than either bound, so this only tightens what the manifest
   # *claims* to support; nothing in resolution or CI changes.
   sdk: '>=3.5.0 <4.0.0'
+  # Chooses the Flutter that Dependabot resolves pubspec.lock with. Dependabot
+  # never reads .fvmrc; it takes the newest stable release this range allows.
+  # Each Flutter release pins meta, matcher, test_api, vector_math and intl to
+  # its own versions, so with no range here Dependabot resolved against the
+  # next minor and each local `pub get` on the .fvmrc toolchain wrote them back.
+  #
+  # Pub enforces only the lower bound (flutter/flutter#95472), so the upper
+  # bound constrains Dependabot alone. The floor is the minor's .0, not the
+  # .fvmrc patch: patches of one minor pin the same packages, and the E2E
+  # image (cirruslabs' stable tag) lags patch releases. ci-nix.yml's
+  # "Check / Flutter Pin" job requires exactly `>=<minor>.0 <<next minor>.0`
+  # for the .fvmrc minor: bump it with .fvmrc.
+  flutter: '>=3.44.0 <3.45.0'
 
 dependencies:
   flutter:

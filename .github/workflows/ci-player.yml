@@ -144,9 +144,15 @@ jobs:
           channel: stable
           cache: true
 
+      # --enforce-lockfile fails the job when pubspec.lock does not resolve on
+      # the .fvmrc SDK, instead of quietly re-resolving and testing a different
+      # tree. That is how a Dependabot PR resolved against a newer Flutter went
+      # green here while every local `pub get` rewrote its lock. Every CI and
+      # release `pub get` carries the flag except the E2E runner, whose image is
+      # not on the .fvmrc SDK (see scripts/e2e/run-tests.sh).
       - name: Install dependencies
         if: needs.changes.outputs.player == 'true'
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Run code generation
         if: needs.changes.outputs.player == 'true'
@@ -260,7 +266,7 @@ jobs:
 
       - name: Install dependencies
         if: needs.changes.outputs.player == 'true'
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Run code generation
         if: needs.changes.outputs.player == 'true'
@@ -387,7 +393,7 @@ jobs:
       - name: Install dependencies
         if: steps.check_platform.outputs.enabled == 'true'
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Run code generation
         if: steps.check_platform.outputs.enabled == 'true'
@@ -550,7 +556,7 @@ jobs:
       - name: Install dependencies
         if: needs.changes.outputs.player == 'true'
         working-directory: player
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       # Not optional: the generated Dart files are gitignored, so without this a
       # clean checkout fails the build with hundreds of errors pointing nowhere

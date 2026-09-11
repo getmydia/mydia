@@ -105,7 +105,7 @@ jobs:
       # itself assumes they already exist (true on a developer's worktree,
       # false on a first-time runner checkout) and does not run them.
       - name: Install Flutter dependencies
-        run: devenv shell -- bash -c "cd player && flutter pub get"
+        run: devenv shell -- bash -c "cd player && flutter pub get --enforce-lockfile"
 
       - name: Run code generation
         run: devenv shell -- bash -c "cd player && flutter pub run build_runner build"
