@@ -42,6 +42,41 @@ type RootMutationType {
 
   "Apply a monitoring preset to a show's episodes"
   applyEpisodeMonitoring(mediaItemId: ID!, preset: EpisodeMonitoringPreset!): MediaItemPayload!
+
+  "Add a movie by its TMDB id"
+  addMovie(input: AddMovieInput!): AddMediaPayload!
+
+  "Add a TV show by its TVDB or TMDB id"
+  addTvShow(input: AddTvShowInput!): AddMediaPayload!
+
+  "Remove a movie or show from the library"
+  removeMediaItem(input: RemoveMediaItemInput!): RemoveMediaItemPayload!
+}
+
+"A movie to add"
+input AddMovieInput {
+  tmdbId: Int!
+  qualityProfileId: ID
+  libraryPathId: ID
+  monitored: Boolean
+  searchNow: Boolean
+}
+
+"A TV show to add. Give tvdbId or tmdbId; tvdbId wins when both are set."
+input AddTvShowInput {
+  tvdbId: Int
+  tmdbId: Int
+  qualityProfileId: ID
+  libraryPathId: ID
+  monitored: Boolean
+  seasonMonitoring: SeasonMonitoring
+  searchNow: Boolean
+}
+
+"A media item to remove"
+input RemoveMediaItemInput {
+  id: ID!
+  deleteFiles: Boolean
 }
 
 "Why a mutation could not do what it was asked"
@@ -81,6 +116,18 @@ type MediaItemPayload {
 "The episode a mutation changed"
 type EpisodePayload {
   episode: Episode
+  userErrors: [UserError!]!
+}
+
+"The media item an add created, or the one already in the library"
+type AddMediaPayload {
+  mediaItem: MediaItem
+  userErrors: [UserError!]!
+}
+
+"The id of the media item a remove deleted"
+type RemoveMediaItemPayload {
+  removedId: ID
   userErrors: [UserError!]!
 }
 
@@ -362,6 +409,24 @@ enum EpisodeMonitoringPreset {
   FUTURE
 
   "No episodes"
+  NONE
+}
+
+"Which seasons of a newly added show to monitor"
+enum SeasonMonitoring {
+  "Every season"
+  ALL
+
+  "Only episodes that have not aired"
+  FUTURE
+
+  "Only the latest season"
+  LATEST
+
+  "Only the first season"
+  FIRST
+
+  "No seasons"
   NONE
 }
 

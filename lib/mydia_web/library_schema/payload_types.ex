@@ -37,4 +37,16 @@ defmodule MydiaWeb.LibrarySchema.PayloadTypes do
     field :episode, :episode
     field :user_errors, non_null(list_of(non_null(:user_error)))
   end
+
+  @desc "The media item an add created, or the one already in the library"
+  object :add_media_payload do
+    field :media_item, :media_item
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
+
+  @desc "The id of the media item a remove deleted"
+  object :remove_media_item_payload do
+    field :removed_id, :id
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
 end

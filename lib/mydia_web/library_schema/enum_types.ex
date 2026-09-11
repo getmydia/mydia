@@ -76,4 +76,13 @@ defmodule MydiaWeb.LibrarySchema.EnumTypes do
     value(:future, description: "Episodes that have not aired")
     value(:none, description: "No episodes")
   end
+
+  @desc "Which seasons of a newly added show to monitor"
+  enum :season_monitoring do
+    value(:all, description: "Every season")
+    value(:future, description: "Only episodes that have not aired")
+    value(:latest, description: "Only the latest season")
+    value(:first, description: "Only the first season")
+    value(:none, description: "No seasons")
+  end
 end
