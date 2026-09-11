@@ -123,6 +123,15 @@ defmodule Mydia.PlayerTest do
     test "says nothing about it when it is unset" do
       refute capture_log(fn -> Player.log_boot_state(fn _ -> nil end) end) =~ "ENABLE_PLAYBACK"
     end
+
+    test "says nothing about it when it is empty" do
+      getenv = fn
+        "ENABLE_PLAYBACK" -> ""
+        _ -> nil
+      end
+
+      refute capture_log(fn -> Player.log_boot_state(getenv) end) =~ "ENABLE_PLAYBACK"
+    end
   end
 
   defp restore({:ok, value}), do: Application.put_env(:mydia, :player_enabled, value)

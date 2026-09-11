@@ -116,7 +116,7 @@ defmodule Mydia.Player do
   """
   @spec log_boot_state((String.t() -> String.t() | nil)) :: :ok
   def log_boot_state(getenv \\ &System.get_env/1) do
-    if getenv.("ENABLE_PLAYBACK") do
+    if Mydia.Settings.env_var_set?("ENABLE_PLAYBACK", getenv) do
       Logger.warning(
         "ENABLE_PLAYBACK is no longer read. Use ENABLE_PLAYER=false to turn the player off."
       )
