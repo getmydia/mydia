@@ -66,6 +66,17 @@ defmodule MydiaWeb.LibrarySchema.SearchTest do
       assert [%{"code" => "NOT_FOUND", "field" => ["id"]}] = payload["userErrors"]
       refute_enqueued(worker: Mydia.Jobs.MovieSearch)
     end
+
+    test "a repeat inside the worker's uniqueness window still reports queued" do
+      movie = insert(:media_item)
+
+      for _ <- 1..2 do
+        assert {:ok, %{data: %{"searchMediaItem" => %{"queued" => true}}}} =
+                 run(@search_item, %{"id" => movie.id})
+      end
+
+      assert length(all_enqueued(worker: Mydia.Jobs.MovieSearch)) == 1
+    end
   end
 
   describe "searchSeason" do

@@ -17,8 +17,12 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Search do
           {:ok, map()} | {:error, String.t()}
   def search_media_item(_parent, %{id: id}, _resolution) do
     with {:ok, item} <- Loaders.item(id, ["id"]),
-         {:ok, count} <- Search.queue_auto_searches([item]) do
-      {:ok, %{queued: count > 0, user_errors: []}}
+         {:ok, _count} <- Search.queue_auto_searches([item]) do
+      # Any successful insert (including a repeat merged by Oban's uniqueness
+      # constraint) should report queued: true. queue_auto_searches returns
+      # count: 0 when the job was deduped (conflict?: true), but the job is
+      # still merged into the queue.
+      {:ok, %{queued: true, user_errors: []}}
     else
       {:error, %UserError{} = error} -> {:ok, not_queued(error)}
       {:error, _reason} -> {:error, "Could not queue the search"}
