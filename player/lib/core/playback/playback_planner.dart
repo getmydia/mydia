@@ -188,9 +188,12 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
     );
   }
 
-  // Rule 3: transcode.
+  // Rule 3: transcode. Auto caps only on evidence that the link cannot
+  // carry the file: a remembered throughput its bitrate does not fit. Knowing
+  // nothing is not evidence, so a first play, and every web play (web never
+  // measures throughput), transcodes at the source resolution like Original.
   final adaptive = choice.kind == QualityChoiceKind.auto;
-  final rung = adaptive
+  final rung = adaptive && !fits
       ? startingRung(
           deriveAdaptiveLadder(sourceHeight: inputs.sourceHeight),
           inputs.knownThroughputKbps,

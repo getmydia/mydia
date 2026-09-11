@@ -250,9 +250,9 @@ void main() {
       ));
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.shapeKnownToFail);
-      expect(plan.rung.height, 1080,
-          reason: 'Auto transcodes at the top of the adaptive ladder when '
-              'throughput is unknown');
+      expect(plan.rung, QualityRung.original,
+          reason: 'nothing here says the link cannot carry the file, so '
+              'Auto transcodes at the source resolution, like Original');
     });
 
     test('a leading HLS_COPY is the needs_transcoding verdict, never taken',
@@ -315,22 +315,76 @@ void main() {
       expect(plan.adaptive, isFalse);
     });
 
-    test('Auto under transcode starts at the top of the adaptive ladder', () {
+    test('Auto under transcode sends no caps when throughput is unknown', () {
+      // Knowing nothing about the connection is not evidence against it, so
+      // a first play, and every web play, transcodes at the source
+      // resolution, like Original.
       final plan = planPlayback(
         _inputs(candidates: _transcodeOnly, choice: QualityChoice.auto),
       );
-      expect((plan as HlsPlan).rung.label, '1080p');
+      expect((plan as HlsPlan).rung, QualityRung.original);
       expect(plan.adaptive, isTrue);
     });
 
-    test('Auto with known throughput starts at the highest rung that fits', () {
-      // 4000 * 1.3 = 5200 <= 6000; 8000 * 1.3 = 10400 > 6000.
+    test('Auto transcodes uncapped on a 4K file when throughput is unknown',
+        () {
+      final plan = planPlayback(_inputs(
+        candidates: _transcodeOnly,
+        sourceHeight: 2160,
+        choice: QualityChoice.auto,
+      ));
+      expect(plan, isA<HlsPlan>());
+      expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
+      expect(plan.rung, QualityRung.original);
+      expect(plan.adaptive, isTrue);
+    });
+
+    test('Auto transcodes uncapped when the file fits remembered throughput',
+        () {
+      // 5000 * 1.3 = 6500 <= 10000.
+      final plan = planPlayback(_inputs(
+        candidates: _transcodeOnly,
+        choice: QualityChoice.auto,
+        fileBitrateKbps: 5000,
+        knownThroughputKbps: 10000,
+      ));
+      expect((plan as HlsPlan).rung, QualityRung.original);
+    });
+
+    test('Auto caps to the highest fitting rung when the file does not fit',
+        () {
+      // 1080p needs 8000 * 1.3 = 10400 > 6000; 720p needs 4000 * 1.3 = 5200
+      // <= 6000.
+      final plan = planPlayback(_inputs(
+        candidates: _transcodeOnly,
+        sourceHeight: 2160,
+        choice: QualityChoice.auto,
+        fileBitrateKbps: 20000,
+        knownThroughputKbps: 6000,
+      ));
+      expect((plan as HlsPlan).rung.label, '720p');
+    });
+
+    test(
+        'Auto transcodes uncapped when the file has a bitrate but '
+        'throughput is unknown', () {
+      final plan = planPlayback(_inputs(
+        candidates: _transcodeOnly,
+        choice: QualityChoice.auto,
+        fileBitrateKbps: 5000,
+      ));
+      expect((plan as HlsPlan).rung, QualityRung.original);
+    });
+
+    test(
+        "Auto transcodes uncapped when throughput is known but the file's "
+        'bitrate is not', () {
       final plan = planPlayback(_inputs(
         candidates: _transcodeOnly,
         choice: QualityChoice.auto,
         knownThroughputKbps: 6000,
       ));
-      expect((plan as HlsPlan).rung.label, '720p');
+      expect((plan as HlsPlan).rung, QualityRung.original);
     });
 
     test('an empty candidate list transcodes at Original', () {

@@ -28,11 +28,16 @@ verification or a quality change, logs a different line; see
 
 The viewer's choice is Auto (the default), Original, or a fixed rung. Auto
 direct plays or copies when the rules below allow it, and otherwise
-transcodes at the top rung of the adaptive ladder that fits remembered
-throughput (the top rung when throughput is unknown). Original is the
-viewer's override: it bypasses remembered decode failures, wherever that
-choice came from. A fixed rung pins its own caps and always transcodes,
-skipping both checks below.
+transcodes at the source resolution, like Original, unless remembered
+throughput says the file will not fit, in which case it asks for the highest
+adaptive rung that does. Knowing nothing about the connection is not evidence
+against it, so a first play, and every web play (web never measures
+throughput), transcodes uncapped. A fallback after a playback failure is a
+different case: it steps down deliberately rather than waiting for evidence
+(`fallbackPlan`; see "Verification" below). Original is the viewer's
+override: it bypasses remembered decode failures, wherever that choice came
+from. A fixed rung pins its own caps and always transcodes, skipping both
+checks below.
 
 Three rules, in order, decide between direct play, copy and transcode for
 Auto and Original alike. Direct play needs native, a leading DIRECT_PLAY or
