@@ -312,7 +312,7 @@ fn start_listening(
                 }
 
                 let mut msg_env = OwnedEnv::new();
-                let _ = msg_env.send_and_clear(&pid, |env| match event {
+                let sent = msg_env.send_and_clear(&pid, |env| match event {
                     Event::Connected {
                         peer_id,
                         connection_type,
@@ -418,11 +418,27 @@ fn start_listening(
                         (atoms::ok(), "log", level_str, target, message).encode(env)
                     }
                 });
+
+                // The pid is gone: the server stopped, or crashed before it
+                // could call stop_host. Holding on would keep this host and
+                // its endpoint alive for nobody.
+                if sent.is_err() {
+                    break;
+                }
             }
         });
     });
 
     Ok("ok".to_string())
+}
+
+/// Stop the host: close the iroh endpoint and end its event loop. Returns once
+/// the endpoint is closed. `Mydia.P2p.Server` calls this from `terminate/2`, so
+/// switching remote access off takes the node off the network.
+#[rustler::nif(schedule = "DirtyIo")]
+fn stop_host(resource: ResourceArc<HostResource>) -> String {
+    blocking::shutdown(&resource.host);
+    "ok".to_string()
 }
 
 /// Seal a pairing claim for the relay.

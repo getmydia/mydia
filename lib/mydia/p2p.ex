@@ -55,6 +55,12 @@ defmodule Mydia.P2p do
   def start_listening(_resource, _pid), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
+  Stop the host: close the iroh endpoint and end its event loop.
+  Returns `"ok"` once the endpoint is closed.
+  """
+  def stop_host(_resource), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc """
   Send a response to an incoming request.
   """
   def send_response(_resource, _request_id, _response), do: :erlang.nif_error(:nif_not_loaded)

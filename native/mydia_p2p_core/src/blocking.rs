@@ -23,6 +23,11 @@ pub fn get_network_stats(host: &Host) -> NetworkStats {
     block_on(host.get_network_stats())
 }
 
+/// Stop the host and wait until its endpoint is closed.
+pub fn shutdown(host: &Host) {
+    block_on(host.shutdown())
+}
+
 pub fn send_response(
     host: &Host,
     request_id: String,

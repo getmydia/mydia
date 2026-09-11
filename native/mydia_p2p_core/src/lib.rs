@@ -21,7 +21,7 @@ use iroh::dns::DnsResolver;
 use iroh_relay::RelayQuicConfig;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::OnceLock;
+use std::sync::{Once, RwLock};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
@@ -190,6 +190,13 @@ enum Command {
     GetNetworkStats {
         reply: oneshot::Sender<NetworkStats>,
     },
+    /// Stop the event loop and close the endpoint. `run_event_loop` takes this
+    /// before dispatch and answers `reply` only after `Endpoint::close`
+    /// returns, so the caller knows the UDP socket is free again. Sent by
+    /// `Host::shutdown`.
+    Shutdown {
+        reply: oneshot::Sender<()>,
+    },
     /// Test-only introspection/control, compiled out of every real build.
     /// `Host` has no production need to report `pending_responses.len()` or
     /// to force-close a specific peer's connection, but the T-808/T-809
@@ -317,8 +324,17 @@ impl PeerConnectionType {
     }
 }
 
-/// Global log channel for forwarding logs to Elixir
-static LOG_TX: OnceLock<mpsc::Sender<Event>> = OnceLock::new();
+/// Global log channel for forwarding logs to Elixir.
+///
+/// Owned by the newest host: `init_tracing` swaps the sender in every time a
+/// host starts. A host started after another one stopped (remote access
+/// switched off and on again) therefore receives the logs, and dropping the
+/// old sender lets the old event channel close, which is what ends the old
+/// host's listener thread in the NIF.
+static LOG_TX: RwLock<Option<mpsc::Sender<Event>>> = RwLock::new(None);
+
+/// The tracing subscriber can only be installed once per process.
+static TRACING_INIT: Once = Once::new();
 
 /// Custom tracing layer that forwards logs to Elixir via the event channel
 struct ElixirLogLayer;
@@ -332,7 +348,9 @@ where
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        if let Some(tx) = LOG_TX.get() {
+        let tx = LOG_TX.read().ok().and_then(|guard| guard.clone());
+
+        if let Some(tx) = tx {
             // Extract message from event
             let mut message = String::new();
             let mut visitor = MessageVisitor(&mut message);
@@ -372,21 +390,23 @@ impl<'a> tracing::field::Visit for MessageVisitor<'a> {
     }
 }
 
-/// Initialize tracing with the Elixir log layer
+/// Point the Elixir log layer at this host's event channel, installing the
+/// subscriber on first use.
 fn init_tracing(event_tx: mpsc::Sender<Event>) {
-    // Only initialize once
-    if LOG_TX.set(event_tx).is_err() {
-        return;
+    if let Ok(mut current) = LOG_TX.write() {
+        *current = Some(event_tx);
     }
 
-    // Set up tracing with env filter (default to info, but can be overridden with RUST_LOG)
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,iroh=info,noq=warn,rustls=warn"));
+    TRACING_INIT.call_once(|| {
+        // Env filter defaults to info and can be overridden with RUST_LOG.
+        let filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("info,iroh=info,noq=warn,rustls=warn"));
 
-    let _ = tracing_subscriber::registry()
-        .with(filter)
-        .with(ElixirLogLayer)
-        .try_init();
+        let _ = tracing_subscriber::registry()
+            .with(filter)
+            .with(ElixirLogLayer)
+            .try_init();
+    });
 }
 
 /// Network statistics
@@ -578,6 +598,22 @@ impl Host {
             return NetworkStats::default();
         }
         rx.await.unwrap_or_default()
+    }
+
+    /// Stop the event loop and close the endpoint, returning once the endpoint
+    /// is closed. Afterwards every call answers the way it does on a host
+    /// whose loop has ended: `send_failed`, an empty address, default stats.
+    /// Calling it again returns at once.
+    pub async fn shutdown(&self) {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(Command::Shutdown { reply: tx })
+            .await
+            .is_ok()
+        {
+            let _ = rx.await;
+        }
     }
 
     /// Test-only: number of entries currently in `pending_responses`. See
@@ -933,6 +969,9 @@ async fn run_event_loop(
         })
         .await;
 
+    // Set by a `Command::Shutdown` and answered after the endpoint closes.
+    let mut shutdown_reply: Option<oneshot::Sender<()>> = None;
+
     loop {
         // A host both accepts inbound connections and serves commands; a
         // client only serves commands. `tokio::select!` takes no `#[cfg]` on
@@ -959,6 +998,10 @@ async fn run_event_loop(
 
             cmd = cmd_rx.recv() => {
                 match cmd {
+                    Some(Command::Shutdown { reply }) => {
+                        shutdown_reply = Some(reply);
+                        false
+                    }
                     Some(cmd) => {
                         handle_command(
                             cmd,
@@ -986,6 +1029,10 @@ async fn run_event_loop(
         let running = tokio::select! {
             cmd = cmd_rx.recv() => {
                 match cmd {
+                    Some(Command::Shutdown { reply }) => {
+                        shutdown_reply = Some(reply);
+                        false
+                    }
                     Some(cmd) => {
                         handle_command(
                             cmd,
@@ -1018,6 +1065,11 @@ async fn run_event_loop(
     tracing::info!("Event loop terminated, closing endpoint gracefully");
     endpoint.close().await;
     tracing::info!("Endpoint closed");
+
+    // Last, so `Host::shutdown` returns only once the socket is released.
+    if let Some(reply) = shutdown_reply {
+        let _ = reply.send(());
+    }
 }
 
 /// Every live connection a peer currently holds, keyed by `ConnectionId`.
@@ -1298,6 +1350,12 @@ async fn handle_command(
                 peer_connection_type,
             };
             let _ = reply.send(stats);
+        }
+        // `run_event_loop` takes Shutdown before dispatch, so this arm exists
+        // only for exhaustiveness. Answering keeps a caller from hanging if
+        // that ever changes.
+        Command::Shutdown { reply } => {
+            let _ = reply.send(());
         }
         #[cfg(test)]
         Command::DebugPendingResponseCount { reply } => {
@@ -2319,10 +2377,10 @@ mod tests {
     /// `RelayConnected`, `Connected`, `Disconnected`, ...) is delivered with
     /// a blocking `event_tx.send(...).await`, and `Event::Log` shares that
     /// same 100-item channel via a non-blocking `try_send` from `tracing`.
-    /// `LOG_TX` is a single process-wide `OnceLock`, so whichever `Host` is
-    /// constructed first across the whole test binary -- not necessarily
-    /// this one -- ends up receiving every test's log traffic on its
-    /// channel. If nothing ever drains it, that log volume alone can fill
+    /// `LOG_TX` is a single process-wide slot that the most recently
+    /// constructed `Host` across the whole test binary -- not necessarily
+    /// this one -- takes over, so that host receives every test's log
+    /// traffic on its channel. If nothing ever drains it, that log volume alone can fill
     /// the buffer; the next blocking `Event` send then blocks forever with
     /// no reader, freezing that `Host`'s `run_event_loop` task and, with
     /// it, every `Command` reply a test is waiting on (`wait_until` then

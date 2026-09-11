@@ -80,6 +80,11 @@ defmodule Mydia.P2p.Server do
 
   @impl true
   def init(_) do
+    # Trapped so terminate/2 runs when the remote-access subtree is stopped,
+    # which is where the iroh host is shut down. Without it the endpoint would
+    # outlive this process.
+    Process.flag(:trap_exit, true)
+
     # Get bind_port from config (required for hole punching in Docker)
     bind_port = Application.get_env(:mydia, :p2p_bind_port)
 
@@ -368,9 +373,22 @@ defmodule Mydia.P2p.Server do
     {:noreply, state}
   end
 
+  # A linked process exiting arrives as a message now that init/1 traps exits.
+  # Nothing in this server reacts to one, and it is not an unhandled event.
+  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
+
   def handle_info(msg, state) do
     Logger.warning("P2P Unhandled Event: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  @impl true
+  def terminate(_reason, %{resource: nil}), do: :ok
+
+  def terminate(_reason, %{resource: resource}) do
+    Logger.info("P2P Host stopping")
+    P2p.stop_host(resource)
+    :ok
   end
 
   # HLS streaming handler
