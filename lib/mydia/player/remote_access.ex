@@ -74,6 +74,8 @@ defmodule Mydia.Player.RemoteAccess do
 
   @doc """
   Saves the admin toggle, then starts or stops the p2p subtree to match.
+  Concurrent calls run one after another, so the subtree always ends up
+  matching the last value saved.
 
   Options:
 
@@ -93,9 +95,16 @@ defmodule Mydia.Player.RemoteAccess do
     end
   end
 
+  # One save at a time, under a node-local lock. Two administrators saving
+  # together could otherwise interleave, and a stale "off" stop the subtree
+  # after a newer "on" had started it, leaving the setting on with no p2p node.
+  defp save_and_sync(enabled, opts) do
+    :global.trans({__MODULE__, self()}, fn -> do_save_and_sync(enabled, opts) end, [node()])
+  end
+
   # The cache is reseeded before the subtree changes, so request handlers
   # refuse from the moment an administrator switches remote access off.
-  defp save_and_sync(enabled, opts) do
+  defp do_save_and_sync(enabled, opts) do
     attrs = %{
       key: @setting_key,
       value: to_string(enabled),

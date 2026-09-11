@@ -205,5 +205,27 @@ defmodule Mydia.Player.RemoteAccessTest do
       refute RemoteAccess.enabled?()
       refute running?(parent)
     end
+
+    # Holding the lock stands in for another administrator's save that has
+    # not finished. Without it a stale "off" could stop the subtree after a
+    # newer "on" had started it.
+    test "waits for a save already in progress" do
+      %{parent: parent} = start_stub_tree()
+      lock = {RemoteAccess, self()}
+      true = :global.set_lock(lock, [node()])
+
+      task =
+        Task.async(fn ->
+          RemoteAccess.set_enabled(false, getenv: fn _ -> nil end, supervisor: parent)
+        end)
+
+      assert Task.yield(task, 300) == nil
+      assert running?(parent)
+
+      :global.del_lock(lock, [node()])
+
+      assert :ok = Task.await(task, 15_000)
+      refute running?(parent)
+    end
   end
 end
