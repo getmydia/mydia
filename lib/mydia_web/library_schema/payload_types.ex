@@ -53,4 +53,12 @@ defmodule MydiaWeb.LibrarySchema.PayloadTypes do
 
     field :user_errors, non_null(list_of(non_null(:user_error)))
   end
+
+  @desc "Whether a search job was queued"
+  object :search_payload do
+    field :queued, non_null(:boolean),
+      description: "True when the job was inserted, including a repeat merged by the worker"
+
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
 end

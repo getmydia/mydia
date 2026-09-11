@@ -51,6 +51,15 @@ type RootMutationType {
 
   "Remove a movie or show from the library"
   removeMediaItem(input: RemoveMediaItemInput!): RemoveMediaItemPayload!
+
+  "Queue an automatic search for a movie, or for a whole show"
+  searchMediaItem(id: ID!): SearchPayload!
+
+  "Queue a search for one season of a show, preferring a season pack"
+  searchSeason(mediaItemId: ID!, season: Int!): SearchPayload!
+
+  "Queue a search for one episode"
+  searchEpisode(id: ID!): SearchPayload!
 }
 
 "A movie to add"
@@ -131,6 +140,14 @@ type RemoveMediaItemPayload {
 
   "Files that could not be removed from disk. 0 when deleteFiles was false."
   filesNotDeleted: Int
+
+  userErrors: [UserError!]!
+}
+
+"Whether a search job was queued"
+type SearchPayload {
+  "True when the job was inserted, including a repeat merged by the worker"
+  queued: Boolean!
 
   userErrors: [UserError!]!
 }

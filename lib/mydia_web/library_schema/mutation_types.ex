@@ -92,5 +92,27 @@ defmodule MydiaWeb.LibrarySchema.MutationTypes do
       arg(:input, non_null(:remove_media_item_input))
       resolve(&MydiaWeb.LibrarySchema.Resolvers.LibraryWrites.remove_media_item/3)
     end
+
+    @desc "Queue an automatic search for a movie, or for a whole show"
+    field :search_media_item, non_null(:search_payload) do
+      meta(action: :search)
+      arg(:id, non_null(:id))
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.Search.search_media_item/3)
+    end
+
+    @desc "Queue a search for one season of a show, preferring a season pack"
+    field :search_season, non_null(:search_payload) do
+      meta(action: :search)
+      arg(:media_item_id, non_null(:id))
+      arg(:season, non_null(:integer))
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.Search.search_season/3)
+    end
+
+    @desc "Queue a search for one episode"
+    field :search_episode, non_null(:search_payload) do
+      meta(action: :search)
+      arg(:id, non_null(:id))
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.Search.search_episode/3)
+    end
   end
 end
