@@ -99,4 +99,10 @@ defmodule Mydia.Factory do
       scan_interval: nil
     }
   end
+
+  def quality_profile_factory do
+    %Mydia.Settings.QualityProfile{
+      name: sequence(:quality_profile_name, &"Profile #{&1}")
+    }
+  end
 end

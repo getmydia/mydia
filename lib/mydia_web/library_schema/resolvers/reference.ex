@@ -15,4 +15,11 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Reference do
 
     {:ok, Enum.map(profiles, &%{id: &1.id, name: &1.name})}
   end
+
+  @spec library_paths(any(), map(), Absinthe.Resolution.t()) :: {:ok, [map()]}
+  def library_paths(_parent, _args, _info) do
+    paths = Settings.list_library_paths()
+
+    {:ok, Enum.map(paths, &%{id: &1.id, path: &1.path, type: &1.type})}
+  end
 end

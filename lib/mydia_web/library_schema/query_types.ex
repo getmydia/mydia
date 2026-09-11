@@ -15,6 +15,12 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       resolve(&MydiaWeb.LibrarySchema.Resolvers.Reference.quality_profiles/3)
     end
 
+    @desc "Library paths available to add media into"
+    field :library_paths, non_null(list_of(non_null(:library_path))) do
+      meta(action: :read_library)
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.Reference.library_paths/3)
+    end
+
     @desc "Search a metadata provider for titles not yet in the library"
     field :lookup, non_null(list_of(non_null(:lookup_result))) do
       meta(action: :read_library)
