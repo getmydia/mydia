@@ -11,6 +11,32 @@ defmodule MydiaWeb.AdminComponents do
     router: MydiaWeb.Router,
     statics: MydiaWeb.static_paths()
 
+  attr :source, :atom,
+    required: true,
+    doc: "where the value came from: :env, :database, :yaml or :default"
+
+  attr :size, :string, default: "sm", values: ["sm", "xs"]
+
+  @doc "The ENV / DB / YAML / Default badge beside a configurable value."
+  def config_source_badge(assigns) do
+    ~H"""
+    <span class={["badge", badge_size(@size), source_class(@source)]}>{source_label(@source)}</span>
+    """
+  end
+
+  defp badge_size("xs"), do: "badge-xs"
+  defp badge_size(_size), do: "badge-sm"
+
+  defp source_class(:env), do: "badge-info"
+  defp source_class(:database), do: "badge-primary"
+  defp source_class(:yaml), do: "badge-secondary"
+  defp source_class(_source), do: "badge-ghost"
+
+  defp source_label(:env), do: "ENV"
+  defp source_label(:database), do: "DB"
+  defp source_label(:yaml), do: "YAML"
+  defp source_label(_source), do: "Default"
+
   attr :active_tab, :atom, required: true
 
   defp tab_nav(assigns) do

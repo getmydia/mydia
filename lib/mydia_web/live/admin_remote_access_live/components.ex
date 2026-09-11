@@ -7,6 +7,8 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
   attr :ra_config, :map, required: true
   attr :p2p_status, :map, required: true
   attr :remote_access_setting, :boolean, required: true
+  attr :remote_access_source, :atom, default: :default
+  attr :remote_access_locked, :boolean, default: false
   attr :show_add_url_modal, :boolean, default: false
   attr :new_url, :string, default: ""
   attr :show_advanced, :boolean, default: false
@@ -65,15 +67,23 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
             </p>
           </div>
         </div>
-        <input
-          type="checkbox"
-          id="remote-access-toggle"
-          class="toggle toggle-success"
-          checked={@remote_access_setting}
-          phx-click="toggle_remote_access"
-          phx-value-enabled={to_string(!@remote_access_setting)}
-        />
+        <div class="flex items-center gap-2">
+          <.config_source_badge source={@remote_access_source} size="xs" />
+          <input
+            type="checkbox"
+            id="remote-access-toggle"
+            class="toggle toggle-success"
+            checked={@remote_access_setting}
+            disabled={@remote_access_locked}
+            phx-click="toggle_remote_access"
+            phx-value-enabled={to_string(!@remote_access_setting)}
+          />
+        </div>
       </div>
+
+      <p :if={@remote_access_locked} id="remote-access-env-note" class="text-xs text-base-content/60">
+        Set by <code>ENABLE_REMOTE_ACCESS</code>. Remove the variable to change it here.
+      </p>
 
       <%= if @remote_access_setting && @ra_config do %>
         <%!-- Status Row --%>

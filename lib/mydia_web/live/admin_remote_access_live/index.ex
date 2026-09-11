@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
 
   alias Mydia.Player.RemoteAccess, as: RemoteAccessSwitch
   alias Mydia.RemoteAccess
+  alias Mydia.Settings
 
   require Logger
 
@@ -180,7 +181,19 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
   end
 
   defp load_remote_access_setting(socket) do
-    assign(socket, :remote_access_setting, RemoteAccessSwitch.setting())
+    all_db_settings = Map.new(Settings.list_config_settings(), &{&1.key, &1})
+
+    socket
+    |> assign(:remote_access_setting, RemoteAccessSwitch.setting())
+    |> assign(:remote_access_locked, RemoteAccessSwitch.env_locked?())
+    |> assign(
+      :remote_access_source,
+      Settings.config_source(
+        RemoteAccessSwitch.env_var(),
+        RemoteAccessSwitch.setting_key(),
+        all_db_settings
+      )
+    )
   end
 
   defp load_p2p_status(socket) do
