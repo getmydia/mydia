@@ -189,6 +189,18 @@ defmodule MydiaWeb.PlayerVisibilityTest do
 
       refute has_element?(view, "#hwaccel-status")
     end
+
+    test "the toggle event is ignored, leaving the stored preference alone", %{
+      conn: conn,
+      user: user
+    } do
+      :ok = hide_player(user)
+
+      {:ok, view, _html} = live(conn, ~p"/profile")
+      render_click(view, "toggle_hide_player", %{})
+
+      assert UserPreference.hide_player?(Accounts.get_user_preference!(user))
+    end
   end
 
   describe "with the player on" do
@@ -201,6 +213,16 @@ defmodule MydiaWeb.PlayerVisibilityTest do
       {:ok, settings, _html} = live(conn, ~p"/admin/config/settings")
       assert has_element?(settings, ~s{a[href="/admin/dashboard"]})
       assert has_element?(settings, "#hwaccel-status")
+    end
+
+    test "the toggle event flips the stored preference", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      render_click(view, "toggle_hide_player", %{})
+      assert UserPreference.hide_player?(Accounts.get_user_preference!(user))
+
+      render_click(view, "toggle_hide_player", %{})
+      refute UserPreference.hide_player?(Accounts.get_user_preference!(user))
     end
   end
 end

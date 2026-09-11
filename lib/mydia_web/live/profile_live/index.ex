@@ -263,17 +263,23 @@ defmodule MydiaWeb.ProfileLive.Index do
 
   @impl true
   def handle_event("toggle_hide_player", _params, socket) do
-    hidden = !socket.assigns.hide_player
+    if socket.assigns.player_enabled do
+      # @hide_player also folds in the server switch, so the flip must read
+      # the stored preference rather than the folded assign.
+      hidden = !UserPreference.hide_player?(socket.assigns.preference)
 
-    case Accounts.update_preference(socket.assigns.preference, %{"hide_player" => hidden}) do
-      {:ok, preference} ->
-        {:noreply,
-         socket
-         |> assign(:preference, preference)
-         |> assign(:hide_player, hidden)}
+      case Accounts.update_preference(socket.assigns.preference, %{"hide_player" => hidden}) do
+        {:ok, preference} ->
+          {:noreply,
+           socket
+           |> assign(:preference, preference)
+           |> assign(:hide_player, hidden)}
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update the player setting")}
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to update the player setting")}
+      end
+    else
+      {:noreply, socket}
     end
   end
 
