@@ -114,5 +114,24 @@ defmodule MydiaWeb.LibrarySchema.MutationTypes do
       arg(:id, non_null(:id))
       resolve(&MydiaWeb.LibrarySchema.Resolvers.Search.search_episode/3)
     end
+
+    @desc "Stop a download and remove it from its client and the queue"
+    field :cancel_download, non_null(:remove_download_payload) do
+      meta(action: :manage_downloads)
+      arg(:id, non_null(:id))
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.Downloads.cancel_download/3)
+    end
+
+    @desc "Remove a download, blocklist its release, and search again"
+    field :reject_release, non_null(:remove_download_payload) do
+      meta(action: :manage_downloads)
+      arg(:id, non_null(:id))
+
+      arg(:blocklist_days, :integer,
+        description: "Days to blocklist the release. Defaults to the configured period."
+      )
+
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.Downloads.reject_release/3)
+    end
   end
 end

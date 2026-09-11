@@ -61,4 +61,10 @@ defmodule MydiaWeb.LibrarySchema.PayloadTypes do
 
     field :user_errors, non_null(list_of(non_null(:user_error)))
   end
+
+  @desc "The id of the download a mutation removed from the queue"
+  object :remove_download_payload do
+    field :removed_id, :id
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
 end

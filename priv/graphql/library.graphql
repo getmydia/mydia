@@ -60,6 +60,17 @@ type RootMutationType {
 
   "Queue a search for one episode"
   searchEpisode(id: ID!): SearchPayload!
+
+  "Stop a download and remove it from its client and the queue"
+  cancelDownload(id: ID!): RemoveDownloadPayload!
+
+  "Remove a download, blocklist its release, and search again"
+  rejectRelease(
+    id: ID!
+
+    "Days to blocklist the release. Defaults to the configured period."
+    blocklistDays: Int
+  ): RemoveDownloadPayload!
 }
 
 "A movie to add"
@@ -149,6 +160,12 @@ type SearchPayload {
   "True when the job was inserted, including a repeat merged by the worker"
   queued: Boolean!
 
+  userErrors: [UserError!]!
+}
+
+"The id of the download a mutation removed from the queue"
+type RemoveDownloadPayload {
+  removedId: ID
   userErrors: [UserError!]!
 }
 
