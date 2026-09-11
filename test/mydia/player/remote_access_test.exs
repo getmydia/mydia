@@ -110,4 +110,100 @@ defmodule Mydia.Player.RemoteAccessTest do
       refute RemoteAccess.env_locked?(fn "ENABLE_REMOTE_ACCESS" -> nil end)
     end
   end
+
+  # A stand-in for Mydia.Player.Supervisor: one remote-access child whose
+  # decision to start is read from an Agent, and whose only child is another
+  # Agent. Nothing here can open an iroh endpoint.
+  defp start_stub_tree(start? \\ true) do
+    {:ok, flag} = Agent.start_link(fn -> start? end)
+
+    child = %{
+      id: Mydia.Player.RemoteAccess.Supervisor,
+      start:
+        {Mydia.Player.RemoteAccess.Supervisor, :start_link,
+         [
+           [
+             name: nil,
+             children: [{Agent, fn -> :stub end}],
+             start?: fn -> Agent.get(flag, & &1) end
+           ]
+         ]},
+      type: :supervisor
+    }
+
+    parent =
+      start_supervised!(%{
+        id: :player_stub_parent,
+        start: {Supervisor, :start_link, [[child], [strategy: :one_for_one]]},
+        type: :supervisor
+      })
+
+    %{parent: parent, flag: flag}
+  end
+
+  defp running?(parent) do
+    [{Mydia.Player.RemoteAccess.Supervisor, pid, :supervisor, _}] =
+      Supervisor.which_children(parent)
+
+    is_pid(pid)
+  end
+
+  describe "sync/2" do
+    test "stops the subtree" do
+      %{parent: parent} = start_stub_tree()
+      assert running?(parent)
+
+      assert :ok = RemoteAccess.sync(false, parent)
+      refute running?(parent)
+    end
+
+    test "starts a subtree that ignored at boot, once it may start" do
+      %{parent: parent, flag: flag} = start_stub_tree(false)
+      refute running?(parent)
+
+      assert :ok = RemoteAccess.sync(true, parent)
+      refute running?(parent)
+
+      Agent.update(flag, fn _ -> true end)
+      assert :ok = RemoteAccess.sync(true, parent)
+      assert running?(parent)
+    end
+
+    test "is idempotent both ways" do
+      %{parent: parent} = start_stub_tree()
+
+      assert :ok = RemoteAccess.sync(true, parent)
+      assert :ok = RemoteAccess.sync(false, parent)
+      assert :ok = RemoteAccess.sync(false, parent)
+    end
+  end
+
+  describe "set_enabled/2" do
+    test "refuses while ENABLE_REMOTE_ACCESS is set, and writes nothing" do
+      getenv = fn "ENABLE_REMOTE_ACCESS" -> "true" end
+
+      assert {:error, :env_locked} = RemoteAccess.set_enabled(false, getenv: getenv)
+      assert Mydia.Settings.get_config_setting_by_key("remote_access.enabled") == nil
+    end
+
+    test "refuses while the player is off" do
+      disable_player()
+
+      assert {:error, :player_disabled} =
+               RemoteAccess.set_enabled(false, getenv: fn _ -> nil end)
+    end
+
+    test "saves the toggle into the layered config and stops the subtree" do
+      %{parent: parent} = start_stub_tree()
+
+      assert :ok = RemoteAccess.set_enabled(false, getenv: fn _ -> nil end, supervisor: parent)
+
+      assert %{value: "false", category: :remote_access} =
+               Mydia.Settings.get_config_setting_by_key("remote_access.enabled")
+
+      refute RemoteAccess.setting()
+      refute RemoteAccess.enabled?()
+      refute running?(parent)
+    end
+  end
 end

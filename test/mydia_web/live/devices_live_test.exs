@@ -291,7 +291,7 @@ defmodule MydiaWeb.DevicesLiveTest do
   describe "pairing card relay status" do
     defp pairing_assigns(status) do
       [
-        ra_config: %Mydia.RemoteAccess.Config{enabled: true, instance_id: "test-instance"},
+        ra_config: %Mydia.RemoteAccess.Config{instance_id: "test-instance"},
         p2p_status: %{
           running: true,
           relay_connected: true,

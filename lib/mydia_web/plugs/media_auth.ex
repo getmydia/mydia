@@ -35,7 +35,6 @@ defmodule MydiaWeb.Plugs.MediaAuth do
   import Phoenix.Controller, only: [json: 2]
 
   alias Mydia.Media.TokenCache
-  alias Mydia.RemoteAccess
   alias Mydia.RemoteAccess.MediaToken
 
   def init(opts), do: opts
@@ -71,7 +70,7 @@ defmodule MydiaWeb.Plugs.MediaAuth do
     # refused wholesale when remote access is off. The guard sits here rather
     # than in call/2 on purpose: call/2 passes locally authenticated requests
     # straight through, and that is how the browser streams.
-    if RemoteAccess.enabled?() do
+    if Mydia.Player.remote_access_enabled?() do
       validate_media_token(conn, token, opts)
     else
       forbidden(conn, "Remote access is disabled on this server")

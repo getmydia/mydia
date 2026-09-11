@@ -12,11 +12,13 @@ defmodule Mydia.Player.RemoteAccess do
   reads or writes the cache must be `async: false`.
   """
 
+  alias Mydia.Config.Loader
   alias Mydia.Settings
 
   @cache_key {__MODULE__, :enabled}
   @env_var "ENABLE_REMOTE_ACCESS"
   @setting_key "remote_access.enabled"
+  @child_id Mydia.Player.RemoteAccess.Supervisor
 
   @doc "The environment variable that controls the setting and locks the toggle."
   @spec env_var() :: String.t()
@@ -68,6 +70,72 @@ defmodule Mydia.Player.RemoteAccess do
     value = Mydia.Player.enabled?() and setting() and startable?()
     :persistent_term.put(@cache_key, value)
     value
+  end
+
+  @doc """
+  Saves the admin toggle, then starts or stops the p2p subtree to match.
+
+  Options:
+
+    * `:updated_by_id` - the administrator making the change
+    * `:getenv` - replaces `System.get_env/1`, so tests never set real env vars
+    * `:supervisor` - the parent of the remote-access subtree, by default
+      `Mydia.Player.Supervisor`
+  """
+  @spec set_enabled(boolean(), keyword()) :: :ok | {:error, term()}
+  def set_enabled(enabled, opts \\ []) when is_boolean(enabled) do
+    getenv = Keyword.get(opts, :getenv, &System.get_env/1)
+
+    cond do
+      not Mydia.Player.enabled?() -> {:error, :player_disabled}
+      env_locked?(getenv) -> {:error, :env_locked}
+      true -> save_and_sync(enabled, opts)
+    end
+  end
+
+  # The cache is reseeded before the subtree changes, so request handlers
+  # refuse from the moment an administrator switches remote access off.
+  defp save_and_sync(enabled, opts) do
+    attrs = %{
+      key: @setting_key,
+      value: to_string(enabled),
+      category: :remote_access,
+      updated_by_id: Keyword.get(opts, :updated_by_id)
+    }
+
+    with {:ok, _setting} <- Settings.upsert_config_setting(attrs),
+         {:ok, _config} <- Loader.reload() do
+      refresh()
+      sync(enabled, Keyword.get(opts, :supervisor, Mydia.Player.Supervisor))
+    end
+  end
+
+  @doc """
+  Starts or stops the remote-access subtree under `supervisor` to match
+  `enabled`.
+
+  Restarting works on a child whose `init/1` returned `:ignore` at boot,
+  because a supervisor keeps the spec of a non-temporary child that ignored.
+  The restarted `init/1` asks `refresh/0` again, so a subtree the environment
+  does not allow to start stays down.
+  """
+  @spec sync(boolean(), Supervisor.supervisor()) :: :ok | {:error, term()}
+  def sync(enabled, supervisor \\ Mydia.Player.Supervisor)
+
+  def sync(true, supervisor) do
+    case Supervisor.restart_child(supervisor, @child_id) do
+      {:ok, _pid} -> :ok
+      {:ok, _pid, _info} -> :ok
+      {:error, :running} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def sync(false, supervisor) do
+    case Supervisor.terminate_child(supervisor, @child_id) do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+    end
   end
 
   defp startable? do

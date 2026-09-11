@@ -301,7 +301,7 @@ defmodule Mydia.P2p.Server do
 
     serve_request(state.resource, request_id, "pairing", fn ->
       response =
-        if RemoteAccess.enabled?() do
+        if Mydia.Player.remote_access_enabled?() do
           handle_pairing_request(req)
         else
           Logger.info("P2P Request: Pairing refused, remote access is disabled")
@@ -346,7 +346,7 @@ defmodule Mydia.P2p.Server do
 
     resource = state.resource
 
-    if RemoteAccess.enabled?() do
+    if Mydia.Player.remote_access_enabled?() do
       stream_hls_response(resource, stream_id, req)
     else
       Logger.info("P2P Request: HLS stream refused, remote access is disabled")
@@ -437,7 +437,7 @@ defmodule Mydia.P2p.Server do
   is worth pinning without standing up a host and a NIF resource to reach it.
   """
   def graphql_response(req, peer_connection_type) do
-    if RemoteAccess.enabled?() do
+    if Mydia.Player.remote_access_enabled?() do
       run_graphql_request(req, peer_connection_type)
     else
       Logger.debug("P2P Request: GraphQL refused, remote access is disabled")

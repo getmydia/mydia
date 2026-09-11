@@ -43,7 +43,7 @@ defmodule MydiaWeb.DevicesLive.Index do
      |> assign(:claim_code_rendezvous_status, nil)
      |> assign(:pairing_error, nil)
      |> assign(:show_pairing_modal, false)
-     |> assign(:remote_access_enabled, RemoteAccess.enabled?())
+     |> assign(:remote_access_enabled, Mydia.Player.remote_access_enabled?())
      |> assign(:ra_config, RemoteAccess.get_config())
      |> load_p2p_status()
      |> load_devices()}

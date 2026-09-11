@@ -73,7 +73,6 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
       start_supervised!(Mydia.Indexers.Health)
 
       {:ok, _config} = RemoteAccess.initialize_config()
-      {:ok, _config} = RemoteAccess.toggle_remote_access(true)
 
       conn =
         conn
