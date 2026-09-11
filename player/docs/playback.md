@@ -107,10 +107,11 @@ restart path.
 The quality picker offers Auto above Original, then the ladder
 `deriveQualityLadder` builds for the source. Auto's subtitle names what it is
 doing right now: `Auto · Direct Play`, `Auto · Original, no re-encoding`, or
-`Auto · <rung>` for a transcode (`Auto · Original, re-encoding required` when
-the adaptive ladder has nothing to offer for this source). Settings shows the
-same Auto row with the neutral `Adapts to your connection`, since there is no
-plan to describe there.
+`Auto · <rung>` for a transcode (`Auto · Original, re-encoding required`
+mainly when nothing says the connection cannot carry the file, since that is
+when Auto transcodes uncapped; also when the adaptive ladder has nothing to
+offer for this source). Settings shows the same Auto row with the neutral
+`Adapts to your connection`, since there is no plan to describe there.
 
 A quality change logs `[PlayerScreen] Quality change: <plan>` and switches,
 unless the new plan delivers the same bytes as what is already playing:
