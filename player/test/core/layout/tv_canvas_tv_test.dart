@@ -91,5 +91,28 @@ void main() {
 
       expect(seen, const Size(1920, 1080));
     });
+
+    testWidgets(
+        'lays the tree out on the enlarged canvas, not just the '
+        'MediaQuery', (tester) async {
+      tester.view.physicalSize = const Size(960, 540);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      const probeKey = ValueKey('tv-canvas-probe');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TvCanvas(
+            child: SizedBox.expand(key: probeKey),
+          ),
+        ),
+      );
+
+      // The assertion the MediaQuery check cannot make: a real layout box of
+      // 1280x720. Without the constraint relief in build() this reports
+      // 960x540, which is exactly the defect that MediaQuery-only assertion
+      // let through.
+      expect(tester.getSize(find.byKey(probeKey)), const Size(1280, 720));
+    });
   }, skip: skipReason);
 }

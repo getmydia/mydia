@@ -42,8 +42,8 @@ abstract class TvCanvasScale {
   }) {
     // A zero-area canvas is a transient state (a window mid-resize, a test
     // viewport) and a factor of 0.0 would be divided into by the caller,
-    // producing a NaN-sized box. Reporting "no scaling" keeps the caller's
-    // arithmetic total.
+    // producing a +Infinity extent that a SizedBox then throws on during
+    // layout. Reporting "no scaling" keeps the caller's arithmetic total.
     if (logicalSize.width <= 0 || logicalSize.height <= 0) return 1.0;
 
     if (!directionalPrimary) return 1.0;

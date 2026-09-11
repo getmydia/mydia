@@ -5,10 +5,11 @@ import 'tv_canvas_scale.dart';
 
 /// Presents a larger logical canvas to [child] on the directional tier.
 ///
-/// Applied as the outermost wrapper of `MaterialApp.router`'s `builder`. It
-/// must sit *below* `MaterialApp`, not above it: `WidgetsApp` installs its own
-/// `MediaQuery` from the view, which would overwrite an override placed above
-/// the app, so a wrapper outside it would have no effect at all.
+/// It is placed in the router's `builder` because that is where the app wraps
+/// every routed page, so this `MediaQuery` is read by everything below it in
+/// the routed content. The root `MediaQuery` is installed by the `View` widget
+/// and `WidgetsApp` never introduces one of its own, so nothing above this
+/// point reinstalls or overwrites it.
 ///
 /// A `Transform.scale` with `Alignment.topLeft` plus a container sized to the
 /// reciprocal is what makes the tree believe it has a larger canvas. The
@@ -36,12 +37,25 @@ class TvCanvas extends StatelessWidget {
 
     if (scale == 1.0) return child;
 
+    // OverflowBox, not SizedBox: this widget is the app root, so the view
+    // hands it tight constraints equal to the panel's logical size, and a
+    // RenderConstrainedBox clamps its child with `enforce`, which would pull
+    // the requested 1280x720 back down to 960x540. The canvas would then be
+    // laid out at 960x540 while MediaQuery claimed 1280x720, and the transform
+    // would paint that unchanged subtree at 0.75 into the corner -- a smaller
+    // app with a dead band, the opposite of what this class is for.
+    // OverflowBox is the primitive for a child deliberately larger than its
+    // parent: it sizes itself to the incoming constraints and hands the child
+    // exactly these. `seek_preview.dart` already uses the same idiom.
     return Transform.scale(
       scale: scale,
       alignment: Alignment.topLeft,
-      child: SizedBox(
-        width: media.size.width / scale,
-        height: media.size.height / scale,
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        minWidth: media.size.width / scale,
+        maxWidth: media.size.width / scale,
+        minHeight: media.size.height / scale,
+        maxHeight: media.size.height / scale,
         child: MediaQuery(
           data: media.copyWith(
             size: media.size / scale,
