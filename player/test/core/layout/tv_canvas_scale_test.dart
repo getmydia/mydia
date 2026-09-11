@@ -63,5 +63,15 @@ void main() {
         closeTo(0.75, 0.0001),
       );
     });
+
+    test('reports no scaling for a zero-area canvas', () {
+      expect(
+        TvCanvasScale.computeScale(
+          logicalSize: Size.zero,
+          directionalPrimary: true,
+        ),
+        1.0,
+      );
+    });
   });
 }
