@@ -56,18 +56,16 @@ defmodule MydiaWeb.Plugs.LibraryApiAuth do
   defp verify(conn, key, bucket) do
     configured = Application.get_env(:mydia, :library_api_key)
 
-    cond do
-      is_binary(configured) and Plug.Crypto.secure_compare(key, configured) ->
-        ApiKeyRateLimiter.reset_rate_limit(bucket)
+    if is_binary(configured) and Plug.Crypto.secure_compare(key, configured) do
+      ApiKeyRateLimiter.reset_rate_limit(bucket)
 
-        assign(
-          conn,
-          :library_api_principal,
-          %Principal{role: "admin", source: :env, user: nil, api_key_id: nil}
-        )
-
-      true ->
-        verify_database_key(conn, key, bucket)
+      assign(
+        conn,
+        :library_api_principal,
+        %Principal{role: "admin", source: :env, user: nil, api_key_id: nil}
+      )
+    else
+      verify_database_key(conn, key, bucket)
     end
   end
 
