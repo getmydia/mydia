@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, listEquals;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +19,7 @@ import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_delay.dart';
+import '../../../core/player/video_output_config.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
@@ -1806,7 +1808,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();
     _player = player;
-    _videoController = VideoController(player);
+    _videoController = VideoController(
+      player,
+      configuration: videoControllerConfigurationFor(
+        defaultTargetPlatform,
+        isWeb: kIsWeb,
+      ),
+    );
     // Hands the backend the media_kit player so the web backend can reach the
     // underlying HTMLVideoElement. A no-op on native.
     //
