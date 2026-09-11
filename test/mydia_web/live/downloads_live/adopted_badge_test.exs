@@ -30,14 +30,18 @@ defmodule MydiaWeb.DownloadsLive.AdoptedBadgeTest do
   test "renders the badge for a download adopted from the client", %{conn: conn} do
     media_item = media_item_fixture(%{title: "Dune: Part Two"})
 
+    # No download client is configured in this test, so list_downloads_with_status/1
+    # applies the tab's filter: an imported row lands on the Completed tab.
     download_fixture(%{
       title: "Dune.Part.Two.2024.2160p.WEB-DL.x265-GROUP",
       media_item_id: media_item.id,
       download_client: "qbit",
+      imported_at: DateTime.utc_now() |> DateTime.truncate(:second),
       metadata: %{matched_from_client: true}
     })
 
     {:ok, view, _html} = live(conn, ~p"/downloads")
+    render_click(view, "switch_tab", %{"tab" => "completed"})
 
     assert has_element?(view, "[data-test=adopted-badge]")
   end

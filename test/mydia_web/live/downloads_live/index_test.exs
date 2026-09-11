@@ -28,9 +28,12 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
     %{conn: log_in_user(conn, admin), admin: admin}
   end
 
-  # No download client is configured in these tests, so list_downloads_with_status
-  # returns every download regardless of tab filter. That's fine here — we assert
-  # on sort ordering and control state, not on tab filtering or live client fields.
+  # No download client is configured in these tests. Downloads.list_downloads_with_status/1
+  # still applies the requested tab's filter (Queue: :active, Completed: :imported), so a
+  # fixture must be shaped for whichever tab a test needs: an in-flight "grabbing" download
+  # (no download_client/download_client_id, inserted recently) lands on Queue; an imported
+  # one lands on Completed. Tests that open on the default Queue tab but need a Completed
+  # row switch tabs explicitly.
 
   defp completed_download(title, attrs \\ %{}) do
     media_item = media_item_fixture(%{title: title})
@@ -62,6 +65,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       completed_download("Alpha Movie")
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
 
       assert has_element?(view, "#downloads-sort")
       assert has_element?(view, "#downloads-sort option[value='added_desc'][selected]")
@@ -74,6 +78,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
     end
 
     test "offers tab-appropriate options", %{conn: conn} do
+      # An active row so the Queue-tab half of this test has something to render
+      # the sort control against; a completed one for the Completed-tab half.
+      grabbing = media_item_fixture(%{title: "Grabbing Movie"})
+
+      download_fixture(%{
+        media_item_id: grabbing.id,
+        download_client: nil,
+        download_client_id: nil
+      })
+
       completed_download("Alpha Movie")
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
@@ -101,6 +115,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
     test "sorts by name ascending and descending", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
       titles = ["Alpha Movie", "Beta Movie", "Gamma Movie"]
 
       html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "name_asc"})
@@ -113,6 +128,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
     test "sorts by size descending (largest first)", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
 
       html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "size_desc"})
 
@@ -124,6 +140,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
     test "an unknown sort value leaves the current sort unchanged", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/downloads")
+      render_click(view, "switch_tab", %{"tab" => "completed"})
 
       # No crash, default remains selected.
       html = view |> element("#downloads-sort-form") |> render_change(%{"sort_by" => "bogus"})
@@ -382,7 +399,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
   describe "in-flight match correction (U3)" do
     test "Change match action is shown on an active (not-imported) row", %{conn: conn} do
       movie = media_item_fixture(%{type: "movie", title: "Active Movie"})
-      download = download_fixture(%{media_item_id: movie.id, imported_at: nil})
+
+      # No download client configured, so this needs no download_client/id (an
+      # in-flight grab) to land on the Queue tab's :active filter.
+      download =
+        download_fixture(%{
+          media_item_id: movie.id,
+          imported_at: nil,
+          download_client: nil,
+          download_client_id: nil
+        })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
 
@@ -448,16 +474,19 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
     end
 
     test "renders the import error on a completed-but-not-imported row", %{conn: conn} do
-      # Mirrors the incident: the torrent finished but the import keeps failing.
-      # The user must see the error on the activity list, not a healthy row.
+      # Mirrors the incident: the download still looks healthy/active on the
+      # Queue row (no client configured, so it reads as an in-flight grab) but
+      # the import keeps failing. The user must see the error on the activity
+      # list, not only buried on the Issues tab.
       media_item = media_item_fixture(%{title: "Perm Fail Show"})
       now = DateTime.utc_now() |> DateTime.truncate(:second)
 
       download_fixture(%{
         media_item_id: media_item.id,
         title: "Perm.Fail.S01E01",
-        completed_at: now,
         imported_at: nil,
+        download_client: nil,
+        download_client_id: nil,
         import_failed_at: now,
         import_last_error: "Download path is not accessible: /media/Series: permission denied",
         import_next_retry_at: DateTime.add(now, 3600, :second),
