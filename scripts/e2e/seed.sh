@@ -32,24 +32,20 @@ su-exec mydia /app/bin/mydia rpc "
 
 echo "E2E: initializing remote access"
 su-exec mydia /app/bin/mydia rpc "
-    config = Mydia.RemoteAccess.get_config()
-
-    config =
-      if is_nil(config) do
-        case Mydia.RemoteAccess.initialize_keypair() do
-          {:ok, c} -> c
-          {:error, reason} -> raise \"initialize_keypair failed: #{inspect(reason)}\"
-        end
-      else
-        config
-      end
-
-    unless Map.get(config, :enabled) do
-      case Mydia.RemoteAccess.toggle_remote_access(true) do
-        {:ok, _} -> IO.puts(\"Remote access enabled\")
-        {:error, reason} -> raise \"toggle_remote_access failed: #{inspect(reason)}\"
-      end
+    # Mydia.RemoteAccess.Provision creates this at boot; initialize_config/0
+    # returns the existing row, so this only covers a boot that skipped it.
+    case Mydia.RemoteAccess.initialize_config() do
+      {:ok, _config} -> :ok
+      {:error, reason} -> raise \"initialize_config failed: #{inspect(reason)}\"
     end
+
+    # ENABLE_REMOTE_ACCESS in compose.player-e2e.yml switches remote access on
+    # and locks the admin toggle, so there is nothing to turn on here.
+    unless Mydia.Player.remote_access_enabled?() do
+      raise \"remote access is off; check ENABLE_PLAYER and ENABLE_REMOTE_ACCESS\"
+    end
+
+    IO.puts(\"Remote access enabled\")
 "
 
 echo "E2E: generating test video"

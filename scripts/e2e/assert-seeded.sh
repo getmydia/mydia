@@ -21,7 +21,8 @@ RESULT=$(su-exec mydia /app/bin/mydia rpc "
 
     checks = [
       {\"admin user\", Accounts.get_user_by_email(\"$ADMIN_EMAIL\") != nil},
-      {\"remote access enabled\", match?(%{enabled: true}, RemoteAccess.get_config())},
+      {\"remote access config\", RemoteAccess.get_config() != nil},
+      {\"remote access enabled\", Mydia.Player.remote_access_enabled?()},
       {\"library path\", Repo.get_by(LibraryPath, path: \"/media/movies\") != nil},
       {\"media item\", Repo.aggregate(Media.MediaItem, :count) > 0},
       {\"media file\", Repo.aggregate(Mydia.Library.MediaFile, :count) > 0}
