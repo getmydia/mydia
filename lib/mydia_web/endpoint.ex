@@ -53,6 +53,11 @@ defmodule MydiaWeb.Endpoint do
     websocket: true,
     longpoll: false
 
+  # With the player off (ENABLE_PLAYER=false) its web build is not served at
+  # all. This has to sit here: the Plug.Static below answers /player requests
+  # before the router's :player pipeline ever runs.
+  plug MydiaWeb.Plugs.RequirePlayer, only: "/player"
+
   # The Flutter web player, ahead of the catch-all below so its cache policy
   # wins for "/player/*".
   #

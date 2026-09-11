@@ -71,8 +71,8 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
       episodes: episodes,
       expanded?: true,
       expanded_episodes: MapSet.new(),
-      playback_enabled: Keyword.get(opts, :playback_enabled, true),
-      segment_detection_available: false
+      player_enabled: Keyword.get(opts, :player_enabled, true),
+      segment_detection_available: Keyword.get(opts, :segment_detection_available, false)
     )
   end
 
@@ -108,11 +108,28 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeRowTest do
       refute has_selector?(html, "a#episode-ep-1-play")
     end
 
-    test "the play slot is absent entirely when playback is off, for every row" do
-      html = render_season([episode(media_files: [media_file()])], playback_enabled: false)
+    test "the play slot is absent entirely when the player is off, for every row" do
+      html = render_season([episode(media_files: [media_file()])], player_enabled: false)
 
       refute has_selector?(html, "#episode-ep-1-play")
       assert has_selector?(html, "#episode-ep-1-auto-search")
+    end
+
+    test "the segment row is absent when the player is off" do
+      html =
+        render_season([episode(media_files: [media_file()])],
+          player_enabled: false,
+          segment_detection_available: true
+        )
+
+      refute has_selector?(html, "#segment-status-season-1")
+    end
+
+    test "the segment row renders when the player is on and detection is available" do
+      html =
+        render_season([episode(media_files: [media_file()])], segment_detection_available: true)
+
+      assert has_selector?(html, "#segment-status-season-1")
     end
 
     test "the status chip stays a 16px dot, with no visible label" do

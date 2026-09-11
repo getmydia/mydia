@@ -345,10 +345,19 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
   defp load_data(socket) do
     socket
-    |> assign(:config_settings_with_sources, get_all_settings_with_sources())
+    |> assign(
+      :config_settings_with_sources,
+      drop_player_settings(get_all_settings_with_sources())
+    )
     |> assign(:crash_report_stats, Mydia.CrashReporter.stats())
     |> assign(:invalid_config_settings, Settings.invalid_config_settings())
     |> assign(:hwaccel, Mydia.Streaming.HardwareAccel.capabilities())
+  end
+
+  # The Streaming category, and the hardware-acceleration card the template
+  # renders inside it, only apply to player transcodes.
+  defp drop_player_settings(settings) do
+    if Mydia.Player.enabled?(), do: settings, else: Map.delete(settings, "Streaming")
   end
 
   defp get_all_settings_with_sources do

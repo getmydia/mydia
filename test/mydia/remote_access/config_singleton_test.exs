@@ -16,14 +16,10 @@ defmodule Mydia.RemoteAccess.ConfigSingletonTest do
   alias Mydia.Repo
 
   describe "initialize_config/0" do
-    test "creates one config with an instance ID, enabled" do
+    test "creates one config with an instance ID" do
       assert {:ok, config} = RemoteAccess.initialize_config()
 
       assert is_binary(config.instance_id)
-      # Remote access is on by default: connecting a player is a user action, so
-      # the identity it needs has to exist and be usable without an admin first
-      # flipping a switch.
-      assert config.enabled
       assert Repo.aggregate(Config, :count) == 1
     end
 
@@ -59,7 +55,7 @@ defmodule Mydia.RemoteAccess.ConfigSingletonTest do
   # initialize_config/0 will no longer produce on its own.
   defp insert_config_at(inserted_at) do
     %Config{}
-    |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: false})
+    |> Config.changeset(%{instance_id: Ecto.UUID.generate()})
     |> Ecto.Changeset.put_change(:inserted_at, inserted_at)
     |> Ecto.Changeset.put_change(:updated_at, inserted_at)
     |> Repo.insert!()

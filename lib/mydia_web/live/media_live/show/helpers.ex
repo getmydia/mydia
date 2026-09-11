@@ -425,12 +425,6 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     end
   end
 
-  # Check if playback feature is enabled
-  def playback_enabled? do
-    Application.get_env(:mydia, :features, [])
-    |> Keyword.get(:playback_enabled, false)
-  end
-
   @doc """
   Builds a URL for the Flutter player.
 

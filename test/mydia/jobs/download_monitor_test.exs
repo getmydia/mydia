@@ -1546,6 +1546,200 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
     end
   end
 
+  describe "post-import junk sweep" do
+    # A finished torrent the importer already gave up on. Transmission status 6
+    # is seeding; the row's failure snapshot is what the sweep judges. Uses the
+    # DB-backed client from `start_transmission_bypass/1` for the same reason
+    # the pre-completion tests do.
+    @junk_title "Harbor.Lights.S02E06.1080p.WEB-DL.DDP5.1.Atmos.zipx"
+
+    defp seeding_torrent(hash) do
+      %{
+        "hashString" => hash,
+        "name" => @junk_title,
+        "status" => 6,
+        "percentDone" => 1.0,
+        "downloadDir" => "/downloads"
+      }
+    end
+
+    # Answers torrent-get with `torrents` and tells the test process about
+    # every torrent-remove, so a test can check the data went with it.
+    defp mock_transmission_recording_removes(bypass, torrents) do
+      test_pid = self()
+
+      Bypass.stub(bypass, "POST", "/transmission/rpc", fn conn ->
+        case Plug.Conn.get_req_header(conn, "x-transmission-session-id") do
+          [] ->
+            conn
+            |> Plug.Conn.put_resp_header("x-transmission-session-id", "test-session")
+            |> Plug.Conn.resp(409, "")
+
+          ["test-session"] ->
+            {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+            decoded = Jason.decode!(body)
+
+            case decoded["method"] do
+              "torrent-get" ->
+                json_resp(conn, 200, %{
+                  "result" => "success",
+                  "arguments" => %{"torrents" => torrents}
+                })
+
+              "torrent-remove" ->
+                send(test_pid, {:torrent_remove, decoded["arguments"]})
+                json_resp(conn, 200, %{"result" => "success", "arguments" => %{}})
+            end
+        end
+      end)
+    end
+
+    defp zipx_candidate(probe_status) do
+      %{
+        "path" => "/downloads/" <> @junk_title,
+        "name" => @junk_title,
+        "size" => 1_102_185_571,
+        "skip_reason" => "not_video_extension",
+        "parsed_season" => 2,
+        "parsed_episode" => 6,
+        "probe" => %{
+          "status" => probe_status,
+          "detail" => "Invalid data found when processing input"
+        }
+      }
+    end
+
+    # The row a terminal `no_importable_files` import failure leaves behind.
+    defp failed_import_download(client_config, hash, candidates, overrides \\ %{}) do
+      media_item = media_item_fixture()
+      now = DateTime.utc_now()
+
+      download =
+        download_fixture(
+          Map.merge(
+            %{
+              media_item_id: media_item.id,
+              title: @junk_title,
+              indexer: "1337x",
+              download_client: client_config.name,
+              download_client_id: hash,
+              completed_at: now,
+              import_retry_count: 1,
+              import_last_error: "No importable files found for TV show episode.",
+              import_failure_reason: "no_importable_files",
+              import_failed_at: now,
+              import_next_retry_at: nil,
+              metadata: %{
+                "indexer" => "1337x",
+                "guid" => "guid-" <> hash,
+                "import_candidates" => candidates
+              }
+            },
+            overrides
+          )
+        )
+
+      {media_item, download}
+    end
+
+    test "removes, blacklists and deletes a finished download its import proved junk" do
+      {bypass, client_config} = start_transmission_bypass()
+      mock_transmission_recording_removes(bypass, [seeding_torrent("junk-hash")])
+
+      {media_item, download} =
+        failed_import_download(client_config, "junk-hash", [zipx_candidate("not_media")])
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      refute Repo.get(Download, download.id)
+
+      row = Repo.get_by!(ReleaseBlacklist, indexer: "1337x", guid: "guid-junk-hash")
+      assert row.failure_reason == "no_importable_files"
+
+      assert_received {:torrent_remove, %{"ids" => ["junk-hash"], "delete-local-data" => true}}
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MovieSearch,
+        args: %{"mode" => "specific", "media_item_id" => media_item.id}
+      )
+
+      # Proven junk is not a guess, so it must not count toward the cap that
+      # suppresses cheap early rejections.
+      assert Mydia.Search.get_backoff_info("auto_reject", media_item.id) == nil
+    end
+
+    test "rejects the row even when the torrent is already gone from a reachable client" do
+      {bypass, client_config} = start_transmission_bypass()
+      mock_transmission_recording_removes(bypass, [])
+
+      {_media_item, download} =
+        failed_import_download(client_config, "gone-hash", [zipx_candidate("not_media")])
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      refute Repo.get(Download, download.id)
+      assert Blacklists.blacklisted?("1337x", "guid-gone-hash")
+    end
+
+    test "leaves a failed download alone when ffprobe found real video in it" do
+      {bypass, client_config} = start_transmission_bypass()
+      mock_transmission_recording_removes(bypass, [seeding_torrent("hidden-hash")])
+
+      {_media_item, download} =
+        failed_import_download(client_config, "hidden-hash", [zipx_candidate("media")])
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Repo.get(Download, download.id)
+      refute Blacklists.blacklisted?("1337x", "guid-hidden-hash")
+      refute_received {:torrent_remove, _}
+    end
+
+    test "leaves a failed download alone when ffprobe could not give a verdict" do
+      {bypass, client_config} = start_transmission_bypass()
+      mock_transmission_recording_removes(bypass, [seeding_torrent("unknown-hash")])
+
+      {_media_item, download} =
+        failed_import_download(client_config, "unknown-hash", [zipx_candidate("unknown")])
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Repo.get(Download, download.id)
+      refute Blacklists.blacklisted?("1337x", "guid-unknown-hash")
+      refute_received {:torrent_remove, _}
+    end
+
+    test "leaves a download alone while an import retry is still scheduled" do
+      {bypass, client_config} = start_transmission_bypass()
+      mock_transmission_recording_removes(bypass, [seeding_torrent("retry-hash")])
+
+      {_media_item, download} =
+        failed_import_download(client_config, "retry-hash", [zipx_candidate("not_media")], %{
+          import_next_retry_at: DateTime.add(DateTime.utc_now(), 3_600, :second)
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Repo.get(Download, download.id)
+      refute Blacklists.blacklisted?("1337x", "guid-retry-hash")
+      refute_received {:torrent_remove, _}
+    end
+
+    test "waits for a later poll when the client cannot be reached" do
+      {bypass, client_config} = start_transmission_bypass()
+
+      {_media_item, download} =
+        failed_import_download(client_config, "down-hash", [zipx_candidate("not_media")])
+
+      Bypass.down(bypass)
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert Repo.get(Download, download.id)
+      refute Blacklists.blacklisted?("1337x", "guid-down-hash")
+    end
+  end
+
   describe "handle_failure/1 with a classified debrid failure" do
     setup do
       alias Mydia.Downloads.Client.Debrid.StubProvider

@@ -40,7 +40,7 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
       {:ok,
        socket
        |> put_flash(:error, "Import Lists is currently disabled")
-       |> redirect(to: ~p"/admin/dashboard")}
+       |> redirect(to: ~p"/admin/config")}
     end
   end
 

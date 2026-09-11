@@ -117,8 +117,9 @@ defmodule MydiaWeb.Api.ConfigController do
         })
 
       true ->
+        # Schemaless: a field the request left out is absent, not nil.
         validated_data = Ecto.Changeset.apply_changes(changeset)
-        perform_update(conn, key, validated_data.value, validated_data.description)
+        perform_update(conn, key, validated_data.value, Map.get(validated_data, :description))
     end
   end
 
@@ -360,8 +361,7 @@ defmodule MydiaWeb.Api.ConfigController do
 
   defp is_env_var_setting?(key) do
     # Map config keys to their environment variable names
-    env_var_name = config_key_to_env_var(key)
-    env_var_name != nil and System.get_env(env_var_name) != nil
+    Settings.env_var_set?(config_key_to_env_var(key))
   end
 
   defp config_key_to_env_var(key) do
@@ -384,7 +384,8 @@ defmodule MydiaWeb.Api.ConfigController do
       "auth.local_enabled" => "LOCAL_AUTH_ENABLED",
       "media.movies_path" => "MOVIES_PATH",
       "media.tv_path" => "TV_PATH",
-      "logging.level" => "LOG_LEVEL"
+      "logging.level" => "LOG_LEVEL",
+      "remote_access.enabled" => "ENABLE_REMOTE_ACCESS"
     }
 
     Map.get(mapping, key)
@@ -407,7 +408,8 @@ defmodule MydiaWeb.Api.ConfigController do
          :general,
          :database,
          :logging,
-         :oban
+         :oban,
+         :remote_access
        ] do
       category_atom
     else

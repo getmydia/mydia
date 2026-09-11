@@ -154,4 +154,85 @@ defmodule MydiaWeb.PlayerVisibilityTest do
     refute has_element?(dashboard, "#player-cta-banner")
     assert has_element?(dashboard, "#sidebar-player-link")
   end
+
+  describe "with the player off" do
+    setup do
+      disable_player()
+    end
+
+    test "every entry point is hidden", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      refute has_element?(view, "#sidebar-player-link")
+      refute has_element?(view, "#dock-player-link")
+      refute has_element?(view, "#player-cta-banner")
+      refute has_element?(view, ~s{a[href="/devices"]})
+    end
+
+    test "the profile drops the hide-player toggle", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      refute has_element?(view, "#hide-player-toggle")
+    end
+
+    test "the admin tabs drop Dashboard and Remote Access", %{conn: conn} do
+      start_supervised!(Mydia.Indexers.Health)
+      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+
+      refute has_element?(view, ~s{a[href="/admin/dashboard"]})
+      refute has_element?(view, ~s{a[href="/admin/config/remote-access"]})
+    end
+
+    test "admin settings drop the Streaming category", %{conn: conn} do
+      start_supervised!(Mydia.Indexers.Health)
+      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+
+      refute has_element?(view, "#hwaccel-status")
+    end
+
+    test "the toggle event is ignored, leaving the stored preference alone", %{
+      conn: conn,
+      user: user
+    } do
+      :ok = hide_player(user)
+
+      {:ok, view, _html} = live(conn, ~p"/profile")
+      render_click(view, "toggle_hide_player", %{})
+
+      assert UserPreference.hide_player?(Accounts.get_user_preference!(user))
+    end
+
+    test "the movie Play button is gone", %{conn: conn} do
+      _library = library_path_fixture(%{type: "movies"})
+      item = media_item_fixture(%{type: "movie", title: "Quiet Harbour", year: 2024})
+      _file = media_file_fixture(%{media_item_id: item.id})
+
+      {:ok, view, _html} = live(conn, ~p"/movies/#{item.id}")
+
+      refute has_element?(view, ~s{a[href^="/player/#/player/movie/"]})
+    end
+  end
+
+  describe "with the player on" do
+    test "the Devices link and the admin tabs are there", %{conn: conn} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      {:ok, home, _html} = live(conn, ~p"/")
+      assert has_element?(home, ~s{a[href="/devices"]})
+
+      {:ok, settings, _html} = live(conn, ~p"/admin/config/settings")
+      assert has_element?(settings, ~s{a[href="/admin/dashboard"]})
+      assert has_element?(settings, "#hwaccel-status")
+    end
+
+    test "the toggle event flips the stored preference", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      render_click(view, "toggle_hide_player", %{})
+      assert UserPreference.hide_player?(Accounts.get_user_preference!(user))
+
+      render_click(view, "toggle_hide_player", %{})
+      refute UserPreference.hide_player?(Accounts.get_user_preference!(user))
+    end
+  end
 end

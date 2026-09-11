@@ -1,6 +1,8 @@
 defmodule MydiaWeb.AdminDashboardLive.Index do
   use MydiaWeb, :live_view
 
+  on_mount {MydiaWeb.PlayerHooks, :require_player}
+
   alias Mydia.Downloads
   alias Mydia.Playback
   alias Mydia.Streaming

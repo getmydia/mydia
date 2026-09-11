@@ -76,7 +76,8 @@ defmodule Mydia.Settings.ConfigSetting do
     :crash_reporting,
     :feedback,
     :general,
-    :flaresolverr
+    :flaresolverr,
+    :remote_access
   ]
 
   schema "config_settings" do

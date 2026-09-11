@@ -244,7 +244,7 @@ defmodule MydiaWeb.MediaLive.NotThisItemTest do
         render_component(&MydiaWeb.MediaLive.Show.Components.episode_file_row/1,
           file: file,
           episode: %Mydia.Media.Episode{id: "ep-1", monitored: true, media_files: [file]},
-          playback_enabled: false,
+          player_enabled: false,
           transcode_jobs: []
         )
 

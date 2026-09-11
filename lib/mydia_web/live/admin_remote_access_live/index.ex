@@ -1,7 +1,11 @@
 defmodule MydiaWeb.AdminRemoteAccessLive.Index do
   use MydiaWeb, :live_view
 
+  on_mount {MydiaWeb.PlayerHooks, :require_player}
+
+  alias Mydia.Player.RemoteAccess, as: RemoteAccessSwitch
   alias Mydia.RemoteAccess
+  alias Mydia.Settings
 
   require Logger
 
@@ -25,6 +29,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
      |> assign(:new_url, "")
      |> assign(:show_advanced, false)
      |> load_config()
+     |> load_remote_access_setting()
      |> load_p2p_status()}
   end
 
@@ -43,39 +48,28 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
 
   @impl true
   def handle_event("toggle_remote_access", params, socket) do
-    enabled_str = Map.get(params, "enabled", "false")
-    enabled = enabled_str == "true"
-    config = socket.assigns.ra_config
+    enabled = Map.get(params, "enabled", "false") == "true"
 
-    with {:ok, socket} <- maybe_initialize_config(socket, config, enabled),
-         {:ok, updated_config} <- RemoteAccess.toggle_remote_access(enabled),
-         :ok <- maybe_start_or_stop_p2p(enabled) do
-      {:noreply,
-       socket
-       |> assign(:ra_config, updated_config)
-       |> load_p2p_status()
-       |> put_flash(:info, "Remote access #{if enabled, do: "enabled", else: "disabled"}")}
-    else
-      {:error, :init_failed, changeset} ->
+    case RemoteAccessSwitch.set_enabled(enabled, updated_by_id: socket.assigns.current_user.id) do
+      :ok ->
         {:noreply,
          socket
-         |> put_flash(:error, "Failed to initialize remote access: #{format_errors(changeset)}")}
-
-      {:error, :not_configured} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Remote access not configured. Please try again.")}
-
-      {:error, :remote_access_not_configured} ->
-        {:noreply,
-         socket
+         |> load_config()
+         |> load_remote_access_setting()
          |> load_p2p_status()
-         |> put_flash(:error, "Failed to start P2P: remote access not fully configured")}
+         |> put_flash(:info, "Remote access #{if enabled, do: "enabled", else: "disabled"}")}
 
-      {:error, _changeset} ->
+      {:error, :env_locked} ->
         {:noreply,
-         socket
-         |> put_flash(:error, "Failed to update remote access setting")}
+         put_flash(
+           socket,
+           :error,
+           "Remote access is set by ENABLE_REMOTE_ACCESS and cannot be changed here."
+         )}
+
+      {:error, reason} ->
+        Logger.error("Failed to switch remote access: #{inspect(reason)}")
+        {:noreply, put_flash(socket, :error, "Failed to update remote access setting")}
     end
   end
 
@@ -164,23 +158,6 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
 
   ## Private Helpers
 
-  defp maybe_initialize_config(socket, nil, true) do
-    case RemoteAccess.initialize_config() do
-      {:ok, new_config} ->
-        {:ok, assign(socket, :ra_config, new_config)}
-
-      {:error, changeset} ->
-        {:error, :init_failed, changeset}
-    end
-  end
-
-  defp maybe_initialize_config(socket, _config, _enabled), do: {:ok, socket}
-
-  # P2P is started automatically by the application supervision tree
-  # These are effectively no-ops now but kept for API compatibility
-  defp maybe_start_or_stop_p2p(true), do: RemoteAccess.start_relay()
-  defp maybe_start_or_stop_p2p(false), do: RemoteAccess.stop_relay()
-
   defp format_errors(%Ecto.Changeset{} = changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
@@ -203,6 +180,22 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
   defp load_config(socket) do
     config = RemoteAccess.get_config()
     assign(socket, :ra_config, config)
+  end
+
+  defp load_remote_access_setting(socket) do
+    all_db_settings = Map.new(Settings.list_config_settings(), &{&1.key, &1})
+
+    socket
+    |> assign(:remote_access_setting, RemoteAccessSwitch.setting())
+    |> assign(:remote_access_locked, RemoteAccessSwitch.env_locked?())
+    |> assign(
+      :remote_access_source,
+      Settings.config_source(
+        RemoteAccessSwitch.env_var(),
+        RemoteAccessSwitch.setting_key(),
+        all_db_settings
+      )
+    )
   end
 
   defp load_p2p_status(socket) do

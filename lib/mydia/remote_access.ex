@@ -11,9 +11,6 @@ defmodule Mydia.RemoteAccess do
   alias Mydia.Repo
   alias Mydia.RemoteAccess.{ClaimRateLimiter, Config, PairingClaim, RemoteDevice}
 
-  # Cache key for the enabled flag. See enabled?/0.
-  @enabled_key {__MODULE__, :enabled}
-
   # Config management
 
   @doc """
@@ -33,7 +30,7 @@ defmodule Mydia.RemoteAccess do
       nil ->
         %Config{}
         # Note: relay_url is read from METADATA_RELAY_URL env var at runtime
-        |> Config.changeset(%{instance_id: Ecto.UUID.generate(), enabled: true})
+        |> Config.changeset(%{instance_id: Ecto.UUID.generate()})
         |> Repo.insert()
 
       config ->
@@ -64,43 +61,6 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
-  Whether remote access is enabled on this instance.
-
-  Read from `:persistent_term` rather than the database. This sits on
-  request-serving paths (`MydiaWeb.Plugs.MediaAuth`, `MydiaWeb.Plugs.RelayDeviceAuth`
-  and the `Mydia.P2p.Server` request handlers), so a query per call is not
-  affordable. `:persistent_term` suits a value written a handful of times in a
-  server's lifetime and read constantly.
-
-  Fails closed: with no config row there is no instance identity for a remote
-  device to authenticate against, so the answer is `false`.
-  """
-  @spec enabled?() :: boolean()
-  def enabled? do
-    case :persistent_term.get(@enabled_key, :unset) do
-      :unset -> refresh_enabled_cache()
-      enabled -> enabled
-    end
-  end
-
-  @doc """
-  Re-reads the enabled flag from the database and reseeds the cache.
-
-  Returns the value it stored. Called at boot and by every writer.
-  """
-  @spec refresh_enabled_cache() :: boolean()
-  def refresh_enabled_cache do
-    enabled =
-      case get_config() do
-        nil -> false
-        config -> config.enabled
-      end
-
-    :persistent_term.put(@enabled_key, enabled)
-    enabled
-  end
-
-  @doc """
   Creates or updates the remote access configuration.
   Since there should only be one config, this upserts.
   """
@@ -118,26 +78,7 @@ defmodule Mydia.RemoteAccess do
           |> Repo.update()
       end
 
-    with {:ok, config} <- result do
-      :persistent_term.put(@enabled_key, config.enabled)
-      {:ok, config}
-    end
-  end
-
-  def toggle_remote_access(enabled) when is_boolean(enabled) do
-    case get_config() do
-      nil ->
-        {:error, :not_configured}
-
-      config ->
-        with {:ok, updated} <-
-               config
-               |> Config.toggle_enabled_changeset(enabled)
-               |> Repo.update() do
-          :persistent_term.put(@enabled_key, updated.enabled)
-          {:ok, updated}
-        end
-    end
+    result
   end
 
   # Device management
@@ -441,7 +382,7 @@ defmodule Mydia.RemoteAccess do
     * `:instance_id` - override the instance id, for tests.
   """
   def generate_claim_code(user_id, opts \\ []) do
-    if enabled?() do
+    if Mydia.Player.remote_access_enabled?() do
       do_generate_claim_code(user_id, opts)
     else
       {:error, :disabled}
@@ -853,30 +794,31 @@ defmodule Mydia.RemoteAccess do
   - relay_connected: Whether connected to a relay server
   """
   def p2p_status do
-    try do
-      status = Mydia.P2p.Server.status()
-      {:ok, status}
-    rescue
-      _ ->
-        {:ok,
-         %Mydia.P2p.Server.Status{
-           node_id: nil,
-           node_addr: nil,
-           running: false,
-           connected_peers: 0,
-           relay_connected: false
-         }}
-    catch
-      :exit, _ ->
-        {:ok,
-         %Mydia.P2p.Server.Status{
-           node_id: nil,
-           node_addr: nil,
-           running: false,
-           connected_peers: 0,
-           relay_connected: false
-         }}
+    if Mydia.Player.remote_access_enabled?() do
+      query_p2p_status()
+    else
+      {:ok, stopped_status()}
     end
+  end
+
+  # Rescued as well as gated: the server can be mid-stop when remote access has
+  # just been switched off.
+  defp query_p2p_status do
+    {:ok, Mydia.P2p.Server.status()}
+  rescue
+    _ -> {:ok, stopped_status()}
+  catch
+    :exit, _ -> {:ok, stopped_status()}
+  end
+
+  defp stopped_status do
+    %Mydia.P2p.Server.Status{
+      node_id: nil,
+      node_addr: nil,
+      running: false,
+      connected_peers: 0,
+      relay_connected: false
+    }
   end
 
   @doc """
@@ -897,24 +839,23 @@ defmodule Mydia.RemoteAccess do
   - relay_connected: Whether connected to a relay server
   """
   def network_stats do
-    try do
-      stats = Mydia.P2p.Server.network_stats()
-      {:ok, stats}
-    rescue
-      _ ->
-        {:ok,
-         %Mydia.P2p.NetworkStats{
-           connected_peers: 0,
-           relay_connected: false
-         }}
-    catch
-      :exit, _ ->
-        {:ok,
-         %Mydia.P2p.NetworkStats{
-           connected_peers: 0,
-           relay_connected: false
-         }}
+    if Mydia.Player.remote_access_enabled?() do
+      query_network_stats()
+    else
+      {:ok, empty_network_stats()}
     end
+  end
+
+  defp query_network_stats do
+    {:ok, Mydia.P2p.Server.network_stats()}
+  rescue
+    _ -> {:ok, empty_network_stats()}
+  catch
+    :exit, _ -> {:ok, empty_network_stats()}
+  end
+
+  defp empty_network_stats do
+    %Mydia.P2p.NetworkStats{connected_peers: 0, relay_connected: false}
   end
 
   @doc """
@@ -953,20 +894,6 @@ defmodule Mydia.RemoteAccess do
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  @doc """
-  Starts the relay connection process.
-  """
-  def start_relay do
-    :ok
-  end
-
-  @doc """
-  Stops the relay connection process.
-  """
-  def stop_relay do
-    :ok
   end
 
   # Subscription helpers

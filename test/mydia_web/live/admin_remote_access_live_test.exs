@@ -73,7 +73,6 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
       start_supervised!(Mydia.Indexers.Health)
 
       {:ok, _config} = RemoteAccess.initialize_config()
-      {:ok, _config} = RemoteAccess.toggle_remote_access(true)
 
       conn =
         conn
@@ -111,6 +110,45 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
 
       persisted_config = RemoteAccess.get_config()
       refute url in persisted_config.direct_urls
+    end
+  end
+
+  describe "the toggle when ENABLE_REMOTE_ACCESS is set" do
+    defp panel(overrides) do
+      render_component(
+        &MydiaWeb.AdminRemoteAccessLive.Components.remote_access_panel/1,
+        Keyword.merge(
+          [
+            ra_config: %Mydia.RemoteAccess.Config{instance_id: "test-instance", direct_urls: []},
+            p2p_status: %Mydia.P2p.Server.Status{
+              running: false,
+              relay_connected: false,
+              connected_peers: 0
+            },
+            remote_access_setting: true,
+            remote_access_source: :default,
+            remote_access_locked: false
+          ],
+          overrides
+        )
+      )
+    end
+
+    defp query(html, selector), do: html |> LazyHTML.from_fragment() |> LazyHTML.query(selector)
+
+    test "is disabled, badged ENV and explained" do
+      html = panel(remote_access_source: :env, remote_access_locked: true)
+
+      assert Enum.any?(query(html, "#remote-access-toggle[disabled]"))
+      assert Enum.any?(query(html, "#remote-access-env-note"))
+      assert html =~ "ENV"
+    end
+
+    test "is interactive otherwise" do
+      html = panel([])
+
+      refute Enum.any?(query(html, "#remote-access-toggle[disabled]"))
+      refute Enum.any?(query(html, "#remote-access-env-note"))
     end
   end
 end

@@ -14,6 +14,10 @@ defmodule Mydia.RemoteAccess.ClaimCodeTest do
     bypass = Bypass.open()
     user = user_fixture()
 
+    # The limiter lives in Mydia.Player.RemoteAccess.Supervisor, which does not
+    # start under mix test.
+    start_supervised!(Mydia.RemoteAccess.ClaimRateLimiter)
+
     set_remote_access(true)
     on_exit(&reset_remote_access/0)
 
