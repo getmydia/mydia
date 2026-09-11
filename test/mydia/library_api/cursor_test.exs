@@ -26,4 +26,13 @@ defmodule Mydia.LibraryApi.CursorTest do
   test "a cursor whose timestamp is not ISO8601 is an error" do
     assert Cursor.decode(Base.url_encode64("not-a-time|abc", padding: false)) == :error
   end
+
+  test "a cursor whose id is empty, malformed, or has another segment is an error" do
+    timestamp = "2026-09-11T00:00:00Z"
+
+    for id <- ["", "not-a-uuid", "9b1c0f4e-2a3b-4c5d-8e7f-0a1b2c3d4e5f|another"] do
+      cursor = Base.url_encode64("#{timestamp}|#{id}", padding: false)
+      assert Cursor.decode(cursor) == :error
+    end
+  end
 end

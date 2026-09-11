@@ -20,7 +20,8 @@ defmodule Mydia.LibraryApi.Cursor do
   def decode(cursor) when is_binary(cursor) do
     with {:ok, decoded} <- Base.url_decode64(cursor, padding: false),
          [timestamp, id] <- String.split(decoded, "|", parts: 2),
-         {:ok, updated_at, _offset} <- DateTime.from_iso8601(timestamp) do
+         {:ok, updated_at, _offset} <- DateTime.from_iso8601(timestamp),
+         {:ok, id} <- Ecto.UUID.cast(id) do
       {:ok, {updated_at, id}}
     else
       _ -> :error

@@ -6,7 +6,7 @@ defmodule MydiaWeb.LibrarySchema.LibraryTest do
   @admin %Principal{role: "admin", source: :api_key}
 
   @media_item """
-  query Item($id: ID, $type: MediaType, $tmdbId: Int, $tvdbId: Int, $imdbId: String) {
+  query Item($id: ID, $type: MediaType, $tmdbId: Int, $tvdbId: Int, $imdbId: String, $season: Int) {
     mediaItem(id: $id, type: $type, tmdbId: $tmdbId, tvdbId: $tvdbId, imdbId: $imdbId) {
       id
       type
@@ -14,7 +14,7 @@ defmodule MydiaWeb.LibrarySchema.LibraryTest do
       year
       monitored
       status { state monitored fileCount }
-      episodes { seasonNumber episodeNumber hasFile monitored }
+      episodes(season: $season) { seasonNumber episodeNumber hasFile monitored }
       qualityProfile { id name }
     }
   }
@@ -60,13 +60,14 @@ defmodule MydiaWeb.LibrarySchema.LibraryTest do
     assert status["fileCount"] == 1
   end
 
-  test "a tv show's episodes report hasFile and can be filtered by season" do
+  test "a tv show's episodes report hasFile and are filtered by season" do
     show = insert(:tv_show, title: "Severance")
     episode = insert(:episode, media_item: show, season_number: 1, episode_number: 1)
     insert(:media_file, episode: episode, media_item: nil)
+    insert(:episode, media_item: show, season_number: 2, episode_number: 1)
 
     assert {:ok, %{data: %{"mediaItem" => %{"episodes" => episodes}}}} =
-             run(@media_item, %{"id" => show.id})
+             run(@media_item, %{"id" => show.id, "season" => 1})
 
     assert [
              %{
@@ -81,6 +82,11 @@ defmodule MydiaWeb.LibrarySchema.LibraryTest do
   test "mediaItem returns nil for an unknown id" do
     assert {:ok, %{data: %{"mediaItem" => nil}}} =
              run(@media_item, %{"id" => Ecto.UUID.generate()})
+  end
+
+  test "mediaItem rejects a malformed id" do
+    assert {:ok, %{errors: errors}} = run(@media_item, %{"id" => "not-a-uuid"})
+    assert Enum.any?(errors, &(&1.extensions[:code] == "INVALID_INPUT"))
   end
 
   test "mediaItem accepts each external identifier selector" do
@@ -157,6 +163,13 @@ defmodule MydiaWeb.LibrarySchema.LibraryTest do
 
   test "an invalid cursor is an error rather than ignored" do
     assert {:ok, %{errors: errors}} = run(@media_items, %{"first" => 2, "after" => "garbage"})
+    assert Enum.any?(errors, &(&1.extensions[:code] == "INVALID_INPUT"))
+  end
+
+  test "mediaItems rejects a cursor with a malformed boundary id" do
+    cursor = Base.url_encode64("2026-09-11T00:00:00Z|not-a-uuid", padding: false)
+
+    assert {:ok, %{errors: errors}} = run(@media_items, %{"first" => 2, "after" => cursor})
     assert Enum.any?(errors, &(&1.extensions[:code] == "INVALID_INPUT"))
   end
 

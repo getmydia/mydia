@@ -40,16 +40,18 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
       {page, _rest} = Enum.split(rows, first)
       ids = Enum.map(page, & &1.id)
 
-      hydrated =
+      hydrated_by_id =
         ids
         |> case do
           [] -> []
           ids -> Media.list_media_items(ids: ids, preload: MediaItemView.preloads())
         end
         |> Map.new(&{&1.id, &1})
-        |> then(fn by_id -> Enum.map(page, &Map.fetch!(by_id, &1.id)) end)
 
-      {:ok, connection(hydrated, length(rows) > first)}
+      # Keep `page` as the cursor source: hydration can see a newer updated_at,
+      # or miss a row deleted after the keyset query. A cursor from either state
+      # could skip rows or crash pagination on a concurrent change.
+      {:ok, connection(page, hydrated_by_id, length(rows) > first)}
     end
   end
 
@@ -83,7 +85,13 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
 
     case provided do
       [{:id, id}] ->
-        {:ok, {:id, id}}
+        case Ecto.UUID.cast(id) do
+          {:ok, id} ->
+            {:ok, {:id, id}}
+
+          :error ->
+            {:error, %{message: "Invalid media item id", extensions: %{code: "INVALID_INPUT"}}}
+        end
 
       [{key, value}] when key in [:tmdb_id, :tvdb_id, :imdb_id] ->
         type = Map.get(args, :type)
@@ -143,16 +151,20 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
     end
   end
 
-  defp connection([], _has_next),
+  defp connection([], _hydrated_by_id, _has_next),
     do: %{edges: [], page_info: %{has_next_page: false, end_cursor: nil}}
 
-  defp connection(items, has_next) do
+  defp connection(page, hydrated_by_id, has_next) do
     edges =
-      Enum.map(items, fn item ->
-        %{node: MediaItemView.item_map(item), cursor: Cursor.encode(item.updated_at, item.id)}
-      end)
+      for boundary <- page,
+          {:ok, item} <- [Map.fetch(hydrated_by_id, boundary.id)] do
+        %{
+          node: MediaItemView.item_map(item),
+          cursor: Cursor.encode(boundary.updated_at, boundary.id)
+        }
+      end
 
-    last = List.last(items)
+    last = List.last(page)
 
     %{
       edges: edges,
