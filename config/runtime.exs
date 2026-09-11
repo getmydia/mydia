@@ -20,6 +20,8 @@ if System.get_env("PHX_SERVER") do
   config :mydia, MydiaWeb.Endpoint, server: true
 end
 
+config :mydia, :library_api_key, Mydia.Release.Env.fetch_optional_secret("LIBRARY_API_KEY")
+
 # Database adapter is configured at compile time only
 # The adapter cannot be changed at runtime - it's baked into the compiled release
 # Each Docker image is built for a specific database type

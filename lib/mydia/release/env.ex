@@ -75,6 +75,50 @@ defmodule Mydia.Release.Env do
     value
   end
 
+  @doc """
+  Fetches `env_var` as an optional secret: `nil` when it is unset, empty, or
+  whitespace-only, and a raised error when it is set but too short to be one.
+
+  The asymmetry is deliberate. Absence means the feature this variable enables
+  is off, which is a supported configuration. Presence means an operator
+  intended to turn it on, and a value that cannot be trusted is worse than no
+  value at all -- silently accepting a placeholder would leave the feature on
+  with a guessable credential.
+
+  ## Options
+
+    * `:min_length` - minimum character count after trimming whitespace.
+      Defaults to #{@default_min_secret_length}, the same floor
+      `mix phx.gen.secret` and `mix guardian.gen.secret` enforce.
+    * `:hint` - optional line appended to the error message.
+  """
+  @spec fetch_optional_secret(String.t(), keyword()) :: String.t() | nil
+  def fetch_optional_secret(env_var, opts \\ []) when is_binary(env_var) and is_list(opts) do
+    case System.get_env(env_var) do
+      nil ->
+        nil
+
+      value ->
+        if blank?(value) do
+          nil
+        else
+          min_length = Keyword.get(opts, :min_length, @default_min_secret_length)
+          hint = Keyword.get(opts, :hint)
+          trimmed_length = value |> String.trim() |> String.length()
+
+          if trimmed_length < min_length do
+            raise """
+            environment variable #{env_var} is too short (#{trimmed_length} character#{plural(trimmed_length)}; at least #{min_length} are required for a secret).
+
+            A short or predictable value here can be brute-forced or guessed.#{hint_line(hint)}
+            """
+          end
+
+          value
+        end
+    end
+  end
+
   defp blank?(value), do: String.trim(value) == ""
 
   defp raise_missing!(env_var, hint) do
