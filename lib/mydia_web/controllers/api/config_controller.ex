@@ -117,8 +117,9 @@ defmodule MydiaWeb.Api.ConfigController do
         })
 
       true ->
+        # Schemaless: a field the request left out is absent, not nil.
         validated_data = Ecto.Changeset.apply_changes(changeset)
-        perform_update(conn, key, validated_data.value, validated_data.description)
+        perform_update(conn, key, validated_data.value, Map.get(validated_data, :description))
     end
   end
 
@@ -407,7 +408,8 @@ defmodule MydiaWeb.Api.ConfigController do
          :general,
          :database,
          :logging,
-         :oban
+         :oban,
+         :remote_access
        ] do
       category_atom
     else
