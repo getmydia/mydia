@@ -164,6 +164,12 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
         }
       end
 
+    # A row missing from hydrated_by_id (deleted between the keyset query and
+    # the hydration query) is dropped from edges, but end_cursor still comes
+    # from the last keyset row below. This can return fewer than `first` edges
+    # with has_next_page: true. That's intentional: the cursor must track the
+    # true keyset position so the next page starts exactly where this one
+    # ended, not a position skewed by which rows happened to hydrate.
     last = List.last(page)
 
     %{

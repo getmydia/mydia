@@ -4,6 +4,10 @@ defmodule Mydia.Downloads.HistoryFilterTest do
   """
   use Mydia.DataCase, async: false
 
+  # Every zero-client test here hits History's "No download clients configured"
+  # warning by design; silence it instead of drowning real failures in noise.
+  @moduletag :capture_log
+
   import Mydia.Factory
 
   alias Mydia.Downloads

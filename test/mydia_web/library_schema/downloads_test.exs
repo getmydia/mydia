@@ -1,6 +1,10 @@
 defmodule MydiaWeb.LibrarySchema.DownloadsTest do
   use MydiaWeb.ConnCase
 
+  # Zero-client tests here hit History's "No download clients configured"
+  # warning by design; silence it instead of drowning real failures in noise.
+  @moduletag :capture_log
+
   import Mydia.Factory
 
   alias Mydia.LibraryApi.Principal
