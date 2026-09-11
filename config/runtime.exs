@@ -157,29 +157,42 @@ if config_env() == :prod do
   # Use 4443 to avoid conflict with metadata-relay on 4001
   https_port = String.to_integer(System.get_env("HTTPS_PORT") || "4443")
 
-  # Generate or load self-signed certificate for direct HTTPS access
-  {:ok, cert_path, key_path, _fingerprint} = Mydia.RemoteAccess.Certificates.ensure_certificate()
+  # The HTTPS listener and its self-signed certificate exist for the direct
+  # URLs a paired player connects to. With the player off neither is created.
+  https_config =
+    if player_enabled do
+      {:ok, cert_path, key_path, _fingerprint} =
+        Mydia.RemoteAccess.Certificates.ensure_certificate()
 
-  config :mydia, MydiaWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
-    http: [
-      # Bind on all interfaces using IPv4 by default (Docker compatible)
-      # Set PHX_IP="::" environment variable to use IPv6
-      # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
-      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: ip_tuple,
-      port: port
-    ],
-    https: [
-      # HTTPS endpoint using self-signed certificate
-      ip: ip_tuple,
-      port: https_port,
-      cipher_suite: :strong,
-      certfile: cert_path,
-      keyfile: key_path
-    ],
-    secret_key_base: secret_key_base,
-    check_origin: check_origin
+      [
+        https: [
+          # HTTPS endpoint using self-signed certificate
+          ip: ip_tuple,
+          port: https_port,
+          cipher_suite: :strong,
+          certfile: cert_path,
+          keyfile: key_path
+        ]
+      ]
+    else
+      []
+    end
+
+  config :mydia,
+         MydiaWeb.Endpoint,
+         [
+           url: [host: host, port: 443, scheme: "https"],
+           http: [
+             # Bind on all interfaces using IPv4 by default (Docker compatible)
+             # Set PHX_IP="::" environment variable to use IPv6
+             # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
+             # for details about using IPv6 vs IPv4 and loopback vs public addresses.
+             ip: ip_tuple,
+             port: port
+           ],
+           secret_key_base: secret_key_base,
+           check_origin: check_origin
+         ] ++ https_config
 
   # ## SSL Support
   #
@@ -354,18 +367,22 @@ if config_env() == :dev do
   http_port = String.to_integer(System.get_env("PORT") || "4000")
   https_port = String.to_integer(System.get_env("HTTPS_PORT") || "4443")
 
-  # Generate or load self-signed certificate
-  {:ok, cert_path, key_path, _fingerprint} = Mydia.RemoteAccess.Certificates.ensure_certificate()
+  # The HTTPS listener and its self-signed certificate exist for the direct
+  # URLs a paired player connects to. With the player off neither is created.
+  # (HTTP is already configured in dev.exs.)
+  if player_enabled do
+    {:ok, cert_path, key_path, _fingerprint} =
+      Mydia.RemoteAccess.Certificates.ensure_certificate()
 
-  # Configure HTTPS endpoint (HTTP is already configured in dev.exs)
-  config :mydia, MydiaWeb.Endpoint,
-    https: [
-      ip: {0, 0, 0, 0},
-      port: https_port,
-      cipher_suite: :strong,
-      certfile: cert_path,
-      keyfile: key_path
-    ]
+    config :mydia, MydiaWeb.Endpoint,
+      https: [
+        ip: {0, 0, 0, 0},
+        port: https_port,
+        cipher_suite: :strong,
+        certfile: cert_path,
+        keyfile: key_path
+      ]
+  end
 
   # Disable public IP detection in dev by default (usually not needed)
   public_ip_enabled =
