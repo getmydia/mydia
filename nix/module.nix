@@ -268,7 +268,7 @@ in
       default = { };
       description = "Extra environment variables to pass to the service";
       example = {
-        ENABLE_PLAYBACK = "true";
+        ENABLE_PLAYER = "false";
       };
     };
   };

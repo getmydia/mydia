@@ -66,6 +66,18 @@ stream sinks might benefit from sharing the app runtime. If blocking-thread
 exhaustion shows up under sustained streaming load, that is the trigger to
 promote `Host::new_with_handle`.
 
+## Stopping a host takes an explicit shutdown
+
+Dropping every `Host` handle ends the event loop, but on the server nothing drops
+them: the NIF's listener thread keeps its own clone of the host for as long as
+events arrive. `Mydia.P2p.Server.terminate/2` calls `stop_host/1`, which sends
+`Command::Shutdown`; the loop closes the endpoint and only then answers, so a
+restart on a fixed `P2P_BIND_PORT` never races the old socket.
+
+`LOG_TX` belongs to the newest host. A host started after another stopped takes
+the log channel over, and releasing the old sender is what closes the old
+channel and ends the old listener thread.
+
 ## send_request never dials, so player-to-player casting cannot work
 
 `handle_send_request` (`native/mydia_p2p_core/src/lib.rs`, around line 1558) looks

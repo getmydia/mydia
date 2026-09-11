@@ -25,26 +25,19 @@ from inside the TestFlight app, not from these links.
 
 ### Enable Remote Access
 
-Remote access is off by default and is turned on with an environment variable, not
-from the web interface. There is no in-app toggle: until the variable is set, the
-**Remote Access** tab is not rendered at all.
+Remote access is on by default. Switch it off or back on under **Admin ›
+Configuration › Remote Access**; the p2p node stops or starts right away, with no
+restart.
 
-1. Set `ENABLE_REMOTE_ACCESS=true` in your container environment:
+To pin it from the environment instead, set `ENABLE_REMOTE_ACCESS=true` or
+`ENABLE_REMOTE_ACCESS=false` on the container. The variable wins over the toggle,
+which then shows an **ENV** badge and cannot be changed.
 
-    ```yaml
-    services:
-      mydia:
-        environment:
-          - ENABLE_REMOTE_ACCESS=true
-    ```
-
-2. Restart Mydia. The p2p server starts with the application and announces itself.
-3. Go to **Admin > Configuration > Remote Access** in the web interface. The tab
-   appears only once the variable is set.
+`ENABLE_PLAYER=false` turns off the whole player, remote access included.
 
 Optionally set `P2P_BIND_PORT` to a fixed UDP port and forward it, which lets peers
 hole-punch a direct connection instead of falling back to a relay. See
-[Environment Variables](../reference/environment-variables.md) for both.
+[Environment Variables](../reference/environment-variables.md) for all three.
 
 ### Direct URLs
 
@@ -61,8 +54,8 @@ stands in for your instance's cryptographic node identity, which is far too long
 to type, and it is valid for **five minutes** and one use only. After pairing,
 the device holds a long-lived device token and the code is no longer involved.
 
-To generate one, open **Admin > Configuration > Remote Access** and use **Pair New
-Device**. Paired devices are listed on the same page, where you can revoke them
+To generate one, open **Devices** from the sidebar and use **Pair a new device**.
+Your paired devices are listed on the same page, where you can revoke them
 individually or clear the inactive ones.
 
 See [How Remote Access Works](../explanation/remote-access.md#claim-codes) for
@@ -72,8 +65,8 @@ why the window is so short.
 
 ### App won't connect
 
-1. **Check remote access is enabled** - if the **Remote Access** tab is missing from
-   Admin > Configuration, `ENABLE_REMOTE_ACCESS` is not set on the container
+1. **Check remote access is on** - the toggle under Admin > Configuration > Remote
+   Access. If the tab is missing, the whole player is off: `ENABLE_PLAYER=false`
 2. **Verify p2p server is running** - check logs for startup messages
 3. **Generate a fresh claim code** - codes expire five minutes after you create
    them and cannot be reused, so a code left on screen while you fetched your
