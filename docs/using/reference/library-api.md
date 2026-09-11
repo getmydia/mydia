@@ -43,6 +43,9 @@ call the player API's `createApiKey` mutation with `permissions: ["admin"]`.
 The owning user must be an admin. The plain key is shown once, in the
 mutation's response.
 
+With the player turned off (`ENABLE_PLAYER=false`) the player API answers 404, so
+this route is closed. Keys created earlier still work on the Library API.
+
 Alternatively, skip database keys entirely and set `LIBRARY_API_KEY` (below).
 
 ### `LIBRARY_API_KEY`
