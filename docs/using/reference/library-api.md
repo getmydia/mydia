@@ -19,10 +19,14 @@ Requests need `Content-Type: application/json` and an `x-api-key` header. The
 `api_key` query parameter is **not** accepted: query strings reach proxy and access
 logs, and this endpoint can change your library.
 
+The examples on this page read the key from `$LIBRARY_API_KEY` in your shell; set
+it to a database key's value or to the `LIBRARY_API_KEY` environment variable's
+value, whichever kind you're using.
+
 ```bash
 curl -s http://localhost:4000/api/library/graphql \
   -H 'content-type: application/json' \
-  -H "x-api-key: $MYDIA_LIBRARY_API_KEY" \
+  -H "x-api-key: $LIBRARY_API_KEY" \
   -d '{"query": "{ qualityProfiles { id name } }"}'
 ```
 
@@ -71,7 +75,7 @@ Fetch the schema itself for the authoritative list:
 ```bash
 curl -s http://localhost:4000/api/library/graphql \
   -H 'content-type: application/json' \
-  -H "x-api-key: $MYDIA_LIBRARY_API_KEY" \
+  -H "x-api-key: $LIBRARY_API_KEY" \
   -d '{"query": "{ __schema { queryType { fields { name } } } }"}'
 ```
 
