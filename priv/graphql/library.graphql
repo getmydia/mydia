@@ -16,7 +16,14 @@ type RootQueryType {
   mediaItem(id: ID, type: MediaType, tmdbId: Int, tvdbId: Int, imdbId: String): MediaItem
 
   "Media items changed recently, oldest first"
-  mediaItems(first: Int, after: String, updatedSince: DateTime): MediaItemConnection!
+  mediaItems(
+    first: Int
+
+    after: String
+
+    "Only items updated at or after this instant (inclusive)"
+    updatedSince: DateTime
+  ): MediaItemConnection!
 
   "The download queue and history. Contacts every configured client."
   downloads(filter: DownloadFilter): [Download!]!

@@ -65,7 +65,7 @@ See [Environment Variables](environment-variables.md) for the full entry.
 | --- | --- |
 | `lookup(query, type, year)` | Metadata-provider hits, each saying whether the library already has it |
 | `mediaItem(id \| tmdbId \| tvdbId \| imdbId)` | One item with its availability status and episodes |
-| `mediaItems(first, after, updatedSince)` | A page of items, oldest change first |
+| `mediaItems(first, after, updatedSince)` | A page of items, oldest change first (`updatedSince` is inclusive) |
 | `downloads(filter)` | The download queue and history |
 | `qualityProfiles` | Profiles available to assign |
 | `libraryPaths` | Library paths available to add into |
@@ -87,6 +87,10 @@ that can set a request header.
 - `downloads` contacts **every** configured download client on each call, so it is
   not paged and is the most expensive query here. Prefer `mediaItems(updatedSince:)`
   for polling a library's changes.
+- `updatedSince` is inclusive, so the item updated exactly at that instant comes
+  back again on the next poll if you just advance `updatedSince` to its `updatedAt`.
+  Keep the last page's `endCursor` and pass it as `after` on the next poll instead,
+  or dedupe by `id` if you re-poll from the last seen `updatedAt`.
 - `mediaItems` computes availability per item. `first` accepts 1 to 200; a value
   outside that range is rejected with `INVALID_INPUT` rather than clamped to it.
 

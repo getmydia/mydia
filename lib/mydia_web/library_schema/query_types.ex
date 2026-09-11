@@ -50,7 +50,10 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       meta(action: :read_library)
       arg(:first, :integer, default_value: 50)
       arg(:after, :string)
-      arg(:updated_since, :datetime)
+
+      arg(:updated_since, :datetime,
+        description: "Only items updated at or after this instant (inclusive)"
+      )
 
       # Absinthe defaults to 1 + child complexity; explicitly account for page
       # size, matching the resolver's default of 50 and cap of 200.
