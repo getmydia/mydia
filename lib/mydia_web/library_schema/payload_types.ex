@@ -47,6 +47,10 @@ defmodule MydiaWeb.LibrarySchema.PayloadTypes do
   @desc "The id of the media item a remove deleted"
   object :remove_media_item_payload do
     field :removed_id, :id
+
+    field :files_not_deleted, :integer,
+      description: "Files that could not be removed from disk. 0 when deleteFiles was false."
+
     field :user_errors, non_null(list_of(non_null(:user_error)))
   end
 end

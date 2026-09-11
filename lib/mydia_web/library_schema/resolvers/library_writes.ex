@@ -34,14 +34,19 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
         [delete_files: input[:delete_files] == true]
 
     with {:ok, item} <- Loaders.item(input.id, ["input", "id"]),
-         {:ok, _deleted, _disk_errors} <- Media.delete_media_item(item, opts) do
-      {:ok, %{removed_id: item.id, user_errors: []}}
+         {:ok, _deleted, disk_error_count} <- Media.delete_media_item(item, opts) do
+      {:ok, %{removed_id: item.id, files_not_deleted: disk_error_count, user_errors: []}}
     else
       {:error, %UserError{} = error} ->
-        {:ok, %{removed_id: nil, user_errors: [error]}}
+        {:ok, %{removed_id: nil, files_not_deleted: nil, user_errors: [error]}}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:ok, %{removed_id: nil, user_errors: UserError.from_changeset(changeset, ["input"])}}
+        {:ok,
+         %{
+           removed_id: nil,
+           files_not_deleted: nil,
+           user_errors: UserError.from_changeset(changeset, ["input"])
+         }}
     end
   end
 

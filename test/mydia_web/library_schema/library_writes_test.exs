@@ -208,6 +208,7 @@ defmodule MydiaWeb.LibrarySchema.LibraryWritesTest do
   mutation Remove($input: RemoveMediaItemInput!) {
     removeMediaItem(input: $input) {
       removedId
+      filesNotDeleted
       userErrors { field code }
     }
   }
@@ -220,7 +221,12 @@ defmodule MydiaWeb.LibrarySchema.LibraryWritesTest do
       assert {:ok, %{data: %{"removeMediaItem" => payload}}} =
                run(@remove, %{"input" => %{"id" => item.id}})
 
-      assert payload == %{"removedId" => item.id, "userErrors" => []}
+      assert payload == %{
+               "removedId" => item.id,
+               "filesNotDeleted" => 0,
+               "userErrors" => []
+             }
+
       assert Media.list_media_items(ids: [item.id]) == []
     end
 
@@ -230,6 +236,38 @@ defmodule MydiaWeb.LibrarySchema.LibraryWritesTest do
 
       assert payload["removedId"] == nil
       assert [%{"code" => "NOT_FOUND", "field" => ["input", "id"]}] = payload["userErrors"]
+    end
+
+    test "deleteFiles: true reports a file that could not be removed from disk" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "mydia_library_writes_del_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf(tmp) end)
+
+      library_path = insert(:library_path, path: tmp, type: :movies)
+      item = insert(:media_item, type: "movie")
+
+      # A directory at the file's relative path makes `File.rm` fail
+      # (`:eisdir`), the same trick test/mydia/media_test.exs uses to force a
+      # non-zero disk_error_count out of Media.delete_media_item/2.
+      File.mkdir_p!(Path.join(tmp, "as_dir.mkv"))
+
+      insert(:media_file,
+        media_item: item,
+        episode: nil,
+        library_path: library_path,
+        relative_path: "as_dir.mkv"
+      )
+
+      assert {:ok, %{data: %{"removeMediaItem" => payload}}} =
+               run(@remove, %{"input" => %{"id" => item.id, "deleteFiles" => true}})
+
+      assert payload["userErrors"] == []
+      assert payload["filesNotDeleted"] == 1
     end
   end
 end
