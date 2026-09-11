@@ -50,6 +50,27 @@ defmodule MydiaWeb.LibrarySchema.ComplexityTest do
     assert complexity(@page, %{"first" => 10_000}) == complexity(@page, %{"first" => 200})
   end
 
+  # Analysis runs before any resolver, so a zero or negative page must not lower
+  # the document's total: that would let expensive siblings such as downloads,
+  # which contacts every client, through a budget they exceed.
+  test "a non-positive first is priced as a page of one" do
+    assert complexity(@page, %{"first" => 0}) == complexity(@page, %{"first" => 1})
+    assert complexity(@page, %{"first" => -10_000}) == complexity(@page, %{"first" => 1})
+  end
+
+  test "a negative first cannot pay for sibling downloads calls" do
+    query = """
+    {
+      a: downloads { id }
+      b: downloads { id }
+      c: downloads { id }
+      offset: mediaItems(first: -10000) { edges { node { id } } }
+    }
+    """
+
+    assert complexity(query, %{}) > complexity("{ downloads { id } }", %{}) * 3
+  end
+
   test "downloads and lookup are per-call costs" do
     assert complexity("{ downloads { id } }", %{}) >= 50
     assert complexity(~s|{ lookup(query: "x", type: MOVIE) { providerId } }|, %{}) >= 20

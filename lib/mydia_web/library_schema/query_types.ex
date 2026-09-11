@@ -56,9 +56,11 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       )
 
       # Absinthe defaults to 1 + child complexity; explicitly account for page
-      # size, matching the resolver's default of 50 and cap of 200.
+      # size, matching the resolver's default of 50 and cap of 200. The floor of
+      # 1 matters because analysis runs before the resolver rejects a bad
+      # `first`: a zero or negative cost would offset expensive siblings.
       complexity(fn args, child_complexity ->
-        first = min(Map.get(args, :first) || 50, 200)
+        first = (Map.get(args, :first) || 50) |> min(200) |> max(1)
         first * child_complexity
       end)
 

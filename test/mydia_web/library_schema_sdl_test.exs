@@ -78,9 +78,19 @@ defmodule MydiaWeb.LibrarySchemaSdlTest do
 
     [_, root_query_content] = root_query_match
 
-    for field <- ~w(lookup mediaItem mediaItems downloads qualityProfiles libraryPaths) do
-      assert root_query_content =~ ~r/^\s+#{field}[:(]/m,
-             "the RootQueryType block has no `#{field}` query field"
-    end
+    # Fields sit at exactly two spaces; arguments of a multi-line field sit
+    # deeper and descriptions start with a quote, so neither is captured.
+    fields =
+      ~r/^  ([A-Za-z_][A-Za-z0-9_]*)[:(]/m
+      |> Regex.scan(root_query_content, capture: :all_but_first)
+      |> List.flatten()
+      |> MapSet.new()
+
+    approved = MapSet.new(~w(lookup mediaItem mediaItems downloads qualityProfiles libraryPaths))
+
+    assert fields == approved,
+           "the RootQueryType fields differ from the approved set. Missing: " <>
+             "#{inspect(approved |> MapSet.difference(fields) |> Enum.sort())}, unexpected: " <>
+             "#{inspect(fields |> MapSet.difference(approved) |> Enum.sort())}"
   end
 end
