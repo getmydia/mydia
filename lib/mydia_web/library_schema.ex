@@ -16,6 +16,7 @@ defmodule MydiaWeb.LibrarySchema do
   import_types(MydiaWeb.LibrarySchema.EnumTypes)
   import_types(MydiaWeb.LibrarySchema.ReferenceTypes)
   import_types(MydiaWeb.LibrarySchema.QueryTypes)
+  import_types(MydiaWeb.LibrarySchema.MediaTypes)
 
   @introspection_fields [:__schema, :__type, :__typename]
 
