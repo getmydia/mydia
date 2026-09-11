@@ -154,4 +154,53 @@ defmodule MydiaWeb.PlayerVisibilityTest do
     refute has_element?(dashboard, "#player-cta-banner")
     assert has_element?(dashboard, "#sidebar-player-link")
   end
+
+  describe "with the player off" do
+    setup do
+      disable_player()
+    end
+
+    test "every entry point is hidden", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      refute has_element?(view, "#sidebar-player-link")
+      refute has_element?(view, "#dock-player-link")
+      refute has_element?(view, "#player-cta-banner")
+      refute has_element?(view, ~s{a[href="/devices"]})
+    end
+
+    test "the profile drops the hide-player toggle", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      refute has_element?(view, "#hide-player-toggle")
+    end
+
+    test "the admin tabs drop Dashboard and Remote Access", %{conn: conn} do
+      start_supervised!(Mydia.Indexers.Health)
+      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+
+      refute has_element?(view, ~s{a[href="/admin/dashboard"]})
+      refute has_element?(view, ~s{a[href="/admin/config/remote-access"]})
+    end
+
+    test "admin settings drop the Streaming category", %{conn: conn} do
+      start_supervised!(Mydia.Indexers.Health)
+      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+
+      refute has_element?(view, "#hwaccel-status")
+    end
+  end
+
+  describe "with the player on" do
+    test "the Devices link and the admin tabs are there", %{conn: conn} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      {:ok, home, _html} = live(conn, ~p"/")
+      assert has_element?(home, ~s{a[href="/devices"]})
+
+      {:ok, settings, _html} = live(conn, ~p"/admin/config/settings")
+      assert has_element?(settings, ~s{a[href="/admin/dashboard"]})
+      assert has_element?(settings, "#hwaccel-status")
+    end
+  end
 end
