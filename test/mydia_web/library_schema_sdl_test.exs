@@ -68,8 +68,19 @@ defmodule MydiaWeb.LibrarySchemaSdlTest do
   test "the root query fields are exactly the approved ones" do
     sdl = Absinthe.Schema.to_sdl(MydiaWeb.LibrarySchema)
 
+    # Extract the RootQueryType block to avoid false matches in other types
+    # (e.g., mediaItem exists both as a root query and as a Download field)
+    root_query_match = Regex.run(~r/type RootQueryType \{(.*?)\n\}/s, sdl)
+
+    assert root_query_match != nil,
+           "could not find 'type RootQueryType { ... }' block in SDL. " <>
+             "The schema structure has changed unexpectedly."
+
+    [_, root_query_content] = root_query_match
+
     for field <- ~w(lookup mediaItem mediaItems downloads qualityProfiles libraryPaths) do
-      assert sdl =~ ~r/^\s+#{field}[:(]/m, "the SDL has no `#{field}` query field"
+      assert root_query_content =~ ~r/^\s+#{field}[:(]/m,
+             "the RootQueryType block has no `#{field}` query field"
     end
   end
 end
