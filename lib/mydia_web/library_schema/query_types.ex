@@ -21,6 +21,10 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       arg(:query, non_null(:string))
       arg(:type, non_null(:media_type))
       arg(:year, :integer)
+
+      # One relay round trip per call, independent of how many results come back.
+      complexity(20)
+
       resolve(&MydiaWeb.LibrarySchema.Resolvers.Lookup.lookup/3)
     end
 
@@ -41,7 +45,26 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       arg(:first, :integer, default_value: 50)
       arg(:after, :string)
       arg(:updated_since, :datetime)
+
+      # Absinthe defaults to 1 + child complexity; explicitly account for page
+      # size, matching the resolver's default of 50 and cap of 200.
+      complexity(fn args, child_complexity ->
+        first = min(Map.get(args, :first) || 50, 200)
+        first * child_complexity
+      end)
+
       resolve(&MydiaWeb.LibrarySchema.Resolvers.Library.media_items/3)
+    end
+
+    @desc "The download queue and history. Contacts every configured client."
+    field :downloads, non_null(list_of(non_null(:download))) do
+      meta(action: :read_downloads)
+      arg(:filter, :download_filter, default_value: :active)
+
+      # Every configured client is contacted, so cost is per call, not per row.
+      complexity(50)
+
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.Downloads.downloads/3)
     end
   end
 end

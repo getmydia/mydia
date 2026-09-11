@@ -385,7 +385,7 @@ defmodule MydiaWeb.Router do
     forward "/graphql", Absinthe.Plug,
       schema: MydiaWeb.LibrarySchema,
       analyze_complexity: true,
-      max_complexity: 1000
+      max_complexity: 2000
   end
 
   # Player API routes - authenticated with JWT, API key, or media token
