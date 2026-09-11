@@ -3150,27 +3150,16 @@ so opening both links leaves you a member of both. Leaving a track again is done
 from inside the TestFlight app, not from these links.</p>
 <h2 id="configuration">Configuration</h2>
 <h3 id="enable-remote-access">Enable Remote Access</h3>
-<p>Remote access is off by default and is turned on with an environment variable, not
-from the web interface. There is no in-app toggle: until the variable is set, the
-<strong>Remote Access</strong> tab is not rendered at all.</p>
-<ol>
-<li>
-<p>Set <code>ENABLE_REMOTE_ACCESS=true</code> in your container environment:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">services</span><span class="p">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">mydia</span><span class="p">:</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ENABLE_REMOTE_ACCESS=true</span>
-</code></pre></div>
-</li>
-<li>
-<p>Restart Mydia. The p2p server starts with the application and announces itself.</p>
-</li>
-<li>Go to <strong>Admin &gt; Configuration &gt; Remote Access</strong> in the web interface. The tab
-   appears only once the variable is set.</li>
-</ol>
+<p>Remote access is on by default. Switch it off or back on under <strong>Admin ›
+Configuration › Remote Access</strong>; the p2p node stops or starts right away, with no
+restart.</p>
+<p>To pin it from the environment instead, set <code>ENABLE_REMOTE_ACCESS=true</code> or
+<code>ENABLE_REMOTE_ACCESS=false</code> on the container. The variable wins over the toggle,
+which then shows an <strong>ENV</strong> badge and cannot be changed.</p>
+<p><code>ENABLE_PLAYER=false</code> turns off the whole player, remote access included.</p>
 <p>Optionally set <code>P2P_BIND_PORT</code> to a fixed UDP port and forward it, which lets peers
 hole-punch a direct connection instead of falling back to a relay. See
-<a href="../../reference/environment-variables/">Environment Variables</a> for both.</p>
+<a href="../../reference/environment-variables/">Environment Variables</a> for all three.</p>
 <h3 id="direct-urls">Direct URLs</h3>
 <p>Direct URLs are automatically detected from your instance's network configuration:
 - Local IP addresses (e.g., <code>https://192.168.1.100:4443</code>)
@@ -3182,16 +3171,16 @@ eight characters) that you generate on your instance and enter in the player. It
 stands in for your instance's cryptographic node identity, which is far too long
 to type, and it is valid for <strong>five minutes</strong> and one use only. After pairing,
 the device holds a long-lived device token and the code is no longer involved.</p>
-<p>To generate one, open <strong>Admin &gt; Configuration &gt; Remote Access</strong> and use <strong>Pair New
-Device</strong>. Paired devices are listed on the same page, where you can revoke them
+<p>To generate one, open <strong>Devices</strong> from the sidebar and use <strong>Pair a new device</strong>.
+Your paired devices are listed on the same page, where you can revoke them
 individually or clear the inactive ones.</p>
 <p>See <a href="../../explanation/remote-access/#claim-codes">How Remote Access Works</a> for
 why the window is so short.</p>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="app-wont-connect">App won't connect</h3>
 <ol>
-<li><strong>Check remote access is enabled</strong> - if the <strong>Remote Access</strong> tab is missing from
-   Admin &gt; Configuration, <code>ENABLE_REMOTE_ACCESS</code> is not set on the container</li>
+<li><strong>Check remote access is on</strong> - the toggle under Admin &gt; Configuration &gt; Remote
+   Access. If the tab is missing, the whole player is off: <code>ENABLE_PLAYER=false</code></li>
 <li><strong>Verify p2p server is running</strong> - check logs for startup messages</li>
 <li><strong>Generate a fresh claim code</strong> - codes expire five minutes after you create
    them and cannot be reused, so a code left on screen while you fetched your

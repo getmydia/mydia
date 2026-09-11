@@ -3617,8 +3617,8 @@ regardless of what you set here. If you serve Mydia over plain http, set
 </thead>
 <tbody>
 <tr>
-<td><code>ENABLE_PLAYBACK</code></td>
-<td>Enable media playback controls and HLS streaming</td>
+<td><code>ENABLE_PLAYER</code></td>
+<td>Everything that serves the Mydia player: p2p remote access and pairing, streaming, offline downloads, intro and credits detection, and the player's pages and buttons</td>
 <td><code>true</code></td>
 </tr>
 <tr>
@@ -3633,11 +3633,17 @@ regardless of what you set here. If you serve Mydia over plain http, set
 </tr>
 <tr>
 <td><code>ENABLE_REMOTE_ACCESS</code></td>
-<td>Enable P2P remote access for the Flutter player</td>
-<td><code>false</code></td>
+<td>P2P remote access for the player. Also a toggle under <strong>Admin › Configuration › Remote Access</strong>; when the variable is set it wins and the toggle is locked</td>
+<td><code>true</code></td>
 </tr>
 </tbody>
 </table>
+<p><code>ENABLE_PLAYER=false</code> is for servers nobody plays from. Mydia then starts no p2p
+node, answers 404 on the player's routes, and hides the Player and Devices
+entries. It accepts <code>true</code>, <code>false</code>, <code>1</code> and <code>0</code>, and refuses to start on
+anything else, so a typo cannot leave the player running. It is read at
+startup, so changing it takes a restart.</p>
+<p><code>ENABLE_PLAYBACK</code> is gone. If you set it, Mydia logs a warning and ignores it.</p>
 <h2 id="import-lists">Import Lists</h2>
 <table>
 <thead>
