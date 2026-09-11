@@ -40,7 +40,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFilePathTest do
     [
       file: file,
       episode: %Episode{id: "ep-1", monitored: true, media_files: [file]},
-      playback_enabled: false,
+      player_enabled: false,
       transcode_jobs: []
     ]
   end

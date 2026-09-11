@@ -48,7 +48,7 @@ defmodule MydiaWeb.AdminSettingsLiveInvalidSettingsTest do
 
     # Scope to this setting's own row via its value control's phx-value-key,
     # climbing to the row content div that also holds the source badge.
-    # setting_source_badge/1 (components.ex) renders :database as
+    # config_source_badge/1 (admin_components.ex) renders :database as
     # `badge badge-primary`, everything else (including :default) as
     # `badge badge-ghost`.
     row_html =

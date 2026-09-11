@@ -6,6 +6,9 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
 
   attr :ra_config, :map, required: true
   attr :p2p_status, :map, required: true
+  attr :remote_access_setting, :boolean, required: true
+  attr :remote_access_source, :atom, default: :default
+  attr :remote_access_locked, :boolean, default: false
   attr :show_add_url_modal, :boolean, default: false
   attr :new_url, :string, default: ""
   attr :show_advanced, :boolean, default: false
@@ -13,8 +16,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
   def remote_access_panel(assigns) do
     # Check if P2P is running
     p2p_running =
-      assigns.ra_config && assigns.ra_config.enabled && assigns.p2p_status &&
-        assigns.p2p_status.running
+      assigns.remote_access_setting && assigns.p2p_status && assigns.p2p_status.running
 
     # Pairing requires relay to be connected (so we can produce a node_addr)
     pairing_available = p2p_running && assigns.p2p_status.relay_connected
@@ -39,21 +41,21 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
         <div class="flex items-center gap-3">
           <div class={[
             "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
-            if(@ra_config && @ra_config.enabled && @pairing_available,
+            if(@remote_access_setting && @pairing_available,
               do: "bg-success/15",
               else: "bg-base-300"
             )
           ]}>
             <.icon
               name="hero-signal"
-              class={"w-5 h-5 #{if @ra_config && @ra_config.enabled && @pairing_available, do: "text-success", else: "opacity-50"}"}
+              class={"w-5 h-5 #{if @remote_access_setting && @pairing_available, do: "text-success", else: "opacity-50"}"}
             />
           </div>
           <div>
             <h2 class="font-semibold">Player Remote Access</h2>
             <p class="text-xs text-base-content/50">
               <%= cond do %>
-                <% !(@ra_config && @ra_config.enabled) -> %>
+                <% !@remote_access_setting -> %>
                   Connect mobile apps from anywhere
                 <% @pairing_available -> %>
                   Players can connect via P2P
@@ -65,17 +67,25 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
             </p>
           </div>
         </div>
-        <input
-          type="checkbox"
-          id="remote-access-toggle"
-          class="toggle toggle-success"
-          checked={@ra_config && @ra_config.enabled}
-          phx-click="toggle_remote_access"
-          phx-value-enabled={to_string(!(@ra_config && @ra_config.enabled))}
-        />
+        <div class="flex items-center gap-2">
+          <.config_source_badge source={@remote_access_source} size="xs" />
+          <input
+            type="checkbox"
+            id="remote-access-toggle"
+            class="toggle toggle-success"
+            checked={@remote_access_setting}
+            disabled={@remote_access_locked}
+            phx-click="toggle_remote_access"
+            phx-value-enabled={to_string(!@remote_access_setting)}
+          />
+        </div>
       </div>
 
-      <%= if @ra_config && @ra_config.enabled do %>
+      <p :if={@remote_access_locked} id="remote-access-env-note" class="text-xs text-base-content/60">
+        Set by <code>ENABLE_REMOTE_ACCESS</code>. Remove the variable to change it here.
+      </p>
+
+      <%= if @remote_access_setting && @ra_config do %>
         <%!-- Status Row --%>
         <div class="space-y-3">
           <%!-- Status Card --%>

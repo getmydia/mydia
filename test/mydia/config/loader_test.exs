@@ -49,7 +49,8 @@ defmodule Mydia.Config.LoaderTest do
         "SUBTITLE_LANGUAGE",
         "DEFAULT_SEASON_MONITORING",
         "HWACCEL",
-        "HWACCEL_DEVICE"
+        "HWACCEL_DEVICE",
+        "ENABLE_REMOTE_ACCESS"
       ] ++ download_client_vars ++ library_path_vars
 
     # Store original values
@@ -1254,6 +1255,34 @@ defmodule Mydia.Config.LoaderTest do
       {:ok, config} = Mydia.Config.Loader.load(sources: [:env])
 
       assert config.media.default_season_monitoring == "first"
+    end
+  end
+
+  describe "remote_access" do
+    test "defaults to on" do
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.remote_access.enabled == true
+    end
+
+    test "ENABLE_REMOTE_ACCESS overrides it" do
+      System.put_env("ENABLE_REMOTE_ACCESS", "false")
+
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.remote_access.enabled == false
+    end
+
+    test "an unreadable ENABLE_REMOTE_ACCESS fails validation instead of defaulting on" do
+      System.put_env("ENABLE_REMOTE_ACCESS", "flase")
+
+      assert {:error, %Ecto.Changeset{valid?: false}} =
+               Loader.load(config_file: "nonexistent.yml")
+    end
+
+    test "an empty ENABLE_REMOTE_ACCESS is treated as unset" do
+      System.put_env("ENABLE_REMOTE_ACCESS", "")
+
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.remote_access.enabled == true
     end
   end
 end

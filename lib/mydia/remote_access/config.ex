@@ -15,7 +15,6 @@ defmodule Mydia.RemoteAccess.Config do
   @type t :: %__MODULE__{
           id: binary(),
           instance_id: String.t() | nil,
-          enabled: boolean(),
           direct_urls: [String.t()],
           cert_fingerprint: String.t() | nil,
           inserted_at: DateTime.t(),
@@ -24,7 +23,6 @@ defmodule Mydia.RemoteAccess.Config do
 
   schema "remote_access_config" do
     field :instance_id, :string
-    field :enabled, :boolean, default: true
     field :direct_urls, {:array, :string}, default: []
     field :cert_fingerprint, :string
 
@@ -38,20 +36,12 @@ defmodule Mydia.RemoteAccess.Config do
     config
     |> cast(attrs, [
       :instance_id,
-      :enabled,
       :direct_urls,
       :cert_fingerprint
     ])
     |> validate_required([:instance_id])
     |> validate_length(:instance_id, min: 1, max: 255)
     |> unique_constraint(:instance_id)
-  end
-
-  @doc """
-  Changeset for toggling remote access enabled state.
-  """
-  def toggle_enabled_changeset(config, enabled) when is_boolean(enabled) do
-    change(config, enabled: enabled)
   end
 
   @doc """

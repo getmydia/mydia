@@ -58,7 +58,7 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
                   <div class="flex-1 min-w-0">
                     <div class="font-medium flex items-center gap-2 flex-wrap">
                       {setting.label}
-                      <.setting_source_badge source={setting.source} />
+                      <.config_source_badge source={setting.source} />
                     </div>
                     <div class="text-xs opacity-50 font-mono truncate">{setting.key}</div>
                     <%= if Map.get(setting, :description) do %>
@@ -257,23 +257,6 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
         </label>
       <% true -> %>
         <kbd class="kbd kbd-sm font-mono">{@setting.value}</kbd>
-    <% end %>
-    """
-  end
-
-  attr :source, :atom, required: true
-
-  defp setting_source_badge(assigns) do
-    ~H"""
-    <%= case @source do %>
-      <% :env -> %>
-        <span class="badge badge-info badge-sm">ENV</span>
-      <% :database -> %>
-        <span class="badge badge-primary badge-sm">DB</span>
-      <% :yaml -> %>
-        <span class="badge badge-secondary badge-sm">YAML</span>
-      <% _ -> %>
-        <span class="badge badge-ghost badge-sm">Default</span>
     <% end %>
     """
   end

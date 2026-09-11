@@ -87,6 +87,13 @@ defmodule MydiaWeb.Router do
     plug MydiaWeb.Plugs.MediaAuth, permissions: ["download"]
   end
 
+  # The player's routes. With the player off (ENABLE_PLAYER=false) they answer
+  # 404 before authentication runs. Listed first in every pipe_through that
+  # uses it. See MydiaWeb.Plugs.RequirePlayer.
+  pipeline :player do
+    plug MydiaWeb.Plugs.RequirePlayer
+  end
+
   # Health check endpoint (no authentication required)
   scope "/", MydiaWeb do
     pipe_through :api
@@ -129,7 +136,7 @@ defmodule MydiaWeb.Router do
 
   # Flutter player web app (authenticated)
   scope "/", MydiaWeb do
-    pipe_through [:browser, :auth, :require_authenticated]
+    pipe_through [:player, :browser, :auth, :require_authenticated]
 
     get "/player", PlayerController, :index
     get "/player/*path", PlayerController, :index
@@ -267,6 +274,13 @@ defmodule MydiaWeb.Router do
     # Media items
     get "/media/:id", MediaController, :show
     post "/media/:id/match", MediaController, :match
+  end
+
+  # The player's share of /api/v1: playback progress, trickplay thumbnails and
+  # offline downloads. Split from the scope above so the :player gate covers
+  # these and nothing else there.
+  scope "/api/v1", MydiaWeb.Api do
+    pipe_through [:player, :api, :api_auth, :require_authenticated]
 
     # Playback progress
     get "/playback/movie/:id", PlaybackController, :show_movie
@@ -293,7 +307,7 @@ defmodule MydiaWeb.Router do
   # above). Kept in its own scope, deliberately apart from the download-job
   # management routes above, which stay session/API-key only.
   scope "/api/v1", MydiaWeb.Api do
-    pipe_through [:api, :media_download_auth, :require_authenticated]
+    pipe_through [:player, :api, :media_download_auth, :require_authenticated]
 
     get "/download/job/:job_id/file", DownloadController, :download_file
   end
@@ -301,7 +315,7 @@ defmodule MydiaWeb.Router do
   # Streaming routes - supports JWT, API keys, and media tokens (for remote devices)
   # Media tokens allow remote devices to stream content via direct HTTP requests
   scope "/api/v1", MydiaWeb.Api do
-    pipe_through [:api, :media_api_auth, :require_authenticated]
+    pipe_through [:player, :api, :media_api_auth, :require_authenticated]
 
     # Streaming
     get "/stream/movie/:id", StreamController, :stream_movie
@@ -340,7 +354,7 @@ defmodule MydiaWeb.Router do
   # media token alone. Individual resolvers check for authentication and
   # return :unauthorized if needed.
   scope "/api/graphql" do
-    pipe_through [:graphql, :api_auth, :graphql_context]
+    pipe_through [:player, :graphql, :api_auth, :graphql_context]
 
     forward "/", Absinthe.Plug,
       schema: MydiaWeb.Schema,
@@ -351,7 +365,7 @@ defmodule MydiaWeb.Router do
   # GraphiQL interface for development
   if Application.compile_env(:mydia, :dev_routes) do
     scope "/api" do
-      pipe_through [:graphql, :api_auth, :graphql_context]
+      pipe_through [:player, :graphql, :api_auth, :graphql_context]
 
       forward "/graphiql", Absinthe.Plug.GraphiQL,
         schema: MydiaWeb.Schema,
@@ -369,7 +383,7 @@ defmodule MydiaWeb.Router do
   # scope needs the same media-token compatibility as the streaming scope
   # above rather than plain :api_auth.
   scope "/api/player/v1", MydiaWeb.Api.Player.V1 do
-    pipe_through [:api, :media_api_auth, :require_authenticated]
+    pipe_through [:player, :api, :media_api_auth, :require_authenticated]
 
     # Subtitles - serves actual subtitle files (URLs provided by GraphQL)
     get "/subtitles/:type/:id", SubtitleController, :index

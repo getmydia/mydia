@@ -144,7 +144,7 @@ defmodule MydiaWeb.Layouts do
                 <h1 class="text-2xl font-bold">Mydia</h1>
               </div>
               <a
-                :if={!@hide_player}
+                :if={!@hide_player and Mydia.Player.enabled?()}
                 id="sidebar-player-link"
                 href="/player"
                 class="btn btn-primary btn-sm gap-1.5 rounded-full shadow-sm hover:shadow-md transition-shadow"
@@ -274,7 +274,7 @@ defmodule MydiaWeb.Layouts do
                   <.icon name="hero-puzzle-piece" class="w-5 h-5" /> Integrations
                 </.link>
               </li>
-              <li>
+              <li :if={Mydia.Player.enabled?()}>
                 <.link
                   navigate="/devices"
                   class={nav_active?(@current_path, "/devices", false) && "active"}
@@ -630,7 +630,7 @@ defmodule MydiaWeb.Layouts do
           label="Downloads"
         />
         <a
-          :if={!@hide_player}
+          :if={!@hide_player and Mydia.Player.enabled?()}
           id="dock-player-link"
           href="/player"
           data-dock-link

@@ -291,7 +291,7 @@ defmodule MydiaWeb.DevicesLiveTest do
   describe "pairing card relay status" do
     defp pairing_assigns(status) do
       [
-        ra_config: %Mydia.RemoteAccess.Config{enabled: true, instance_id: "test-instance"},
+        ra_config: %Mydia.RemoteAccess.Config{instance_id: "test-instance"},
         p2p_status: %{
           running: true,
           relay_connected: true,
@@ -344,6 +344,27 @@ defmodule MydiaWeb.DevicesLiveTest do
       assert html =~ ~s(id="claim-code")
       assert html =~ "<svg"
       refute html =~ ~s(id="pairing-relay-warning")
+    end
+
+    test "an administrator is sent to the switch when remote access is off" do
+      html =
+        render_component(
+          &MydiaWeb.DevicesLive.PairingComponents.pairing_card/1,
+          Keyword.merge(pairing_assigns(nil), remote_access_enabled: false, admin: true)
+        )
+
+      assert html =~ ~s(href="/admin/config/remote-access")
+    end
+
+    test "anyone else is told to ask an administrator" do
+      html =
+        render_component(
+          &MydiaWeb.DevicesLive.PairingComponents.pairing_card/1,
+          Keyword.merge(pairing_assigns(nil), remote_access_enabled: false, admin: false)
+        )
+
+      refute html =~ ~s(href="/admin/config/remote-access")
+      assert html =~ "Ask an administrator"
     end
   end
 end

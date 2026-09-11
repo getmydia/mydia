@@ -32,6 +32,7 @@ defmodule MydiaWeb.ConnCase do
       import Mydia.ConfigHelpers
       import Mydia.Factory
       import Mydia.RemoteAccessHelpers
+      import Mydia.PlayerHelpers
     end
   end
 

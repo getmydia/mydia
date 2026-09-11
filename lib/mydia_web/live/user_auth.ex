@@ -252,13 +252,24 @@ defmodule MydiaWeb.Live.UserAuth do
   # No connected?/1 gate: unlike assign_changelog_notice/1 this only reads, so
   # there is no write to defer to the connected render. This on_mount covers the
   # whole of live_session :authenticated, so every role gets the assigns.
+  #
+  # :hide_player folds in the server switch: with the player off every entry
+  # point is hidden for every user, so templates that already test @hide_player
+  # need nothing else. :player_enabled is for the surfaces the per-user
+  # preference leaves alone on purpose, such as Play buttons and admin tabs.
   defp assign_player_ui(socket) do
+    player_enabled = Mydia.Player.enabled?()
+
     case socket.assigns do
       %{current_user: %Mydia.Accounts.User{} = user} ->
         pref = Mydia.Accounts.get_user_preference!(user)
 
         socket
-        |> assign(:hide_player, Mydia.Accounts.UserPreference.hide_player?(pref))
+        |> assign(:player_enabled, player_enabled)
+        |> assign(
+          :hide_player,
+          not player_enabled or Mydia.Accounts.UserPreference.hide_player?(pref)
+        )
         |> assign(
           :player_banner_dismissed,
           Mydia.Accounts.UserPreference.player_banner_dismissed?(pref)
@@ -266,7 +277,8 @@ defmodule MydiaWeb.Live.UserAuth do
 
       _ ->
         socket
-        |> assign(:hide_player, false)
+        |> assign(:player_enabled, player_enabled)
+        |> assign(:hide_player, not player_enabled)
         |> assign(:player_banner_dismissed, false)
     end
   end

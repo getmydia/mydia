@@ -2279,6 +2279,24 @@ defmodule Mydia.SettingsTest do
     end
   end
 
+  describe "env_var_set?/2" do
+    test "is set for a present, non-empty value" do
+      assert Settings.env_var_set?("ENABLE_REMOTE_ACCESS", fn "ENABLE_REMOTE_ACCESS" -> "true" end)
+    end
+
+    test "is unset for an empty value" do
+      refute Settings.env_var_set?("ENABLE_REMOTE_ACCESS", fn "ENABLE_REMOTE_ACCESS" -> "" end)
+    end
+
+    test "is unset for a nil value" do
+      refute Settings.env_var_set?("ENABLE_REMOTE_ACCESS", fn "ENABLE_REMOTE_ACCESS" -> nil end)
+    end
+
+    test "is unset for a nil name" do
+      refute Settings.env_var_set?(nil, fn _ -> "true" end)
+    end
+  end
+
   describe "upsert_config_setting/1" do
     test "creates a row when the key is absent, persisting the supplied category" do
       assert {:ok, setting} =

@@ -54,7 +54,7 @@ Every option lives under `services.mydia`.
 
 `extraEnvironment` is the escape hatch: anything in
 [Environment Variables](../reference/environment-variables.md) can be set through
-it, including feature flags such as `ENABLE_REMOTE_ACCESS`.
+it, including feature flags such as `ENABLE_PLAYER` and `ENABLE_REMOTE_ACCESS`.
 
 ### Secrets
 

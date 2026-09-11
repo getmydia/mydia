@@ -18,6 +18,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
   attr :ra_config, :map, default: nil
   attr :p2p_status, :map, default: nil
   attr :remote_access_enabled, :boolean, required: true
+  attr :admin, :boolean, default: false, doc: "whether the viewer can turn remote access on"
   attr :claim_code, :string, default: nil
   attr :claim_code_rendezvous_status, :any, default: nil
   attr :claim_expires_at, :any, default: nil
@@ -79,8 +80,18 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                 <%= if @remote_access_enabled do %>
                   Connecting to the relay. Try again in a moment.
                 <% else %>
-                  Remote access is turned off on this server. Ask an administrator to turn it on
-                  before connecting a player.
+                  Remote access is turned off on this server.
+                  <%= if @admin do %>
+                    <.link
+                      id="pairing-enable-remote-access"
+                      navigate={~p"/admin/config/remote-access"}
+                      class="link link-primary"
+                    >
+                      Turn it on
+                    </.link>
+                  <% else %>
+                    Ask an administrator to turn it on before connecting a player.
+                  <% end %>
                 <% end %>
               </div>
             </div>

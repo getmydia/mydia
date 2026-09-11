@@ -107,11 +107,13 @@ config :mydia, Mydia.RemoteAccess.MediaToken,
 # P2P keypair path for tests - use a temp directory
 config :mydia, :p2p_keypair_path, "/tmp/mydia_test_p2p_keypair.bin"
 
-# Remote access stays off in tests. With it on, Mydia.P2p.Server starts for every
-# test run, which loads the Rustler NIF, opens an iroh endpoint and dials
-# cae1-1.relay.mydia.dev. Tests that need the flag on set it through
+# Remote access stays off in tests. With it on, the remote-access subtree starts
+# Mydia.P2p.Server for every test run, which loads the Rustler NIF, opens an
+# iroh endpoint and dials cae1-1.relay.mydia.dev. This keeps
+# Mydia.Player.RemoteAccess.enabled?/0 false and the subtree ignored at boot.
+# Tests that need remote access on set it through
 # Mydia.RemoteAccessHelpers.set_remote_access/1 instead.
-config :mydia, :features, remote_access_enabled: false
+config :mydia, Mydia.Player, start_remote_access: false
 
 # Keep Tower from shipping crash reports during the test suite: register no
 # real reporter (the in-memory ephemeral reporter is a no-op for our purposes)

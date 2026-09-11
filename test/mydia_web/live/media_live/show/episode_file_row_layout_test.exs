@@ -62,7 +62,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeFileRowLayoutTest do
       episodes: [episode(media_files: [media_file()])],
       expanded?: true,
       expanded_episodes: MapSet.new(["ep-1"]),
-      playback_enabled: true,
+      player_enabled: true,
       segment_detection_available: false
     )
   end

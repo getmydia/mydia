@@ -24,6 +24,9 @@ defmodule Mydia.Application do
     # Store validated config in Application environment for fast access
     Application.put_env(:mydia, :runtime_config, config)
 
+    # One line saying what ENABLE_PLAYER left out, before anything starts.
+    Mydia.Player.log_boot_state()
+
     children = children()
 
     # Attached before the supervisor starts, unlike its sibling
@@ -61,8 +64,6 @@ defmodule Mydia.Application do
       Mydia.MediaServer.Plex.Endpoint.init_cache()
       # Rehydrate installed WASM plugins into the runtime registry
       Mydia.Plugins.register_plugins()
-      # Start relay service if remote access is enabled (requires Repo to be running)
-      start_relay_if_enabled()
       # Ensure default quality profiles exist (skip in test environment)
       if Application.get_env(:mydia, :start_health_monitors, true) do
         ensure_default_quality_profiles()
@@ -126,7 +127,6 @@ defmodule Mydia.Application do
       # run. Returns :ignore once done. See the module doc.
       {Mydia.Config.Bootstrap, skip: skip_config_merge?()}
     ] ++
-      hardware_accel_children() ++
       [
         # Releases import runs whose coordinator died with the previous node.
         # Must run after the migrator (it queries import_runs) and before the
@@ -167,22 +167,9 @@ defmodule Mydia.Application do
         # Per-plugin invocation single-flight lock (U4): serializes on-event /
         # on-schedule / inline calls for one plugin so shared KV state is safe.
         Mydia.Plugins.SingleFlight,
-        # Separate named lock instance serializing session subtitle extraction
-        # (see Mydia.Streaming.SessionSubtitles). A slow ffmpeg extraction must
-        # never make a plugin invocation wait behind it, hence its own instance
-        # rather than sharing the plugin host's lock above. The explicit :id
-        # disambiguates it from the SingleFlight child above: both default to
-        # the module name as their child id, which the supervisor rejects as
-        # a duplicate.
-        Supervisor.child_spec({Mydia.Plugins.SingleFlight, name: Mydia.Streaming.SubtitleLock},
-          id: Mydia.Streaming.SubtitleLock
-        ),
         # Fans "events:all" out to subscribed plugins (U5). Replaces the Luerl
         # hooks manager removed in U11.
         Mydia.Plugins.Dispatcher,
-        {Registry, keys: :unique, name: Mydia.Streaming.HlsSessionRegistry},
-        Mydia.Streaming.HlsSessionSupervisor,
-        {Registry, keys: :unique, name: Mydia.Downloads.TranscodeRegistry},
         {Registry, keys: :unique, name: Mydia.Downloads.Client.Debrid.FetcherRegistry},
         {DynamicSupervisor,
          name: Mydia.Downloads.Client.Debrid.FetcherSupervisor, strategy: :one_for_one},
@@ -190,30 +177,23 @@ defmodule Mydia.Application do
         {Registry, keys: :unique, name: Mydia.Downloads.Seedbox.FetcherRegistry},
         {DynamicSupervisor,
          name: Mydia.Downloads.Seedbox.FetcherSupervisor, strategy: :one_for_one},
-        Mydia.Downloads.JobManager,
         Mydia.CrashReporter.Throttle,
         Mydia.CrashReporter.Queue,
-        Mydia.RemoteAccess.ClaimRateLimiter,
-        Mydia.Accounts.ApiKeyRateLimiter,
-        {Registry, keys: :unique, name: Mydia.DynamicSupervisorRegistry},
-        {DynamicSupervisor,
-         name: {:via, Registry, {Mydia.DynamicSupervisorRegistry, :relay}}, strategy: :one_for_one}
+        Mydia.Accounts.ApiKeyRateLimiter
       ] ++
-      remote_access_children() ++
+      Mydia.Player.children() ++
       client_health_children() ++
       indexer_health_children() ++
       media_server_health_children() ++
-      relay_children() ++
       oban_children(oban_config) ++
       oidc_children() ++
       [
         # Start a worker by calling: Mydia.Worker.start_link(arg)
         # {Mydia.Worker, arg},
         # Start to serve requests, typically the last entry
-        MydiaWeb.Endpoint,
-        # Absinthe subscriptions must start after the Endpoint
-        {Absinthe.Subscription, MydiaWeb.Endpoint}
-      ]
+        MydiaWeb.Endpoint
+      ] ++
+      absinthe_subscription_children()
   end
 
   # Tell Phoenix to update the endpoint configuration
@@ -224,62 +204,12 @@ defmodule Mydia.Application do
     :ok
   end
 
-  defp remote_access_children do
-    # Only start P2P server and related processes if remote access is enabled
-    if Application.get_env(:mydia, :features)[:remote_access_enabled] do
-      [
-        # Must precede P2p.Server: it creates the instance identity the p2p node
-        # and every pairing depend on, and seeds RemoteAccess.enabled?/0.
-        Mydia.RemoteAccess.Provision,
-        # Serves peer requests off Mydia.P2p.Server. Bounded because iroh gates
-        # inbound connections on ALPN alone, so a peer needs no credential to
-        # make the host spawn these, and `max_children` is what keeps that from
-        # becoming the third memory-exhaustion hole in this subsystem. Over the
-        # limit the request is refused rather than queued.
-        #
-        # Two children per in-flight request, so this caps concurrency at 256:
-        # one runs the handler, the other waits on it with a deadline and kills
-        # it if it hangs. A handler blocked on an unresponsive filesystem
-        # returns on its own schedule or never, and a bound whose slots never
-        # come back just fails every later request instead.
-        {Task.Supervisor, name: Mydia.P2p.RequestSupervisor, max_children: 512},
-        # HLS byte-serving, kept off RequestSupervisor on purpose. These tasks
-        # are long-lived where a request handler is not: one may sit in
-        # `HlsSession.await_ready/2` for the whole readiness budget waiting on a
-        # cold encoder, then stream a segment. Sharing the request pool would let
-        # a stalled encoder's backlog fill it and start refusing GraphQL, so the
-        # two get separate budgets and a stream backlog can only exhaust its own.
-        #
-        # One child per in-flight stream request here, not two, since nothing
-        # wraps these with a deadline: the readiness wait is the bound.
-        {Task.Supervisor, name: Mydia.P2p.StreamSupervisor, max_children: 256},
-        Mydia.P2p.Server,
-        # Resume active pairing claims on startup
-        Mydia.RemoteAccess.ResumeClaims
-      ]
-    else
-      []
-    end
-  end
-
-  # Probes the host's video hardware once and caches the answer. Must sit after
-  # Config.Bootstrap, which merges the database layer carrying HWACCEL and
-  # HWACCEL_DEVICE. Probing costs one to three seconds and runs in
-  # handle_continue, so it delays only the first caller asking for
-  # capabilities, not the rest of the tree.
-  #
-  # Not started under `mix test`. A developer machine with a real render node
-  # would otherwise hand hardware capabilities to every streaming test, and
-  # those tests assert software arguments on purpose: they are what proves the
-  # accelerated path did not change the unaccelerated one. capabilities/0
-  # reports software when this process is absent, so nothing else needs to
-  # know.
-  defp hardware_accel_children do
-    if Application.get_env(:mydia, :start_health_monitors, true) do
-      [Mydia.Streaming.HardwareAccel]
-    else
-      []
-    end
+  # GraphQL subscriptions only ever have player clients, and they must start
+  # after the Endpoint. MydiaWeb.Schema.Publish treats a missing subscription
+  # registry as a skipped event, so leaving this out with the player off is
+  # safe.
+  defp absinthe_subscription_children do
+    if Mydia.Player.enabled?(), do: [{Absinthe.Subscription, MydiaWeb.Endpoint}], else: []
   end
 
   defp client_health_children do
@@ -309,19 +239,6 @@ defmodule Mydia.Application do
     end
   end
 
-  defp relay_children do
-    # Relay is started dynamically after supervisor starts (see start_relay_if_enabled/0)
-    # This avoids querying the database before Repo is started
-    []
-  end
-
-  # Legacy relay service startup - no longer needed with P2P architecture.
-  # The Mydia.P2p.Server is now started in the supervision tree and handles
-  # all P2P connectivity for remote access.
-  defp start_relay_if_enabled do
-    :ok
-  end
-
   defp oban_children(oban_config) do
     # Don't start Oban in test environment to avoid pool conflicts with SQL Sandbox
     # Skip Oban if testing is manual or queues are disabled
@@ -329,7 +246,7 @@ defmodule Mydia.Application do
          Keyword.get(oban_config, :queues) == false do
       []
     else
-      [{Oban, oban_config}]
+      [{Oban, Mydia.Player.prune_oban_config(oban_config)}]
     end
   end
 

@@ -196,28 +196,13 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
     <div>
       <div class="flex items-center gap-2">
         <span class="text-sm font-medium">{@label}</span>
-        <.fs_source_badge source={@source} />
+        <.config_source_badge source={@source} size="xs" />
         <%= if @source == :env do %>
           <span class="text-xs text-base-content/50">read-only (set via environment)</span>
         <% end %>
       </div>
       <.input field={@field} type={@type} placeholder={@placeholder} disabled={@source == :env} />
     </div>
-    """
-  end
-
-  attr :source, :atom, required: true
-
-  defp fs_source_badge(assigns) do
-    ~H"""
-    <%= case @source do %>
-      <% :env -> %>
-        <span class="badge badge-info badge-xs">ENV</span>
-      <% :database -> %>
-        <span class="badge badge-primary badge-xs">DB</span>
-      <% _ -> %>
-        <span class="badge badge-ghost badge-xs">Default</span>
-    <% end %>
     """
   end
 

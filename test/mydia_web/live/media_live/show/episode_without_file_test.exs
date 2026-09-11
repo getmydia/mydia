@@ -40,7 +40,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeWithoutFileTest do
       episodes: episodes,
       expanded?: true,
       expanded_episodes: MapSet.new(Enum.map(episodes, & &1.id)),
-      playback_enabled: false,
+      player_enabled: false,
       segment_detection_available: false
     )
   end

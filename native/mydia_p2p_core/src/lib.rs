@@ -21,8 +21,8 @@ use iroh::dns::DnsResolver;
 use iroh_relay::RelayQuicConfig;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::OnceLock;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use std::sync::{Once, RwLock};
+use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 // Gated at the declaration site rather than inside the file: on wasm a
@@ -190,6 +190,13 @@ enum Command {
     GetNetworkStats {
         reply: oneshot::Sender<NetworkStats>,
     },
+    /// Stop the event loop and close the endpoint. `run_event_loop` takes this
+    /// before dispatch and answers `reply` only after `Endpoint::close`
+    /// returns, so the caller knows the UDP socket is free again. Sent by
+    /// `Host::shutdown`.
+    Shutdown {
+        reply: oneshot::Sender<()>,
+    },
     /// Test-only introspection/control, compiled out of every real build.
     /// `Host` has no production need to report `pending_responses.len()` or
     /// to force-close a specific peer's connection, but the T-808/T-809
@@ -216,6 +223,10 @@ enum Command {
         peer_id: String,
         reply: oneshot::Sender<usize>,
     },
+    /// A command that never finishes, standing in for one waiting on a peer
+    /// that has stopped reading. `started` fires once the loop is inside it.
+    #[cfg(test)]
+    DebugStall { started: oneshot::Sender<()> },
 }
 
 /// Events emitted by the Host
@@ -317,8 +328,17 @@ impl PeerConnectionType {
     }
 }
 
-/// Global log channel for forwarding logs to Elixir
-static LOG_TX: OnceLock<mpsc::Sender<Event>> = OnceLock::new();
+/// Global log channel for forwarding logs to Elixir.
+///
+/// Owned by the newest host: `init_tracing` swaps the sender in every time a
+/// host starts. A host started after another one stopped (remote access
+/// switched off and on again) therefore receives the logs, and dropping the
+/// old sender lets the old event channel close, which is what ends the old
+/// host's listener thread in the NIF.
+static LOG_TX: RwLock<Option<mpsc::Sender<Event>>> = RwLock::new(None);
+
+/// The tracing subscriber can only be installed once per process.
+static TRACING_INIT: Once = Once::new();
 
 /// Custom tracing layer that forwards logs to Elixir via the event channel
 struct ElixirLogLayer;
@@ -332,7 +352,9 @@ where
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        if let Some(tx) = LOG_TX.get() {
+        let tx = LOG_TX.read().ok().and_then(|guard| guard.clone());
+
+        if let Some(tx) = tx {
             // Extract message from event
             let mut message = String::new();
             let mut visitor = MessageVisitor(&mut message);
@@ -372,21 +394,23 @@ impl<'a> tracing::field::Visit for MessageVisitor<'a> {
     }
 }
 
-/// Initialize tracing with the Elixir log layer
+/// Point the Elixir log layer at this host's event channel, installing the
+/// subscriber on first use.
 fn init_tracing(event_tx: mpsc::Sender<Event>) {
-    // Only initialize once
-    if LOG_TX.set(event_tx).is_err() {
-        return;
+    if let Ok(mut current) = LOG_TX.write() {
+        *current = Some(event_tx);
     }
 
-    // Set up tracing with env filter (default to info, but can be overridden with RUST_LOG)
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,iroh=info,noq=warn,rustls=warn"));
+    TRACING_INIT.call_once(|| {
+        // Env filter defaults to info and can be overridden with RUST_LOG.
+        let filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("info,iroh=info,noq=warn,rustls=warn"));
 
-    let _ = tracing_subscriber::registry()
-        .with(filter)
-        .with(ElixirLogLayer)
-        .try_init();
+        let _ = tracing_subscriber::registry()
+            .with(filter)
+            .with(ElixirLogLayer)
+            .try_init();
+    });
 }
 
 /// Network statistics
@@ -473,6 +497,9 @@ fn endpoint_addr_from_json(json: &str) -> Result<EndpointAddr, String> {
 /// The core Host struct that manages the iroh Endpoint
 pub struct Host {
     pub(crate) cmd_tx: mpsc::Sender<Command>,
+    /// Set by `shutdown`. The loop watches it next to the command channel,
+    /// because a command stuck on a peer keeps the channel from being read.
+    shutdown_tx: watch::Sender<bool>,
     pub event_rx: Arc<Mutex<mpsc::Receiver<Event>>>,
     node_id: String,
 }
@@ -485,6 +512,7 @@ impl Host {
 
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(32);
         let (event_tx, event_rx) = mpsc::channel::<Event>(100);
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
         // Spawn the event loop. On native this lands on the shared tokio
         // runtime; in a browser it lands on the microtask queue.
@@ -494,11 +522,18 @@ impl Host {
         // `spawn` panics without a reactor. Entering rather than blocking is
         // what keeps this function compilable for wasm.
         let _guard = runtime::enter();
-        runtime::spawn(run_event_loop(secret_key, config, cmd_rx, event_tx));
+        runtime::spawn(run_event_loop(
+            secret_key,
+            config,
+            cmd_rx,
+            shutdown_rx,
+            event_tx,
+        ));
 
         (
             Host {
                 cmd_tx,
+                shutdown_tx,
                 event_rx: Arc::new(Mutex::new(event_rx)),
                 node_id: node_id_str.clone(),
             },
@@ -580,6 +615,27 @@ impl Host {
         rx.await.unwrap_or_default()
     }
 
+    /// Stop the event loop and close the endpoint, returning once the endpoint
+    /// is closed. Afterwards every call answers the way it does on a host
+    /// whose loop has ended: `send_failed`, an empty address, default stats.
+    /// Calling it again returns at once.
+    ///
+    /// The signal goes first so a command stuck on a peer is abandoned, not
+    /// waited for. The `Shutdown` that follows carries the reply the loop
+    /// sends once the endpoint is closed.
+    pub async fn shutdown(&self) {
+        self.shutdown_tx.send_replace(true);
+        let (tx, rx) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(Command::Shutdown { reply: tx })
+            .await
+            .is_ok()
+        {
+            let _ = rx.await;
+        }
+    }
+
     /// Test-only: number of entries currently in `pending_responses`. See
     /// the doc comment on `Command::DebugPendingResponseCount`.
     #[cfg(test)]
@@ -633,6 +689,21 @@ impl Host {
             return 0;
         }
         rx.await.unwrap_or(0)
+    }
+
+    /// Test-only: start a command that never finishes, returning once the
+    /// event loop is inside it. See `Command::DebugStall`.
+    #[cfg(test)]
+    async fn debug_stall(&self) {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(Command::DebugStall { started: tx })
+            .await
+            .is_ok()
+        {
+            let _ = rx.await;
+        }
     }
 
     /// Get this node's ID
@@ -841,6 +912,7 @@ async fn run_event_loop(
     secret_key: SecretKey,
     config: HostConfig,
     mut cmd_rx: mpsc::Receiver<Command>,
+    mut shutdown_rx: watch::Receiver<bool>,
     event_tx: mpsc::Sender<Event>,
 ) {
     // Initialize tracing to forward logs to Elixir
@@ -901,6 +973,9 @@ async fn run_event_loop(
     }));
     let mut relay_connected = false;
 
+    // Set by a `Command::Shutdown` and answered after the endpoint closes.
+    let mut shutdown_reply: Option<oneshot::Sender<()>> = None;
+
     // `connected_peers` is only ever touched from this loop, so pruning it
     // stays lock-free: each `handle_connection` task (one per accepted or
     // dialed connection) reports its own closure back here as
@@ -910,107 +985,187 @@ async fn run_event_loop(
     // reconnection under the same peer_id that raced ahead of it.
     let (disconnect_tx, mut disconnect_rx) = mpsc::channel::<(String, ConnectionId)>(64);
 
-    // Wait for endpoint to be online (relay connected + local IP available)
-    // Use a timeout to avoid blocking indefinitely if relay is unreachable
+    // Wait for the endpoint to come online (relay connected + local IP
+    // available), bounded by a timeout so an unreachable relay cannot block
+    // forever. Commands are read during this wait too: a `Shutdown` is
+    // answered at once instead of sitting unread until the wait ends, which
+    // otherwise made `terminate/2` hang for up to 30s right after the node
+    // started. Every other command is held, in arrival order, and served
+    // right after `Ready` is emitted below, so ordering stays exactly what
+    // it was before this wait could also drain the command channel.
     tracing::info!("Waiting for relay connection...");
-    match runtime::time::timeout(std::time::Duration::from_secs(30), endpoint.online()).await {
-        Ok(()) => {
-            relay_connected = true;
-            tracing::info!("Relay connection established");
-            let _ = event_tx.send(Event::RelayConnected).await;
-        }
-        Err(_) => {
-            tracing::warn!("Relay connection timed out after 30s - continuing without relay");
+    let mut shutting_down = false;
+    let mut held_commands: Vec<Command> = Vec::new();
+    let online = runtime::time::timeout(std::time::Duration::from_secs(30), endpoint.online());
+    let mut online = std::pin::pin!(online);
+    loop {
+        tokio::select! {
+            _ = shutdown_requested(&mut shutdown_rx) => {
+                shutting_down = true;
+                break;
+            }
+            result = &mut online => {
+                match result {
+                    Ok(()) => {
+                        relay_connected = true;
+                        tracing::info!("Relay connection established");
+                        let _ = event_tx.send(Event::RelayConnected).await;
+                    }
+                    Err(_) => {
+                        tracing::warn!("Relay connection timed out after 30s - continuing without relay");
+                    }
+                }
+                break;
+            }
+            cmd = cmd_rx.recv() => {
+                match cmd {
+                    Some(Command::Shutdown { reply }) => {
+                        shutdown_reply = Some(reply);
+                        shutting_down = true;
+                        break;
+                    }
+                    Some(cmd) => held_commands.push(cmd),
+                    None => {
+                        shutting_down = true;
+                        break;
+                    }
+                }
+            }
         }
     }
 
-    // Get endpoint address and emit Ready event
-    let addr = endpoint.addr();
-    let addr_json = endpoint_addr_to_json(&addr);
-    let _ = event_tx
-        .send(Event::Ready {
-            node_addr: addr_json,
-        })
-        .await;
+    if !shutting_down {
+        // Get endpoint address and emit Ready event
+        let addr = endpoint.addr();
+        let addr_json = endpoint_addr_to_json(&addr);
+        let _ = event_tx
+            .send(Event::Ready {
+                node_addr: addr_json,
+            })
+            .await;
 
-    loop {
-        // A host both accepts inbound connections and serves commands; a
-        // client only serves commands. `tokio::select!` takes no `#[cfg]` on
-        // a branch, so the two loop bodies are spelled out separately. Both
-        // call the same handlers, so only the set of arms differs.
-        // `cmd_rx.recv()` returning `None` is the shutdown signal: it means
-        // every `Command` sender (all owned, directly or via clone, by the
-        // `Host` handle) has been dropped. That must end the loop on its
-        // own. It cannot be left to the `else` arm: `disconnect_rx` never
-        // observes closure while this function still holds `disconnect_tx`
-        // above, and `endpoint.accept()` simply stays pending with no more
-        // peers dialing in, so `else` would require both of those to also
-        // resolve to a non-matching value in the very same poll -- which
-        // they never do. Matching `cmd_rx.recv()`'s `Option` explicitly
-        // (instead of `Some(cmd) = cmd_rx.recv()`, which just disables the
-        // arm on `None` rather than ending the loop) makes shutdown fire
-        // directly off that one authoritative signal.
-        #[cfg(feature = "host")]
-        let running = tokio::select! {
-            Some(incoming) = endpoint.accept() => {
-                accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state, &disconnect_tx).await;
-                true
+        let mut running = true;
+        for cmd in held_commands {
+            running = unless_shutdown(
+                &mut shutdown_rx,
+                handle_command(
+                    cmd,
+                    &endpoint,
+                    &mut connected_peers,
+                    &event_tx,
+                    &shared_state,
+                    relay_connected,
+                    &disconnect_tx,
+                ),
+            )
+            .await;
+            if !running {
+                break;
             }
+        }
 
-            cmd = cmd_rx.recv() => {
-                match cmd {
-                    Some(cmd) => {
-                        handle_command(
-                            cmd,
-                            &endpoint,
-                            &mut connected_peers,
-                            &event_tx,
-                            &shared_state,
-                            relay_connected,
-                            &disconnect_tx,
+        while running {
+            // A host both accepts inbound connections and serves commands; a
+            // client only serves commands. `tokio::select!` takes no `#[cfg]` on
+            // a branch, so the two loop bodies are spelled out separately. Both
+            // call the same handlers, so only the set of arms differs.
+            // `cmd_rx.recv()` returning `None` is the shutdown signal: it means
+            // every `Command` sender (all owned, directly or via clone, by the
+            // `Host` handle) has been dropped. That must end the loop on its
+            // own. It cannot be left to the `else` arm: `disconnect_rx` never
+            // observes closure while this function still holds `disconnect_tx`
+            // above, and `endpoint.accept()` simply stays pending with no more
+            // peers dialing in, so `else` would require both of those to also
+            // resolve to a non-matching value in the very same poll -- which
+            // they never do. Matching `cmd_rx.recv()`'s `Option` explicitly
+            // (instead of `Some(cmd) = cmd_rx.recv()`, which just disables the
+            // arm on `None` rather than ending the loop) makes shutdown fire
+            // directly off that one authoritative signal.
+            //
+            // `Host::shutdown` also raises `shutdown_rx`, and every await
+            // below that can wait on a peer (a handshake, a command writing
+            // to a stalled stream) races it through `unless_shutdown`.
+            #[cfg(feature = "host")]
+            {
+                running = tokio::select! {
+                    _ = shutdown_requested(&mut shutdown_rx) => false,
+
+                    Some(incoming) = endpoint.accept() => {
+                        unless_shutdown(
+                            &mut shutdown_rx,
+                            accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state, &disconnect_tx),
                         )
-                        .await;
+                        .await
+                    }
+
+                    cmd = cmd_rx.recv() => {
+                        match cmd {
+                            Some(Command::Shutdown { reply }) => {
+                                shutdown_reply = Some(reply);
+                                false
+                            }
+                            Some(cmd) => {
+                                unless_shutdown(
+                                    &mut shutdown_rx,
+                                    handle_command(
+                                        cmd,
+                                        &endpoint,
+                                        &mut connected_peers,
+                                        &event_tx,
+                                        &shared_state,
+                                        relay_connected,
+                                        &disconnect_tx,
+                                    ),
+                                )
+                                .await
+                            }
+                            None => false,
+                        }
+                    }
+
+                    Some((peer_id, stable_id)) = disconnect_rx.recv() => {
+                        prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
                         true
                     }
-                    None => false,
-                }
+                };
             }
 
-            Some((peer_id, stable_id)) = disconnect_rx.recv() => {
-                prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
-                true
-            }
-        };
+            #[cfg(not(feature = "host"))]
+            {
+                running = tokio::select! {
+                    _ = shutdown_requested(&mut shutdown_rx) => false,
 
-        #[cfg(not(feature = "host"))]
-        let running = tokio::select! {
-            cmd = cmd_rx.recv() => {
-                match cmd {
-                    Some(cmd) => {
-                        handle_command(
-                            cmd,
-                            &endpoint,
-                            &mut connected_peers,
-                            &event_tx,
-                            &shared_state,
-                            relay_connected,
-                            &disconnect_tx,
-                        )
-                        .await;
+                    cmd = cmd_rx.recv() => {
+                        match cmd {
+                            Some(Command::Shutdown { reply }) => {
+                                shutdown_reply = Some(reply);
+                                false
+                            }
+                            Some(cmd) => {
+                                unless_shutdown(
+                                    &mut shutdown_rx,
+                                    handle_command(
+                                        cmd,
+                                        &endpoint,
+                                        &mut connected_peers,
+                                        &event_tx,
+                                        &shared_state,
+                                        relay_connected,
+                                        &disconnect_tx,
+                                    ),
+                                )
+                                .await
+                            }
+                            None => false,
+                        }
+                    }
+
+                    Some((peer_id, stable_id)) = disconnect_rx.recv() => {
+                        prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
                         true
                     }
-                    None => false,
-                }
+                };
             }
-
-            Some((peer_id, stable_id)) = disconnect_rx.recv() => {
-                prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
-                true
-            }
-        };
-
-        if !running {
-            break;
         }
     }
 
@@ -1018,6 +1173,44 @@ async fn run_event_loop(
     tracing::info!("Event loop terminated, closing endpoint gracefully");
     endpoint.close().await;
     tracing::info!("Endpoint closed");
+
+    // Last, so `Host::shutdown` returns only once the socket is released.
+    if let Some(reply) = shutdown_reply {
+        let _ = reply.send(());
+    }
+
+    // A shutdown that got in through `shutdown_rx` left its `Shutdown`
+    // queued, or still being sent. Closing fails a send still in progress,
+    // and draining answers the queued ones.
+    cmd_rx.close();
+    while let Ok(cmd) = cmd_rx.try_recv() {
+        if let Command::Shutdown { reply } = cmd {
+            let _ = reply.send(());
+        }
+    }
+}
+
+/// Resolves once `Host::shutdown` has been called. A `Host` dropped without
+/// calling it closes the command channel, which ends the loop by itself, so
+/// a closed signal is never taken for a shutdown.
+async fn shutdown_requested(shutdown_rx: &mut watch::Receiver<bool>) {
+    if shutdown_rx.wait_for(|requested| *requested).await.is_err() {
+        std::future::pending::<()>().await;
+    }
+}
+
+/// Runs `work` unless a shutdown comes first, returning whether the loop
+/// should keep going. Abandoning `work` drops it mid-flight, so its caller
+/// sees its reply channel close.
+async fn unless_shutdown(
+    shutdown_rx: &mut watch::Receiver<bool>,
+    work: impl std::future::Future<Output = ()>,
+) -> bool {
+    tokio::select! {
+        biased;
+        _ = shutdown_requested(shutdown_rx) => false,
+        _ = work => true,
+    }
 }
 
 /// Every live connection a peer currently holds, keyed by `ConnectionId`.
@@ -1299,6 +1492,12 @@ async fn handle_command(
             };
             let _ = reply.send(stats);
         }
+        // `run_event_loop` takes Shutdown before dispatch, so this arm exists
+        // only for exhaustiveness. Answering keeps a caller from hanging if
+        // that ever changes.
+        Command::Shutdown { reply } => {
+            let _ = reply.send(());
+        }
         #[cfg(test)]
         Command::DebugPendingResponseCount { reply } => {
             let state = shared_state.lock().await;
@@ -1323,6 +1522,11 @@ async fn handle_command(
         Command::DebugConnectionCount { peer_id, reply } => {
             let count = connected_peers.get(&peer_id).map_or(0, |conns| conns.len());
             let _ = reply.send(count);
+        }
+        #[cfg(test)]
+        Command::DebugStall { started } => {
+            let _ = started.send(());
+            std::future::pending::<()>().await;
         }
         #[cfg(feature = "host")]
         Command::SendHlsHeader {
@@ -2319,10 +2523,10 @@ mod tests {
     /// `RelayConnected`, `Connected`, `Disconnected`, ...) is delivered with
     /// a blocking `event_tx.send(...).await`, and `Event::Log` shares that
     /// same 100-item channel via a non-blocking `try_send` from `tracing`.
-    /// `LOG_TX` is a single process-wide `OnceLock`, so whichever `Host` is
-    /// constructed first across the whole test binary -- not necessarily
-    /// this one -- ends up receiving every test's log traffic on its
-    /// channel. If nothing ever drains it, that log volume alone can fill
+    /// `LOG_TX` is a single process-wide slot that the most recently
+    /// constructed `Host` across the whole test binary -- not necessarily
+    /// this one -- takes over, so that host receives every test's log
+    /// traffic on its channel. If nothing ever drains it, that log volume alone can fill
     /// the buffer; the next blocking `Event` send then blocks forever with
     /// no reader, freezing that `Host`'s `run_event_loop` task and, with
     /// it, every `Command` reply a test is waiting on (`wait_until` then
@@ -2491,6 +2695,36 @@ mod tests {
             "the endpoint's UDP port to be released after the Host was dropped -- before the \
              fix, run_event_loop never observed cmd_rx closing on its own and looped forever \
              without ever calling endpoint.close()",
+        )
+        .await;
+    }
+
+    /// A command can wait on a peer for as long as the peer likes; an HLS
+    /// write to a client that stopped reading is the real case. Shutdown must
+    /// not queue behind it, because the server's `terminate/2` waits on
+    /// `Host::shutdown`. Before the shutdown signal the loop never read the
+    /// `Shutdown` sitting behind the stalled command, and the timeout fired.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shutdown_does_not_wait_for_a_command_that_never_finishes() {
+        let port = free_udp_port();
+
+        let (host, _host_id) = Host::new(HostConfig {
+            bind_port: Some(port),
+            ..test_config()
+        });
+        spawn_event_drain(&host);
+        wait_for_addr(&host).await;
+
+        host.debug_stall().await;
+
+        tokio::time::timeout(std::time::Duration::from_secs(5), host.shutdown())
+            .await
+            .expect("shutdown waited for the stalled command");
+
+        wait_until(
+            || async { std::net::UdpSocket::bind(("0.0.0.0", port)).is_ok() },
+            std::time::Duration::from_secs(10),
+            "the endpoint's UDP port to be released after shutdown returned",
         )
         .await;
     }

@@ -52,7 +52,7 @@ defmodule Mydia.Settings.RuntimeConfig do
   @doc """
   Resolves the source of a config value for UI display:
 
-    - `:env` when the given environment variable is set
+    - `:env` when the given environment variable is set and non-empty
     - `:database` when the key has a row in the prefetched `all_db_settings` map
     - `:default` otherwise
 
@@ -62,11 +62,25 @@ defmodule Mydia.Settings.RuntimeConfig do
   """
   def config_source(env_var_name, key, all_db_settings) do
     cond do
-      env_var_name != nil and System.get_env(env_var_name) != nil -> :env
+      env_var_set?(env_var_name) -> :env
       Map.has_key?(all_db_settings, key) -> :database
       true -> :default
     end
   end
+
+  @doc """
+  Whether an environment variable actually controls a config value.
+
+  `Mydia.Config.Loader`'s `put_if_present/4` skips an empty value, so an empty
+  variable never reaches the layered config and must not read as set here
+  either. True only when `name` is not `nil` and `getenv.(name)` is neither
+  `nil` nor `""`. `getenv` replaces `System.get_env/1` in tests, which must
+  never set a real environment variable.
+  """
+  @spec env_var_set?(String.t() | nil, (String.t() -> String.t() | nil)) :: boolean()
+  def env_var_set?(name, getenv \\ &System.get_env/1)
+  def env_var_set?(nil, _getenv), do: false
+  def env_var_set?(name, getenv), do: getenv.(name) not in [nil, ""]
 
   @doc """
   Creates or updates a `ConfigSetting` by key.

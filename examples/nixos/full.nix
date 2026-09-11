@@ -94,7 +94,7 @@
 
     # Extra environment variables
     extraEnvironment = {
-      ENABLE_PLAYBACK = "true";
+      ENABLE_PLAYER = "true";
       ENABLE_CARDIGANN = "true";
     };
   };

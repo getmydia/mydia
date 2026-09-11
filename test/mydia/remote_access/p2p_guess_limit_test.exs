@@ -21,6 +21,10 @@ defmodule Mydia.RemoteAccess.P2pGuessLimitTest do
     set_remote_access(true)
     on_exit(&reset_remote_access/0)
 
+    # The limiter lives in Mydia.Player.RemoteAccess.Supervisor, which does not
+    # start under mix test.
+    start_supervised!(ClaimRateLimiter)
+
     ClaimRateLimiter.reset_rate_limit("p2p:pairing")
 
     {:ok,

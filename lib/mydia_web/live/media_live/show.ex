@@ -174,8 +174,6 @@ defmodule MydiaWeb.MediaLive.Show do
        max_entries: 1,
        max_file_size: 2_000_000
      )
-     # Feature flags
-     |> assign(:playback_enabled, playback_enabled?())
      # Franchise section state
      |> assign(:franchise, nil)
      |> assign(:adding_franchise_tmdb_ids, MapSet.new())
