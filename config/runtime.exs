@@ -20,6 +20,14 @@ if System.get_env("PHX_SERVER") do
   config :mydia, MydiaWeb.Endpoint, server: true
 end
 
+# The master switch for everything that only serves the Mydia player: the p2p
+# node and pairing, HLS streaming, offline-download transcodes, intro and
+# credits detection, and the player UI. Read once, here, at boot. Mydia.Player
+# explains why it is not part of the layered config. The HTTPS listener below
+# reuses `player_enabled`, so the two readings always agree.
+player_enabled = Mydia.Player.parse_env!(System.get_env("ENABLE_PLAYER"))
+config :mydia, :player_enabled, player_enabled
+
 # Database adapter is configured at compile time only
 # The adapter cannot be changed at runtime - it's baked into the compiled release
 # Each Docker image is built for a specific database type
