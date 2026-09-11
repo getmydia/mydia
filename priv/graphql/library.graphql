@@ -33,6 +33,15 @@ type RootQueryType {
 type RootMutationType {
   "Turn monitoring on or off for a movie or show"
   setMediaItemMonitored(id: ID!, monitored: Boolean!): MediaItemPayload!
+
+  "Turn monitoring on or off for every episode of one season"
+  setSeasonMonitored(mediaItemId: ID!, season: Int!, monitored: Boolean!): MediaItemPayload!
+
+  "Turn monitoring on or off for one episode"
+  setEpisodeMonitored(id: ID!, monitored: Boolean!): EpisodePayload!
+
+  "Apply a monitoring preset to a show's episodes"
+  applyEpisodeMonitoring(mediaItemId: ID!, preset: EpisodeMonitoringPreset!): MediaItemPayload!
 }
 
 "Why a mutation could not do what it was asked"
@@ -66,6 +75,12 @@ type UserError {
 "The media item a mutation changed"
 type MediaItemPayload {
   mediaItem: MediaItem
+  userErrors: [UserError!]!
+}
+
+"The episode a mutation changed"
+type EpisodePayload {
+  episode: Episode
   userErrors: [UserError!]!
 }
 
@@ -330,6 +345,24 @@ enum LibraryPathType {
 
   "Mixed content library"
   MIXED
+}
+
+"Which of a show's episodes to monitor"
+enum EpisodeMonitoringPreset {
+  "Every episode"
+  ALL
+
+  "Episodes without a file"
+  MISSING
+
+  "Episodes with a file"
+  EXISTING
+
+  "Episodes that have not aired"
+  FUTURE
+
+  "No episodes"
+  NONE
 }
 
 """

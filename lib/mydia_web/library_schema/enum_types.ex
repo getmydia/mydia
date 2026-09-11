@@ -67,4 +67,13 @@ defmodule MydiaWeb.LibrarySchema.EnumTypes do
     value(:series, description: "TV series library")
     value(:mixed, description: "Mixed content library")
   end
+
+  @desc "Which of a show's episodes to monitor"
+  enum :episode_monitoring_preset do
+    value(:all, description: "Every episode")
+    value(:missing, description: "Episodes without a file")
+    value(:existing, description: "Episodes with a file")
+    value(:future, description: "Episodes that have not aired")
+    value(:none, description: "No episodes")
+  end
 end

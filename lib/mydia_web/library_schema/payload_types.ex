@@ -31,4 +31,10 @@ defmodule MydiaWeb.LibrarySchema.PayloadTypes do
     field :media_item, :media_item
     field :user_errors, non_null(list_of(non_null(:user_error)))
   end
+
+  @desc "The episode a mutation changed"
+  object :episode_payload do
+    field :episode, :episode
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
 end
