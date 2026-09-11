@@ -68,5 +68,20 @@ defmodule Mydia.Streaming.HlsSessionInfoTest do
       assert get_info(0, :window).playlist_mode == :window
       assert get_info(0, :full).playlist_mode == :full
     end
+
+    test "reports the keyframe a pinned stream copy really starts on" do
+      state = %{state(27, :window) | effective_start_position: 20}
+
+      {:reply, {:ok, info}, _new_state} =
+        HlsSession.handle_call(:get_info, {self(), make_ref()}, state)
+
+      assert info.effective_start_position == 20
+      # Still the requested offset: HlsSessionSupervisor matches on it.
+      assert info.start_position == 27
+    end
+
+    test "falls back to the requested offset when nothing was pinned" do
+      assert get_info(4200).effective_start_position == 4200
+    end
   end
 end

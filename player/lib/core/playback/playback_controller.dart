@@ -212,8 +212,10 @@ class PlaybackController {
           (echoedDuration == null
               ? null
               : Duration(milliseconds: (echoedDuration * 1000).round()));
-      // The echoed offset, not the requested one: the server clamps it and
-      // `-ss` lands on a keyframe. A FULL playlist starts at zero regardless.
+      // The echoed offset, not the requested one: the server clamps it, and a
+      // copied stream can only begin on a keyframe, which the server finds and
+      // echoes for MKV and MP4 sources (MPEG-TS still echoes the requested
+      // offset). A FULL playlist starts at zero regardless.
       final timeline = full
           ? StreamTimeline(totalDuration: duration)
           : StreamTimeline(

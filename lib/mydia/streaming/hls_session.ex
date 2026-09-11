@@ -32,9 +32,11 @@ defmodule Mydia.Streaming.HlsSession do
   require Logger
 
   alias Mydia.Library
+  alias Mydia.Library.MediaFile
   alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HardwareAccel
   alias Mydia.Streaming.HardwareAccel.Capabilities
+  alias Mydia.Streaming.KeyframeLocator
   alias Mydia.Streaming.SegmentPlan
   alias Mydia.Streaming.StreamPlan
   alias Mydia.Streaming.TranscodeWindow
@@ -59,6 +61,7 @@ defmodule Mydia.Streaming.HlsSession do
       :user_id,
       :mode,
       :start_position,
+      :effective_start_position,
       :max_bitrate,
       :max_height,
       :backend,
@@ -89,6 +92,7 @@ defmodule Mydia.Streaming.HlsSession do
             user_id: integer(),
             mode: :copy | :transcode,
             start_position: non_neg_integer(),
+            effective_start_position: non_neg_integer() | nil,
             backend: :ffmpeg,
             backend_pid: pid() | nil,
             temp_dir: String.t(),
@@ -276,6 +280,7 @@ defmodule Mydia.Streaming.HlsSession do
       max_bitrate: max_bitrate,
       max_height: max_height,
       start_position: start_position,
+      seek_keyframe: Keyword.get(opts, :seek_keyframe),
       audio_language: Keyword.get(opts, :audio_language),
       show_audio_language: Keyword.get(opts, :show_audio_language)
     }
@@ -299,11 +304,7 @@ defmodule Mydia.Streaming.HlsSession do
       # client requested.
       requested_mode = Keyword.get(opts, :playlist_mode, :window)
 
-      segment_plan =
-        case requested_mode do
-          :full -> plan_from_media_file(media_file)
-          :window -> nil
-        end
+      segment_plan = segment_plan_for(media_file, requested_mode)
 
       playlist_mode = if segment_plan, do: :full, else: :window
 
@@ -376,6 +377,9 @@ defmodule Mydia.Streaming.HlsSession do
     first_index =
       if segment_plan, do: SegmentPlan.index_for_time(segment_plan, start_position), else: 0
 
+    # Where the first encoder seeks to. See encoder_start_position/3.
+    encoder_start = encoder_start_position(segment_plan, first_index, start_position)
+
     # Generate session ID and create temp directory
     session_id = generate_session_id()
     temp_dir = Path.join(@temp_base_dir, session_id)
@@ -438,7 +442,8 @@ defmodule Mydia.Streaming.HlsSession do
         backend_opts = [
           max_bitrate: max_bitrate,
           max_height: max_height,
-          start_position: start_position,
+          start_position: encoder_start,
+          seek_keyframe: playback.seek_keyframe,
           start_number: first_index,
           grid_aligned: grid_aligned?(playlist_mode, media_file, max_bitrate, max_height),
           absolute_timestamps: playlist_mode == :full,
@@ -465,6 +470,8 @@ defmodule Mydia.Streaming.HlsSession do
               user_id: user_id,
               mode: mode,
               start_position: start_position,
+              effective_start_position:
+                effective_start_position(playback.seek_keyframe, encoder_start),
               max_bitrate: max_bitrate,
               max_height: max_height,
               backend: :ffmpeg,
@@ -593,6 +600,152 @@ defmodule Mydia.Streaming.HlsSession do
       FfmpegHlsTranscoder.reencodes_video?(media_file, max_bitrate, max_height)
   end
 
+  # Where the session's first encoder seeks to.
+  #
+  # A :full session starts it on the segment grid, exactly where relocate/2
+  # starts every later one. Forced keyframes follow the encoder's start rather
+  # than the grid, so an encoder started at the raw resume second cut every
+  # segment it wrote that far off the published plan. Measured: resumed at 30s,
+  # the segments declared as 28-32, 32-36 and 36-40 began at 30.00, 33.92 and
+  # 37.93, and a later on-grid relocation met them with a 2s gap. The viewer
+  # never sees the extra lead-in: the player seeks to the resume point inside
+  # the full playlist.
+  #
+  # A :window session has no grid and starts where it was asked to.
+  #
+  # Public only so this decision can be asserted directly; nothing outside
+  # this module should call it.
+  @doc false
+  @spec encoder_start_position(SegmentPlan.t() | nil, non_neg_integer(), non_neg_integer()) ::
+          non_neg_integer()
+  def encoder_start_position(nil, _first_index, start_position), do: start_position
+
+  def encoder_start_position(segment_plan, first_index, _start_position),
+    do: trunc(SegmentPlan.start_time(segment_plan, first_index))
+
+  # What StartStreamingSession echoes for a :window session: the keyframe a
+  # pinned stream copy begins on, or else where the first encoder started.
+  defp effective_start_position(keyframe, _encoder_start) when is_number(keyframe),
+    do: trunc(keyframe)
+
+  defp effective_start_position(nil, encoder_start), do: encoder_start
+
+  @doc """
+  Adds `:seek_keyframe` to a new session's opts when its stream will begin on
+  a keyframe rather than on the requested offset.
+
+  Runs in the caller's process: `HlsSessionSupervisor.start_new_session/5`
+  calls it before `DynamicSupervisor.start_child/2`, because `init/1` runs
+  inside the supervisor and a keyframe lookup there would hold up every other
+  session start behind it.
+
+  Returns `opts` untouched whenever there is nothing to pin, including for a
+  media file that no longer exists; `init/1` reports that one.
+  """
+  @spec prepare_start(term(), keyword()) :: keyword()
+  def prepare_start(media_file_id, opts) do
+    media_file = Library.get_media_file!(media_file_id, preload: [:library_path])
+    seek_opts(media_file, opts)
+  rescue
+    Ecto.NoResultsError -> opts
+  end
+
+  # The containers whose seeks were measured to land where KeyframeLocator
+  # predicts. An MPEG-TS copy seek lands after its target, so a pin there
+  # would start the stream a GOP later than the echo claims.
+  @pinnable_containers ["mkv", "mp4"]
+
+  # Only a :window session copying its video, resumed past zero, from a
+  # measured container, needs a pin. Re-encoded video already starts on the
+  # second it was asked for (accurate seek, plus -copypriorss:a 0 for copied
+  # audio), and a :full session echoes zero and carries real media time
+  # through -copyts.
+  #
+  # Public only so the decision can be asserted on a hand-built file, without a
+  # database row; nothing outside this module should call it.
+  @doc false
+  @spec seek_opts(
+          MediaFile.t(),
+          keyword(),
+          (String.t(), number() -> {:ok, float()} | :none)
+        ) :: keyword()
+  def seek_opts(media_file, opts, locate \\ &KeyframeLocator.locate/2) do
+    start_position = Keyword.get(opts, :start_position, 0)
+    requested_mode = Keyword.get(opts, :playlist_mode, :window)
+
+    with true <- is_integer(start_position) and start_position > 0,
+         :window <- effective_playlist_mode(media_file, requested_mode),
+         true <- container(media_file) in @pinnable_containers,
+         false <-
+           FfmpegHlsTranscoder.reencodes_video?(
+             media_file,
+             Keyword.get(opts, :max_bitrate),
+             Keyword.get(opts, :max_height)
+           ),
+         path when is_binary(path) <- MediaFile.absolute_path(media_file),
+         {:ok, keyframe} <- locate.(path, start_position) do
+      Keyword.put(opts, :seek_keyframe, keyframe)
+    else
+      _ -> opts
+    end
+  end
+
+  defp container(%MediaFile{metadata: %{container: container}}), do: container
+  defp container(_media_file), do: nil
+
+  # The published plan a session asking for `requested_mode` gets, or nil when
+  # it runs :window. Shared by init/1 and seek_opts/3 so the two cannot
+  # disagree about which mode a session ends up in; both load the file from the
+  # database, so they see the same duration.
+  #
+  # Public only so this decision can be asserted directly; nothing outside
+  # this module should call it.
+  @doc false
+  @spec segment_plan_for(MediaFile.t(), :full | :window) :: SegmentPlan.t() | nil
+  def segment_plan_for(media_file, :full), do: plan_from_media_file(media_file)
+  def segment_plan_for(_media_file, :window), do: nil
+
+  # :full or :window for a session asking for `requested_mode`, by the same
+  # rule init/1 applies (see segment_plan_for/2).
+  #
+  # Public only so this decision can be asserted directly; nothing outside
+  # this module should call it.
+  @doc false
+  @spec effective_playlist_mode(MediaFile.t(), :full | :window) :: :full | :window
+  def effective_playlist_mode(media_file, requested_mode) do
+    if segment_plan_for(media_file, requested_mode), do: :full, else: :window
+  end
+
+  # The keys start_backend/6 forwards to FfmpegHlsTranscoder. See the comment
+  # in start_backend/6: a key the transcoder reads has to be listed here, or
+  # the transcoder never sees it.
+  #
+  # Public only so the forwarding can be asserted without spawning FFmpeg;
+  # nothing outside this module should call it.
+  @doc false
+  @spec transcoder_base_opts(MediaFile.t(), String.t() | nil, String.t(), keyword()) ::
+          keyword()
+  def transcoder_base_opts(media_file, absolute_path, temp_dir, opts) do
+    [
+      input_path: absolute_path,
+      output_dir: temp_dir,
+      media_file: media_file,
+      start_position: Keyword.get(opts, :start_position, 0),
+      seek_keyframe: Keyword.get(opts, :seek_keyframe),
+      start_number: Keyword.get(opts, :start_number, 0),
+      grid_aligned: Keyword.get(opts, :grid_aligned, false),
+      absolute_timestamps: Keyword.get(opts, :absolute_timestamps, false)
+    ] ++
+      if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: []) ++
+      if(opts[:max_height], do: [max_height: opts[:max_height]], else: []) ++
+      if(opts[:audio_language], do: [audio_language: opts[:audio_language]], else: []) ++
+      if(opts[:show_audio_language],
+        do: [show_audio_language: opts[:show_audio_language]],
+        else: []
+      ) ++
+      if(opts[:capabilities], do: [capabilities: opts[:capabilities]], else: [])
+  end
+
   @doc """
   Decides what to do when the backend died of a hardware initialisation failure.
 
@@ -649,14 +802,19 @@ defmodule Mydia.Streaming.HlsSession do
       session_id: state.session_id,
       media_file_id: state.media_file_id,
       mode: state.mode,
-      # The offset this session is actually transcoding from. Reported here
-      # rather than left to the caller's own bookkeeping because a caller can
-      # end up holding a session it did not start — HlsSessionSupervisor
-      # adopts a concurrent winner, and that winner may have been started from
-      # a different offset. Echoing the requested value instead of this one
-      # would hand the client a timeline shifted against the stream it is
-      # actually playing, and every position it persisted would be wrong.
+      # The offset this session was started for. HlsSessionSupervisor matches
+      # repeat requests against it, so it stays the requested value even when
+      # the stream begins elsewhere; see effective_start_position below.
       start_position: state.start_position,
+      # Where the stream really begins, and what StartStreamingSession echoes
+      # for a :window session: the keyframe a pinned stream copy starts on (see
+      # prepare_start/2), otherwise start_position. Reported here rather than
+      # left to the caller's own bookkeeping because a caller can end up
+      # holding a session it did not start (HlsSessionSupervisor adopts a
+      # concurrent winner, which may have started elsewhere), and a client
+      # handed an offset its stream does not start at persists every position
+      # wrong.
+      effective_start_position: state.effective_start_position || state.start_position,
       backend: state.backend,
       temp_dir: state.temp_dir,
       last_activity: state.last_activity,
@@ -1073,24 +1231,7 @@ defmodule Mydia.Streaming.HlsSession do
     # also forwarding it through this filter will desynchronise the two
     # plans silently: the dashboard (reading HlsSession.State.plan) would
     # describe an encode the transcoder never actually runs.
-    base_opts =
-      [
-        input_path: absolute_path,
-        output_dir: temp_dir,
-        media_file: media_file,
-        start_position: Keyword.get(opts, :start_position, 0),
-        start_number: Keyword.get(opts, :start_number, 0),
-        grid_aligned: Keyword.get(opts, :grid_aligned, false),
-        absolute_timestamps: Keyword.get(opts, :absolute_timestamps, false)
-      ] ++
-        if(opts[:max_bitrate], do: [max_bitrate: opts[:max_bitrate]], else: []) ++
-        if(opts[:max_height], do: [max_height: opts[:max_height]], else: []) ++
-        if(opts[:audio_language], do: [audio_language: opts[:audio_language]], else: []) ++
-        if(opts[:show_audio_language],
-          do: [show_audio_language: opts[:show_audio_language]],
-          else: []
-        ) ++
-        if(opts[:capabilities], do: [capabilities: opts[:capabilities]], else: [])
+    base_opts = transcoder_base_opts(media_file, absolute_path, temp_dir, opts)
 
     # Only a :full session has a TranscodeWindow to mark ready, so only wire
     # the callback that reports segment completion for that mode. A :window

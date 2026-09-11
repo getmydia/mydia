@@ -51,7 +51,8 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           preset: String.t(),
           crf: integer(),
           max_bitrate: integer() | nil,
-          max_height: integer() | nil
+          max_height: integer() | nil,
+          seek_keyframe: float() | nil
         ]
 
   defmodule State do
@@ -591,15 +592,12 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     # The consequence is that playlist timestamps start at ~0 rather than at the
     # offset, which is why the client has to carry a StreamTimeline to map
     # stream-local positions back onto real media positions.
-    seek_args =
-      case Keyword.get(opts, :start_position, 0) do
-        pos when is_integer(pos) and pos > 0 -> ["-ss", to_string(pos)]
-        _ -> []
-      end
+    seek_flags =
+      seek_args(Keyword.get(opts, :seek_keyframe), Keyword.get(opts, :start_position, 0))
 
     # -hwaccel flags must precede -i. After it, ffmpeg has already selected a
     # decoder and silently ignores them.
-    base_args = seek_args ++ accel.input ++ ["-i", input_path]
+    base_args = seek_flags ++ accel.input ++ ["-i", input_path]
 
     video_args =
       if video_codec == "copy" do
@@ -612,7 +610,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
     audio_args =
       if audio_codec == "copy" do
         # Stream copy - no encoding parameters needed
-        ["-c:a", "copy"]
+        ["-c:a", "copy"] ++ trim_copied_audio(seek_flags, video_codec)
       else
         # Full transcoding with encoding parameters
         [
@@ -706,6 +704,48 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       AudioTrackSelector.ffmpeg_map_args(selected_audio) ++
       video_args ++ audio_args ++ keyframe_args ++ timestamp_args ++ hls_args
   end
+
+  # -copypriorss:a 0 drops copied audio packets from before the seek point.
+  #
+  # An input seek starts reading at the keyframe before the target. Accurate
+  # seek (FFmpeg's default) discards the decoded video before the target, but
+  # copied audio never reaches a decoder, so without this it starts back at
+  # the keyframe. Measured on a source with a keyframe every 10s, resumed at
+  # 27s: 7.2s of audio ahead of the first video frame, 3ms with the flag. It
+  # holds under -copyts too, where the timestamps stay absolute.
+  #
+  # Jellyfin fixed the same bug with an output-side -ss. Measured and rejected
+  # here: under -copyts that rebases every timestamp to zero, which breaks the
+  # real-time segments of a :full playlist.
+  #
+  # Never for copied video. That starts on the keyframe as well, so its audio
+  # has to start there too, or the frames before the target play silent.
+  defp trim_copied_audio([], _video_codec), do: []
+  defp trim_copied_audio(_seek_flags, "copy"), do: []
+  defp trim_copied_audio(_seek_flags, _video_codec), do: ["-copypriorss:a", "0"]
+
+  # FFmpeg pulls an input seek back by 3/23s (about 0.13s) whenever a video
+  # stream has B-frame delay and the container cannot seek by PTS, which covers
+  # every MKV with B-frames. Seeking to a keyframe's exact timestamp therefore
+  # lands a whole GOP early: -ss 20.001 against an MKV keyframe at 20.000
+  # started the stream from the previous keyframe, at 10. 0.2s clears the
+  # pull-back and still sits far nearer this keyframe than the next one, so
+  # MKV and MP4 both land on it.
+  @keyframe_seek_margin_seconds 0.2
+
+  # A pinned keyframe (see Mydia.Streaming.KeyframeLocator) wins over the
+  # requested whole-second position. A keyframe at zero is the start of the
+  # file and needs no seek at all.
+  defp seek_args(keyframe, _start_position) when is_number(keyframe) and keyframe > 0 do
+    ["-ss", :erlang.float_to_binary(keyframe + @keyframe_seek_margin_seconds, decimals: 3)]
+  end
+
+  defp seek_args(keyframe, _start_position) when is_number(keyframe), do: []
+
+  defp seek_args(nil, start_position) when is_integer(start_position) and start_position > 0,
+    do: ["-ss", to_string(start_position)]
+
+  defp seek_args(nil, _start_position), do: []
 
   # Start FFmpeg process using Port
   defp start_ffmpeg_process(args) do
