@@ -195,6 +195,13 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # importable, before they finish downloading.
     Enum.each(bad_content, &reject_bad_content/1)
 
+    # And the ones that finished anyway, once their import has proved them
+    # junk. This runs every poll rather than at import time, so rows left
+    # behind before this pass existed are cleaned up too.
+    downloads
+    |> Enum.filter(&sweepable_junk?/1)
+    |> Enum.each(&reject_junk/1)
+
     # Self-heal abandoned grabs (persist the timeout so occupancy is released)
     Enum.each(stale_grabs, &handle_stale_grab/1)
 
@@ -573,6 +580,77 @@ defmodule Mydia.Jobs.DownloadMonitor do
       {:error, reason} ->
         Logger.warning("Could not auto-reject bad-content download",
           download_id: download_map.id,
+          reason: inspect(reason)
+        )
+
+        :ok
+    end
+  end
+
+  # --- Post-import junk sweep --------------------------------------------
+
+  # A completed download the importer gave up on because nothing in it was
+  # importable, and whose failure snapshot also proves nothing in it could be
+  # matched by hand (see `ImportCandidates.provably_junk?/1`). The
+  # pre-completion check above rejects most of these early, but the
+  # auto-reject cap deliberately lets a download finish once that check has
+  # fired too often for one media item, in case the check is wrong. A failed
+  # import on a payload ffprobe could not read settles that, so reject it the
+  # way an operator would from the Issues tab.
+  #
+  # Only for a client that answered this poll: `Queue.reject_release/2`
+  # deletes the row even when removing the torrent fails, so rejecting against
+  # a client that is down, disabled or removed would leave the torrent and its
+  # data behind with nothing tracking them. Those rows wait for a later poll.
+  defp sweepable_junk?(download_map) do
+    download_map.client_config_state == :present and
+      not is_nil(download_map.in_client?) and
+      junk_failure?(download_map)
+  end
+
+  # Shared by the poll-time filter and the re-check after reloading, so a row
+  # an operator retried in between (retrying clears `import_failed_at`) is left
+  # alone.
+  defp junk_failure?(download) do
+    is_nil(download.imported_at) and
+      not is_nil(download.import_failed_at) and
+      is_nil(download.import_next_retry_at) and
+      download.import_failure_reason == "no_importable_files" and
+      ImportCandidates.provably_junk?(import_candidates(download))
+  end
+
+  defp import_candidates(%{metadata: %{"import_candidates" => candidates}}), do: candidates
+  defp import_candidates(_download), do: nil
+
+  defp reject_junk(download_map) do
+    with_download(download_map, :reject_junk, [preload: [:media_item]], fn download ->
+      if junk_failure?(download), do: do_reject_junk(download)
+    end)
+  end
+
+  defp do_reject_junk(download) do
+    Logger.warning(
+      "Rejecting completed download: its import found nothing importable or salvageable",
+      download_id: download.id,
+      title: download.title,
+      files_sample:
+        download
+        |> import_candidates()
+        |> Enum.take(@bad_content_log_sample)
+        |> Enum.map(& &1["name"])
+    )
+
+    case Queue.reject_release(download,
+           actor_type: :system,
+           actor_id: "download_monitor",
+           failure_reason: "no_importable_files"
+         ) do
+      {:ok, :rejected} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Could not reject junk download",
+          download_id: download.id,
           reason: inspect(reason)
         )
 

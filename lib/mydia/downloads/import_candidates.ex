@@ -103,6 +103,36 @@ defmodule Mydia.Downloads.ImportCandidates do
     end
   end
 
+  @doc """
+  True when a failed import's candidate listing proves the download holds
+  nothing worth keeping.
+
+  Takes the list `build/3` stores at `metadata["import_candidates"]`. Every
+  file must have been dropped on its extension alone and then ruled out as
+  media: ffprobe called it `not_media`, or it is under `probe_size_floor/0`
+  and so was never probed.
+
+  Anything an operator could still salvage by hand makes the answer false: a
+  file with a video extension (sample and extra drops included, since sample
+  detection can be wrong), a `media` verdict (a real video under the wrong
+  extension), an `unknown` verdict (ffprobe was not available), or a large
+  file that was never probed (past `probe_cap/0`, or a listing written before
+  probing existed). Anything that is not a non-empty list is false too.
+  """
+  @spec provably_junk?(term()) :: boolean()
+  def provably_junk?([_ | _] = candidates), do: Enum.all?(candidates, &junk_candidate?/1)
+  def provably_junk?(_candidates), do: false
+
+  defp junk_candidate?(%{"skip_reason" => "not_video_extension"} = candidate),
+    do: ruled_out_as_media?(candidate)
+
+  defp junk_candidate?(_candidate), do: false
+
+  defp ruled_out_as_media?(%{"probe" => %{"status" => "not_media"}}), do: true
+  defp ruled_out_as_media?(%{"probe" => _verdict}), do: false
+  defp ruled_out_as_media?(%{"size" => size}) when is_integer(size), do: size < @probe_size_floor
+  defp ruled_out_as_media?(_candidate), do: false
+
   # Only files rejected purely on extension are worth probing: everything else
   # either imported fine or was correctly identified as a sample.
   defp add_probes(candidates) do

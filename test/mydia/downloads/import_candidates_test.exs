@@ -562,6 +562,88 @@ defmodule Mydia.Downloads.ImportCandidatesTest do
     end
   end
 
+  describe "provably_junk?/1" do
+    # The shape `build/3` stores at metadata["import_candidates"] after a failed
+    # import: string keys, and a "probe" verdict only on extension-rejected
+    # files at or above probe_size_floor/0.
+    defp snapshot(name, size, attrs \\ %{}) do
+      Map.merge(
+        %{
+          "path" => Path.join("/downloads", name),
+          "name" => name,
+          "size" => size,
+          "skip_reason" => "not_video_extension",
+          "parsed_season" => nil,
+          "parsed_episode" => nil
+        },
+        attrs
+      )
+    end
+
+    defp probed(status), do: %{"probe" => %{"status" => status, "detail" => "test verdict"}}
+
+    defp big, do: ImportCandidates.probe_size_floor() * 100
+
+    test "a lone archive ffprobe could not read is junk" do
+      assert ImportCandidates.provably_junk?([
+               snapshot(
+                 "Harbor.Lights.S02E06.1080p.WEB-DL.DDP5.1.Atmos.zipx",
+                 1_102_185_571,
+                 probed("not_media")
+               )
+             ])
+    end
+
+    test "unreadable archive parts plus a small unprobed nfo are junk" do
+      assert ImportCandidates.provably_junk?([
+               snapshot("release.part1.rar", big(), probed("not_media")),
+               snapshot("release.part2.rar", big(), probed("not_media")),
+               snapshot("release.nfo", 2_048)
+             ])
+    end
+
+    test "a file with a video extension is never junk, even one dropped as a sample" do
+      archive = snapshot("release.zipx", big(), probed("not_media"))
+
+      refute ImportCandidates.provably_junk?([
+               archive,
+               snapshot("release-sample.mkv", 40_000_000, %{
+                 "skip_reason" => "Sample file (detected from filename)"
+               })
+             ])
+
+      refute ImportCandidates.provably_junk?([
+               archive,
+               snapshot("episode.mkv", big(), %{"skip_reason" => nil})
+             ])
+    end
+
+    test "a media verdict means a real video under the wrong extension" do
+      refute ImportCandidates.provably_junk?([
+               snapshot("release.zipx", big(), probed("not_media")),
+               snapshot("a1b2c3d4.bin", big(), probed("media"))
+             ])
+    end
+
+    test "an unknown verdict proves nothing" do
+      refute ImportCandidates.provably_junk?([snapshot("release.zipx", big(), probed("unknown"))])
+    end
+
+    test "a large file that was never probed proves nothing" do
+      refute ImportCandidates.provably_junk?([
+               snapshot("release.zipx", big(), probed("not_media")),
+               snapshot("release.part21.rar", big())
+             ])
+    end
+
+    test "anything that is not a non-empty candidate list is not junk" do
+      refute ImportCandidates.provably_junk?(nil)
+      refute ImportCandidates.provably_junk?([])
+      refute ImportCandidates.provably_junk?(%{"name" => "release.zipx"})
+      refute ImportCandidates.provably_junk?([Map.delete(snapshot("release.nfo", 2_048), "size")])
+    end
+  end
+
   ## Helpers
 
   # A resolvable download client config whose download_directory is
