@@ -457,13 +457,7 @@ config :mydia, :features,
   # away and the scheduler job is a no-op
   # On by default: syncing an external list is a normal admin action
   # Can be overridden via ENABLE_IMPORT_LISTS environment variable
-  import_lists_enabled: true,
-  # Enable/disable Remote Access feature (iroh-based peer-to-peer connectivity)
-  # When enabled, starts the p2p server for remote device pairing and media streaming
-  # On by default: connecting a player is a normal user action, and requiring an
-  # operator to set an environment variable first would make it anything but.
-  # Can be overridden via ENABLE_REMOTE_ACCESS environment variable
-  remote_access_enabled: true
+  import_lists_enabled: true
 
 # P2P networking configuration (iroh)
 # UDP port for direct peer-to-peer connections (enables hole punching)

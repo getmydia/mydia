@@ -21,6 +21,8 @@ defmodule Mydia.Player do
       touches one of those processes.
   """
 
+  require Logger
+
   @doc "Whether the player is on for this boot."
   @spec enabled?() :: boolean()
   def enabled?, do: Application.get_env(:mydia, :player_enabled, true)
@@ -48,5 +50,76 @@ defmodule Mydia.Player do
   def parse_env!(value) do
     raise ArgumentError,
           "ENABLE_PLAYER must be one of true, false, 1 or 0, got: #{inspect(value)}"
+  end
+
+  # Intro and credits detection is the only player-only job today.
+  @player_cron_workers [Mydia.Jobs.SegmentDetectionScheduler]
+  @player_queues [:segments]
+
+  @doc """
+  The player's slot in `Mydia.Application.children/1`: its supervisor, or
+  nothing when the player is off.
+  """
+  @spec children() :: [module()]
+  def children, do: if(enabled?(), do: [Mydia.Player.Supervisor], else: [])
+
+  @doc """
+  Removes the player's cron entries and queues from an Oban config when the
+  player is off. The scheduler never fires and the queue never starts, so
+  detection jobs already in the table wait, untouched, for the player to come
+  back.
+  """
+  @spec prune_oban_config(keyword(), boolean()) :: keyword()
+  def prune_oban_config(oban_config, enabled \\ enabled?())
+  def prune_oban_config(oban_config, true), do: oban_config
+
+  def prune_oban_config(oban_config, false) do
+    oban_config
+    |> prune_queues()
+    |> prune_cron()
+  end
+
+  defp prune_queues(config) do
+    case Keyword.fetch(config, :queues) do
+      {:ok, queues} when is_list(queues) ->
+        Keyword.put(config, :queues, Keyword.drop(queues, @player_queues))
+
+      _ ->
+        config
+    end
+  end
+
+  defp prune_cron(config) do
+    case Keyword.fetch(config, :plugins) do
+      {:ok, plugins} when is_list(plugins) ->
+        Keyword.put(config, :plugins, Enum.map(plugins, &prune_cron_plugin/1))
+
+      _ ->
+        config
+    end
+  end
+
+  defp prune_cron_plugin({Oban.Plugins.Cron, opts}) do
+    crontab = opts |> Keyword.get(:crontab, []) |> Enum.reject(&player_cron_entry?/1)
+    {Oban.Plugins.Cron, Keyword.put(opts, :crontab, crontab)}
+  end
+
+  defp prune_cron_plugin(plugin), do: plugin
+
+  defp player_cron_entry?({_expression, worker}), do: worker in @player_cron_workers
+  defp player_cron_entry?({_expression, worker, _opts}), do: worker in @player_cron_workers
+  defp player_cron_entry?(_entry), do: false
+
+  @doc "Logs, once at boot, what the switch left out."
+  @spec log_boot_state() :: :ok
+  def log_boot_state do
+    unless enabled?() do
+      Logger.info(
+        "Player disabled by ENABLE_PLAYER: p2p, pairing, streaming, offline-download " <>
+          "transcodes, intro and credits detection and the player UI are off"
+      )
+    end
+
+    :ok
   end
 end

@@ -275,18 +275,10 @@ if config_env() == :prod do
         end
     end
 
-  remote_access_enabled =
-    case System.get_env("ENABLE_REMOTE_ACCESS") do
-      "true" -> true
-      "false" -> false
-      _ -> Application.get_env(:mydia, :features)[:remote_access_enabled] || false
-    end
-
   config :mydia, :features,
     playback_enabled: playback_enabled,
     cardigann_enabled: cardigann_enabled,
-    import_lists_enabled: import_lists_enabled,
-    remote_access_enabled: remote_access_enabled
+    import_lists_enabled: import_lists_enabled
 
   # Enable/disable public IP detection via external services
   # Default: true (enabled)
@@ -448,18 +440,10 @@ if config_env() in [:dev, :test] do
         end
     end
 
-  remote_access_enabled =
-    case System.get_env("ENABLE_REMOTE_ACCESS") do
-      "true" -> true
-      "false" -> false
-      _ -> Application.get_env(:mydia, :features)[:remote_access_enabled] || false
-    end
-
   config :mydia, :features,
     playback_enabled: playback_enabled,
     cardigann_enabled: cardigann_enabled,
-    import_lists_enabled: import_lists_enabled,
-    remote_access_enabled: remote_access_enabled
+    import_lists_enabled: import_lists_enabled
 end
 
 # A custom-URL import list is fetched by the server, so an admin-supplied URL is
