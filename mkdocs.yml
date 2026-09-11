@@ -115,6 +115,7 @@ nav:
           - using/reference/quality-profiles.md
           - using/reference/database.md
           - using/reference/api.md
+          - using/reference/library-api.md
       - Explanation:
           - using/explanation/index.md
           - using/explanation/configuration-model.md
