@@ -1,4 +1,5 @@
 schema {
+  mutation: RootMutationType
   query: RootQueryType
 }
 
@@ -27,6 +28,45 @@ type RootQueryType {
 
   "The download queue and history. Contacts every configured client."
   downloads(filter: DownloadFilter): [Download!]!
+}
+
+type RootMutationType {
+  "Turn monitoring on or off for a movie or show"
+  setMediaItemMonitored(id: ID!, monitored: Boolean!): MediaItemPayload!
+}
+
+"Why a mutation could not do what it was asked"
+enum UserErrorCode {
+  "The title is already in the library"
+  ALREADY_IN_LIBRARY
+
+  "An id names nothing"
+  NOT_FOUND
+
+  "The arguments cannot be satisfied"
+  INVALID_INPUT
+
+  "The metadata relay could not provide the title"
+  METADATA_UNAVAILABLE
+
+  "A download client could not do what was asked"
+  CLIENT_UNAVAILABLE
+}
+
+"An expected failure, tied to the argument that caused it when there is one"
+type UserError {
+  "Path to the argument, as sent"
+  field: [String!]
+
+  code: UserErrorCode!
+
+  message: String!
+}
+
+"The media item a mutation changed"
+type MediaItemPayload {
+  mediaItem: MediaItem
+  userErrors: [UserError!]!
 }
 
 "The download client a row belongs to"

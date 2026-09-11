@@ -9,7 +9,14 @@ defmodule Mydia.LibraryApi.Policy do
 
   alias Mydia.LibraryApi.Principal
 
-  @actions [:read_library, :read_downloads]
+  @actions [
+    :read_library,
+    :read_downloads,
+    :read_events,
+    :manage_library,
+    :search,
+    :manage_downloads
+  ]
 
   @doc "Every action a Library API field may declare."
   @spec actions() :: [atom()]

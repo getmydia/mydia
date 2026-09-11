@@ -18,6 +18,8 @@ defmodule MydiaWeb.LibrarySchema do
   import_types(MydiaWeb.LibrarySchema.QueryTypes)
   import_types(MydiaWeb.LibrarySchema.MediaTypes)
   import_types(MydiaWeb.LibrarySchema.DownloadTypes)
+  import_types(MydiaWeb.LibrarySchema.PayloadTypes)
+  import_types(MydiaWeb.LibrarySchema.MutationTypes)
 
   @introspection_fields [:__schema, :__type, :__typename]
 
@@ -27,7 +29,7 @@ defmodule MydiaWeb.LibrarySchema do
   A root field without one is an error rather than a default: authorization has
   to fail closed, and a field nobody marked is a field nobody decided about.
   """
-  def middleware(middleware, field, %{identifier: :query}) do
+  def middleware(middleware, field, %{identifier: root}) when root in [:query, :mutation] do
     if field.identifier in @introspection_fields do
       middleware
     else
@@ -48,5 +50,9 @@ defmodule MydiaWeb.LibrarySchema do
 
   query do
     import_fields(:library_queries)
+  end
+
+  mutation do
+    import_fields(:library_mutations)
   end
 end
