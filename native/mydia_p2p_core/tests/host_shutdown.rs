@@ -39,3 +39,21 @@ fn a_second_shutdown_returns_instead_of_hanging() {
 
     assert_eq!(blocking::get_node_addr(&host), "");
 }
+
+/// A host still waiting for its relay answers Shutdown at once instead of
+/// after the wait, which lasts up to 30 s when the relay cannot be reached.
+/// Online the wait is short, so this only catches a regression offline.
+#[test]
+fn shutdown_during_the_relay_wait_returns_promptly() {
+    let (host, _node_id) = Host::new(HostConfig::default());
+    let started = std::time::Instant::now();
+
+    blocking::shutdown(&host);
+
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "shutdown took {:?}",
+        started.elapsed()
+    );
+    assert_eq!(blocking::get_node_addr(&host), "");
+}

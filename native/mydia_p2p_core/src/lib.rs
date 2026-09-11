@@ -937,6 +937,9 @@ async fn run_event_loop(
     }));
     let mut relay_connected = false;
 
+    // Set by a `Command::Shutdown` and answered after the endpoint closes.
+    let mut shutdown_reply: Option<oneshot::Sender<()>> = None;
+
     // `connected_peers` is only ever touched from this loop, so pruning it
     // stays lock-free: each `handle_connection` task (one per accepted or
     // dialed connection) reports its own closure back here as
@@ -946,118 +949,161 @@ async fn run_event_loop(
     // reconnection under the same peer_id that raced ahead of it.
     let (disconnect_tx, mut disconnect_rx) = mpsc::channel::<(String, ConnectionId)>(64);
 
-    // Wait for endpoint to be online (relay connected + local IP available)
-    // Use a timeout to avoid blocking indefinitely if relay is unreachable
+    // Wait for the endpoint to come online (relay connected + local IP
+    // available), bounded by a timeout so an unreachable relay cannot block
+    // forever. Commands are read during this wait too: a `Shutdown` is
+    // answered at once instead of sitting unread until the wait ends, which
+    // otherwise made `terminate/2` hang for up to 30s right after the node
+    // started. Every other command is held, in arrival order, and served
+    // right after `Ready` is emitted below, so ordering stays exactly what
+    // it was before this wait could also drain the command channel.
     tracing::info!("Waiting for relay connection...");
-    match runtime::time::timeout(std::time::Duration::from_secs(30), endpoint.online()).await {
-        Ok(()) => {
-            relay_connected = true;
-            tracing::info!("Relay connection established");
-            let _ = event_tx.send(Event::RelayConnected).await;
-        }
-        Err(_) => {
-            tracing::warn!("Relay connection timed out after 30s - continuing without relay");
+    let mut shutting_down = false;
+    let mut held_commands: Vec<Command> = Vec::new();
+    let online = runtime::time::timeout(std::time::Duration::from_secs(30), endpoint.online());
+    let mut online = std::pin::pin!(online);
+    loop {
+        tokio::select! {
+            result = &mut online => {
+                match result {
+                    Ok(()) => {
+                        relay_connected = true;
+                        tracing::info!("Relay connection established");
+                        let _ = event_tx.send(Event::RelayConnected).await;
+                    }
+                    Err(_) => {
+                        tracing::warn!("Relay connection timed out after 30s - continuing without relay");
+                    }
+                }
+                break;
+            }
+            cmd = cmd_rx.recv() => {
+                match cmd {
+                    Some(Command::Shutdown { reply }) => {
+                        shutdown_reply = Some(reply);
+                        shutting_down = true;
+                        break;
+                    }
+                    Some(cmd) => held_commands.push(cmd),
+                    None => {
+                        shutting_down = true;
+                        break;
+                    }
+                }
+            }
         }
     }
 
-    // Get endpoint address and emit Ready event
-    let addr = endpoint.addr();
-    let addr_json = endpoint_addr_to_json(&addr);
-    let _ = event_tx
-        .send(Event::Ready {
-            node_addr: addr_json,
-        })
-        .await;
+    if !shutting_down {
+        // Get endpoint address and emit Ready event
+        let addr = endpoint.addr();
+        let addr_json = endpoint_addr_to_json(&addr);
+        let _ = event_tx
+            .send(Event::Ready {
+                node_addr: addr_json,
+            })
+            .await;
 
-    // Set by a `Command::Shutdown` and answered after the endpoint closes.
-    let mut shutdown_reply: Option<oneshot::Sender<()>> = None;
+        for cmd in held_commands {
+            handle_command(
+                cmd,
+                &endpoint,
+                &mut connected_peers,
+                &event_tx,
+                &shared_state,
+                relay_connected,
+                &disconnect_tx,
+            )
+            .await;
+        }
 
-    loop {
-        // A host both accepts inbound connections and serves commands; a
-        // client only serves commands. `tokio::select!` takes no `#[cfg]` on
-        // a branch, so the two loop bodies are spelled out separately. Both
-        // call the same handlers, so only the set of arms differs.
-        // `cmd_rx.recv()` returning `None` is the shutdown signal: it means
-        // every `Command` sender (all owned, directly or via clone, by the
-        // `Host` handle) has been dropped. That must end the loop on its
-        // own. It cannot be left to the `else` arm: `disconnect_rx` never
-        // observes closure while this function still holds `disconnect_tx`
-        // above, and `endpoint.accept()` simply stays pending with no more
-        // peers dialing in, so `else` would require both of those to also
-        // resolve to a non-matching value in the very same poll -- which
-        // they never do. Matching `cmd_rx.recv()`'s `Option` explicitly
-        // (instead of `Some(cmd) = cmd_rx.recv()`, which just disables the
-        // arm on `None` rather than ending the loop) makes shutdown fire
-        // directly off that one authoritative signal.
-        #[cfg(feature = "host")]
-        let running = tokio::select! {
-            Some(incoming) = endpoint.accept() => {
-                accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state, &disconnect_tx).await;
-                true
-            }
-
-            cmd = cmd_rx.recv() => {
-                match cmd {
-                    Some(Command::Shutdown { reply }) => {
-                        shutdown_reply = Some(reply);
-                        false
-                    }
-                    Some(cmd) => {
-                        handle_command(
-                            cmd,
-                            &endpoint,
-                            &mut connected_peers,
-                            &event_tx,
-                            &shared_state,
-                            relay_connected,
-                            &disconnect_tx,
-                        )
-                        .await;
-                        true
-                    }
-                    None => false,
+        loop {
+            // A host both accepts inbound connections and serves commands; a
+            // client only serves commands. `tokio::select!` takes no `#[cfg]` on
+            // a branch, so the two loop bodies are spelled out separately. Both
+            // call the same handlers, so only the set of arms differs.
+            // `cmd_rx.recv()` returning `None` is the shutdown signal: it means
+            // every `Command` sender (all owned, directly or via clone, by the
+            // `Host` handle) has been dropped. That must end the loop on its
+            // own. It cannot be left to the `else` arm: `disconnect_rx` never
+            // observes closure while this function still holds `disconnect_tx`
+            // above, and `endpoint.accept()` simply stays pending with no more
+            // peers dialing in, so `else` would require both of those to also
+            // resolve to a non-matching value in the very same poll -- which
+            // they never do. Matching `cmd_rx.recv()`'s `Option` explicitly
+            // (instead of `Some(cmd) = cmd_rx.recv()`, which just disables the
+            // arm on `None` rather than ending the loop) makes shutdown fire
+            // directly off that one authoritative signal.
+            #[cfg(feature = "host")]
+            let running = tokio::select! {
+                Some(incoming) = endpoint.accept() => {
+                    accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state, &disconnect_tx).await;
+                    true
                 }
-            }
 
-            Some((peer_id, stable_id)) = disconnect_rx.recv() => {
-                prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
-                true
-            }
-        };
-
-        #[cfg(not(feature = "host"))]
-        let running = tokio::select! {
-            cmd = cmd_rx.recv() => {
-                match cmd {
-                    Some(Command::Shutdown { reply }) => {
-                        shutdown_reply = Some(reply);
-                        false
+                cmd = cmd_rx.recv() => {
+                    match cmd {
+                        Some(Command::Shutdown { reply }) => {
+                            shutdown_reply = Some(reply);
+                            false
+                        }
+                        Some(cmd) => {
+                            handle_command(
+                                cmd,
+                                &endpoint,
+                                &mut connected_peers,
+                                &event_tx,
+                                &shared_state,
+                                relay_connected,
+                                &disconnect_tx,
+                            )
+                            .await;
+                            true
+                        }
+                        None => false,
                     }
-                    Some(cmd) => {
-                        handle_command(
-                            cmd,
-                            &endpoint,
-                            &mut connected_peers,
-                            &event_tx,
-                            &shared_state,
-                            relay_connected,
-                            &disconnect_tx,
-                        )
-                        .await;
-                        true
-                    }
-                    None => false,
                 }
-            }
 
-            Some((peer_id, stable_id)) = disconnect_rx.recv() => {
-                prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
-                true
-            }
-        };
+                Some((peer_id, stable_id)) = disconnect_rx.recv() => {
+                    prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
+                    true
+                }
+            };
 
-        if !running {
-            break;
+            #[cfg(not(feature = "host"))]
+            let running = tokio::select! {
+                cmd = cmd_rx.recv() => {
+                    match cmd {
+                        Some(Command::Shutdown { reply }) => {
+                            shutdown_reply = Some(reply);
+                            false
+                        }
+                        Some(cmd) => {
+                            handle_command(
+                                cmd,
+                                &endpoint,
+                                &mut connected_peers,
+                                &event_tx,
+                                &shared_state,
+                                relay_connected,
+                                &disconnect_tx,
+                            )
+                            .await;
+                            true
+                        }
+                        None => false,
+                    }
+                }
+
+                Some((peer_id, stable_id)) = disconnect_rx.recv() => {
+                    prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
+                    true
+                }
+            };
+
+            if !running {
+                break;
+            }
         }
     }
 
