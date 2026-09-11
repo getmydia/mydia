@@ -71,7 +71,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
     test "mounting redirects instead of rendering the page", %{conn: conn} do
       assert {:error, {:redirect, redirect}} = live(conn, ~p"/admin/import-lists")
 
-      assert redirect.to == ~p"/admin/dashboard"
+      assert redirect.to == ~p"/admin/config"
       assert redirect.flash["error"] =~ "disabled"
     end
 

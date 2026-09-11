@@ -1,6 +1,8 @@
 defmodule MydiaWeb.AdminRemoteAccessLive.Index do
   use MydiaWeb, :live_view
 
+  on_mount {MydiaWeb.PlayerHooks, :require_player}
+
   alias Mydia.Player.RemoteAccess, as: RemoteAccessSwitch
   alias Mydia.RemoteAccess
   alias Mydia.Settings

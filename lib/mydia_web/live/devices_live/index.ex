@@ -8,6 +8,8 @@ defmodule MydiaWeb.DevicesLive.Index do
   """
   use MydiaWeb, :live_view
 
+  on_mount {MydiaWeb.PlayerHooks, :require_player}
+
   alias Mydia.RemoteAccess
   alias MydiaWeb.DevicesLive.Components
 
