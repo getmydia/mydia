@@ -1,0 +1,300 @@
+schema {
+  query: RootQueryType
+}
+
+type RootQueryType {
+  "Quality profiles available to assign"
+  qualityProfiles: [QualityProfile!]!
+
+  "Library paths available to add media into"
+  libraryPaths: [LibraryPath!]!
+
+  "Search a metadata provider for titles not yet in the library"
+  lookup(query: String!, type: MediaType!, year: Int): [LookupResult!]!
+
+  "One media item, by id or by an external id"
+  mediaItem(id: ID, type: MediaType, tmdbId: Int, tvdbId: Int, imdbId: String): MediaItem
+
+  "Media items changed recently, oldest first"
+  mediaItems(first: Int, after: String, updatedSince: DateTime): MediaItemConnection!
+
+  "The download queue and history. Contacts every configured client."
+  downloads(filter: DownloadFilter): [Download!]!
+}
+
+"The download client a row belongs to"
+type DownloadClient {
+  name: String!
+
+  "Whether this client is still configured, disabled, or gone"
+  state: ClientConfigState!
+}
+
+"The indexer a row was grabbed from"
+type Indexer {
+  name: String!
+}
+
+"A download, with live status from its client"
+type Download {
+  id: ID!
+
+  title: String!
+
+  status: DownloadStatus!
+
+  "Percentage, 0 to 100"
+  progress: Float
+
+  "Float because GraphQL Int is 32-bit"
+  sizeBytes: Float
+
+  downloadedBytes: Float
+
+  etaSeconds: Int
+
+  "Null for a grab that has not reached a client yet"
+  downloadClient: DownloadClient
+
+  indexer: Indexer
+
+  errorMessage: String
+
+  importFailureReason: String
+
+  importFailedAt: DateTime
+
+  mediaItem: MediaItem
+
+  episode: Episode
+
+  addedAt: DateTime!
+}
+
+"Whether a media item is available, arriving, or absent"
+type AvailabilityStatus {
+  state: AvailabilityState!
+  monitored: Boolean!
+  fileCount: Int
+  downloaded: Int
+  total: Int
+}
+
+"One episode of a TV show"
+type Episode {
+  id: ID!
+
+  seasonNumber: Int!
+
+  episodeNumber: Int!
+
+  title: String
+
+  airDate: Date
+
+  monitored: Boolean!
+
+  "Whether any untrashed, non-extra file covers this episode"
+  hasFile: Boolean!
+}
+
+"A movie or TV show in the library"
+type MediaItem {
+  id: ID!
+  type: MediaType!
+  title: String!
+  year: Int
+  tmdbId: Int
+  tvdbId: Int
+  imdbId: String
+  monitored: Boolean!
+  qualityProfile: QualityProfile
+  status: AvailabilityStatus!
+  addedAt: DateTime!
+  updatedAt: DateTime!
+  episodes(season: Int): [Episode!]!
+}
+
+"A metadata provider hit"
+type LookupResult {
+  provider: MetadataProvider!
+
+  providerId: String!
+
+  type: MediaType!
+
+  title: String!
+
+  year: Int
+
+  overview: String
+
+  posterUrl: String
+
+  imdbId: String
+
+  "The library item this hit corresponds to, if Mydia already has it"
+  inLibrary: MediaItem
+}
+
+"One item in a mediaItems page"
+type MediaItemEdge {
+  node: MediaItem!
+  cursor: String!
+}
+
+"A page of media items"
+type MediaItemConnection {
+  edges: [MediaItemEdge!]!
+  pageInfo: PageInfo!
+}
+
+"A quality profile"
+type QualityProfile {
+  id: ID!
+  name: String!
+}
+
+"A library path Mydia scans"
+type LibraryPath {
+  id: ID!
+  path: String!
+  type: LibraryPathType!
+}
+
+"Pagination info"
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+"Media content types"
+enum MediaType {
+  "A movie"
+  MOVIE
+
+  "A TV show"
+  TV_SHOW
+}
+
+"Metadata providers the relay can answer from"
+enum MetadataProvider {
+  "TMDB"
+  TMDB
+
+  "TVDB"
+  TVDB
+}
+
+"Whether a media item is available, arriving, or absent"
+enum AvailabilityState {
+  "No file and nothing downloading"
+  MISSING
+
+  "Some episodes present"
+  PARTIAL
+
+  "Fully present"
+  DOWNLOADED
+
+  "At least one download active"
+  DOWNLOADING
+
+  "Every episode airs in the future"
+  UPCOMING
+}
+
+"Which downloads to return"
+enum DownloadFilter {
+  "Every download row"
+  ALL
+
+  "Not yet imported and still moving"
+  ACTIVE
+
+  "Finished in the client, not yet imported"
+  COMPLETED
+
+  "Imported into the library"
+  IMPORTED
+
+  "Failed in the client or during import"
+  FAILED
+}
+
+"A download's current state"
+enum DownloadStatus {
+  "Waiting to start"
+  QUEUED
+
+  "Handed to a client, no status yet"
+  GRABBING
+
+  "Receiving data"
+  DOWNLOADING
+
+  "Verifying, repairing, unpacking, or moving"
+  CHECKING
+
+  "Manually paused"
+  PAUSED
+
+  "Complete and uploading"
+  SEEDING
+
+  "Complete, not yet imported"
+  COMPLETED
+
+  "Imported into the library"
+  IMPORTED
+
+  "Terminal failure"
+  FAILED
+
+  "Gone from its client"
+  MISSING
+
+  "Unrecognised state"
+  UNKNOWN
+}
+
+"Whether a download's client configuration still exists"
+enum ClientConfigState {
+  "Configured and enabled"
+  PRESENT
+
+  "Configured but disabled"
+  DISABLED
+
+  "No longer configured"
+  REMOVED
+
+  "Not determined"
+  UNKNOWN
+}
+
+"What a library path holds"
+enum LibraryPathType {
+  "Movie library"
+  MOVIES
+
+  "TV series library"
+  SERIES
+
+  "Mixed content library"
+  MIXED
+}
+
+"""
+The `DateTime` scalar type represents a date and time in the UTC
+timezone. The DateTime appears in a JSON response as an ISO8601 formatted
+string, including UTC timezone ("Z"). The parsed date and time string will
+be converted to UTC if there is an offset.
+"""
+scalar DateTime
+
+"""
+The `Date` scalar type represents a date. The Date appears in a JSON
+response as an ISO8601 formatted string, without a time component.
+"""
+scalar Date
