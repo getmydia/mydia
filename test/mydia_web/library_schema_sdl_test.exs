@@ -38,11 +38,14 @@ defmodule MydiaWeb.LibrarySchemaSdlTest do
     object_names = ~w(
       MediaItem Episode AvailabilityStatus LookupResult Download DownloadClient Indexer
       QualityProfile LibraryPath PageInfo MediaItemEdge MediaItemConnection
+      UserError MediaItemPayload EpisodePayload AddMediaPayload RemoveMediaItemPayload
+      SearchPayload RemoveDownloadPayload Event EventEdge EventConnection
     )
 
     enum_names = ~w(
       MediaType MetadataProvider AvailabilityState DownloadFilter DownloadStatus
-      ClientConfigState LibraryPathType
+      ClientConfigState LibraryPathType UserErrorCode SeasonMonitoring
+      EpisodeMonitoringPreset Severity
     )
 
     for name <- object_names do
@@ -91,6 +94,44 @@ defmodule MydiaWeb.LibrarySchemaSdlTest do
 
     assert fields == approved,
            "the RootQueryType fields differ from the approved set. Missing: " <>
+             "#{inspect(approved |> MapSet.difference(fields) |> Enum.sort())}, unexpected: " <>
+             "#{inspect(fields |> MapSet.difference(approved) |> Enum.sort())}"
+  end
+
+  test "inputs and scalars are named as the contract says" do
+    sdl = Absinthe.Schema.to_sdl(MydiaWeb.LibrarySchema)
+
+    for name <- ~w(AddMovieInput AddTvShowInput RemoveMediaItemInput) do
+      assert sdl =~ ~r/^input #{name}\b/m, "the SDL has no `input #{name}`"
+    end
+
+    assert sdl =~ ~r/^scalar JSON\b/m
+  end
+
+  test "the root mutation fields are exactly the approved ones" do
+    sdl = Absinthe.Schema.to_sdl(MydiaWeb.LibrarySchema)
+
+    assert [_, block] = Regex.run(~r/type RootMutationType \{(.*?)\n\}/s, sdl),
+           "could not find the RootMutationType block in the SDL"
+
+    # Fields sit at exactly two spaces; arguments of a multi-line field sit
+    # deeper and descriptions start with a quote.
+    fields =
+      ~r/^  ([A-Za-z_][A-Za-z0-9_]*)[:(]/m
+      |> Regex.scan(block, capture: :all_but_first)
+      |> List.flatten()
+      |> MapSet.new()
+
+    approved =
+      MapSet.new(~w(
+        setMediaItemMonitored setSeasonMonitored setEpisodeMonitored applyEpisodeMonitoring
+        addMovie addTvShow removeMediaItem
+        searchMediaItem searchSeason searchEpisode
+        cancelDownload rejectRelease
+      ))
+
+    assert fields == approved,
+           "the RootMutationType fields differ from the approved set. Missing: " <>
              "#{inspect(approved |> MapSet.difference(fields) |> Enum.sort())}, unexpected: " <>
              "#{inspect(fields |> MapSet.difference(approved) |> Enum.sort())}"
   end
