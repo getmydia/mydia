@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/player/platform_features.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../focus_highlight.dart';
 import '../glass_surface.dart';
 
 /// A 36px-tall pill in the playback glass material.
@@ -88,12 +89,24 @@ class GlassPill extends StatelessWidget {
 
     if (onTap == null) return content;
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: content,
+    // FocusHighlight draws its ring only for keyboard and directional
+    // traversal and hides it under touch and mouse, so this needs no tier
+    // gate: a phone viewer sees exactly what they saw before, and a remote
+    // finally gets a focus stop on Back and Cast. Ring geometry matches the
+    // pill's own radius, or the ring traces a different rectangle than the
+    // one it surrounds.
+    return FocusHighlight(
+      onActivate: onTap,
+      borderRadius: const BorderRadius.all(
+        Radius.circular(DepthTokens.radiusPlayerPill),
+      ),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: content,
+        ),
       ),
     );
   }
