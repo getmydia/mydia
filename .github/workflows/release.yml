@@ -500,6 +500,9 @@ jobs:
       - name: Check APK ABIs
         run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
 
+      - name: Check AAB ABIs
+        run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/bundle/release/app-release.aab
+
       - name: Setup Ruby for Fastlane
         if: ${{ !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
         env:

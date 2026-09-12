@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Assert that a built player APK ships exactly the ABIs we intend.
+# Assert that a built player APK or AAB ships exactly the ABIs we intend.
 #
 # Flutter's Gradle plugin sets defaultConfig.ndk.abiFilters to its own fixed
 # list (armeabi-v7a, arm64-v8a, x86_64) in FlutterPlugin.kt's
@@ -32,15 +32,17 @@ if [ ! -f "$apk" ]; then
   exit 1
 fi
 
-# Directory names directly under lib/ are the ABI set. zipinfo -1 lists bare
-# paths, so the ^lib/ anchor cannot match a path with lib/ somewhere in the
-# middle. The [^/]+/ after it requires an ABI segment to actually be present,
-# so a bare "lib/" directory record (some zip tools store one, Flutter's own
-# output does not) can't match and contribute an empty ABI ahead of the real
-# names once sorted. The C locale is pinned so a runner's locale cannot
-# reorder the comparison string.
+# Directory names directly under lib/ are the ABI set. An Android App Bundle
+# (.aab) nests the same native libs one level deeper, under base/lib/<abi>/,
+# so both layouts are matched. zipinfo -1 lists bare paths, so the ^lib/ (or
+# ^base\/lib\/) anchor cannot match a path with lib/ somewhere in the middle.
+# The [^/]+/ after it requires an ABI segment to actually be present, so a
+# bare "lib/" or "base/lib/" directory record (some zip tools store one,
+# Flutter's own output does not) can't match and contribute an empty ABI
+# ahead of the real names once sorted. The C locale is pinned so a runner's
+# locale cannot reorder the comparison string.
 actual="$(unzip -Z1 "$apk" \
-  | awk -F/ '/^lib\/[^/]+\//{print $2}' \
+  | awk -F/ '/^lib\/[^/]+\//{print $2} /^base\/lib\/[^/]+\//{print $3}' \
   | LC_ALL=C sort -u | paste -sd, -)"
 
 # An APK with no lib/ entries yields an empty string and fails here, which is
