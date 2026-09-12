@@ -20,6 +20,7 @@ Future<void> _pump(
   void Function(String)? onNavigate,
   bool isOffline = false,
   double height = 1400,
+  FocusNode? selectedRowFocusNode,
 }) async {
   tester.view.physicalSize = Size(1200, height + 200);
   tester.view.devicePixelRatio = 1.0;
@@ -42,6 +43,7 @@ Future<void> _pump(
               location: location,
               onNavigate: onNavigate ?? (_) {},
               isOffline: isOffline,
+              selectedRowFocusNode: selectedRowFocusNode,
             ),
           ),
         ),
@@ -288,5 +290,43 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.get()!.hidden, isEmpty);
+  });
+
+  // The shell hands the sidebar one node and moves focus into it with the
+  // D-pad, so "is the node attached to a row?" is the whole contract. A node
+  // on no row cannot take focus, and left at the content edge becomes a dead
+  // button. Asserted by moving focus rather than by reading the field, since
+  // moving focus is what the shell actually does with it.
+  testWidgets('the shell node reaches the selected row', (tester) async {
+    final node = FocusNode(debugLabel: 'shell-sidebar');
+    addTearDown(node.dispose);
+
+    await _pump(tester, location: '/settings', selectedRowFocusNode: node);
+
+    node.requestFocus();
+    await tester.pump();
+
+    expect(node.hasFocus, isTrue);
+  });
+
+  testWidgets('the shell node reaches a row when nothing is selected',
+      (tester) async {
+    // A location the sidebar does not list at all — a filter the viewer
+    // deleted, or a shared `/filter/<id>` link. No row carries the selection,
+    // and without a fallback the node would attach to nothing and the sidebar
+    // would be unreachable from the content with a remote.
+    final node = FocusNode(debugLabel: 'shell-sidebar');
+    addTearDown(node.dispose);
+
+    await _pump(
+      tester,
+      location: '/filter/no-such-filter',
+      selectedRowFocusNode: node,
+    );
+
+    node.requestFocus();
+    await tester.pump();
+
+    expect(node.hasFocus, isTrue);
   });
 }

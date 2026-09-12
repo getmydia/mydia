@@ -35,6 +35,9 @@ class TransportSurface extends StatelessWidget {
   /// `playback_chrome.dart` for what that means and what still needs a home.
   final bool compact;
 
+  /// Optional externally-owned node for the play/pause button.
+  final FocusNode? playPauseFocusNode;
+
   const TransportSurface({
     super.key,
     required this.isPlaying,
@@ -44,6 +47,7 @@ class TransportSurface extends StatelessWidget {
     this.onPreviousEpisode,
     this.onNextEpisode,
     this.compact = false,
+    this.playPauseFocusNode,
   });
 
   static const Key playPauseKey = Key('transport-play-pause');
@@ -67,30 +71,29 @@ class TransportSurface extends StatelessWidget {
   /// buttons flanking it — while sharing the exact same transition as the
   /// full transport.
   ///
-  /// AnimatedSwitcher is keyed on the glyph so play <-> pause cross-fades
-  /// and scales rather than snapping. Deliberately not AnimatedIcons
-  /// .play_pause: that ships its own glyph style and would break the
-  /// _rounded family coherence the icon_family_test enforces.
+  /// The cross-fade lives *inside* [ControlButton] (`animateIcon`) rather than
+  /// in an `AnimatedSwitcher` around it. Wrapping the button keys the switcher
+  /// on [isPlaying], which mounts two `ControlButton`s for the 120ms
+  /// transition — harmless while each created its own private focus node, but
+  /// [playPauseFocusNode] is owned by the caller, and two live widgets cannot
+  /// both attach one node. Animating the glyph keeps a single button, and so a
+  /// single owner of the node, for the button's whole lifetime; it also means
+  /// `find.byKey(playPauseKey)` resolves to that one `ControlButton`
+  /// unconditionally, with no window in which it resolves ambiguously.
+  ///
+  /// Deliberately not AnimatedIcons.play_pause: that ships its own glyph style
+  /// and would break the _rounded family coherence the icon_family_test
+  /// enforces.
   Widget _playPause() {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 120),
-      transitionBuilder: (child, animation) => ScaleTransition(
-        scale: animation,
-        child: FadeTransition(opacity: animation, child: child),
-      ),
-      // The switching key sits on the wrapper, not the button, so
-      // `find.byKey(playPauseKey)` keeps resolving to the ControlButton.
-      child: KeyedSubtree(
-        key: ValueKey<bool>(isPlaying),
-        child: ControlButton(
-          key: playPauseKey,
-          icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          size: 40,
-          iconSize: 24,
-          tooltip: isPlaying ? 'Pause' : 'Play',
-          onTap: onPlayPause,
-        ),
-      ),
+    return ControlButton(
+      key: playPauseKey,
+      focusNode: playPauseFocusNode,
+      animateIcon: true,
+      icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+      size: 40,
+      iconSize: 24,
+      tooltip: isPlaying ? 'Pause' : 'Play',
+      onTap: onPlayPause,
     );
   }
 
@@ -160,6 +163,9 @@ class TransportCluster extends StatelessWidget {
   /// Forwarded to [TransportSurface.compact].
   final bool compact;
 
+  /// Optional externally-owned node for the play/pause button.
+  final FocusNode? playPauseFocusNode;
+
   const TransportCluster({
     super.key,
     required this.player,
@@ -168,6 +174,7 @@ class TransportCluster extends StatelessWidget {
     this.onPreviousEpisode,
     this.onNextEpisode,
     this.compact = false,
+    this.playPauseFocusNode,
   });
 
   @override
@@ -185,6 +192,7 @@ class TransportCluster extends StatelessWidget {
           onPreviousEpisode: onPreviousEpisode,
           onNextEpisode: onNextEpisode,
           compact: compact,
+          playPauseFocusNode: playPauseFocusNode,
         );
       },
     );

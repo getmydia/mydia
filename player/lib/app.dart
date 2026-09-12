@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/auth/auth_status.dart';
+import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/theme/app_theme.dart';
 import 'core/window/decoration_layout_source.dart';
@@ -520,10 +521,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // reverse: the buttons and drag band are positioned against the raw
       // window edge, so they must NOT be pushed down by the very inset that
       // exists to reserve room for them.
-      builder: (context, child) => DesktopWindowChrome(
-        layout: _decorationLayout.layout,
-        child: WindowChromeInset(
-          child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => TvCanvas(
+        child: DesktopWindowChrome(
+          layout: _decorationLayout.layout,
+          child: WindowChromeInset(
+            child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+          ),
         ),
       ),
     );

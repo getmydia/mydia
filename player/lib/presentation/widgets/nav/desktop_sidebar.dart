@@ -18,12 +18,18 @@ class DesktopSidebar extends StatelessWidget {
   final bool showBackToMydia;
   final bool isOffline;
 
+  /// Node for the selected row, forwarded to [SidebarContent] so the shell can
+  /// focus the sidebar deliberately when the viewer presses left at the
+  /// content edge.
+  final FocusNode? selectedRowFocusNode;
+
   const DesktopSidebar({
     super.key,
     required this.location,
     required this.onNavigate,
     this.showBackToMydia = false,
     this.isOffline = false,
+    this.selectedRowFocusNode,
   });
 
   @override
@@ -35,6 +41,7 @@ class DesktopSidebar extends StatelessWidget {
           location: location,
           onNavigate: onNavigate,
           isOffline: isOffline,
+          selectedRowFocusNode: selectedRowFocusNode,
           backToMydiaWidget: showBackToMydia ? const BackToMydiaButton() : null,
         ),
       ),

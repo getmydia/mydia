@@ -18,6 +18,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
@@ -649,12 +650,19 @@ ProviderContainer buildPlayerScreenContainer({
 }
 
 /// Mounts `PlayerScreen` under [container] and pumps once.
+///
+/// [createPlayer] is the screen's own seam for the media_kit `Player`: pass a
+/// factory whose player wraps a fake `PlatformPlayer` when the test needs to
+/// reach real playback, since mpv/FFI is unavailable under `flutter test`.
+/// Omitted, the screen builds a real `Player` exactly as it does in
+/// production.
 Future<void> pumpPlayerScreen(
   WidgetTester tester,
   ProviderContainer container, {
   String mediaId = 'movie-1',
   String mediaType = 'movie',
   String fileId = 'file-1',
+  Player Function()? createPlayer,
 }) async {
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
@@ -664,6 +672,7 @@ Future<void> pumpPlayerScreen(
         mediaType: mediaType,
         fileId: fileId,
         title: 'The Long Aurora',
+        createPlayer: createPlayer,
       ),
     ),
   ));

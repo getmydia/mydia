@@ -24,12 +24,23 @@ class SidebarContent extends ConsumerWidget {
     required this.onNavigate,
     required this.isOffline,
     this.backToMydiaWidget,
+    this.selectedRowFocusNode,
   });
 
   final String location;
   final ValueChanged<String> onNavigate;
   final bool isOffline;
   final Widget? backToMydiaWidget;
+
+  /// Node for the row matching the current route, so the shell can focus the
+  /// sidebar deliberately when the viewer presses left at the content edge.
+  ///
+  /// Falls back to the first row the sidebar renders when the location matches
+  /// no destination at all — see `_focusRowId` — because otherwise the node
+  /// would attach to no row and the sidebar would be unreachable from a remote
+  /// on the routes it does not list, such as a filter that has since been
+  /// deleted.
+  final FocusNode? selectedRowFocusNode;
 
   /// The destination that should render as selected.
   ///
@@ -51,6 +62,38 @@ class SidebarContent extends ConsumerWidget {
       }
     }
     return best;
+  }
+
+  /// The destination whose row carries `selectedRowFocusNode`.
+  ///
+  /// Usually the selected row: that is the row a viewer already reads as "where
+  /// I am" in the sidebar. The fallback exists because a location can match no
+  /// destination at all — a filter the viewer deleted, a shared `/filter/<id>`
+  /// link — and then no row would carry the node, leaving the shell with
+  /// nothing to focus and the sidebar unreachable from the content with a
+  /// D-pad, which is the defect the boundary exists to fix. The first row the
+  /// sidebar renders is the predictable place for a left press to land on a
+  /// screen the sidebar does not consider part of any destination.
+  ///
+  /// The order here mirrors the render order in [build] — anchors first, then
+  /// the scrolling middle, then the remaining anchors. Anchors cannot be
+  /// hidden, so only the middle list needs [middleIncludesHidden]; skipping
+  /// hidden rows outside edit mode keeps the fallback on a row that is
+  /// actually on screen, since [SidebarMiddleList] filters them out there.
+  static String? _focusRowId({
+    required NavDestination? selected,
+    required List<NavDestination> leading,
+    required List<SidebarEditRow> middle,
+    required bool middleIncludesHidden,
+    required List<NavDestination> trailing,
+  }) {
+    if (selected != null) return selected.id;
+    if (leading.isNotEmpty) return leading.first.id;
+    for (final row in middle) {
+      if (middleIncludesHidden || !row.hidden) return row.destination.id;
+    }
+    if (trailing.isNotEmpty) return trailing.first.id;
+    return null;
   }
 
   @override
@@ -78,6 +121,13 @@ class SidebarContent extends ConsumerWidget {
         destinations.where((d) => d.isAnchored && d.id == 'search').toList();
     final trailing =
         destinations.where((d) => d.isAnchored && d.id != 'search').toList();
+    final focusRowId = _focusRowId(
+      selected: selected,
+      leading: leading,
+      middle: editRows,
+      middleIncludesHidden: editing,
+      trailing: trailing,
+    );
 
     final hasBackWidget = backToMydiaWidget != null;
 
@@ -136,6 +186,7 @@ class SidebarContent extends ConsumerWidget {
                     context: context,
                     destination: destination,
                     selected: selected,
+                    focusRowId: focusRowId,
                     isEditing: editing,
                   ),
                   const SizedBox(height: 2),
@@ -149,6 +200,7 @@ class SidebarContent extends ConsumerWidget {
                       context: context,
                       destination: row.destination,
                       selected: selected,
+                      focusRowId: focusRowId,
                       isEditing: editing,
                       isHidden: row.hidden,
                       editingTrailing: editingTrailing,
@@ -188,6 +240,7 @@ class SidebarContent extends ConsumerWidget {
                     context: context,
                     destination: destination,
                     selected: selected,
+                    focusRowId: focusRowId,
                     isEditing: editing,
                   ),
                   const SizedBox(height: 2),
@@ -263,6 +316,7 @@ class SidebarContent extends ConsumerWidget {
     required BuildContext context,
     required NavDestination destination,
     required NavDestination? selected,
+    required String? focusRowId,
     bool isEditing = false,
     bool isHidden = false,
     Widget? editingTrailing,
@@ -270,6 +324,10 @@ class SidebarContent extends ConsumerWidget {
     final isSelected = selected?.id == destination.id;
     final isDisabled = isOffline && destination.id != 'downloads';
     final canCustomise = !destination.isAnchored;
+
+    // The row that carries the shell's node. Not the same test as `isSelected`:
+    // see [_focusRowId].
+    final carriesFocusNode = destination.id == focusRowId;
 
     // Anchors read as locked while editing so they do not look draggable.
     // They cannot move, and saying so is more honest than leaving them bare.
@@ -283,6 +341,7 @@ class SidebarContent extends ConsumerWidget {
 
     if (destination.id == 'settings') {
       return SettingsSidebarRow(
+        focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         isSelected: isSelected,
         isDisabled: isDisabled,
         onTap: () => onNavigate(destination.route),
@@ -294,6 +353,7 @@ class SidebarContent extends ConsumerWidget {
 
     if (destination is FilterDestination) {
       return SidebarRow(
+        focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         icon: destination.icon,
         selectedIcon: destination.selectedIcon,
         label: destination.label,
@@ -328,6 +388,7 @@ class SidebarContent extends ConsumerWidget {
     }
 
     return SidebarRow(
+      focusNode: carriesFocusNode ? selectedRowFocusNode : null,
       icon: destination.icon,
       selectedIcon: destination.selectedIcon,
       label: destination.label,

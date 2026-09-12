@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../focus_highlight.dart';
 import '../glass_surface.dart';
 
 /// A 36px-tall pill in the playback glass material.
@@ -135,6 +137,41 @@ class ChromeTopBar extends StatelessWidget {
   static const Key titleKey = Key('chrome-title');
   static const Key castKey = Key('chrome-cast');
 
+  /// Wraps a pill in a focus stop, so a D-pad can reach it.
+  ///
+  /// Applied here, at the two top-bar pills that need it, rather than inside
+  /// [GlassPill]: GlassPill is also the resting pill in `UpNextPrompt`, whose
+  /// child already carries three focus stops of its own. Wrapping there nests
+  /// a fourth around them, which reading-order traversal picks first — shifting
+  /// every Tab by one and ringing the whole pill instead of the control the
+  /// viewer is on. `detail_action_row.dart` avoids the same nesting with
+  /// `canRequestFocus: false`.
+  ///
+  /// Returns the pill untouched when it has no action, matching the inert-pill
+  /// behaviour the Back and Cast pills already document.
+  ///
+  /// Gated on [InputCapabilities.directionalPrimary]. [FocusHighlight] needs no
+  /// *ring* gate — it shows the ring only for keyboard and directional
+  /// traversal and hides it under touch and mouse, so a phone viewer sees no
+  /// ring they did not see before — but the wrapper is a focus stop on every
+  /// platform, and adding one changes the top bar's Tab order: off-tier the
+  /// playback chrome would gain two stops (Back and Cast) and Enter/Space on a
+  /// pill would reach [FocusHighlight]'s `ActivateIntent` where those keys
+  /// previously fell through. Chrome Tab order is pinned behaviour in this
+  /// repo — `up_next_prompt_test.dart` exists because a nested wrapper shifted
+  /// it — so the wrapper is scope-limited to the directional tier it was
+  /// written for.
+  Widget _focusablePill({required Widget child, required VoidCallback? onTap}) {
+    if (onTap == null || !InputCapabilities.directionalPrimary) return child;
+    return FocusHighlight(
+      onActivate: onTap,
+      borderRadius: const BorderRadius.all(
+        Radius.circular(DepthTokens.radiusPlayerPill),
+      ),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final titleText = title;
@@ -146,17 +183,20 @@ class ChromeTopBar extends StatelessWidget {
         Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
-            child: GlassPill(
-              key: backKey,
-              tier: tier,
+            child: _focusablePill(
               onTap: onBack,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.chevron_left_rounded),
-                  SizedBox(width: 2),
-                  Text('Back'),
-                ],
+              child: GlassPill(
+                key: backKey,
+                tier: tier,
+                onTap: onBack,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.chevron_left_rounded),
+                    SizedBox(width: 2),
+                    Text('Back'),
+                  ],
+                ),
               ),
             ),
           ),
@@ -196,11 +236,14 @@ class ChromeTopBar extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: cast == null
                 ? const SizedBox.shrink()
-                : GlassPill(
-                    key: castKey,
-                    tier: tier,
+                : _focusablePill(
                     onTap: onCastTap,
-                    child: cast,
+                    child: GlassPill(
+                      key: castKey,
+                      tier: tier,
+                      onTap: onCastTap,
+                      child: cast,
+                    ),
                   ),
           ),
         ),

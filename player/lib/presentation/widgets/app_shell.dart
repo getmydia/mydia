@@ -6,8 +6,11 @@ import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
+import '../../core/focus/region_traversal_policy.dart';
+import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
+import '../../core/player/input_capabilities.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
@@ -196,6 +199,39 @@ class _AppShellState extends ConsumerState<AppShell>
   /// Whether the nav drawer is open. Drives [AppShell.dockChrome].
   bool _drawerOpen = false;
 
+  /// Node for the sidebar's selected row. Also the boundary's target, so one
+  /// node serves both the row that takes focus and the shell that asks for it.
+  ///
+  /// The boundary that uses it — and the memory of which card focus came from,
+  /// so the move is a round trip rather than a one-way jump — lives in
+  /// [SidebarFocusBoundary], where a test can drive it. The shell itself cannot
+  /// be mounted by a widget test: it needs the authenticated provider graph.
+  final FocusNode _sidebarFocusNode = FocusNode(debugLabel: 'sidebar-selected');
+
+  /// The two regions' scopes.
+  ///
+  /// Owned here rather than left to `FocusScope`'s implicit node, because
+  /// [SidebarFocusBoundary] falls back to the *first focusable inside the
+  /// content region* when the node it remembered has been disposed by a route
+  /// change, and finding that needs the region's own scope to enumerate.
+  ///
+  /// Both keep the default `directionalTraversalEdgeBehavior` of
+  /// [TraversalEdgeBehavior.stop], which is load-bearing: under `closedLoop`
+  /// or `parentScope` the traversal mixin resolves the region edge inside
+  /// `inDirection`, before [RegionTraversalPolicy.onExit] is ever consulted —
+  /// so the boundary would silently stop calling back and the sidebar would
+  /// become unreachable again, with no test failing. Do not reconfigure these
+  /// nodes.
+  final FocusScopeNode _sidebarScopeNode =
+      FocusScopeNode(debugLabel: 'sidebar-region');
+  final FocusScopeNode _contentScopeNode =
+      FocusScopeNode(debugLabel: 'content-region');
+
+  late final SidebarFocusBoundary _focusBoundary = SidebarFocusBoundary(
+    sidebarNode: _sidebarFocusNode,
+    contentScope: _contentScopeNode,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -247,6 +283,9 @@ class _AppShellState extends ConsumerState<AppShell>
     WidgetsBinding.instance.removeObserver(this);
     _router?.routerDelegate.removeListener(_onRouteChanged);
     _collectionAutoSync?.dispose();
+    _sidebarFocusNode.dispose();
+    _sidebarScopeNode.dispose();
+    _contentScopeNode.dispose();
     super.dispose();
   }
 
@@ -302,6 +341,41 @@ class _AppShellState extends ConsumerState<AppShell>
     context.go(route);
   }
 
+  /// Wraps [child] in a focus region, or returns it untouched off the
+  /// directional tier.
+  ///
+  /// The boundary is a remote affordance: a D-pad viewer has no pointer and no
+  /// Tab key, so the only way into the sidebar has to be an arrow key, and that
+  /// needs a region that fails predictably at its edge. A desktop or web viewer
+  /// has both a pointer and Tab, and their arrow-key behaviour today is the
+  /// plain scoped geometric walk; gating here is what keeps this change from
+  /// altering it. Returning `child` unwrapped rather than installing an inert
+  /// region also means the non-directional tree is byte-for-byte what it was.
+  ///
+  /// The scope is given an explicit [FocusScopeNode] owned by this state
+  /// (rather than left to `FocusScope`'s implicit one) so the region can be
+  /// enumerated: [SidebarFocusBoundary] falls back to the first focusable in
+  /// the content region when the node it remembered has been disposed by a
+  /// route change, and [_contentScopeNode] is how it finds one. That node
+  /// keeps the default `directionalTraversalEdgeBehavior` of
+  /// [TraversalEdgeBehavior.stop], and that is load-bearing. Under `closedLoop`
+  /// or `parentScope` the traversal mixin resolves the region edge itself,
+  /// inside `inDirection`, before [RegionTraversalPolicy.onExit] is ever
+  /// consulted — so the boundary would silently stop calling back and the
+  /// sidebar would become unreachable again, with no test failing. Do not
+  /// reconfigure these nodes.
+  Widget _region({
+    required Widget child,
+    required RegionExitCallback onExit,
+    required FocusScopeNode node,
+  }) {
+    if (!InputCapabilities.directionalPrimary) return child;
+    return FocusTraversalGroup(
+      policy: RegionTraversalPolicy(onExit: onExit),
+      child: FocusScope(node: node, child: child),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final location = widget.location;
@@ -336,21 +410,40 @@ class _AppShellState extends ConsumerState<AppShell>
             Positioned.fill(child: backdrop),
             Row(
               children: [
-                DesktopSidebar(
-                  location: location,
-                  onNavigate: _navigateTo,
-                  showBackToMydia: showBackToMydia,
-                  isOffline: isOffline,
+                _region(
+                  node: _sidebarScopeNode,
+                  onExit: (direction) => direction == TraversalDirection.right
+                      ? _focusBoundary.focusContent()
+                      : false,
+                  child: DesktopSidebar(
+                    location: location,
+                    onNavigate: _navigateTo,
+                    showBackToMydia: showBackToMydia,
+                    isOffline: isOffline,
+                    // Gated like the region above it: off-tier the sidebar row
+                    // falls back to the per-row node FocusHighlight creates,
+                    // which is what keeps `_region`'s "unchanged off-tier"
+                    // claim true rather than borrowing the shell-owned node.
+                    selectedRowFocusNode: InputCapabilities.directionalPrimary
+                        ? _sidebarFocusNode
+                        : null,
+                  ),
                 ),
                 Expanded(
-                  child: AppShell.contentGutter(
-                    child: Column(
-                      children: [
-                        if (isOffline) const OfflineBanner(),
-                        const CompatibilityBanner(),
-                        const UpdateBanner(),
-                        Expanded(child: widget.child),
-                      ],
+                  child: _region(
+                    node: _contentScopeNode,
+                    onExit: (direction) => direction == TraversalDirection.left
+                        ? _focusBoundary.focusSidebar()
+                        : false,
+                    child: AppShell.contentGutter(
+                      child: Column(
+                        children: [
+                          if (isOffline) const OfflineBanner(),
+                          const CompatibilityBanner(),
+                          const UpdateBanner(),
+                          Expanded(child: widget.child),
+                        ],
+                      ),
                     ),
                   ),
                 ),
