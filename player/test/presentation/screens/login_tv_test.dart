@@ -322,9 +322,16 @@ void main() {
           tester.widget<ExcludeFocus>(excludedAncestor.first);
       expect(excludeFocusWidget.excluding, isTrue);
 
-      // Verify overlay close button is focused
-      final closeButton = find.byIcon(Icons.close);
+      // Verify overlay close button is focused and exposes accessible tooltip semantics
+      final closeButton = find.byTooltip('Close advanced settings');
       expect(closeButton, findsOneWidget);
+      expect(
+        find.descendant(
+          of: closeButton,
+          matching: find.byIcon(Icons.close),
+        ),
+        findsOneWidget,
+      );
       final closeFocusHighlight = find.ancestor(
         of: closeButton,
         matching: find.byType(FocusHighlight),

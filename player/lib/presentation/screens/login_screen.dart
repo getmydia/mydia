@@ -1652,6 +1652,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               borderRadius: BorderRadius.circular(8),
                               child: IconButton(
                                 onPressed: _closeAdvancedSettings,
+                                tooltip: 'Close advanced settings',
                                 icon: const Icon(
                                   Icons.close,
                                   color: AppColors.textSecondary,
