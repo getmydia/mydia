@@ -44,6 +44,7 @@ defmodule Mydia.Plugins.HostFunctions do
   require Logger
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias Mydia.Collections
   alias Mydia.Media
   alias Mydia.Playback
@@ -504,7 +505,7 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   defp fetch_media_item(id) do
-    {:ok, Media.get_media_item!(id)}
+    {:ok, Media.get_media_item!(Scope.system(), id)}
   rescue
     Ecto.NoResultsError -> {:error, Error.new(:not_found, "media_item #{id} not found")}
     Ecto.Query.CastError -> {:error, Error.new(:invalid_request, "invalid media_item id")}
@@ -595,7 +596,9 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   defp list_namespace(_plugin, "media_item", cursor, since, limit) do
-    rows = Media.list_items_page(after: cursor, updated_since: since, limit: limit + 1)
+    rows =
+      Media.list_items_page(Scope.system(), after: cursor, updated_since: since, limit: limit + 1)
+
     {page, next} = paginate(rows, limit)
 
     items =
@@ -605,7 +608,13 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   defp list_namespace(_plugin, "library_item", cursor, since, limit) do
-    rows = Media.list_library_items_page(after: cursor, updated_since: since, limit: limit + 1)
+    rows =
+      Media.list_library_items_page(Scope.system(),
+        after: cursor,
+        updated_since: since,
+        limit: limit + 1
+      )
+
     {page, next} = paginate(rows, limit)
     items = Enum.map(page, fn row -> {:"library-item", to_library_item(row)} end)
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
@@ -777,7 +786,7 @@ defmodule Mydia.Plugins.HostFunctions do
   defp apply_favorite(user_id, media_item_id) do
     user = Accounts.get_user!(user_id)
 
-    if Collections.is_favorite?(user, media_item_id) do
+    if Collections.is_favorite?(Scope.for_user(user), media_item_id) do
       {:ok, %{status: :"already-favorited"}}
     else
       with {:ok, favorites} <- Collections.get_or_create_favorites(user),

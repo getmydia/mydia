@@ -83,7 +83,7 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       view |> element("#select-all") |> render_click()
       view |> element("#batch-unmonitor") |> render_click()
 
-      refute Mydia.Media.get_media_item!(anime.id).monitored
+      refute Mydia.Media.get_media_item!(Mydia.Accounts.Scope.unrestricted(), anime.id).monitored
     end
 
     test "redirects when the section belongs to someone else", %{conn: conn} do

@@ -24,6 +24,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
   import Mydia.MetadataCacheHelpers
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
@@ -140,7 +141,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
       refute is_nil(approved.media_item_id),
              "approval must link the created media item; a nil id means the metadata fetch failed"
 
-      media_item = Media.get_media_item!(approved.media_item_id)
+      media_item = Media.get_media_item!(Scope.unrestricted(), approved.media_item_id)
 
       assert media_item.type == "movie"
       assert media_item.title == MetadataStubProvider.movie_title()
@@ -247,7 +248,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
       assert approved.status == "approved"
       refute is_nil(approved.media_item_id)
 
-      media_item = Media.get_media_item!(approved.media_item_id)
+      media_item = Media.get_media_item!(Scope.unrestricted(), approved.media_item_id)
 
       assert media_item.type == "tv_show"
       assert media_item.title == MetadataStubProvider.series_title()
@@ -262,7 +263,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
       admin: admin
     } do
       {:ok, request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: MetadataStubProvider.movie_title(),
           tmdb_id: MetadataStubProvider.movie_tmdb_id(),
@@ -300,16 +301,18 @@ defmodule MydiaWeb.GuestRequestFlowTest do
         requester_id: guest.id
       }
 
-      {:ok, _first} = MediaRequests.create_request(attrs)
+      {:ok, _first} = MediaRequests.create_request(Scope.unrestricted(), attrs)
 
-      assert {:error, :duplicate_request} = MediaRequests.create_request(attrs)
+      assert {:error, :duplicate_request} =
+               MediaRequests.create_request(Scope.unrestricted(), attrs)
+
       assert Repo.aggregate(MediaRequest, :count) == 1
     end
 
     test "requesting media already in the library is refused", %{guest: guest, admin: admin} do
       # Approve one request so the media item exists in the library.
       {:ok, request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: MetadataStubProvider.movie_title(),
           tmdb_id: MetadataStubProvider.movie_tmdb_id(),
@@ -317,10 +320,10 @@ defmodule MydiaWeb.GuestRequestFlowTest do
         })
 
       {:ok, _} =
-        MediaRequests.approve_request(request, %{approved_by_id: admin.id})
+        MediaRequests.approve_request(Scope.unrestricted(), request, %{approved_by_id: admin.id})
 
       assert {:error, :duplicate_media} =
-               MediaRequests.create_request(%{
+               MediaRequests.create_request(Scope.unrestricted(), %{
                  media_type: "movie",
                  title: MetadataStubProvider.movie_title(),
                  tmdb_id: MetadataStubProvider.movie_tmdb_id(),
@@ -336,7 +339,7 @@ defmodule MydiaWeb.GuestRequestFlowTest do
       admin: admin
     } do
       {:ok, request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Unresolvable Movie",
           tmdb_id: MetadataStubProvider.missing_id(),

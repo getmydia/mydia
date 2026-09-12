@@ -10,6 +10,7 @@ defmodule Mydia.Library.MetadataEnricher do
   """
 
   require Logger
+  alias Mydia.Accounts.Scope
   alias Mydia.{Media, Metadata, Repo}
   alias Mydia.Library.MetadataPreparation
   alias Mydia.Media.ExternalIds
@@ -134,7 +135,9 @@ defmodule Mydia.Library.MetadataEnricher do
     provider_key = if provider_type == :tvdb, do: :tvdb, else: :tmdb
 
     existing_item =
-      Media.find_by_external_ids(%{provider_key => id}, type: media_type_to_string(media_type))
+      Media.find_by_external_ids(Scope.system(), %{provider_key => id},
+        type: media_type_to_string(media_type)
+      )
 
     case existing_item do
       nil ->
@@ -461,7 +464,7 @@ defmodule Mydia.Library.MetadataEnricher do
       attrs,
       [type: media_type_to_string(media_type), title: attrs[:title]],
       fn attrs ->
-        Media.create_media_item(attrs, skip_episode_refresh: true)
+        Media.create_media_item(Scope.system(), attrs, skip_episode_refresh: true)
       end
     )
   end
@@ -489,7 +492,11 @@ defmodule Mydia.Library.MetadataEnricher do
             exclude_id: media_item.id,
             title: media_item.title
           ],
-          fn attrs -> Media.update_media_item(media_item, attrs, reason: "Metadata enriched") end
+          fn attrs ->
+            Media.update_media_item(Scope.system(), media_item, attrs,
+              reason: "Metadata enriched"
+            )
+          end
         )
     end
   end

@@ -4,6 +4,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
   import Mydia.AccountsFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias Mydia.Metadata.Structs.MediaMetadata
 
@@ -117,7 +118,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tvdb_search(bypass, tvdb_id, "TMDB Lib Show", 2019)
 
       assert {:ok, item, _map} =
-               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :tv_show, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
+                 {:tmdb, id},
+                 :tv_show,
+                 %{},
+                 config
+               )
 
       assert item.type == "tv_show"
       assert item.metadata_source == :tmdb
@@ -138,6 +145,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
                  {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
@@ -158,6 +166,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
                  {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
@@ -180,6 +189,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, _map} =
                MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
                  {:tmdb, tmdb_id},
                  :tv_show,
                  %{},
@@ -197,7 +207,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tmdb_movie(bypass, id, "A Movie", 2019)
 
       assert {:ok, item, _map} =
-               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :movie, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
+                 {:tmdb, id},
+                 :movie,
+                 %{},
+                 config
+               )
 
       assert item.type == "movie"
       assert item.metadata_source == nil
@@ -217,6 +233,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
 
       assert {:ok, item, updated_map} =
                MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
                  {:tvdb, tvdb_id},
                  :tv_show,
                  %{},
@@ -261,7 +278,13 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpersTest do
       stub_tmdb_movie(bypass, id, "Already Added", 2019)
 
       assert {:already_in_library, item, updated_map} =
-               MediaAddHelpers.handle_add_media_to_library({:tmdb, id}, :movie, %{}, config)
+               MediaAddHelpers.handle_add_media_to_library(
+                 Scope.unrestricted(),
+                 {:tmdb, id},
+                 :movie,
+                 %{},
+                 config
+               )
 
       assert item.id == existing.id
       assert updated_map[id][:in_library] == true

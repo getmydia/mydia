@@ -26,6 +26,7 @@ defmodule Mydia.ImportCandidates do
     SelectionScope
   }
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.Episode
   alias Mydia.Metadata
@@ -1566,6 +1567,7 @@ defmodule Mydia.ImportCandidates do
     {title, year} = title_and_year(anchor_key)
 
     case Media.create_media_item(
+           Scope.system(),
            %{title: title, year: year, type: "tv_show", monitored: false},
            skip_episode_refresh: true
          ) do

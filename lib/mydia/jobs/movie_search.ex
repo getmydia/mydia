@@ -34,6 +34,7 @@ defmodule Mydia.Jobs.MovieSearch do
   import Ecto.Query, warn: false
 
   alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads.{Blacklists, Download}
   alias Mydia.Indexers.RankingOptions
   alias Mydia.Indexers.QualityProfileResolver
@@ -192,7 +193,7 @@ defmodule Mydia.Jobs.MovieSearch do
 
     result =
       try do
-        media_item = Media.get_media_item!(media_item_id)
+        media_item = Media.get_media_item!(Scope.system(), media_item_id)
 
         case media_item do
           %MediaItem{type: "movie"} = movie ->

@@ -618,7 +618,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
       ) do
     results =
       if String.length(query) >= 2 do
-        Media.list_media_items(search: query) |> Enum.take(10)
+        socket.assigns.current_scope
+        |> Media.list_media_items(search: query)
+        |> Enum.take(10)
       else
         []
       end
@@ -636,8 +638,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       with_download(socket, id, [preload: [:media_item]], fn download ->
         dialog =
-          download
-          |> MatchDialog.open(mode_atom(mode))
+          socket.assigns.current_scope
+          |> MatchDialog.open(download, mode_atom(mode))
           |> then(&MatchDialog.search(&1, &1.query))
 
         {:noreply, assign(socket, :match_modal, dialog)}
@@ -706,7 +708,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
           {:ok, source, candidates} ->
             episodes =
               if download.media_item && download.media_item.type == "tv_show" do
-                Media.list_episodes(download.media_item.id)
+                Media.list_episodes(socket.assigns.current_scope, download.media_item.id)
               else
                 []
               end
@@ -793,7 +795,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
       valid_episode_ids =
         case download.media_item do
           %{type: "tv_show", id: media_item_id} ->
-            media_item_id |> Media.list_episodes() |> MapSet.new(& &1.id)
+            socket.assigns.current_scope
+            |> Media.list_episodes(media_item_id)
+            |> MapSet.new(& &1.id)
 
           _other ->
             MapSet.new()

@@ -3,6 +3,7 @@ defmodule Mydia.Library.CandidatePromotion do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.{DB, Metadata, Repo}
   alias Mydia.Library.{EpisodeMinter, ImportCandidate, MediaFile, MetadataEnricher}
   alias Mydia.Media
@@ -218,7 +219,7 @@ defmodule Mydia.Library.CandidatePromotion do
   end
 
   defp find_or_mint_episode(item, season, episode_number, candidate, opts) do
-    case Media.get_episode_by_number(item.id, season, episode_number) do
+    case Media.get_episode_by_number(Scope.system(), item.id, season, episode_number) do
       nil ->
         if Keyword.get(opts, :allow_episode_creation, false) do
           EpisodeMinter.mint(item, season, episode_number, Path.basename(candidate.relative_path))

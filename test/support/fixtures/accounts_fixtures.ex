@@ -78,4 +78,19 @@ defmodule Mydia.AccountsFixtures do
       role: Map.get(attrs, :role, "user")
     })
   end
+
+  @doc """
+  Generate a user with an access restriction already applied.
+
+  Accepts `:allowed_categories` and `:max_content_age`; every other key is
+  passed through to `user_fixture/1`.
+  """
+  def restricted_user_fixture(attrs \\ %{}) do
+    {restriction, user_attrs} = Map.split(attrs, [:allowed_categories, :max_content_age])
+
+    user = user_fixture(user_attrs)
+    {:ok, _} = Accounts.upsert_access_restriction(user, restriction)
+
+    user
+  end
 end

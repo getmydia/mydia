@@ -24,7 +24,7 @@ defmodule MydiaWeb.Api.PlaybackController do
   def show_movie(conn, %{"id" => media_item_id}) do
     current_user = Guardian.Plug.current_resource(conn)
 
-    case Media.get_media_item!(media_item_id) do
+    case Media.get_media_item!(conn.assigns.current_scope, media_item_id) do
       nil ->
         conn
         |> put_status(:not_found)
@@ -59,7 +59,7 @@ defmodule MydiaWeb.Api.PlaybackController do
   def show_episode(conn, %{"id" => episode_id}) do
     current_user = Guardian.Plug.current_resource(conn)
 
-    case Media.get_episode!(episode_id) do
+    case Media.get_episode!(conn.assigns.current_scope, episode_id) do
       nil ->
         conn
         |> put_status(:not_found)
@@ -95,7 +95,7 @@ defmodule MydiaWeb.Api.PlaybackController do
   def update_movie(conn, %{"id" => media_item_id} = params) do
     current_user = Guardian.Plug.current_resource(conn)
 
-    case Media.get_media_item!(media_item_id) do
+    case Media.get_media_item!(conn.assigns.current_scope, media_item_id) do
       nil ->
         conn
         |> put_status(:not_found)
@@ -156,7 +156,7 @@ defmodule MydiaWeb.Api.PlaybackController do
   def update_episode(conn, %{"id" => episode_id} = params) do
     current_user = Guardian.Plug.current_resource(conn)
 
-    case Media.get_episode!(episode_id) do
+    case Media.get_episode!(conn.assigns.current_scope, episode_id) do
       nil ->
         conn
         |> put_status(:not_found)

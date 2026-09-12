@@ -4,6 +4,7 @@ defmodule Mydia.Media.ExternalIdsTest do
   import ExUnit.CaptureLog
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media.ExternalIds
 
@@ -136,7 +137,7 @@ defmodule Mydia.Media.ExternalIdsTest do
       {result, log} =
         with_log(fn ->
           ExternalIds.write(attrs, [type: "tv_show"], fn attrs ->
-            Mydia.Media.create_media_item(attrs, skip_episode_refresh: true)
+            Mydia.Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
           end)
         end)
 
@@ -162,7 +163,7 @@ defmodule Mydia.Media.ExternalIdsTest do
       {result, _log} =
         with_log(fn ->
           ExternalIds.write(attrs, [type: "tv_show"], fn attrs ->
-            Mydia.Media.create_media_item(attrs, skip_episode_refresh: true)
+            Mydia.Media.create_media_item(Scope.unrestricted(), attrs, skip_episode_refresh: true)
           end)
         end)
 
@@ -180,7 +181,7 @@ defmodule Mydia.Media.ExternalIdsTest do
 
       assert {:error, changeset} =
                ExternalIds.write(attrs, [type: "movie"], fn attrs ->
-                 Mydia.Media.create_media_item(attrs)
+                 Mydia.Media.create_media_item(Scope.unrestricted(), attrs)
                end)
 
       refute changeset.valid?
@@ -203,7 +204,7 @@ defmodule Mydia.Media.ExternalIdsTest do
       {result, _log} =
         with_log(fn ->
           ExternalIds.write(attrs, [type: "tv_show", exclude_id: item.id], fn attrs ->
-            Mydia.Media.update_media_item(item, attrs, reason: "test")
+            Mydia.Media.update_media_item(Scope.unrestricted(), item, attrs, reason: "test")
           end)
         end)
 
@@ -239,7 +240,9 @@ defmodule Mydia.Media.ExternalIdsTest do
             # the retry hits a constraint the pre-pass could not have seen.
             attrs
             |> Map.put_new(:tmdb_id, 1399)
-            |> Mydia.Media.create_media_item(skip_episode_refresh: true)
+            |> then(
+              &Mydia.Media.create_media_item(Scope.unrestricted(), &1, skip_episode_refresh: true)
+            )
           end)
         end)
 
@@ -257,8 +260,11 @@ defmodule Mydia.Media.ExternalIdsTest do
       {result, _log} =
         with_log(fn ->
           ExternalIds.write(%{tvdb_id: 121_361}, [type: "tv_show", exclude_id: item.id], fn
-            changes when changes == %{} -> {:ok, item}
-            changes -> Mydia.Media.update_media_item(item, changes, reason: "test")
+            changes when changes == %{} ->
+              {:ok, item}
+
+            changes ->
+              Mydia.Media.update_media_item(Scope.unrestricted(), item, changes, reason: "test")
           end)
         end)
 

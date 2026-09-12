@@ -9,6 +9,7 @@ defmodule Mydia.WatchSync.Engine do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Playback
   alias Mydia.Repo
@@ -88,16 +89,22 @@ defmodule Mydia.WatchSync.Engine do
   end
 
   defp resolve_local(%{type: :movie} = mapping) do
-    case Media.find_by_external_ids(mapping.external_ids, type: "movie") do
+    case Media.find_by_external_ids(Scope.system(), mapping.external_ids, type: "movie") do
       nil -> nil
       item -> [media_item_id: item.id]
     end
   end
 
   defp resolve_local(%{type: :episode} = mapping) do
-    with %{id: show_id} <- Media.find_by_external_ids(mapping.external_ids, type: "tv_show"),
+    with %{id: show_id} <-
+           Media.find_by_external_ids(Scope.system(), mapping.external_ids, type: "tv_show"),
          %{id: ep_id} <-
-           Media.find_episode(show_id, mapping.season_number, mapping.episode_number) do
+           Media.find_episode(
+             Scope.system(),
+             show_id,
+             mapping.season_number,
+             mapping.episode_number
+           ) do
       [episode_id: ep_id]
     else
       _ -> nil

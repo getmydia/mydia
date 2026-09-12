@@ -137,6 +137,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   convenience on top of it.
   """
   def handle_add_media_to_library(
+        scope,
         ref,
         media_type,
         library_status_map,
@@ -145,7 +146,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       ) do
     {search_on_add, add_opts} = Keyword.pop(opts, :search_on_add, false)
 
-    case Add.from_provider(ref, media_type, config, add_opts) do
+    case Add.from_provider(scope, ref, media_type, config, add_opts) do
       {:ok, media_item} ->
         Mydia.Search.maybe_queue_search(media_item, search_on_add)
 

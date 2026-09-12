@@ -23,6 +23,7 @@ defmodule Mydia.Jobs.SubtitleSearch do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.MediaFile
   alias Mydia.Media
   alias Mydia.Subtitles
@@ -64,8 +65,11 @@ defmodule Mydia.Jobs.SubtitleSearch do
     active_files_query =
       from(mf in MediaFile, where: is_nil(mf.trashed_at), preload: :library_path)
 
-    media_item_id
-    |> Media.list_episodes(season: season_number, preload: [media_files: active_files_query])
+    Scope.system()
+    |> Media.list_episodes(media_item_id,
+      season: season_number,
+      preload: [media_files: active_files_query]
+    )
     |> Enum.flat_map(& &1.media_files)
   end
 

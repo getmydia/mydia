@@ -23,6 +23,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryEvents do
       library_path_id = if raw_id == "", do: nil, else: raw_id
 
       case Media.update_media_item(
+             socket.assigns.current_scope,
              media_item,
              %{library_path_id: library_path_id},
              reason: "Target library updated"

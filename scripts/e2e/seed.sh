@@ -88,7 +88,7 @@ su-exec mydia /app/bin/mydia rpc "
         existing -> existing
       end
 
-    with {:ok, movie} <- Media.create_media_item(%{type: \"movie\", title: \"E2E Test Movie\", year: 2025}, skip_episode_refresh: true),
+    with {:ok, movie} <- Media.create_media_item(Mydia.Accounts.Scope.system(), %{type: \"movie\", title: \"E2E Test Movie\", year: 2025}, skip_episode_refresh: true),
          {:ok, _file} <- Library.create_media_file(%{
            media_item_id: movie.id,
            library_path_id: lib_path.id,

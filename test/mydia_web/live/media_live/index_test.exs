@@ -981,8 +981,9 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       render_click(view, "show_batch_edit", %{})
       render_submit(view, "batch_edit_submit", %{"batch_edit" => %{"monitored" => "true"}})
 
-      assert Mydia.Media.get_media_item!(movie_a.id).monitored
-      assert Mydia.Media.get_media_item!(movie_b.id).monitored
+      assert Mydia.Media.get_media_item!(Mydia.Accounts.Scope.unrestricted(), movie_a.id).monitored
+
+      assert Mydia.Media.get_media_item!(Mydia.Accounts.Scope.unrestricted(), movie_b.id).monitored
 
       for item <- [movie_a, movie_b] do
         assert [event] =
@@ -1011,7 +1012,8 @@ defmodule MydiaWeb.MediaLive.IndexTest do
         "batch_edit" => %{"quality_profile_id" => profile.id, "monitored" => "no_change"}
       })
 
-      assert Mydia.Media.get_media_item!(movie.id).quality_profile_id == profile.id
+      assert Mydia.Media.get_media_item!(Mydia.Accounts.Scope.unrestricted(), movie.id).quality_profile_id ==
+               profile.id
 
       assert Mydia.Events.list_events(
                type: "media_item.monitoring_changed",

@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Schema.SubtitleTest do
   use MydiaWeb.ConnCase
 
+  alias Mydia.Accounts.Scope
   alias Mydia.MediaFixtures
   alias Mydia.AccountsFixtures
 
@@ -157,7 +158,9 @@ defmodule MydiaWeb.Schema.SubtitleTest do
 
   # Helper function to run GraphQL queries
   defp run_query(query, variables, user \\ nil) do
-    context = if user, do: %{current_user: user}, else: %{}
+    context =
+      if user, do: %{current_user: user, current_scope: Scope.for_user(user)}, else: %{}
+
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
   end
 end

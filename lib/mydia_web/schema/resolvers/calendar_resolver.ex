@@ -8,6 +8,7 @@ defmodule MydiaWeb.Schema.Resolvers.CalendarResolver do
   `has_downloads` is never exposed.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.MediaFile
   alias Mydia.Media
   alias Mydia.Repo
@@ -29,9 +30,11 @@ defmodule MydiaWeb.Schema.Resolvers.CalendarResolver do
   `:files` to each `OnDeckEntry` before the continue-watching resolver ever
   runs. See `MydiaWeb.Schema.Resolvers.DiscoveryResolver.continue_watching/3`.
   """
-  def calendar(_parent, %{start: start_date, end: end_date}, _resolution) do
-    episodes = Media.list_episodes_by_air_date(start_date, end_date, monitored: nil)
-    movies = Media.list_movies_by_release_date(start_date, end_date, monitored: nil)
+  def calendar(_parent, %{start: start_date, end: end_date}, resolution) do
+    scope = current_scope(resolution)
+
+    episodes = Media.list_episodes_by_air_date(scope, start_date, end_date, monitored: nil)
+    movies = Media.list_movies_by_release_date(scope, start_date, end_date, monitored: nil)
 
     entries =
       (episodes ++ movies)
@@ -71,6 +74,13 @@ defmodule MydiaWeb.Schema.Resolvers.CalendarResolver do
         %{entry | files: Map.get(files_by_media_item_id, entry.media_item_id, [])}
     end)
   end
+
+  # The calendar is a per-viewer read, so it is scoped like every other
+  # `Mydia.Media` call. A resolution with no scope in context (an unauthenticated
+  # path) falls back to the system scope rather than crashing, matching
+  # `BrowseResolver.current_scope/1`.
+  defp current_scope(%{context: context}), do: context[:current_scope] || Scope.system()
+  defp current_scope(_resolution), do: Scope.system()
 
   defp load_files_by(_key_field, []), do: %{}
 

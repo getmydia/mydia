@@ -14,6 +14,7 @@ defmodule Mydia.MediaRequests do
   import Mydia.QueryHelpers
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Repo
   alias Mydia.Media
   alias Mydia.Media.Add
@@ -62,15 +63,56 @@ defmodule Mydia.MediaRequests do
 
   Returns `{:error, :duplicate_media}` if media exists.
   Returns `{:error, :duplicate_request}` if pending request exists.
+  Returns `{:error, :restricted}` if the scope may not create an item in this
+  category or above its rating limit -- a restricted account must not be able
+  to route around the write guard by filing a request instead of creating
+  directly.
+
+  ## Options
+    - `:config` - Relay config used to resolve metadata for the restriction
+      check on a restricted scope. Defaults to `Metadata.default_relay_config/0`.
+      Inject a Bypass config in tests. Never fetched for an unrestricted scope,
+      so the common path stays a single insert.
   """
-  def create_request(attrs \\ %{}) do
+  def create_request(%Scope{} = scope, attrs \\ %{}, opts \\ []) do
     changeset = MediaRequest.create_changeset(%MediaRequest{}, attrs)
 
-    with :ok <- check_duplicate_media(changeset),
+    with :ok <- authorize_request(scope, changeset, opts),
+         :ok <- check_duplicate_media(scope, changeset),
          :ok <- check_duplicate_request(changeset),
          {:ok, request} <- Repo.insert(changeset) do
       {:ok, Repo.preload(request, [:requester])}
     end
+  end
+
+  # An unrestricted scope (admin, or any account with no category/rating
+  # limits) is always authorized and never triggers the metadata fetch below,
+  # which is what keeps request submission instant for the common case. A
+  # changeset that is not valid yet is left for `Repo.insert/1` to reject with
+  # its own errors rather than spending a network call on attrs that cannot be
+  # persisted anyway.
+  defp authorize_request(scope, changeset, opts) do
+    if Scope.restricted?(scope) and changeset.valid? do
+      media_type = Ecto.Changeset.get_field(changeset, :media_type)
+      tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
+      tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
+
+      # Calls the same `Media.writable?/2` that gates direct creation, so a
+      # future change to what counts as out of bounds cannot apply to one path
+      # and not the other.
+      with {:ok, media_attrs} <- resolve_request_metadata(media_type, tmdb_id, tvdb_id, opts) do
+        if Media.writable?(scope, media_attrs), do: :ok, else: {:error, :restricted}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp resolve_request_metadata(media_type, tmdb_id, tvdb_id, opts) do
+    ref = MediaRequest.external_ref(%MediaRequest{tmdb_id: tmdb_id, tvdb_id: tvdb_id})
+    media_type_atom = if media_type == "movie", do: :movie, else: :tv_show
+
+    Add.resolve_attrs(ref, media_type_atom, opts[:config])
   end
 
   @doc """
@@ -108,9 +150,9 @@ defmodule Mydia.MediaRequests do
     - `:config` - Relay config to fetch with. Defaults to
       `Metadata.default_relay_config/0`. Inject a Bypass config in tests.
   """
-  def approve_request(%MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
+  def approve_request(%Scope{} = scope, %MediaRequest{} = request, attrs \\ %{}, opts \\ []) do
     with {:ok, media_attrs} <- resolve_media_attrs(request, opts),
-         {:ok, result, created?} <- insert_approval(request, media_attrs, attrs, opts) do
+         {:ok, result, created?} <- insert_approval(scope, request, media_attrs, attrs, opts) do
       # After the transaction, never inside it. Repo.transaction defers event
       # broadcasts until commit, and a search queued against an uncommitted
       # media item is a race.
@@ -156,10 +198,11 @@ defmodule Mydia.MediaRequests do
   # rather than creating a new one. `approve_request/3` uses that flag to
   # decide whether to queue a search; a linked request must not queue one for
   # a media item someone else already added.
-  defp insert_approval(request, media_attrs, attrs, opts) do
+  defp insert_approval(scope, request, media_attrs, attrs, opts) do
     Multi.new()
     |> Multi.run(:media_item, fn _repo, _changes ->
       case Add.from_attrs(
+             scope,
              media_attrs,
              opts[:config],
              [
@@ -262,7 +305,7 @@ defmodule Mydia.MediaRequests do
 
   # Private functions
 
-  defp check_duplicate_media(changeset) do
+  defp check_duplicate_media(scope, changeset) do
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
     tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
     # Provider ids are unique per type. A TV request whose tmdb_id matches a
@@ -277,10 +320,10 @@ defmodule Mydia.MediaRequests do
       type not in MediaRequest.valid_media_types() ->
         :ok
 
-      tmdb_id && Media.find_by_external_ids(%{tmdb: tmdb_id}, type: type) ->
+      tmdb_id && Media.find_by_external_ids(scope, %{tmdb: tmdb_id}, type: type) ->
         {:error, :duplicate_media}
 
-      tvdb_id && Media.find_by_external_ids(%{tvdb: tvdb_id}, type: type) ->
+      tvdb_id && Media.find_by_external_ids(scope, %{tvdb: tvdb_id}, type: type) ->
         {:error, :duplicate_media}
 
       true ->

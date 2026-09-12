@@ -7,7 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
   alias Mydia.Media
   alias MydiaWeb.Live.Authorization
 
-  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 1]
+  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 2]
   import MydiaWeb.MediaLive.Show.Helpers, only: [monitoring_preset_label: 1]
 
   require Logger
@@ -20,18 +20,27 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
       media_item = socket.assigns.media_item
       new_monitored = !media_item.monitored
 
-      {:ok, updated_item} =
-        Media.update_media_item(media_item, %{monitored: new_monitored},
-          reason: if(new_monitored, do: "Monitoring enabled", else: "Monitoring disabled")
-        )
+      case Media.update_media_item(
+             socket.assigns.current_scope,
+             media_item,
+             %{monitored: new_monitored},
+             reason: if(new_monitored, do: "Monitoring enabled", else: "Monitoring disabled")
+           ) do
+        {:ok, updated_item} ->
+          {:noreply,
+           socket
+           |> assign(:media_item, updated_item)
+           |> put_flash(
+             :info,
+             "Monitoring #{if updated_item.monitored, do: "enabled", else: "disabled"}"
+           )}
 
-      {:noreply,
-       socket
-       |> assign(:media_item, updated_item)
-       |> put_flash(
-         :info,
-         "Monitoring #{if updated_item.monitored, do: "enabled", else: "disabled"}"
-       )}
+        {:error, :restricted} ->
+          {:noreply, put_flash(socket, :error, Media.restricted_message())}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to update monitoring")}
+      end
     else
       {:unauthorized, socket} -> {:noreply, socket}
     end
@@ -49,7 +58,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
 
           {:noreply,
            socket
-           |> assign(:media_item, load_media_item(media_item.id))
+           |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(:info, "Applied '#{preset_label}' monitoring to #{count} episodes")}
 
         {:error, reason} ->
@@ -80,7 +89,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
 
       {:noreply,
        socket
-       |> assign(:media_item, load_media_item(updated.id))
+       |> assign(:media_item, load_media_item(socket.assigns.current_scope, updated.id))
        |> put_flash(:info, message)}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -89,12 +98,15 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
 
   def toggle_episode_monitored(%{"episode-id" => episode_id}, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
-      episode = Media.get_episode!(episode_id)
+      episode = Media.get_episode!(socket.assigns.current_scope, episode_id)
       {:ok, _updated_episode} = Media.update_episode(episode, %{monitored: !episode.monitored})
 
       {:noreply,
        socket
-       |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+       |> assign(
+         :media_item,
+         load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+       )
        |> put_flash(
          :info,
          "Episode monitoring #{if episode.monitored, do: "disabled", else: "enabled"}"
@@ -113,7 +125,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
         {:ok, count} ->
           {:noreply,
            socket
-           |> assign(:media_item, load_media_item(media_item.id))
+           |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
              "Monitoring enabled for #{count} episodes in Season #{season_number}"
@@ -136,7 +148,7 @@ defmodule MydiaWeb.MediaLive.Show.EpisodeEvents do
         {:ok, count} ->
           {:noreply,
            socket
-           |> assign(:media_item, load_media_item(media_item.id))
+           |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item.id))
            |> put_flash(
              :info,
              "Monitoring disabled for #{count} episodes in Season #{season_number}"

@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Schema.MediaSegmentTest do
   use MydiaWeb.ConnCase, async: false
 
+  alias Mydia.Accounts.Scope
   alias Mydia.AccountsFixtures
   alias Mydia.Library.MediaFile
   alias Mydia.Library.MediaSegment
@@ -220,6 +221,9 @@ defmodule MydiaWeb.Schema.MediaSegmentTest do
   end
 
   defp run_query(query, variables, user) do
-    Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: %{current_user: user})
+    Absinthe.run(query, MydiaWeb.Schema,
+      variables: variables,
+      context: %{current_user: user, current_scope: Scope.for_user(user)}
+    )
   end
 end

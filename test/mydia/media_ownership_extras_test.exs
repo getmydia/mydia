@@ -1,6 +1,7 @@
 defmodule Mydia.MediaOwnershipExtrasTest do
   use Mydia.DataCase, async: false
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.MediaFile
   alias Mydia.Media
   alias Mydia.Repo
@@ -20,7 +21,7 @@ defmodule Mydia.MediaOwnershipExtrasTest do
   end
 
   defp owned?(item) do
-    Media.list_library_items_page([])
+    Media.list_library_items_page(Scope.unrestricted(), [])
     |> Enum.find(&(&1.id == item.id))
     |> Map.fetch!(:owned)
   end

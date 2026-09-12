@@ -7,6 +7,7 @@ defmodule Mydia.ImportListsTest do
 
   import Mydia.MetadataStub
 
+  alias Mydia.Accounts.Scope
   alias Mydia.ImportLists
   alias Mydia.ImportLists.{ImportList, ImportListItem}
 
@@ -177,7 +178,7 @@ defmodule Mydia.ImportListsTest do
     test "list_import_list_items/2 filters by status", %{import_list: import_list} do
       # Create a media item for the "added" item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Added Movie",
           year: 2024
@@ -206,7 +207,7 @@ defmodule Mydia.ImportListsTest do
     test "count_import_list_items/2 returns count by status", %{import_list: import_list} do
       # Create a media item for the "added" item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Added Movie",
           year: 2024
@@ -244,7 +245,7 @@ defmodule Mydia.ImportListsTest do
     test "get_pending_items/1 returns only pending items", %{import_list: import_list} do
       # Create a media item for the "added" item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Added Movie",
           year: 2024
@@ -308,7 +309,11 @@ defmodule Mydia.ImportListsTest do
     test "upsert_import_list_item/1 only refreshes cached display fields on conflict, not status, skip_reason, media_item_id or discovered_at",
          %{import_list: import_list} do
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{type: "movie", title: "Already Added Movie", year: 2024})
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Already Added Movie",
+          year: 2024
+        })
 
       original_discovered_at = ~U[2024-01-01 00:00:00Z]
 
@@ -366,7 +371,7 @@ defmodule Mydia.ImportListsTest do
     test "mark_item_added/2 updates status to added", %{import_list: import_list} do
       # Create a media item first for the foreign key
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Test Movie",
           year: 2024
@@ -388,7 +393,7 @@ defmodule Mydia.ImportListsTest do
     } do
       # Create a media item
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Test Movie",
           year: 2024
@@ -409,7 +414,7 @@ defmodule Mydia.ImportListsTest do
       assert ImportLists.count_import_list_items(import_list, "pending") == 0
 
       # Now delete the media item
-      {:ok, _, _} = Mydia.Media.delete_media_item(media_item)
+      {:ok, _, _} = Mydia.Media.delete_media_item(Scope.unrestricted(), media_item)
 
       # After deletion, the item should be treated as "pending" since media is gone
       assert ImportLists.count_import_list_items(import_list, "added") == 0
@@ -836,7 +841,7 @@ defmodule Mydia.ImportListsTest do
   describe "check_duplicate/2" do
     test "matches an existing media item by tmdb_id" do
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Nebula Drift",
           year: 2022,
@@ -852,7 +857,11 @@ defmodule Mydia.ImportListsTest do
 
     test "falls back to a normalised title+year match when the tmdb_id lookup misses" do
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Silverback Station",
+          year: 2019
+        })
 
       assert {:duplicate, ^media_item} =
                ImportLists.check_duplicate(12_345, "movie", "  SILVERBACK STATION  ", 2019)
@@ -863,10 +872,18 @@ defmodule Mydia.ImportListsTest do
       # collide, so two scanned copies of one title can both sit here. This
       # used to raise Ecto.MultipleResultsError and take the sync job down.
       {:ok, first} =
-        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Silverback Station",
+          year: 2019
+        })
 
       {:ok, second} =
-        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Silverback Station",
+          year: 2019
+        })
 
       assert {:duplicate, matched} =
                ImportLists.check_duplicate(12_345, "movie", "Silverback Station", 2019)
@@ -880,13 +897,21 @@ defmodule Mydia.ImportListsTest do
     end
 
     test "does not fall back when year is nil, even with a matching title" do
-      Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+      Mydia.Media.create_media_item(Scope.unrestricted(), %{
+        type: "movie",
+        title: "Silverback Station",
+        year: 2019
+      })
 
       assert :not_found = ImportLists.check_duplicate(12_345, "movie", "Silverback Station", nil)
     end
 
     test "does not fall back when title is nil, even with a matching year" do
-      Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+      Mydia.Media.create_media_item(Scope.unrestricted(), %{
+        type: "movie",
+        title: "Silverback Station",
+        year: 2019
+      })
 
       assert :not_found = ImportLists.check_duplicate(12_345, "movie", nil, 2019)
     end
@@ -895,7 +920,7 @@ defmodule Mydia.ImportListsTest do
       # A row with its own tmdb_id is a genuinely different item, not a
       # scan-time match waiting to be linked, even if the title and year
       # happen to coincide.
-      Mydia.Media.create_media_item(%{
+      Mydia.Media.create_media_item(Scope.unrestricted(), %{
         type: "movie",
         title: "Silverback Station",
         year: 2019,
@@ -907,7 +932,11 @@ defmodule Mydia.ImportListsTest do
     end
 
     test "the title+year fallback requires an exact year match" do
-      Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+      Mydia.Media.create_media_item(Scope.unrestricted(), %{
+        type: "movie",
+        title: "Silverback Station",
+        year: 2019
+      })
 
       assert :not_found =
                ImportLists.check_duplicate(12_345, "movie", "Silverback Station", 2020)
@@ -918,6 +947,7 @@ defmodule Mydia.ImportListsTest do
       # lookup for a tv_show with no provider id, which would otherwise
       # reach the network in this test.
       Mydia.Media.create_media_item(
+        Scope.unrestricted(),
         %{type: "tv_show", title: "Silverback Station", year: 2019},
         skip_episode_refresh: true
       )
@@ -943,7 +973,7 @@ defmodule Mydia.ImportListsTest do
       import_list: import_list
     } do
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Nebula Drift",
           year: 2022,
@@ -971,7 +1001,11 @@ defmodule Mydia.ImportListsTest do
 
     test "links a duplicate found only via the title+year fallback", %{import_list: import_list} do
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Silverback Station",
+          year: 2019
+        })
 
       {:ok, item} =
         ImportLists.create_import_list_item(%{
@@ -1105,7 +1139,7 @@ defmodule Mydia.ImportListsTest do
         })
 
       {:ok, _media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Nebula Drift",
           year: 2022,
@@ -1185,7 +1219,7 @@ defmodule Mydia.ImportListsTest do
         })
 
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Nebula Drift",
           year: 2022,
@@ -1230,7 +1264,11 @@ defmodule Mydia.ImportListsTest do
         })
 
       {:ok, media_item} =
-        Mydia.Media.create_media_item(%{type: "movie", title: "Silverback Station", year: 2019})
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Silverback Station",
+          year: 2019
+        })
 
       {:ok, item} =
         ImportLists.create_import_list_item(%{

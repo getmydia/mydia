@@ -22,11 +22,12 @@ defmodule Mydia.LibrarySearch do
   Each requested section runs one row query and one `COUNT` query, so a full
   search is eight queries plus, per returned collection, one `item_count`
   query and — since nothing in this codebase currently writes
-  `collections.poster_path` — one more `Collections.poster_paths/2` query to
-  fall back to a member's poster. Movies and TV shows share the `media_items`
-  table but still get their own query pair: splitting a single result set in
-  Elixir would break the per-section limit, since one `LIMIT 20` over both
-  types cannot guarantee twenty of each.
+  `collections.poster_path` — one more `Collections.poster_paths/3` query to
+  fall back to a member's poster, plus one `Scope.for_user/1` lookup resolved
+  once for the whole request (skipped for admins). Movies and TV shows share
+  the `media_items` table but still get their own query pair: splitting a
+  single result set in Elixir would break the per-section limit, since one
+  `LIMIT 20` over both types cannot guarantee twenty of each.
 
   The counts are deliberate. Section headers show a total and each section offers
   "Show all", both of which need a real count rather than the length of an
@@ -52,19 +53,24 @@ defmodule Mydia.LibrarySearch do
 
   `user` is a required positional argument, never an option, because this is the
   one place the feature can leak data and a positional argument is compiler
-  enforced. Collections are filtered with the same predicate used everywhere else
-  in `Mydia.Collections`. Movies, shows, and episodes are not user-scoped in the
-  current data model and need no additional filtering.
+  enforced. `Scope.for_user/1` is resolved once, up front, and threaded into
+  every section: collections are filtered with the same predicate used
+  everywhere else in `Mydia.Collections`, and movies, shows, and episodes are
+  filtered with `Mydia.Media.Restrictions`, the same predicate the rest of
+  `Mydia.Media` uses. A restricted account gets no more from search than it
+  gets from browsing.
   """
 
   import Ecto.Query, warn: false
   require Mydia.LibrarySearch.Rank
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Accounts.User
   alias Mydia.Collections
   alias Mydia.Collections.Collection
   alias Mydia.LibrarySearch.{Rank, Result, Results, Section, Tokenizer}
   alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Media.Restrictions
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Repo
 
@@ -82,6 +88,10 @@ defmodule Mydia.LibrarySearch do
   def search(%User{} = user, query, opts \\ []) do
     types = Keyword.get(opts, :types, @section_order)
     limit = Keyword.get(opts, :limit, @default_limit)
+    # Resolved once per search rather than per row/section: an admin
+    # short-circuits to unrestricted with no query, and a restricted user's
+    # one extra lookup is shared across the whole request.
+    scope = Scope.for_user(user)
 
     case Tokenizer.normalize(query) do
       :empty ->
@@ -91,7 +101,7 @@ defmodule Mydia.LibrarySearch do
         sections =
           @section_order
           |> Enum.filter(&(&1 in types))
-          |> Enum.map(&build_section(&1, user, normalized, limit))
+          |> Enum.map(&build_section(&1, scope, normalized, limit))
           |> Enum.reject(&(&1.total_count == 0))
 
         {:ok,
@@ -104,8 +114,8 @@ defmodule Mydia.LibrarySearch do
 
   ## Sections
 
-  defp build_section(type, _user, normalized, limit) when type in [:movie, :tv_show] do
-    base = media_item_base(Atom.to_string(type), normalized)
+  defp build_section(type, %Scope{} = scope, normalized, limit) when type in [:movie, :tv_show] do
+    base = media_item_base(Atom.to_string(type), normalized, scope)
 
     results =
       base
@@ -116,8 +126,8 @@ defmodule Mydia.LibrarySearch do
     %Section{type: type, results: results, total_count: Repo.aggregate(base, :count)}
   end
 
-  defp build_section(:episode, _user, normalized, limit) do
-    base = episode_base(normalized)
+  defp build_section(:episode, %Scope{} = scope, normalized, limit) do
+    base = episode_base(normalized, scope)
 
     results =
       base
@@ -128,23 +138,27 @@ defmodule Mydia.LibrarySearch do
     %Section{type: :episode, results: results, total_count: Repo.aggregate(base, :count)}
   end
 
-  defp build_section(:collection, %User{} = user, normalized, limit) do
+  defp build_section(:collection, %Scope{user: %User{} = user} = scope, normalized, limit) do
     base = collection_base(user, normalized)
 
     results =
       base
       |> collection_rows(normalized, limit)
       |> Repo.all()
-      |> Enum.map(&build_collection_result/1)
+      |> Enum.map(&build_collection_result(&1, scope))
 
     %Section{type: :collection, results: results, total_count: Repo.aggregate(base, :count)}
   end
 
   ## media_items
 
-  defp media_item_base(db_type, normalized) do
-    Enum.reduce(normalized.tokens, from(m in MediaItem, where: m.type == ^db_type), fn token,
-                                                                                       query ->
+  defp media_item_base(db_type, normalized, scope) do
+    base =
+      MediaItem
+      |> Restrictions.apply(scope)
+      |> where([m], m.type == ^db_type)
+
+    Enum.reduce(normalized.tokens, base, fn token, query ->
       pattern = Tokenizer.contains_pattern(token)
 
       where(
@@ -184,16 +198,26 @@ defmodule Mydia.LibrarySearch do
 
   ## episodes
 
-  defp episode_base(normalized) do
-    Enum.reduce(
-      normalized.tokens,
-      from(e in Episode, join: m in assoc(e, :media_item), as: :show),
-      fn token, query ->
-        pattern = Tokenizer.contains_pattern(token)
+  # Restriction is applied to a bare `Episode` first — the same shape as every
+  # other `Restrictions.apply_to_episodes/2` call site in `Mydia.Media` — then
+  # the `:show` join this module needs for display (title/poster/backdrop) is
+  # added on top, referencing only the stable position-0 `e` binding. For an
+  # unrestricted scope `apply_to_episodes/2` is a no-op (no join added), so
+  # this costs nothing extra in the common case; a restricted scope ends up
+  # with two joins to `media_items` (one for the filter, one for display),
+  # which is harmless but not free — acceptable here since restricted scopes
+  # are the exception, not the rule.
+  defp episode_base(normalized, scope) do
+    base =
+      Episode
+      |> Restrictions.apply_to_episodes(scope)
+      |> then(&from(e in &1, join: m in assoc(e, :media_item), as: :show))
 
-        where(query, [e], fragment("lower(?) LIKE ? ESCAPE '\\'", e.title, ^pattern))
-      end
-    )
+    Enum.reduce(normalized.tokens, base, fn token, query ->
+      pattern = Tokenizer.contains_pattern(token)
+
+      where(query, [e], fragment("lower(?) LIKE ? ESCAPE '\\'", e.title, ^pattern))
+    end)
   end
 
   defp episode_rows(base, normalized, limit) do
@@ -255,30 +279,30 @@ defmodule Mydia.LibrarySearch do
     )
   end
 
-  defp build_collection_result(%{collection: collection, rank: rank}) do
+  defp build_collection_result(%{collection: collection, rank: rank}, scope) do
     %Result{
       id: collection.id,
       type: :collection,
       title: collection.name,
       score: rank / 1,
-      subtitle: item_count_label(Collections.item_count(collection)),
-      poster_path: collection_poster_path(collection)
+      subtitle: item_count_label(Collections.item_count(scope, collection)),
+      poster_path: collection_poster_path(collection, scope)
     }
   end
 
   # `collections.poster_path` is cast on the schema but no write path in this
   # codebase ever populates it, so every other collection surface (see
-  # `CollectionResolver.build_collection/1` and `CollectionLive.Index`) builds
+  # `CollectionResolver.build_collection/2` and `CollectionLive.Index`) builds
   # a poster from the collection's own items instead. Do the same here rather
   # than showing the bookmark placeholder forever. Only reached when the
   # column is empty, so this is at most one extra query per collection.
-  defp collection_poster_path(%Collection{poster_path: poster_path})
+  defp collection_poster_path(%Collection{poster_path: poster_path}, _scope)
        when is_binary(poster_path) and poster_path != "" do
     poster_path
   end
 
-  defp collection_poster_path(collection) do
-    case Collections.poster_paths(collection, 1) do
+  defp collection_poster_path(collection, scope) do
+    case Collections.poster_paths(scope, collection, 1) do
       [path | _] -> path
       [] -> nil
     end

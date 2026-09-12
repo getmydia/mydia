@@ -160,7 +160,12 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
     results = Enum.filter(results, &(RecommendationEvents.safe_provider_id(&1) != nil))
     tmdb_ids = Enum.map(results, &RecommendationEvents.safe_provider_id/1)
 
-    status = Mydia.Media.library_status_for_tmdb_ids(tmdb_ids, media_item.type)
+    status =
+      Mydia.Media.library_status_for_tmdb_ids(
+        socket.assigns.current_scope,
+        tmdb_ids,
+        media_item.type
+      )
 
     results
     |> MediaAddHelpers.enrich_with_library_status(status)

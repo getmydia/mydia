@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
   import Mydia.MediaFixtures
   import MydiaWeb.AuthHelpers
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.Episode
   alias Mydia.Repo
@@ -71,7 +72,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
        %{conn: conn} do
     tvdb_id = System.unique_integer([:positive])
     show = oversized_show(tvdb_id)
-    {:ok, show} = Media.update_media_item(show, %{season_order: :official})
+    {:ok, show} = Media.update_media_item(Scope.unrestricted(), show, %{season_order: :official})
     stub_tvdb_orderings(tvdb_id, official: 170, dvd: [51, 51, 52, 16])
 
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
@@ -193,7 +194,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
   test "the selector still lists the ordering the show is already in", %{conn: conn} do
     tvdb_id = System.unique_integer([:positive])
     show = oversized_show(tvdb_id)
-    {:ok, _show} = Media.update_media_item(show, %{season_order: :dvd})
+    {:ok, _show} = Media.update_media_item(Scope.unrestricted(), show, %{season_order: :dvd})
     stub_tvdb_orderings(tvdb_id, official: 170)
 
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
@@ -218,7 +219,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     assert has_element?(view, "#flash-info", "Switched to DVD order")
     refute has_element?(view, "#season-order-suggestion")
 
-    reloaded = Media.get_media_item!(show.id)
+    reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
     assert reloaded.season_order == :dvd
   end
 
@@ -237,7 +238,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
 
     assert has_element?(view, "#flash-error", "TVDB does not list Absolute order for this show.")
 
-    reloaded = Media.get_media_item!(show.id)
+    reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
     assert reloaded.season_order == nil
   end
 
@@ -285,7 +286,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
 
     assert counts == [51, 51, 52, 16]
 
-    reloaded = Media.get_media_item!(show.id)
+    reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
     assert reloaded.season_order == :dvd
   end
 
@@ -301,7 +302,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
 
     refute has_element?(view, "#season-order-suggestion")
 
-    reloaded = Media.get_media_item!(show.id)
+    reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
     assert reloaded.season_order == :official
 
     # Aired order describes the same single season it started with — nothing
@@ -355,7 +356,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
     refute has_element?(view, "#season-order-suggestion")
     assert has_element?(view, "#flash-info", "Keeping Aired order")
 
-    reloaded = Media.get_media_item!(show.id)
+    reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
     assert reloaded.season_order == :official
   end
 
@@ -374,7 +375,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
 
     assert has_element?(view, "#flash-error", "missing 119")
 
-    reloaded = Media.get_media_item!(show.id)
+    reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
     assert reloaded.season_order == nil
 
     # Nothing moved: refusing must be all-or-nothing, not "remap the covered
@@ -426,7 +427,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
 
     assert has_element?(view, "#flash-info", "Switched to DVD order")
 
-    reloaded = Media.get_media_item!(show.id)
+    reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
     assert reloaded.season_order == :dvd
 
     tagged =
@@ -472,7 +473,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
 
     assert has_element?(view, "#flash-error", "Refresh this show")
 
-    reloaded = Media.get_media_item!(show.id)
+    reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
     assert reloaded.season_order == nil
   end
 
@@ -630,7 +631,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
 
       # The database must be untouched, not merely flashed at: a gate that
       # flashes but still mutates would pass a flash-only assertion.
-      reloaded = Media.get_media_item!(show.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
       assert reloaded.season_order == nil
 
       episode_numbers =
@@ -662,7 +663,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonOrderUiTest do
                "You do not have permission to modify media items"
              )
 
-      reloaded = Media.get_media_item!(show.id)
+      reloaded = Media.get_media_item!(Scope.unrestricted(), show.id)
       assert reloaded.season_order == nil
 
       episode_numbers =

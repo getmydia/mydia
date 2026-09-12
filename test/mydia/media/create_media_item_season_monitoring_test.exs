@@ -3,6 +3,7 @@ defmodule Mydia.Media.CreateMediaItemSeasonMonitoringTest do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.Episode
 
@@ -70,6 +71,7 @@ defmodule Mydia.Media.CreateMediaItemSeasonMonitoringTest do
          %{config: config, tmdb_id: tmdb_id} do
       assert {:ok, media_item} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{
                    title: "Monitoring Test Show",
                    type: "tv_show",
@@ -112,6 +114,7 @@ defmodule Mydia.Media.CreateMediaItemSeasonMonitoringTest do
          %{config: config, tmdb_id: tmdb_id} do
       assert {:ok, media_item} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{
                    title: "Monitoring Test Show",
                    type: "tv_show",
@@ -152,6 +155,7 @@ defmodule Mydia.Media.CreateMediaItemSeasonMonitoringTest do
          %{config: config, tmdb_id: tmdb_id} do
       assert {:ok, media_item} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{
                    title: "Monitoring Test Show",
                    type: "tv_show",
@@ -175,6 +179,7 @@ defmodule Mydia.Media.CreateMediaItemSeasonMonitoringTest do
          %{config: config, tmdb_id: tmdb_id} do
       assert {:ok, media_item} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{
                    title: "Monitoring Test Show",
                    type: "tv_show",
@@ -215,6 +220,7 @@ defmodule Mydia.Media.CreateMediaItemSeasonMonitoringTest do
          %{config: config, tmdb_id: tmdb_id} do
       assert {:ok, media_item} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{
                    title: "Monitoring Test Show",
                    type: "tv_show",
@@ -246,6 +252,7 @@ defmodule Mydia.Media.CreateMediaItemSeasonMonitoringTest do
          %{config: config, tmdb_id: tmdb_id} do
       assert {:ok, media_item} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{
                    title: "Monitoring Test Show",
                    type: "tv_show",

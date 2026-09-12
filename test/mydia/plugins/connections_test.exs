@@ -3,6 +3,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
 
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.Kv
   alias Mydia.Settings
@@ -146,7 +147,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
       {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
 
       {:ok, _request} =
-        Mydia.MediaRequests.create_request(%{
+        Mydia.MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Restricting Request",
           tmdb_id: 603,

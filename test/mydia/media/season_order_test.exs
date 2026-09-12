@@ -3,6 +3,7 @@ defmodule Mydia.Media.SeasonOrderTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.MediaItem
   alias Mydia.Media.SeasonOrder
 
@@ -75,7 +76,7 @@ defmodule Mydia.Media.SeasonOrderTest do
     test "moves episodes without creating or deleting any", %{show: show, mapping: mapping} do
       assert {:ok, 4} = SeasonOrder.remap(show, :dvd, mapping)
 
-      episodes = Mydia.Media.list_episodes(show.id)
+      episodes = Mydia.Media.list_episodes(Scope.unrestricted(), show.id)
       assert length(episodes) == 4
 
       assert Enum.sort(Enum.map(episodes, &{&1.season_number, &1.episode_number})) ==
@@ -93,12 +94,12 @@ defmodule Mydia.Media.SeasonOrderTest do
     end
 
     test "preserves media file links across the switch", %{show: show, mapping: mapping} do
-      episode = Mydia.Media.find_episode(show.id, 1, 3)
+      episode = Mydia.Media.find_episode(Scope.unrestricted(), show.id, 1, 3)
       file = media_file_fixture(%{episode_id: episode.id})
 
       {:ok, _} = SeasonOrder.remap(show, :dvd, mapping)
 
-      moved = Mydia.Media.find_episode(show.id, 2, 1)
+      moved = Mydia.Media.find_episode(Scope.unrestricted(), show.id, 2, 1)
       assert moved.id == episode.id
       assert Repo.get!(Mydia.Library.MediaFile, file.id).episode_id == episode.id
     end
@@ -118,7 +119,7 @@ defmodule Mydia.Media.SeasonOrderTest do
       {:ok, _} = SeasonOrder.remap(show, :official, back)
 
       assert Enum.map(1..4, fn n ->
-               Mydia.Media.find_episode(show.id, 1, n).provider_episode_id
+               Mydia.Media.find_episode(Scope.unrestricted(), show.id, 1, n).provider_episode_id
              end) == ["ep1", "ep2", "ep3", "ep4"]
 
       # Same rows throughout: a round trip that recreated them would land on the
@@ -133,8 +134,12 @@ defmodule Mydia.Media.SeasonOrderTest do
       swap = %{"ep1" => {1, 2}, "ep2" => {1, 1}, "ep3" => {1, 3}, "ep4" => {1, 4}}
 
       assert {:ok, 4} = SeasonOrder.remap(show, :official, swap)
-      assert Mydia.Media.find_episode(show.id, 1, 1).provider_episode_id == "ep2"
-      assert Mydia.Media.find_episode(show.id, 1, 2).provider_episode_id == "ep1"
+
+      assert Mydia.Media.find_episode(Scope.unrestricted(), show.id, 1, 1).provider_episode_id ==
+               "ep2"
+
+      assert Mydia.Media.find_episode(Scope.unrestricted(), show.id, 1, 2).provider_episode_id ==
+               "ep1"
     end
 
     # A row the target ordering never mentions must end up back where it
@@ -145,19 +150,22 @@ defmodule Mydia.Media.SeasonOrderTest do
 
       assert {:ok, 2} = SeasonOrder.remap(show, :dvd, partial)
 
-      assert Mydia.Media.find_episode(show.id, 1, 3).provider_episode_id == "ep3"
-      assert Mydia.Media.find_episode(show.id, 1, 4).provider_episode_id == "ep4"
+      assert Mydia.Media.find_episode(Scope.unrestricted(), show.id, 1, 3).provider_episode_id ==
+               "ep3"
+
+      assert Mydia.Media.find_episode(Scope.unrestricted(), show.id, 1, 4).provider_episode_id ==
+               "ep4"
 
       assert Enum.sort(
                Enum.map(
-                 Mydia.Media.list_episodes(show.id),
+                 Mydia.Media.list_episodes(Scope.unrestricted(), show.id),
                  &{&1.season_number, &1.episode_number}
                )
              ) == [{1, 3}, {1, 4}, {2, 1}, {2, 2}]
     end
 
     test "refuses when an episode has no provider id", %{show: show, mapping: mapping} do
-      episode = Mydia.Media.find_episode(show.id, 1, 2)
+      episode = Mydia.Media.find_episode(Scope.unrestricted(), show.id, 1, 2)
       {:ok, _} = Mydia.Media.update_episode(episode, %{provider_episode_id: nil})
 
       before = coordinates(show)
@@ -165,7 +173,9 @@ defmodule Mydia.Media.SeasonOrderTest do
       assert {:error, :missing_provider_ids} = SeasonOrder.remap(show, :dvd, mapping)
 
       # And nothing moved.
-      assert Mydia.Media.find_episode(show.id, 1, 3).provider_episode_id == "ep3"
+      assert Mydia.Media.find_episode(Scope.unrestricted(), show.id, 1, 3).provider_episode_id ==
+               "ep3"
+
       assert coordinates(show) == before
       assert Repo.get!(MediaItem, show.id).season_order == nil
     end
@@ -187,14 +197,14 @@ defmodule Mydia.Media.SeasonOrderTest do
   end
 
   defp ids_by_provider_id(show) do
-    show.id
-    |> Mydia.Media.list_episodes()
+    Scope.unrestricted()
+    |> Mydia.Media.list_episodes(show.id)
     |> Map.new(&{&1.provider_episode_id, &1.id})
   end
 
   defp coordinates(show) do
-    show.id
-    |> Mydia.Media.list_episodes()
+    Scope.unrestricted()
+    |> Mydia.Media.list_episodes(show.id)
     |> Enum.map(&{&1.provider_episode_id, &1.season_number, &1.episode_number})
     |> Enum.sort()
   end

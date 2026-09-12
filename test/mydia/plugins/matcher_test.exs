@@ -1,12 +1,14 @@
 defmodule Mydia.Plugins.MatcherTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Plugins.Matcher
 
   defp movie(attrs) do
     {:ok, item} =
       Media.create_media_item(
+        Scope.unrestricted(),
         Map.merge(
           %{
             title: "Movie",
@@ -24,6 +26,7 @@ defmodule Mydia.Plugins.MatcherTest do
   defp show(attrs) do
     {:ok, item} =
       Media.create_media_item(
+        Scope.unrestricted(),
         Map.merge(
           %{title: "Show", type: "tv_show", tmdb_id: System.unique_integer([:positive])},
           attrs

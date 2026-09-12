@@ -5,6 +5,7 @@ defmodule Mydia.Plugins.ConformanceTest do
 
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Plugins
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.Error
@@ -166,7 +167,7 @@ defmodule Mydia.Plugins.ConformanceTest do
 
       for _ <- 1..3 do
         {:ok, _} =
-          Mydia.Media.create_media_item(%{
+          Mydia.Media.create_media_item(Scope.unrestricted(), %{
             title: "M#{System.unique_integer([:positive])}",
             type: "movie",
             year: 2024,
@@ -189,7 +190,7 @@ defmodule Mydia.Plugins.ConformanceTest do
       {:ok, _} = Connections.connect(slug, user.id, %{access_token: "t"})
 
       {:ok, _} =
-        Mydia.Media.create_media_item(%{
+        Mydia.Media.create_media_item(Scope.unrestricted(), %{
           title: "M",
           type: "movie",
           year: 2024,

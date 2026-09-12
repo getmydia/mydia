@@ -341,6 +341,7 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
     base = %{
       __changed__: %{},
       flash: %{},
+      current_scope: Mydia.Accounts.Scope.unrestricted(),
       media_type: :movie,
       search_mode: false,
       search_query: "",

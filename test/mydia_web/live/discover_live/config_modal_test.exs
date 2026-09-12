@@ -73,7 +73,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
     view |> element("#add-config-modal button", "Cancel") |> render_click()
 
     refute has_element?(view, "#add-config-modal[open]")
-    assert Mydia.Media.list_media_items() == []
+    assert Mydia.Media.list_media_items(Mydia.Accounts.Scope.unrestricted()) == []
   end
 
   # library_picker_button/1 (the caret) used to be gated behind
@@ -109,7 +109,7 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
       })
 
     assert html =~ "That library is no longer available"
-    assert Mydia.Media.list_media_items() == []
+    assert Mydia.Media.list_media_items(Mydia.Accounts.Scope.unrestricted()) == []
   end
 
   # submit_add_config's own glue (params["monitored"] == "true", presence/1 on
@@ -350,7 +350,9 @@ defmodule MydiaWeb.DiscoverLive.ConfigModalTest do
   end
 
   defp wait_until_media_item(provider_id, retries) do
-    case Mydia.Media.find_by_external_ids(%{tmdb: provider_id}) do
+    case Mydia.Media.find_by_external_ids(Mydia.Accounts.Scope.unrestricted(), %{
+           tmdb: provider_id
+         }) do
       nil ->
         Process.sleep(10)
         wait_until_media_item(provider_id, retries - 1)

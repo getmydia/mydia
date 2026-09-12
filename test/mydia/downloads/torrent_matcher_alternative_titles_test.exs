@@ -1,6 +1,7 @@
 defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads.TorrentMatcher
   alias Mydia.Media
 
@@ -8,7 +9,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
     setup do
       # Create a movie with alternative titles in metadata
       {:ok, movie_with_alt_titles} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Edge of Tomorrow",
           original_title: "Edge of Tomorrow",
@@ -25,7 +26,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
 
       # Create another movie to test specificity
       {:ok, other_movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "The Tomorrow War",
           year: 2021,
@@ -95,7 +96,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
 
     test "handles movie with no alternative titles gracefully" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "The Matrix",
           year: 1999,
@@ -116,7 +117,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
 
     test "handles movie with nil metadata gracefully" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Inception",
           year: 2010,
@@ -136,7 +137,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
 
     test "alternative title with different year still requires year validation" do
       {:ok, _movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Leon: The Professional",
           year: 1994,
@@ -170,7 +171,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
     test "matches localized/foreign alternative titles", %{movie_with_alt_titles: movie} do
       # Update movie with a foreign alternative title
       {:ok, updated_movie} =
-        Media.update_media_item(movie, %{
+        Media.update_media_item(Scope.unrestricted(), movie, %{
           metadata: %{
             "alternative_titles" => [
               "Live Die Repeat",
@@ -192,7 +193,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
 
     test "original_title is checked before alternative titles" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "The Professional",
           original_title: "Léon",
@@ -218,7 +219,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
 
     test "alternative titles are case-insensitive" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "Source Code",
           year: 2011,
@@ -240,7 +241,7 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
 
     test "duplicate alternative titles are handled correctly" do
       {:ok, movie} =
-        Media.create_media_item(%{
+        Media.create_media_item(Scope.unrestricted(), %{
           type: "movie",
           title: "The Matrix",
           original_title: "The Matrix",

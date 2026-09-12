@@ -107,7 +107,7 @@ defmodule MydiaWeb.MediaLive.Show.CollectionEvents do
   """
   def load_collection_data(socket, media_item) do
     user = socket.assigns.current_scope.user
-    is_favorite = Collections.is_favorite?(user, media_item.id)
+    is_favorite = Collections.is_favorite?(socket.assigns.current_scope, media_item.id)
     item_collections = Collections.collections_for_item(user, media_item.id)
     user_collections = Collections.list_collections(user, type: "manual", include_shared: false)
 
