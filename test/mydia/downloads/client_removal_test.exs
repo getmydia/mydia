@@ -87,6 +87,16 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     assert is_nil(Downloads.get_download!(download.id).client_removed_at)
   end
 
+  test "maybe_remove_after_import defers on unexpected seed-aware states" do
+    client = client!(type: :qbittorrent, remove_completed: true)
+    download = download!(client, imported: true)
+    StubAdapter.put(status(:unknown, download.download_client_id))
+
+    assert :deferred = ClientRemoval.maybe_remove_after_import(download)
+    assert StubAdapter.take_removes() == []
+    assert is_nil(Downloads.get_download!(download.id).client_removed_at)
+  end
+
   test "maybe_remove_after_import skips when remove_completed is false" do
     client = client!(type: :qbittorrent, remove_completed: false)
     download = download!(client, imported: true)

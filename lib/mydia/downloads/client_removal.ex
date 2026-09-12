@@ -83,6 +83,14 @@ defmodule Mydia.Downloads.ClientRemoval do
 
                 :deferred
 
+              {:ok, %{state: state}} ->
+                Logger.info("Deferring client removal; torrent not idle yet",
+                  download_id: download.id,
+                  state: state
+                )
+
+                :deferred
+
               {:error, error} ->
                 if not_found_error?(error) do
                   stamp(download)
