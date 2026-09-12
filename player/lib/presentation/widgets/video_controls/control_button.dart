@@ -151,15 +151,22 @@ class _ControlButtonState extends State<ControlButton> {
                           // AnimatedSwitcher reverses the outgoing entry's
                           // controller and eases it back through
                           // `switchOutCurve`. Both curves therefore only have
-                          // to stay inside [0, 1] — which easeOut does — and
-                          // the pair reads as the same scale-and-fade the
-                          // wrapping switcher produced: grow in, shrink out.
-                          // Reading the outgoing animation through
-                          // ReverseAnimation instead would run its scale
-                          // backwards, blowing the departing glyph up to full
-                          // size on the way out; that is not what shipped.
-                          switchInCurve: Curves.easeOut,
-                          switchOutCurve: Curves.easeOut,
+                          // to stay inside [0, 1], and the pair reads as the
+                          // same scale-and-fade the wrapping switcher
+                          // produced: grow in, shrink out. Reading the
+                          // outgoing animation through ReverseAnimation
+                          // instead would run its scale backwards, blowing the
+                          // departing glyph up to full size on the way out;
+                          // that is not what shipped.
+                          //
+                          // Linear is `AnimatedSwitcher`'s default, and it is
+                          // named here rather than left implicit only to say
+                          // that it is deliberate: the wrapper this replaces
+                          // set no curves either, so keeping the default is
+                          // what stops this refactor from subtly restyling a
+                          // transition the viewer already knows.
+                          switchInCurve: Curves.linear,
+                          switchOutCurve: Curves.linear,
                           transitionBuilder: (child, animation) =>
                               ScaleTransition(
                             scale: animation,
