@@ -35,6 +35,9 @@ class TransportSurface extends StatelessWidget {
   /// `playback_chrome.dart` for what that means and what still needs a home.
   final bool compact;
 
+  /// Optional externally-owned node for the play/pause button.
+  final FocusNode? playPauseFocusNode;
+
   const TransportSurface({
     super.key,
     required this.isPlaying,
@@ -44,6 +47,7 @@ class TransportSurface extends StatelessWidget {
     this.onPreviousEpisode,
     this.onNextEpisode,
     this.compact = false,
+    this.playPauseFocusNode,
   });
 
   static const Key playPauseKey = Key('transport-play-pause');
@@ -84,6 +88,7 @@ class TransportSurface extends StatelessWidget {
         key: ValueKey<bool>(isPlaying),
         child: ControlButton(
           key: playPauseKey,
+          focusNode: playPauseFocusNode,
           icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
           size: 40,
           iconSize: 24,
@@ -160,6 +165,9 @@ class TransportCluster extends StatelessWidget {
   /// Forwarded to [TransportSurface.compact].
   final bool compact;
 
+  /// Optional externally-owned node for the play/pause button.
+  final FocusNode? playPauseFocusNode;
+
   const TransportCluster({
     super.key,
     required this.player,
@@ -168,6 +176,7 @@ class TransportCluster extends StatelessWidget {
     this.onPreviousEpisode,
     this.onNextEpisode,
     this.compact = false,
+    this.playPauseFocusNode,
   });
 
   @override
@@ -185,6 +194,7 @@ class TransportCluster extends StatelessWidget {
           onPreviousEpisode: onPreviousEpisode,
           onNextEpisode: onNextEpisode,
           compact: compact,
+          playPauseFocusNode: playPauseFocusNode,
         );
       },
     );

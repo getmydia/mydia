@@ -699,6 +699,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // Desktop feature state
   final FocusNode _focusNode = FocusNode();
 
+  /// Focus target for the play/pause control, so revealing the OSD lands the
+  /// viewer on a real control. Owned here rather than by the chrome because
+  /// the key handler that reveals the chrome lives here and is the only caller
+  /// that needs to move focus into it.
+  final FocusNode _osdPlayPauseFocus = FocusNode(debugLabel: 'osd-play-pause');
+
   /// Handle on the OSD's shown or hidden state, so `_handleKeyEvent` can
   /// decide what an arrow press means and reveal the chrome on demand.
   final ChromeVisibilityController _chromeVisibility =
@@ -811,6 +817,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _fullscreen.available.addListener(_onFullscreenChanged);
     _fullscreenFailures = _fullscreen.failures.listen(_onFullscreenFailure);
     _initializePlayer();
+
+    // An auto-hidden OSD that kept focus would swallow the next OK: the
+    // focused control is still live but no longer on screen, so the press
+    // would activate something the viewer cannot see. Handing focus back to
+    // the player makes the next reveal start from a known place.
+    _chromeVisibility.addListener(_onChromeVisibilityChanged);
 
     // Force landscape orientation on mobile devices. Skipped on a television,
     // which is already landscape and has nothing to rotate.
@@ -4040,6 +4052,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         planPlayback(inputs.copyWith(choice: QualityChoice.auto)));
   }
 
+  void _onChromeVisibilityChanged() {
+    if (_chromeVisibility.visible) return;
+    if (_osdPlayPauseFocus.hasFocus) _focusNode.requestFocus();
+  }
+
   /// Handle keyboard shortcuts (desktop only)
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final player = _player;
@@ -4087,6 +4104,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       case ArrowIntent.revealChrome:
         _chromeVisibility.show();
+        _osdPlayPauseFocus.requestFocus();
         return KeyEventResult.handled;
 
       case ArrowIntent.traverse:
@@ -4100,6 +4118,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       case LogicalKeyboardKey.space:
         // Play/Pause
         player.playOrPause();
+        return KeyEventResult.handled;
+
+      // A remote's centre press. With the OSD hidden there is no focused
+      // control to receive it — the controls' own FocusHighlight is what
+      // handles select/enter normally — so OK would otherwise do nothing at
+      // all. Revealing and focusing is the same move the arrow keys make.
+      case LogicalKeyboardKey.select:
+      case LogicalKeyboardKey.enter:
+      case LogicalKeyboardKey.gameButtonA:
+        if (_chromeVisibility.visible) return KeyEventResult.ignored;
+        _chromeVisibility.show();
+        _osdPlayPauseFocus.requestFocus();
         return KeyEventResult.handled;
 
       // A remote's transport buttons. The Chromecast remote's play/pause is
@@ -4362,6 +4392,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Dispose player (VideoController is automatically disposed when player is disposed)
     _player?.dispose();
     _focusNode.dispose();
+    _osdPlayPauseFocus.dispose();
+    _chromeVisibility.removeListener(_onChromeVisibilityChanged);
     _chromeVisibility.dispose();
     _subtitleDelayDisplay.dispose();
     super.dispose();
@@ -4726,6 +4758,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           onSeekToReal: seekToReal,
           title: widget.title,
           chromeVisibility: _chromeVisibility,
+          playPauseFocusNode: _osdPlayPauseFocus,
           onBack: () {
             if (context.canPop()) {
               context.pop();

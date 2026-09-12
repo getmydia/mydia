@@ -39,10 +39,12 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
   String? selectedSubtitleLabel,
   String? selectedQualityLabel,
   ChromeVisibilityController? chromeVisibility,
+  FocusNode? playPauseFocusNode,
 }) {
   return (VideoState state) => PlaybackChrome(
         player: state.widget.controller.player,
         chromeVisibility: chromeVisibility,
+        playPauseFocusNode: playPauseFocusNode,
         timeline: timeline,
         onSeekToReal: onSeekToReal,
         title: title,

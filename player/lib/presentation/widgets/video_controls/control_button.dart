@@ -34,6 +34,14 @@ class ControlButton extends StatefulWidget {
   /// Whether the button responds to input.
   final bool enabled;
 
+  /// Optional externally-owned focus node.
+  ///
+  /// The player owns one for the play/pause button so it can move focus onto a
+  /// real control when it reveals the OSD. Without that, revealing the chrome
+  /// leaves focus on the screen's own node, which paints no ring, and the
+  /// viewer cannot tell what a subsequent OK would do.
+  final FocusNode? focusNode;
+
   const ControlButton({
     super.key,
     required this.icon,
@@ -42,6 +50,7 @@ class ControlButton extends StatefulWidget {
     this.iconSize = 24,
     this.tooltip,
     this.enabled = true,
+    this.focusNode,
   });
 
   /// Glyph opacity at rest.
@@ -91,7 +100,7 @@ class _ControlButtonState extends State<ControlButton> {
         duration: const Duration(milliseconds: 100),
         curve: DepthTokens.curveStandard,
         child: FocusHighlight(
-          focusNode: _focusNode,
+          focusNode: widget.focusNode ?? _focusNode,
           onActivate: _interactive ? widget.onTap : null,
           circular: true,
           ringWidth: 2,

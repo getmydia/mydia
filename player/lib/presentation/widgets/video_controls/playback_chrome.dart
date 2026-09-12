@@ -514,6 +514,9 @@ class PlaybackChrome extends StatefulWidget {
   /// never reads it.
   final ChromeVisibilityController? chromeVisibility;
 
+  /// Optional externally-owned node for the OSD's play/pause control.
+  final FocusNode? playPauseFocusNode;
+
   const PlaybackChrome({
     super.key,
     required this.player,
@@ -538,6 +541,7 @@ class PlaybackChrome extends StatefulWidget {
     this.selectedSubtitleLabel,
     this.selectedQualityLabel,
     this.chromeVisibility,
+    this.playPauseFocusNode,
   });
 
   @override
@@ -626,6 +630,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                             metrics: metrics,
                             transport: TransportCluster(
                               player: widget.player,
+                              playPauseFocusNode: widget.playPauseFocusNode,
                               onBack10: () =>
                                   _seekBy(const Duration(seconds: -10)),
                               onForward10: () =>
