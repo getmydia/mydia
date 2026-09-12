@@ -44,6 +44,9 @@ class SettingsSidebarRow extends ConsumerWidget {
   final bool isHidden;
   final Widget? editingTrailing;
 
+  /// Forwarded to the wrapped [SidebarRow]. See its docs.
+  final FocusNode? focusNode;
+
   const SettingsSidebarRow({
     super.key,
     required this.isSelected,
@@ -52,6 +55,7 @@ class SettingsSidebarRow extends ConsumerWidget {
     this.isEditing = false,
     this.isHidden = false,
     this.editingTrailing,
+    this.focusNode,
   });
 
   @override
@@ -67,6 +71,7 @@ class SettingsSidebarRow extends ConsumerWidget {
       isEditing: isEditing,
       isHidden: isHidden,
       editingTrailing: editingTrailing,
+      focusNode: focusNode,
     );
   }
 }

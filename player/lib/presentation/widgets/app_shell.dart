@@ -7,6 +7,7 @@ import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/focus/region_traversal_policy.dart';
+import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
 import '../../core/player/input_capabilities.dart';
@@ -198,12 +199,17 @@ class _AppShellState extends ConsumerState<AppShell>
   /// Whether the nav drawer is open. Drives [AppShell.dockChrome].
   bool _drawerOpen = false;
 
-  /// Node for the sidebar's selected row, and the node focus came from, so the
-  /// boundary is a round trip rather than a one-way jump. Without the second,
-  /// a viewer who presses left deep in a rail returns to the first card
-  /// instead of the one they left, which loses their place in the row.
+  /// Node for the sidebar's selected row. Also the boundary's target, so one
+  /// node serves both the row that takes focus and the shell that asks for it.
+  ///
+  /// The boundary that uses it — and the memory of which card focus came from,
+  /// so the move is a round trip rather than a one-way jump — lives in
+  /// [SidebarFocusBoundary], where a test can drive it. The shell itself cannot
+  /// be mounted by a widget test: it needs the authenticated provider graph.
   final FocusNode _sidebarFocusNode = FocusNode(debugLabel: 'sidebar-selected');
-  FocusNode? _focusBeforeSidebar;
+
+  late final SidebarFocusBoundary _focusBoundary =
+      SidebarFocusBoundary(sidebarNode: _sidebarFocusNode);
 
   @override
   void initState() {
@@ -312,24 +318,6 @@ class _AppShellState extends ConsumerState<AppShell>
     context.go(route);
   }
 
-  bool _focusSidebar() {
-    final current = FocusManager.instance.primaryFocus;
-    if (current != null && current != _sidebarFocusNode) {
-      _focusBeforeSidebar = current;
-    }
-    _sidebarFocusNode.requestFocus();
-    return true;
-  }
-
-  bool _focusContent() {
-    final previous = _focusBeforeSidebar;
-    if (previous != null && previous.canRequestFocus) {
-      previous.requestFocus();
-      return true;
-    }
-    return false;
-  }
-
   /// Wraps [child] in a focus region, or returns it untouched off the
   /// directional tier.
   ///
@@ -393,7 +381,7 @@ class _AppShellState extends ConsumerState<AppShell>
               children: [
                 _region(
                   onExit: (direction) => direction == TraversalDirection.right
-                      ? _focusContent()
+                      ? _focusBoundary.focusContent()
                       : false,
                   child: DesktopSidebar(
                     location: location,
@@ -406,7 +394,7 @@ class _AppShellState extends ConsumerState<AppShell>
                 Expanded(
                   child: _region(
                     onExit: (direction) => direction == TraversalDirection.left
-                        ? _focusSidebar()
+                        ? _focusBoundary.focusSidebar()
                         : false,
                     child: AppShell.contentGutter(
                       child: Column(
