@@ -158,4 +158,99 @@ void main() {
 
     expect(boundary.focusContent(), isFalse);
   });
+
+  /// A shell whose content region is its own scope — the shape `AppShell`
+  /// builds — with whichever cards the caller wants mounted.
+  ///
+  /// The region scope is what the fallback enumerates, so the tests below need
+  /// the cards to be inside it rather than merely on screen.
+  Widget scopedContentShell(FocusScopeNode scope,
+      {List<FocusNode> cards = const []}) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Row(
+          children: [
+            SizedBox(
+              width: 260,
+              child: Focus(
+                focusNode: sidebarNode,
+                child: const SizedBox(height: 50),
+              ),
+            ),
+            Expanded(
+              child: FocusScope(
+                node: scope,
+                child: Column(
+                  children: [
+                    for (final card in cards)
+                      Focus(focusNode: card, child: const SizedBox(height: 50)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  testWidgets(
+      'a remembered card that has left the tree falls back to the first '
+      'focusable still in the content region', (tester) async {
+    final contentScope = FocusScopeNode(debugLabel: 'content-region');
+    addTearDown(contentScope.dispose);
+    final freshCard = FocusNode(debugLabel: 'fresh-card');
+    addTearDown(freshCard.dispose);
+
+    await tester.pumpWidget(
+      scopedContentShell(contentScope, cards: [firstCard, secondCard]),
+    );
+    await tester.pump();
+
+    final boundary = SidebarFocusBoundary(
+      sidebarNode: sidebarNode,
+      contentScope: contentScope,
+    );
+    secondCard.requestFocus();
+    await tester.pump();
+    expect(boundary.focusSidebar(), isTrue);
+
+    // Re-pump with a different card, the way `context.go` replaces the routed
+    // child: the remembered node is gone and the region holds a new focusable
+    // in its place. RIGHT must land there rather than doing nothing.
+    await tester
+        .pumpWidget(scopedContentShell(contentScope, cards: [freshCard]));
+    await tester.pump();
+
+    expect(boundary.focusContent(), isTrue);
+    expect(
+      FocusManager.instance.primaryFocus,
+      same(freshCard),
+      reason: 'the fallback must land on a real node in the region, not merely '
+          'report that it moved',
+    );
+  });
+
+  testWidgets('an empty content region reports no move', (tester) async {
+    final contentScope = FocusScopeNode(debugLabel: 'content-region');
+    addTearDown(contentScope.dispose);
+
+    await tester.pumpWidget(
+      scopedContentShell(contentScope, cards: [firstCard, secondCard]),
+    );
+    await tester.pump();
+    final boundary = SidebarFocusBoundary(
+      sidebarNode: sidebarNode,
+      contentScope: contentScope,
+    );
+    secondCard.requestFocus();
+    await tester.pump();
+    expect(boundary.focusSidebar(), isTrue);
+
+    await tester.pumpWidget(scopedContentShell(contentScope));
+    await tester.pump();
+
+    // Nothing to focus, so the key must fall through rather than be swallowed.
+    expect(boundary.focusContent(), isFalse);
+  });
 }

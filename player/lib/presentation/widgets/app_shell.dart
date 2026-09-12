@@ -208,8 +208,29 @@ class _AppShellState extends ConsumerState<AppShell>
   /// be mounted by a widget test: it needs the authenticated provider graph.
   final FocusNode _sidebarFocusNode = FocusNode(debugLabel: 'sidebar-selected');
 
-  late final SidebarFocusBoundary _focusBoundary =
-      SidebarFocusBoundary(sidebarNode: _sidebarFocusNode);
+  /// The two regions' scopes.
+  ///
+  /// Owned here rather than left to `FocusScope`'s implicit node, because
+  /// [SidebarFocusBoundary] falls back to the *first focusable inside the
+  /// content region* when the node it remembered has been disposed by a route
+  /// change, and finding that needs the region's own scope to enumerate.
+  ///
+  /// Both keep the default `directionalTraversalEdgeBehavior` of
+  /// [TraversalEdgeBehavior.stop], which is load-bearing: under `closedLoop`
+  /// or `parentScope` the traversal mixin resolves the region edge inside
+  /// `inDirection`, before [RegionTraversalPolicy.onExit] is ever consulted —
+  /// so the boundary would silently stop calling back and the sidebar would
+  /// become unreachable again, with no test failing. Do not reconfigure these
+  /// nodes.
+  final FocusScopeNode _sidebarScopeNode =
+      FocusScopeNode(debugLabel: 'sidebar-region');
+  final FocusScopeNode _contentScopeNode =
+      FocusScopeNode(debugLabel: 'content-region');
+
+  late final SidebarFocusBoundary _focusBoundary = SidebarFocusBoundary(
+    sidebarNode: _sidebarFocusNode,
+    contentScope: _contentScopeNode,
+  );
 
   @override
   void initState() {
@@ -263,6 +284,8 @@ class _AppShellState extends ConsumerState<AppShell>
     _router?.routerDelegate.removeListener(_onRouteChanged);
     _collectionAutoSync?.dispose();
     _sidebarFocusNode.dispose();
+    _sidebarScopeNode.dispose();
+    _contentScopeNode.dispose();
     super.dispose();
   }
 
@@ -329,19 +352,27 @@ class _AppShellState extends ConsumerState<AppShell>
   /// altering it. Returning `child` unwrapped rather than installing an inert
   /// region also means the non-directional tree is byte-for-byte what it was.
   ///
-  /// The scope deliberately takes no explicit [FocusScopeNode]: the default
-  /// node's `directionalTraversalEdgeBehavior` is [TraversalEdgeBehavior.stop],
-  /// and that is load-bearing. Under `closedLoop` or `parentScope` the
-  /// traversal mixin resolves the region edge itself, inside
-  /// `inDirection`, before [RegionTraversalPolicy.onExit] is ever consulted —
-  /// so the boundary would silently stop calling back and the sidebar would
-  /// become unreachable again, with no test failing. Do not give these scopes a
-  /// node configured any other way.
-  Widget _region({required Widget child, required RegionExitCallback onExit}) {
+  /// The scope is given an explicit [FocusScopeNode] owned by this state
+  /// (rather than left to `FocusScope`'s implicit one) so the region can be
+  /// enumerated: [SidebarFocusBoundary] falls back to the first focusable in
+  /// the content region when the node it remembered has been disposed by a
+  /// route change, and [_contentScopeNode] is how it finds one. That node
+  /// keeps the default `directionalTraversalEdgeBehavior` of
+  /// [TraversalEdgeBehavior.stop], and that is load-bearing. Under `closedLoop`
+  /// or `parentScope` the traversal mixin resolves the region edge itself,
+  /// inside `inDirection`, before [RegionTraversalPolicy.onExit] is ever
+  /// consulted — so the boundary would silently stop calling back and the
+  /// sidebar would become unreachable again, with no test failing. Do not
+  /// reconfigure these nodes.
+  Widget _region({
+    required Widget child,
+    required RegionExitCallback onExit,
+    required FocusScopeNode node,
+  }) {
     if (!InputCapabilities.directionalPrimary) return child;
     return FocusTraversalGroup(
       policy: RegionTraversalPolicy(onExit: onExit),
-      child: FocusScope(child: child),
+      child: FocusScope(node: node, child: child),
     );
   }
 
@@ -380,6 +411,7 @@ class _AppShellState extends ConsumerState<AppShell>
             Row(
               children: [
                 _region(
+                  node: _sidebarScopeNode,
                   onExit: (direction) => direction == TraversalDirection.right
                       ? _focusBoundary.focusContent()
                       : false,
@@ -399,6 +431,7 @@ class _AppShellState extends ConsumerState<AppShell>
                 ),
                 Expanded(
                   child: _region(
+                    node: _contentScopeNode,
                     onExit: (direction) => direction == TraversalDirection.left
                         ? _focusBoundary.focusSidebar()
                         : false,

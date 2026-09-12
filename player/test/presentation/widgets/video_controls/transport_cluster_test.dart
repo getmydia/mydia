@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 
@@ -141,40 +142,97 @@ void main() {
     });
 
     testWidgets(
-        'find.byKey(playPauseKey) resolves to exactly one ControlButton '
-        'once the cross-fade settles, even though both the outgoing and '
-        'incoming children are briefly mounted mid-transition', (tester) async {
+        'the play/pause button stays one ControlButton across the cross-fade, '
+        'and the supplied node keeps primary focus throughout', (tester) async {
+      final playPauseFocusNode = FocusNode(debugLabel: 'play-pause');
+      addTearDown(playPauseFocusNode.dispose);
+
       await tester.pumpWidget(
-        _host(const TransportSurface(isPlaying: false)),
+        _host(
+          TransportSurface(
+            isPlaying: false,
+            onPlayPause: () {},
+            playPauseFocusNode: playPauseFocusNode,
+          ),
+        ),
+      );
+
+      playPauseFocusNode.requestFocus();
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus,
+        same(playPauseFocusNode),
+        reason: 'precondition: the button owns focus before the toggle',
       );
 
       await tester.pumpWidget(
-        _host(const TransportSurface(isPlaying: true)),
+        _host(
+          TransportSurface(
+            isPlaying: true,
+            onPlayPause: () {},
+            playPauseFocusNode: playPauseFocusNode,
+          ),
+        ),
       );
-      // Pump a partial frame so both the outgoing and incoming
-      // AnimatedSwitcher children are briefly alive in the tree at once. Both
-      // carry the *same* literal playPauseKey (only the KeyedSubtree wrapper
-      // around each is uniquely keyed by isPlaying, which is what lets
-      // AnimatedSwitcher tell them apart internally) so this is expected to
-      // transiently resolve to two widgets, not one.
+      // Pump a partial frame so the glyph cross-fade is running: both the
+      // outgoing and incoming glyph are alive in the tree at once.
       await tester.pump(const Duration(milliseconds: 40));
+
       expect(
         find.byKey(TransportSurface.playPauseKey),
-        findsNWidgets(2),
-        reason: 'both cross-fade children are mounted mid-transition and '
-            'share the same static key; this is expected, not a bug',
+        findsOneWidget,
+        reason: 'the cross-fade animates the glyph inside the button, so this '
+            'key resolves to exactly one ControlButton at every point in the '
+            'transition — there is no window with two live buttons, and so no '
+            'window with two owners of the caller-supplied focus node',
+      );
+      // The invariant the finding is about: one node, one owner. Two live
+      // ControlButtons would each hand playPauseFocusNode to a FocusHighlight
+      // of their own, and the focus system keeps only the most recent
+      // attachment — so the outgoing button's ring and activation would
+      // silently stop tracking the node for the length of the fade.
+      expect(
+        tester
+            .widgetList<FocusHighlight>(find.byType(FocusHighlight))
+            .where((widget) => widget.focusNode == playPauseFocusNode)
+            .length,
+        1,
+        reason: 'exactly one widget may own the caller-supplied node',
+      );
+      expect(
+        find.byIcon(Icons.play_arrow_rounded),
+        findsOneWidget,
+        reason: 'the outgoing glyph is still alive mid-cross-fade',
+      );
+      expect(
+        find.byIcon(Icons.pause_rounded),
+        findsOneWidget,
+        reason: 'the incoming glyph is alive mid-cross-fade',
+      );
+      expect(
+        FocusManager.instance.primaryFocus,
+        same(playPauseFocusNode),
+        reason: 'the supplied node must hold primary focus across the toggle; '
+            'asserting identity, not hasFocus, because hasFocus is also true '
+            'for an ancestor',
       );
 
-      // Once settled, only the incoming child remains, so the key resolves
-      // unambiguously again — this is the guarantee callers (goldens, other
-      // tests) actually rely on.
+      // Once settled, only the incoming glyph remains, and the key still
+      // resolves unambiguously — the guarantee callers (goldens, other tests)
+      // rely on.
       await tester.pumpAndSettle();
       expect(find.byKey(TransportSurface.playPauseKey), findsOneWidget);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
       expect(
         tester
             .widget<ControlButton>(find.byKey(TransportSurface.playPauseKey))
             .icon,
         Icons.pause_rounded,
+      );
+      expect(
+        FocusManager.instance.primaryFocus,
+        same(playPauseFocusNode),
+        reason: 'the node still owns focus once the cross-fade has settled',
       );
     });
 

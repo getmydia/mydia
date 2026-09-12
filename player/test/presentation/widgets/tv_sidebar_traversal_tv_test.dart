@@ -35,8 +35,17 @@ void main() {
     late FocusNode sidebarSelected;
     late FocusNode firstCard;
     late FocusNode secondCard;
+    late FocusScopeNode contentScope;
+    late FocusScopeNode sidebarScope;
+    late SidebarFocusBoundary boundary;
 
-    Widget buildShell() {
+    /// Creates the shell's nodes and boundary.
+    ///
+    /// Separate from [buildShell] so a test can rebuild the shell — the way a
+    /// route change does — while keeping the same sidebar node, region scope
+    /// and boundary: what is under test there is the boundary surviving a
+    /// change of content, which a fresh boundary on every build would hide.
+    void createShellNodes() {
       sidebarSelected = FocusNode(debugLabel: 'sidebar-selected');
       firstCard = FocusNode(debugLabel: 'first-card');
       secondCard = FocusNode(debugLabel: 'second-card');
@@ -44,13 +53,18 @@ void main() {
       addTearDown(firstCard.dispose);
       addTearDown(secondCard.dispose);
 
-      final contentScope = FocusScopeNode(debugLabel: 'content-scope');
-      final sidebarScope = FocusScopeNode(debugLabel: 'sidebar-scope');
+      contentScope = FocusScopeNode(debugLabel: 'content-scope');
+      sidebarScope = FocusScopeNode(debugLabel: 'sidebar-scope');
       addTearDown(contentScope.dispose);
       addTearDown(sidebarScope.dispose);
 
-      final boundary = SidebarFocusBoundary(sidebarNode: sidebarSelected);
+      boundary = SidebarFocusBoundary(
+        sidebarNode: sidebarSelected,
+        contentScope: contentScope,
+      );
+    }
 
+    Widget buildShell({Widget? content}) {
       return MaterialApp(
         home: Scaffold(
           body: Row(
@@ -99,19 +113,20 @@ void main() {
                     node: contentScope,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Focus(
-                            focusNode: firstCard,
-                            child: const SizedBox(width: 160, height: 240),
+                      child: content ??
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Focus(
+                                focusNode: firstCard,
+                                child: const SizedBox(width: 160, height: 240),
+                              ),
+                              Focus(
+                                focusNode: secondCard,
+                                child: const SizedBox(width: 160, height: 240),
+                              ),
+                            ],
                           ),
-                          Focus(
-                            focusNode: secondCard,
-                            child: const SizedBox(width: 160, height: 240),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ),
@@ -128,6 +143,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
+      createShellNodes();
       await tester.pumpWidget(buildShell());
       firstCard.requestFocus();
       await tester.pump();
@@ -144,6 +160,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
+      createShellNodes();
       await tester.pumpWidget(buildShell());
 
       // The viewer reaches the sidebar by pressing left, so the origin has to
@@ -168,6 +185,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
+      createShellNodes();
       await tester.pumpWidget(buildShell());
 
       secondCard.requestFocus();
@@ -185,6 +203,51 @@ void main() {
       // focus came from: without it, RIGHT lands on the first card.
       expect(secondCard.hasFocus, isTrue);
       expect(firstCard.hasFocus, isFalse);
+    });
+
+    testWidgets(
+        'RIGHT after navigating from the sidebar lands in the new route, '
+        'whose remembered card is gone', (tester) async {
+      tester.view.physicalSize = const Size(960, 540);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      createShellNodes();
+      await tester.pumpWidget(buildShell());
+
+      secondCard.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(sidebarSelected.hasFocus, isTrue);
+
+      // Activating the row runs `context.go`, which replaces the routed child:
+      // an entirely new focusable takes the old ones' place and the node the
+      // boundary remembered is disposed. The sidebar row is untouched and
+      // keeps focus, which is exactly the state a viewer is in when they press
+      // RIGHT to leave the sidebar.
+      final newRouteCard = FocusNode(debugLabel: 'new-route-card');
+      addTearDown(newRouteCard.dispose);
+      await tester.pumpWidget(
+        buildShell(
+          content: Center(
+            child: Focus(
+              focusNode: newRouteCard,
+              child: const SizedBox(width: 160, height: 240),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(sidebarSelected));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      // Without the fallback this press is dropped: the boundary reports no
+      // move, the policy calls the key unhandled, and focus stays in the
+      // sidebar.
+      expect(FocusManager.instance.primaryFocus, same(newRouteCard));
     });
   }, skip: skipReason);
 }
