@@ -1,0 +1,8 @@
+<Layouts.app {assigns}>
+  <.admin_page active_tab={@active_tab}>
+    <Components.api_keys_tab api_keys={@api_keys} env_key_set={@env_key_set} />
+    <Components.api_key_modal :if={@show_api_key_modal} form={@api_key_form} />
+    <Components.created_key_modal :if={@created_key} key={@created_key} />
+    <Components.confirm_modal :if={@confirm} confirm={@confirm} />
+  </.admin_page>
+</Layouts.app>

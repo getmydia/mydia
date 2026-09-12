@@ -28,6 +28,16 @@ end
 player_enabled = Mydia.Player.parse_env!(System.get_env("ENABLE_PLAYER"))
 config :mydia, :player_enabled, player_enabled
 
+# Optional admin key for the Library API. Read at the top level, not inside a
+# config_env() == :prod block: runtime.exs runs for every environment and the
+# variable is optional everywhere. Unset means the endpoint falls back to
+# database API keys only.
+config :mydia,
+       :library_api_key,
+       Mydia.Release.Env.fetch_optional_secret("LIBRARY_API_KEY",
+         hint: "Generate one with: openssl rand -hex 32"
+       )
+
 # Database adapter is configured at compile time only
 # The adapter cannot be changed at runtime - it's baked into the compiled release
 # Each Docker image is built for a specific database type

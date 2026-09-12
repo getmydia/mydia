@@ -1,0 +1,70 @@
+defmodule MydiaWeb.LibrarySchema.PayloadTypes do
+  @moduledoc """
+  Mutation payloads and the user errors they carry.
+
+  An expected failure (the title is already in the library, the relay is down, an
+  id names nothing) comes back in `userErrors` with the payload's main field
+  null, so a client branches on `code` without parsing messages. Top-level
+  GraphQL errors stay reserved for authorization and for bugs.
+  """
+
+  use Absinthe.Schema.Notation
+
+  @desc "Why a mutation could not do what it was asked"
+  enum :user_error_code do
+    value(:already_in_library, description: "The title is already in the library")
+    value(:not_found, description: "An id names nothing")
+    value(:invalid_input, description: "The arguments cannot be satisfied")
+    value(:metadata_unavailable, description: "The metadata relay could not provide the title")
+    value(:client_unavailable, description: "A download client could not do what was asked")
+  end
+
+  @desc "An expected failure, tied to the argument that caused it when there is one"
+  object :user_error do
+    field :field, list_of(non_null(:string)), description: "Path to the argument, as sent"
+    field :code, non_null(:user_error_code)
+    field :message, non_null(:string)
+  end
+
+  @desc "The media item a mutation changed"
+  object :media_item_payload do
+    field :media_item, :media_item
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
+
+  @desc "The episode a mutation changed"
+  object :episode_payload do
+    field :episode, :episode
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
+
+  @desc "The media item an add created, or the one already in the library"
+  object :add_media_payload do
+    field :media_item, :media_item
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
+
+  @desc "The id of the media item a remove deleted"
+  object :remove_media_item_payload do
+    field :removed_id, :id
+
+    field :files_not_deleted, :integer,
+      description: "Files that could not be removed from disk. 0 when deleteFiles was false."
+
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
+
+  @desc "Whether a search job was queued"
+  object :search_payload do
+    field :queued, non_null(:boolean),
+      description: "True when the job was inserted, including a repeat merged by the worker"
+
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
+
+  @desc "The id of the download a mutation removed from the queue"
+  object :remove_download_payload do
+    field :removed_id, :id
+    field :user_errors, non_null(list_of(non_null(:user_error)))
+  end
+end

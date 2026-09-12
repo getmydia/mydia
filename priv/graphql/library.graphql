@@ -1,0 +1,539 @@
+schema {
+  mutation: RootMutationType
+  query: RootQueryType
+}
+
+type RootQueryType {
+  "Quality profiles available to assign"
+  qualityProfiles: [QualityProfile!]!
+
+  "Library paths available to add media into"
+  libraryPaths: [LibraryPath!]!
+
+  "Search a metadata provider for titles not yet in the library"
+  lookup(query: String!, type: MediaType!, year: Int): [LookupResult!]!
+
+  "One media item, by id or by an external id"
+  mediaItem(id: ID, type: MediaType, tmdbId: Int, tvdbId: Int, imdbId: String): MediaItem
+
+  "Media items changed recently, oldest first"
+  mediaItems(
+    first: Int
+
+    after: String
+
+    "Only items updated at or after this instant (inclusive)"
+    updatedSince: DateTime
+  ): MediaItemConnection!
+
+  "The download queue and history. Contacts every configured client."
+  downloads(filter: DownloadFilter): [Download!]!
+
+  "Library activity, oldest first. Best-effort: the docs explain the limits."
+  events(
+    first: Int
+
+    after: String
+
+    "Defaults to every published type"
+    types: [String!]
+  ): EventConnection!
+}
+
+type RootMutationType {
+  "Turn monitoring on or off for a movie or show"
+  setMediaItemMonitored(id: ID!, monitored: Boolean!): MediaItemPayload!
+
+  "Turn monitoring on or off for every episode of one season"
+  setSeasonMonitored(mediaItemId: ID!, season: Int!, monitored: Boolean!): MediaItemPayload!
+
+  "Turn monitoring on or off for one episode"
+  setEpisodeMonitored(id: ID!, monitored: Boolean!): EpisodePayload!
+
+  "Apply a monitoring preset to a show's episodes"
+  applyEpisodeMonitoring(mediaItemId: ID!, preset: EpisodeMonitoringPreset!): MediaItemPayload!
+
+  "Add a movie by its TMDB id"
+  addMovie(input: AddMovieInput!): AddMediaPayload!
+
+  "Add a TV show by its TVDB or TMDB id"
+  addTvShow(input: AddTvShowInput!): AddMediaPayload!
+
+  "Remove a movie or show from the library"
+  removeMediaItem(input: RemoveMediaItemInput!): RemoveMediaItemPayload!
+
+  "Queue an automatic search for a movie, or for a whole show"
+  searchMediaItem(id: ID!): SearchPayload!
+
+  "Queue a search for one season of a show, preferring a season pack"
+  searchSeason(mediaItemId: ID!, season: Int!): SearchPayload!
+
+  "Queue a search for one episode"
+  searchEpisode(id: ID!): SearchPayload!
+
+  "Stop a download and remove it from its client and the queue"
+  cancelDownload(id: ID!): RemoveDownloadPayload!
+
+  "Remove a download, blocklist its release, and search again"
+  rejectRelease(
+    id: ID!
+
+    "Days to blocklist the release. Defaults to the configured period."
+    blocklistDays: Int
+  ): RemoveDownloadPayload!
+}
+
+"Arbitrary JSON, returned as stored"
+scalar JSON
+
+"How serious an event is"
+enum Severity {
+  "Routine"
+  INFO
+
+  "Worth a look"
+  WARNING
+
+  "Something failed"
+  ERROR
+}
+
+"Something that happened in the library"
+type Event {
+  id: ID!
+
+  type: String!
+
+  "When Mydia recorded it, to the second"
+  occurredAt: DateTime!
+
+  severity: Severity!
+
+  resourceType: String
+
+  resourceId: ID
+
+  "Type-specific details. Keys may change during beta."
+  data: JSON!
+}
+
+"One event in a page"
+type EventEdge {
+  node: Event!
+  cursor: String!
+}
+
+"A page of events"
+type EventConnection {
+  edges: [EventEdge!]!
+  pageInfo: PageInfo!
+}
+
+"A movie to add"
+input AddMovieInput {
+  tmdbId: Int!
+  qualityProfileId: ID
+  libraryPathId: ID
+  monitored: Boolean
+  searchNow: Boolean
+}
+
+"A TV show to add. Give tvdbId or tmdbId; tvdbId wins when both are set."
+input AddTvShowInput {
+  tvdbId: Int
+  tmdbId: Int
+  qualityProfileId: ID
+  libraryPathId: ID
+  monitored: Boolean
+  seasonMonitoring: SeasonMonitoring
+  searchNow: Boolean
+}
+
+"A media item to remove"
+input RemoveMediaItemInput {
+  id: ID!
+  deleteFiles: Boolean
+}
+
+"Why a mutation could not do what it was asked"
+enum UserErrorCode {
+  "The title is already in the library"
+  ALREADY_IN_LIBRARY
+
+  "An id names nothing"
+  NOT_FOUND
+
+  "The arguments cannot be satisfied"
+  INVALID_INPUT
+
+  "The metadata relay could not provide the title"
+  METADATA_UNAVAILABLE
+
+  "A download client could not do what was asked"
+  CLIENT_UNAVAILABLE
+}
+
+"An expected failure, tied to the argument that caused it when there is one"
+type UserError {
+  "Path to the argument, as sent"
+  field: [String!]
+
+  code: UserErrorCode!
+
+  message: String!
+}
+
+"The media item a mutation changed"
+type MediaItemPayload {
+  mediaItem: MediaItem
+  userErrors: [UserError!]!
+}
+
+"The episode a mutation changed"
+type EpisodePayload {
+  episode: Episode
+  userErrors: [UserError!]!
+}
+
+"The media item an add created, or the one already in the library"
+type AddMediaPayload {
+  mediaItem: MediaItem
+  userErrors: [UserError!]!
+}
+
+"The id of the media item a remove deleted"
+type RemoveMediaItemPayload {
+  removedId: ID
+
+  "Files that could not be removed from disk. 0 when deleteFiles was false."
+  filesNotDeleted: Int
+
+  userErrors: [UserError!]!
+}
+
+"Whether a search job was queued"
+type SearchPayload {
+  "True when the job was inserted, including a repeat merged by the worker"
+  queued: Boolean!
+
+  userErrors: [UserError!]!
+}
+
+"The id of the download a mutation removed from the queue"
+type RemoveDownloadPayload {
+  removedId: ID
+  userErrors: [UserError!]!
+}
+
+"The download client a row belongs to"
+type DownloadClient {
+  name: String!
+
+  "Whether this client is still configured, disabled, or gone"
+  state: ClientConfigState!
+}
+
+"The indexer a row was grabbed from"
+type Indexer {
+  name: String!
+}
+
+"A download, with live status from its client"
+type Download {
+  id: ID!
+
+  title: String!
+
+  status: DownloadStatus!
+
+  "Percentage, 0 to 100"
+  progress: Float
+
+  "Float because GraphQL Int is 32-bit"
+  sizeBytes: Float
+
+  downloadedBytes: Float
+
+  etaSeconds: Int
+
+  "Null for a grab that has not reached a client yet"
+  downloadClient: DownloadClient
+
+  indexer: Indexer
+
+  errorMessage: String
+
+  importFailureReason: String
+
+  importFailedAt: DateTime
+
+  mediaItem: MediaItem
+
+  episode: Episode
+
+  addedAt: DateTime!
+}
+
+"Whether a media item is available, arriving, or absent"
+type AvailabilityStatus {
+  state: AvailabilityState!
+  monitored: Boolean!
+  fileCount: Int
+  downloaded: Int
+  total: Int
+}
+
+"One episode of a TV show"
+type Episode {
+  id: ID!
+
+  seasonNumber: Int!
+
+  episodeNumber: Int!
+
+  title: String
+
+  airDate: Date
+
+  monitored: Boolean!
+
+  "Whether any untrashed, non-extra file covers this episode"
+  hasFile: Boolean!
+}
+
+"A movie or TV show in the library"
+type MediaItem {
+  id: ID!
+  type: MediaType!
+  title: String!
+  year: Int
+  tmdbId: Int
+  tvdbId: Int
+  imdbId: String
+  monitored: Boolean!
+  qualityProfile: QualityProfile
+  status: AvailabilityStatus!
+  addedAt: DateTime!
+  updatedAt: DateTime!
+  episodes(season: Int): [Episode!]!
+}
+
+"A metadata provider hit"
+type LookupResult {
+  provider: MetadataProvider!
+
+  providerId: String!
+
+  type: MediaType!
+
+  title: String!
+
+  year: Int
+
+  overview: String
+
+  posterUrl: String
+
+  imdbId: String
+
+  "The library item this hit corresponds to, if Mydia already has it"
+  inLibrary: MediaItem
+}
+
+"One item in a mediaItems page"
+type MediaItemEdge {
+  node: MediaItem!
+  cursor: String!
+}
+
+"A page of media items"
+type MediaItemConnection {
+  edges: [MediaItemEdge!]!
+  pageInfo: PageInfo!
+}
+
+"A quality profile"
+type QualityProfile {
+  id: ID!
+  name: String!
+}
+
+"A library path Mydia scans"
+type LibraryPath {
+  id: ID!
+  path: String!
+  type: LibraryPathType!
+}
+
+"Pagination info"
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+"Media content types"
+enum MediaType {
+  "A movie"
+  MOVIE
+
+  "A TV show"
+  TV_SHOW
+}
+
+"Metadata providers the relay can answer from"
+enum MetadataProvider {
+  "TMDB"
+  TMDB
+
+  "TVDB"
+  TVDB
+}
+
+"Whether a media item is available, arriving, or absent"
+enum AvailabilityState {
+  "No file and nothing downloading"
+  MISSING
+
+  "Some episodes present"
+  PARTIAL
+
+  "Fully present"
+  DOWNLOADED
+
+  "At least one download active"
+  DOWNLOADING
+
+  "Every episode airs in the future"
+  UPCOMING
+}
+
+"Which downloads to return"
+enum DownloadFilter {
+  "Every download row"
+  ALL
+
+  "Not yet imported and still moving"
+  ACTIVE
+
+  "Finished in the client, not yet imported"
+  COMPLETED
+
+  "Imported into the library"
+  IMPORTED
+
+  "Failed in the client or during import"
+  FAILED
+}
+
+"A download's current state"
+enum DownloadStatus {
+  "Waiting to start"
+  QUEUED
+
+  "Handed to a client, no status yet"
+  GRABBING
+
+  "Receiving data"
+  DOWNLOADING
+
+  "Verifying, repairing, unpacking, or moving"
+  CHECKING
+
+  "Manually paused"
+  PAUSED
+
+  "Complete and uploading"
+  SEEDING
+
+  "Complete, not yet imported"
+  COMPLETED
+
+  "Imported into the library"
+  IMPORTED
+
+  "Terminal failure"
+  FAILED
+
+  "Gone from its client"
+  MISSING
+
+  "Unrecognised state"
+  UNKNOWN
+}
+
+"Whether a download's client configuration still exists"
+enum ClientConfigState {
+  "Configured and enabled"
+  PRESENT
+
+  "Configured but disabled"
+  DISABLED
+
+  "No longer configured"
+  REMOVED
+
+  "Not determined"
+  UNKNOWN
+}
+
+"What a library path holds"
+enum LibraryPathType {
+  "Movie library"
+  MOVIES
+
+  "TV series library"
+  SERIES
+
+  "Mixed content library"
+  MIXED
+}
+
+"Which of a show's episodes to monitor"
+enum EpisodeMonitoringPreset {
+  "Every episode"
+  ALL
+
+  "Episodes without a file"
+  MISSING
+
+  "Episodes with a file"
+  EXISTING
+
+  "Episodes that have not aired"
+  FUTURE
+
+  "No episodes"
+  NONE
+}
+
+"Which seasons of a newly added show to monitor"
+enum SeasonMonitoring {
+  "Every season"
+  ALL
+
+  "Only episodes that have not aired"
+  FUTURE
+
+  "Only the latest season"
+  LATEST
+
+  "Only the first season"
+  FIRST
+
+  "No seasons"
+  NONE
+}
+
+"""
+The `DateTime` scalar type represents a date and time in the UTC
+timezone. The DateTime appears in a JSON response as an ISO8601 formatted
+string, including UTC timezone ("Z"). The parsed date and time string will
+be converted to UTC if there is an offset.
+"""
+scalar DateTime
+
+"""
+The `Date` scalar type represents a date. The Date appears in a JSON
+response as an ISO8601 formatted string, without a time component.
+"""
+scalar Date

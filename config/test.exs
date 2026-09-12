@@ -207,3 +207,5 @@ config :mydia, Mydia.MigrationTestRepo,
 # test/mydia/accounts/hash_cost_config_test.exs enforces that.
 config :bcrypt_elixir, log_rounds: 4
 config :argon2_elixir, t_cost: 1, m_cost: 8
+
+config :mydia, :library_api_key, nil

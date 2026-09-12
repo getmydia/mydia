@@ -186,8 +186,9 @@ defmodule Mydia.Downloads.History do
       # rows :removed so the honest copy and the `no_client` tag still apply.
       # A download with no `download_client` at all has nothing to classify
       # against, so `client_config_state` stays nil for it, per
-      # EnrichedDownload's contract. Polling and `apply_status_filters` stay
-      # skipped either way — there is nothing to poll.
+      # EnrichedDownload's contract. Polling stays skipped — there is nothing to poll.
+      # Filtering applies here too: a client-less install is exactly where a caller
+      # asking for :active must not be handed completed rows.
       Enum.map(downloads, fn download ->
         enriched = enrich_download_with_empty_status(download)
 
@@ -197,6 +198,7 @@ defmodule Mydia.Downloads.History do
           with_client_state(enriched, :removed)
         end
       end)
+      |> apply_status_filters(opts[:filter] || :all)
     else
       # Get status from all clients
       client_statuses = fetch_all_client_statuses(clients, downloads)

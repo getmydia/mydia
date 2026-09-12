@@ -94,6 +94,17 @@ defmodule MydiaWeb.Router do
     plug MydiaWeb.Plugs.RequirePlayer
   end
 
+  # Library API pipeline - API keys only, supplied as a header.
+  #
+  # Deliberately does NOT reuse :api_auth: that pipeline accepts a Guardian
+  # session, a bearer token, and the `api_key` query parameter, and this
+  # endpoint can add and remove media. See MydiaWeb.Plugs.LibraryApiAuth.
+  pipeline :library_api do
+    plug :accepts, ["json"]
+    plug MydiaWeb.Plugs.LibraryApiAuth
+    plug MydiaWeb.Plugs.LibraryApiContext
+  end
+
   # Health check endpoint (no authentication required)
   scope "/", MydiaWeb do
     pipe_through :api
@@ -239,6 +250,7 @@ defmodule MydiaWeb.Router do
       live "/config/plugins", AdminPluginsLive.Index, :index
       live "/config/path-mappings", AdminPathMappingsLive.Index, :index
       live "/config/remote-access", AdminRemoteAccessLive.Index, :index
+      live "/config/api-keys", AdminApiKeysLive.Index, :index
       live "/import-lists", AdminImportListsLive.Index, :index
       live "/jobs", JobsLive.Index, :index
       live "/transcodes", TranscodesLive.Index, :index
@@ -371,6 +383,24 @@ defmodule MydiaWeb.Router do
         schema: MydiaWeb.Schema,
         interface: :playground
     end
+  end
+
+  # Library API - a separate schema with its own authentication. The player
+  # schema above is a shared contract with the Rust server and the Flutter
+  # client; this one is neither, so it is not routed through Absinthe.Plug's
+  # player pipeline and is not covered by the Rust SDL parity gate.
+  #
+  # No GraphiQL route is mounted here. Absinthe.Plug.GraphiQL cannot reach an
+  # authenticated principal: the browser's initial GET carries no x-api-key and
+  # cannot set one before the shell loads, and mounting it without the pipeline
+  # would offer a UI whose every query fails closed to "forbidden".
+  scope "/api/library" do
+    pipe_through :library_api
+
+    forward "/graphql", Absinthe.Plug,
+      schema: MydiaWeb.LibrarySchema,
+      analyze_complexity: true,
+      max_complexity: 2000
   end
 
   # Player API routes - authenticated with JWT, API key, or media token

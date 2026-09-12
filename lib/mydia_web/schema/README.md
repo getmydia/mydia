@@ -101,3 +101,12 @@ accepting only headers breaks every paired one. `MydiaWeb.Plugs.MediaAuth`
 
 Stream URLs are served under `/api/v1` while subtitle URLs are under
 `/api/player/v1`. Different router scopes, easy to get wrong.
+
+## The library API is outside this gate
+
+`POST /api/library/graphql` serves a second, separate schema,
+`MydiaWeb.LibrarySchema`, with its own contract at `priv/graphql/library.graphql`.
+It is not the player contract: nothing in the Rust crate, the Flutter player, or
+`sdl_parity.rs` reads it, and none of them should. That file is gated by
+`test/mydia_web/library_schema_sdl_test.exs` alone, and it is exported with
+`mix library_schema.export`, not `mix schema.export`.

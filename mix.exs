@@ -269,6 +269,12 @@ defmodule Mydia.MixProject do
       # Delegates to Mix.Tasks.Mydia.Graphql, which writes
       # priv/graphql/schema.graphql (the player path is a symlink to it).
       "schema.export": ["mydia.graphql export"],
+      # The Library API is a separate schema with its own contract, so it has its
+      # own export. `schema.export` above writes the player SDL and must not be
+      # repointed: the Rust parity gate reads that file.
+      "library_schema.export": [
+        "absinthe.schema.sdl --schema MydiaWeb.LibrarySchema priv/graphql/library.graphql"
+      ],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind mydia", "esbuild mydia"],
