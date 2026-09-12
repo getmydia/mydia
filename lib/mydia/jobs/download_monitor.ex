@@ -56,6 +56,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.ClientAdoption
+  alias Mydia.Downloads.ClientRemoval
   alias Mydia.Downloads.Client.FailureCategory
   alias Mydia.Downloads.ImportCandidates
   alias Mydia.Downloads.Queue
@@ -226,6 +227,29 @@ defmodule Mydia.Jobs.DownloadMonitor do
     Logger.info("Found #{length(stuck)} stuck downloads")
     Enum.each(stuck, &handle_stuck/1)
 
+    pending_removals = ClientRemoval.list_pending_removals()
+
+    Enum.each(pending_removals, fn download ->
+      with_download(download, :client_removal, [], fn live ->
+        case ClientRemoval.finish_pending_removal(live) do
+          :removed ->
+            Logger.info("Finished deferred client removal", download_id: live.id)
+
+          :still_seeding ->
+            :ok
+
+          :skipped ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("Deferred client removal failed",
+              download_id: live.id,
+              error: inspect(reason)
+            )
+        end
+      end)
+    end)
+
     duration = System.monotonic_time(:millisecond) - start_time
 
     Logger.info("Download monitoring completed",
@@ -237,6 +261,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       stalled_count: stalled_count,
       stall_update_failures: stall_update_failures,
       stuck_count: length(stuck),
+      pending_removals_count: length(pending_removals),
       untracked_matched: length(untracked_downloads),
       external_needs_matching: length(external_scan.needs_matching),
       external_other: length(external_scan.external)
