@@ -576,7 +576,11 @@ jobs:
       - name: Build APK
         if: needs.changes.outputs.player == 'true'
         working-directory: player
-        run: flutter build apk --release
+        run: flutter build apk --release --target-platform android-arm,android-arm64
+
+      - name: Check APK ABIs
+        if: needs.changes.outputs.player == 'true'
+        run: ./scripts/check-apk-abis.sh player/build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload artifact
         if: needs.changes.outputs.player == 'true'

@@ -491,11 +491,14 @@ jobs:
 
       - name: Build APK
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build apk --release
+        run: flutter build apk --release --target-platform android-arm,android-arm64
 
       - name: Build AAB
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build appbundle --release
+        run: flutter build appbundle --release --target-platform android-arm,android-arm64
+
+      - name: Check APK ABIs
+        run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
 
       - name: Setup Ruby for Fastlane
         if: ${{ !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
