@@ -3924,6 +3924,11 @@ host/port.</p>
 <td>-</td>
 </tr>
 <tr>
+<td><code>INDEXER_&lt;N&gt;_API_PATH</code></td>
+<td>Newznab only. Endpoint path appended to the base URL; defaults to <code>/api</code></td>
+<td><code>/api</code></td>
+</tr>
+<tr>
 <td><code>INDEXER_&lt;N&gt;_INDEXER_IDS</code></td>
 <td>Comma-separated indexer IDs</td>
 <td><code>1,2,3</code></td>
@@ -3945,7 +3950,7 @@ host/port.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Indexer Types:</strong> <code>prowlarr</code>, <code>jackett</code>, <code>nzbhydra2</code>, <code>public</code></p>
+<p><strong>Indexer Types:</strong> <code>prowlarr</code>, <code>jackett</code>, <code>newznab</code>, <code>public</code></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Prowlarr</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">INDEXER_1_NAME</span><span class="o">=</span>Prowlarr
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">INDEXER_1_TYPE</span><span class="o">=</span>prowlarr
@@ -3958,12 +3963,20 @@ host/port.</p>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="nv">INDEXER_2_BASE_URL</span><span class="o">=</span>http://jackett:9117
 <a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="nv">INDEXER_2_API_KEY</span><span class="o">=</span>your-jackett-api-key
 <a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="c1"># NZBHydra2</span>
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="nv">INDEXER_3_NAME</span><span class="o">=</span>NZBHydra2
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="nv">INDEXER_3_TYPE</span><span class="o">=</span>nzbhydra2
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="nv">INDEXER_3_BASE_URL</span><span class="o">=</span>http://nzbhydra2:5076
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="nv">INDEXER_3_API_KEY</span><span class="o">=</span>your-nzbhydra2-api-key
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="c1"># Newznab (works with any Newznab-compatible indexer)</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="nv">INDEXER_3_NAME</span><span class="o">=</span>NZB<span class="w"> </span>Indexer
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="nv">INDEXER_3_TYPE</span><span class="o">=</span>newznab
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="nv">INDEXER_3_BASE_URL</span><span class="o">=</span>https://indexer.example
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="nv">INDEXER_3_API_KEY</span><span class="o">=</span>your-newznab-api-key
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="c1"># Optional; defaults to /api</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="nv">INDEXER_3_API_PATH</span><span class="o">=</span>/api
 </code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Legacy <code>nzbhydra2</code> type</p>
+<p>Existing configurations with <code>INDEXER_&lt;N&gt;_TYPE=nzbhydra2</code> keep working;
+Mydia accepts the legacy value and treats it as <code>newznab</code>. New
+configurations should use <code>newznab</code>.</p>
+</div>
 <h2 id="automatic-search">Automatic Search</h2>
 <table>
 <thead>

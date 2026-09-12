@@ -2986,8 +2986,8 @@
 <td>Yes</td>
 </tr>
 <tr>
-<td><strong>NZBHydra2</strong></td>
-<td>NZB meta search aggregator</td>
+<td><strong>Newznab</strong></td>
+<td>Generic NZB indexer API; connects to any compatible Usenet indexer, including meta aggregators such as NZBHydra2</td>
 <td>Yes</td>
 </tr>
 <tr>
@@ -3028,6 +3028,11 @@ under the <strong>Indexers</strong> tab.</p>
 <td>API Key</td>
 <td>Authentication key</td>
 <td><code>abc123</code></td>
+</tr>
+<tr>
+<td>API Path</td>
+<td>Newznab only. Endpoint path appended to the Base URL. Blank or omitted means <code>/api</code></td>
+<td><code>/api</code></td>
 </tr>
 <tr>
 <td>Enabled</td>
@@ -3073,7 +3078,7 @@ Set them with environment variables:</p>
 <tr>
 <td>Categories</td>
 <td><code>INDEXER_&lt;N&gt;_CATEGORIES</code></td>
-<td>Default category IDs to search within, for Prowlarr and NZBHydra2</td>
+<td>Default category IDs to search within, for Prowlarr and Newznab</td>
 </tr>
 <tr>
 <td>Rate Limit</td>

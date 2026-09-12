@@ -939,15 +939,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#nzbhydra2" class="md-nav__link">
+  <a href="#newznab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        NZBHydra2
+        Newznab
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="NZBHydra2">
+    <nav class="md-nav" aria-label="Newznab">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3106,15 +3106,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#nzbhydra2" class="md-nav__link">
+  <a href="#newznab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        NZBHydra2
+        Newznab
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="NZBHydra2">
+    <nav class="md-nav" aria-label="Newznab">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -3209,7 +3209,7 @@
 
 
 <h1 id="indexers">Indexers</h1>
-<p>Indexers provide search capabilities for finding media releases. Mydia supports Prowlarr, Jackett, and built-in Cardigann indexers.</p>
+<p>Indexers provide search capabilities for finding media releases. Mydia supports Prowlarr, Jackett, Newznab, and built-in Cardigann indexers.</p>
 <p>See <a href="../../reference/indexers/">Indexers</a> for the full list of supported indexer types.</p>
 <h2 id="prowlarr-recommended">Prowlarr (Recommended)</h2>
 <p>Prowlarr is an indexer manager that aggregates multiple indexers into a single API.</p>
@@ -3241,19 +3241,27 @@
 </ol>
 <h3 id="environment-variables_1">Environment Variables</h3>
 <p>Every indexer variable is listed in <a href="../../reference/environment-variables/#indexers">Environment variables</a>.</p>
-<h2 id="nzbhydra2">NZBHydra2</h2>
-<p>NZBHydra2 is a meta search aggregator for NZB indexers.</p>
+<h2 id="newznab">Newznab</h2>
+<p>Newznab is the API protocol Usenet indexers expose. Any Newznab-compatible
+service works here, including meta search aggregators such as NZBHydra2.</p>
 <h3 id="setup_2">Setup</h3>
 <ol>
 <li>Navigate to <strong>Admin &gt; Configuration</strong>, then the <strong>Indexers</strong> tab</li>
 <li>Click <strong>Add Indexer</strong></li>
-<li>Select <strong>NZBHydra2</strong></li>
+<li>Select <strong>Newznab</strong></li>
 <li>Enter connection details:</li>
-<li>Base URL: <code>http://nzbhydra2:5076</code></li>
-<li>API Key: Your NZBHydra2 API key</li>
+<li>Base URL: <code>https://indexer.example</code>, or the deployment prefix your provider
+     publishes, such as <code>https://indexer.example/proxy</code></li>
+<li>API Path: <code>/api</code> by default. Change it only if your provider serves the
+     Newznab endpoint at another path, such as <code>/newznab/api</code>.</li>
+<li>API Key: Your provider's Newznab API key</li>
 <li>Test connection</li>
 <li>Save</li>
 </ol>
+<p>The Base URL identifies the service, and the API Path identifies the Newznab
+endpoint on it. Mydia joins the two, so a base URL of
+<code>https://indexer.example/proxy</code> with the default API Path requests
+<code>https://indexer.example/proxy/api</code>.</p>
 <h3 id="environment-variables_2">Environment Variables</h3>
 <p>Every indexer variable is listed in <a href="../../reference/environment-variables/#indexers">Environment variables</a>.</p>
 <p>Mydia also includes built-in <a href="../cardigann-indexers/">Cardigann</a> indexer support for connecting to indexers directly, without Prowlarr or Jackett.</p>
