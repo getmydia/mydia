@@ -38,8 +38,9 @@ defmodule Mydia.Config.Loader do
     with {:ok, yaml_config} <- maybe_load_yaml(config_file, sources),
          {:ok, db_config} <- maybe_load_database_config(sources),
          env_config <- maybe_load_env(sources),
-         merged <- merge_all_configs(yaml_config, db_config, env_config) do
-      validate(merged)
+         merged <- merge_all_configs(yaml_config, db_config, env_config),
+         normalized <- normalize_legacy_indexer_types(merged) do
+      validate(normalized)
     end
   end
 
@@ -468,6 +469,11 @@ defmodule Mydia.Config.Loader do
       |> put_if_present(:categories, System.get_env("#{prefix}CATEGORIES"), &parse_string_list/1)
       |> put_if_present(:rate_limit, System.get_env("#{prefix}RATE_LIMIT"), &parse_integer/1)
       |> put_if_present(:timeout, System.get_env("#{prefix}TIMEOUT"), &parse_integer/1)
+      |> put_if_present(
+        :connection_settings,
+        System.get_env("#{prefix}API_PATH"),
+        fn value -> {:ok, %{"api_path" => value}} end
+      )
     end)
     |> Enum.reject(&(&1 == %{}))
   end
@@ -761,6 +767,25 @@ defmodule Mydia.Config.Loader do
     |> deep_merge(db_config)
     |> deep_merge(env_config)
   end
+
+  # `nzbhydra2` was the only Newznab-compatible type before the adapter was
+  # generalized. YAML, environment variables, and rows written before the
+  # rename carry it, so map it to the canonical `:newznab` at this single
+  # boundary rather than teaching the schema and adapter registry about it.
+  defp normalize_legacy_indexer_types(%{indexers: indexers} = config) when is_list(indexers) do
+    normalized =
+      Enum.map(indexers, fn indexer ->
+        if Map.get(indexer, :type) in [:nzbhydra2, "nzbhydra2"] do
+          Map.put(indexer, :type, :newznab)
+        else
+          indexer
+        end
+      end)
+
+    Map.put(config, :indexers, normalized)
+  end
+
+  defp normalize_legacy_indexer_types(config), do: config
 
   defp deep_merge(left, right) when is_map(left) and is_map(right) do
     Map.merge(left, right, fn key, left_val, right_val ->

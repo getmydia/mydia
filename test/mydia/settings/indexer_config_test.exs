@@ -84,6 +84,51 @@ defmodule Mydia.Settings.IndexerConfigTest do
       assert changeset.valid?
       assert get_change(changeset, :base_url) == "http://192.168.68.66:9696"
     end
+
+    test "accepts Newznab and stores the default API path" do
+      attrs = %{
+        name: "NZBGeek",
+        type: :newznab,
+        base_url: "https://api.nzbgeek.info",
+        connection_settings: %{}
+      }
+
+      changeset = IndexerConfig.changeset(%IndexerConfig{}, attrs)
+      assert changeset.valid?
+      assert get_change(changeset, :connection_settings) == %{"api_path" => "/api"}
+    end
+
+    test "normalizes a custom Newznab API path without dropping other settings" do
+      attrs = %{
+        name: "Custom Newznab",
+        type: :newznab,
+        base_url: "https://indexer.test",
+        connection_settings: %{"api_path" => " custom/api ", "timeout" => 10_000}
+      }
+
+      changeset = IndexerConfig.changeset(%IndexerConfig{}, attrs)
+      assert changeset.valid?
+
+      assert get_change(changeset, :connection_settings) == %{
+               "api_path" => "/custom/api",
+               "timeout" => 10_000
+             }
+    end
+
+    test "rejects a Newznab API path containing a URL, query, or fragment" do
+      for invalid <- ["https://indexer.test/api", "/api?t=search", "/api#fragment"] do
+        attrs = %{
+          name: "Invalid Newznab",
+          type: :newznab,
+          base_url: "https://indexer.test",
+          connection_settings: %{"api_path" => invalid}
+        }
+
+        changeset = IndexerConfig.changeset(%IndexerConfig{}, attrs)
+        refute changeset.valid?
+        assert %{connection_settings: [_message]} = errors_on(changeset)
+      end
+    end
   end
 
   describe "normalize_url/1" do

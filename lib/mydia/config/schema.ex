@@ -10,6 +10,7 @@ defmodule Mydia.Config.Schema do
   require Logger
 
   alias Mydia.Settings.PathMappingConfig
+  alias Mydia.Indexers.NewznabEndpoint
 
   @primary_key false
 
@@ -310,7 +311,7 @@ defmodule Mydia.Config.Schema do
 
     embeds_many :indexers, Indexer, on_replace: :delete, primary_key: false do
       field :name, :string
-      field :type, Ecto.Enum, values: [:prowlarr, :jackett, :public]
+      field :type, Ecto.Enum, values: [:prowlarr, :jackett, :newznab, :public]
       field :enabled, :boolean, default: true
       field :priority, :integer, default: 1
       field :base_url, :string
@@ -319,6 +320,7 @@ defmodule Mydia.Config.Schema do
       field :categories, {:array, :string}
       field :rate_limit, :integer
       field :timeout, :integer, default: 30000
+      field :connection_settings, :map, default: %{}
     end
 
     embeds_many :subtitle_providers, SubtitleProvider, on_replace: :delete, primary_key: false do
@@ -773,13 +775,34 @@ defmodule Mydia.Config.Schema do
       :indexer_ids,
       :categories,
       :rate_limit,
-      :timeout
+      :timeout,
+      :connection_settings
     ])
     |> validate_required([:name, :type, :base_url])
-    |> validate_inclusion(:type, [:prowlarr, :jackett, :public])
+    |> validate_inclusion(:type, [:prowlarr, :jackett, :newznab, :public])
     |> validate_number(:priority, greater_than: 0)
     |> validate_number(:rate_limit, greater_than: 0)
     |> validate_number(:timeout, greater_than: 0)
+    |> validate_newznab_api_path()
+  end
+
+  # Mirrors IndexerConfig's Newznab handling so a bad API path in YAML or an
+  # environment variable fails configuration validation instead of reaching the
+  # adapter at request time.
+  defp validate_newznab_api_path(changeset) do
+    if get_field(changeset, :type) == :newznab do
+      settings = get_field(changeset, :connection_settings) || %{}
+
+      case NewznabEndpoint.normalize_api_path(Map.get(settings, "api_path")) do
+        {:ok, api_path} ->
+          put_change(changeset, :connection_settings, Map.put(settings, "api_path", api_path))
+
+        {:error, message} ->
+          add_error(changeset, :connection_settings, message)
+      end
+    else
+      changeset
+    end
   end
 
   defp subtitle_provider_changeset(schema, attrs) do

@@ -5,6 +5,8 @@ defmodule Mydia.Settings.IndexerConfig do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Indexers.NewznabEndpoint
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -28,7 +30,7 @@ defmodule Mydia.Settings.IndexerConfig do
           updated_at: DateTime.t()
         }
 
-  @indexer_types [:prowlarr, :jackett, :nzbhydra2, :public]
+  @indexer_types [:prowlarr, :jackett, :newznab, :public]
 
   schema "indexer_configs" do
     field :name, :string
@@ -69,6 +71,7 @@ defmodule Mydia.Settings.IndexerConfig do
       :env_name,
       :min_post_age_minutes
     ])
+    |> normalize_and_validate_newznab_api_path()
     |> validate_required([:name, :type])
     |> validate_base_url_or_env_name()
     |> validate_inclusion(:type, @indexer_types)
@@ -78,6 +81,25 @@ defmodule Mydia.Settings.IndexerConfig do
     |> normalize_base_url()
     |> validate_base_url()
     |> unique_constraint(:name)
+  end
+
+  # Newznab indexers address a configurable API path; store the normalized form
+  # so adapters and the UI read one representation. Other indexer types keep
+  # their connection settings exactly as supplied.
+  defp normalize_and_validate_newznab_api_path(changeset) do
+    if get_field(changeset, :type) == :newznab do
+      settings = get_field(changeset, :connection_settings) || %{}
+
+      case NewznabEndpoint.normalize_api_path(Map.get(settings, "api_path")) do
+        {:ok, api_path} ->
+          put_change(changeset, :connection_settings, Map.put(settings, "api_path", api_path))
+
+        {:error, message} ->
+          add_error(changeset, :connection_settings, message)
+      end
+    else
+      changeset
+    end
   end
 
   # Validates that either base_url or env_name is provided

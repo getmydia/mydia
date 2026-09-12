@@ -692,10 +692,11 @@ defmodule Mydia.Indexers do
     resolved_config = Settings.resolve_env_inheritance(config)
 
     fields = connection_fields(resolved_config.base_url)
+    settings = resolved_config.connection_settings || %{}
 
     # Get timeout from connection_settings or use default
     timeout =
-      case resolved_config.connection_settings do
+      case settings do
         %{"timeout" => timeout} when is_integer(timeout) -> timeout
         _ -> 30_000
       end
@@ -712,7 +713,8 @@ defmodule Mydia.Indexers do
         categories: resolved_config.categories || [],
         rate_limit: resolved_config.rate_limit,
         timeout: timeout,
-        base_path: fields.base_path
+        base_path: fields.base_path,
+        api_path: Map.get(settings, "api_path", "/api")
       }
     }
   end
@@ -723,16 +725,21 @@ defmodule Mydia.Indexers do
   defp maybe_convert_base_url(%{base_url: base_url} = config) when is_binary(base_url) do
     fields = connection_fields(base_url)
 
+    # Callers that pass options explicitly (the UI's Test Connection payload)
+    # must keep every value they supplied; anything they omitted falls back to
+    # the adapter defaults rather than being silently undefined.
+    options =
+      Map.merge(
+        %{indexer_ids: [], categories: [], base_path: fields.base_path, api_path: "/api"},
+        Map.get(config, :options, %{})
+      )
+
     config
     |> Map.put(:host, fields.host)
     |> Map.put(:port, fields.port)
     |> Map.put(:use_ssl, fields.use_ssl)
     |> Map.put(:name, Map.get(config, :name, "Test"))
-    |> Map.put_new(:options, %{
-      indexer_ids: [],
-      categories: [],
-      base_path: fields.base_path
-    })
+    |> Map.put(:options, options)
   end
 
   defp maybe_convert_base_url(config), do: config
