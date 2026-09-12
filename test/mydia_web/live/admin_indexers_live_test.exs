@@ -245,6 +245,46 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
              )
     end
 
+    test "unsaved Newznab connection test resolves an env-sourced indexer", %{view: view} do
+      bypass = Bypass.open()
+      env_name = "TEST_NEWZNAB_#{System.unique_integer([:positive])}"
+
+      # The Source dropdown is populated when the modal opens, so the env vars
+      # have to exist before the click below.
+      System.put_env("#{env_name}_BASE_URL", "http://localhost:#{bypass.port}")
+      System.put_env("#{env_name}_API_KEY", "env-api-key")
+
+      on_exit(fn ->
+        System.delete_env("#{env_name}_BASE_URL")
+        System.delete_env("#{env_name}_API_KEY")
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/api", fn conn ->
+        assert conn.query_params["t"] == "caps"
+        assert conn.query_params["apikey"] == "env-api-key"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, newznab_caps_xml())
+      end)
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      # The Base URL/API Key inputs are hidden for an env source, so the only
+      # connection details the form can carry are the env_name and the settings.
+      view
+      |> form("#indexer-form",
+        indexer_config: %{name: "Env Newznab", type: "newznab", env_name: env_name}
+      )
+      |> render_change()
+
+      view
+      |> element(~s{button[phx-click="test_indexer_connection"]})
+      |> render_click()
+
+      assert has_element?(view, "#flash-info", "Connection successful")
+    end
+
     test "keeps Newznab connection settings the form does not render", %{conn: conn} do
       # Legacy NZBHydra2 rows migrate to Newznab carrying their old settings
       # (the migration test pins a stored timeout), so editing one in the UI
