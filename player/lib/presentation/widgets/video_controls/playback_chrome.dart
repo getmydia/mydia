@@ -517,6 +517,15 @@ class PlaybackChrome extends StatefulWidget {
   /// Optional externally-owned node for the OSD's play/pause control.
   final FocusNode? playPauseFocusNode;
 
+  /// Optional externally-owned node wrapped around the whole chrome, so the
+  /// owner can ask whether focus is anywhere inside the OSD.
+  ///
+  /// `FocusNode.hasFocus` is true for a node when any descendant holds it, so
+  /// this one node answers "is the viewer somewhere in the chrome?" — which is
+  /// what the player needs to know before it hides the OSD out from under a
+  /// focused control.
+  final FocusNode? chromeFocusNode;
+
   const PlaybackChrome({
     super.key,
     required this.player,
@@ -542,6 +551,7 @@ class PlaybackChrome extends StatefulWidget {
     this.selectedQualityLabel,
     this.chromeVisibility,
     this.playPauseFocusNode,
+    this.chromeFocusNode,
   });
 
   @override
@@ -573,7 +583,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       stream: widget.player.stream.playing,
       initialData: widget.player.state.playing,
       builder: (context, snapshot) {
-        return Stack(
+        final Widget chrome = Stack(
           fit: StackFit.expand,
           children: [
             ChromeVisibility(
@@ -727,6 +737,15 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
               child: BufferingIndicator(player: widget.player),
             ),
           ],
+        );
+        // Wraps the entire OSD so its owner can ask whether focus is anywhere
+        // in the chrome. Takes no focus and is skipped by traversal, so it
+        // adds no stop and changes no order.
+        return Focus(
+          focusNode: widget.chromeFocusNode,
+          canRequestFocus: false,
+          skipTraversal: true,
+          child: chrome,
         );
       },
     );

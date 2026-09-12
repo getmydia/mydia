@@ -705,6 +705,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// that needs to move focus into it.
   final FocusNode _osdPlayPauseFocus = FocusNode(debugLabel: 'osd-play-pause');
 
+  /// Wraps the whole OSD so the screen can ask "is focus anywhere in the
+  /// chrome?" rather than "is it on play/pause?".
+  ///
+  /// `hasFocus` is true for a node when any descendant holds focus, which is
+  /// what makes one node sufficient here. It takes no focus itself and is
+  /// skipped by traversal — the same shape `RailFocusScroller` uses — so it
+  /// adds no stop and changes no order.
+  final FocusNode _chromeFocusNode = FocusNode(
+    debugLabel: 'osd-chrome',
+    skipTraversal: true,
+    canRequestFocus: false,
+  );
+
   /// Handle on the OSD's shown or hidden state, so `_handleKeyEvent` can
   /// decide what an arrow press means and reveal the chrome on demand.
   final ChromeVisibilityController _chromeVisibility =
@@ -4054,7 +4067,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _onChromeVisibilityChanged() {
     if (_chromeVisibility.visible) return;
-    if (_osdPlayPauseFocus.hasFocus) _focusNode.requestFocus();
+    if (_chromeFocusNode.hasFocus) _focusNode.requestFocus();
   }
 
   /// Handle keyboard shortcuts (desktop only)
@@ -4124,10 +4137,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // control to receive it — the controls' own FocusHighlight is what
       // handles select/enter normally — so OK would otherwise do nothing at
       // all. Revealing and focusing is the same move the arrow keys make.
+      //
+      // Gated on the directional tier because the key handler also runs on
+      // desktop and web (`wantsKeyHandling` is true there via
+      // `supportsKeyboardShortcuts`), where Enter previously fell through to
+      // `ignored` and did nothing. A keyboard user pressing Enter over a
+      // hidden OSD has not asked for the OSD.
       case LogicalKeyboardKey.select:
       case LogicalKeyboardKey.enter:
       case LogicalKeyboardKey.gameButtonA:
-        if (_chromeVisibility.visible) return KeyEventResult.ignored;
+        if (!InputCapabilities.directionalPrimary)
+          return KeyEventResult.ignored;
+        if (_chromeFocusNode.hasFocus) return KeyEventResult.ignored;
         _chromeVisibility.show();
         _osdPlayPauseFocus.requestFocus();
         return KeyEventResult.handled;
@@ -4393,6 +4414,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player?.dispose();
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();
+    _chromeFocusNode.dispose();
     _chromeVisibility.removeListener(_onChromeVisibilityChanged);
     _chromeVisibility.dispose();
     _subtitleDelayDisplay.dispose();
@@ -4759,6 +4781,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           title: widget.title,
           chromeVisibility: _chromeVisibility,
           playPauseFocusNode: _osdPlayPauseFocus,
+          chromeFocusNode: _chromeFocusNode,
           onBack: () {
             if (context.canPop()) {
               context.pop();
