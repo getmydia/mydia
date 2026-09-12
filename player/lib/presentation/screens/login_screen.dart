@@ -7,12 +7,13 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/auth/auth_service.dart';
-import '../../core/p2p/p2p_service.dart' show defaultRelayUrl;
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
 import '../widgets/focus_highlight.dart';
 import '../widgets/glass_surface.dart';
+import '../widgets/pin_code_display.dart';
 import '../widgets/storage_unavailable_dialog.dart';
+import '../widgets/tv_keypad.dart';
 import 'login/login_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -61,9 +62,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   void initState() {
     super.initState();
+    _claimCodeController.addListener(_onClaimCodeChanged);
     _loadSavedServerUrl();
     _loadSavedRelayUrl();
     _setupAnimations();
+  }
+
+  void _onClaimCodeChanged() {
+    if (mounted) setState(() {});
   }
 
   void _setupAnimations() {
@@ -156,6 +162,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   void dispose() {
+    _claimCodeController.removeListener(_onClaimCodeChanged);
     _animationController.dispose();
     _serverUrlController.dispose();
     _usernameController.dispose();
@@ -262,67 +269,125 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     await _completePairing();
   }
 
+  void _handleTvCharacterPressed(String char) {
+    if (_claimCodeController.text.length < 6) {
+      final updated = _claimCodeController.text + char;
+      setState(() {
+        _claimCodeController.text = updated;
+      });
+      if (updated.length == 6) {
+        _handleClaimCodeSubmit();
+      }
+    }
+  }
+
+  void _handleTvDeletePressed() {
+    final text = _claimCodeController.text;
+    if (text.isNotEmpty) {
+      setState(() {
+        _claimCodeController.text = text.substring(0, text.length - 1);
+      });
+    }
+  }
+
+  void _handleTvClearPressed() {
+    setState(() {
+      _claimCodeController.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final loginState = ref.watch(loginControllerProvider);
     final size = MediaQuery.of(context).size;
     final isCompact = size.height < 700;
 
-    return Scaffold(
-      body: Container(
-        width: size.width,
-        height: size.height,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.background,
-              Color(0xFF0E1828),
-              AppColors.background,
-            ],
-            stops: [0.0, 0.5, 1.0],
-          ),
-        ),
-        child: Stack(
-          children: [
-            _buildBackgroundDecoration(),
-            SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: isCompact ? 16 : 24,
-                  ),
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: SlideTransition(
-                      position: _slideAnimation,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildLogo(isCompact),
-                          SizedBox(height: isCompact ? 24 : 32),
-                          _buildContent(loginState, isCompact),
-                          const SizedBox(height: 16),
-                          _buildFooter(loginState),
-                        ],
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent && InputCapabilities.directionalPrimary) {
+          if (event.logicalKey == LogicalKeyboardKey.escape ||
+              event.logicalKey == LogicalKeyboardKey.goBack) {
+            if (_claimCodeController.text.isNotEmpty) {
+              _handleTvDeletePressed();
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: PopScope(
+        canPop: !InputCapabilities.directionalPrimary ||
+            _claimCodeController.text.isEmpty,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          if (_claimCodeController.text.isNotEmpty) {
+            _handleTvDeletePressed();
+          }
+        },
+        child: Scaffold(
+          body: Container(
+            width: size.width,
+            height: size.height,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.background,
+                  Color(0xFF0E1828),
+                  AppColors.background,
+                ],
+                stops: [0.0, 0.5, 1.0],
+              ),
+            ),
+            child: Stack(
+              children: [
+                _buildBackgroundDecoration(),
+                SafeArea(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: isCompact ? 16 : 24,
+                      ),
+                      child: FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: SlideTransition(
+                          position: _slideAnimation,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!InputCapabilities.directionalPrimary) ...[
+                                _buildLogo(isCompact),
+                                SizedBox(height: isCompact ? 24 : 32),
+                              ],
+                              _buildContent(loginState, isCompact),
+                              const SizedBox(height: 16),
+                              _buildFooter(loginState),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+                if (_showQrScanner) _buildQrScannerOverlay(),
+                if (_showAdvancedSettings) _buildAdvancedSettingsOverlay(),
+              ],
             ),
-            if (_showQrScanner) _buildQrScannerOverlay(),
-            if (_showAdvancedSettings) _buildAdvancedSettingsOverlay(),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildContent(LoginState loginState, bool isCompact) {
+    if (InputCapabilities.directionalPrimary) {
+      return _buildTvPairingLayout(loginState, isCompact);
+    }
     // Always show the claim code card which now contains
     // the direct connection form as an expandable section
     return _buildClaimCodeCard(loginState, isCompact);
@@ -497,6 +562,340 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
       ],
+    );
+  }
+
+  // ===== TV TWO-COLUMN LAYOUT =====
+  Widget _buildTvPairingLayout(LoginState loginState, bool isCompact) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 1020),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 5,
+            child: _buildTvLeftCard(loginState, isCompact),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            flex: 6,
+            child: _buildTvRightCard(loginState),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTvLeftCard(LoginState loginState, bool isCompact) {
+    return GlassSurface.modal(
+      child: Padding(
+        padding: EdgeInsets.all(isCompact ? 16 : 22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildTvHeader(),
+            SizedBox(height: isCompact ? 12 : 16),
+            _buildSegmentedControl(loginState),
+            SizedBox(height: isCompact ? 14 : 18),
+            if (!_showDirectConnection) ...[
+              _buildTvInstructions(),
+              SizedBox(height: isCompact ? 14 : 18),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: PinCodeDisplay(
+                  code: _claimCodeController.text,
+                  hasError: loginState.error != null &&
+                      loginState.mode != ConnectionMode.direct,
+                  isLoading: loginState.isLoading,
+                ),
+              ),
+              if (loginState.claimCodeMessage != null &&
+                  loginState.claimCodeStatus != ClaimCodeStatus.error) ...[
+                const SizedBox(height: 12),
+                _buildTvLoadingIndicator(loginState),
+              ],
+              if (loginState.error != null &&
+                  loginState.mode != ConnectionMode.direct) ...[
+                const SizedBox(height: 12),
+                _buildErrorMessage(loginState.error!),
+              ],
+              SizedBox(height: isCompact ? 16 : 20),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: _buildTvConnectButton(loginState),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: _buildTvClearButton(loginState),
+                  ),
+                ],
+              ),
+            ] else ...[
+              _buildDirectConnectionContent(loginState, isCompact),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTvRightCard(LoginState loginState) {
+    return GlassSurface.modal(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: TvKeypad(
+          enabled: !loginState.isLoading && !_showDirectConnection,
+          onCharacterPressed: _handleTvCharacterPressed,
+          onDeletePressed: _handleTvDeletePressed,
+          onClearPressed: _handleTvClearPressed,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTvHeader() {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.primaryFocus],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.25),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.play_circle_filled_rounded,
+            size: 24,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Mydia Player',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _showDirectConnection
+                    ? 'Sign in directly with your server credentials'
+                    : 'Pair with your server using claim code',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: () => setState(() => _showAdvancedSettings = true),
+          icon: const Icon(Icons.settings_outlined, size: 20),
+          color: AppColors.textSecondary,
+          tooltip: 'Relay & Network Settings',
+          style: IconButton.styleFrom(
+            backgroundColor: AppColors.surfaceVariant.withValues(alpha: 0.3),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTvInstructions() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.border.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildInstructionStep(1, 'Open Mydia on phone or PC'),
+          const SizedBox(height: 6),
+          _buildInstructionStep(
+              2, 'Go to Settings \u2192 Devices \u2192 Pair device'),
+          const SizedBox(height: 6),
+          _buildInstructionStep(3, 'Enter the 6-character code below'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionStep(int number, String text) {
+    return Row(
+      children: [
+        Container(
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            '$number',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary.withValues(alpha: 0.85),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTvLoadingIndicator(LoginState loginState) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (loginState.isLoading) ...[
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Text(
+              loginState.claimCodeMessage ?? '',
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTvConnectButton(LoginState loginState) {
+    final canConnect =
+        _claimCodeController.text.length == 6 && !loginState.isLoading;
+    return FocusHighlight(
+      onActivate: canConnect ? _handleClaimCodeSubmit : null,
+      borderRadius: BorderRadius.circular(10),
+      child: ElevatedButton(
+        onPressed: canConnect ? _handleClaimCodeSubmit : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: loginState.isLoading
+            ? const SizedBox(
+                height: 18,
+                width: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Connect',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  SizedBox(width: 6),
+                  Icon(Icons.link_rounded, size: 18),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildTvClearButton(LoginState loginState) {
+    final canClear =
+        _claimCodeController.text.isNotEmpty && !loginState.isLoading;
+    return FocusHighlight(
+      onActivate: canClear ? _handleTvClearPressed : null,
+      borderRadius: BorderRadius.circular(10),
+      child: OutlinedButton(
+        onPressed: canClear ? _handleTvClearPressed : null,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.textSecondary,
+          disabledForegroundColor: AppColors.textDisabled,
+          side: BorderSide(
+            color: AppColors.border.withValues(alpha: 0.3),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.refresh_rounded, size: 16),
+            SizedBox(width: 6),
+            Text(
+              'Clear',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
