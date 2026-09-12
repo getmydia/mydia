@@ -34,9 +34,22 @@ class SidebarFocusBoundary {
   /// Returns false when there is nothing to move to, so the caller can let the
   /// key fall through instead of swallowing it. Also false if the move did not
   /// take, which keeps the `onExit` contract honest even if a future caller
-  /// forgets the attachment guard.
+  /// forgets the liveness guard.
+  ///
+  /// The guard asks whether the remembered context is still mounted rather
+  /// than whether `context` is null: `FocusNode._context` is assigned once in
+  /// `attach()` and never cleared, so a node that was attached and has since
+  /// been unmounted still reports a non-null context. `context?.mounted` is
+  /// what distinguishes "in the tree now" from "departed"; a null context
+  /// means never attached, an unmounted one means departed. Skipping
+  /// `requestFocus` on a departed node matters beyond the return value —
+  /// `requestFocus` on a parentless node sets `_requestFocusWhenReparented`,
+  /// so a node reused after re-attachment would steal focus uninvited. The
+  /// returned value does not depend on the guard being complete: [_landed]
+  /// re-reads `hasFocus` after flushing, so even a case the guard
+  /// misclassifies still answers false.
   bool focusSidebar() {
-    if (sidebarNode.context == null) return false;
+    if (!(sidebarNode.context?.mounted ?? false)) return false;
 
     final current = FocusManager.instance.primaryFocus;
     if (current != null && current != sidebarNode) _origin = current;
@@ -49,12 +62,18 @@ class SidebarFocusBoundary {
   ///
   /// False when nothing was remembered, or the remembered node has since left
   /// the tree — in which case the key must fall through rather than be
-  /// consumed. `FocusNode.context` is the check, not `canRequestFocus`: the
+  /// consumed. The check is `context?.mounted`, not `canRequestFocus`: the
   /// latter is true for a detached node, so gating on it would report a move
-  /// from a card that is no longer on screen.
+  /// from a card that is no longer on screen. It is also not `context == null`,
+  /// because `FocusNode._context` is assigned once in `attach()` and never
+  /// cleared, so a departed node still reports a non-null context.
+  ///
+  /// The guard is a cheap side-effect filter, not the source of the answer:
+  /// [_landed] re-reads `hasFocus` after flushing, so a departed node that the
+  /// guard cannot classify still reports false rather than consuming the key.
   bool focusContent() {
     final origin = _origin;
-    if (origin == null || origin.context == null) return false;
+    if (origin == null || !(origin.context?.mounted ?? false)) return false;
 
     origin.requestFocus();
     return _landed(origin);

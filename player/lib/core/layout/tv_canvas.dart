@@ -47,15 +47,29 @@ class TvCanvas extends StatelessWidget {
     // OverflowBox is the primitive for a child deliberately larger than its
     // parent: it sizes itself to the incoming constraints and hands the child
     // exactly these. `seek_preview.dart` already uses the same idiom.
-    return Transform.scale(
-      scale: scale,
+    //
+    // OverflowBox outermost, Transform innermost. The order is load-bearing
+    // and not interchangeable: hit testing runs outside-in, and a
+    // RenderConstrainedOverflowBox rejects any position outside its own size
+    // (`RenderBox.hitTest` gates on `size.contains(position)`) while it is
+    // sized to the *incoming* constraints, not to the larger canvas it lays
+    // its child out at. With the Transform outside, the pointer is
+    // inverse-scaled first and then rejected by the OverflowBox, leaving the
+    // right and bottom quarter of the screen dead to mouse, touch and
+    // air-mouse input. With the Transform inside, the OverflowBox accepts the
+    // on-screen position and the Transform maps it into canvas space, so the
+    // whole canvas stays reachable. Layout and painting are identical either
+    // way: both boxes pass constraints through, so the child still gets a
+    // tight 1280x720 and is still painted at 0.75.
+    return OverflowBox(
       alignment: Alignment.topLeft,
-      child: OverflowBox(
+      minWidth: media.size.width / scale,
+      maxWidth: media.size.width / scale,
+      minHeight: media.size.height / scale,
+      maxHeight: media.size.height / scale,
+      child: Transform.scale(
+        scale: scale,
         alignment: Alignment.topLeft,
-        minWidth: media.size.width / scale,
-        maxWidth: media.size.width / scale,
-        minHeight: media.size.height / scale,
-        maxHeight: media.size.height / scale,
         child: MediaQuery(
           data: media.copyWith(
             size: media.size / scale,

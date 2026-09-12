@@ -111,6 +111,47 @@ void main() {
     expect(boundary.focusContent(), isFalse);
   });
 
+  testWidgets('a card that returns after a refused move does not steal focus',
+      (tester) async {
+    await pump(tester);
+    final boundary = SidebarFocusBoundary(sidebarNode: sidebarNode);
+
+    secondCard.requestFocus();
+    await tester.pump();
+    expect(boundary.focusSidebar(), isTrue);
+
+    // Re-pump without the cards, the way a route change would, then ask to
+    // return. `focusContent` must return false *without* calling
+    // `requestFocus` on the departed node: requestFocus on a parentless node
+    // arms `_requestFocusWhenReparented`, so the same card coming back on
+    // screen afterwards would take focus uninvited. The returned false is not
+    // enough on its own — `_landed` supplies that even when the guard is
+    // skipped — so this test reads the side effect instead.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Focus(
+            focusNode: sidebarNode,
+            child: const SizedBox(height: 50),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(boundary.focusContent(), isFalse);
+
+    // Put the cards back. If `focusContent` had requested focus on the
+    // detached node, this re-attachment would honour the deferred request.
+    await pump(tester);
+    await tester.pump();
+
+    expect(
+      FocusManager.instance.primaryFocus,
+      isNot(secondCard),
+      reason: 'a refused move must not arm the departed card for re-attachment',
+    );
+  });
+
   testWidgets('nothing remembered on the first trip', (tester) async {
     await pump(tester);
     final boundary = SidebarFocusBoundary(sidebarNode: sidebarNode);

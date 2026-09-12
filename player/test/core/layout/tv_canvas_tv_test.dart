@@ -114,5 +114,43 @@ void main() {
       // let through.
       expect(tester.getSize(find.byKey(probeKey)), const Size(1280, 720));
     });
+
+    testWidgets('a pointer reaches the far corner of the enlarged canvas',
+        (tester) async {
+      tester.view.physicalSize = const Size(960, 540);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      var taps = 0;
+      const probeKey = ValueKey('tv-canvas-corner-probe');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TvCanvas(
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: GestureDetector(
+                key: probeKey,
+                // A bare SizedBox paints nothing and is not itself a hit
+                // target, so the default `deferToChild` would make the
+                // detector unreachable at any position and the assertion
+                // vacuously unreachable. `opaque` makes the 80x80 box the
+                // target, which is what isolates the nesting under test.
+                behavior: HitTestBehavior.opaque,
+                onTap: () => taps++,
+                child: const SizedBox(width: 80, height: 80),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // A physical point near the panel's bottom-right corner. It maps to a
+      // canvas coordinate beyond 960x540, which is exactly where the
+      // OverflowBox/Transform ordering used to reject the hit.
+      await tester.tapAt(const Offset(940, 520));
+      await tester.pump();
+
+      expect(taps, 1);
+    });
   }, skip: skipReason);
 }

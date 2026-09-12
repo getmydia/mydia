@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../focus_highlight.dart';
@@ -149,11 +150,19 @@ class ChromeTopBar extends StatelessWidget {
   /// Returns the pill untouched when it has no action, matching the inert-pill
   /// behaviour the Back and Cast pills already document.
   ///
-  /// No tier gate: [FocusHighlight] shows its ring only for keyboard and
-  /// directional traversal and hides it under touch and mouse, so a phone
-  /// viewer sees exactly what they saw before.
+  /// Gated on [InputCapabilities.directionalPrimary]. [FocusHighlight] needs no
+  /// *ring* gate — it shows the ring only for keyboard and directional
+  /// traversal and hides it under touch and mouse, so a phone viewer sees no
+  /// ring they did not see before — but the wrapper is a focus stop on every
+  /// platform, and adding one changes the top bar's Tab order: off-tier the
+  /// playback chrome would gain two stops (Back and Cast) and Enter/Space on a
+  /// pill would reach [FocusHighlight]'s `ActivateIntent` where those keys
+  /// previously fell through. Chrome Tab order is pinned behaviour in this
+  /// repo — `up_next_prompt_test.dart` exists because a nested wrapper shifted
+  /// it — so the wrapper is scope-limited to the directional tier it was
+  /// written for.
   Widget _focusablePill({required Widget child, required VoidCallback? onTap}) {
-    if (onTap == null) return child;
+    if (onTap == null || !InputCapabilities.directionalPrimary) return child;
     return FocusHighlight(
       onActivate: onTap,
       borderRadius: const BorderRadius.all(

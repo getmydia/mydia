@@ -388,7 +388,13 @@ class _AppShellState extends ConsumerState<AppShell>
                     onNavigate: _navigateTo,
                     showBackToMydia: showBackToMydia,
                     isOffline: isOffline,
-                    selectedRowFocusNode: _sidebarFocusNode,
+                    // Gated like the region above it: off-tier the sidebar row
+                    // falls back to the per-row node FocusHighlight creates,
+                    // which is what keeps `_region`'s "unchanged off-tier"
+                    // claim true rather than borrowing the shell-owned node.
+                    selectedRowFocusNode: InputCapabilities.directionalPrimary
+                        ? _sidebarFocusNode
+                        : null,
                   ),
                 ),
                 Expanded(
