@@ -101,6 +101,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> assign(:show_indexer_modal, true)
      |> assign(:indexer_form, to_form(changeset))
      |> assign(:indexer_mode, :new)
+     |> assign(:indexer_connection_settings, %{})
      |> assign(:testing_indexer_connection, false)
      |> assign(:available_env_indexers, Settings.list_available_env_indexers())
      |> init_prowlarr_indexer_assigns([])
@@ -127,6 +128,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         "indexer_ids" => indexer.indexer_ids,
         "categories" => indexer.categories,
         "rate_limit" => indexer.rate_limit,
+        "connection_settings" => indexer.connection_settings,
         "env_name" => if(matching_env, do: matching_env.env_name, else: nil),
         "base_url" => if(matching_env, do: nil, else: indexer.base_url),
         "api_key" => if(matching_env, do: nil, else: indexer.api_key)
@@ -139,6 +141,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        |> assign(:show_indexer_modal, true)
        |> assign(:indexer_form, to_form(changeset))
        |> assign(:indexer_mode, :new)
+       |> assign(:indexer_connection_settings, indexer.connection_settings || %{})
        |> assign(:testing_indexer_connection, false)
        |> assign(:available_env_indexers, available_env_indexers)
        |> init_prowlarr_indexer_assigns(existing_indexer_ids)
@@ -153,6 +156,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        |> assign(:indexer_form, to_form(changeset))
        |> assign(:indexer_mode, :edit)
        |> assign(:editing_indexer, indexer)
+       |> assign(:indexer_connection_settings, indexer.connection_settings || %{})
        |> assign(:testing_indexer_connection, false)
        |> assign(:available_env_indexers, available_env_indexers)
        |> init_prowlarr_indexer_assigns(existing_indexer_ids)
@@ -170,7 +174,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     changeset =
       indexer
-      |> IndexerConfig.changeset(params)
+      |> IndexerConfig.changeset(merge_connection_settings(params, socket.assigns))
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, :indexer_form, to_form(changeset))}
@@ -178,7 +182,10 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   @impl true
   def handle_event("save_indexer", %{"indexer_config" => params}, socket) do
-    params = merge_prowlarr_indexer_ids(params, socket.assigns)
+    params =
+      params
+      |> merge_connection_settings(socket.assigns)
+      |> merge_prowlarr_indexer_ids(socket.assigns)
 
     result =
       case socket.assigns.indexer_mode do
@@ -337,37 +344,42 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   @impl true
   def handle_event("test_indexer_connection", _params, socket) do
     changeset = socket.assigns.indexer_form.source
-    params = Ecto.Changeset.apply_changes(changeset)
 
-    type =
-      case params.type do
-        type when is_atom(type) -> type
-        type when is_binary(type) -> String.to_existing_atom(type)
+    if changeset.valid? do
+      # Passing the IndexerConfig struct reuses the central adapter conversion
+      # (Mydia.Indexers.indexer_config_to_adapter_config/1), so the unsaved test
+      # probes exactly what a save would probe — including connection_settings
+      # such as the Newznab API path.
+      case Indexers.test_connection(Ecto.Changeset.apply_changes(changeset)) do
+        {:ok, info} ->
+          version = Map.get(info, :version, "unknown")
+
+          {:noreply,
+           socket
+           |> assign(:testing_indexer_connection, false)
+           |> put_flash(:info, "Connection successful! Version: #{version}")}
+
+        {:error, error} ->
+          error_msg =
+            case error do
+              msg when is_binary(msg) -> msg
+              %{message: msg} -> msg
+              _ -> MydiaLogger.extract_error_message(error)
+            end
+
+          {:noreply,
+           socket
+           |> assign(:testing_indexer_connection, false)
+           |> put_flash(:error, "Connection failed: #{error_msg}")}
       end
-
-    test_config = %{type: type, base_url: params.base_url, api_key: params.api_key}
-
-    case Mydia.Indexers.test_connection(test_config) do
-      {:ok, info} ->
-        version = Map.get(info, :version, "unknown")
-
-        {:noreply,
-         socket
-         |> assign(:testing_indexer_connection, false)
-         |> put_flash(:info, "Connection successful! Version: #{version}")}
-
-      {:error, error} ->
-        error_msg =
-          case error do
-            msg when is_binary(msg) -> msg
-            %{message: msg} -> msg
-            _ -> MydiaLogger.extract_error_message(error)
-          end
-
-        {:noreply,
-         socket
-         |> assign(:testing_indexer_connection, false)
-         |> put_flash(:error, "Connection failed: #{error_msg}")}
+    else
+      # An invalid changeset has no connection details worth probing: reassign
+      # the form so the errors render, and never issue the request.
+      {:noreply,
+       socket
+       |> assign(:testing_indexer_connection, false)
+       |> assign(:indexer_form, to_form(Map.put(changeset, :action, :validate)))
+       |> put_flash(:error, "Fix the highlighted errors before testing the connection")}
     end
   end
 
@@ -1321,6 +1333,30 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     if type == "prowlarr",
       do: Map.put(params, "indexer_ids", indexer_ids),
       else: params
+  end
+
+  # The modal renders only a few connection settings (today just Newznab's
+  # api_path), and Ecto's cast replaces the whole map with what the form
+  # submitted, so merge the submitted keys over the settings the modal was
+  # opened with. Keys with no input — a timeout on a row migrated from the
+  # legacy Hydra indexer type, say — then survive a save instead of being
+  # silently dropped. Types that render no connection-settings input at all
+  # (Prowlarr, Jackett, Public) submit no such key, so the stored map has to be
+  # re-attached before it reaches the changeset.
+  defp merge_connection_settings(params, assigns) do
+    stored = Map.get(assigns, :indexer_connection_settings, %{})
+
+    case params do
+      %{"connection_settings" => submitted} when is_map(submitted) ->
+        Map.put(params, "connection_settings", Map.merge(stored, submitted))
+
+      _ ->
+        if stored == %{} do
+          params
+        else
+          Map.put(params, "connection_settings", stored)
+        end
+    end
   end
 
   defp format_sync_error(:rate_limit_exceeded),

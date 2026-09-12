@@ -145,6 +145,210 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#flash-error", "Unexpected response")
     end
 
+    test "offers Newznab and shows its API path field", %{view: view} do
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      assert has_element?(view, "#indexer-form option[value='newznab']", "Newznab")
+      refute has_element?(view, "#indexer-form option[value='nzbhydra2']")
+
+      view
+      |> form("#indexer-form", indexer_config: %{type: "newznab"})
+      |> render_change()
+
+      assert has_element?(
+               view,
+               ~s{#indexer-form input[name="indexer_config[connection_settings][api_path]"][value="/api"]}
+             )
+    end
+
+    test "surfaces a rejected API Path on the field", %{view: view} do
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      view
+      |> change_newznab_form(%{
+        name: "Bad Path",
+        type: "newznab",
+        base_url: "http://localhost:5076",
+        api_key: "test-api-key",
+        connection_settings: %{"api_path" => "http://localhost:5076/api"}
+      })
+      |> render_change()
+
+      # The message comes from NewznabEndpoint.normalize_api_path/1 and the
+      # class can only be on this input if it received this error list.
+      assert has_element?(view, "#indexer-api-path.input-error")
+
+      assert has_element?(
+               view,
+               "#indexer-form p.text-error",
+               "must be a path, not a complete URL"
+             )
+
+      view
+      |> form("#indexer-form",
+        indexer_config: %{connection_settings: %{"api_path" => "custom/api"}}
+      )
+      |> render_change()
+
+      refute has_element?(view, "#indexer-api-path.input-error")
+      refute has_element?(view, "#indexer-form", "must be a path, not a complete URL")
+    end
+
+    test "unsaved Newznab connection test probes the configured API path", %{view: view} do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/proxy/custom/api", fn conn ->
+        assert conn.query_params["t"] == "caps"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, newznab_caps_xml())
+      end)
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      view
+      |> change_newznab_form(%{
+        name: "Custom Newznab",
+        type: "newznab",
+        base_url: "http://localhost:#{bypass.port}/proxy",
+        api_key: "test-api-key",
+        connection_settings: %{"api_path" => "/custom/api"}
+      })
+      |> render_change()
+
+      view
+      |> element(~s{button[phx-click="test_indexer_connection"]})
+      |> render_click()
+
+      assert has_element?(view, "#flash-info", "Connection successful")
+    end
+
+    test "an invalid changeset is never probed over HTTP", %{view: view} do
+      # A downed Bypass turns any accidental request into a "Connection failed"
+      # flash, so the refutation below proves no request left the LiveView.
+      bypass = Bypass.open()
+      Bypass.down(bypass)
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      # The name is required, so this changeset can never become valid.
+      view
+      |> change_newznab_form(%{
+        type: "newznab",
+        base_url: "http://localhost:#{bypass.port}/proxy",
+        api_key: "test-api-key",
+        connection_settings: %{"api_path" => "/custom/api"}
+      })
+      |> render_change()
+
+      view
+      |> element(~s{button[phx-click="test_indexer_connection"]})
+      |> render_click()
+
+      assert has_element?(view, "#flash-error", "Fix the highlighted errors")
+      refute has_element?(view, "#flash-error", "Connection failed")
+    end
+
+    test "saves and reopens a Newznab API path", %{view: view} do
+      name = "Custom Newznab #{System.unique_integer([:positive])}"
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      view
+      |> change_newznab_form(%{
+        name: name,
+        type: "newznab",
+        base_url: "http://localhost:5076",
+        api_key: "test-api-key",
+        connection_settings: %{"api_path" => "/custom/api"}
+      })
+      |> render_submit()
+
+      saved = Enum.find(Settings.list_indexer_configs(), &(&1.name == name))
+      assert saved.connection_settings["api_path"] == "/custom/api"
+
+      view
+      |> element(~s{button[phx-click="edit_indexer"][phx-value-id="#{saved.id}"]})
+      |> render_click()
+
+      assert has_element?(
+               view,
+               ~s{#indexer-form input[name="indexer_config[connection_settings][api_path]"][value="/custom/api"]}
+             )
+    end
+
+    test "unsaved Newznab connection test resolves an env-sourced indexer", %{view: view} do
+      bypass = Bypass.open()
+      env_name = "TEST_NEWZNAB_#{System.unique_integer([:positive])}"
+
+      # The Source dropdown is populated when the modal opens, so the env vars
+      # have to exist before the click below.
+      System.put_env("#{env_name}_BASE_URL", "http://localhost:#{bypass.port}")
+      System.put_env("#{env_name}_API_KEY", "env-api-key")
+
+      on_exit(fn ->
+        System.delete_env("#{env_name}_BASE_URL")
+        System.delete_env("#{env_name}_API_KEY")
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/api", fn conn ->
+        assert conn.query_params["t"] == "caps"
+        assert conn.query_params["apikey"] == "env-api-key"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, newznab_caps_xml())
+      end)
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      # The Base URL/API Key inputs are hidden for an env source, so the only
+      # connection details the form can carry are the env_name and the settings.
+      view
+      |> form("#indexer-form",
+        indexer_config: %{name: "Env Newznab", type: "newznab", env_name: env_name}
+      )
+      |> render_change()
+
+      view
+      |> element(~s{button[phx-click="test_indexer_connection"]})
+      |> render_click()
+
+      assert has_element?(view, "#flash-info", "Connection successful")
+    end
+
+    test "keeps Newznab connection settings the form does not render", %{conn: conn} do
+      # Legacy NZBHydra2 rows migrate to Newznab carrying their old settings
+      # (the migration test pins a stored timeout), so editing one in the UI
+      # must not drop keys the form has no input for.
+      {:ok, indexer} =
+        Settings.create_indexer_config(%{
+          name: "Legacy Newznab #{System.unique_integer([:positive])}",
+          type: :newznab,
+          base_url: "http://localhost:5076",
+          api_key: "test-api-key",
+          connection_settings: %{"api_path" => "/api", "timeout" => 60_000}
+        })
+
+      # Seed before mounting: the row has to be in the list the LiveView loads.
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+
+      view
+      |> element(~s{button[phx-click="edit_indexer"][phx-value-id="#{indexer.id}"]})
+      |> render_click()
+
+      view
+      |> form("#indexer-form",
+        indexer_config: %{connection_settings: %{"api_path" => "/custom/api"}}
+      )
+      |> render_submit()
+
+      saved = Settings.get_indexer_config!(indexer.id)
+      assert saved.connection_settings["api_path"] == "/custom/api"
+      assert saved.connection_settings["timeout"] == 60_000
+    end
+
     @tag :skip
     test "test connection succeeds with valid prowlarr server", %{view: view} do
       bypass = Bypass.open()
@@ -258,6 +462,92 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       }
 
       assert Settings.runtime_config?(db_indexer) == false
+    end
+  end
+
+  describe "runtime indexer conversion" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+      Mydia.Indexers.register_adapters()
+
+      name = "Convert Me #{System.unique_integer([:positive])}"
+      base_url = "http://127.0.0.1:19911"
+
+      # api_key stays nil so edit_indexer skips the synchronous Prowlarr
+      # indexer fetch; connection_settings is what this test is about.
+      runtime_config = %{
+        Mydia.Config.Schema.defaults()
+        | indexers: [
+            %{
+              name: name,
+              type: :prowlarr,
+              enabled: true,
+              priority: 10,
+              base_url: base_url,
+              api_key: nil,
+              connection_settings: %{"timeout" => 60_000}
+            }
+          ]
+      }
+
+      original_runtime = Application.get_env(:mydia, :runtime_config)
+      Application.put_env(:mydia, :runtime_config, runtime_config)
+
+      on_exit(fn ->
+        if original_runtime do
+          Application.put_env(:mydia, :runtime_config, original_runtime)
+        else
+          Application.delete_env(:mydia, :runtime_config)
+        end
+      end)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+
+      %{view: view, name: name, base_url: base_url, runtime_id: "runtime::indexer::#{name}"}
+    end
+
+    test "converting a runtime indexer without a connection_settings param keeps stored settings",
+         %{view: view, name: name, base_url: base_url, runtime_id: runtime_id} do
+      view
+      |> element(~s{button[phx-click="edit_indexer"][phx-value-id="#{runtime_id}"]})
+      |> render_click()
+
+      assert has_element?(
+               view,
+               "#flash-info",
+               "Converting runtime indexer to database-managed configuration"
+             )
+
+      # Prowlarr's modal renders no connection_settings inputs, so the submitted
+      # params carry no "connection_settings" key at all.
+      refute has_element?(
+               view,
+               ~s{#indexer-form input[name^="indexer_config[connection_settings]"]}
+             )
+
+      view
+      |> form("#indexer-form",
+        indexer_config: %{
+          name: name,
+          type: "prowlarr",
+          base_url: base_url,
+          api_key: "test-api-key",
+          enabled: "true",
+          priority: "1"
+        }
+      )
+      |> render_submit()
+
+      saved = Repo.get_by(Mydia.Settings.IndexerConfig, name: name)
+
+      assert saved, "expected the converted runtime indexer to be persisted as a database row"
+      assert saved.connection_settings == %{"timeout" => 60_000}
     end
   end
 
@@ -800,5 +1090,25 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
         Jason.encode!(%{"status" => "ok", "version" => "3.3.21", "sessions" => []})
       )
     end)
+  end
+
+  defp newznab_caps_xml do
+    """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <caps>
+      <server appname="Newznab" version="1.0"/>
+    </caps>
+    """
+  end
+
+  # The API Path input only renders once the type is Newznab, and LiveViewTest
+  # resolves form inputs against the rendered DOM, so reveal the field before
+  # building the form that fills it.
+  defp change_newznab_form(view, attrs) do
+    view
+    |> form("#indexer-form", indexer_config: %{type: "newznab"})
+    |> render_change()
+
+    form(view, "#indexer-form", indexer_config: attrs)
   end
 end

@@ -784,6 +784,35 @@ defmodule Mydia.IndexersTest do
 
       assert {:ok, %{version: "1.25.0"}} = Indexers.test_connection(config)
     end
+
+    test "stored Newznab config carries API path to the adapter" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/proxy/custom/api", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, sample_newznab_caps_xml())
+      end)
+
+      config = %Settings.IndexerConfig{
+        name: "Custom Newznab",
+        type: :newznab,
+        base_url: "http://localhost:#{bypass.port}/proxy",
+        api_key: "test-key",
+        connection_settings: %{"api_path" => "/custom/api"}
+      }
+
+      assert {:ok, _info} = Indexers.test_connection(config)
+    end
+
+    defp sample_newznab_caps_xml do
+      """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <caps>
+        <server appname="Newznab" version="1.0"/>
+      </caps>
+      """
+    end
   end
 
   describe "list_prowlarr_indexers/1" do

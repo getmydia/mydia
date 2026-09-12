@@ -315,7 +315,8 @@ download_clients:
 # Indexer Configuration
 # ----------------------
 # Configure torrent indexers and search providers for media discovery.
-# Supports Prowlarr (aggregator), Jackett (proxy), and direct public indexers.
+# Supports Prowlarr (aggregator), Jackett (proxy), Newznab (generic NZB
+# protocol), and direct public indexers.
 indexers:
   # Prowlarr example - Indexer aggregator (recommended)
   # Prowlarr provides access to hundreds of indexers through a single API
@@ -358,3 +359,16 @@ indexers:
   #   categories: []
   #   rate_limit: 30
   #   timeout: 30000
+
+  # Generic Newznab indexer example (commented out)
+  # Works with any Newznab-compatible service, including meta aggregators
+  # such as NZBHydra2.
+  # - name: "NZB Indexer"
+  #   type: "newznab"
+  #   enabled: true
+  #   priority: 2
+  #   base_url: "https://indexer.example"
+  #   api_key: "your-api-key"
+  #   connection_settings:
+  #     # Optional; defaults to /api
+  #     api_path: "/api"

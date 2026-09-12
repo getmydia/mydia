@@ -203,5 +203,12 @@ defmodule Mydia.Indexers.Adapter.RegistryTest do
       assert {:ok, [%SearchResult{}]} = adapter1.search(config1, "test", [])
       assert {:ok, []} = adapter2.search(config2, "test", [])
     end
+
+    test "registers the canonical Newznab adapter type only" do
+      Mydia.Indexers.register_adapters()
+
+      assert {:ok, Mydia.Indexers.Adapter.Newznab} = Registry.get_adapter(:newznab)
+      refute Registry.registered?(:nzbhydra2)
+    end
   end
 end

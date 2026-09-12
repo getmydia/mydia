@@ -1,45 +1,50 @@
-defmodule Mydia.Indexers.Adapter.NzbHydra2 do
+defmodule Mydia.Indexers.Adapter.Newznab do
   @moduledoc """
-  NZBHydra2 indexer adapter.
+  Newznab protocol adapter.
 
-  NZBHydra2 is a meta search aggregator for Usenet NZB indexers. It provides
-  a unified Newznab-compatible API to search across multiple NZB indexers.
+  Speaks the Newznab API exposed by Usenet indexers and meta search
+  aggregators (NZBHydra2, Prowlarr-style proxies, native indexers).
+  Capabilities are discovered with `t=caps` and searches run through
+  `t=search`; both are served from the configured API path, which defaults
+  to `/api`.
 
   ## API Documentation
 
-  NZBHydra2 API: https://github.com/theotherp/nzbhydra2/wiki/API
+  Newznab documentation: https://newznab.readthedocs.io/en/latest/
 
   ## Authentication
 
   Authentication is done via the `apikey` query parameter.
 
-  ## Search Endpoint
+  ## Endpoint
 
-  The search endpoint returns results in Newznab XML format by default,
-  or JSON with `o=json` parameter:
-  - `GET /api?apikey={key}&t=search&q={query}`
-  - `GET /api?apikey={key}&t=search&q={query}&o=json`
+  Requests combine the configured base URL, the `options.base_path`
+  deployment prefix, and `options.api_path` (see
+  `Mydia.Indexers.NewznabEndpoint`):
+  - `GET {base_url}{base_path}{api_path}?apikey={key}&t=caps`
+  - `GET {base_url}{base_path}{api_path}?apikey={key}&t=search&q={query}`
 
   ## Example Usage
 
       config = %{
-        type: :nzbhydra2,
-        name: "NZBHydra2",
+        type: :newznab,
+        name: "My Indexer",
         host: "localhost",
         port: 5076,
         api_key: "your-api-key",
         use_ssl: false,
         options: %{
+          api_path: "/api",
           timeout: 30_000
         }
       }
 
-      {:ok, results} = NzbHydra2.search(config, "Ubuntu 22.04")
+      {:ok, results} = Newznab.search(config, "Ubuntu 22.04")
   """
 
   @behaviour Mydia.Indexers.Adapter
 
-  alias Mydia.Indexers.{SearchResult, QualityParser}
+  alias Mydia.Indexers.{SearchResult, QualityParser, NewznabEndpoint}
   alias Mydia.Indexers.Adapter.Error
 
   import SweetXml
@@ -53,67 +58,76 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
 
   @impl true
   def test_connection(config) do
-    url = build_url(config, "/api")
     params = [{"apikey", config.api_key}, {"t", "caps"}]
     query_string = URI.encode_query(params)
-    full_url = "#{url}?#{query_string}"
 
-    Logger.debug("NZBHydra2 test connection: #{full_url}")
+    with {:ok, url} <- build_endpoint(config) do
+      full_url = "#{url}?#{query_string}"
 
-    case Req.get(full_url, receive_timeout: 10_000, retry: false) do
-      {:ok, %Req.Response{status: 200, body: body}} ->
-        parse_caps_response(body)
+      Logger.debug("Newznab test connection: #{full_url}")
 
-      {:ok, %Req.Response{status: 401}} ->
-        {:error, Error.authentication_failed("Invalid API key")}
+      case Req.get(full_url, receive_timeout: 10_000, retry: false) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          parse_caps_response(body)
 
-      {:ok, %Req.Response{status: 403}} ->
-        {:error, Error.authentication_failed("Access forbidden - check API key")}
+        {:ok, %Req.Response{status: 401}} ->
+          {:error, Error.authentication_failed("Invalid API key")}
 
-      {:ok, %Req.Response{status: status}} ->
-        {:error, Error.connection_failed("HTTP #{status}")}
+        {:ok, %Req.Response{status: 403}} ->
+          {:error, Error.authentication_failed("Access forbidden - check API key")}
 
-      {:error, %Req.TransportError{reason: reason}} ->
-        {:error, Error.connection_failed("Connection failed: #{inspect(reason)}")}
+        {:ok, %Req.Response{status: status}} ->
+          {:error, Error.connection_failed("HTTP #{status}")}
 
-      {:error, reason} ->
-        {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+        {:error, %Req.TransportError{reason: reason}} ->
+          {:error, Error.connection_failed("Connection failed: #{inspect(reason)}")}
+
+        {:error, reason} ->
+          {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+      end
+    else
+      {:error, message} ->
+        {:error, Error.connection_failed(message)}
     end
   end
 
   @impl true
   def search(config, query, opts \\ []) do
-    url = build_search_url(config, query, opts)
     timeout = get_in(config, [:options, :timeout]) || 30_000
 
-    Logger.debug("NZBHydra2 search: #{url}")
+    with {:ok, url} <- build_search_url(config, query, opts) do
+      Logger.debug("Newznab search: #{url}")
 
-    case Req.get(url,
-           receive_timeout: timeout,
-           connect_options: [timeout: @connect_timeout],
-           retry: false
-         ) do
-      {:ok, %Req.Response{status: 200, body: body}} ->
-        parse_search_response(body, config.name)
+      case Req.get(url,
+             receive_timeout: timeout,
+             connect_options: [timeout: @connect_timeout],
+             retry: false
+           ) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          parse_search_response(body, config.name)
 
-      {:ok, %Req.Response{status: 401}} ->
-        {:error, Error.authentication_failed("Invalid API key")}
+        {:ok, %Req.Response{status: 401}} ->
+          {:error, Error.authentication_failed("Invalid API key")}
 
-      {:ok, %Req.Response{status: 403}} ->
-        {:error, Error.authentication_failed("Access forbidden")}
+        {:ok, %Req.Response{status: 403}} ->
+          {:error, Error.authentication_failed("Access forbidden")}
 
-      {:ok, %Req.Response{status: 429}} ->
-        {:error, Error.rate_limited("Rate limit exceeded")}
+        {:ok, %Req.Response{status: 429}} ->
+          {:error, Error.rate_limited("Rate limit exceeded")}
 
-      {:ok, %Req.Response{status: status, body: body}} ->
-        Logger.error("NZBHydra2 search failed with status #{status}: #{inspect(body)}")
-        {:error, Error.search_failed("HTTP #{status}")}
+        {:ok, %Req.Response{status: status, body: body}} ->
+          Logger.error("Newznab search failed with status #{status}: #{inspect(body)}")
+          {:error, Error.search_failed("HTTP #{status}")}
 
-      {:error, %Req.TransportError{reason: :timeout}} ->
-        {:error, Error.timeout("Request timeout")}
+        {:error, %Req.TransportError{reason: :timeout}} ->
+          {:error, Error.timeout("Request timeout")}
 
-      {:error, reason} ->
-        {:error, Error.search_failed("Request failed: #{inspect(reason)}")}
+        {:error, reason} ->
+          {:error, Error.search_failed("Request failed: #{inspect(reason)}")}
+      end
+    else
+      {:error, message} ->
+        {:error, Error.search_failed(message)}
     end
   end
 
@@ -133,10 +147,14 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
 
   ## Private Functions
 
-  defp build_url(config, path) do
+  defp build_endpoint(config) do
     scheme = if Map.get(config, :use_ssl, false), do: "https", else: "http"
-    base_path = get_in(config, [:options, :base_path]) || ""
-    "#{scheme}://#{config.host}:#{config.port}#{base_path}#{path}"
+    base_path = get_in(config, [:options, :base_path])
+    api_path = get_in(config, [:options, :api_path])
+
+    with {:ok, path} <- NewznabEndpoint.join(base_path, api_path) do
+      {:ok, "#{scheme}://#{config.host}:#{config.port}#{path}"}
+    end
   end
 
   defp build_search_url(config, query, opts) do
@@ -152,10 +170,11 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
       |> maybe_add_param("limit", limit)
       |> maybe_add_list_param("cat", categories)
 
-    base_url = build_url(config, "/api")
-    query_string = URI.encode_query(params)
+    with {:ok, base_url} <- build_endpoint(config) do
+      query_string = URI.encode_query(params)
 
-    "#{base_url}?#{query_string}"
+      {:ok, "#{base_url}?#{query_string}"}
+    end
   end
 
   defp maybe_add_param(params, _key, nil), do: params
@@ -177,32 +196,37 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
 
       {:ok,
        %{
-         name: if(server != "", do: server, else: "NZBHydra2"),
+         name: if(server != "", do: server, else: "Newznab"),
          version: if(version != "", do: version, else: "unknown"),
-         app_name: "NZBHydra2"
+         app_name: "Newznab"
        }}
     rescue
       error ->
-        Logger.error("Failed to parse NZBHydra2 caps response: #{inspect(error)}")
-        {:ok, %{name: "NZBHydra2", version: "unknown", app_name: "NZBHydra2"}}
+        Logger.error("Failed to parse Newznab caps response: #{inspect(error)}")
+        {:ok, %{name: "Newznab", version: "unknown", app_name: "Newznab"}}
     end
   end
 
   defp fetch_capabilities(config) do
-    url = build_url(config, "/api")
     params = [{"apikey", config.api_key}, {"t", "caps"}]
     query_string = URI.encode_query(params)
-    full_url = "#{url}?#{query_string}"
 
-    case Req.get(full_url, receive_timeout: 10_000, retry: false) do
-      {:ok, %Req.Response{status: 200, body: body}} ->
-        parse_capabilities_xml(body)
+    with {:ok, url} <- build_endpoint(config) do
+      full_url = "#{url}?#{query_string}"
 
-      {:ok, %Req.Response{status: status}} ->
-        {:error, Error.connection_failed("HTTP #{status}")}
+      case Req.get(full_url, receive_timeout: 10_000, retry: false) do
+        {:ok, %Req.Response{status: 200, body: body}} ->
+          parse_capabilities_xml(body)
 
-      {:error, reason} ->
-        {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+        {:ok, %Req.Response{status: status}} ->
+          {:error, Error.connection_failed("HTTP #{status}")}
+
+        {:error, reason} ->
+          {:error, Error.connection_failed("Request failed: #{inspect(reason)}")}
+      end
+    else
+      {:error, message} ->
+        {:error, Error.connection_failed(message)}
     end
   end
 
@@ -235,7 +259,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
        }}
     rescue
       error ->
-        Logger.error("Failed to parse NZBHydra2 capabilities: #{inspect(error)}")
+        Logger.error("Failed to parse Newznab capabilities: #{inspect(error)}")
         {:error, Error.parse_error("Failed to parse capabilities XML")}
     end
   end
@@ -285,7 +309,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
       {:ok, results}
     rescue
       error ->
-        Logger.error("Failed to parse NZBHydra2 search response: #{inspect(error)}")
+        Logger.error("Failed to parse Newznab search response: #{inspect(error)}")
         Logger.debug("Body: #{inspect(body)}")
         {:error, Error.parse_error("Failed to parse search results XML")}
     end
@@ -408,7 +432,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
           tmdb_id: tmdb_id,
           tvdb_id: tvdb_id,
           imdb_id: imdb_id,
-          # Always NZB protocol for NZBHydra2
+          # Always NZB protocol for Newznab
           download_protocol: :nzb,
           usenet_date: usenet_date,
           nzb_completion: nzb_completion,
@@ -418,7 +442,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2 do
       end
     rescue
       error ->
-        Logger.error("Failed to parse NZBHydra2 result item: #{inspect(error)}")
+        Logger.error("Failed to parse Newznab result item: #{inspect(error)}")
         Logger.debug("Item: #{inspect(item)}")
         nil
     end

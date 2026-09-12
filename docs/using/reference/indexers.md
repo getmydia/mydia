@@ -6,7 +6,7 @@ Complete reference of the indexer types Mydia supports.
 |------|-------------|-------------|
 | **Prowlarr** | Indexer manager with unified API | Yes |
 | **Jackett** | Indexer proxy | Yes |
-| **NZBHydra2** | NZB meta search aggregator | Yes |
+| **Newznab** | Generic NZB indexer API; connects to any compatible Usenet indexer, including meta aggregators such as NZBHydra2 | Yes |
 | **Cardigann** | Built-in indexer support | Experimental |
 
 ## Configuration Fields
@@ -20,6 +20,7 @@ under the **Indexers** tab.
 | Type | Indexer type | `prowlarr` |
 | Base URL | Indexer URL | `http://prowlarr:9696` |
 | API Key | Authentication key | `abc123` |
+| API Path | Newznab only. Endpoint path appended to the Base URL. Blank or omitted means `/api` | `/api` |
 | Enabled | Enable or disable this indexer | `true` |
 | Priority | Orders the indexer list for display and nothing else, see below | `1` |
 | Indexer IDs | Which Prowlarr indexers to query, picked from a checklist after the connection succeeds | `1,2,3` |
@@ -41,7 +42,7 @@ Set them with environment variables:
 
 | Field | Environment variable | Effect |
 |---|---|---|
-| Categories | `INDEXER_<N>_CATEGORIES` | Default category IDs to search within, for Prowlarr and NZBHydra2 |
+| Categories | `INDEXER_<N>_CATEGORIES` | Default category IDs to search within, for Prowlarr and Newznab |
 | Rate Limit | `INDEXER_<N>_RATE_LIMIT` | Maximum requests **per minute** for this indexer. Unset means no limit. |
 
 !!! warning "Rate Limit is per minute, not per second"

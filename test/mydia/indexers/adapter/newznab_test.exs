@@ -1,7 +1,7 @@
-defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
+defmodule Mydia.Indexers.Adapter.NewznabTest do
   use ExUnit.Case, async: true
 
-  alias Mydia.Indexers.Adapter.NzbHydra2
+  alias Mydia.Indexers.Adapter.Newznab
   alias Mydia.Indexers.Adapter.Error
   alias Mydia.Indexers.SearchResult
 
@@ -78,14 +78,16 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
 
   defp build_config(bypass, opts \\ []) do
     %{
-      type: :nzbhydra2,
-      name: Keyword.get(opts, :name, "Test NZBHydra2"),
+      type: :newznab,
+      name: Keyword.get(opts, :name, "Test Newznab"),
       host: "localhost",
       port: bypass.port,
       api_key: Keyword.get(opts, :api_key, "test-api-key"),
       use_ssl: false,
       options: %{
-        timeout: 30_000
+        timeout: 30_000,
+        base_path: Keyword.get(opts, :base_path),
+        api_path: Keyword.get(opts, :api_path)
       }
     }
   end
@@ -104,10 +106,36 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, info} = NzbHydra2.test_connection(config)
+      assert {:ok, info} = Newznab.test_connection(config)
       assert info.name == "NZBHydra2"
       assert info.version == "5.3.0"
-      assert info.app_name == "NZBHydra2"
+      assert info.app_name == "Newznab"
+    end
+
+    test "uses a custom API path for connection testing" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/proxy/newznab/api", fn conn ->
+        assert conn.query_params["t"] == "caps"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, @sample_caps_xml)
+      end)
+
+      config = build_config(bypass, base_path: "/proxy", api_path: "/newznab/api")
+      assert {:ok, _info} = Newznab.test_connection(config)
+    end
+
+    test "returns a typed error without issuing a request for an invalid API path" do
+      bypass = Bypass.open()
+
+      config = build_config(bypass, api_path: "https://indexer.test/api")
+
+      assert {:error, %Error{type: :connection_failed, message: message}} =
+               Newznab.test_connection(config)
+
+      refute message =~ "HTTP"
     end
 
     test "returns error on authentication failure (401)" do
@@ -119,7 +147,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:error, %Error{type: :authentication_failed}} = NzbHydra2.test_connection(config)
+      assert {:error, %Error{type: :authentication_failed}} = Newznab.test_connection(config)
     end
 
     test "returns error on forbidden (403)" do
@@ -131,7 +159,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:error, %Error{type: :authentication_failed}} = NzbHydra2.test_connection(config)
+      assert {:error, %Error{type: :authentication_failed}} = Newznab.test_connection(config)
     end
 
     test "returns error on server error" do
@@ -143,14 +171,14 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:error, %Error{type: :connection_failed}} = NzbHydra2.test_connection(config)
+      assert {:error, %Error{type: :connection_failed}} = Newznab.test_connection(config)
     end
 
     test "returns error on connection refused" do
       # Use a port that is not open
       config = %{
-        type: :nzbhydra2,
-        name: "Test NZBHydra2",
+        type: :newznab,
+        name: "Test Newznab",
         host: "localhost",
         port: 59999,
         api_key: "test-key",
@@ -158,7 +186,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
         options: %{}
       }
 
-      assert {:error, %Error{type: :connection_failed}} = NzbHydra2.test_connection(config)
+      assert {:error, %Error{type: :connection_failed}} = Newznab.test_connection(config)
     end
   end
 
@@ -177,7 +205,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, results} = NzbHydra2.search(config, "test movie")
+      assert {:ok, results} = Newznab.search(config, "test movie")
 
       assert length(results) == 2
 
@@ -208,6 +236,21 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       assert result2.download_protocol == :nzb
     end
 
+    test "uses a custom API path for search" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/custom/api", fn conn ->
+        assert conn.query_params["t"] == "search"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, @sample_search_xml)
+      end)
+
+      config = build_config(bypass, api_path: "custom/api")
+      assert {:ok, _results} = Newznab.search(config, "test")
+    end
+
     test "returns empty list on no results" do
       bypass = Bypass.open()
 
@@ -218,7 +261,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, []} = NzbHydra2.search(config, "nonexistent")
+      assert {:ok, []} = Newznab.search(config, "nonexistent")
     end
 
     test "includes category filter in request" do
@@ -233,7 +276,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, _} = NzbHydra2.search(config, "test", categories: [2000, 5000])
+      assert {:ok, _} = Newznab.search(config, "test", categories: [2000, 5000])
     end
 
     test "includes limit in request" do
@@ -248,7 +291,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, _} = NzbHydra2.search(config, "test", limit: 50)
+      assert {:ok, _} = Newznab.search(config, "test", limit: 50)
     end
 
     test "returns error on authentication failure" do
@@ -260,7 +303,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:error, %Error{type: :authentication_failed}} = NzbHydra2.search(config, "test")
+      assert {:error, %Error{type: :authentication_failed}} = Newznab.search(config, "test")
     end
 
     test "returns error on rate limit" do
@@ -272,7 +315,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:error, %Error{type: :rate_limited}} = NzbHydra2.search(config, "test")
+      assert {:error, %Error{type: :rate_limited}} = Newznab.search(config, "test")
     end
 
     test "returns error on server error" do
@@ -284,7 +327,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:error, %Error{type: :search_failed}} = NzbHydra2.search(config, "test")
+      assert {:error, %Error{type: :search_failed}} = Newznab.search(config, "test")
     end
   end
 
@@ -300,7 +343,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, capabilities} = NzbHydra2.get_capabilities(config)
+      assert {:ok, capabilities} = Newznab.get_capabilities(config)
 
       assert is_map(capabilities.searching)
       assert capabilities.searching.search.available == true
@@ -322,15 +365,15 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
     test "implements required callbacks" do
       # Ensure the module is loaded first — function_exported?/3 returns false
       # for a module that has not yet been loaded, which flakes under test
-      # orderings where no prior test has referenced NzbHydra2.
-      assert Code.ensure_loaded?(NzbHydra2)
-      assert function_exported?(NzbHydra2, :search, 3)
-      assert function_exported?(NzbHydra2, :test_connection, 1)
-      assert function_exported?(NzbHydra2, :get_capabilities, 1)
+      # orderings where no prior test has referenced Newznab.
+      assert Code.ensure_loaded?(Newznab)
+      assert function_exported?(Newznab, :search, 3)
+      assert function_exported?(Newznab, :test_connection, 1)
+      assert function_exported?(Newznab, :get_capabilities, 1)
     end
 
     test "module exists and is loaded" do
-      assert Code.ensure_loaded?(NzbHydra2)
+      assert Code.ensure_loaded?(Newznab)
     end
   end
 
@@ -359,7 +402,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, [result]} = NzbHydra2.search(config, "test")
+      assert {:ok, [result]} = Newznab.search(config, "test")
       assert result.imdb_id == "tt1234567"
     end
 
@@ -387,7 +430,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, [result]} = NzbHydra2.search(config, "test")
+      assert {:ok, [result]} = Newznab.search(config, "test")
       assert result.imdb_id == "tt9876543"
     end
   end
@@ -417,7 +460,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, [result]} = NzbHydra2.search(config, "test")
+      assert {:ok, [result]} = Newznab.search(config, "test")
 
       assert result.quality != nil
       assert result.quality.resolution == "2160p"
@@ -450,7 +493,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, [result]} = NzbHydra2.search(config, "test")
+      assert {:ok, [result]} = Newznab.search(config, "test")
       assert %DateTime{} = result.usenet_date
       assert result.usenet_date.year == 2024
       assert result.usenet_date.month == 11
@@ -481,7 +524,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, [result]} = NzbHydra2.search(config, "test")
+      assert {:ok, [result]} = Newznab.search(config, "test")
       assert result.nzb_grabs == 42
       assert result.seeders == nil
       assert result.leechers == nil
@@ -511,7 +554,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, [result]} = NzbHydra2.search(config, "test")
+      assert {:ok, [result]} = Newznab.search(config, "test")
       assert result.nzb_completion == 0.95
     end
 
@@ -538,7 +581,7 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
       end)
 
       config = build_config(bypass)
-      assert {:ok, [result]} = NzbHydra2.search(config, "test")
+      assert {:ok, [result]} = Newznab.search(config, "test")
       assert result.usenet_date == nil
       assert result.nzb_completion == nil
       assert result.nzb_grabs == nil
@@ -557,15 +600,15 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
 
       # Config WITHOUT use_ssl key - simulates web UI config
       config = %{
-        type: :nzbhydra2,
-        name: "Test NZBHydra2",
+        type: :newznab,
+        name: "Test Newznab",
         host: "localhost",
         port: bypass.port,
         api_key: "test-api-key",
         options: %{}
       }
 
-      assert {:ok, info} = NzbHydra2.test_connection(config)
+      assert {:ok, info} = Newznab.test_connection(config)
       assert info.name == "NZBHydra2"
     end
 
@@ -580,15 +623,15 @@ defmodule Mydia.Indexers.Adapter.NzbHydra2Test do
 
       # Config WITHOUT use_ssl key - simulates web UI config
       config = %{
-        type: :nzbhydra2,
-        name: "Test NZBHydra2",
+        type: :newznab,
+        name: "Test Newznab",
         host: "localhost",
         port: bypass.port,
         api_key: "test-api-key",
         options: %{}
       }
 
-      assert {:ok, results} = NzbHydra2.search(config, "test")
+      assert {:ok, results} = Newznab.search(config, "test")
       assert length(results) == 2
     end
   end

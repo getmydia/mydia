@@ -1,6 +1,6 @@
 # Indexers
 
-Indexers provide search capabilities for finding media releases. Mydia supports Prowlarr, Jackett, and built-in Cardigann indexers.
+Indexers provide search capabilities for finding media releases. Mydia supports Prowlarr, Jackett, Newznab, and built-in Cardigann indexers.
 
 See [Indexers](../reference/indexers.md) for the full list of supported indexer types.
 
@@ -42,20 +42,29 @@ Jackett is an alternative indexer proxy.
 
 Every indexer variable is listed in [Environment variables](../reference/environment-variables.md#indexers).
 
-## NZBHydra2
+## Newznab
 
-NZBHydra2 is a meta search aggregator for NZB indexers.
+Newznab is the API protocol Usenet indexers expose. Any Newznab-compatible
+service works here, including meta search aggregators such as NZBHydra2.
 
 ### Setup
 
 1. Navigate to **Admin > Configuration**, then the **Indexers** tab
 2. Click **Add Indexer**
-3. Select **NZBHydra2**
+3. Select **Newznab**
 4. Enter connection details:
-   - Base URL: `http://nzbhydra2:5076`
-   - API Key: Your NZBHydra2 API key
+   - Base URL: `https://indexer.example`, or the deployment prefix your provider
+     publishes, such as `https://indexer.example/proxy`
+   - API Path: `/api` by default. Change it only if your provider serves the
+     Newznab endpoint at another path, such as `/newznab/api`.
+   - API Key: Your provider's Newznab API key
 5. Test connection
 6. Save
+
+The Base URL identifies the service, and the API Path identifies the Newznab
+endpoint on it. Mydia joins the two, so a base URL of
+`https://indexer.example/proxy` with the default API Path requests
+`https://indexer.example/proxy/api`.
 
 ### Environment Variables
 

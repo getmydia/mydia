@@ -25,6 +25,11 @@ defmodule Mydia.Config.LoaderTest do
       |> Enum.filter(fn {key, _} -> String.starts_with?(key, "LIBRARY_PATH_") end)
       |> Enum.map(fn {key, _} -> key end)
 
+    indexer_vars =
+      System.get_env()
+      |> Enum.filter(fn {key, _} -> String.starts_with?(key, "INDEXER_") end)
+      |> Enum.map(fn {key, _} -> key end)
+
     env_vars =
       [
         "PORT",
@@ -51,7 +56,7 @@ defmodule Mydia.Config.LoaderTest do
         "HWACCEL",
         "HWACCEL_DEVICE",
         "ENABLE_REMOTE_ACCESS"
-      ] ++ download_client_vars ++ library_path_vars
+      ] ++ download_client_vars ++ library_path_vars ++ indexer_vars
 
     # Store original values
     original_env =
@@ -78,6 +83,11 @@ defmodule Mydia.Config.LoaderTest do
       # Same reasoning for LIBRARY_PATH_* vars the test itself set.
       System.get_env()
       |> Enum.filter(fn {key, _} -> String.starts_with?(key, "LIBRARY_PATH_") end)
+      |> Enum.each(fn {key, _} -> System.delete_env(key) end)
+
+      # Same reasoning for INDEXER_* vars the test itself set.
+      System.get_env()
+      |> Enum.filter(fn {key, _} -> String.starts_with?(key, "INDEXER_") end)
       |> Enum.each(fn {key, _} -> System.delete_env(key) end)
 
       # Restore original environment
@@ -263,6 +273,48 @@ defmodule Mydia.Config.LoaderTest do
       assert [path] = config.library_paths
       assert path.path == "/movies"
       refute Map.has_key?(path, :quality_profile_id)
+    end
+
+    test "loads a Newznab API path from environment configuration" do
+      System.put_env("INDEXER_1_NAME", "Custom Newznab")
+      System.put_env("INDEXER_1_TYPE", "newznab")
+      System.put_env("INDEXER_1_BASE_URL", "https://indexer.test")
+      System.put_env("INDEXER_1_API_PATH", "/custom/api")
+
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml", sources: [:env])
+      assert [indexer] = config.indexers
+      assert indexer.type == :newznab
+      assert indexer.connection_settings == %{"api_path" => "/custom/api"}
+    end
+
+    test "normalizes the legacy nzbhydra2 runtime type forever" do
+      System.put_env("INDEXER_1_NAME", "Legacy Hydra")
+      System.put_env("INDEXER_1_TYPE", "nzbhydra2")
+      System.put_env("INDEXER_1_BASE_URL", "http://hydra:5076")
+
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml", sources: [:env])
+      assert [indexer] = config.indexers
+      assert indexer.type == :newznab
+    end
+
+    test "normalizes a legacy nzbhydra2 indexer from YAML" do
+      yaml_content = """
+      indexers:
+        - name: Legacy Hydra
+          type: nzbhydra2
+          base_url: http://hydra:5076
+          connection_settings:
+            api_path: /custom/api
+      """
+
+      File.mkdir_p!("test/fixtures")
+      File.write!(@test_yaml_path, yaml_content)
+
+      {:ok, config} = Loader.load(config_file: @test_yaml_path)
+
+      assert [indexer] = config.indexers
+      assert indexer.type == :newznab
+      assert indexer.connection_settings["api_path"] == "/custom/api"
     end
 
     test "returns error for invalid configuration" do

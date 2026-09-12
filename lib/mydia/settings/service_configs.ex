@@ -16,6 +16,7 @@ defmodule Mydia.Settings.ServiceConfigs do
     SubtitleProviderConfig
   }
 
+  alias Mydia.Indexers.NewznabEndpoint
   alias Mydia.Settings.RuntimeConfig, as: RC
   alias Mydia.Subtitles.ProviderRegistry
 
@@ -222,12 +223,38 @@ defmodule Mydia.Settings.ServiceConfigs do
     # Build environment variable names
     base_url_var = "#{env_name}_BASE_URL"
     api_key_var = "#{env_name}_API_KEY"
+    api_path_var = "#{env_name}_API_PATH"
 
     # Resolve from environment, falling back to existing values
     resolved_base_url = System.get_env(base_url_var) || config.base_url
     resolved_api_key = System.get_env(api_key_var) || config.api_key
 
-    %{config | base_url: resolved_base_url, api_key: resolved_api_key}
+    %{
+      config
+      | base_url: resolved_base_url,
+        api_key: resolved_api_key,
+        connection_settings:
+          resolve_env_api_path(config.connection_settings, System.get_env(api_path_var))
+    }
+  end
+
+  # An unset or blank `<env_name>_API_PATH` leaves the row's settings untouched,
+  # so the caller's existing value (or its own default) still applies. A value
+  # the Newznab path normalizer rejects is likewise ignored rather than
+  # injecting a bogus path.
+  defp resolve_env_api_path(settings, nil), do: settings
+
+  defp resolve_env_api_path(settings, api_path) when is_binary(api_path) do
+    case String.trim(api_path) do
+      "" ->
+        settings
+
+      trimmed ->
+        case NewznabEndpoint.normalize_api_path(trimmed) do
+          {:ok, normalized} -> Map.put(settings || %{}, "api_path", normalized)
+          {:error, _reason} -> settings
+        end
+    end
   end
 
   def list_available_env_indexers do
