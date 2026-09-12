@@ -469,8 +469,22 @@ defmodule Mydia.Downloads.Client.NzbgetTest do
 
       failed = by_id["3002"]
       assert failed.state == :error
-      # FAILURE is not in the {SUCCESS, DELETED} set -> completed_at stays nil
+      # FAILURE is not in the SUCCESS set -> completed_at stays nil
       assert failed.completed_at == nil
+    end
+
+    test "list_torrents filter: :completed keeps SUCCESS/* history only",
+         %{
+           bypass: bypass,
+           config: config,
+           listgroups_body: listgroups_body,
+           history_body: history_body
+         } do
+      expect_listgroups_and_history(bypass, listgroups_body, history_body)
+
+      assert {:ok, statuses} = Nzbget.list_torrents(config, filter: :completed)
+      ids = Enum.map(statuses, & &1.id) |> MapSet.new()
+      assert MapSet.equal?(ids, MapSet.new(["3001", "3003"]))
     end
 
     test "list_torrents filter: :downloading keeps DOWNLOADING/FETCHING/QUEUED only",
@@ -500,9 +514,18 @@ defmodule Mydia.Downloads.Client.NzbgetTest do
       {"QUEUED", :downloading},
       {"PAUSED", :paused},
       {"SUCCESS", :completed},
-      {"DELETED", :completed},
+      {"SUCCESS/ALL", :completed},
+      {"SUCCESS/UNPACK", :completed},
+      {"SUCCESS/HEALTH", :completed},
+      {"DELETED", :error},
+      {"DELETED/MANUAL", :error},
+      {"DELETED/DUPE", :error},
       {"FAILURE", :error},
+      {"FAILURE/PAR", :error},
+      {"FAILURE/UNPACK", :error},
       {"WARNING", :error},
+      {"WARNING/SCRIPT", :error},
+      {"WARNING/REPAIRABLE", :error},
       {"PP_QUEUED", :checking},
       {"LOADING_PARS", :checking},
       {"VERIFYING", :checking},
