@@ -52,58 +52,56 @@ defmodule Mydia.Downloads.ClientRemoval do
         :skipped
 
       {:ok, info} ->
-        cond do
-          not seed_aware_type?(info.type) ->
-            remove_and_stamp(download, info)
+        if seed_aware_type?(info.type) do
+          case Client.get_status(info.adapter, info.config, info.client_id) do
+            {:ok, %{state: state}} when state in [:paused, :completed] ->
+              remove_and_stamp(download, info)
 
-          true ->
-            case Client.get_status(info.adapter, info.config, info.client_id) do
-              {:ok, %{state: state}} when state in [:paused, :completed] ->
-                remove_and_stamp(download, info)
+            {:ok, %{state: :seeding}} ->
+              Logger.info("Deferring client removal until seeding finishes",
+                download_id: download.id
+              )
 
-              {:ok, %{state: :seeding}} ->
-                Logger.info("Deferring client removal until seeding finishes",
-                  download_id: download.id
-                )
+              :deferred
 
-                :deferred
+            {:ok, %{state: state}} when state in [:downloading, :checking] ->
+              Logger.info("Deferring client removal; torrent not idle yet",
+                download_id: download.id,
+                state: state
+              )
 
-              {:ok, %{state: state}} when state in [:downloading, :checking] ->
-                Logger.info("Deferring client removal; torrent not idle yet",
+              :deferred
+
+            {:ok, %{state: :error}} ->
+              Logger.warning("Not auto-removing errored torrent after import",
+                download_id: download.id
+              )
+
+              :deferred
+
+            {:ok, %{state: state}} ->
+              Logger.info("Deferring client removal; torrent not idle yet",
+                download_id: download.id,
+                state: state
+              )
+
+              :deferred
+
+            {:error, error} ->
+              if not_found_error?(error) do
+                stamp(download)
+                :removed
+              else
+                Logger.warning("Could not read status for post-import removal",
                   download_id: download.id,
-                  state: state
+                  error: inspect(error)
                 )
 
                 :deferred
-
-              {:ok, %{state: :error}} ->
-                Logger.warning("Not auto-removing errored torrent after import",
-                  download_id: download.id
-                )
-
-                :deferred
-
-              {:ok, %{state: state}} ->
-                Logger.info("Deferring client removal; torrent not idle yet",
-                  download_id: download.id,
-                  state: state
-                )
-
-                :deferred
-
-              {:error, error} ->
-                if not_found_error?(error) do
-                  stamp(download)
-                  :removed
-                else
-                  Logger.warning("Could not read status for post-import removal",
-                    download_id: download.id,
-                    error: inspect(error)
-                  )
-
-                  :deferred
-                end
-            end
+              end
+          end
+        else
+          remove_and_stamp(download, info)
         end
     end
   end
@@ -115,9 +113,7 @@ defmodule Mydia.Downloads.ClientRemoval do
         :removed
 
       {:ok, info} ->
-        unless info.remove_completed do
-          :skipped
-        else
+        if info.remove_completed do
           case Client.get_status(info.adapter, info.config, info.client_id) do
             {:ok, %{state: state}} ->
               if removable_state?(state) do
@@ -134,6 +130,8 @@ defmodule Mydia.Downloads.ClientRemoval do
                 {:error, error}
               end
           end
+        else
+          :skipped
         end
     end
   end
