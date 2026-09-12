@@ -4,10 +4,14 @@ defmodule MydiaWeb.LibrarySchema.ComplexityTest do
   alias Mydia.LibraryApi.Principal
 
   @admin %Principal{role: "admin", source: :api_key}
+  # The HTTP budget test executes this at the cap, so the selection is the
+  # shape a poller actually asks for: the change's identity, deletion flag and
+  # timestamp, plus the changed item's id. A richer nested selection is priced
+  # above the server's 2000 budget by design, which `@enforced` pins separately.
   @page """
   query Page($first: Int) {
-    mediaItems(first: $first) {
-      edges { node { id title status { state } } }
+    mediaItemChanges(first: $first) {
+      edges { node { mediaItemId deleted changedAt mediaItem { id } } }
       pageInfo { hasNextPage endCursor }
     }
   }
@@ -36,8 +40,8 @@ defmodule MydiaWeb.LibrarySchema.ComplexityTest do
   test "omitting first applies the documented default of 50" do
     without_first = """
     {
-      mediaItems {
-        edges { node { id title status { state } } }
+      mediaItemChanges {
+        edges { node { mediaItemId deleted changedAt mediaItem { id } } }
         pageInfo { hasNextPage endCursor }
       }
     }
@@ -64,7 +68,7 @@ defmodule MydiaWeb.LibrarySchema.ComplexityTest do
       a: downloads { id }
       b: downloads { id }
       c: downloads { id }
-      offset: mediaItems(first: -10000) { edges { node { id } } }
+      offset: mediaItemChanges(first: -10000) { edges { node { mediaItemId } } }
     }
     """
 
@@ -78,8 +82,8 @@ defmodule MydiaWeb.LibrarySchema.ComplexityTest do
 
   @enforced """
   {
-    mediaItems(first: 200) {
-      edges { node { id title status { state } } }
+    mediaItemChanges(first: 200) {
+      edges { node { mediaItemId deleted changedAt mediaItem { id title status { state } } } }
     }
   }
   """
@@ -99,7 +103,7 @@ defmodule MydiaWeb.LibrarySchema.ComplexityTest do
   end
 
   test "the same document at exactly the budget is not refused for complexity" do
-    assert {:ok, %{data: %{"mediaItems" => _}} = result} =
+    assert {:ok, %{data: %{"mediaItemChanges" => _}} = result} =
              Absinthe.run(@enforced, MydiaWeb.LibrarySchema,
                context: %{principal: @admin},
                analyze_complexity: true,
@@ -113,15 +117,19 @@ defmodule MydiaWeb.LibrarySchema.ComplexityTest do
 
   test "the HTTP budget accepts a capped page with cursors" do
     result = post_query(@page, %{"first" => 200})
-    assert %{"data" => %{"mediaItems" => %{"edges" => []}}} = result
+    assert %{"data" => %{"mediaItemChanges" => %{"edges" => []}}} = result
     refute Map.has_key?(result, "errors")
   end
 
   test "the HTTP budget rejects multiple large pages" do
     query = """
     {
-      one: mediaItems(first: 200) { edges { node { id title status { state } } } }
-      two: mediaItems(first: 200) { edges { node { id title status { state } } } }
+      one: mediaItemChanges(first: 200) {
+        edges { node { mediaItemId deleted changedAt mediaItem { id title status { state } } } }
+      }
+      two: mediaItemChanges(first: 200) {
+        edges { node { mediaItemId deleted changedAt mediaItem { id title status { state } } } }
+      }
     }
     """
 

@@ -5,7 +5,7 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
   A `media_item_revisions` row is the latest state of one media item, ordered by a
   database-generated integer rather than a wall clock. Every assertion here pairs
   that marker with the representation a Library API consumer actually reads
-  (`MediaItemView.item_map/1`, which carries `get_media_status/1`), so a trigger
+  (`MediaItemView.item_map/2`, which carries `get_media_status/1`), so a trigger
   that stops covering an observable write fails on both sides at once instead of
   silently drifting.
   """
@@ -19,7 +19,7 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Library.MediaFileEpisode
-  alias Mydia.LibraryApi.MediaItemRevision
+  alias Mydia.LibraryApi.{MediaItemRevision, RevisionFeed}
   alias Mydia.Media
   alias Mydia.Repo
   alias Mydia.Settings
@@ -37,18 +37,19 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
     Repo.aggregate(from(r in MediaItemRevision, where: r.media_item_id == ^id), :count)
   end
 
-  # Exactly the projection a Library API consumer receives: the item map with its
-  # episodes put through `episode_map/1` too, which is where `has_file` comes
-  # from. It raises rather than reporting a wrong status if a preload is missing,
-  # which is the behavior the feed depends on, so reusing it here makes the
-  # test's status claims the consumer's claims.
+  # Exactly the projection a Library API consumer receives: the item map, with
+  # the item's aggregate revision timestamp and its episodes put through
+  # `episode_map/1` too, which is where `has_file` comes from. It raises rather
+  # than reporting a wrong status if a preload is missing, which is the behavior
+  # the feed depends on, so reusing it here makes the test's status claims the
+  # consumer's claims.
   defp view!(id) do
     item =
       id
       |> Media.get_media_item!()
       |> Repo.preload(MediaItemView.preloads())
 
-    map = MediaItemView.item_map(item)
+    map = MediaItemView.item_map(item, RevisionFeed.changed_at!(id))
     %{map | episodes: Enum.map(map.episodes, &MediaItemView.episode_map/1)}
   end
 
@@ -109,7 +110,7 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
 
   test "a sweep-only parent write advances the marker by design" do
     # `stamp_seasons_refreshed/1` writes only a refresh watermark that
-    # `MediaItemView.item_map/1` never reads, so it is a false-positive
+    # `MediaItemView.item_map/2` never reads, so it is a false-positive
     # delivery. The parent trigger is unconditional on purpose: the design spec
     # says `media_items` "insert and every update are observable", and a missed
     # consumer-visible change is worse than a redundant re-delivery. Narrowing

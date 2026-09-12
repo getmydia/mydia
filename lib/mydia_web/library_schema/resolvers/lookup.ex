@@ -10,6 +10,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
 
   require Logger
 
+  alias Mydia.LibraryApi.RevisionFeed
   alias Mydia.Media
   alias Mydia.Metadata
   alias Mydia.Metadata.ImageUrl
@@ -125,7 +126,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
   # The two indexes above answer with ids, because that is what a bulk lookup can
   # give. `inLibrary` is a MediaItem, so one batched fetch turns the whole set of
   # matches into hydrated items -- including the availability status, which needs
-  # the media preloads or it reads the wrong thing.
+  # the media preloads or it reads the wrong thing. The aggregate timestamps come
+  # from one more batch over the revision markers, never one query per hit.
   defp hydrate(index) do
     ids = index |> Map.values() |> Enum.uniq()
 
@@ -136,11 +138,12 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
       ids ->
         found = Media.list_media_items(ids: ids, preload: MediaItemView.preloads())
         by_id = Map.new(found, &{&1.id, &1})
+        changed_at_by_id = RevisionFeed.changed_at_by_ids(Enum.map(found, & &1.id))
 
         Map.new(index, fn {key, id} ->
           case Map.get(by_id, id) do
             nil -> {key, nil}
-            item -> {key, MediaItemView.item_map(item)}
+            item -> {key, MediaItemView.item_map(item, Map.fetch!(changed_at_by_id, id))}
           end
         end)
     end
