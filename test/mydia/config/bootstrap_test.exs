@@ -30,12 +30,30 @@ defmodule Mydia.Config.BootstrapTest do
       migrator = Enum.find_index(children, &match?({Ecto.Migrator, _}, &1))
       bootstrap = Enum.find_index(children, &match?({Mydia.Config.Bootstrap, _}, &1))
 
+      revision_clock =
+        Enum.find_index(
+          children,
+          &match?({Mydia.LibraryApi.RevisionClockBootstrap, _}, &1)
+        )
+
+      endpoint = Enum.find_index(children, &(&1 == MydiaWeb.Endpoint))
+
       assert repo, "expected a Mydia.Repo child"
       assert migrator, "expected an Ecto.Migrator child"
       assert bootstrap, "expected a Mydia.Config.Bootstrap child"
+      assert revision_clock, "expected a Mydia.LibraryApi.RevisionClockBootstrap child"
+      assert endpoint, "expected a MydiaWeb.Endpoint child"
 
       assert repo < migrator
       assert migrator < bootstrap
+
+      # The clock sweep reads library_revision_clock, which the migrator creates,
+      # and serves the revision feed the endpoint exposes. Above the migrator it
+      # would read a table that may not exist; below the endpoint it would let a
+      # request see a stale feed.
+      assert migrator < revision_clock
+      assert bootstrap < revision_clock
+      assert revision_clock < endpoint
     end
 
     test "returns :ignore so no process lingers" do
