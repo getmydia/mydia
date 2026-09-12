@@ -313,7 +313,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               setState(() => _showAdvancedSettings = false);
               return KeyEventResult.handled;
             }
-            if (_claimCodeController.text.isNotEmpty) {
+            if (!_showDirectConnection &&
+                _claimCodeController.text.isNotEmpty) {
               _handleTvDeletePressed();
               return KeyEventResult.handled;
             }
@@ -324,12 +325,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: PopScope(
         canPop: !_showAdvancedSettings &&
             (!InputCapabilities.directionalPrimary ||
+                _showDirectConnection ||
                 _claimCodeController.text.isEmpty),
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
           if (_showAdvancedSettings) {
             setState(() => _showAdvancedSettings = false);
-          } else if (_claimCodeController.text.isNotEmpty) {
+          } else if (!_showDirectConnection &&
+              _claimCodeController.text.isNotEmpty) {
             _handleTvDeletePressed();
           }
         },
