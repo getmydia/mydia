@@ -30,23 +30,40 @@ defmodule Mydia.LibraryApi.RevisionPostgresConcurrencyTest do
     test "a lower revision allocated before a higher one commits cannot overwrite it" do
       item_id = Ecto.UUID.generate()
 
+      # Every `$n` bound to a uuid position is cast from text explicitly. An
+      # uncast parameter there is described as uuid, and Postgrex encodes that
+      # type from a 16-byte binary only, never from the 36-character string
+      # `Ecto.UUID.generate/0` returns. This is the same cast
+      # `RevisionFeed.mark_live/1` uses for the same reason.
       on_exit(fn ->
         unboxed(fn ->
-          Repo.query!("DELETE FROM media_item_revisions WHERE media_item_id = $1", [item_id])
+          Repo.query!(
+            "DELETE FROM media_item_revisions WHERE media_item_id = $1::text::uuid",
+            [item_id]
+          )
         end)
       end)
 
       # The marker must already exist, so both writers resolve the unique
-      # conflict through the update branch rather than inserting.
-      assert 1 ==
-               unboxed(fn ->
-                 Repo.query!("SELECT mydia_mark_media_item_changed($1, false)", [item_id])
+      # conflict through the update branch rather than inserting. The revision
+      # itself is not asserted: `nextval` is non-transactional, so the identity
+      # sequence is shared with every other test that wrote a media item and its
+      # position is not this test's to predict. Reading a row back is what proves
+      # the marker was written.
+      baseline =
+        unboxed(fn ->
+          Repo.query!(
+            "SELECT mydia_mark_media_item_changed($1::text::uuid, false)",
+            [item_id]
+          )
 
-                 scalar!(
-                   "SELECT revision FROM media_item_revisions WHERE media_item_id = $1",
-                   [item_id]
-                 )
-               end)
+          scalar!(
+            "SELECT revision FROM media_item_revisions WHERE media_item_id = $1::text::uuid",
+            [item_id]
+          )
+        end)
+
+      assert is_integer(baseline)
 
       parent = self()
       ref = make_ref()
@@ -73,7 +90,10 @@ defmodule Mydia.LibraryApi.RevisionPostgresConcurrencyTest do
                 @barrier_timeout -> raise "the delayed writer was never released"
               end
 
-              Repo.query!("SELECT mydia_library_revision_apply($1, $2, false)", [item_id, low])
+              Repo.query!(
+                "SELECT mydia_library_revision_apply($1::text::uuid, $2, false)",
+                [item_id, low]
+              )
             end)
           after
             Sandbox.checkin(Repo)
@@ -85,10 +105,13 @@ defmodule Mydia.LibraryApi.RevisionPostgresConcurrencyTest do
 
       high =
         unboxed(fn ->
-          Repo.query!("SELECT mydia_mark_media_item_changed($1, false)", [item_id])
+          Repo.query!(
+            "SELECT mydia_mark_media_item_changed($1::text::uuid, false)",
+            [item_id]
+          )
 
           scalar!(
-            "SELECT revision FROM media_item_revisions WHERE media_item_id = $1",
+            "SELECT revision FROM media_item_revisions WHERE media_item_id = $1::text::uuid",
             [item_id]
           )
         end)
@@ -101,7 +124,7 @@ defmodule Mydia.LibraryApi.RevisionPostgresConcurrencyTest do
       final =
         unboxed(fn ->
           scalar!(
-            "SELECT revision FROM media_item_revisions WHERE media_item_id = $1",
+            "SELECT revision FROM media_item_revisions WHERE media_item_id = $1::text::uuid",
             [item_id]
           )
         end)
