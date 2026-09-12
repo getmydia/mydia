@@ -161,6 +161,39 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
              )
     end
 
+    test "surfaces a rejected API Path on the field", %{view: view} do
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      view
+      |> change_newznab_form(%{
+        name: "Bad Path",
+        type: "newznab",
+        base_url: "http://localhost:5076",
+        api_key: "test-api-key",
+        connection_settings: %{"api_path" => "http://localhost:5076/api"}
+      })
+      |> render_change()
+
+      # The message comes from NewznabEndpoint.normalize_api_path/1 and the
+      # class can only be on this input if it received this error list.
+      assert has_element?(view, "#indexer-api-path.input-error")
+
+      assert has_element?(
+               view,
+               "#indexer-form p.text-error",
+               "must be a path, not a complete URL"
+             )
+
+      view
+      |> form("#indexer-form",
+        indexer_config: %{connection_settings: %{"api_path" => "custom/api"}}
+      )
+      |> render_change()
+
+      refute has_element?(view, "#indexer-api-path.input-error")
+      refute has_element?(view, "#indexer-form", "must be a path, not a complete URL")
+    end
+
     test "unsaved Newznab connection test probes the configured API path", %{view: view} do
       bypass = Bypass.open()
 

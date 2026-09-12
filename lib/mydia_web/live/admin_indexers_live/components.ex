@@ -379,6 +379,17 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     is_newznab = indexer_type == "newznab" or indexer_type == :newznab
     assigns = assign(assigns, :is_newznab, is_newznab)
 
+    # An unusable API path is recorded on :connection_settings by
+    # IndexerConfig.normalize_and_validate_newznab_api_path/1, and the API Path
+    # input is the only render site for that field, so hand its errors to the
+    # input explicitly (it renders by name, not by field).
+    api_path_errors =
+      assigns.indexer_form.source
+      |> Map.get(:errors, [])
+      |> translate_errors(:connection_settings)
+
+    assigns = assign(assigns, :api_path_errors, api_path_errors)
+
     # NZB-capable indexer types support a minimum post-age filter.
     # Prowlarr aggregates both protocols, Newznab is NZB-only, Jackett
     # historically passes Newznab attrs through for NZB definitions.
@@ -553,6 +564,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
                       }
                       placeholder="/api"
                       hint="Newznab endpoint path; usually remains /api."
+                      errors={@api_path_errors}
                     />
                   </div>
                 </div>
