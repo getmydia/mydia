@@ -48,7 +48,7 @@ defmodule Mydia.Indexers do
   Currently supported adapters:
     - `:prowlarr` - Prowlarr indexer aggregator
     - `:jackett` - Jackett indexer proxy
-    - `:nzbhydra2` - NZBHydra2 Usenet NZB aggregator
+    - `:newznab` - Generic Newznab Usenet indexer (including NZBHydra2)
     - `:cardigann` - Native Cardigann definition support
   """
   @spec register_adapters() :: :ok
@@ -58,7 +58,7 @@ defmodule Mydia.Indexers do
     # Register adapters
     Adapter.Registry.register(:prowlarr, Mydia.Indexers.Adapter.Prowlarr)
     Adapter.Registry.register(:jackett, Mydia.Indexers.Adapter.Jackett)
-    Adapter.Registry.register(:nzbhydra2, Mydia.Indexers.Adapter.NzbHydra2)
+    Adapter.Registry.register(:newznab, Mydia.Indexers.Adapter.Newznab)
     Adapter.Registry.register(:cardigann, Mydia.Indexers.Adapter.Cardigann)
 
     Logger.info("Indexer adapter registration complete")
