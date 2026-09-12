@@ -1262,13 +1262,13 @@ defmodule MydiaWeb.SearchLive.Index do
   # Indexer type helpers for the template
   defp indexer_type_badge_class(:prowlarr), do: "badge-primary"
   defp indexer_type_badge_class(:jackett), do: "badge-secondary"
-  defp indexer_type_badge_class(:nzbhydra2), do: "badge-accent"
+  defp indexer_type_badge_class(:newznab), do: "badge-accent"
   defp indexer_type_badge_class(:public), do: "badge-ghost"
   defp indexer_type_badge_class(_), do: "badge-ghost"
 
   defp indexer_type_label(:prowlarr), do: "Prowlarr"
   defp indexer_type_label(:jackett), do: "Jackett"
-  defp indexer_type_label(:nzbhydra2), do: "NZBHydra2"
+  defp indexer_type_label(:newznab), do: "Newznab"
   defp indexer_type_label(:public), do: "Public"
   defp indexer_type_label(type), do: to_string(type)
 

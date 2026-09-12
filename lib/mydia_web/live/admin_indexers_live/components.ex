@@ -374,11 +374,16 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
     is_prowlarr = indexer_type == "prowlarr" or indexer_type == :prowlarr
     assigns = assign(assigns, :is_prowlarr, is_prowlarr)
 
+    # Newznab indexers address a configurable API path; the form exposes it so
+    # operators can point Mydia at a deployment prefix or a non-standard endpoint.
+    is_newznab = indexer_type == "newznab" or indexer_type == :newznab
+    assigns = assign(assigns, :is_newznab, is_newznab)
+
     # NZB-capable indexer types support a minimum post-age filter.
-    # Prowlarr aggregates both protocols, NZBHydra2 is NZB-only, Jackett
+    # Prowlarr aggregates both protocols, Newznab is NZB-only, Jackett
     # historically passes Newznab attrs through for NZB definitions.
     is_nzb_capable =
-      indexer_type in ["prowlarr", :prowlarr, "nzbhydra2", :nzbhydra2, "jackett", :jackett]
+      indexer_type in ["prowlarr", :prowlarr, "newznab", :newznab, "jackett", :jackett]
 
     assigns = assign(assigns, :is_nzb_capable, is_nzb_capable)
 
@@ -440,7 +445,7 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
                   options={[
                     {"Prowlarr", "prowlarr"},
                     {"Jackett", "jackett"},
-                    {"NZBHydra2", "nzbhydra2"},
+                    {"Newznab", "newznab"},
                     {"Public", "public"}
                   ]}
                   required
@@ -531,6 +536,24 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
                   <div class="col-span-3 md:col-span-2 text-xs text-base-content/60 self-end pb-2">
                     Filters out NZB results posted within this many minutes. Useful for letting
                     indexers complete article propagation. Leave blank to disable.
+                  </div>
+                </div>
+                <div :if={@is_newznab} class="grid grid-cols-3 gap-3">
+                  <div class="col-span-3">
+                    <.input
+                      id="indexer-api-path"
+                      name="indexer_config[connection_settings][api_path]"
+                      type="text"
+                      label="API Path"
+                      value={
+                        get_in(
+                          Phoenix.HTML.Form.input_value(@indexer_form, :connection_settings) || %{},
+                          ["api_path"]
+                        ) || "/api"
+                      }
+                      placeholder="/api"
+                      hint="Newznab endpoint path; usually remains /api."
+                    />
                   </div>
                 </div>
               </div>

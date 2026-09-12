@@ -145,6 +145,106 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert has_element?(view, "#flash-error", "Unexpected response")
     end
 
+    test "offers Newznab and shows its API path field", %{view: view} do
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      assert has_element?(view, "#indexer-form option[value='newznab']", "Newznab")
+      refute has_element?(view, "#indexer-form option[value='nzbhydra2']")
+
+      view
+      |> form("#indexer-form", indexer_config: %{type: "newznab"})
+      |> render_change()
+
+      assert has_element?(
+               view,
+               ~s{#indexer-form input[name="indexer_config[connection_settings][api_path]"][value="/api"]}
+             )
+    end
+
+    test "unsaved Newznab connection test probes the configured API path", %{view: view} do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/proxy/custom/api", fn conn ->
+        assert conn.query_params["t"] == "caps"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/xml")
+        |> Plug.Conn.resp(200, newznab_caps_xml())
+      end)
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      view
+      |> change_newznab_form(%{
+        name: "Custom Newznab",
+        type: "newznab",
+        base_url: "http://localhost:#{bypass.port}/proxy",
+        api_key: "test-api-key",
+        connection_settings: %{"api_path" => "/custom/api"}
+      })
+      |> render_change()
+
+      view
+      |> element(~s{button[phx-click="test_indexer_connection"]})
+      |> render_click()
+
+      assert has_element?(view, "#flash-info", "Connection successful")
+    end
+
+    test "an invalid changeset is never probed over HTTP", %{view: view} do
+      # A downed Bypass turns any accidental request into a "Connection failed"
+      # flash, so the refutation below proves no request left the LiveView.
+      bypass = Bypass.open()
+      Bypass.down(bypass)
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      # The name is required, so this changeset can never become valid.
+      view
+      |> change_newznab_form(%{
+        type: "newznab",
+        base_url: "http://localhost:#{bypass.port}/proxy",
+        api_key: "test-api-key",
+        connection_settings: %{"api_path" => "/custom/api"}
+      })
+      |> render_change()
+
+      view
+      |> element(~s{button[phx-click="test_indexer_connection"]})
+      |> render_click()
+
+      assert has_element?(view, "#flash-error", "Fix the highlighted errors")
+      refute has_element?(view, "#flash-error", "Connection failed")
+    end
+
+    test "saves and reopens a Newznab API path", %{view: view} do
+      name = "Custom Newznab #{System.unique_integer([:positive])}"
+
+      view |> element(~s{button[phx-click="new_indexer"]}) |> render_click()
+
+      view
+      |> change_newznab_form(%{
+        name: name,
+        type: "newznab",
+        base_url: "http://localhost:5076",
+        api_key: "test-api-key",
+        connection_settings: %{"api_path" => "/custom/api"}
+      })
+      |> render_submit()
+
+      saved = Enum.find(Settings.list_indexer_configs(), &(&1.name == name))
+      assert saved.connection_settings["api_path"] == "/custom/api"
+
+      view
+      |> element(~s{button[phx-click="edit_indexer"][phx-value-id="#{saved.id}"]})
+      |> render_click()
+
+      assert has_element?(
+               view,
+               ~s{#indexer-form input[name="indexer_config[connection_settings][api_path]"][value="/custom/api"]}
+             )
+    end
+
     @tag :skip
     test "test connection succeeds with valid prowlarr server", %{view: view} do
       bypass = Bypass.open()
@@ -800,5 +900,25 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
         Jason.encode!(%{"status" => "ok", "version" => "3.3.21", "sessions" => []})
       )
     end)
+  end
+
+  defp newznab_caps_xml do
+    """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <caps>
+      <server appname="Newznab" version="1.0"/>
+    </caps>
+    """
+  end
+
+  # The API Path input only renders once the type is Newznab, and LiveViewTest
+  # resolves form inputs against the rendered DOM, so reveal the field before
+  # building the form that fills it.
+  defp change_newznab_form(view, attrs) do
+    view
+    |> form("#indexer-form", indexer_config: %{type: "newznab"})
+    |> render_change()
+
+    form(view, "#indexer-form", indexer_config: attrs)
   end
 end

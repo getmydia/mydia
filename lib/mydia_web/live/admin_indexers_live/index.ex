@@ -127,6 +127,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         "indexer_ids" => indexer.indexer_ids,
         "categories" => indexer.categories,
         "rate_limit" => indexer.rate_limit,
+        "connection_settings" => indexer.connection_settings,
         "env_name" => if(matching_env, do: matching_env.env_name, else: nil),
         "base_url" => if(matching_env, do: nil, else: indexer.base_url),
         "api_key" => if(matching_env, do: nil, else: indexer.api_key)
@@ -337,37 +338,42 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   @impl true
   def handle_event("test_indexer_connection", _params, socket) do
     changeset = socket.assigns.indexer_form.source
-    params = Ecto.Changeset.apply_changes(changeset)
 
-    type =
-      case params.type do
-        type when is_atom(type) -> type
-        type when is_binary(type) -> String.to_existing_atom(type)
+    if changeset.valid? do
+      # Passing the IndexerConfig struct reuses the central adapter conversion
+      # (Mydia.Indexers.indexer_config_to_adapter_config/1), so the unsaved test
+      # probes exactly what a save would probe — including connection_settings
+      # such as the Newznab API path.
+      case Indexers.test_connection(Ecto.Changeset.apply_changes(changeset)) do
+        {:ok, info} ->
+          version = Map.get(info, :version, "unknown")
+
+          {:noreply,
+           socket
+           |> assign(:testing_indexer_connection, false)
+           |> put_flash(:info, "Connection successful! Version: #{version}")}
+
+        {:error, error} ->
+          error_msg =
+            case error do
+              msg when is_binary(msg) -> msg
+              %{message: msg} -> msg
+              _ -> MydiaLogger.extract_error_message(error)
+            end
+
+          {:noreply,
+           socket
+           |> assign(:testing_indexer_connection, false)
+           |> put_flash(:error, "Connection failed: #{error_msg}")}
       end
-
-    test_config = %{type: type, base_url: params.base_url, api_key: params.api_key}
-
-    case Mydia.Indexers.test_connection(test_config) do
-      {:ok, info} ->
-        version = Map.get(info, :version, "unknown")
-
-        {:noreply,
-         socket
-         |> assign(:testing_indexer_connection, false)
-         |> put_flash(:info, "Connection successful! Version: #{version}")}
-
-      {:error, error} ->
-        error_msg =
-          case error do
-            msg when is_binary(msg) -> msg
-            %{message: msg} -> msg
-            _ -> MydiaLogger.extract_error_message(error)
-          end
-
-        {:noreply,
-         socket
-         |> assign(:testing_indexer_connection, false)
-         |> put_flash(:error, "Connection failed: #{error_msg}")}
+    else
+      # An invalid changeset has no connection details worth probing: reassign
+      # the form so the errors render, and never issue the request.
+      {:noreply,
+       socket
+       |> assign(:testing_indexer_connection, false)
+       |> assign(:indexer_form, to_form(Map.put(changeset, :action, :validate)))
+       |> put_flash(:error, "Fix the highlighted errors before testing the connection")}
     end
   end
 
