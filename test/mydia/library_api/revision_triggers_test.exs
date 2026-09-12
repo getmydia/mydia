@@ -94,10 +94,35 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
     assert {:error, :forced} =
              Repo.transaction(fn ->
                Repo.update!(Ecto.Changeset.change(item, title: "Rolled back"))
+
+               # The trigger must have fired inside the transaction, or this
+               # test would pass with the trigger deleted entirely: it is the
+               # rollback undoing a real allocation that is under test.
+               in_transaction = marker!(item.id)
+               assert in_transaction.revision > before.revision
+
                Repo.rollback(:forced)
              end)
 
     assert marker!(item.id).revision == before.revision
+  end
+
+  test "a sweep-only parent write advances the marker by design" do
+    # `stamp_seasons_refreshed/1` writes only a refresh watermark that
+    # `MediaItemView.item_map/1` never reads, so it is a false-positive
+    # delivery. The parent trigger is unconditional on purpose: the design spec
+    # says `media_items` "insert and every update are observable", and a missed
+    # consumer-visible change is worse than a redundant re-delivery. Narrowing
+    # the trigger to a column list must first change that spec, and this test is
+    # what makes the narrowing fail loudly.
+    item = insert(:media_item)
+    before = marker!(item.id)
+
+    assert {1, _} = Mydia.Media.stamp_seasons_refreshed(item)
+
+    swept = assert_advanced(item.id, before)
+    refute swept.deleted
+    assert marker_count(item.id) == 1
   end
 
   test "episode monitored, title and air_date changes advance the owning show" do
