@@ -34,10 +34,13 @@ fi
 
 # Directory names directly under lib/ are the ABI set. zipinfo -1 lists bare
 # paths, so the ^lib/ anchor cannot match a path with lib/ somewhere in the
-# middle. The C locale is pinned so a runner's locale cannot reorder the
-# comparison string.
+# middle. The [^/]+/ after it requires an ABI segment to actually be present,
+# so a bare "lib/" directory record (some zip tools store one, Flutter's own
+# output does not) can't match and contribute an empty ABI ahead of the real
+# names once sorted. The C locale is pinned so a runner's locale cannot
+# reorder the comparison string.
 actual="$(unzip -Z1 "$apk" \
-  | awk -F/ '/^lib\//{print $2}' \
+  | awk -F/ '/^lib\/[^/]+\//{print $2}' \
   | LC_ALL=C sort -u | paste -sd, -)"
 
 # An APK with no lib/ entries yields an empty string and fails here, which is
