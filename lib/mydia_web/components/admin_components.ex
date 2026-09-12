@@ -142,6 +142,9 @@ defmodule MydiaWeb.AdminComponents do
           Remote Access
         </.tab_link>
       <% end %>
+      <.tab_link active={@active_tab == :api_keys} to="/admin/config/api-keys" icon="hero-key">
+        API Keys
+      </.tab_link>
     </div>
     """
   end
