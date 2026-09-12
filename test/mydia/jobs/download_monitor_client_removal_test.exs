@@ -103,6 +103,19 @@ defmodule Mydia.Jobs.DownloadMonitorClientRemovalTest do
     assert %DateTime{} = Downloads.get_download!(download.id).client_removed_at
   end
 
+  test "leaves unresolved_files pending removal alone on monitor pass" do
+    client = client!(remove_completed: true)
+    download = pending_download!(client, match_status: "unresolved_files")
+    StubAdapter.put(status(:paused, download.download_client_id))
+
+    refute Enum.any?(ClientRemoval.list_pending_removals(), &(&1.id == download.id))
+
+    assert :ok = perform_job(DownloadMonitor, %{})
+
+    assert StubAdapter.take_removes() == []
+    assert is_nil(Downloads.get_download!(download.id).client_removed_at)
+  end
+
   defp client!(opts) do
     unique = System.unique_integer([:positive])
 
@@ -122,16 +135,26 @@ defmodule Mydia.Jobs.DownloadMonitorClientRemovalTest do
     client
   end
 
-  defp pending_download!(client) do
+  defp pending_download!(client, opts \\ []) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
+    match_status = Keyword.get(opts, :match_status)
 
-    download_fixture(%{
+    attrs = %{
       download_client: client.name,
       download_client_id: "dl-#{System.unique_integer([:positive])}",
       completed_at: now,
       imported_at: now,
       client_removed_at: nil
-    })
+    }
+
+    attrs =
+      if match_status do
+        Map.put(attrs, :match_status, match_status)
+      else
+        attrs
+      end
+
+    download_fixture(attrs)
   end
 
   defp status(state, client_id) do

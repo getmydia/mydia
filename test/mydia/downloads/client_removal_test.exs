@@ -152,6 +152,41 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     assert %DateTime{} = Downloads.get_download!(download.id).client_removed_at
   end
 
+  test "list_pending_removals excludes unresolved_files downloads" do
+    client = client!(type: :qbittorrent, remove_completed: true)
+    unresolved = download!(client, imported: true, match_status: "unresolved_files")
+    pending = download!(client, imported: true)
+
+    ids = ClientRemoval.list_pending_removals() |> Enum.map(& &1.id)
+
+    assert pending.id in ids
+    refute unresolved.id in ids
+  end
+
+  test "finish_pending_removal removes non-seed-aware client immediately while seeding" do
+    previous = Registry.lookup(:rqbit)
+    Registry.register(:rqbit, StubAdapter)
+    on_exit(fn -> if previous, do: Registry.register(:rqbit, previous) end)
+
+    client = client!(type: :rqbit, remove_completed: true)
+    download = download!(client, imported: true)
+    StubAdapter.put(status(:seeding, download.download_client_id))
+
+    assert :removed = ClientRemoval.finish_pending_removal(download)
+    assert [{_, [delete_files: true]}] = StubAdapter.take_removes()
+    assert %DateTime{} = Downloads.get_download!(download.id).client_removed_at
+  end
+
+  test "maybe_remove_after_import skips unresolved_files downloads" do
+    client = client!(type: :qbittorrent, remove_completed: true)
+    download = download!(client, imported: true, match_status: "unresolved_files")
+    StubAdapter.put(status(:paused, download.download_client_id))
+
+    assert :skipped = ClientRemoval.maybe_remove_after_import(download)
+    assert StubAdapter.take_removes() == []
+    assert is_nil(Downloads.get_download!(download.id).client_removed_at)
+  end
+
   defp client!(opts) do
     unique = System.unique_integer([:positive])
 
@@ -171,6 +206,7 @@ defmodule Mydia.Downloads.ClientRemovalTest do
 
   defp download!(client, opts) do
     imported = Keyword.get(opts, :imported, true)
+    match_status = Keyword.get(opts, :match_status)
 
     attrs = %{
       download_client: client.name,
@@ -180,6 +216,13 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     attrs =
       if imported do
         Map.put(attrs, :imported_at, DateTime.utc_now() |> DateTime.truncate(:second))
+      else
+        attrs
+      end
+
+    attrs =
+      if match_status do
+        Map.put(attrs, :match_status, match_status)
       else
         attrs
       end

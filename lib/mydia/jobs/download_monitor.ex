@@ -227,11 +227,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
     Logger.info("Found #{length(stuck)} stuck downloads")
     Enum.each(stuck, &handle_stuck/1)
 
-    pending_removals = ClientRemoval.list_pending_removals()
+    {removal_configs, pending_removals} = ClientRemoval.finish_pending_removals()
 
     Enum.each(pending_removals, fn download ->
       with_download(download, :client_removal, [], fn live ->
-        case ClientRemoval.finish_pending_removal(live) do
+        case ClientRemoval.finish_pending_removal(live, removal_configs) do
           :removed ->
             Logger.info("Finished deferred client removal", download_id: live.id)
 
