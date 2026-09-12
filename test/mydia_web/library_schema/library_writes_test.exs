@@ -17,9 +17,15 @@ defmodule MydiaWeb.LibrarySchema.LibraryWritesTest do
     start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
 
     bypass = Bypass.open()
-    previous = Application.get_env(:mydia, :metadata_relay_url)
+    previous = Application.fetch_env(:mydia, :metadata_relay_url)
     Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
-    on_exit(fn -> Application.put_env(:mydia, :metadata_relay_url, previous) end)
+
+    on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:mydia, :metadata_relay_url, value)
+        :error -> Application.delete_env(:mydia, :metadata_relay_url)
+      end
+    end)
 
     %{bypass: bypass}
   end

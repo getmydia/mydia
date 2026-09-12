@@ -33,7 +33,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Search do
           {:ok, map()} | {:error, String.t()}
   def search_season(_parent, %{media_item_id: id, season: season}, _resolution) do
     with {:ok, item} <- Loaders.item(id, ["mediaItemId"]),
-         :ok <- Loaders.require_show(item, ["mediaItemId"]) do
+         :ok <- Loaders.require_show(item, ["mediaItemId"]),
+         {:ok, season} <- validate_season(season) do
       insert(%{mode: "season", media_item_id: item.id, season_number: season})
     else
       {:error, %UserError{} = error} -> {:ok, not_queued(error)}
@@ -48,6 +49,16 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Search do
       {:error, %UserError{} = error} -> {:ok, not_queued(error)}
     end
   end
+
+  # Season 0 is specials, so it stays valid; only negative seasons are
+  # rejected. TVShowSearch's "season" mode otherwise accepts a negative
+  # season_number, matches no episodes (season_number is never negative in
+  # the DB), and completes having searched nothing - see load_episodes_for_season/2
+  # and the "season" perform/1 clause in lib/mydia/jobs/tv_show_search.ex.
+  defp validate_season(season) when is_integer(season) and season >= 0, do: {:ok, season}
+
+  defp validate_season(_season),
+    do: {:error, UserError.new(:invalid_input, "Must be 0 or greater", ["season"])}
 
   defp insert(args) do
     case args |> TVShowSearch.new() |> Oban.insert() do

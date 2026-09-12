@@ -53,14 +53,16 @@ defmodule MydiaWeb.LibrarySchema.DownloadWritesTest do
     engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
     start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
 
-    original =
-      case Registry.get_adapter(:qbittorrent) do
-        {:ok, adapter} -> adapter
-        {:error, _} -> nil
-      end
+    original = Registry.get_adapter(:qbittorrent)
 
     Registry.register(:qbittorrent, RemovingAdapter)
-    on_exit(fn -> if original, do: Registry.register(:qbittorrent, original) end)
+
+    on_exit(fn ->
+      case original do
+        {:ok, adapter} -> Registry.register(:qbittorrent, adapter)
+        {:error, _} -> Registry.unregister(:qbittorrent)
+      end
+    end)
 
     user = user_fixture()
 

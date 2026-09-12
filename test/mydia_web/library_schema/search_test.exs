@@ -110,6 +110,28 @@ defmodule MydiaWeb.LibrarySchema.SearchTest do
       assert [%{"code" => "INVALID_INPUT", "field" => ["mediaItemId"]}] = payload["userErrors"]
       refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
     end
+
+    test "a negative season is INVALID_INPUT on season and queues nothing" do
+      show = insert(:tv_show)
+
+      assert {:ok, %{data: %{"searchSeason" => payload}}} =
+               run(@search_season, %{"id" => show.id, "season" => -1})
+
+      assert [%{"code" => "INVALID_INPUT", "field" => ["season"]}] = payload["userErrors"]
+      refute_enqueued(worker: Mydia.Jobs.TVShowSearch)
+    end
+
+    test "season 0 (specials) queues TVShowSearch" do
+      show = insert(:tv_show)
+
+      assert {:ok, %{data: %{"searchSeason" => %{"queued" => true, "userErrors" => []}}}} =
+               run(@search_season, %{"id" => show.id, "season" => 0})
+
+      assert_enqueued(
+        worker: Mydia.Jobs.TVShowSearch,
+        args: %{"mode" => "season", "media_item_id" => show.id, "season_number" => 0}
+      )
+    end
   end
 
   describe "searchEpisode" do
