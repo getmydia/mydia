@@ -44,6 +44,14 @@ class SidebarRow extends StatefulWidget {
   /// needs the item's index, which belongs to the list rather than the row.
   final Widget? editingTrailing;
 
+  /// Optional externally-owned node for this row.
+  ///
+  /// The shell needs one on the selected row so it can move focus into the
+  /// sidebar deliberately when a viewer presses left at the content's edge —
+  /// the traversal policy's geometric search cannot find it from the content
+  /// region, which is the whole reason the boundary is explicit.
+  final FocusNode? focusNode;
+
   const SidebarRow({
     super.key,
     required this.icon,
@@ -60,6 +68,7 @@ class SidebarRow extends StatefulWidget {
     this.isEditing = false,
     this.isHidden = false,
     this.editingTrailing,
+    this.focusNode,
   });
 
   @override
@@ -109,6 +118,7 @@ class _SidebarRowState extends State<SidebarRow> {
         : (widget.canCustomise ? _overflowMenu(showMenu: showMenu) : null);
 
     return FocusHighlight(
+      focusNode: widget.focusNode,
       onActivate: widget.isEditing ? null : widget.onTap,
       // Matches the pill `BoxDecoration.borderRadius` below: the ring traces
       // that exact rectangle, so the two radii must move together.

@@ -6,8 +6,10 @@ import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
+import '../../core/focus/region_traversal_policy.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
+import '../../core/player/input_capabilities.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
@@ -196,6 +198,13 @@ class _AppShellState extends ConsumerState<AppShell>
   /// Whether the nav drawer is open. Drives [AppShell.dockChrome].
   bool _drawerOpen = false;
 
+  /// Node for the sidebar's selected row, and the node focus came from, so the
+  /// boundary is a round trip rather than a one-way jump. Without the second,
+  /// a viewer who presses left deep in a rail returns to the first card
+  /// instead of the one they left, which loses their place in the row.
+  final FocusNode _sidebarFocusNode = FocusNode(debugLabel: 'sidebar-selected');
+  FocusNode? _focusBeforeSidebar;
+
   @override
   void initState() {
     super.initState();
@@ -247,6 +256,7 @@ class _AppShellState extends ConsumerState<AppShell>
     WidgetsBinding.instance.removeObserver(this);
     _router?.routerDelegate.removeListener(_onRouteChanged);
     _collectionAutoSync?.dispose();
+    _sidebarFocusNode.dispose();
     super.dispose();
   }
 
@@ -302,6 +312,51 @@ class _AppShellState extends ConsumerState<AppShell>
     context.go(route);
   }
 
+  bool _focusSidebar() {
+    final current = FocusManager.instance.primaryFocus;
+    if (current != null && current != _sidebarFocusNode) {
+      _focusBeforeSidebar = current;
+    }
+    _sidebarFocusNode.requestFocus();
+    return true;
+  }
+
+  bool _focusContent() {
+    final previous = _focusBeforeSidebar;
+    if (previous != null && previous.canRequestFocus) {
+      previous.requestFocus();
+      return true;
+    }
+    return false;
+  }
+
+  /// Wraps [child] in a focus region, or returns it untouched off the
+  /// directional tier.
+  ///
+  /// The boundary is a remote affordance: a D-pad viewer has no pointer and no
+  /// Tab key, so the only way into the sidebar has to be an arrow key, and that
+  /// needs a region that fails predictably at its edge. A desktop or web viewer
+  /// has both a pointer and Tab, and their arrow-key behaviour today is the
+  /// plain scoped geometric walk; gating here is what keeps this change from
+  /// altering it. Returning `child` unwrapped rather than installing an inert
+  /// region also means the non-directional tree is byte-for-byte what it was.
+  ///
+  /// The scope deliberately takes no explicit [FocusScopeNode]: the default
+  /// node's `directionalTraversalEdgeBehavior` is [TraversalEdgeBehavior.stop],
+  /// and that is load-bearing. Under `closedLoop` or `parentScope` the
+  /// traversal mixin resolves the region edge itself, inside
+  /// `inDirection`, before [RegionTraversalPolicy.onExit] is ever consulted —
+  /// so the boundary would silently stop calling back and the sidebar would
+  /// become unreachable again, with no test failing. Do not give these scopes a
+  /// node configured any other way.
+  Widget _region({required Widget child, required RegionExitCallback onExit}) {
+    if (!InputCapabilities.directionalPrimary) return child;
+    return FocusTraversalGroup(
+      policy: RegionTraversalPolicy(onExit: onExit),
+      child: FocusScope(child: child),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final location = widget.location;
@@ -336,21 +391,32 @@ class _AppShellState extends ConsumerState<AppShell>
             Positioned.fill(child: backdrop),
             Row(
               children: [
-                DesktopSidebar(
-                  location: location,
-                  onNavigate: _navigateTo,
-                  showBackToMydia: showBackToMydia,
-                  isOffline: isOffline,
+                _region(
+                  onExit: (direction) => direction == TraversalDirection.right
+                      ? _focusContent()
+                      : false,
+                  child: DesktopSidebar(
+                    location: location,
+                    onNavigate: _navigateTo,
+                    showBackToMydia: showBackToMydia,
+                    isOffline: isOffline,
+                    selectedRowFocusNode: _sidebarFocusNode,
+                  ),
                 ),
                 Expanded(
-                  child: AppShell.contentGutter(
-                    child: Column(
-                      children: [
-                        if (isOffline) const OfflineBanner(),
-                        const CompatibilityBanner(),
-                        const UpdateBanner(),
-                        Expanded(child: widget.child),
-                      ],
+                  child: _region(
+                    onExit: (direction) => direction == TraversalDirection.left
+                        ? _focusSidebar()
+                        : false,
+                    child: AppShell.contentGutter(
+                      child: Column(
+                        children: [
+                          if (isOffline) const OfflineBanner(),
+                          const CompatibilityBanner(),
+                          const UpdateBanner(),
+                          Expanded(child: widget.child),
+                        ],
+                      ),
                     ),
                   ),
                 ),

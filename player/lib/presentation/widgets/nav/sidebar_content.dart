@@ -24,12 +24,17 @@ class SidebarContent extends ConsumerWidget {
     required this.onNavigate,
     required this.isOffline,
     this.backToMydiaWidget,
+    this.selectedRowFocusNode,
   });
 
   final String location;
   final ValueChanged<String> onNavigate;
   final bool isOffline;
   final Widget? backToMydiaWidget;
+
+  /// Node for the row matching the current route, so the shell can focus the
+  /// sidebar deliberately when the viewer presses left at the content edge.
+  final FocusNode? selectedRowFocusNode;
 
   /// The destination that should render as selected.
   ///
@@ -294,6 +299,7 @@ class SidebarContent extends ConsumerWidget {
 
     if (destination is FilterDestination) {
       return SidebarRow(
+        focusNode: isSelected ? selectedRowFocusNode : null,
         icon: destination.icon,
         selectedIcon: destination.selectedIcon,
         label: destination.label,
@@ -328,6 +334,7 @@ class SidebarContent extends ConsumerWidget {
     }
 
     return SidebarRow(
+      focusNode: isSelected ? selectedRowFocusNode : null,
       icon: destination.icon,
       selectedIcon: destination.selectedIcon,
       label: destination.label,
