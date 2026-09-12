@@ -309,6 +309,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         if (event is KeyDownEvent && InputCapabilities.directionalPrimary) {
           if (event.logicalKey == LogicalKeyboardKey.escape ||
               event.logicalKey == LogicalKeyboardKey.goBack) {
+            if (_showAdvancedSettings) {
+              setState(() => _showAdvancedSettings = false);
+              return KeyEventResult.handled;
+            }
             if (_claimCodeController.text.isNotEmpty) {
               _handleTvDeletePressed();
               return KeyEventResult.handled;
@@ -318,11 +322,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         return KeyEventResult.ignored;
       },
       child: PopScope(
-        canPop: !InputCapabilities.directionalPrimary ||
-            _claimCodeController.text.isEmpty,
+        canPop: !_showAdvancedSettings &&
+            (!InputCapabilities.directionalPrimary ||
+                _claimCodeController.text.isEmpty),
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
-          if (_claimCodeController.text.isNotEmpty) {
+          if (_showAdvancedSettings) {
+            setState(() => _showAdvancedSettings = false);
+          } else if (_claimCodeController.text.isNotEmpty) {
             _handleTvDeletePressed();
           }
         },
@@ -711,15 +718,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ],
           ),
         ),
-        IconButton(
-          onPressed: () => setState(() => _showAdvancedSettings = true),
-          icon: const Icon(Icons.settings_outlined, size: 20),
-          color: AppColors.textSecondary,
-          tooltip: 'Relay & Network Settings',
-          style: IconButton.styleFrom(
-            backgroundColor: AppColors.surfaceVariant.withValues(alpha: 0.3),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+        FocusHighlight(
+          onActivate: () => setState(() => _showAdvancedSettings = true),
+          borderRadius: BorderRadius.circular(8),
+          child: IconButton(
+            onPressed: () => setState(() => _showAdvancedSettings = true),
+            icon: const Icon(Icons.settings_outlined, size: 20),
+            color: AppColors.textSecondary,
+            tooltip: 'Relay & Network Settings',
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.surfaceVariant.withValues(alpha: 0.3),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
         ),

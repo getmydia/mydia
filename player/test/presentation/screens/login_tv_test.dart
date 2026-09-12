@@ -35,6 +35,7 @@ import '../../test_utils/mock_auth_storage.dart';
 
 class _FakeLoginController extends LoginController {
   String? submittedClaimCode;
+  String? failureError;
 
   @override
   LoginState build() => LoginState.initial();
@@ -42,6 +43,12 @@ class _FakeLoginController extends LoginController {
   @override
   Future<void> pairWithClaimCode(String claimCode) async {
     submittedClaimCode = claimCode;
+    if (failureError != null) {
+      state = state.copyWith(
+        error: failureError,
+        claimCodeStatus: ClaimCodeStatus.error,
+      );
+    }
   }
 }
 
@@ -161,6 +168,85 @@ void main() {
 
       // Also test system pop route (e.g. Android TV OS back)
       await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      expect(_findPinCodeText('A'), findsNothing);
+    });
+
+    testWidgets('settings button in TV header is wrapped in FocusHighlight',
+        (tester) async {
+      await _pumpLoginScreen(tester);
+
+      final settingsHighlightFinder = find.ancestor(
+        of: find.byTooltip('Relay & Network Settings'),
+        matching: find.byType(FocusHighlight),
+      );
+      expect(settingsHighlightFinder, findsOneWidget);
+    });
+
+    testWidgets('error state preserves entered code in PinCodeDisplay',
+        (tester) async {
+      final fakeController = _FakeLoginController()
+        ..failureError = 'Invalid or expired claim code';
+      await _pumpLoginScreen(tester, controller: fakeController);
+
+      for (final char in ['A', 'B', 'C', 'D', 'E', 'F']) {
+        await tester.tap(find.byKey(ValueKey('tv-key-$char')));
+        await tester.pump();
+      }
+
+      expect(fakeController.submittedClaimCode, equals('ABCDEF'));
+      expect(find.text('Invalid or expired claim code'), findsOneWidget);
+
+      final pinDisplay =
+          tester.widget<PinCodeDisplay>(find.byType(PinCodeDisplay));
+      expect(pinDisplay.code, equals('ABCDEF'));
+      expect(pinDisplay.hasError, isTrue);
+
+      for (final char in ['A', 'B', 'C', 'D', 'E', 'F']) {
+        expect(_findPinCodeText(char), findsOneWidget);
+      }
+    });
+
+    testWidgets(
+        'remote Back key dismisses advanced settings overlay when open instead of deleting characters',
+        (tester) async {
+      await _pumpLoginScreen(tester);
+
+      // Enter a character first to verify it is NOT deleted when Back dismisses the overlay
+      await tester.tap(find.byKey(const ValueKey('tv-key-A')));
+      await tester.pump();
+      expect(_findPinCodeText('A'), findsOneWidget);
+
+      // Open advanced settings overlay via header settings button
+      final settingsButton = find.byTooltip('Relay & Network Settings');
+      expect(settingsButton, findsOneWidget);
+      await tester.tap(settingsButton);
+      await tester.pump();
+
+      expect(find.text('Advanced Settings'), findsOneWidget);
+
+      // Remote Back key (Escape) dismisses the overlay and preserves the entered character
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(find.text('Advanced Settings'), findsNothing);
+      expect(_findPinCodeText('A'), findsOneWidget);
+
+      // Open again to verify system pop route (Android TV back) also dismisses overlay
+      await tester.tap(settingsButton);
+      await tester.pump();
+
+      expect(find.text('Advanced Settings'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      expect(find.text('Advanced Settings'), findsNothing);
+      expect(_findPinCodeText('A'), findsOneWidget);
+
+      // Once overlay is dismissed, remote Back key deletes the character as normal
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
 
       expect(_findPinCodeText('A'), findsNothing);
