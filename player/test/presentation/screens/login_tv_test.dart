@@ -50,6 +50,8 @@ class _FakeLoginController extends LoginController {
       );
     }
   }
+
+  void setLoading(bool loading) => state = state.copyWith(isLoading: loading);
 }
 
 Widget _buildTestWidget({LoginController? controller}) => ProviderScope(
@@ -250,6 +252,102 @@ void main() {
       await tester.pump();
 
       expect(_findPinCodeText('A'), findsNothing);
+    });
+
+    testWidgets(
+        'remote Back key does not delete claim code while pairing is loading',
+        (tester) async {
+      final fakeController = _FakeLoginController();
+      await _pumpLoginScreen(tester, controller: fakeController);
+
+      for (final char in ['A', 'B', 'C', 'D', 'E', 'F']) {
+        await tester.tap(find.byKey(ValueKey('tv-key-$char')));
+        await tester.pump();
+      }
+
+      expect(fakeController.submittedClaimCode, equals('ABCDEF'));
+
+      // Simulate in-flight loading
+      fakeController.setLoading(true);
+      await tester.pump();
+
+      // Attempt remote Back key while loading
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      // Characters are preserved because deletion is blocked during loading
+      for (final char in ['A', 'B', 'C', 'D', 'E', 'F']) {
+        expect(_findPinCodeText(char), findsOneWidget);
+      }
+
+      // System pop route is also blocked from deleting while loading
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      for (final char in ['A', 'B', 'C', 'D', 'E', 'F']) {
+        expect(_findPinCodeText(char), findsOneWidget);
+      }
+    });
+
+    testWidgets(
+        'advanced settings overlay traps focus in owned FocusScope and restores focus to settings button on close',
+        (tester) async {
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(() {
+        FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic;
+      });
+
+      await _pumpLoginScreen(tester);
+
+      final settingsButton = find.byTooltip('Relay & Network Settings');
+      expect(settingsButton, findsOneWidget);
+
+      // Open advanced settings
+      await tester.tap(settingsButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Advanced Settings'), findsOneWidget);
+
+      // Verify underlying TV controls are excluded from focus traversal
+      final keypadFinder = find.byType(TvKeypad);
+      expect(keypadFinder, findsOneWidget);
+      final excludedAncestor = find.ancestor(
+        of: keypadFinder,
+        matching: find.byType(ExcludeFocus),
+      );
+      expect(excludedAncestor, findsOneWidget);
+      final excludeFocusWidget =
+          tester.widget<ExcludeFocus>(excludedAncestor.first);
+      expect(excludeFocusWidget.excluding, isTrue);
+
+      // Verify overlay close button is focused
+      final closeButton = find.byIcon(Icons.close);
+      expect(closeButton, findsOneWidget);
+      final closeFocusHighlight = find.ancestor(
+        of: closeButton,
+        matching: find.byType(FocusHighlight),
+      );
+      expect(closeFocusHighlight, findsOneWidget);
+
+      // Dismiss overlay via remote Back key
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Advanced Settings'), findsNothing);
+
+      // Verify settings button on header has focus restored with ring
+      final headerSettingsHighlight = find.ancestor(
+        of: settingsButton,
+        matching: find.byType(FocusHighlight),
+      );
+      final ringFinder = find.descendant(
+        of: headerSettingsHighlight,
+        matching: find.byKey(FocusHighlight.ringKey),
+      );
+      final decorated = tester.widget<DecoratedBox>(ringFinder);
+      expect((decorated.decoration as BoxDecoration).border, isNotNull);
     });
 
     group('segment tab focus', () {

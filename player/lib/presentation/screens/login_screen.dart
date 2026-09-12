@@ -46,6 +46,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _passwordFocus = FocusNode();
   final _claimCodeFocus = FocusNode();
   final _relayUrlFocus = FocusNode();
+  final _tvSettingsFocusNode = FocusNode(debugLabel: 'tv-settings-button');
+  final _closeSettingsFocusNode =
+      FocusNode(debugLabel: 'settings-close-button');
+  final _settingsOverlayScopeNode =
+      FocusScopeNode(debugLabel: 'settings-overlay-scope');
 
   bool _isLoadingSavedUrl = true;
   bool _obscurePassword = true;
@@ -174,6 +179,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _passwordFocus.dispose();
     _claimCodeFocus.dispose();
     _relayUrlFocus.dispose();
+    _tvSettingsFocusNode.dispose();
+    _closeSettingsFocusNode.dispose();
+    _settingsOverlayScopeNode.dispose();
     _scannerController?.dispose();
     super.dispose();
   }
@@ -296,6 +304,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     });
   }
 
+  void _openAdvancedSettings() {
+    setState(() => _showAdvancedSettings = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_showAdvancedSettings) return;
+      _closeSettingsFocusNode.requestFocus();
+    });
+  }
+
+  void _closeAdvancedSettings() {
+    setState(() => _showAdvancedSettings = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _showAdvancedSettings) return;
+      if (InputCapabilities.directionalPrimary &&
+          _tvSettingsFocusNode.canRequestFocus) {
+        _tvSettingsFocusNode.requestFocus();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final loginState = ref.watch(loginControllerProvider);
@@ -310,10 +337,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           if (event.logicalKey == LogicalKeyboardKey.escape ||
               event.logicalKey == LogicalKeyboardKey.goBack) {
             if (_showAdvancedSettings) {
-              setState(() => _showAdvancedSettings = false);
+              _closeAdvancedSettings();
               return KeyEventResult.handled;
             }
-            if (!_showDirectConnection &&
+            if (!loginState.isLoading &&
+                !_showDirectConnection &&
                 _claimCodeController.text.isNotEmpty) {
               _handleTvDeletePressed();
               return KeyEventResult.handled;
@@ -325,13 +353,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: PopScope(
         canPop: !_showAdvancedSettings &&
             (!InputCapabilities.directionalPrimary ||
+                loginState.isLoading ||
                 _showDirectConnection ||
                 _claimCodeController.text.isEmpty),
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
           if (_showAdvancedSettings) {
-            setState(() => _showAdvancedSettings = false);
-          } else if (!_showDirectConnection &&
+            _closeAdvancedSettings();
+          } else if (!loginState.isLoading &&
+              !_showDirectConnection &&
               _claimCodeController.text.isNotEmpty) {
             _handleTvDeletePressed();
           }
@@ -346,38 +376,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 end: Alignment.bottomRight,
                 colors: [
                   AppColors.background,
-                  Color(0xFF0E1828),
-                  AppColors.background,
+                  Color(0xFF0F172A),
+                  Color(0xFF0A0F1D),
                 ],
-                stops: [0.0, 0.5, 1.0],
               ),
             ),
             child: Stack(
               children: [
                 _buildBackgroundDecoration(),
-                SafeArea(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: isCompact ? 16 : 24,
-                      ),
-                      child: FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: SlideTransition(
-                          position: _slideAnimation,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (!InputCapabilities.directionalPrimary) ...[
-                                _buildLogo(isCompact),
-                                SizedBox(height: isCompact ? 24 : 32),
+                ExcludeFocus(
+                  excluding: _showAdvancedSettings || _showQrScanner,
+                  child: SafeArea(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: isCompact ? 16 : 24,
+                        ),
+                        child: FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: SlideTransition(
+                            position: _slideAnimation,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!InputCapabilities.directionalPrimary) ...[
+                                  _buildLogo(isCompact),
+                                  SizedBox(height: isCompact ? 24 : 32),
+                                ],
+                                _buildContent(loginState, isCompact),
+                                const SizedBox(height: 16),
+                                _buildFooter(loginState),
                               ],
-                              _buildContent(loginState, isCompact),
-                              const SizedBox(height: 16),
-                              _buildFooter(loginState),
-                            ],
+                            ),
                           ),
                         ),
                       ),
@@ -722,10 +754,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
         FocusHighlight(
-          onActivate: () => setState(() => _showAdvancedSettings = true),
+          focusNode: _tvSettingsFocusNode,
+          onActivate: _openAdvancedSettings,
           borderRadius: BorderRadius.circular(8),
           child: IconButton(
-            onPressed: () => setState(() => _showAdvancedSettings = true),
+            onPressed: _openAdvancedSettings,
             icon: const Icon(Icons.settings_outlined, size: 20),
             color: AppColors.textSecondary,
             tooltip: 'Relay & Network Settings',
@@ -970,7 +1003,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
         const SizedBox(width: 8),
         IconButton(
-          onPressed: () => setState(() => _showAdvancedSettings = true),
+          onPressed: _openAdvancedSettings,
           icon: const Icon(Icons.settings_outlined, size: 20),
           color: AppColors.textSecondary,
           tooltip: 'Relay & Network Settings',
@@ -1569,243 +1602,250 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Widget _buildAdvancedSettingsOverlay() {
     return Positioned.fill(
-      child: GestureDetector(
-        onTap: () => setState(() => _showAdvancedSettings = false),
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.7),
-          child: Center(
-            child: GestureDetector(
-              onTap: () {}, // Prevent tap from closing
-              child: Container(
-                margin: const EdgeInsets.all(24),
-                constraints: const BoxConstraints(maxWidth: 400),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppColors.border.withValues(alpha: 0.2),
+      child: FocusScope(
+        node: _settingsOverlayScopeNode,
+        child: GestureDetector(
+          onTap: _closeAdvancedSettings,
+          child: Container(
+            color: Colors.black.withValues(alpha: 0.7),
+            child: Center(
+              child: GestureDetector(
+                onTap: () {}, // Prevent tap from closing
+                child: Container(
+                  margin: const EdgeInsets.all(24),
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.border.withValues(alpha: 0.2),
+                    ),
                   ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.settings_outlined,
-                            color: AppColors.textSecondary,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Text(
-                              'Advanced Settings',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () =>
-                                setState(() => _showAdvancedSettings = false),
-                            icon: const Icon(
-                              Icons.close,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.settings_outlined,
                               color: AppColors.textSecondary,
                               size: 20,
                             ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      height: 1,
-                      color: AppColors.border.withValues(alpha: 0.15),
-                    ),
-                    // Content
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Relay URL',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textSecondary,
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Advanced Settings',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceVariant
-                                  .withValues(alpha: 0.25),
+                            FocusHighlight(
+                              focusNode: _closeSettingsFocusNode,
+                              onActivate: _closeAdvancedSettings,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppColors.border.withValues(alpha: 0.1),
-                              ),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.info_outline_rounded,
-                                  size: 14,
-                                  color: AppColors.textSecondary
-                                      .withValues(alpha: 0.7),
+                              child: IconButton(
+                                onPressed: _closeAdvancedSettings,
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: AppColors.textSecondary,
+                                  size: 20,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Change this if using a custom or self-hosted P2P relay server. Both your Mydia server and Mydia Player must be connected to the exact same relay for Quick Pair to work.',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      height: 1.35,
-                                      color: AppColors.textSecondary
-                                          .withValues(alpha: 0.75),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _relayUrlController,
-                            focusNode: _relayUrlFocus,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textPrimary,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: defaultRelayUrl,
-                              hintStyle: TextStyle(
-                                color: AppColors.textDisabled
-                                    .withValues(alpha: 0.5),
-                                fontSize: 13,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
                               ),
-                              filled: true,
-                              fillColor: AppColors.surfaceVariant
-                                  .withValues(alpha: 0.4),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color:
-                                      AppColors.border.withValues(alpha: 0.15),
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: AppColors.primary,
-                                  width: 1.5,
-                                ),
-                              ),
-                              suffixIcon:
-                                  _relayUrlController.text != defaultRelayUrl
-                                      ? IconButton(
-                                          onPressed: _resetRelayUrlToDefault,
-                                          icon: const Icon(
-                                            Icons.refresh,
-                                            size: 18,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                          tooltip: 'Reset to default',
-                                        )
-                                      : null,
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                          if (_isRelayUrlModified) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline,
-                                  size: 12,
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.7),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'Using custom relay URL',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.primary
-                                          .withValues(alpha: 0.7),
-                                    ),
-                                  ),
-                                ),
-                              ],
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                    Container(
-                      height: 1,
-                      color: AppColors.border.withValues(alpha: 0.15),
-                    ),
-                    // Actions
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () =>
-                                setState(() => _showAdvancedSettings = false),
-                            child: const Text('Cancel'),
-                          ),
-                          const SizedBox(width: 12),
-                          ElevatedButton(
-                            onPressed: () {
-                              _saveRelayUrl();
-                              setState(() => _showAdvancedSettings = false);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 10,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Save',
+                      Container(
+                        height: 1,
+                        color: AppColors.border.withValues(alpha: 0.15),
+                      ),
+                      // Content
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Relay URL',
                               style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary,
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceVariant
+                                    .withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color:
+                                      AppColors.border.withValues(alpha: 0.1),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 14,
+                                    color: AppColors.textSecondary
+                                        .withValues(alpha: 0.7),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Change this if using a custom or self-hosted P2P relay server. Both your Mydia server and Mydia Player must be connected to the exact same relay for Quick Pair to work.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        height: 1.35,
+                                        color: AppColors.textSecondary
+                                            .withValues(alpha: 0.75),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _relayUrlController,
+                              focusNode: _relayUrlFocus,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textPrimary,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: defaultRelayUrl,
+                                hintStyle: TextStyle(
+                                  color: AppColors.textDisabled
+                                      .withValues(alpha: 0.5),
+                                  fontSize: 13,
+                                ),
+                                filled: true,
+                                fillColor: AppColors.surfaceVariant
+                                    .withValues(alpha: 0.4),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: AppColors.border
+                                        .withValues(alpha: 0.15),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: AppColors.primary,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                suffixIcon:
+                                    _relayUrlController.text != defaultRelayUrl
+                                        ? IconButton(
+                                            onPressed: _resetRelayUrlToDefault,
+                                            icon: const Icon(
+                                              Icons.refresh,
+                                              size: 18,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                            tooltip: 'Reset to default',
+                                          )
+                                        : null,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            if (_isRelayUrlModified) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 12,
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.7),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Using custom relay URL',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.primary
+                                            .withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      Container(
+                        height: 1,
+                        color: AppColors.border.withValues(alpha: 0.15),
+                      ),
+                      // Actions
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: _closeAdvancedSettings,
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              onPressed: () {
+                                _saveRelayUrl();
+                                _closeAdvancedSettings();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text(
+                                'Save',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
