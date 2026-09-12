@@ -2324,6 +2324,69 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       refute Repo.get(Download, download.id)
       assert Repo.aggregate(ReleaseBlacklist, :count) == 0
     end
+
+    test "processes NZBGet SUCCESS/ALL history item as completed and enqueues import job" do
+      bypass = Bypass.open()
+
+      client =
+        build_test_client_config(%{
+          name: "NZBGet-Test-#{System.unique_integer([:positive])}",
+          type: :nzbget,
+          host: "localhost",
+          port: bypass.port,
+          username: "admin",
+          password: "admin"
+        })
+
+      setup_runtime_config([client])
+
+      Bypass.expect(bypass, "POST", "/jsonrpc", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
+        decoded = Jason.decode!(body)
+
+        result =
+          case decoded["method"] do
+            "listgroups" ->
+              []
+
+            "history" ->
+              [
+                %{
+                  "NZBID" => 5001,
+                  "NZBName" => "NZBGet.Completed.Show.S01E01",
+                  "Status" => "SUCCESS/ALL",
+                  "FileSizeMB" => 1000,
+                  "RemainingSizeMB" => 0,
+                  "DownloadRate" => 0,
+                  "DestDir" => "/downloads/NZBGet.Completed.Show.S01E01",
+                  "HistoryTime" => 1_700_050_000
+                }
+              ]
+          end
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{"version" => "1.1", "result" => result}))
+      end)
+
+      media_item = media_item_fixture(%{type: "movie"})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: client.name,
+          download_client_id: "5001",
+          title: "NZBGet.Completed.Show.S01E01"
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      updated = Downloads.get_download!(download.id)
+      assert updated.completed_at != nil
+      assert updated.error_message == nil
+      assert Repo.aggregate(ReleaseBlacklist, :count) == 0
+      assert_enqueued(worker: Mydia.Jobs.MediaImport)
+    end
   end
 
   ## Helper Functions

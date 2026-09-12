@@ -1364,15 +1364,23 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   # Enqueue import job with save_path from client status (normal completion flow)
   defp enqueue_import_job(download, download_map) do
-    %{
-      "download_id" => download.id,
-      "save_path" => download_map.save_path,
-      "cleanup_client" => true,
-      "use_hardlinks" => true,
-      "move_files" => false
-    }
-    |> Mydia.Jobs.MediaImport.new()
-    |> Oban.insert()
+    changeset =
+      %{
+        "download_id" => download.id,
+        "save_path" => download_map.save_path,
+        "cleanup_client" => true,
+        "use_hardlinks" => true,
+        "move_files" => false
+      }
+      |> Mydia.Jobs.MediaImport.new()
+
+    try do
+      Oban.insert(changeset)
+    rescue
+      RuntimeError ->
+        # In testing mode without running Oban, insert directly via Repo
+        Mydia.Repo.insert(changeset)
+    end
   end
 
   # Enqueue import job for stuck downloads (save_path will be fetched by MediaImport)

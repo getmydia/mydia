@@ -234,9 +234,7 @@ defmodule Mydia.Downloads.Client.Nzbget do
           :completed ->
             Enum.filter(all_items, fn item ->
               status = get_in(item, ["Status"]) || ""
-
-              status in ["SUCCESS", "DELETED"] &&
-                get_in(item, ["TotalArticles"]) == get_in(item, ["SuccessArticles"])
+              status_class(status) == "SUCCESS"
             end)
 
           :active ->
@@ -469,7 +467,7 @@ defmodule Mydia.Downloads.Client.Nzbget do
 
     # For history items, use the completion time
     completed_at =
-      if status in ["SUCCESS", "DELETED"] do
+      if status_class(status) == "SUCCESS" do
         Helpers.parse_timestamp_unix(get_in(item, ["HistoryTime"]))
       else
         nil
@@ -497,13 +495,13 @@ defmodule Mydia.Downloads.Client.Nzbget do
   end
 
   defp parse_state(status) when is_binary(status) do
-    case status do
+    case status_class(status) do
       "DOWNLOADING" -> :downloading
       "FETCHING" -> :downloading
       "QUEUED" -> :downloading
       "PAUSED" -> :paused
       "SUCCESS" -> :completed
-      "DELETED" -> :completed
+      "DELETED" -> :error
       "FAILURE" -> :error
       "WARNING" -> :error
       "PP_QUEUED" -> :checking
@@ -515,6 +513,14 @@ defmodule Mydia.Downloads.Client.Nzbget do
       "EXECUTING_SCRIPT" -> :checking
       _ -> :error
     end
+  end
+
+  defp status_class(nil), do: ""
+
+  defp status_class(status) when is_binary(status) do
+    status
+    |> String.split("/", parts: 2)
+    |> hd()
   end
 
   defp fetch_nzb_from_url(url) do
