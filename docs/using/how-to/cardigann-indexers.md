@@ -157,5 +157,5 @@ When reporting Cardigann issues:
 
 ## Next Steps
 
-- [Indexers](connect-indexer.md) - Prowlarr, Jackett, and NZBHydra2 setup
+- [Indexers](connect-indexer.md) - Prowlarr, Jackett, and Newznab setup
 - [How a Title Becomes a File](../explanation/media-pipeline.md#why-mydia-ships-its-own-indexer-implementation) - Why Mydia has a native Cardigann engine at all, and what it trades away

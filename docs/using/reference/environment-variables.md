@@ -256,12 +256,13 @@ Configure multiple indexers using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `INDEXER_<N>_PRIORITY` | Display order only, does not affect searching | `1` |
 | `INDEXER_<N>_BASE_URL` | Indexer base URL | `http://prowlarr:9696` |
 | `INDEXER_<N>_API_KEY` | Indexer API key | - |
+| `INDEXER_<N>_API_PATH` | Newznab only. Endpoint path appended to the base URL; defaults to `/api` | `/api` |
 | `INDEXER_<N>_INDEXER_IDS` | Comma-separated indexer IDs | `1,2,3` |
 | `INDEXER_<N>_CATEGORIES` | Comma-separated categories | `movies,tv` |
 | `INDEXER_<N>_RATE_LIMIT` | Maximum requests **per minute**. Unset means no limit. | - |
 | `INDEXER_<N>_TIMEOUT` | Request timeout in milliseconds | - |
 
-**Indexer Types:** `prowlarr`, `jackett`, `nzbhydra2`, `public`
+**Indexer Types:** `prowlarr`, `jackett`, `newznab`, `public`
 
 ```bash
 # Prowlarr
@@ -276,12 +277,19 @@ INDEXER_2_TYPE=jackett
 INDEXER_2_BASE_URL=http://jackett:9117
 INDEXER_2_API_KEY=your-jackett-api-key
 
-# NZBHydra2
-INDEXER_3_NAME=NZBHydra2
-INDEXER_3_TYPE=nzbhydra2
-INDEXER_3_BASE_URL=http://nzbhydra2:5076
-INDEXER_3_API_KEY=your-nzbhydra2-api-key
+# Newznab (works with any Newznab-compatible indexer)
+INDEXER_3_NAME=NZB Indexer
+INDEXER_3_TYPE=newznab
+INDEXER_3_BASE_URL=https://indexer.example
+INDEXER_3_API_KEY=your-newznab-api-key
+# Optional; defaults to /api
+INDEXER_3_API_PATH=/api
 ```
+
+!!! note "Legacy `nzbhydra2` type"
+    Existing configurations with `INDEXER_<N>_TYPE=nzbhydra2` keep working;
+    Mydia accepts the legacy value and treats it as `newznab`. New
+    configurations should use `newznab`.
 
 ## Automatic Search
 
