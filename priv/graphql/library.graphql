@@ -28,6 +28,16 @@ type RootQueryType {
 
   "The download queue and history. Contacts every configured client."
   downloads(filter: DownloadFilter): [Download!]!
+
+  "Library activity, oldest first. Best-effort: the docs explain the limits."
+  events(
+    first: Int
+
+    after: String
+
+    "Defaults to every published type"
+    types: [String!]
+  ): EventConnection!
 }
 
 type RootMutationType {
@@ -71,6 +81,52 @@ type RootMutationType {
     "Days to blocklist the release. Defaults to the configured period."
     blocklistDays: Int
   ): RemoveDownloadPayload!
+}
+
+"Arbitrary JSON, returned as stored"
+scalar JSON
+
+"How serious an event is"
+enum Severity {
+  "Routine"
+  INFO
+
+  "Worth a look"
+  WARNING
+
+  "Something failed"
+  ERROR
+}
+
+"Something that happened in the library"
+type Event {
+  id: ID!
+
+  type: String!
+
+  "When Mydia recorded it, to the second"
+  occurredAt: DateTime!
+
+  severity: Severity!
+
+  resourceType: String
+
+  resourceId: ID
+
+  "Type-specific details. Keys may change during beta."
+  data: JSON!
+}
+
+"One event in a page"
+type EventEdge {
+  node: Event!
+  cursor: String!
+}
+
+"A page of events"
+type EventConnection {
+  edges: [EventEdge!]!
+  pageInfo: PageInfo!
 }
 
 "A movie to add"

@@ -20,6 +20,7 @@ defmodule MydiaWeb.LibrarySchema do
   import_types(MydiaWeb.LibrarySchema.DownloadTypes)
   import_types(MydiaWeb.LibrarySchema.PayloadTypes)
   import_types(MydiaWeb.LibrarySchema.MutationTypes)
+  import_types(MydiaWeb.LibrarySchema.EventTypes)
 
   @introspection_fields [:__schema, :__type, :__typename]
 

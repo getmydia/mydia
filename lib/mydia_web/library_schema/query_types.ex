@@ -60,8 +60,7 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       # 1 matters because analysis runs before the resolver rejects a bad
       # `first`: a zero or negative cost would offset expensive siblings.
       complexity(fn args, child_complexity ->
-        first = (Map.get(args, :first) || 50) |> min(200) |> max(1)
-        first * child_complexity
+        MydiaWeb.LibrarySchema.Paging.cost(args, 50, 200, child_complexity)
       end)
 
       resolve(&MydiaWeb.LibrarySchema.Resolvers.Library.media_items/3)
@@ -76,6 +75,20 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       complexity(50)
 
       resolve(&MydiaWeb.LibrarySchema.Resolvers.Downloads.downloads/3)
+    end
+
+    @desc "Library activity, oldest first. Best-effort: the docs explain the limits."
+    field :events, non_null(:event_connection) do
+      meta(action: :read_events)
+      arg(:first, :integer, default_value: 100)
+      arg(:after, :string)
+      arg(:types, list_of(non_null(:string)), description: "Defaults to every published type")
+
+      complexity(fn args, child_complexity ->
+        MydiaWeb.LibrarySchema.Paging.cost(args, 100, 200, child_complexity)
+      end)
+
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.Events.events/3)
     end
   end
 end

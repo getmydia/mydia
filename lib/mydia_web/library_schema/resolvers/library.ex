@@ -12,6 +12,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
   alias Mydia.Media
   alias Mydia.Media.MediaItem
   alias MydiaWeb.LibrarySchema.MediaItemView
+  alias MydiaWeb.LibrarySchema.Paging
 
   @default_first 50
   @max_first 200
@@ -28,8 +29,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
 
   @spec media_items(any(), map(), Absinthe.Resolution.t()) :: {:ok, map()} | {:error, term()}
   def media_items(_parent, args, _info) do
-    with {:ok, first} <- page_size(Map.get(args, :first)),
-         {:ok, after_cursor} <- decode_cursor(Map.get(args, :after)) do
+    with {:ok, first} <- Paging.page_size(Map.get(args, :first), @default_first, @max_first),
+         {:ok, after_cursor} <- Paging.decode_cursor(Map.get(args, :after)) do
       # One extra row decides hasNextPage without a second count query.
       page_opts =
         [limit: first + 1]
@@ -51,28 +52,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
       # Keep `page` as the cursor source: hydration can see a newer updated_at,
       # or miss a row deleted after the keyset query. A cursor from either state
       # could skip rows or crash pagination on a concurrent change.
-      {:ok, connection(page, hydrated_by_id, length(rows) > first)}
+      {:ok, connection(page, hydrated_by_id, length(rows) > first, Map.get(args, :after))}
     end
-  end
-
-  # `first` reaches Ecto's `limit`, where 0 and negative values do not mean
-  # "no rows": they are invalid or surprising, so they are refused rather than
-  # clamped. A client that asks for 0 has a bug worth surfacing.
-  defp page_size(nil), do: {:ok, @default_first}
-
-  defp page_size(first) when is_integer(first) and first >= 1 and first <= @max_first,
-    do: {:ok, first}
-
-  defp page_size(first) when is_integer(first) do
-    {:error,
-     %{
-       message: "first must be between 1 and #{@max_first}, got #{first}",
-       extensions: %{code: "INVALID_INPUT"}
-     }}
-  end
-
-  defp page_size(_first) do
-    {:error, %{message: "first must be an integer", extensions: %{code: "INVALID_INPUT"}}}
   end
 
   # Exactly one identifier, because two of them could name different items and
@@ -142,19 +123,12 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
   defp external_key(:tvdb_id), do: :tvdb
   defp external_key(:imdb_id), do: :imdb
 
-  defp decode_cursor(nil), do: {:ok, nil}
+  # An empty page repeats the cursor the client sent, so a poller that always
+  # passes endCursor back never restarts from the beginning.
+  defp connection([], _hydrated_by_id, _has_next, after_cursor),
+    do: %{edges: [], page_info: %{has_next_page: false, end_cursor: after_cursor}}
 
-  defp decode_cursor(cursor) do
-    case Cursor.decode(cursor) do
-      {:ok, value} -> {:ok, value}
-      :error -> {:error, %{message: "Invalid cursor", extensions: %{code: "INVALID_INPUT"}}}
-    end
-  end
-
-  defp connection([], _hydrated_by_id, _has_next),
-    do: %{edges: [], page_info: %{has_next_page: false, end_cursor: nil}}
-
-  defp connection(page, hydrated_by_id, has_next) do
+  defp connection(page, hydrated_by_id, has_next, _after_cursor) do
     edges =
       for boundary <- page,
           {:ok, item} <- [Map.fetch(hydrated_by_id, boundary.id)] do

@@ -86,7 +86,8 @@ defmodule MydiaWeb.LibrarySchemaSdlTest do
       |> List.flatten()
       |> MapSet.new()
 
-    approved = MapSet.new(~w(lookup mediaItem mediaItems downloads qualityProfiles libraryPaths))
+    approved =
+      MapSet.new(~w(lookup mediaItem mediaItems downloads events qualityProfiles libraryPaths))
 
     assert fields == approved,
            "the RootQueryType fields differ from the approved set. Missing: " <>
