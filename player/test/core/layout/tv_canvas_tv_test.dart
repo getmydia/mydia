@@ -101,7 +101,7 @@ void main() {
 
       const probeKey = ValueKey('tv-canvas-probe');
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: TvCanvas(
             child: SizedBox.expand(key: probeKey),
           ),
