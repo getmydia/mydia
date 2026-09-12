@@ -171,7 +171,7 @@ A name update marks every referencing media item because `MediaItem.qualityProfi
 
 ### Future fields
 
-The observable dependency list is an explicit contract. Adding a field to `MediaItemView.item_map/1` or `episode_map/1`, or changing `get_media_status/1`, requires checking whether another column or table must advance revisions. A focused invariant test keeps the projection and declared dependency catalog aligned; it must assert consumer-visible behavior rather than compare trigger source text.
+The observable dependency list is an explicit contract. Adding a field to `MediaItemView.item_map/2` or `episode_map/1`, or changing `get_media_status/1`, requires checking whether another column or table must advance revisions. A focused invariant test keeps the projection and declared dependency catalog aligned; it must assert consumer-visible behavior rather than compare trigger source text.
 
 ## Clock-derived changes
 

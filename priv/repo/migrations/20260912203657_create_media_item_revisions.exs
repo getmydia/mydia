@@ -326,7 +326,7 @@ defmodule Mydia.Repo.Migrations.CreateMediaItemRevisions do
     # safe while a missed change is not. Sweep-only writes such as
     # `seasons_refreshed_at` (`Media.stamp_seasons_refreshed/1`) and
     # `season_order` therefore advance a revision on purpose, and a new column
-    # added to `MediaItemView.item_map/1` is covered without a migration change.
+    # added to `MediaItemView.item_map/2` is covered without a migration change.
     # Narrowing this to a column list would trade that safety for a few avoided
     # deliveries; if that is ever wanted, it needs a spec change first.
     postgres_trigger(

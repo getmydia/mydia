@@ -16,15 +16,8 @@ type RootQueryType {
   "One media item, by id or by an external id"
   mediaItem(id: ID, type: MediaType, tmdbId: Int, tvdbId: Int, imdbId: String): MediaItem
 
-  "Media items changed recently, oldest first"
-  mediaItems(
-    first: Int
-
-    after: String
-
-    "Only items updated at or after this instant (inclusive)"
-    updatedSince: DateTime
-  ): MediaItemConnection!
+  "Media items changed recently, oldest revision first. Includes deletions."
+  mediaItemChanges(first: Int, after: String): MediaItemChangeConnection!
 
   "The download queue and history. Contacts every configured client."
   downloads(filter: DownloadFilter): [Download!]!
@@ -274,6 +267,33 @@ type Download {
   addedAt: DateTime!
 }
 
+"One media item change: a live item or a tombstone for a deleted one"
+type MediaItemChange {
+  mediaItemId: ID!
+
+  "True when the item was deleted; mediaItem is then null"
+  deleted: Boolean!
+
+  "When this revision was recorded; equals mediaItem.updatedAt when live"
+  changedAt: DateTime!
+
+  mediaItem: MediaItem
+}
+
+"One change in a page"
+type MediaItemChangeEdge {
+  node: MediaItemChange!
+
+  "Opaque; pass the last edge's cursor as `after` for the next page"
+  cursor: String!
+}
+
+"A page of media item changes, oldest revision first"
+type MediaItemChangeConnection {
+  edges: [MediaItemChangeEdge!]!
+  pageInfo: PageInfo!
+}
+
 "Whether a media item is available, arriving, or absent"
 type AvailabilityStatus {
   state: AvailabilityState!
@@ -338,18 +358,6 @@ type LookupResult {
 
   "The library item this hit corresponds to, if Mydia already has it"
   inLibrary: MediaItem
-}
-
-"One item in a mediaItems page"
-type MediaItemEdge {
-  node: MediaItem!
-  cursor: String!
-}
-
-"A page of media items"
-type MediaItemConnection {
-  edges: [MediaItemEdge!]!
-  pageInfo: PageInfo!
 }
 
 "A quality profile"
