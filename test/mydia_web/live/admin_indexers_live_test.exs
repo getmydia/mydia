@@ -465,6 +465,92 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
   end
 
+  describe "runtime indexer conversion" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+      Mydia.Indexers.register_adapters()
+
+      name = "Convert Me #{System.unique_integer([:positive])}"
+      base_url = "http://127.0.0.1:19911"
+
+      # api_key stays nil so edit_indexer skips the synchronous Prowlarr
+      # indexer fetch; connection_settings is what this test is about.
+      runtime_config = %{
+        Mydia.Config.Schema.defaults()
+        | indexers: [
+            %{
+              name: name,
+              type: :prowlarr,
+              enabled: true,
+              priority: 10,
+              base_url: base_url,
+              api_key: nil,
+              connection_settings: %{"timeout" => 60_000}
+            }
+          ]
+      }
+
+      original_runtime = Application.get_env(:mydia, :runtime_config)
+      Application.put_env(:mydia, :runtime_config, runtime_config)
+
+      on_exit(fn ->
+        if original_runtime do
+          Application.put_env(:mydia, :runtime_config, original_runtime)
+        else
+          Application.delete_env(:mydia, :runtime_config)
+        end
+      end)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+
+      %{view: view, name: name, base_url: base_url, runtime_id: "runtime::indexer::#{name}"}
+    end
+
+    test "converting a runtime indexer without a connection_settings param keeps stored settings",
+         %{view: view, name: name, base_url: base_url, runtime_id: runtime_id} do
+      view
+      |> element(~s{button[phx-click="edit_indexer"][phx-value-id="#{runtime_id}"]})
+      |> render_click()
+
+      assert has_element?(
+               view,
+               "#flash-info",
+               "Converting runtime indexer to database-managed configuration"
+             )
+
+      # Prowlarr's modal renders no connection_settings inputs, so the submitted
+      # params carry no "connection_settings" key at all.
+      refute has_element?(
+               view,
+               ~s{#indexer-form input[name^="indexer_config[connection_settings]"]}
+             )
+
+      view
+      |> form("#indexer-form",
+        indexer_config: %{
+          name: name,
+          type: "prowlarr",
+          base_url: base_url,
+          api_key: "test-api-key",
+          enabled: "true",
+          priority: "1"
+        }
+      )
+      |> render_submit()
+
+      saved = Repo.get_by(Mydia.Settings.IndexerConfig, name: name)
+
+      assert saved, "expected the converted runtime indexer to be persisted as a database row"
+      assert saved.connection_settings == %{"timeout" => 60_000}
+    end
+  end
+
   describe "FlareSolverr panel" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)

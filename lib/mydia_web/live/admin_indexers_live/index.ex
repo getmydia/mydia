@@ -1340,7 +1340,9 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
   # submitted, so merge the submitted keys over the settings the modal was
   # opened with. Keys with no input — a timeout on a row migrated from the
   # legacy Hydra indexer type, say — then survive a save instead of being
-  # silently dropped.
+  # silently dropped. Types that render no connection-settings input at all
+  # (Prowlarr, Jackett, Public) submit no such key, so the stored map has to be
+  # re-attached before it reaches the changeset.
   defp merge_connection_settings(params, assigns) do
     stored = Map.get(assigns, :indexer_connection_settings, %{})
 
@@ -1349,7 +1351,11 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
         Map.put(params, "connection_settings", Map.merge(stored, submitted))
 
       _ ->
-        params
+        if stored == %{} do
+          params
+        else
+          Map.put(params, "connection_settings", stored)
+        end
     end
   end
 
