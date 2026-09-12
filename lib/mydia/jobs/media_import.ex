@@ -35,6 +35,7 @@ defmodule Mydia.Jobs.MediaImport do
   require Logger
   alias Mydia.{Downloads, Library, Media, Settings}
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.ClientRemoval
   alias Mydia.Downloads.ImportCandidates
   alias Mydia.Library.{FileNamer, FileOrganizer, SampleDetector}
   alias Mydia.Library.ReleaseParser
@@ -500,21 +501,27 @@ defmodule Mydia.Jobs.MediaImport do
         # download in the client when some files remain unmatched so
         # the user can manually retry after fixing the matches.
         unless has_unresolved do
-          client_info = get_client_info(download)
-          should_cleanup = client_info && client_info.remove_completed
+          case ClientRemoval.maybe_remove_after_import(download) do
+            :removed ->
+              Logger.info("Removed download from client after import",
+                download_id: download.id
+              )
 
-          if should_cleanup do
-            Logger.info("Removing download from client (remove_completed enabled)",
-              download_id: download.id,
-              client: download.download_client
-            )
+            :deferred ->
+              Logger.info("Keeping download in client until seeding finishes",
+                download_id: download.id
+              )
 
-            cleanup_download_client(download)
-          else
-            Logger.info("Keeping download in client for seeding (remove_completed disabled)",
-              download_id: download.id,
-              client: download.download_client
-            )
+            :skipped ->
+              Logger.info("Keeping download in client (remove_completed disabled)",
+                download_id: download.id
+              )
+
+            {:error, reason} ->
+              Logger.warning("Post-import client removal failed",
+                download_id: download.id,
+                error: inspect(reason)
+              )
           end
         end
 
@@ -1842,28 +1849,6 @@ defmodule Mydia.Jobs.MediaImport do
   # both of which clear the pointer and keep the new file.
   defp resolve_supersede_target(target_id, media_item_id, nil) do
     Upgrades.current_best_file_id(media_item_id, nil) || target_id
-  end
-
-  defp cleanup_download_client(download) do
-    client_info = get_client_info(download)
-
-    if client_info do
-      case Client.remove_download(
-             client_info.adapter,
-             client_info.config,
-             client_info.client_id,
-             delete_files: true
-           ) do
-        :ok ->
-          Logger.info("Removed download from client", download_id: download.id)
-
-        {:error, error} ->
-          Logger.warning("Failed to remove download from client",
-            download_id: download.id,
-            error: inspect(error)
-          )
-      end
-    end
   end
 
   defp build_client_config(client_config) do
