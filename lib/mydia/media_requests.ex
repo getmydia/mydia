@@ -250,17 +250,51 @@ defmodule Mydia.MediaRequests do
   end
 
   @doc """
-  Checks if a request with the given TMDB ID is pending.
+  Checks if a request of the given media type with the given TMDB ID is pending.
+
+  Scoped by type because TMDB numbers movies and series independently: without
+  it a pending TV request for id 550 reported a movie with tmdb_id 550 as
+  already requested, and blocked it from being requested at all.
+
+  `media_type` must be `"movie"` or `"tv_show"`; anything else, `nil` included,
+  is `false`. A caller with no type cannot ask a meaningful question here, and
+  `create_request/1` reaches this before its own validation has run.
   """
-  def pending_request_exists?(tmdb_id) when is_integer(tmdb_id) do
-    MediaRequest
-    |> where([r], r.tmdb_id == ^tmdb_id and r.status == "pending")
-    |> Repo.exists?()
+  @spec pending_request_exists?(String.t() | atom(), integer()) :: boolean()
+  def pending_request_exists?(media_type, tmdb_id) when is_integer(tmdb_id) do
+    pending_exists?(:tmdb_id, media_type, tmdb_id)
   end
 
-  def pending_request_exists?(_), do: false
+  def pending_request_exists?(_media_type, _tmdb_id), do: false
 
   # Private functions
+
+  # A TVDB-sourced request has no tmdb_id, so pending_request_exists?/2 (which
+  # is documented and tested as TMDB-only) never sees it. Kept private and
+  # separate rather than widening that public function's contract.
+  defp pending_tvdb_request_exists?(media_type, tvdb_id) when is_integer(tvdb_id) do
+    pending_exists?(:tvdb_id, media_type, tvdb_id)
+  end
+
+  defp pending_tvdb_request_exists?(_media_type, _tvdb_id), do: false
+
+  # `field` is a literal from this module's own two call sites, never user
+  # input. An unrecognised media_type answers false rather than querying: the
+  # question "is a request of no particular type pending" has no useful answer,
+  # and create_request/1 asks this before its own validation has rejected the
+  # changeset.
+  defp pending_exists?(field, media_type, id) do
+    type = media_type && to_string(media_type)
+
+    if type in MediaRequest.valid_media_types() do
+      MediaRequest
+      |> where([r], r.media_type == ^type and r.status == "pending")
+      |> where([r], field(r, ^field) == ^id)
+      |> Repo.exists?()
+    else
+      false
+    end
+  end
 
   defp check_duplicate_media(changeset) do
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
@@ -291,21 +325,16 @@ defmodule Mydia.MediaRequests do
   defp check_duplicate_request(changeset) do
     tmdb_id = Ecto.Changeset.get_field(changeset, :tmdb_id)
     tvdb_id = Ecto.Changeset.get_field(changeset, :tvdb_id)
+    # Same reasoning as check_duplicate_media/1: a pending TV request for a
+    # given tmdb_id is not a duplicate of a movie request for that number, and
+    # an invalid type falls through to the caller's own validation error.
+    type = Ecto.Changeset.get_field(changeset, :media_type)
 
     cond do
-      tmdb_id && pending_request_exists?(tmdb_id) -> {:error, :duplicate_request}
-      tvdb_id && pending_tvdb_request_exists?(tvdb_id) -> {:error, :duplicate_request}
+      tmdb_id && pending_request_exists?(type, tmdb_id) -> {:error, :duplicate_request}
+      tvdb_id && pending_tvdb_request_exists?(type, tvdb_id) -> {:error, :duplicate_request}
       true -> :ok
     end
-  end
-
-  # A TVDB-sourced request has no tmdb_id, so pending_request_exists?/1 (which
-  # is documented and tested as TMDB-only) never sees it. Kept private and
-  # separate rather than widening that public function's contract.
-  defp pending_tvdb_request_exists?(tvdb_id) do
-    MediaRequest
-    |> where([r], r.tvdb_id == ^tvdb_id and r.status == "pending")
-    |> Repo.exists?()
   end
 
   @doc """

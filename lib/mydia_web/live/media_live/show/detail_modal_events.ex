@@ -163,6 +163,7 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
     status = Mydia.Media.library_status_for_tmdb_ids(tmdb_ids, media_item.type)
 
     results
+    |> RecommendationEvents.stamp_media_type(media_item.type)
     |> MediaAddHelpers.enrich_with_library_status(status)
     |> MediaRequestHelpers.enrich_with_request_status(MediaRequestHelpers.request_status_map())
   end

@@ -57,7 +57,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       assert request.tmdb_id == tmdb_id
       assert request.status == "pending"
       assert request.requester_id == user.id
-      assert map[tmdb_id] == "pending"
+      assert map[{:movie, :tmdb, tmdb_id}] == "pending"
     end
 
     test "reports a duplicate when a pending request already exists" do
@@ -102,9 +102,9 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       assert request.tvdb_id == tvdb_id
       assert is_nil(request.tmdb_id)
       assert MediaRequest.external_ref(request) == {:tvdb, tvdb_id}
-      # Tagged, not bare: a bare key would collide with a TMDB movie or show
-      # that happens to share this same numeric id.
-      assert map[{:tvdb, tvdb_id}] == "pending"
+      # Fully qualified: neither the bare id nor the provider alone separates
+      # this from a TMDB movie or a TMDB show sharing the same number.
+      assert map[{:tv_show, :tvdb, tvdb_id}] == "pending"
     end
 
     # There is no TVDB movie catalog, so a movie card tagged provider: :tvdb
@@ -144,8 +144,29 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
 
       # The second guest must see it as already requested: create_request/1
       # rejects duplicates globally, so an enabled button would only error.
-      assert MediaRequestHelpers.request_status_map()[tmdb_id] == "pending"
+      assert MediaRequestHelpers.request_status_map()[{:movie, :tmdb, tmdb_id}] == "pending"
       assert second.id != first.id
+    end
+
+    test "keys a TV request separately from a movie request with the same tmdb id" do
+      requester = guest()
+      shared_id = System.unique_integer([:positive])
+
+      {:ok, _show_request} =
+        MediaRequests.create_request(%{
+          media_type: "tv_show",
+          title: "Harbour Lights",
+          tmdb_id: shared_id,
+          requester_id: requester.id
+        })
+
+      map = MediaRequestHelpers.request_status_map()
+
+      # The whole point of #463: TMDB numbers movies and series independently,
+      # so the pending show must not make a same-numbered movie read as
+      # requested.
+      assert map[{:tv_show, :tmdb, shared_id}] == "pending"
+      refute Map.has_key?(map, {:movie, :tmdb, shared_id})
     end
 
     test "includes a TVDB-sourced pending request" do
@@ -160,9 +181,9 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
           requester_id: guest_user.id
         })
 
-      # Tagged, not bare: a bare key would collide with a TMDB movie or show
-      # that happens to share this same numeric id.
-      assert MediaRequestHelpers.request_status_map()[{:tvdb, tvdb_id}] == "pending"
+      # Fully qualified: neither the bare id nor the provider alone separates
+      # this from a TMDB movie or a TMDB show sharing the same number.
+      assert MediaRequestHelpers.request_status_map()[{:tv_show, :tvdb, tvdb_id}] == "pending"
     end
   end
 
@@ -170,7 +191,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
     test "stamps the status onto matching items and nil onto the rest" do
       requested = System.unique_integer([:positive])
       untouched = System.unique_integer([:positive])
-      map = %{requested => "pending"}
+      map = %{{:movie, :tmdb, requested} => "pending"}
 
       [a, b] =
         MediaRequestHelpers.enrich_with_request_status(
@@ -193,9 +214,9 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
         tvdb_item(shared_id, "Shared Id Series")
         |> Map.put(:media_type, :tv_show)
 
-      # Only the TMDB movie has an outstanding request, keyed bare as
+      # Only the TMDB movie has an outstanding request, keyed exactly as
       # request_status_map/0 would store it.
-      map = %{shared_id => "pending"}
+      map = %{{:movie, :tmdb, shared_id} => "pending"}
 
       [enriched_movie, enriched_series] =
         MediaRequestHelpers.enrich_with_request_status([movie, series], map)
@@ -215,15 +236,57 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
         tvdb_item(shared_id, "Other Shared Id Series")
         |> Map.put(:media_type, :tv_show)
 
-      # No TMDB movie request exists; only the TVDB show does, keyed tagged
+      # No TMDB movie request exists; only the TVDB show does, keyed exactly
       # as request_status_map/0 would store it.
-      map = %{{:tvdb, shared_id} => "pending"}
+      map = %{{:tv_show, :tvdb, shared_id} => "pending"}
 
       [enriched_movie, enriched_series] =
         MediaRequestHelpers.enrich_with_request_status([movie, series], map)
 
       assert is_nil(enriched_movie.request_status)
       assert enriched_series.request_status == "pending"
+    end
+
+    test "does not let a TMDB show read as requested off a same-numbered TMDB movie" do
+      shared_id = System.unique_integer([:positive])
+
+      movie = item(shared_id, "Harbour Lights")
+
+      # A TV show sourced from TMDB, the ordinary case on a TMDB-configured
+      # instance: same provider, same number, unrelated title. The provider
+      # half of the key cannot separate these two; only the type can.
+      show = %SearchResult{
+        provider_id: to_string(shared_id),
+        provider: :tmdb,
+        media_type: :tv_show,
+        title: "Harbour Lights: The Series",
+        year: 2024
+      }
+
+      map = %{{:movie, :tmdb, shared_id} => "pending"}
+
+      [enriched_movie, enriched_show] =
+        MediaRequestHelpers.enrich_with_request_status([movie, show], map)
+
+      assert enriched_movie.request_status == "pending"
+      assert is_nil(enriched_show.request_status)
+    end
+
+    test "leaves an item with no media type unkeyed rather than guessing" do
+      id = System.unique_integer([:positive])
+      untyped = Map.put(item(id), :media_type, nil)
+      map = %{{:movie, :tmdb, id} => "pending"}
+
+      [enriched] = MediaRequestHelpers.enrich_with_request_status([untyped], map)
+
+      assert is_nil(enriched.request_status)
+    end
+
+    test "survives a non-numeric provider id" do
+      malformed = Map.put(item(1), :provider_id, "not-a-number")
+
+      assert [%{request_status: nil}] =
+               MediaRequestHelpers.enrich_with_request_status([malformed], %{})
     end
   end
 end
