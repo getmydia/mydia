@@ -12,10 +12,12 @@ defmodule Mydia.LibraryApi.EventFeed do
     * `Mydia.Events.Writer` drops events under overload and loses a batch whose
       insert fails, so the feed can have gaps. `mediaItems(updatedSince:)` and
       `downloads` stay the source of truth.
-    * `inserted_at` is second-precision and ids are random UUIDs, so an event
-      written late within a second could sort before a cursor already handed
-      out. Rows younger than the settle window are withheld, which covers the
-      writer's 200 ms flush; a long transaction can still outlast it.
+    * `inserted_at` is stamped in the caller's process before the event is
+      flushed; the writer can block in Repo.insert_all/2 for up to the
+      database's busy_timeout (30 seconds). Rows younger than the settle window
+      (35 seconds) are withheld, which is longer than the write timeout, so an
+      event written during a library scan still lands before the feed hands out
+      a cursor past it.
     * The existing cleanup deletes events after 90 days. A cursor older than that
       resumes at the oldest remaining event.
   """
@@ -26,7 +28,7 @@ defmodule Mydia.LibraryApi.EventFeed do
   alias Mydia.Plugins.Manifest
   alias Mydia.Repo
 
-  @settle_seconds 10
+  @settle_seconds 35
 
   @doc """
   Lists events oldest first.

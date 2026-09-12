@@ -26,8 +26,8 @@ defmodule Mydia.LibraryApi.EventFeedTest do
 
   test "returns events oldest first, ties broken by id" do
     oldest = event!("media_item.added", 60)
-    tie_a = event!("media_item.updated", 30)
-    tie_b = event!("media_item.removed", 30)
+    tie_a = event!("media_item.updated", 50)
+    tie_b = event!("media_item.removed", 50)
 
     [first_tie, second_tie] = Enum.sort([tie_a.id, tie_b.id])
 
@@ -43,7 +43,7 @@ defmodule Mydia.LibraryApi.EventFeedTest do
 
   test "resumes strictly after the cursor, including within one second" do
     rows =
-      for type <- ~w(media_item.added media_item.updated media_item.removed), do: event!(type, 30)
+      for type <- ~w(media_item.added media_item.updated media_item.removed), do: event!(type, 50)
 
     [first, second, third] = Enum.sort_by(rows, & &1.id)
 
@@ -55,15 +55,15 @@ defmodule Mydia.LibraryApi.EventFeedTest do
   end
 
   test "defaults to the plugin event catalog" do
-    listed = event!("media_item.added", 30)
-    _unlisted = event!("library.scan.finished", 30)
+    listed = event!("media_item.added", 50)
+    _unlisted = event!("library.scan.finished", 50)
 
     assert ids(EventFeed.list(limit: 10, now: @now)) == [listed.id]
   end
 
   test "filters to the requested types" do
-    _added = event!("media_item.added", 30)
-    removed = event!("media_item.removed", 30)
+    _added = event!("media_item.added", 50)
+    removed = event!("media_item.removed", 50)
 
     assert ids(EventFeed.list(limit: 10, types: ["media_item.removed"], now: @now)) ==
              [removed.id]
