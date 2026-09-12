@@ -2,10 +2,13 @@
 // unreachable from a remote: the only way out of playback is Android's back
 // button, and there is no way to reach the cast picker at all.
 //
-// Tier-independent on purpose -- FocusHighlight already hides its ring under
-// touch and mouse and shows it for directional traversal, so this asserts the
-// pills are focus stops on every platform, which is also what desktop keyboard
-// users were missing.
+// No tier flag is needed and none is passed. FocusHighlight gates its ring on
+// traversal -- keyboard and directional only -- rather than on the input tier,
+// so the pills are focus stops on every platform, and what is asserted here is
+// exactly what a desktop keyboard user gets too. That is also why this file
+// deliberately does not enrol in the TV-tier job: it is named
+// `chrome_top_bar_focus_test.dart`, not `*_tv_test.dart`, so CI's
+// `--dart-define=MYDIA_FORCE_TV=true` run never picks it up.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -44,6 +47,16 @@ void main() {
     await tester.pump();
 
     expect(backs, 1);
+
+    // The title pill has no action, so it must not be a focus stop: it sits
+    // between Back and Cast in reading order, and a stop there would cost a
+    // keypress with nothing to activate. Asserted rather than trusted to the
+    // comment in the file header, because moving the wrapper one level up
+    // would silently make it focusable.
+    expect(
+      Focus.maybeOf(tester.element(find.byKey(ChromeTopBar.titleKey))),
+      isNull,
+    );
   });
 
   testWidgets('the cast pill is a focus stop and activates from the keyboard',

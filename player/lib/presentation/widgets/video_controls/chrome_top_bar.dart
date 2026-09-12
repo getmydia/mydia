@@ -89,24 +89,12 @@ class GlassPill extends StatelessWidget {
 
     if (onTap == null) return content;
 
-    // FocusHighlight draws its ring only for keyboard and directional
-    // traversal and hides it under touch and mouse, so this needs no tier
-    // gate: a phone viewer sees exactly what they saw before, and a remote
-    // finally gets a focus stop on Back and Cast. Ring geometry matches the
-    // pill's own radius, or the ring traces a different rectangle than the
-    // one it surrounds.
-    return FocusHighlight(
-      onActivate: onTap,
-      borderRadius: const BorderRadius.all(
-        Radius.circular(DepthTokens.radiusPlayerPill),
-      ),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: content,
-        ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: content,
       ),
     );
   }
@@ -148,6 +136,33 @@ class ChromeTopBar extends StatelessWidget {
   static const Key titleKey = Key('chrome-title');
   static const Key castKey = Key('chrome-cast');
 
+  /// Wraps a pill in a focus stop, so a D-pad can reach it.
+  ///
+  /// Applied here, at the two top-bar pills that need it, rather than inside
+  /// [GlassPill]: GlassPill is also the resting pill in `UpNextPrompt`, whose
+  /// child already carries three focus stops of its own. Wrapping there nests
+  /// a fourth around them, which reading-order traversal picks first — shifting
+  /// every Tab by one and ringing the whole pill instead of the control the
+  /// viewer is on. `detail_action_row.dart` avoids the same nesting with
+  /// `canRequestFocus: false`.
+  ///
+  /// Returns the pill untouched when it has no action, matching the inert-pill
+  /// behaviour the Back and Cast pills already document.
+  ///
+  /// No tier gate: [FocusHighlight] shows its ring only for keyboard and
+  /// directional traversal and hides it under touch and mouse, so a phone
+  /// viewer sees exactly what they saw before.
+  Widget _focusablePill({required Widget child, required VoidCallback? onTap}) {
+    if (onTap == null) return child;
+    return FocusHighlight(
+      onActivate: onTap,
+      borderRadius: const BorderRadius.all(
+        Radius.circular(DepthTokens.radiusPlayerPill),
+      ),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final titleText = title;
@@ -159,17 +174,20 @@ class ChromeTopBar extends StatelessWidget {
         Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
-            child: GlassPill(
-              key: backKey,
-              tier: tier,
+            child: _focusablePill(
               onTap: onBack,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.chevron_left_rounded),
-                  SizedBox(width: 2),
-                  Text('Back'),
-                ],
+              child: GlassPill(
+                key: backKey,
+                tier: tier,
+                onTap: onBack,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.chevron_left_rounded),
+                    SizedBox(width: 2),
+                    Text('Back'),
+                  ],
+                ),
               ),
             ),
           ),
@@ -209,11 +227,14 @@ class ChromeTopBar extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: cast == null
                 ? const SizedBox.shrink()
-                : GlassPill(
-                    key: castKey,
-                    tier: tier,
+                : _focusablePill(
                     onTap: onCastTap,
-                    child: cast,
+                    child: GlassPill(
+                      key: castKey,
+                      tier: tier,
+                      onTap: onCastTap,
+                      child: cast,
+                    ),
                   ),
           ),
         ),
