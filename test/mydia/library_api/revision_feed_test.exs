@@ -126,4 +126,58 @@ defmodule Mydia.LibraryApi.RevisionFeedTest do
     assert marker!(removed.id) == tombstone
     assert Repo.get_by(MediaItemRevision, media_item_id: unknown) == nil
   end
+
+  test "mark_live cannot move a marker whose stored revision is already ahead" do
+    # Simulate a stale allocation: the stored marker sits ahead of the next
+    # revision the clock path can allocate. The greater-revision guard must leave
+    # its revision and deleted flag alone, because a marker moved backwards is a
+    # permanent consumer miss.
+    live = insert(:media_item)
+    ahead = marker!(live.id).revision + 1_000_000
+    store_marker_ahead!(live.id, ahead)
+
+    assert RevisionFeed.mark_live([live.id]) == :ok
+
+    marked = marker!(live.id)
+    assert marked.revision >= ahead
+    refute marked.deleted
+    assert marker_count(live.id) == 1
+
+    # PostgreSQL identity values are handed out outside commit order, so the
+    # clock sweep's revision can arrive below the committed marker's and only the
+    # guard keeps it from moving backwards. SQLite's AUTOINCREMENT allocates
+    # inside the write lock, in commit order, so its guard is inert and a
+    # tombstone on a still-present item is legitimately revived by the next
+    # allocation. The flag case is therefore PostgreSQL-only.
+    if Mydia.DB.postgres?() do
+      tombstoned = insert(:media_item)
+      ahead = marker!(tombstoned.id).revision + 1_000_000
+      store_marker_ahead!(tombstoned.id, ahead, true)
+
+      assert RevisionFeed.mark_live([tombstoned.id]) == :ok
+
+      marked = marker!(tombstoned.id)
+      assert marked.revision == ahead
+      assert marked.deleted
+    end
+  end
+
+  # Writes the marker ahead of what the clock path can allocate next. SQLite's
+  # AUTOINCREMENT watermark tracks the largest rowid ever used, and an UPDATE
+  # that raises a rowid raises that watermark too, so it is rewound after the
+  # write; PostgreSQL keeps its sequence behind an identity column set directly,
+  # so it needs nothing.
+  defp store_marker_ahead!(media_item_id, revision, deleted \\ false) do
+    Repo.update_all(
+      from(r in MediaItemRevision, where: r.media_item_id == ^media_item_id),
+      set: [revision: revision, deleted: deleted]
+    )
+
+    unless Mydia.DB.postgres?() do
+      Repo.query!(
+        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'media_item_revisions'",
+        [revision - 1]
+      )
+    end
+  end
 end

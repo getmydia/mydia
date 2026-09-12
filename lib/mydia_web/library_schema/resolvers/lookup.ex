@@ -26,7 +26,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
 
     case Metadata.search_cached(Metadata.default_relay_config(), query, opts) do
       {:ok, results} ->
-        {:ok, build_results(results)}
+        build_results(results)
 
       {:error, reason} ->
         Logger.warning("Library API lookup failed: #{inspect(reason)}")
@@ -55,21 +55,22 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
         end
       end)
 
-    in_library = resolve_in_library(usable)
-
-    Enum.map(usable, fn result ->
-      %{
-        provider: result.provider,
-        provider_id: result.provider_id,
-        type: result.media_type,
-        title: result.title,
-        year: result.year,
-        overview: result.overview,
-        poster_url: ImageUrl.poster_url(result.poster_path),
-        imdb_id: result.imdb_id,
-        in_library: Map.get(in_library, {result.provider, to_string(result.provider_id)})
-      }
-    end)
+    with {:ok, in_library} <- resolve_in_library(usable) do
+      {:ok,
+       Enum.map(usable, fn result ->
+         %{
+           provider: result.provider,
+           provider_id: result.provider_id,
+           type: result.media_type,
+           title: result.title,
+           year: result.year,
+           overview: result.overview,
+           poster_url: ImageUrl.poster_url(result.poster_path),
+           imdb_id: result.imdb_id,
+           in_library: Map.get(in_library, {result.provider, to_string(result.provider_id)})
+         }
+       end)}
+    end
   end
 
   defp resolve_in_library(results) do
@@ -127,25 +128,36 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
   # give. `inLibrary` is a MediaItem, so one batched fetch turns the whole set of
   # matches into hydrated items -- including the availability status, which needs
   # the media preloads or it reads the wrong thing. The aggregate timestamps come
-  # from one more batch over the revision markers, never one query per hit.
+  # from one more batch over the revision markers, tombstones included, never one
+  # query per hit.
   defp hydrate(index) do
     ids = index |> Map.values() |> Enum.uniq()
 
     case ids do
       [] ->
-        %{}
+        {:ok, %{}}
 
       ids ->
         found = Media.list_media_items(ids: ids, preload: MediaItemView.preloads())
         by_id = Map.new(found, &{&1.id, &1})
-        changed_at_by_id = RevisionFeed.changed_at_by_ids(Enum.map(found, & &1.id))
 
-        Map.new(index, fn {key, id} ->
-          case Map.get(by_id, id) do
-            nil -> {key, nil}
-            item -> {key, MediaItemView.item_map(item, Map.fetch!(changed_at_by_id, id))}
-          end
-        end)
+        with {:ok, changed_at_by_id} <- RevisionFeed.live_changed_at_by_ids(Map.keys(by_id)) do
+          {:ok,
+           Map.new(index, fn {key, id} -> {key, in_library_item(by_id, changed_at_by_id, id)} end)}
+        end
+    end
+  end
+
+  defp in_library_item(by_id, changed_at_by_id, id) do
+    case Map.get(by_id, id) do
+      nil ->
+        nil
+
+      item ->
+        case Map.fetch!(changed_at_by_id, id) do
+          nil -> nil
+          changed_at -> MediaItemView.item_map(item, changed_at)
+        end
     end
   end
 

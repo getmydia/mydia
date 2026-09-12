@@ -1,6 +1,8 @@
 defmodule MydiaWeb.LibrarySchema.LibraryTest do
   use MydiaWeb.ConnCase
 
+  import Ecto.Query
+
   alias Mydia.LibraryApi.MediaItemRevision
   alias Mydia.LibraryApi.Principal
   alias Mydia.Media
@@ -99,6 +101,30 @@ defmodule MydiaWeb.LibrarySchema.LibraryTest do
   test "mediaItem returns nil for an unknown id" do
     assert {:ok, %{data: %{"mediaItem" => nil}}} =
              run(@media_item, %{"id" => Ecto.UUID.generate()})
+  end
+
+  test "mediaItem returns nil for an item deleted between the item query and the marker read" do
+    movie = insert(:media_item, type: "movie", title: "Arrival")
+
+    # The item query ran before a concurrent delete committed, so the row is
+    # still in the result set while its marker is already a tombstone. That is
+    # ordinary absence, not the missing-marker invariant, and must not raise.
+    Repo.update_all(
+      from(r in MediaItemRevision, where: r.media_item_id == ^movie.id),
+      set: [deleted: true]
+    )
+
+    assert {:ok, %{data: %{"mediaItem" => nil}}} = run(@media_item, %{"id" => movie.id})
+  end
+
+  test "mediaItem surfaces a live item with no marker row at all as an internal error" do
+    movie = insert(:media_item, type: "movie", title: "Arrival")
+
+    Repo.delete_all(from(r in MediaItemRevision, where: r.media_item_id == ^movie.id))
+
+    assert {:ok, %{errors: errors}} = run(@media_item, %{"id" => movie.id})
+    refute errors == []
+    assert Enum.any?(errors, &(&1.message =~ "invariant"))
   end
 
   test "mediaItem rejects a malformed id" do

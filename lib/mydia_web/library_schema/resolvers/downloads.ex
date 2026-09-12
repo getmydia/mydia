@@ -44,13 +44,15 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
   @spec client_state(atom() | nil) :: atom()
   def client_state(value), do: Map.get(@client_state_map, value, :unknown)
 
-  @spec downloads(any(), map(), Absinthe.Resolution.t()) :: {:ok, [map()]}
+  @spec downloads(any(), map(), Absinthe.Resolution.t()) :: {:ok, [map()]} | {:error, String.t()}
   def downloads(_parent, args, _info) do
     filter = Map.get(args, :filter) || :active
     rows = Downloads.list_downloads_with_status(filter: filter)
-    {items, changed_at_by_id, episodes} = hydrate_associations(rows)
+    {items, episodes} = hydrate_associations(rows)
 
-    {:ok, Enum.map(rows, &download_map(&1, items, changed_at_by_id, episodes))}
+    with {:ok, changed_at_by_id} <- RevisionFeed.live_changed_at_by_ids(Map.keys(items)) do
+      {:ok, Enum.map(rows, &download_map(&1, items, changed_at_by_id, episodes))}
+    end
   end
 
   @spec cancel_download(any(), map(), Absinthe.Resolution.t()) :: {:ok, map()}
@@ -112,9 +114,9 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
   defp not_removed(error), do: %{removed_id: nil, user_errors: [error]}
 
   # History only preloads episode.media_item. Batch the standard API preloads
-  # so nested availability and episode.hasFile never read unloaded associations,
-  # and batch the items' aggregate revision timestamps in the same pass so a
-  # queue listing never runs one marker query per row.
+  # so nested availability and episode.hasFile never read unloaded associations.
+  # The marker read is one query for the whole page, in the caller, not one per
+  # row.
   defp hydrate_associations(rows) do
     item_ids =
       rows
@@ -131,14 +133,13 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
       end
 
     by_id = Map.new(items, &{&1.id, &1})
-    changed_at_by_id = RevisionFeed.changed_at_by_ids(Enum.map(items, & &1.id))
 
     episodes =
       items
       |> Enum.flat_map(& &1.episodes)
       |> Map.new(&{&1.id, &1})
 
-    {by_id, changed_at_by_id, episodes}
+    {by_id, episodes}
   end
 
   defp download_map(row, items, changed_at_by_id, episodes) do
@@ -165,8 +166,14 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
 
   defp media_item(id, items, changed_at_by_id) do
     case Map.get(items, id) do
-      nil -> nil
-      item -> MediaItemView.item_map(item, Map.fetch!(changed_at_by_id, id))
+      nil ->
+        nil
+
+      item ->
+        case Map.fetch!(changed_at_by_id, id) do
+          nil -> nil
+          changed_at -> MediaItemView.item_map(item, changed_at)
+        end
     end
   end
 

@@ -21,9 +21,15 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
           {:ok, map() | nil} | {:error, term()}
   def media_item(_parent, args, _info) do
     with {:ok, opts} <- identify(args) do
-      item = fetch_one(opts)
+      case fetch_one(opts) do
+        nil ->
+          {:ok, nil}
 
-      {:ok, item && MediaItemView.item_map(item, RevisionFeed.changed_at!(item.id))}
+        item ->
+          with {:ok, changed_at} <- RevisionFeed.live_changed_at(item.id) do
+            {:ok, changed_at && MediaItemView.item_map(item, changed_at)}
+          end
+      end
     end
   end
 

@@ -163,7 +163,9 @@ What the contract guarantees:
   live change it equals the node's `mediaItem.updatedAt`, which is the aggregate
   change time of the returned representation rather than only the parent row. Both
   are for display and for order-independent bookkeeping. Neither orders the feed
-  and neither is a polling watermark.
+  and neither is a polling watermark. Note that `MediaItem.updatedAt` now reports
+  the item's aggregate change time, which on upgrade is the migration instant for
+  every existing item until it next changes.
 - **Some availability changes have no database write behind them.** `status.state`
   compares episode air dates with the current UTC date, so a show can leave
   `UPCOMING` at a UTC date boundary with nothing written to the database. A

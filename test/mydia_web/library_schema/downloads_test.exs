@@ -7,7 +7,11 @@ defmodule MydiaWeb.LibrarySchema.DownloadsTest do
 
   import Mydia.Factory
 
+  import Ecto.Query
+
+  alias Mydia.LibraryApi.MediaItemRevision
   alias Mydia.LibraryApi.Principal
+  alias Mydia.Repo
   alias MydiaWeb.LibrarySchema.Resolvers.Downloads
 
   @admin %Principal{role: "admin", source: :api_key}
@@ -103,6 +107,23 @@ defmodule MydiaWeb.LibrarySchema.DownloadsTest do
              run(@downloads, %{"filter" => "ALL"})
 
     assert download["episode"] == %{"id" => episode.id, "hasFile" => false}
+    assert download["mediaItem"] == nil
+  end
+
+  test "a media item deleted between the item query and the marker read reports no mediaItem" do
+    movie = insert(:media_item, type: "movie", title: "Arrival")
+    insert(:download, title: "Arrival.2016.1080p", media_item: movie)
+
+    # The download's item was hydrated before a concurrent delete committed, so
+    # the row is still in the batch while its marker is already a tombstone.
+    Repo.update_all(
+      from(r in MediaItemRevision, where: r.media_item_id == ^movie.id),
+      set: [deleted: true]
+    )
+
+    assert {:ok, %{data: %{"downloads" => [download]}}} =
+             run(@downloads, %{"filter" => "ALL"})
+
     assert download["mediaItem"] == nil
   end
 end

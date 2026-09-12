@@ -33,15 +33,23 @@ defmodule MydiaWeb.LibrarySchema.Loaders do
 
   Reloaded rather than reusing a struct a context function returned: the payload
   must carry the preloads `item_map/2` reads, and updates do not return them.
-  The aggregate timestamp comes from the item's single revision marker;
-  `changed_at!/1` raises if a live item has none, because every write advances a
-  marker and a missing one is a broken invariant rather than an absent value.
+  The aggregate timestamp comes from the item's single revision marker; a
+  tombstone reads as nil because the item was deleted concurrently, while a
+  wholly absent marker keeps the invariant error `live_changed_at!/1` raises --
+  every write advances a marker, so a missing one is a broken invariant rather
+  than an absent value.
   """
   @spec item_map(Ecto.UUID.t()) :: map() | nil
   def item_map(id) do
     case load(id) do
-      nil -> nil
-      item -> MediaItemView.item_map(item, RevisionFeed.changed_at!(item.id))
+      nil ->
+        nil
+
+      item ->
+        case RevisionFeed.live_changed_at!(item.id) do
+          nil -> nil
+          changed_at -> MediaItemView.item_map(item, changed_at)
+        end
     end
   end
 
