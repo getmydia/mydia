@@ -1,10 +1,10 @@
 defmodule Mydia.LibraryApi.Cursor do
   @moduledoc """
-  The opaque `mediaItems` cursor.
+  The opaque `events` cursor.
 
-  Encodes the `{updated_at, id}` pair the keyset query compares against.
-  `updated_at` is `:utc_datetime`, so second precision round-trips exactly and
-  the strict `>` / `==` comparison in `Mydia.Media.list_items_page/1` stays
+  Encodes the `{inserted_at, id}` pair the keyset query compares against.
+  `inserted_at` is `:utc_datetime`, so second precision round-trips exactly and
+  the strict `>` / `==` comparison in `Mydia.LibraryApi.EventFeed.list/1` stays
   correct across a page boundary.
 
   Base64url without padding, so the value is safe in a JSON string and has no
