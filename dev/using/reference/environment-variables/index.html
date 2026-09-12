@@ -1307,6 +1307,8 @@
       
         
       
+        
+      
     
     
     
@@ -1882,6 +1884,34 @@
     
   
     API Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../library-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library API
   
 
     
@@ -3599,6 +3629,11 @@ regardless of what you set here. If you serve Mydia over plain http, set
 <td><code>OIDC_SCOPES</code></td>
 <td>Space-separated scope list</td>
 <td><code>openid profile email</code></td>
+</tr>
+<tr>
+<td><code>LIBRARY_API_KEY</code></td>
+<td>Admin key for the <a href="../library-api/">Library API</a>, sent as the <code>x-api-key</code> header. Optional; unset means only database API keys work. Minimum 32 characters. Generate with <code>openssl rand -hex 32</code>. Remove it and restart to revoke.</td>
+<td>(unset)</td>
 </tr>
 </tbody>
 </table>
