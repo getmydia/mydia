@@ -101,6 +101,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
      |> assign(:show_indexer_modal, true)
      |> assign(:indexer_form, to_form(changeset))
      |> assign(:indexer_mode, :new)
+     |> assign(:indexer_connection_settings, %{})
      |> assign(:testing_indexer_connection, false)
      |> assign(:available_env_indexers, Settings.list_available_env_indexers())
      |> init_prowlarr_indexer_assigns([])
@@ -140,6 +141,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        |> assign(:show_indexer_modal, true)
        |> assign(:indexer_form, to_form(changeset))
        |> assign(:indexer_mode, :new)
+       |> assign(:indexer_connection_settings, indexer.connection_settings || %{})
        |> assign(:testing_indexer_connection, false)
        |> assign(:available_env_indexers, available_env_indexers)
        |> init_prowlarr_indexer_assigns(existing_indexer_ids)
@@ -154,6 +156,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
        |> assign(:indexer_form, to_form(changeset))
        |> assign(:indexer_mode, :edit)
        |> assign(:editing_indexer, indexer)
+       |> assign(:indexer_connection_settings, indexer.connection_settings || %{})
        |> assign(:testing_indexer_connection, false)
        |> assign(:available_env_indexers, available_env_indexers)
        |> init_prowlarr_indexer_assigns(existing_indexer_ids)
@@ -171,7 +174,7 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
     changeset =
       indexer
-      |> IndexerConfig.changeset(params)
+      |> IndexerConfig.changeset(merge_connection_settings(params, socket.assigns))
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, :indexer_form, to_form(changeset))}
@@ -179,7 +182,10 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
   @impl true
   def handle_event("save_indexer", %{"indexer_config" => params}, socket) do
-    params = merge_prowlarr_indexer_ids(params, socket.assigns)
+    params =
+      params
+      |> merge_connection_settings(socket.assigns)
+      |> merge_prowlarr_indexer_ids(socket.assigns)
 
     result =
       case socket.assigns.indexer_mode do
@@ -1327,6 +1333,24 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
     if type == "prowlarr",
       do: Map.put(params, "indexer_ids", indexer_ids),
       else: params
+  end
+
+  # The modal renders only a few connection settings (today just Newznab's
+  # api_path), and Ecto's cast replaces the whole map with what the form
+  # submitted, so merge the submitted keys over the settings the modal was
+  # opened with. Keys with no input — a timeout on a row migrated from the
+  # legacy Hydra indexer type, say — then survive a save instead of being
+  # silently dropped.
+  defp merge_connection_settings(params, assigns) do
+    stored = Map.get(assigns, :indexer_connection_settings, %{})
+
+    case params do
+      %{"connection_settings" => submitted} when is_map(submitted) ->
+        Map.put(params, "connection_settings", Map.merge(stored, submitted))
+
+      _ ->
+        params
+    end
   end
 
   defp format_sync_error(:rate_limit_exceeded),

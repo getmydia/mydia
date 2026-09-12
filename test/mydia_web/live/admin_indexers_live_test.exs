@@ -245,6 +245,37 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
              )
     end
 
+    test "keeps Newznab connection settings the form does not render", %{conn: conn} do
+      # Legacy NZBHydra2 rows migrate to Newznab carrying their old settings
+      # (the migration test pins a stored timeout), so editing one in the UI
+      # must not drop keys the form has no input for.
+      {:ok, indexer} =
+        Settings.create_indexer_config(%{
+          name: "Legacy Newznab #{System.unique_integer([:positive])}",
+          type: :newznab,
+          base_url: "http://localhost:5076",
+          api_key: "test-api-key",
+          connection_settings: %{"api_path" => "/api", "timeout" => 60_000}
+        })
+
+      # Seed before mounting: the row has to be in the list the LiveView loads.
+      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+
+      view
+      |> element(~s{button[phx-click="edit_indexer"][phx-value-id="#{indexer.id}"]})
+      |> render_click()
+
+      view
+      |> form("#indexer-form",
+        indexer_config: %{connection_settings: %{"api_path" => "/custom/api"}}
+      )
+      |> render_submit()
+
+      saved = Settings.get_indexer_config!(indexer.id)
+      assert saved.connection_settings["api_path"] == "/custom/api"
+      assert saved.connection_settings["timeout"] == 60_000
+    end
+
     @tag :skip
     test "test connection succeeds with valid prowlarr server", %{view: view} do
       bypass = Bypass.open()
