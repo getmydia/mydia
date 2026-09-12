@@ -35,6 +35,14 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Events do
            message: "Unknown event types: #{Enum.join(unknown, ", ")}",
            extensions: %{code: "INVALID_INPUT"}
          }}
+
+      {:error, :empty_types} ->
+        {:error,
+         %{
+           message:
+             "types must name at least one event type, or be omitted entirely to receive every published type",
+           extensions: %{code: "INVALID_INPUT"}
+         }}
     end
   end
 

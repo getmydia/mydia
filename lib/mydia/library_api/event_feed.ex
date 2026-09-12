@@ -35,9 +35,14 @@ defmodule Mydia.LibraryApi.EventFeed do
 
   Options: `:limit` (required), `:after` (an `{inserted_at, id}` pair from
   `Mydia.LibraryApi.Cursor.decode/1`), `:types` (defaults to the plugin event
-  catalog; a type outside it is refused), `:now` (the clock, for tests).
+  catalog; a type outside it is refused, and an empty list is refused too,
+  rather than compiling to `WHERE type IN ()` and returning an empty feed
+  forever), `:now` (the clock, for tests).
   """
-  @spec list(keyword()) :: {:ok, [Event.t()]} | {:error, {:unknown_types, [String.t()]}}
+  @spec list(keyword()) ::
+          {:ok, [Event.t()]}
+          | {:error, {:unknown_types, [String.t()]}}
+          | {:error, :empty_types}
   def list(opts) do
     with {:ok, types} <- types(Keyword.get(opts, :types)) do
       settled =
@@ -64,6 +69,7 @@ defmodule Mydia.LibraryApi.EventFeed do
   def settle_seconds, do: @settle_seconds
 
   defp types(nil), do: {:ok, Manifest.event_catalog()}
+  defp types([]), do: {:error, :empty_types}
 
   defp types(requested) do
     catalog = Manifest.event_catalog()

@@ -73,4 +73,10 @@ defmodule Mydia.LibraryApi.EventFeedTest do
     assert EventFeed.list(limit: 10, types: ["media_item.added", "nope.nope"], now: @now) ==
              {:error, {:unknown_types, ["nope.nope"]}}
   end
+
+  test "refuses an empty types list instead of returning an empty feed forever" do
+    _added = event!("media_item.added", 50)
+
+    assert EventFeed.list(limit: 10, types: [], now: @now) == {:error, :empty_types}
+  end
 end

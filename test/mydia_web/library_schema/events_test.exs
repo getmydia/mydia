@@ -109,6 +109,13 @@ defmodule MydiaWeb.LibrarySchema.EventsTest do
     assert error.extensions.code == "INVALID_INPUT"
   end
 
+  test "an empty types list is INVALID_INPUT, not an empty page" do
+    event!("media_item.added", 0)
+
+    assert {:ok, %{errors: [error]}} = run(%{"types" => []})
+    assert error.extensions.code == "INVALID_INPUT"
+  end
+
   test "a non-admin is refused" do
     assert {:ok, %{errors: errors}} = run(%{}, %Principal{role: "user", source: :api_key})
     assert Enum.any?(errors, &(&1.extensions[:code] == "FORBIDDEN"))
