@@ -38,8 +38,8 @@ defmodule Mydia.Downloads.Client.Nzbget do
 
     * `DOWNLOADING`, `FETCHING` -> `:downloading`
     * `PAUSED` -> `:paused`
-    * `SUCCESS`, `DELETED` (with completion) -> `:completed`
-    * `FAILURE`, `WARNING` -> `:error`
+    * `SUCCESS/*` -> `:completed`
+    * `DELETED/*`, `FAILURE/*`, `WARNING/*` -> `:error`
     * `QUEUED` -> `:downloading` (queued but counted as downloading)
     * `PP_QUEUED`, `LOADING_PARS`, `VERIFYING`, `REPAIRING`, `UNPACKING`, `MOVING` -> `:checking`
 

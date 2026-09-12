@@ -2329,7 +2329,7 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
       bypass = Bypass.open()
 
       client =
-        build_test_client_config(%{
+        download_client_config_fixture(%{
           name: "NZBGet-Test-#{System.unique_integer([:positive])}",
           type: :nzbget,
           host: "localhost",
@@ -2337,8 +2337,6 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
           username: "admin",
           password: "admin"
         })
-
-      setup_runtime_config([client])
 
       Bypass.expect(bypass, "POST", "/jsonrpc", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn, length: 1_000_000)
