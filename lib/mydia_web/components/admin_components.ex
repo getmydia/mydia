@@ -1,6 +1,6 @@
 defmodule MydiaWeb.AdminComponents do
   @moduledoc """
-  Admin chrome: the sidebar's Admin section (`admin_nav/1`), the header every
+  Admin chrome: the sidebar's Admin hub links (`admin_nav/1`), the header every
   admin page renders (`admin_page/1`), and the config source badge. The two
   navigation components read `MydiaWeb.AdminNav`.
   """
@@ -17,63 +17,41 @@ defmodule MydiaWeb.AdminComponents do
 
   attr :current_path, :string,
     default: nil,
-    doc: "the request path; picks the open hub and the active link"
+    doc: "the request path; picks the active hub"
 
   attr :pending_requests_count, :integer,
     default: 0,
-    doc: "shown on the Administration hub and on Requests when above zero"
+    doc: "shown on the Administration hub when above zero"
 
   @doc """
-  The sidebar's Admin section: one collapsible group per `MydiaWeb.AdminNav` hub,
-  listing the pages whose feature gate is on.
-
-  The group holding the current page renders open and the others closed. Live
-  navigation re-renders this from the server, so a group opened by hand closes
-  again on the next page.
+  The sidebar's Admin section: one link per `MydiaWeb.AdminNav` hub, opening the
+  hub's first page. The hub holding the current page is active. Pages within a
+  hub are reached through the tab strip `admin_page/1` renders.
   """
   def admin_nav(assigns) do
     current = AdminNav.page_for_path(assigns.current_path)
 
-    groups =
+    hubs =
       for hub <- AdminNav.hubs() do
         Map.merge(hub, %{
-          open?: not is_nil(current) and current.hub == hub.key,
-          pages: AdminNav.visible_pages(hub.key)
+          active?: not is_nil(current) and current.hub == hub.key,
+          path: AdminNav.hub_landing_path(hub.key)
         })
       end
 
-    assigns = assign(assigns, :groups, groups)
+    assigns = assign(assigns, :hubs, hubs)
 
     ~H"""
-    <li :for={group <- @groups}>
-      <details id={"admin-nav-#{group.key}"} open={group.open?}>
-        <summary>
-          <.icon name={group.icon} class="w-5 h-5" /> {group.label}
-          <span
-            :if={group.key == :administration and @pending_requests_count > 0}
-            class="badge badge-primary badge-sm"
-          >
-            {@pending_requests_count}
-          </span>
-        </summary>
-        <ul>
-          <li :for={page <- group.pages}>
-            <.link
-              id={"admin-nav-link-#{page.key}"}
-              navigate={page.path}
-              class={page.path == @current_path && "active"}
-            >
-              <.icon name={page.icon} class="w-5 h-5" /> {page.label}
-              <span
-                :if={page.key == :requests and @pending_requests_count > 0}
-                class="badge badge-primary badge-sm"
-              >
-                {@pending_requests_count}
-              </span>
-            </.link>
-          </li>
-        </ul>
-      </details>
+    <li :for={hub <- @hubs}>
+      <.link id={"admin-nav-#{hub.key}"} navigate={hub.path} class={[hub.active? && "menu-active"]}>
+        <.icon name={hub.icon} class="w-5 h-5" /> {hub.label}
+        <span
+          :if={hub.key == :administration and @pending_requests_count > 0}
+          class="badge badge-primary badge-sm"
+        >
+          {@pending_requests_count}
+        </span>
+      </.link>
     </li>
     """
   end
@@ -113,15 +91,22 @@ defmodule MydiaWeb.AdminComponents do
   slot :inner_block, required: true
 
   @doc """
-  The header every admin page renders: its hub, its `<h1>` and its one-line
-  description, all from `MydiaWeb.AdminNav`, plus optional header actions.
+  The chrome every admin page renders: its hub, its `<h1>` and one-line
+  description from `MydiaWeb.AdminNav`, optional header actions, and a tab
+  strip of the hub's pages.
 
   Pass `page` as a literal (`<.admin_page page={:trash}>`) so a mistyped key
   fails the build.
   """
   def admin_page(assigns) do
     nav_page = AdminNav.fetch!(assigns.page)
-    assigns = assign(assigns, nav_page: nav_page, hub_label: hub_label(nav_page.hub))
+
+    assigns =
+      assign(assigns,
+        nav_page: nav_page,
+        hub_label: AdminNav.hub_label(nav_page.hub),
+        tabs: AdminNav.visible_pages(nav_page.hub)
+      )
 
     ~H"""
     <div
@@ -142,15 +127,26 @@ defmodule MydiaWeb.AdminComponents do
       </div>
     </div>
 
+    <div
+      id="admin-page-tabs"
+      role="tablist"
+      class="tabs tabs-border flex-nowrap overflow-x-auto mb-6"
+    >
+      <.link
+        :for={tab <- @tabs}
+        id={"admin-tab-#{tab.key}"}
+        navigate={tab.path}
+        role="tab"
+        aria-selected={to_string(tab.key == @nav_page.key)}
+        class={["tab whitespace-nowrap", tab.key == @nav_page.key && "tab-active"]}
+      >
+        {tab.label}
+      </.link>
+    </div>
+
     <div class="bg-base-100">
       {render_slot(@inner_block)}
     </div>
     """
-  end
-
-  defp hub_label(hub_key) do
-    AdminNav.hubs()
-    |> Enum.find(&(&1.key == hub_key))
-    |> Map.fetch!(:label)
   end
 end

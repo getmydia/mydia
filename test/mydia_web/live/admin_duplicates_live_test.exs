@@ -141,15 +141,15 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       refute group_html =~ "type=\"checkbox\""
     end
 
-    test "renders the admin page header with Duplicates active in the sidebar", %{conn: conn} do
+    test "renders the admin page header with Duplicates as the active tab", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       assert has_element?(view, "#admin-page-hub", "Administration")
       assert has_element?(view, "h1#admin-page-title", "Duplicates")
-      assert has_element?(view, ~s|a.active[href="/admin/duplicates"]|)
-      # Every other admin page must still be reachable from here, or an
-      # operator who lands on this page has no way back to the rest of admin.
-      assert has_element?(view, ~s|a[href="/admin/library-paths"]|, "Library")
+      assert has_element?(view, ~s|a#admin-tab-duplicates.tab-active[href="/admin/duplicates"]|)
+      # Sibling pages must be one click away, or an operator who lands here
+      # has to go back through the sidebar.
+      assert has_element?(view, ~s|a#admin-tab-trash[href="/admin/trash"]|, "Trash")
     end
 
     test "heads its sections with h2 and leaves the page h1 to the admin shell", %{conn: conn} do

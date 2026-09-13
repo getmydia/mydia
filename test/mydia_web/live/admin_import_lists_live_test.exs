@@ -40,7 +40,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
     end
 
     test "the nav link is present", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/dashboard")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
       assert has_element?(view, "a[href='/admin/import-lists']")
     end
@@ -76,7 +76,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
     end
 
     test "the nav link is absent", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/dashboard")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
       refute has_element?(view, "a[href='/admin/import-lists']")
     end

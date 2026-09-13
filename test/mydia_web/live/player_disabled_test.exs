@@ -27,12 +27,12 @@ defmodule MydiaWeb.PlayerDisabledTest do
       end
     end
 
-    test "the admin sidebar drops Dashboard and Remote Access", %{conn: conn} do
+    test "the System tabs drop Dashboard and Remote Access", %{conn: conn} do
       {:ok, view, _html} = live(conn, "/admin/settings")
 
-      refute has_element?(view, "#admin-nav-link-dashboard")
-      refute has_element?(view, "#admin-nav-link-remote_access")
-      assert has_element?(view, "#admin-nav-link-status")
+      refute has_element?(view, "#admin-tab-dashboard")
+      refute has_element?(view, "#admin-tab-remote_access")
+      assert has_element?(view, "#admin-tab-status")
     end
   end
 

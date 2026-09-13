@@ -294,8 +294,9 @@ fails for a live route under `/admin` that has no entry.
 
 **No page `<h1>`.** `<.admin_page>` renders the hub label, the page `<h1>` and
 the description from `AdminNav`, with header buttons in its `:actions` slot.
-There is no tab bar; the sidebar's Admin section is how operators move between
-pages, and longer explanatory copy stays in the page body. Content opens with
+Sibling pages in the same hub are tabs under the header, rendered by
+`<.admin_page>` from `AdminNav`; the sidebar links each hub to its first page.
+Longer explanatory copy stays in the page body. Content opens with
 `<div class="p-4 sm:p-6 space-y-4">` and a section header:
 `<h2 class="text-lg font-semibold flex items-center gap-2">` with a leading
 `<.icon>`, the title, and `<span class="badge badge-ghost">{length(@items)}</span>`,

@@ -52,6 +52,17 @@ defmodule MydiaWeb.AdminNav do
   @spec hubs() :: [%{key: Page.hub(), label: String.t(), icon: String.t()}]
   def hubs, do: @hubs
 
+  @doc "The label of `hub`."
+  @spec hub_label(Page.hub()) :: String.t()
+  def hub_label(hub), do: @hubs |> Enum.find(&(&1.key == hub)) |> Map.fetch!(:label)
+
+  @doc """
+  Where the sidebar link for `hub` goes: the hub's first page whose feature gate
+  is on. Every hub has an ungated page, so there always is one.
+  """
+  @spec hub_landing_path(Page.hub()) :: String.t()
+  def hub_landing_path(hub), do: hub |> visible_pages() |> hd() |> Map.fetch!(:path)
+
   @doc "Every page key, in sidebar order."
   @spec keys() :: [atom()]
   def keys, do: @keys

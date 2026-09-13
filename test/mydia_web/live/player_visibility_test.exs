@@ -175,7 +175,7 @@ defmodule MydiaWeb.PlayerVisibilityTest do
       refute has_element?(view, "#hide-player-toggle")
     end
 
-    test "the admin sidebar drops Dashboard and Remote Access", %{conn: conn} do
+    test "the admin tabs drop Dashboard and Remote Access", %{conn: conn} do
       start_supervised!(Mydia.Indexers.Health)
       {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
@@ -214,7 +214,7 @@ defmodule MydiaWeb.PlayerVisibilityTest do
   end
 
   describe "with the player on" do
-    test "the Devices link and the admin sidebar's Dashboard link are there", %{conn: conn} do
+    test "the Devices link and the admin Dashboard tab are there", %{conn: conn} do
       start_supervised!(Mydia.Indexers.Health)
 
       {:ok, home, _html} = live(conn, ~p"/")

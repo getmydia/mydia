@@ -23,36 +23,34 @@ defmodule MydiaWeb.AdminNavLiveTest do
       refute has_element?(view, "li.menu-title", "Administration")
     end
 
-    test "opens only the hub holding the current page", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/trash")
-
-      assert has_element?(view, "details#admin-nav-administration[open]")
-      assert has_element?(view, "details#admin-nav-configuration")
-      refute has_element?(view, "details#admin-nav-configuration[open]")
-      assert has_element?(view, "details#admin-nav-system")
-      refute has_element?(view, "details#admin-nav-system[open]")
-    end
-
-    test "marks only the current page's link active", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/trash")
-
-      assert has_element?(view, ~s|a#admin-nav-link-trash.active[href="/admin/trash"]|)
-      refute has_element?(view, "a#admin-nav-link-duplicates.active")
-    end
-
-    test "lists the pages of closed hubs too", %{conn: conn} do
+    test "links each hub to its first page", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
       assert has_element?(
                view,
-               ~s|details#admin-nav-configuration a[href="/admin/quality"]|,
-               "Quality"
+               ~s|a#admin-nav-configuration[href="/admin/quality"]|,
+               "Configuration"
              )
 
-      assert has_element?(view, ~s|details#admin-nav-system a[href="/admin/status"]|, "Status")
+      assert has_element?(
+               view,
+               ~s|a#admin-nav-administration[href="/admin/requests"]|,
+               "Administration"
+             )
+
+      assert has_element?(view, ~s|a#admin-nav-system[href="/admin/status"]|, "System")
+      refute has_element?(view, "details[id^=admin-nav-]")
     end
 
-    test "shows the pending-requests count on the Administration hub and on Requests", %{
+    test "marks only the hub holding the current page", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/trash")
+
+      assert has_element?(view, "a#admin-nav-administration.menu-active")
+      refute has_element?(view, "a#admin-nav-configuration.menu-active")
+      refute has_element?(view, "a#admin-nav-system.menu-active")
+    end
+
+    test "shows the pending-requests count on the Administration hub", %{
       conn: conn
     } do
       guest = user_fixture(%{role: "guest"})
@@ -68,17 +66,15 @@ defmodule MydiaWeb.AdminNavLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
-      assert has_element?(view, "#admin-nav-administration summary .badge", "1")
-      assert has_element?(view, "#admin-nav-link-requests .badge", "1")
-      refute has_element?(view, "#admin-nav-configuration summary .badge")
-      refute has_element?(view, "#admin-nav-system summary .badge")
+      assert has_element?(view, "a#admin-nav-administration .badge", "1")
+      refute has_element?(view, "a#admin-nav-configuration .badge")
+      refute has_element?(view, "a#admin-nav-system .badge")
     end
 
     test "shows no count when nothing is pending", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
-      refute has_element?(view, "#admin-nav-administration summary .badge")
-      refute has_element?(view, "#admin-nav-link-requests .badge")
+      refute has_element?(view, "a#admin-nav-administration .badge")
     end
   end
 
@@ -92,11 +88,21 @@ defmodule MydiaWeb.AdminNavLiveTest do
       refute has_element?(view, "#admin-page-actions")
     end
 
-    test "has no admin tab bar", %{conn: conn} do
+    test "tabs list the current hub's pages with the current page active", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
-      refute has_element?(view, ~s|a[role="tab"][href="/admin/duplicates"]|)
-      refute has_element?(view, "a.tab-active")
+      for key <- ~w(requests jobs release_blacklist duplicates trash) do
+        assert has_element?(view, "#admin-page-tabs a#admin-tab-#{key}[role=tab]")
+      end
+
+      assert has_element?(
+               view,
+               ~s|#admin-page-tabs a#admin-tab-trash.tab-active[href="/admin/trash"]|
+             )
+
+      refute has_element?(view, "#admin-page-tabs a#admin-tab-duplicates.tab-active")
+      refute has_element?(view, "#admin-page-tabs a#admin-tab-quality")
+      refute has_element?(view, "#admin-page-tabs a#admin-tab-status")
     end
 
     test "Users puts Create Local User in the header and keeps the OIDC banner in the body", %{
@@ -156,6 +162,6 @@ defmodule MydiaWeb.AdminNavLiveTest do
     {:ok, view, _html} = live(conn, ~p"/movies")
 
     refute has_element?(view, "li.menu-title", "Admin")
-    refute has_element?(view, "details#admin-nav-configuration")
+    refute has_element?(view, "a#admin-nav-configuration")
   end
 end

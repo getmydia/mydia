@@ -160,14 +160,14 @@ defmodule MydiaWeb.Layouts do
           <nav class="flex-1 overflow-y-auto">
             <ul class="menu w-full space-y-1 px-2 py-4">
               <li>
-                <.link navigate="/" class={nav_active?(@current_path, "/", true) && "active"}>
+                <.link navigate="/" class={nav_active?(@current_path, "/", true) && "menu-active"}>
                   <.icon name="hero-home" class="w-5 h-5" /> Dashboard
                 </.link>
               </li>
               <li>
                 <.link
                   navigate="/discover"
-                  class={nav_active?(@current_path, "/discover", false) && "active"}
+                  class={nav_active?(@current_path, "/discover", false) && "menu-active"}
                 >
                   <.icon name="hero-sparkles" class="w-5 h-5" /> Discover
                 </.link>
@@ -175,14 +175,17 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <.link
                   navigate="/movies"
-                  class={nav_active?(@current_path, "/movies", false) && "active"}
+                  class={nav_active?(@current_path, "/movies", false) && "menu-active"}
                 >
                   <.icon name="hero-film" class="w-5 h-5" /> Movies
                   <span id="nav-movie-count" class="badge badge-sm">{@movie_count}</span>
                 </.link>
               </li>
               <li>
-                <.link navigate="/tv" class={nav_active?(@current_path, "/tv", false) && "active"}>
+                <.link
+                  navigate="/tv"
+                  class={nav_active?(@current_path, "/tv", false) && "menu-active"}
+                >
                   <.icon name="hero-tv" class="w-5 h-5" /> TV Shows
                   <span id="nav-tv-count" class="badge badge-sm">{@tv_show_count}</span>
                 </.link>
@@ -191,7 +194,9 @@ defmodule MydiaWeb.Layouts do
                 <.link
                   id={"nav-section-#{section.id}"}
                   navigate={~p"/sections/#{section.id}"}
-                  class={nav_active?(@current_path, "/sections/#{section.id}", false) && "active"}
+                  class={
+                    nav_active?(@current_path, "/sections/#{section.id}", false) && "menu-active"
+                  }
                 >
                   <.icon name={section.sidebar_icon || "hero-squares-2x2"} class="w-5 h-5" />
                   {section.name}
@@ -213,7 +218,7 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <.link
                   navigate="/import"
-                  class={nav_active?(@current_path, "/import", false) && "active"}
+                  class={nav_active?(@current_path, "/import", false) && "menu-active"}
                 >
                   <.icon name="hero-inbox-stack" class="w-5 h-5" /> Import
                   <span
@@ -228,7 +233,7 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <.link
                   navigate="/downloads"
-                  class={nav_active?(@current_path, "/downloads", false) && "active"}
+                  class={nav_active?(@current_path, "/downloads", false) && "menu-active"}
                 >
                   <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Downloads
                   <span class="badge badge-primary badge-sm">{@downloads_count}</span>
@@ -237,7 +242,7 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <.link
                   navigate="/calendar"
-                  class={nav_active?(@current_path, "/calendar", false) && "active"}
+                  class={nav_active?(@current_path, "/calendar", false) && "menu-active"}
                 >
                   <.icon name="hero-calendar" class="w-5 h-5" /> Calendar
                 </.link>
@@ -245,7 +250,7 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <.link
                   navigate="/search"
-                  class={nav_active?(@current_path, "/search", false) && "active"}
+                  class={nav_active?(@current_path, "/search", false) && "menu-active"}
                 >
                   <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Search
                 </.link>
@@ -253,7 +258,7 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <.link
                   navigate="/activity"
-                  class={nav_active?(@current_path, "/activity", false) && "active"}
+                  class={nav_active?(@current_path, "/activity", false) && "menu-active"}
                 >
                   <.icon name="hero-clock" class="w-5 h-5" /> Activity
                 </.link>
@@ -261,7 +266,7 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <.link
                   navigate="/collections"
-                  class={nav_active?(@current_path, "/collections", false) && "active"}
+                  class={nav_active?(@current_path, "/collections", false) && "menu-active"}
                 >
                   <.icon name="hero-folder" class="w-5 h-5" /> Collections
                 </.link>
@@ -269,7 +274,7 @@ defmodule MydiaWeb.Layouts do
               <li>
                 <.link
                   navigate="/integrations"
-                  class={nav_active?(@current_path, "/integrations", false) && "active"}
+                  class={nav_active?(@current_path, "/integrations", false) && "menu-active"}
                 >
                   <.icon name="hero-puzzle-piece" class="w-5 h-5" /> Integrations
                 </.link>
@@ -277,7 +282,7 @@ defmodule MydiaWeb.Layouts do
               <li :if={Mydia.Player.enabled?()}>
                 <.link
                   navigate="/devices"
-                  class={nav_active?(@current_path, "/devices", false) && "active"}
+                  class={nav_active?(@current_path, "/devices", false) && "menu-active"}
                 >
                   <.icon name="hero-device-phone-mobile" class="w-5 h-5" /> Devices
                 </.link>
@@ -301,7 +306,7 @@ defmodule MydiaWeb.Layouts do
                 <li>
                   <.link
                     navigate="/requests"
-                    class={nav_active?(@current_path, "/requests", true) && "active"}
+                    class={nav_active?(@current_path, "/requests", true) && "menu-active"}
                   >
                     <.icon name="hero-queue-list" class="w-5 h-5" /> My Requests
                   </.link>

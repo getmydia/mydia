@@ -27,9 +27,9 @@ defmodule MydiaWeb.AdminApiKeysLiveTest do
     assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin/api-keys")
   end
 
-  test "the page is active in the sidebar", %{conn: conn} do
+  test "the page is the active tab", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
-    assert has_element?(view, ~s|a.active[href="/admin/api-keys"]|)
+    assert has_element?(view, ~s|a#admin-tab-api_keys.tab-active[href="/admin/api-keys"]|)
     assert has_element?(view, "#api-keys-empty")
   end
 

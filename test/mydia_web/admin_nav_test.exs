@@ -118,6 +118,18 @@ defmodule MydiaWeb.AdminNavTest do
       assert AdminNav.page_for_path("/admin/config/trash") == nil
       assert AdminNav.page_for_path(nil) == nil
     end
+
+    test "hub_label/1 names each hub" do
+      assert AdminNav.hub_label(:configuration) == "Configuration"
+      assert AdminNav.hub_label(:administration) == "Administration"
+      assert AdminNav.hub_label(:system) == "System"
+    end
+
+    test "hub_landing_path/1 is the hub's first visible page" do
+      assert AdminNav.hub_landing_path(:configuration) == "/admin/quality"
+      assert AdminNav.hub_landing_path(:administration) == "/admin/requests"
+      assert AdminNav.hub_landing_path(:system) == "/admin/status"
+    end
   end
 
   defp hub_keys(hub), do: hub |> AdminNav.visible_pages() |> Enum.map(& &1.key)
