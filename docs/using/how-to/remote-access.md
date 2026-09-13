@@ -26,7 +26,7 @@ from inside the TestFlight app, not from these links.
 ### Enable Remote Access
 
 Remote access is on by default. Switch it off or back on under **Admin ›
-Configuration › Remote Access**; the p2p node stops or starts right away, with no
+System › Remote Access**; the p2p node stops or starts right away, with no
 restart.
 
 To pin it from the environment instead, set `ENABLE_REMOTE_ACCESS=true` or

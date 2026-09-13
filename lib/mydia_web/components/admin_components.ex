@@ -132,22 +132,21 @@ defmodule MydiaWeb.AdminComponents do
       </div>
     </div>
 
-    <div
+    <nav
       id="admin-page-tabs"
-      role="tablist"
+      aria-label={"#{@hub_label} pages"}
       class="tabs tabs-border flex-nowrap overflow-x-auto mb-6 [scrollbar-width:none]"
     >
       <.link
         :for={tab <- @tabs}
         id={"admin-tab-#{tab.key}"}
         navigate={tab.path}
-        role="tab"
-        aria-selected={to_string(tab.key == @nav_page.key)}
+        aria-current={tab.key == @nav_page.key && "page"}
         class={["tab whitespace-nowrap", tab.key == @nav_page.key && "tab-active"]}
       >
         {tab.label}
       </.link>
-    </div>
+    </nav>
 
     <div class="bg-base-100">
       {render_slot(@inner_block)}

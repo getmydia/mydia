@@ -100,7 +100,7 @@ Configure additional libraries using numbered variables (`<N>` = 1, 2, 3, etc.):
 | `ENABLE_PLAYER` | Everything that serves the Mydia player: p2p remote access and pairing, streaming, offline downloads, intro and credits detection, and the player's pages and buttons | `true` |
 | `ENABLE_CARDIGANN` | Enable native Cardigann indexer support | `true` |
 | `ENABLE_IMPORT_LISTS` | Enable import lists for syncing external lists (TMDB watchlists, popular, etc.) | `true` |
-| `ENABLE_REMOTE_ACCESS` | P2P remote access for the player. Also a toggle under **Admin › Configuration › Remote Access**; when the variable is set it wins and the toggle is locked | `true` |
+| `ENABLE_REMOTE_ACCESS` | P2P remote access for the player. Also a toggle under **Admin › System › Remote Access**; when the variable is set it wins and the toggle is locked | `true` |
 
 `ENABLE_PLAYER=false` is for servers nobody plays from. Mydia then starts no p2p
 node, answers 404 on the player's routes, and hides the Player and Devices

@@ -116,7 +116,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
       for key <- ~w(requests jobs release_blacklist duplicates trash) do
-        assert has_element?(view, "#admin-page-tabs a#admin-tab-#{key}[role=tab]")
+        assert has_element?(view, "nav#admin-page-tabs a#admin-tab-#{key}")
       end
 
       assert has_element?(
@@ -124,9 +124,13 @@ defmodule MydiaWeb.AdminNavLiveTest do
                ~s|#admin-page-tabs a#admin-tab-trash.tab-active[href="/admin/trash"]|
              )
 
+      assert has_element?(view, ~s|#admin-page-tabs a#admin-tab-trash[aria-current="page"]|)
+      refute has_element?(view, "#admin-page-tabs a#admin-tab-duplicates[aria-current]")
+
       refute has_element?(view, "#admin-page-tabs a#admin-tab-duplicates.tab-active")
       refute has_element?(view, "#admin-page-tabs a#admin-tab-quality")
       refute has_element?(view, "#admin-page-tabs a#admin-tab-status")
+      refute has_element?(view, "[role=tab], [role=tablist]")
     end
 
     test "Users puts Create Local User in the header and keeps the OIDC banner in the body", %{
@@ -191,12 +195,12 @@ defmodule MydiaWeb.AdminNavLiveTest do
                ~s|#requests-status-filter button[phx-value-status="pending"][aria-pressed="true"]|
              )
 
-      assert has_element?(view, "[role=tablist]#admin-page-tabs")
+      assert has_element?(view, "nav#admin-page-tabs")
 
       assert view
              |> render()
              |> LazyHTML.from_fragment()
-             |> LazyHTML.query("main [role=tablist]")
+             |> LazyHTML.query("main .tabs")
              |> Enum.count() == 1
     end
 
