@@ -286,12 +286,24 @@ describe("GET /admin/feedback?page= guards against hostile input", () => {
 // that exercise it, including "all".
 describe("GET /admin/feedback?state= filtering", () => {
   it("defaults to the unread queue when no state is given, matching mount/3", async () => {
+    // Vitest isolates storage per test FILE, not per test -- it was per test
+    // before @cloudflare/vitest-pool-workers 0.13.0, which is what let this
+    // test assume FB1 was still unread after the state/github tests above
+    // moved it to "read". Put it back the same way the state=read test below
+    // performs its own transition, rather than depending on an earlier test's
+    // residue.
+    await SELF.fetch(`https://relay.mydia.dev/admin/feedback/${FB1}/state`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "state=unread",
+      redirect: "manual",
+    });
+
     const html = await (await SELF.fetch("https://relay.mydia.dev/admin/feedback")).text();
     // fbxss/fbfields/fbref/the escaped-id row were all inserted as 'unread'
     // in the tests above, so the default (unread) view still contains them,
-    // while FB1 (moved to 'read' earlier in this file) is state-dependent --
-    // check the state-only filters directly instead of relying on FB1 here.
-    expect(html).toContain("Scanner missed a file"); // FB1's message, state notwithstanding
+    // and FB1 is unread again as of the transition above.
+    expect(html).toContain("Scanner missed a file"); // FB1's message
   });
 
   it("state=all returns every state, not zero rows", async () => {
@@ -300,10 +312,10 @@ describe("GET /admin/feedback?state= filtering", () => {
   });
 
   it("state=read returns only read rows", async () => {
-    // vitest-pool-workers' isolated storage rolls each test back to the
-    // state right after beforeAll, so FB1's "read" transition from an
-    // earlier test in this file does not carry over here -- do the
-    // transition again within this test rather than relying on it.
+    // Storage is isolated per test FILE, not per test as it was before
+    // @cloudflare/vitest-pool-workers 0.13.0, so whether FB1 is read by the
+    // time this test runs depends on which tests above ran. Perform the
+    // transition here so the test means the same thing either way.
     await SELF.fetch(`https://relay.mydia.dev/admin/feedback/${FB1}/state`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },

@@ -1,6 +1,7 @@
-import { env, fetchMock } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { describe, it, expect, beforeAll } from "vitest";
 import { parseJwtExpiry, getTvdbToken } from "../../src/proxy/tvdb-auth";
+import { fetchMock } from "../support/fetch-mock";
 
 beforeAll(() => {
   fetchMock.activate();
