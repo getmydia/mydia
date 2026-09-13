@@ -132,46 +132,44 @@ defmodule Mydia.Downloads.ClientRemoval do
   end
 
   def finish_pending_removal(%Download{} = download, configs \\ nil) do
-    cond do
-      download.match_status == "unresolved_files" ->
-        :skipped
+    if download.match_status == "unresolved_files" do
+      :skipped
+    else
+      case client_info(download, configs) do
+        {:error, :missing_client} ->
+          case stamp(download) do
+            :ok -> :removed
+            {:error, _} = err -> err
+          end
 
-      true ->
-        case client_info(download, configs) do
-          {:error, :missing_client} ->
-            case stamp(download) do
-              :ok -> :removed
-              {:error, _} = err -> err
-            end
+        {:ok, info} ->
+          if info.remove_completed || false do
+            if seed_aware_type?(info.type) do
+              case Client.get_status(info.adapter, info.config, info.client_id) do
+                {:ok, %{state: state}} ->
+                  if removable_state?(state) do
+                    remove_and_stamp(download, info)
+                  else
+                    :still_seeding
+                  end
 
-          {:ok, info} ->
-            if info.remove_completed || false do
-              if seed_aware_type?(info.type) do
-                case Client.get_status(info.adapter, info.config, info.client_id) do
-                  {:ok, %{state: state}} ->
-                    if removable_state?(state) do
-                      remove_and_stamp(download, info)
-                    else
-                      :still_seeding
+                {:error, error} ->
+                  if not_found_error?(error) do
+                    case stamp(download) do
+                      :ok -> :removed
+                      {:error, _} = err -> err
                     end
-
-                  {:error, error} ->
-                    if not_found_error?(error) do
-                      case stamp(download) do
-                        :ok -> :removed
-                        {:error, _} = err -> err
-                      end
-                    else
-                      {:error, error}
-                    end
-                end
-              else
-                remove_and_stamp(download, info)
+                  else
+                    {:error, error}
+                  end
               end
             else
-              :skipped
+              remove_and_stamp(download, info)
             end
-        end
+          else
+            :skipped
+          end
+      end
     end
   end
 
