@@ -143,8 +143,7 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
       admin = user_fixture(%{role: "admin"})
       {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/")
 
-      # Give the LiveView async task time to complete
-      Process.sleep(100)
+      render_async(view)
       assigns = :sys.get_state(view.pid).socket.assigns
       assert assigns.duplicates_state in [:none, :review]
       assert is_integer(assigns.duplicates_count)

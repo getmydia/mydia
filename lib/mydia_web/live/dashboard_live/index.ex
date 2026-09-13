@@ -137,9 +137,8 @@ defmodule MydiaWeb.DashboardLive.Index do
       trash_summary = Library.trashed_summary()
       flaresolverr_enabled = Mydia.Indexers.FlareSolverr.enabled?()
 
-      Process.send_after(self(), :refresh_health, 60_000)
-
       socket
+      |> schedule_health_refresh()
       |> assign(:clients_rollup, Rollup.from_status_map(client_status))
       |> assign(:indexers_rollup, Rollup.from_status_map(indexer_status))
       |> assign(:media_servers_rollup, Rollup.from_status_map(media_server_status))
@@ -381,7 +380,11 @@ defmodule MydiaWeb.DashboardLive.Index do
             socket
             |> assign(:home_widgets, new_widgets)
             |> then(fn s ->
-              if key in new_widgets, do: load_widget(s, key), else: s
+              if key in new_widgets do
+                load_widget(s, key)
+              else
+                if key == :system_health, do: cancel_health_refresh(s), else: s
+              end
             end)
 
           {:noreply, socket}
@@ -425,6 +428,9 @@ defmodule MydiaWeb.DashboardLive.Index do
         socket =
           socket
           |> assign(:home_widgets, defaults)
+          |> then(fn s ->
+            if :system_health not in defaults, do: cancel_health_refresh(s), else: s
+          end)
           |> then(fn s ->
             Enum.reduce(defaults, s, fn k, acc -> load_widget(acc, k) end)
           end)
@@ -562,8 +568,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   def handle_info(:refresh_health, socket) do
     user = socket.assigns[:current_user]
 
-    if (:system_health in (socket.assigns[:home_widgets] || []) and
-          user) && user.role == "admin" do
+    if user && user.role == "admin" && :system_health in (socket.assigns[:home_widgets] || []) do
       client_status = ClientHealth.status_map()
       indexer_status = Mydia.Indexers.Health.status_map()
 
@@ -571,17 +576,32 @@ defmodule MydiaWeb.DashboardLive.Index do
         Mydia.MediaServer.Health.status_map(Mydia.Settings.list_media_server_configs())
 
       trash_summary = Library.trashed_summary()
+      flaresolverr_enabled = socket.assigns[:flaresolverr_enabled]
 
-      Process.send_after(self(), :refresh_health, 60_000)
+      socket =
+        socket
+        |> schedule_health_refresh()
+        |> assign(:clients_rollup, Rollup.from_status_map(client_status))
+        |> assign(:indexers_rollup, Rollup.from_status_map(indexer_status))
+        |> assign(:media_servers_rollup, Rollup.from_status_map(media_server_status))
+        |> assign(:trash_summary, trash_summary)
+        |> start_async(:duplicate_count, fn ->
+          plan = Mydia.Library.Prune.plan()
+          length(plan.decisions)
+        end)
+        |> then(fn s ->
+          if flaresolverr_enabled do
+            start_async(s, :flaresolverr_status, fn ->
+              Mydia.Indexers.FlareSolverr.status()
+            end)
+          else
+            s
+          end
+        end)
 
-      {:noreply,
-       socket
-       |> assign(:clients_rollup, Rollup.from_status_map(client_status))
-       |> assign(:indexers_rollup, Rollup.from_status_map(indexer_status))
-       |> assign(:media_servers_rollup, Rollup.from_status_map(media_server_status))
-       |> assign(:trash_summary, trash_summary)}
-    else
       {:noreply, socket}
+    else
+      {:noreply, cancel_health_refresh(socket)}
     end
   end
 
@@ -598,6 +618,20 @@ defmodule MydiaWeb.DashboardLive.Index do
   def trending_rail_limit, do: @trending_rail_limit
 
   ## Private Helpers
+
+  defp schedule_health_refresh(socket) do
+    socket = cancel_health_refresh(socket)
+    ref = Process.send_after(self(), :refresh_health, 60_000)
+    assign(socket, :health_timer_ref, ref)
+  end
+
+  defp cancel_health_refresh(socket) do
+    if timer = socket.assigns[:health_timer_ref] do
+      Process.cancel_timer(timer)
+    end
+
+    assign(socket, :health_timer_ref, nil)
+  end
 
   defp add_with_opts(ref, media_type, opts, socket) do
     opts =
