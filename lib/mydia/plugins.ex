@@ -258,10 +258,44 @@ defmodule Mydia.Plugins do
   reconciliation point a long-lived node otherwise lacks. `ensure_bundled/0` runs
   only once at boot, so without this an instance that started before a bundled
   manifest shipped never discovers the new plugin until it restarts.
+
+  Discovery alone is not enough: `ensure_bundled/0` is seeding-only, and this
+  pass's `enabled: true` row reads as live in the admin UI while `Host`/`Registry`
+  hold nothing for the slug (every event dropped). So this also starts every
+  enabled bundled plugin the pass created or that is not yet running, through the
+  same isolated-failure activation `register_plugins/0` uses.
   """
   @spec maybe_ensure_bundled() :: :ok
   def maybe_ensure_bundled do
-    if Application.get_env(:mydia, :start_health_monitors, true), do: ensure_bundled(), else: :ok
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      ensure_bundled()
+      start_enabled_bundled_plugins()
+    else
+      :ok
+    end
+  end
+
+  # Starts the pools for enabled bundled rows that are not already running — the
+  # activation half of mount-time reconciliation (`maybe_ensure_bundled/0`).
+  # `register_plugins/0` performs this at boot; a node that discovers a bundled
+  # manifest later has no other path to it. Rows the operator disabled are left
+  # stopped, and an already-running slug is skipped so a re-render never restarts
+  # a live pool. Failures are logged and skipped, matching `register_plugins/0`.
+  defp start_enabled_bundled_plugins do
+    Settings.get_db_plugin_configs()
+    |> Enum.filter(&(&1.enabled and &1.source_url == "bundled"))
+    |> Enum.reject(&Host.running?(&1.slug))
+    |> Enum.each(fn config ->
+      case activate(config) do
+        {:ok, _} ->
+          :ok
+
+        {:error, error} ->
+          Logger.warning("could not activate plugin #{config.slug}: #{inspect(error)}")
+      end
+    end)
+
+    :ok
   end
 
   @doc """

@@ -517,6 +517,45 @@ defmodule Mydia.PluginsTest do
       assert MapSet.member?(slugs, "webhook-notifier")
       assert MapSet.member?(slugs, "simkl_sync")
     end
+
+    test "starts a bundled plugin discovered on a running node, so its enabled row is not left unregistered" do
+      Application.put_env(:mydia, :start_health_monitors, true)
+      on_exit(fn -> Application.put_env(:mydia, :start_health_monitors, false) end)
+
+      refute Host.running?("webhook-notifier")
+
+      assert :ok = Plugins.maybe_ensure_bundled()
+
+      assert Host.running?("webhook-notifier")
+    end
+
+    test "is idempotent and never starts a bundled plugin the operator disabled" do
+      Application.put_env(:mydia, :start_health_monitors, true)
+      on_exit(fn -> Application.put_env(:mydia, :start_health_monitors, false) end)
+
+      {:ok, _config} =
+        Settings.create_plugin_config(%{
+          slug: "simkl_sync",
+          name: "Simkl Sync",
+          version: "1.1.0",
+          source_url: "bundled",
+          enabled: false,
+          granted_capabilities: %{"net:http" => ["api.simkl.com"]},
+          settings: %{},
+          manifest: %{
+            "slug" => "simkl_sync",
+            "name" => "Simkl Sync",
+            "version" => "1.1.0",
+            "capabilities" => %{"net:http" => ["api.simkl.com"]}
+          }
+        })
+
+      assert :ok = Plugins.maybe_ensure_bundled()
+      assert :ok = Plugins.maybe_ensure_bundled()
+
+      assert Host.running?("webhook-notifier")
+      refute Host.running?("simkl_sync")
+    end
   end
 
   describe "detect_updates/2 (R14)" do
