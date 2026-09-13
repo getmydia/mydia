@@ -338,6 +338,32 @@ Copy `admin_library_paths_live/` for the smallest complete example, or
 render read-only with an ENV lock badge and disabled Edit and Delete. Singletons
 such as FlareSolverr use one row plus Edit, with no add or delete.
 
+## The sidebar
+
+`MydiaWeb.Layouts.app/1` composes the sidebar from `MydiaWeb.SidebarComponents`.
+A new link is a `<.nav_item>` in the section it belongs to, never hand-written
+`<li><.link>` markup.
+
+| Section | Holds | Visible to |
+|---|---|---|
+| (no heading) | Home, Discover, My Requests | all; My Requests only when `Authorization.can_submit_request?/1` (guests) |
+| Library | Movies, TV Shows, pinned sections, Collections, Calendar | all |
+| Acquisition | Search, Downloads, Import, Import Lists, Activity | `Authorization.can_update_media?/1` (admin, user); Import Lists also needs `is_admin?/1` and the feature flag |
+| Admin | the three `AdminNav` hubs | `Authorization.is_admin?/1` |
+
+Visibility only hides links. Every page still enforces its own authorization.
+
+**Badges mean "needs attention".** `nav_item/1`'s `badge` renders only above
+zero (Downloads, Import, Administration). A library total is `count`, a muted
+number, never a badge.
+
+**The account menu is the footer.** `account_menu/1` is the aside's last child
+and opens upward (`dropdown dropdown-top`). It holds Profile, Integrations,
+Devices, the theme switcher, What's new and Send feedback. The aside is `h-full`
+and the nav `flex-1 min-h-0 overflow-y-auto`: `.drawer-side` is a sticky,
+viewport-height scroll container, so with `min-h-full` the aside grows to its
+content and the footer scrolls away with it.
+
 ## Sidebar sections are pinned collections, and exclusion is page scoped
 
 A section is a `Mydia.Collections.Collection` with `pinned_position` set. It
