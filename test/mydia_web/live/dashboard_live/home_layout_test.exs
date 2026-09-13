@@ -1,0 +1,157 @@
+defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
+  use MydiaWeb.ConnCase, async: false
+
+  import Phoenix.LiveViewTest
+  import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers
+  import MydiaWeb.AuthHelpers
+
+  alias Mydia.Accounts
+
+  setup do
+    warm_trending_cache(:movie, [])
+    warm_trending_cache(:tv_show, [])
+    :ok
+  end
+
+  @tag :template
+  test "disconnected and connected mount assign home_widgets and modal states", %{conn: conn} do
+    user = user_fixture(%{role: "admin"})
+    conn = log_in_user(conn, user)
+
+    {:ok, view, html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#edit-home-btn")
+    assert has_element?(view, "#system-health-widget")
+    refute html =~ "edit-home-modal"
+  end
+
+  @tag :template
+  test "open_edit_home and close_edit_home toggle modal visibility", %{conn: conn} do
+    user = user_fixture(%{role: "user"})
+    conn = log_in_user(conn, user)
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    view |> element("#edit-home-btn") |> render_click()
+    assert has_element?(view, "#edit-home-modal")
+
+    view |> element("#edit-home-modal button", "Done") |> render_click()
+    refute has_element?(view, "#edit-home-modal")
+  end
+
+  describe "layout event handlers" do
+    test "open_edit_home and close_edit_home toggle editing_home assign", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      assert :sys.get_state(view.pid).socket.assigns.editing_home == false
+      render_hook(view, "open_edit_home", %{})
+      assert :sys.get_state(view.pid).socket.assigns.editing_home == true
+      render_hook(view, "close_edit_home", %{})
+      assert :sys.get_state(view.pid).socket.assigns.editing_home == false
+    end
+
+    test "toggle_home_widget toggles widget and persists to user preferences", %{conn: conn} do
+      user = user_fixture(%{role: "admin"})
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      assert :episodes in :sys.get_state(view.pid).socket.assigns.home_widgets
+      render_hook(view, "toggle_home_widget", %{"key" => "episodes"})
+      refute :episodes in :sys.get_state(view.pid).socket.assigns.home_widgets
+      refute :episodes in Accounts.home_widgets(user)
+
+      render_hook(view, "toggle_home_widget", %{"key" => "episodes"})
+      assert :episodes in :sys.get_state(view.pid).socket.assigns.home_widgets
+      assert :episodes in Accounts.home_widgets(user)
+    end
+
+    test "move_home_widget reorders widgets and persists to user preferences", %{conn: conn} do
+      user = user_fixture(%{role: "admin"})
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      initial_widgets = Accounts.home_widgets(user)
+      first = Enum.at(initial_widgets, 0)
+      second = Enum.at(initial_widgets, 1)
+
+      render_hook(view, "move_home_widget", %{"key" => to_string(first), "direction" => "down"})
+      updated_widgets = Accounts.home_widgets(user)
+      assert Enum.at(updated_widgets, 0) == second
+      assert Enum.at(updated_widgets, 1) == first
+    end
+
+    test "reset_home_widgets resets preferences to defaults", %{conn: conn} do
+      user = user_fixture(%{role: "admin"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      assert :sys.get_state(view.pid).socket.assigns.home_widgets == [:library_stats]
+      render_hook(view, "reset_home_widgets", %{})
+      assert length(:sys.get_state(view.pid).socket.assigns.home_widgets) > 1
+      assert length(Accounts.home_widgets(user)) > 1
+    end
+  end
+
+  describe "data loading and role gating" do
+    test "system health is only loaded for admin users", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, user_view, _html} = live(log_in_user(conn, user), ~p"/")
+      user_assigns = :sys.get_state(user_view.pid).socket.assigns
+      assert user_assigns.clients_rollup.state == :none
+
+      admin = user_fixture(%{role: "admin"})
+      {:ok, admin_view, _html} = live(log_in_user(conn, admin), ~p"/")
+      admin_assigns = :sys.get_state(admin_view.pid).socket.assigns
+      assert admin_assigns.clients_rollup != nil
+      assert admin_assigns.trash_summary != nil
+    end
+
+    test "trending prerequisites are not loaded when trending widgets are hidden", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats, :quick_actions])
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert assigns.trending_prerequisites_loaded == false
+      assert assigns.library_status_map == %{}
+      assert assigns.request_status_map == %{}
+      assert assigns.quality_profiles == []
+    end
+  end
+
+  describe "async task handlers and health refresh" do
+    test "handle_async :duplicate_count updates duplicates state and count", %{conn: conn} do
+      admin = user_fixture(%{role: "admin"})
+      {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/")
+
+      # Give the LiveView async task time to complete
+      Process.sleep(100)
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert assigns.duplicates_state in [:none, :review]
+      assert is_integer(assigns.duplicates_count)
+    end
+
+    test "handle_info :refresh_health refreshes health assigns for admin", %{conn: conn} do
+      admin = user_fixture(%{role: "admin"})
+      {:ok, view, _html} = live(log_in_user(conn, admin), ~p"/")
+
+      send(view.pid, :refresh_health)
+      _ = render(view)
+
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert assigns.clients_rollup != nil
+      assert assigns.trash_summary != nil
+    end
+
+    test "handle_info :refresh_health is ignored when user is not admin", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      send(view.pid, :refresh_health)
+      _ = render(view)
+
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert assigns.clients_rollup.state == :none
+    end
+  end
+end
