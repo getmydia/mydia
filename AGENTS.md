@@ -96,12 +96,14 @@ APKs stay arm-only.
 - **Requirements:** Linux KVM (`/dev/kvm` must be readable *and* writable, so
   your user needs to be in the `kvm` group) and a graphical Wayland or X11
   session — the emulator runs headful, and the runner refuses to start without
-  one. It renders through the host GPU: the AVD profile's software renderer
-  segfaults in the emulator's GL thread once the app paints.
+  one. The runner passes `-gpu host` because the `tv_1080p` profile's software
+  GLES path has been observed to crash once the app paints; host GPU passthrough
+  has been more stable on the machines tested so far, but try other `-gpu` modes
+  manually if rendering fails on yours.
 - **AVD state** lives in the normal Android cache
-  (`${ANDROID_AVD_HOME:-$HOME/.android/avd}`) under the versioned name
-  `mydia-tv-api-36`, never in the repository or the Nix store. It is created on
-  first use and reused afterwards; delete that directory to start clean.
+  (`${ANDROID_AVD_HOME:-$HOME/.android/avd}`) as `mydia-tv-api-36.avd/` and
+  `mydia-tv-api-36.ini`, never in the repository or the Nix store. It is created
+  on first use and reused afterwards; delete both to start clean.
 - **Ownership:** the run stops only an emulator *it* started. A
   `mydia-tv-api-36` emulator that is already running is reused and deliberately
   left running on exit.

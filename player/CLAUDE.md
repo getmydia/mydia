@@ -58,10 +58,11 @@ server, so they are not part of `./dev up`:
 
 `tv-run` needs Linux KVM and a graphical session: the emulator runs headful.
 Its first invocation fetches the ~990 MB API 36 TV system image plus the
-emulator into the Nix store, AVD state stays in the normal Android cache as
-`mydia-tv-api-36`, and it stops only an emulator that invocation started — one
-already running under that name is reused and left up. `AGENTS.md` has the
-full contract.
+emulator into the Nix store. AVD state stays in the normal Android cache as
+`mydia-tv-api-36.avd/` and `mydia-tv-api-36.ini`; delete both to reset. It
+stops only an emulator that invocation started — one already running under that
+name is reused and left up. `AGENTS.md` has the full contract (including
+`-gpu host` and why).
 
 Verify the TV tier from a second shell while a run is attached:
 
