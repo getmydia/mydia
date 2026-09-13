@@ -43,6 +43,32 @@ Deeper reference lives alongside this file in `player/docs/`:
 ./dev flutter test        # Run tests
 ```
 
+### Android and Android TV
+
+Android builds go through the root flake's dev shells instead of the web dev
+server, so they are not part of `./dev up`:
+
+```bash
+./dev player android build      # Release APK (arm only)
+./dev player android run        # Debug build on a connected device
+./dev player android tv-run     # Provision/start the pinned API 36 Android TV
+                                # emulator and run the debug app
+./dev player android shell      # .#android shell for manual commands
+```
+
+`tv-run` needs Linux KVM and a graphical session: the emulator runs headful.
+Its first invocation fetches the ~990 MB API 36 TV system image plus the
+emulator into the Nix store, AVD state stays in the normal Android cache as
+`mydia-tv-api-36`, and it stops only an emulator that invocation started — one
+already running under that name is reused and left up. `AGENTS.md` has the
+full contract.
+
+Verify the TV tier from a second shell while a run is attached:
+
+```bash
+nix develop .#android-tv --command adb devices
+```
+
 ### Development
 
 Access the player at: **http://localhost:4000/player**

@@ -36,6 +36,18 @@ EMULATOR="$TV_SDK_ROOT/emulator/emulator"
 AVDMANAGER="$TV_SDK_ROOT/cmdline-tools/13.0/bin/avdmanager"
 ADB="${ANDROID_SDK_ROOT:?The Android build shell did not set ANDROID_SDK_ROOT}/platform-tools/adb"
 
+# The emulator and avdmanager resolve an AVD's system image through
+# ANDROID_SDK_ROOT/ANDROID_HOME, not by looking beside their own binary. Both
+# variables point at the *build* SDK in this shell, which has no system-images
+# tree at all, so the AVD would resolve to a missing directory and the emulator
+# would die with "Broken AVD system path". The TV tools get the TV root for
+# their own invocations only; adb and the Flutter/Gradle build keep theirs.
+tv_sdk_env=(
+    env
+    "ANDROID_SDK_ROOT=$TV_SDK_ROOT"
+    "ANDROID_HOME=$TV_SDK_ROOT"
+)
+
 for command_path in "$EMULATOR" "$AVDMANAGER" "$ADB"; do
     if [[ ! -x "$command_path" ]]; then
         echo "Error: required Android TV tool is unavailable: $command_path" >&2
@@ -55,7 +67,9 @@ find_avd_serial() {
     local serial name
     while read -r serial state; do
         [[ "$serial" == emulator-* && "$state" == device ]] || continue
-        name="$($ADB -s "$serial" emu avd name 2>/dev/null | head -n 1 || true)"
+        # The emulator console answers with CRLF, so the name arrives as
+        # "mydia-tv-api-36\r" and would never compare equal to $AVD_NAME.
+        name="$("$ADB" -s "$serial" emu avd name 2>/dev/null | tr -d '\r' | head -n 1 || true)"
         if [[ "$name" == "$AVD_NAME" ]]; then
             printf '%s\n' "$serial"
             return 0
@@ -67,9 +81,15 @@ find_avd_serial() {
 # Idempotent: create the AVD only when the exact name is absent. The prompt is
 # the "custom hardware profile?" question, answered no so the --device profile
 # is used as-is. avdmanager writes to the normal ${ANDROID_AVD_HOME:-$HOME/.android/avd}.
-if ! "$AVDMANAGER" list avd | grep -q "^[[:space:]]*Name: $AVD_NAME$"; then
+#
+# The listing is read into a variable rather than piped into `grep -q`: grep
+# exits on the first match, and under `pipefail` that early exit can fail the
+# pipeline while the AVD *is* present (seen during acceptance as an unnecessary
+# re-create of an AVD that already existed).
+avd_listing="$("$AVDMANAGER" list avd 2>/dev/null || true)"
+if ! grep -q "^[[:space:]]*Name: $AVD_NAME$" <<<"$avd_listing"; then
     echo "Creating Android TV AVD $AVD_NAME..."
-    printf 'no\n' | "$AVDMANAGER" create avd \
+    printf 'no\n' | "${tv_sdk_env[@]}" "$AVDMANAGER" create avd \
         --force \
         --name "$AVD_NAME" \
         --package "$SYSTEM_IMAGE" \
@@ -108,7 +128,13 @@ if [[ -z "$emulator_serial" ]]; then
         exit 1
     fi
 
-    "$EMULATOR" -avd "$AVD_NAME" -no-boot-anim -no-snapshot \
+    # The tv_1080p profile sets hw.gpu.enabled=no, so -gpu auto picks the
+    # software GLES translator, and that SwiftShader path segfaulted in
+    # gfxstream's RenderThread as soon as the app painted (coredump:
+    # libGLESv2.so <- gles2_decoder_context_t::decode). The host GPU path ran
+    # the same workload with D-pad input for minutes without a crash, so pin it.
+    "${tv_sdk_env[@]}" "$EMULATOR" -avd "$AVD_NAME" -no-boot-anim -no-snapshot \
+        -gpu host \
         >"$emulator_log" 2>&1 &
     emulator_pid=$!
     started_emulator=true
@@ -146,9 +172,13 @@ fi
 
 # The same contract the app relies on at runtime. A phone-shaped or non-TV
 # image would boot and accept the APK, then fail confusingly inside Leanback.
-if ! "$ADB" -s "$emulator_serial" shell pm list features \
-    | tr -d '\r' \
-    | grep -qx 'feature:android.software.leanback'; then
+#
+# Read the feature list into a variable for the same reason as the AVD listing
+# above: `grep -q` exits on the first match, and under `pipefail` that early
+# exit can fail the pipeline -- reporting a perfectly good TV image as not
+# Leanback.
+tv_features="$("$ADB" -s "$emulator_serial" shell pm list features | tr -d '\r')"
+if ! grep -qx 'feature:android.software.leanback' <<<"$tv_features"; then
     echo "Error: $emulator_serial is not an Android TV Leanback image" >&2
     exit 1
 fi
