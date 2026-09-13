@@ -115,6 +115,21 @@ defmodule MydiaWeb.Features.DockNavTest do
         description: "the drawer sidebar finishing its slide-in"
       )
 
+      # iOS Safari resolves 100vh to the viewport with its toolbar collapsed,
+      # taller than the 100dvh daisyUI gives .drawer-side while the toolbar
+      # shows. A viewport-unit min-height (Tailwind's min-h-screen) beats that
+      # height and pushes the pinned account chip under the toolbar. Chromium
+      # resolves vh and dvh identically, so geometry alone cannot catch this:
+      # assert the drawer carries no min-height at all.
+      min_height = """
+      var side = document.querySelector('.drawer-side');
+      if (!side) { return '__missing__'; }
+      return window.getComputedStyle(side).minHeight;
+      """
+
+      assert eval_js(session, min_height) in ["0px", "auto"],
+             "expected .drawer-side to have no min-height, got #{inspect(eval_js(session, min_height))}"
+
       # The account chip is pinned to the bottom of the sidebar, the edge the
       # dock floats over. Only the nav above it scrolls, so scroll that to the
       # bottom to probe the worst case. The dock hides while the drawer is

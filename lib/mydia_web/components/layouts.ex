@@ -135,7 +135,7 @@ defmodule MydiaWeb.Layouts do
       </div>
 
       <!-- Sidebar -->
-      <div class="drawer-side z-40 min-h-screen">
+      <div class="drawer-side z-40">
         <label for="main-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
 
         <aside class="flex flex-col w-64 h-full bg-base-300">
