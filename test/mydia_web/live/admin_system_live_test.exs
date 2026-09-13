@@ -63,8 +63,8 @@ defmodule MydiaWeb.AdminSystemLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, _view, html} = live(conn, ~p"/admin/status")
-      assert html =~ "Configuration"
+      {:ok, view, _html} = live(conn, ~p"/admin/status")
+      assert has_element?(view, "h1#admin-page-title", "Status")
     end
   end
 
@@ -82,8 +82,9 @@ defmodule MydiaWeb.AdminSystemLiveTest do
       %{conn: conn, view: view}
     end
 
-    test "renders system status tab by default", %{view: view} do
-      assert has_element?(view, ~s{a[class*="tab-active"]}, "Status")
+    test "renders the Status header under the System hub", %{view: view} do
+      assert has_element?(view, "#admin-page-hub", "System")
+      assert has_element?(view, "h1#admin-page-title", "Status")
     end
 
     test "displays system information", %{view: view} do
@@ -146,41 +147,6 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
   end
 
-  describe "Tab Navigation" do
-    setup %{conn: conn, token: token} do
-      start_supervised!(Mydia.Indexers.Health)
-
-      conn =
-        conn
-        |> init_test_session(%{})
-        |> put_session(:guardian_default_token, token)
-        |> put_req_header("authorization", "Bearer #{token}")
-
-      {:ok, view, _html} = live(conn, ~p"/admin/status")
-      %{conn: conn, view: view}
-    end
-
-    test "renders tab navigation links", %{view: view} do
-      assert has_element?(view, ~s{a[role="tab"]}, "Status")
-      assert has_element?(view, ~s{a[role="tab"]}, "Settings")
-      assert has_element?(view, ~s{a[role="tab"]}, "Quality")
-      assert has_element?(view, ~s{a[role="tab"]}, "Clients")
-      assert has_element?(view, ~s{a[role="tab"]}, "Indexers")
-      assert has_element?(view, ~s{a[role="tab"]}, "Library")
-      assert has_element?(view, ~s{a[role="tab"]}, "Media Servers")
-    end
-
-    test "tab links point to correct routes", %{view: view} do
-      html = render(view)
-      assert html =~ ~s{href="/admin/settings"}
-      assert html =~ ~s{href="/admin/quality"}
-      assert html =~ ~s{href="/admin/clients"}
-      assert html =~ ~s{href="/admin/indexers"}
-      assert html =~ ~s{href="/admin/library-paths"}
-      assert html =~ ~s{href="/admin/media-servers"}
-    end
-  end
-
   describe "activity has moved to the dashboard" do
     setup do
       start_supervised!(Mydia.Indexers.Health)
@@ -203,8 +169,8 @@ defmodule MydiaWeb.AdminSystemLiveTest do
       # section itself is gone (always rendered today via the Activity divider).
       refute has_element?(view, "div.divider", "Activity")
 
-      # The tab itself must still render; only the activity section is gone.
-      assert has_element?(view, "a[href='/admin/dashboard']")
+      # The page itself must still render; only the activity section is gone.
+      assert has_element?(view, "h1#admin-page-title", "Status")
     end
   end
 

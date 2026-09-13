@@ -1,6 +1,8 @@
 defmodule MydiaWeb.AdminComponents do
   @moduledoc """
-  Shared components for admin configuration pages.
+  Admin chrome: the sidebar's Admin section (`admin_nav/1`), the header every
+  admin page renders (`admin_page/1`), and the config source badge. The two
+  navigation components read `MydiaWeb.AdminNav`.
   """
   use Phoenix.Component
 
@@ -102,133 +104,43 @@ defmodule MydiaWeb.AdminComponents do
   defp source_label(:yaml), do: "YAML"
   defp source_label(_source), do: "Default"
 
-  attr :active_tab, :atom, required: true
+  attr :page, :atom,
+    required: true,
+    values: AdminNav.keys(),
+    doc: "the `MydiaWeb.AdminNav` key of the page, passed as a literal"
 
-  defp tab_nav(assigns) do
-    assigns = assign(assigns, :player_enabled, Mydia.Player.enabled?())
-
-    ~H"""
-    <div role="tablist" class="tabs tabs-border mb-6">
-      <%= if @player_enabled do %>
-        <.tab_link
-          active={@active_tab == :dashboard}
-          to="/admin/dashboard"
-          icon="hero-chart-bar"
-        >
-          Dashboard
-        </.tab_link>
-      <% end %>
-      <.tab_link active={@active_tab == :status} to="/admin/status" icon="hero-server">
-        Status
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :settings}
-        to="/admin/settings"
-        icon="hero-cog-6-tooth"
-      >
-        Settings
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :quality}
-        to="/admin/quality"
-        icon="hero-sparkles"
-      >
-        Quality
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :custom_formats}
-        to="/admin/custom-formats"
-        icon="hero-language"
-      >
-        Custom Formats
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :clients}
-        to="/admin/clients"
-        icon="hero-arrow-down-tray"
-      >
-        Clients
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :indexers}
-        to="/admin/indexers"
-        icon="hero-magnifying-glass"
-      >
-        Indexers
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :library_paths}
-        to="/admin/library-paths"
-        icon="hero-folder"
-      >
-        Library
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :duplicates}
-        to="/admin/duplicates"
-        icon="hero-document-duplicate"
-      >
-        Duplicates
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :trash}
-        to="/admin/trash"
-        icon="hero-trash"
-      >
-        Trash
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :media_servers}
-        to="/admin/media-servers"
-        icon="hero-server-stack"
-      >
-        Media Servers
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :plugins}
-        to="/admin/plugins"
-        icon="hero-puzzle-piece"
-      >
-        Plugins
-      </.tab_link>
-      <.tab_link
-        active={@active_tab == :path_mappings}
-        to="/admin/path-mappings"
-        icon="hero-arrows-right-left"
-      >
-        Path Mappings
-      </.tab_link>
-      <%= if @player_enabled do %>
-        <.tab_link
-          active={@active_tab == :remote_access}
-          to="/admin/remote-access"
-          icon="hero-signal"
-        >
-          Remote Access
-        </.tab_link>
-      <% end %>
-      <.tab_link active={@active_tab == :api_keys} to="/admin/api-keys" icon="hero-key">
-        API Keys
-      </.tab_link>
-    </div>
-    """
-  end
-
-  attr :active_tab, :atom, required: true
+  slot :actions, doc: "header buttons, right-aligned from the md breakpoint up"
   slot :inner_block, required: true
 
+  @doc """
+  The header every admin page renders: its hub, its `<h1>` and its one-line
+  description, all from `MydiaWeb.AdminNav`, plus optional header actions.
+
+  Pass `page` as a literal (`<.admin_page page={:trash}>`) so a mistyped key
+  fails the build.
+  """
   def admin_page(assigns) do
+    nav_page = AdminNav.fetch!(assigns.page)
+    assigns = assign(assigns, nav_page: nav_page, hub_label: hub_label(nav_page.hub))
+
     ~H"""
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+    <div
+      id="admin-page-header"
+      class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
+    >
       <div>
-        <h1 class="text-3xl font-bold">Configuration</h1>
-        <p class="text-base-content/70 mt-1">
-          System status, application settings, and configuration management
+        <p id="admin-page-hub" class="text-xs uppercase tracking-wide text-base-content/60">
+          {@hub_label}
+        </p>
+        <h1 id="admin-page-title" class="text-3xl font-bold">{@nav_page.label}</h1>
+        <p id="admin-page-description" class="text-base-content/70 mt-1">
+          {@nav_page.description}
         </p>
       </div>
+      <div :if={@actions != []} id="admin-page-actions" class="flex items-center gap-2">
+        {render_slot(@actions)}
+      </div>
     </div>
-
-    <.tab_nav active_tab={@active_tab} />
 
     <div class="bg-base-100">
       {render_slot(@inner_block)}
@@ -236,16 +148,9 @@ defmodule MydiaWeb.AdminComponents do
     """
   end
 
-  attr :active, :boolean, required: true
-  attr :to, :string, required: true
-  attr :icon, :string, required: true
-  slot :inner_block, required: true
-
-  defp tab_link(assigns) do
-    ~H"""
-    <.link navigate={@to} role="tab" class={["tab gap-2", @active && "tab-active"]}>
-      <.icon name={@icon} class="w-4 h-4" />{render_slot(@inner_block)}
-    </.link>
-    """
+  defp hub_label(hub_key) do
+    AdminNav.hubs()
+    |> Enum.find(&(&1.key == hub_key))
+    |> Map.fetch!(:label)
   end
 end

@@ -270,23 +270,32 @@ The guideline still holds where `<.button>`'s variants and defaults do real work
 Check the component's `attr` declarations before converting, and reply with
 specifics rather than complying reflexively or dismissing it.
 
-## The /admin/config scaffolding standard
+## The admin page scaffolding standard
 
-Every page under `/admin/config` (`lib/mydia_web/live/admin_*_live/`) is built
-from the same scaffolding, not just the external-service ones. Verified
-2026-08-10 against download clients, indexers, media servers, library paths and
-quality profiles, which are byte-for-byte consistent on the class strings below.
-Convention drift here reads as a defect on its own, independent of whether the
-page works.
+Every admin page (`lib/mydia_web/live/admin_*_live/`) is built from the same
+scaffolding, not just the external-service ones. Verified 2026-08-10 against
+download clients, indexers, media servers, library paths and quality profiles,
+which are byte-for-byte consistent on the class strings below. Convention drift
+here reads as a defect on its own, independent of whether the page works.
+
+**Registered in `MydiaWeb.AdminNav`.** A new admin page needs an entry in
+`lib/mydia_web/admin_nav.ex` with its hub (Configuration for acquisition levers,
+Administration for work to act on, System for the server itself), label,
+one-line description, icon and `~p` path under `/admin/<slug>`. That entry is
+the page's sidebar link and its header. `test/mydia_web/admin_nav_test.exs`
+fails for a live route under `/admin` that has no entry.
 
 **Thin template shell.** `index.html.heex` contains only
-`<Layouts.app {assigns}><.admin_page active_tab={@active_tab}>`, one call to the
-sibling `<MydiaWeb.Admin<X>Live.Components.<x>_tab ...>`, then each modal behind
+`<Layouts.app {assigns}><.admin_page page={:<key>}>`, one call to the sibling
+`<MydiaWeb.Admin<X>Live.Components.<x>_tab ...>`, then each modal behind
 `<%= if assigns[:show_<x>_modal] do %>`. All markup lives in a sibling
-`components.ex`.
+`components.ex`. Pass the key as a literal: `admin_page/1` declares
+`values: AdminNav.keys()`, so a typo fails the build.
 
-**No page `<h1>`.** `<.admin_page>` (`components/admin_components.ex:107`)
-already renders the Configuration h1 and the tab bar. Tab content opens with
+**No page `<h1>`.** `<.admin_page>` renders the hub label, the page `<h1>` and
+the description from `AdminNav`, with header buttons in its `:actions` slot.
+There is no tab bar; the sidebar's Admin section is how operators move between
+pages, and longer explanatory copy stays in the page body. Content opens with
 `<div class="p-4 sm:p-6 space-y-4">` and a section header:
 `<h2 class="text-lg font-semibold flex items-center gap-2">` with a leading
 `<.icon>`, the title, and `<span class="badge badge-ghost">{length(@items)}</span>`,

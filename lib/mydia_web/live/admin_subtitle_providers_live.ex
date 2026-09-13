@@ -12,7 +12,6 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Subtitle Providers")
-     |> assign(:active_tab, :subtitle_providers)
      |> load_data()}
   end
 

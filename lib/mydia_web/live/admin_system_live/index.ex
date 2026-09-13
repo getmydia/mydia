@@ -20,7 +20,6 @@ defmodule MydiaWeb.AdminSystemLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Status")
-     |> assign(:active_tab, :status)
      |> load_data()
      |> load_system_data()}
   end

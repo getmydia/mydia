@@ -1,22 +1,13 @@
 <Layouts.app {assigns}>
-  <div>
-    <%!-- Page Header --%>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Import Lists</h1>
-        <p class="text-base-content/70 mt-1">
-          Automatically sync media from TMDB lists (trending, popular, upcoming, etc.)
-        </p>
-      </div>
-      <div class="flex gap-2">
-        <button phx-click="sync_all" class="btn btn-ghost btn-sm gap-2">
-          <.icon name="hero-arrow-path" class="w-4 h-4" /> Sync All
-        </button>
-        <button phx-click="new_list" class="btn btn-primary btn-sm gap-2">
-          <.icon name="hero-plus" class="w-4 h-4" /> New TMDB List
-        </button>
-      </div>
-    </div>
+  <.admin_page page={:import_lists}>
+    <:actions>
+      <button phx-click="sync_all" class="btn btn-ghost btn-sm gap-2">
+        <.icon name="hero-arrow-path" class="w-4 h-4" /> Sync All
+      </button>
+      <button phx-click="new_list" class="btn btn-primary btn-sm gap-2">
+        <.icon name="hero-plus" class="w-4 h-4" /> New TMDB List
+      </button>
+    </:actions>
 
     <%!-- Quick Add Presets Section (Compact) --%>
     <div class="mb-6 p-4 bg-base-200/50 rounded-xl">
@@ -199,7 +190,7 @@
         </div>
       <% end %>
     </div>
-  </div>
+  </.admin_page>
 
   <%!-- List Edit/Create Modal --%>
   <%= if @show_list_modal do %>

@@ -23,7 +23,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Media Servers")
-     |> assign(:active_tab, :media_servers)
      |> clear_account_mapping()
      |> load_data()}
   end

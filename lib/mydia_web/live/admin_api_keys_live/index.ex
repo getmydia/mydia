@@ -23,7 +23,6 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - API Keys")
-     |> assign(:active_tab, :api_keys)
      |> assign(:env_key_set, is_binary(Application.get_env(:mydia, :library_api_key)))
      |> assign(:show_api_key_modal, false)
      |> assign(:created_key, nil)

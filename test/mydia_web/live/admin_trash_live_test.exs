@@ -102,7 +102,7 @@ defmodule MydiaWeb.AdminTrashLiveTest do
   end
 
   @tag :tmp_dir
-  test "uses the shared Configuration tab content hierarchy", %{conn: conn} = ctx do
+  test "uses the shared admin page content hierarchy", %{conn: conn} = ctx do
     _a = trashed(ctx, "a.mkv", :missing, 10)
 
     {:ok, view, _html} = live(conn, ~p"/admin/trash")

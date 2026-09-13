@@ -1,14 +1,9 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Release Blacklist</h1>
-        <p class="text-base-content/70 mt-1">
-          Releases that failed to download are temporarily blocked so the next search avoids them.
-          Default TTL is 30 days. Use "Block Forever" to make a block permanent, or "Remove" to lift it immediately.
-        </p>
-      </div>
-    </div>
+  <.admin_page page={:release_blacklist}>
+    <p id="blacklist-ttl-note" class="text-sm text-base-content/70 mb-4">
+      Releases that failed to download are temporarily blocked so the next search avoids them.
+      Default TTL is 30 days. Use "Block Forever" to make a block permanent, or "Remove" to lift it immediately.
+    </p>
 
     <div class="flex flex-col md:flex-row md:items-end gap-4 mb-4">
       <form
@@ -147,5 +142,5 @@
         </button>
       </div>
     <% end %>
-  </div>
+  </.admin_page>
 </Layouts.app>

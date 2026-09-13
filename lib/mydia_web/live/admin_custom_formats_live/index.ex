@@ -19,7 +19,6 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Custom Formats")
-     |> assign(:active_tab, :custom_formats)
      |> assign(:show_custom_format_modal, false)
      |> assign(:test_results, [])
      |> load_formats()}

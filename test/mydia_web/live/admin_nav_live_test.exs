@@ -82,6 +82,74 @@ defmodule MydiaWeb.AdminNavLiveTest do
     end
   end
 
+  describe "page header" do
+    test "names the hub, the page and its description", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/trash")
+
+      assert has_element?(view, "#admin-page-hub", "Administration")
+      assert has_element?(view, "h1#admin-page-title", "Trash")
+      assert has_element?(view, "#admin-page-description", "Deleted files waiting to be purged")
+      refute has_element?(view, "#admin-page-actions")
+    end
+
+    test "has no admin tab bar", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/trash")
+
+      refute has_element?(view, ~s|a[role="tab"][href="/admin/duplicates"]|)
+      refute has_element?(view, "a.tab-active")
+    end
+
+    test "Users puts Create Local User in the header and keeps the OIDC banner in the body", %{
+      conn: conn
+    } do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+
+      assert has_element?(view, "#admin-page-hub", "System")
+      assert has_element?(view, "h1#admin-page-title", "Users")
+      assert has_element?(view, "#admin-page-actions button[phx-click=open_create_modal]")
+      assert has_element?(view, ".alert", "OIDC Auto-Registration")
+    end
+
+    test "Requests uses the registry label", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+
+      assert has_element?(view, "h1#admin-page-title", "Requests")
+      refute has_element?(view, "h1", "Manage Media Requests")
+    end
+
+    test "Import Lists puts its sync and create buttons in the header", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/import-lists")
+
+      assert has_element?(view, "#admin-page-hub", "Configuration")
+      assert has_element?(view, "#admin-page-actions button[phx-click=sync_all]")
+      assert has_element?(view, "#admin-page-actions button[phx-click=new_list]")
+    end
+
+    test "Release Blacklist keeps its TTL note in the body", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/release-blacklist")
+
+      assert has_element?(
+               view,
+               "#admin-page-description",
+               "Releases blocked from future searches"
+             )
+
+      assert has_element?(view, "#blacklist-ttl-note", "Default TTL is 30 days")
+    end
+
+    test "Background Jobs puts Refresh in the header", %{conn: conn} do
+      # JobsLive reads Oban.config/0, and Oban is not started in test.
+      engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+      start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/jobs")
+
+      assert has_element?(view, "#admin-page-hub", "Administration")
+      assert has_element?(view, "h1#admin-page-title", "Background Jobs")
+      assert has_element?(view, "#admin-page-actions button[phx-click=refresh]")
+    end
+  end
+
   test "a non-admin sees no Admin section" do
     conn = log_in_user(build_conn(), user_fixture())
 

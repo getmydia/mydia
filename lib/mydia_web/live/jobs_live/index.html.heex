@@ -1,17 +1,10 @@
 <Layouts.app {assigns}>
-  <div>
-    <%!-- Header --%>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Background Jobs</h1>
-        <p class="text-base-content/70 mt-1">Scheduled jobs and execution history</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <button class="btn btn-sm btn-ghost" phx-click="refresh">
-          <.icon name="hero-arrow-path" class="w-4 h-4" /> Refresh
-        </button>
-      </div>
-    </div>
+  <.admin_page page={:jobs}>
+    <:actions>
+      <button class="btn btn-sm btn-ghost" phx-click="refresh">
+        <.icon name="hero-arrow-path" class="w-4 h-4" /> Refresh
+      </button>
+    </:actions>
 
     <%!-- Scheduled Cron Jobs --%>
     <div class="mb-12">
@@ -238,7 +231,7 @@
         <% end %>
       </div>
     </div>
-  </div>
+  </.admin_page>
 
   <%!-- Job Details Modal --%>
   <%= if @selected_job do %>

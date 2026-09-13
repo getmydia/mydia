@@ -11,7 +11,6 @@ defmodule MydiaWeb.AdminPathMappingsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Path Mappings")
-     |> assign(:active_tab, :path_mappings)
      |> load_data()}
   end
 

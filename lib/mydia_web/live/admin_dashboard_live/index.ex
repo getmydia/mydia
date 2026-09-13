@@ -29,7 +29,6 @@ defmodule MydiaWeb.AdminDashboardLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Dashboard")
-     |> assign(:active_tab, :dashboard)
      |> assign(:range_days, @default_range)
      |> load_now_playing()
      |> load_history()}

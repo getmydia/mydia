@@ -14,7 +14,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Download Clients")
-     |> assign(:active_tab, :clients)
      |> assign(:pending_delete_client, nil)
      |> assign(:pending_delete_count, 0)
      |> load_data()}

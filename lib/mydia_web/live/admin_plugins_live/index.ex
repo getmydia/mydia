@@ -34,7 +34,6 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Plugins")
-     |> assign(:active_tab, :plugins)
      |> assign(:catalog, [])
      |> assign(:browsing?, false)
      |> assign(:browse_error, nil)

@@ -141,14 +141,15 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       refute group_html =~ "type=\"checkbox\""
     end
 
-    test "renders the admin tab strip with duplicates as the active tab", %{conn: conn} do
+    test "renders the admin page header with Duplicates active in the sidebar", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
-      assert has_element?(view, "div[role=tablist]")
-      assert has_element?(view, "a.tab-active", "Duplicates")
-      # Every other admin page's tab must still be reachable from here, or an
+      assert has_element?(view, "#admin-page-hub", "Administration")
+      assert has_element?(view, "h1#admin-page-title", "Duplicates")
+      assert has_element?(view, ~s|a.active[href="/admin/duplicates"]|)
+      # Every other admin page must still be reachable from here, or an
       # operator who lands on this page has no way back to the rest of admin.
-      assert has_element?(view, "a[href='/admin/library-paths']", "Library")
+      assert has_element?(view, ~s|a[href="/admin/library-paths"]|, "Library")
     end
 
     test "heads its sections with h2 and leaves the page h1 to the admin shell", %{conn: conn} do
@@ -157,13 +158,16 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
-      # <.admin_page> already renders the "Configuration" <h1> and the tab
-      # strip. Every other /admin/config tab opens its body with an <h2>
-      # section header carrying a count badge, and adds no <h1> of its own.
+      # <.admin_page> renders the page's only <h1>. Every admin page opens its
+      # body with an <h2> section header carrying a count badge.
       assert has_element?(view, "h2", "Duplicates")
       assert has_element?(view, "h2", "Needs Attention")
       assert has_element?(view, "h2 span.badge-ghost")
-      refute has_element?(view, "h1", "Duplicate")
+
+      main_h1_count =
+        view |> render() |> LazyHTML.from_fragment() |> LazyHTML.query("main h1") |> Enum.count()
+
+      assert main_h1_count == 1
     end
 
     test "renders a refused group without any Keep or Trash control", %{conn: conn} do

@@ -59,7 +59,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
       # If the route is reachable, verify it renders; otherwise accept the redirect.
       case live(conn, ~p"/admin/remote-access") do
         {:ok, _view, html} ->
-          assert html =~ "Remote Access" or html =~ "Configuration"
+          assert html =~ "Remote Access"
 
         {:error, {:redirect, _}} ->
           # Feature may be disabled or route may redirect; this is acceptable
