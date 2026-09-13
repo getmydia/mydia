@@ -16,8 +16,10 @@ A plugin is a WebAssembly **component** written in Rust against the
 `mydia-plugin-sdk` crate. You write one typed handler function; the SDK turns it
 into a component the host can load. The plugin runs in a sandbox with no ambient
 network, filesystem, or OS access. The only way out is through a small set of
-capability-gated host functions you declare up front, approved by the operator
-before the plugin ever runs.
+capability-gated host functions you declare up front. Plugins installed from an
+index or remote package are approved by the operator before they ever run;
+plugins shipped in Mydia's own `priv/plugins/` directory are trusted as part of
+the host release and granted their declared capabilities on discovery.
 
 ## Where to start
 

@@ -98,6 +98,11 @@ Every `playback.*` event carries an `origin` in its metadata: `player` (a real c
     the shipped manifest while preserving the administrator's enabled/disabled
     choice and settings.
 
+    Because the host release is the source of truth, Remove and Revoke are not
+    final for a bundled plugin: the next reconciliation restores the
+    release-declared capabilities, and Remove re-seeds the row approved and
+    enabled. Disable is the control that persists across upgrades.
+
 !!! warning "`net:http` is an exact-host allowlist"
     List each host you contact (`discord.com`, `api.example.com`). Wildcard
     subdomains are rejected because they would be a data-exfiltration channel.

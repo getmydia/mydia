@@ -3,11 +3,13 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   Admin plugin store and capability-approval UI (U9).
 
   Mirrors the service-config row+modal pattern (download clients / indexers).
-  The emphasized surface is the **capability-approval modal**: activation is
-  blocked until the admin explicitly accepts the declared capabilities, which are
-  rendered in host-owned plain language (`MydiaWeb.AdminPluginsLive.Components`),
-  with network egress made legible. Env/index-sourced rows render read-only with
-  a source badge (provenance).
+  The emphasized surface is the **capability-approval modal**: for a plugin whose
+  grant is empty, activation is blocked until the admin explicitly accepts the
+  declared capabilities, which are rendered in host-owned plain language
+  (`MydiaWeb.AdminPluginsLive.Components`), with network egress made legible.
+  Bundled rows arrive already granted and enabled, so the modal is not part of
+  their path. Env/index-sourced rows render read-only with a source badge
+  (provenance).
   """
   use MydiaWeb, :live_view
 
