@@ -26,6 +26,14 @@ defmodule MydiaWeb.PlayerDisabledTest do
         assert flash["error"] =~ "player is disabled"
       end
     end
+
+    test "the admin sidebar drops Dashboard and Remote Access", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/admin/settings")
+
+      refute has_element?(view, "#admin-nav-link-dashboard")
+      refute has_element?(view, "#admin-nav-link-remote_access")
+      assert has_element?(view, "#admin-nav-link-status")
+    end
   end
 
   describe "with the player on" do

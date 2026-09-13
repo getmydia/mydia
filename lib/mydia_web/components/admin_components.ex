@@ -11,6 +11,71 @@ defmodule MydiaWeb.AdminComponents do
     router: MydiaWeb.Router,
     statics: MydiaWeb.static_paths()
 
+  alias MydiaWeb.AdminNav
+
+  attr :current_path, :string,
+    default: nil,
+    doc: "the request path; picks the open hub and the active link"
+
+  attr :pending_requests_count, :integer,
+    default: 0,
+    doc: "shown on the Administration hub and on Requests when above zero"
+
+  @doc """
+  The sidebar's Admin section: one collapsible group per `MydiaWeb.AdminNav` hub,
+  listing the pages whose feature gate is on.
+
+  The group holding the current page renders open and the others closed. Live
+  navigation re-renders this from the server, so a group opened by hand closes
+  again on the next page.
+  """
+  def admin_nav(assigns) do
+    current = AdminNav.page_for_path(assigns.current_path)
+
+    groups =
+      for hub <- AdminNav.hubs() do
+        Map.merge(hub, %{
+          open?: not is_nil(current) and current.hub == hub.key,
+          pages: AdminNav.visible_pages(hub.key)
+        })
+      end
+
+    assigns = assign(assigns, :groups, groups)
+
+    ~H"""
+    <li :for={group <- @groups}>
+      <details id={"admin-nav-#{group.key}"} open={group.open?}>
+        <summary>
+          <.icon name={group.icon} class="w-5 h-5" /> {group.label}
+          <span
+            :if={group.key == :administration and @pending_requests_count > 0}
+            class="badge badge-primary badge-sm"
+          >
+            {@pending_requests_count}
+          </span>
+        </summary>
+        <ul>
+          <li :for={page <- group.pages}>
+            <.link
+              id={"admin-nav-link-#{page.key}"}
+              navigate={page.path}
+              class={page.path == @current_path && "active"}
+            >
+              <.icon name={page.icon} class="w-5 h-5" /> {page.label}
+              <span
+                :if={page.key == :requests and @pending_requests_count > 0}
+                class="badge badge-primary badge-sm"
+              >
+                {@pending_requests_count}
+              </span>
+            </.link>
+          </li>
+        </ul>
+      </details>
+    </li>
+    """
+  end
+
   attr :source, :atom,
     required: true,
     doc: "where the value came from: :env, :database, :yaml or :default"

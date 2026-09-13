@@ -284,62 +284,13 @@ defmodule MydiaWeb.Layouts do
               </li>
               <%= if @current_user && @current_user.role == "admin" do %>
                 <li class="menu-title mt-4">
-                  <span>Administration</span>
+                  <span>Admin</span>
                 </li>
 
-                <li>
-                  <.link
-                    navigate="/admin/users"
-                    class={nav_active?(@current_path, "/admin/users", false) && "active"}
-                  >
-                    <.icon name="hero-users" class="w-5 h-5" /> Users
-                  </.link>
-                </li>
-                <li>
-                  <.link
-                    navigate="/admin/status"
-                    class={nav_active?(@current_path, "/admin/status", false) && "active"}
-                  >
-                    <.icon name="hero-cog-6-tooth" class="w-5 h-5" /> Configuration
-                  </.link>
-                </li>
-                <%= if Mydia.ImportLists.FeatureFlags.enabled?() do %>
-                  <li>
-                    <.link
-                      navigate="/admin/import-lists"
-                      class={nav_active?(@current_path, "/admin/import-lists", false) && "active"}
-                    >
-                      <.icon name="hero-arrow-down-on-square-stack" class="w-5 h-5" /> Import Lists
-                    </.link>
-                  </li>
-                <% end %>
-                <li>
-                  <.link
-                    navigate="/admin/jobs"
-                    class={nav_active?(@current_path, "/admin/jobs", false) && "active"}
-                  >
-                    <.icon name="hero-queue-list" class="w-5 h-5" /> Background Jobs
-                  </.link>
-                </li>
-                <li>
-                  <.link
-                    navigate="/admin/release-blacklist"
-                    class={nav_active?(@current_path, "/admin/release-blacklist", false) && "active"}
-                  >
-                    <.icon name="hero-no-symbol" class="w-5 h-5" /> Release Blacklist
-                  </.link>
-                </li>
-                <li>
-                  <.link
-                    navigate="/admin/requests"
-                    class={nav_active?(@current_path, "/admin/requests", false) && "active"}
-                  >
-                    <.icon name="hero-inbox-stack" class="w-5 h-5" /> Requests
-                    <%= if @pending_requests_count > 0 do %>
-                      <span class="badge badge-primary badge-sm">{@pending_requests_count}</span>
-                    <% end %>
-                  </.link>
-                </li>
+                <.admin_nav
+                  current_path={@current_path}
+                  pending_requests_count={@pending_requests_count}
+                />
               <% end %>
 
               <%= if @current_user && @current_user.role == "guest" do %>
