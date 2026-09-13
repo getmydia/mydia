@@ -48,8 +48,9 @@ This page is a practical reference, using the bundled webhook notifier
 ## Capabilities
 
 Capabilities are **deny-by-default** and enforced server-side on every host
-call. The manifest *declares* what the plugin wants; the operator approves it at
-install time. A plugin can never widen its own grant at runtime.
+call. The manifest *declares* what the plugin wants; for a third-party plugin
+the operator approves that declaration at install time. A plugin can never widen
+its own grant at runtime.
 
 | Capability | Meaning |
 |------------|---------|
@@ -85,17 +86,17 @@ Every `playback.*` event carries an `origin` in its metadata: `player` (a real c
     users, and `ensure-watched` is rejected for a user without an active
     connection. The same consent gate applies to `ensure-favorite`.
 
-!!! warning "A manifest revision needs a re-approval"
-    Declaring a new capability class, a new `net:http` host, or a new subscribed
-    event in a revised manifest does **not** grant it. The stored grant is left
-    untouched, the plugin stays approved and enabled on its old grant, and calls
-    against anything newly declared come back `Denied`.
+!!! warning "Third-party manifest revisions need re-approval"
+    A plugin installed from an index or remote package cannot widen its grant.
+    New capability classes, hosts, or events remain denied until an administrator
+    reviews and re-approves the revised manifest.
 
-    Mydia flags the state rather than leaving it quiet: the plugin is badged
-    **needs re-approval** in Admin > System > Plugins, its row names the
-    capabilities it is asking for beyond what was approved, and **Review &
-    re-approve** grants the currently declared set. The host also logs a warning
-    naming them when such a plugin starts. Until you re-approve, nothing widens.
+!!! note "Bundled system plugins follow the host release"
+    Plugins shipped in Mydia's `priv/plugins/` directory are trusted as part of
+    the host release. First discovery grants and enables them automatically.
+    Later releases replace their grants with the exact effective capabilities in
+    the shipped manifest while preserving the administrator's enabled/disabled
+    choice and settings.
 
 !!! warning "`net:http` is an exact-host allowlist"
     List each host you contact (`discord.com`, `api.example.com`). Wildcard
