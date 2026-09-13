@@ -119,6 +119,15 @@ defmodule Mydia.Indexers.Health do
   end
 
   @doc """
+  Maps indexer configs to health results for display, reading cache only.
+  Never performs I/O.
+  """
+  @spec status_map([struct()]) :: %{String.t() => Health.health_result()}
+  def status_map(configs \\ Settings.list_indexer_configs()) do
+    Map.new(configs, fn config -> {config.id, cached_status(config)} end)
+  end
+
+  @doc """
   Gets the failure count for a specific indexer.
 
   Returns the number of consecutive failures for the indexer.
@@ -308,10 +317,14 @@ defmodule Mydia.Indexers.Health do
       [] ->
         :not_found
     end
+  rescue
+    ArgumentError -> :not_found
   end
 
   defp cache_health(indexer_id, health) do
     :ets.insert(@table_name, {indexer_id, health, System.monotonic_time(:millisecond)})
+  rescue
+    ArgumentError -> :ok
   end
 
   defp fresh?(cached_at) do
@@ -339,5 +352,22 @@ defmodule Mydia.Indexers.Health do
       details: %{},
       error: error_message
     }
+  end
+
+  defp cached_status(%{enabled: false}), do: disabled_result()
+
+  defp cached_status(config) do
+    case get_cached_health(config.id) do
+      {:ok, health} -> health
+      :not_found -> unknown_result()
+    end
+  end
+
+  defp unknown_result do
+    %{status: :unknown, checked_at: nil, details: %{}, error: nil}
+  end
+
+  defp disabled_result do
+    %{status: :disabled, checked_at: nil, details: %{}, error: nil}
   end
 end
