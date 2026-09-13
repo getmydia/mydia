@@ -893,7 +893,10 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                   <div>
                     <span class="text-sm font-medium">Remove After Import</span>
                     <p class="text-xs text-base-content/50">
-                      Remove downloads from client after importing
+                      Remove downloads from the client after importing. Torrent clients
+                      that support seeding wait until the torrent is stopped or paused
+                      (seed ratio/time), then remove. Usenet and similar clients remove
+                      immediately.
                     </p>
                   </div>
                 </div>

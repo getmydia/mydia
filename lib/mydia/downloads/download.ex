@@ -27,6 +27,7 @@ defmodule Mydia.Downloads.Download do
           import_reported_path: String.t() | nil,
           import_next_retry_at: DateTime.t() | nil,
           import_failed_at: DateTime.t() | nil,
+          client_removed_at: DateTime.t() | nil,
           last_progress_at: DateTime.t() | nil,
           last_known_bytes: integer(),
           last_observed_at: DateTime.t() | nil,
@@ -63,6 +64,7 @@ defmodule Mydia.Downloads.Download do
     field :import_reported_path, :string
     field :import_next_retry_at, :utc_datetime
     field :import_failed_at, :utc_datetime
+    field :client_removed_at, :utc_datetime
 
     # Stall-detection / progress tracking fields. `last_progress_at` is the
     # timestamp of the last observed bytes-downloaded increment; `last_known_bytes`
@@ -158,6 +160,7 @@ defmodule Mydia.Downloads.Download do
       :import_reported_path,
       :import_next_retry_at,
       :import_failed_at,
+      :client_removed_at,
       :last_progress_at,
       :last_known_bytes,
       :last_observed_at,
