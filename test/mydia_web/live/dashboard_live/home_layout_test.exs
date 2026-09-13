@@ -14,19 +14,17 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
     :ok
   end
 
-  @tag :template
   test "disconnected and connected mount assign home_widgets and modal states", %{conn: conn} do
     user = user_fixture(%{role: "admin"})
     conn = log_in_user(conn, user)
 
-    {:ok, view, html} = live(conn, ~p"/")
+    {:ok, view, _html} = live(conn, ~p"/")
 
     assert has_element?(view, "#edit-home-btn")
     assert has_element?(view, "#system-health-widget")
-    refute html =~ "edit-home-modal"
+    refute has_element?(view, "#edit-home-modal[open]")
   end
 
-  @tag :template
   test "open_edit_home and close_edit_home toggle modal visibility", %{conn: conn} do
     user = user_fixture(%{role: "user"})
     conn = log_in_user(conn, user)
@@ -34,10 +32,31 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view |> element("#edit-home-btn") |> render_click()
-    assert has_element?(view, "#edit-home-modal")
+    assert has_element?(view, "#edit-home-modal[open]")
 
     view |> element("#edit-home-modal button", "Done") |> render_click()
-    refute has_element?(view, "#edit-home-modal")
+    refute has_element?(view, "#edit-home-modal[open]")
+  end
+
+  test "empty visible widgets renders #home-empty state", %{conn: conn} do
+    user = user_fixture(%{role: "user"})
+    {:ok, _} = Accounts.put_home_widgets(user, [])
+    conn = log_in_user(conn, user)
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#home-empty")
+    assert has_element?(view, "#home-empty button", "Edit Home")
+  end
+
+  test "getting started links to Discover when library is empty", %{conn: conn} do
+    user = user_fixture(%{role: "user"})
+    conn = log_in_user(conn, user)
+
+    {:ok, _view, html} = live(conn, ~p"/")
+
+    assert html =~ "Start by adding movies or TV shows from"
+    assert html =~ ~s(href="/discover")
   end
 
   describe "layout event handlers" do
