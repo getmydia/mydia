@@ -7,7 +7,7 @@ defmodule Mydia.Media do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Media.{AvailabilityStatus, MediaItem, Episode, CategoryClassifier}
+  alias Mydia.Media.{AvailabilityStatus, MediaItem, Episode, CategoryClassifier, ProviderKey}
   alias Mydia.Media.Structs.CalendarEntry
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Events
@@ -989,11 +989,15 @@ defmodule Mydia.Media do
   end
 
   @doc """
-  Returns a map of provider IDs to library status for efficient lookup.
+  Returns a map of `{type, provider, provider_id}` to library status for
+  efficient lookup.
 
-  Returns a map where:
-  - TMDB IDs are integer keys: `12345 => %{...}`
-  - TVDB IDs are tuple keys: `{:tvdb, 67890} => %{...}`
+  The key is a 3-tuple because neither of its parts is unique on its own. TMDB
+  and TVDB number their catalogues independently, so `671` names a different
+  title on each, and since provider-id uniqueness was scoped by type a movie
+  and a show may hold the same provider id legitimately. Keying on the bare
+  integer collapsed all three of those into one entry, and whichever row the
+  query happened to reach last won.
 
   Values are maps with:
   - `:in_library` - boolean
@@ -1005,8 +1009,8 @@ defmodule Mydia.Media do
 
       iex> get_library_status_map()
       %{
-        12345 => %{in_library: true, monitored: true, type: "movie", id: 1},
-        {:tvdb, 67890} => %{in_library: true, monitored: false, type: "tv_show", id: 2}
+        {:movie, :tmdb, 12345} => %{in_library: true, monitored: true, type: "movie", id: 1},
+        {:tv_show, :tvdb, 67890} => %{in_library: true, monitored: false, type: "tv_show", id: 2}
       }
   """
   @spec get_library_status_map() :: map()
@@ -1018,12 +1022,13 @@ defmodule Mydia.Media do
     |> Enum.reduce(%{}, fn {tmdb_id, tvdb_id, monitored, type, id}, acc ->
       entry = %{in_library: true, monitored: monitored, type: type, id: id}
 
-      acc =
-        if tmdb_id, do: Map.put(acc, tmdb_id, entry), else: acc
-
-      if tvdb_id, do: Map.put(acc, {:tvdb, tvdb_id}, entry), else: acc
+      acc = put_status(acc, ProviderKey.new(type, :tmdb, tmdb_id), entry)
+      put_status(acc, ProviderKey.new(type, :tvdb, tvdb_id), entry)
     end)
   end
+
+  defp put_status(acc, nil, _entry), do: acc
+  defp put_status(acc, key, entry), do: Map.put(acc, key, entry)
 
   @doc """
   Returns library status for a specific set of TMDB ids, scoped to one type.
@@ -1040,7 +1045,12 @@ defmodule Mydia.Media do
   ## Examples
 
       iex> library_status_for_tmdb_ids([671, 672], "movie")
-      %{671 => %{in_library: true, monitored: true, type: "movie", id: "..."}}
+      %{{:movie, :tmdb, 671} => %{in_library: true, monitored: true, type: "movie", id: "..."}}
+
+  The key shape matches `get_library_status_map/0` even though this query is
+  already scoped to one type and one provider, so the two are interchangeable
+  wherever a status map is consumed. `MediaAddHelpers.enrich_with_library_status/2`
+  takes either one and needs only a single lookup.
   """
   @spec library_status_for_tmdb_ids([integer()], String.t()) :: map()
   def library_status_for_tmdb_ids([], _type), do: %{}
@@ -1051,7 +1061,8 @@ defmodule Mydia.Media do
     |> select([m], {m.tmdb_id, m.monitored, m.type, m.id})
     |> Repo.all()
     |> Map.new(fn {tmdb_id, monitored, type, id} ->
-      {tmdb_id, %{in_library: true, monitored: monitored, type: type, id: id}}
+      {ProviderKey.new(type, :tmdb, tmdb_id),
+       %{in_library: true, monitored: monitored, type: type, id: id}}
     end)
   end
 

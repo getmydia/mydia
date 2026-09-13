@@ -11,6 +11,7 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   alias Mydia.Media.AddDefaults
   alias Mydia.MediaRequests
   alias Mydia.Media.FranchiseEntry
+  alias Mydia.Media.ProviderKey
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
@@ -87,15 +88,19 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
 
   For each item, adds `:in_library`, `:monitored`, and `:id` fields
   based on the library_status_map.
+
+  Takes either status map `Mydia.Media` builds, `get_library_status_map/0` or
+  `library_status_for_tmdb_ids/2`: both key on `Mydia.Media.ProviderKey`, so one
+  lookup on the item's own `{media_type, provider, provider_id}` covers both.
+  An item that cannot be keyed at all reads as not in the library.
   """
   def enrich_with_library_status(items, library_status_map) do
     Enum.map(items, fn item ->
-      provider_id_int = Add.parse_provider_id(item.provider_id)
-
       library_status =
-        Map.get(library_status_map, provider_id_int) ||
-          Map.get(library_status_map, {:tvdb, provider_id_int}) ||
-          %{in_library: false}
+        case ProviderKey.from_card(item) do
+          nil -> %{in_library: false}
+          key -> Map.get(library_status_map, key, %{in_library: false})
+        end
 
       Map.merge(item, %{
         in_library: library_status[:in_library] || false,
@@ -495,14 +500,15 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
   defp presence(""), do: nil
   defp presence(value), do: value
 
-  # The untagged key space is TMDB-only (see `enrich_with_library_status/2`
-  # above, which reads it before the tagged `{:tvdb, id}` key). Keying it off
-  # `Ref.id(ref)` used to put a TVDB add's own id there whenever the ref was
-  # `{:tvdb, id}`, since a ref's bare id carries no provider information once
-  # extracted -- a TMDB result with the same numeric id would then read the
-  # TVDB item's status. `media_item.tmdb_id` is the show's actual TMDB id (nil
-  # unless the add resolved a cross-reference), so a TVDB-only add no longer
-  # writes anything into this slot.
+  # Writes the same keys `Media.get_library_status_map/0` would have produced
+  # for this row, so a freshly added item is found by exactly the lookup
+  # `enrich_with_library_status/2` performs, without refetching the whole map.
+  #
+  # Keying off `Ref.id(ref)` instead would put a TVDB add's own id under the
+  # TMDB key whenever the ref was `{:tvdb, id}`, since a ref's bare id carries
+  # no provider information once extracted. `media_item.tmdb_id` is the show's
+  # actual TMDB id (nil unless the add resolved a cross-reference), so a
+  # TVDB-only add writes nothing into the TMDB slot.
   defp update_library_status_map(library_status_map, media_item) do
     entry = %{
       in_library: true,
@@ -511,17 +517,11 @@ defmodule MydiaWeb.Live.Helpers.MediaAddHelpers do
       id: media_item.id
     }
 
-    map =
-      if media_item.tmdb_id do
-        Map.put(library_status_map, media_item.tmdb_id, entry)
-      else
-        library_status_map
-      end
-
-    if media_item.tvdb_id do
-      Map.put(map, {:tvdb, media_item.tvdb_id}, entry)
-    else
-      map
-    end
+    [
+      ProviderKey.new(media_item.type, :tmdb, media_item.tmdb_id),
+      ProviderKey.new(media_item.type, :tvdb, media_item.tvdb_id)
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.reduce(library_status_map, &Map.put(&2, &1, entry))
   end
 end

@@ -169,7 +169,9 @@ defmodule Mydia.Media.Franchises do
   defp decorate(entry, status, %MediaItem{tmdb_id: current_tmdb_id}) do
     entry = %{entry | current?: entry.tmdb_id == current_tmdb_id}
 
-    case Map.get(status, entry.tmdb_id) do
+    # A franchise is always movies, which is also the type the status map was
+    # built for a few lines up in `build/2`.
+    case Map.get(status, {:movie, :tmdb, entry.tmdb_id}) do
       %{id: media_item_id, monitored: monitored} ->
         %{entry | in_library?: true, media_item_id: media_item_id, monitored: monitored}
 

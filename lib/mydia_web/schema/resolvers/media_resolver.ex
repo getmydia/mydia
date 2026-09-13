@@ -6,6 +6,7 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   import Absinthe.Resolution.Helpers, only: [batch: 3]
 
   alias Mydia.{Media, Library, Playback}
+  alias Mydia.Media.MediaItem
   alias Mydia.Playback.WatchStatus
 
   alias Mydia.Metadata.Access, as: MetadataAccess
@@ -81,10 +82,11 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   def resolve_similar(parent, _args, _info) do
     tmdb_ids = MetadataAccess.get_field(parent, :recommended_tmdb_ids) || []
     status = Media.library_status_for_tmdb_ids(tmdb_ids, parent.type)
+    type_atom = MediaItem.type_atom(parent.type)
 
     matched_ids =
       tmdb_ids
-      |> Enum.map(&get_in(status, [&1, :id]))
+      |> Enum.map(&get_in(status, [{type_atom, :tmdb, &1}, :id]))
       |> Enum.reject(&is_nil/1)
 
     items_by_id =

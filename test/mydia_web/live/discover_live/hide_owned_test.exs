@@ -226,7 +226,12 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
       seed_curated_page(2, 2, [curated_result(visible_id, "Paper Comet")])
 
       library_status_map = %{
-        owned_id => %{in_library: true, monitored: true, type: "movie", id: "owned"}
+        {:movie, :tmdb, owned_id} => %{
+          in_library: true,
+          monitored: true,
+          type: "movie",
+          id: "owned"
+        }
       }
 
       socket = curated_socket(%{library_status_map: library_status_map})
@@ -259,8 +264,8 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
       seed_curated_page(2, 2, [curated_result(next_page_id, "Velvet Static")])
 
       library_status_map = %{
-        owned_a => %{in_library: true, monitored: true, type: "movie", id: "a"},
-        owned_b => %{in_library: true, monitored: true, type: "movie", id: "b"}
+        {:movie, :tmdb, owned_a} => %{in_library: true, monitored: true, type: "movie", id: "a"},
+        {:movie, :tmdb, owned_b} => %{in_library: true, monitored: true, type: "movie", id: "b"}
       }
 
       socket = curated_socket(%{library_status_map: library_status_map})
@@ -288,7 +293,12 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
       seed_curated_page(2, 9, [curated_result(owned_id, "Marooned Aurora")])
 
       library_status_map = %{
-        owned_id => %{in_library: true, monitored: true, type: "movie", id: "owned"}
+        {:movie, :tmdb, owned_id} => %{
+          in_library: true,
+          monitored: true,
+          type: "movie",
+          id: "owned"
+        }
       }
 
       socket =
@@ -312,7 +322,12 @@ defmodule MydiaWeb.DiscoverLive.HideOwnedTest do
       end
 
       library_status_map = %{
-        owned_id => %{in_library: true, monitored: true, type: "movie", id: "owned"}
+        {:movie, :tmdb, owned_id} => %{
+          in_library: true,
+          monitored: true,
+          type: "movie",
+          id: "owned"
+        }
       }
 
       socket = curated_socket(%{library_status_map: library_status_map})

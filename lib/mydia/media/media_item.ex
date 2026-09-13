@@ -181,4 +181,24 @@ defmodule Mydia.Media.MediaItem do
   Returns the list of valid type values.
   """
   def valid_types, do: @type_values
+
+  @doc """
+  The stored `type` string as the atom the status maps and card APIs key on.
+
+  Mirrors `Mydia.Media.MediaRequest.media_type_atom/1` so a media item and a
+  request for it produce the same key half.
+
+  Raises on anything else rather than defaulting, following
+  `Media.find_by_external_ids/2`: a value outside `@type_values` cannot reach
+  the column through `changeset/2`, so if one ever appears it is a corrupted
+  row and silently keying it as a movie would hide that.
+  """
+  @spec type_atom(String.t() | atom()) :: :movie | :tv_show
+  def type_atom(type) when type in [:movie, "movie"], do: :movie
+  def type_atom(type) when type in [:tv_show, "tv_show"], do: :tv_show
+
+  def type_atom(type) do
+    raise ArgumentError,
+          "invalid media item type #{inspect(type)}, expected one of #{inspect(@type_values)}"
+  end
 end
