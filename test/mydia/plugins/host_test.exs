@@ -80,7 +80,7 @@ defmodule Mydia.Plugins.HostTest do
   end
 
   describe "memory limiting (StoreLimits)" do
-    # Wasmex 0.14 enforces StoreLimits.memory_size on a component store at
+    # Wasmex 0.15 enforces StoreLimits.memory_size on a component store at
     # *instantiation* (a component whose minimum linear memory exceeds the cap is
     # refused), but not on runtime memory.grow — see Host's moduledoc residual.
     # This guards the instantiation-time cap, which is the verified guarantee.

@@ -236,8 +236,8 @@ defmodule Mydia.MixProject do
       # CORS support for cross-origin API requests (standalone player)
       {:corsica, "~> 2.1"},
 
-      # Rustler for the p2p NIF (native crate is on rustler 0.37.2; wasmex needs ~> 0.37.1)
-      {:rustler, "~> 0.37", runtime: false},
+      # Rustler for the p2p NIF (native crate is on rustler 0.38.0; wasmex 0.15 needs ~> 0.38)
+      {:rustler, "~> 0.38", runtime: false},
 
       # GraphQL
       {:absinthe, "~> 1.7"},

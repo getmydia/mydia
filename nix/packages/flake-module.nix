@@ -91,7 +91,7 @@
       # reuses the cached artifact instead of hitting the network. Hashes come
       # from deps/wasmex/checksum-Elixir.Wasmex.Native.exs (only nif-2.15
       # artifacts are published, which is also rustler_precompiled's default).
-      wasmexVersion = "0.14.0";
+      wasmexVersion = "0.15.1";
       wasmexNifTarget = {
         "x86_64-linux" = "x86_64-unknown-linux-gnu";
         "aarch64-linux" = "aarch64-unknown-linux-gnu";
@@ -99,10 +99,10 @@
         "aarch64-darwin" = "aarch64-apple-darwin";
       }.${system} or "x86_64-unknown-linux-gnu";
       wasmexNifHash = {
-        "x86_64-unknown-linux-gnu" = "sha256-ubMR5fk21s+SutUv3ekcMHDgOOY8IvuBlejHH5dgU5I=";
-        "aarch64-unknown-linux-gnu" = "sha256-N3HvNpmkM1F6QfxYEXAjgaRU/kF11Q/4Pbk9a9JlJ9I=";
-        "x86_64-apple-darwin" = "sha256-JxOp8tgGtPW0VtbXIhfGrfVnmuWhWAFEL0btAtL1zw4=";
-        "aarch64-apple-darwin" = "sha256-BFcwJT5Z1AOtytwIBpZiHUgIzO8TEqdvjCDDAymdFfg=";
+        "x86_64-unknown-linux-gnu" = "sha256-5iQqTFjElY7ZuDPT9vUZjyqSUaE0MgajOvvoR/XmZh0=";
+        "aarch64-unknown-linux-gnu" = "sha256-P5Id4S5KgaZpNSSRv7HJeevggEqg/LnqXezE0sVgL30=";
+        "x86_64-apple-darwin" = "sha256-L0Imgy9YrGOGz6kusc9AwI5ypeVbc/Rf6bsxFpzuyHM=";
+        "aarch64-apple-darwin" = "sha256-VwMGKS8nmuF6vyVY5zMb7GQsMNg/0x8bSoQ99lN5f2w=";
       }.${wasmexNifTarget};
       wasmexNifFileName = "libwasmex-v${wasmexVersion}-nif-2.15-${wasmexNifTarget}.so.tar.gz";
       wasmexNifTarball = pkgs.fetchurl {
