@@ -15,13 +15,20 @@ defmodule Mydia.Plugins do
   only *active* (approved + enabled) descriptors — the set the dispatcher fans
   events to — while the DB holds every installed plugin for the admin UI.
 
-  ## Manifest revisions never widen a grant
+  ## Trust boundary: bundled vs. third-party manifests
 
-  A revised manifest (a built-in upgrade, a reinstalled index package) re-stores
-  what the plugin *declares* but leaves the grant exactly as approved, so nothing
-  is ever silently widened. The cost is that an approved plugin can end up asking
-  for more than it holds and failing `Denied` at the one call site that needed
-  the new capability. `needs_reapproval?/1` and `ungranted_capabilities/1` detect
+  Image-bundled system plugins (`priv/plugins/*.json`) are part of the trusted
+  host release. `ensure_bundled/0` grants their complete shipped capability set
+  and enables them on first discovery, then replaces the grant with the shipped
+  manifest's exact effective set on every later release — a system plugin never
+  waits for admin approval and never runs on a stale grant.
+
+  Third-party manifests — a reinstalled index package, any row whose
+  `source_url` is not `"bundled"` — never widen a grant on revision: re-storing
+  what the plugin *declares* leaves the grant exactly as approved, so nothing is
+  ever silently widened. The cost is that such a plugin can end up asking for
+  more than it holds and failing `Denied` at the one call site that needed the
+  new capability. `needs_reapproval?/1` and `ungranted_capabilities/1` detect
   that state (see `Mydia.Plugins.Capabilities` for the comparison), `activate/1`
   warns about it when the plugin starts, the admin UI badges it, and `approve/2`
   is the way out: it grants the currently requested set.
@@ -221,10 +228,10 @@ defmodule Mydia.Plugins do
   """
   @spec register_plugins() :: :ok
   def register_plugins do
-    # Seed the bundled notifier so it shows in the admin UI (pending approval).
-    # Gated by the same flag the app uses for boot-time side effects, so the test
-    # suite's app boot doesn't write to the shared DB (tests call ensure_bundled/0
-    # explicitly when they need it).
+    # Reconcile bundled system plugins (approved + enabled) so they show in the
+    # admin UI. Gated by the same flag the app uses for boot-time side effects, so
+    # the test suite's app boot doesn't write to the shared DB (tests call
+    # ensure_bundled/0 explicitly when they need it).
     maybe_ensure_bundled()
 
     Settings.get_db_plugin_configs()
@@ -247,10 +254,10 @@ defmodule Mydia.Plugins do
   test stays deterministic).
 
   Safe to call on every admin Plugins page view: it is idempotent (seeds only a
-  missing slug, refreshes only a changed manifest) and is the reconciliation point
-  a long-lived node otherwise lacks. `ensure_bundled/0` runs only once at boot, so
-  without this an instance that started before a bundled manifest shipped never
-  discovers the new plugin until it restarts.
+  missing slug, reconciles only a changed manifest or grant) and is the
+  reconciliation point a long-lived node otherwise lacks. `ensure_bundled/0` runs
+  only once at boot, so without this an instance that started before a bundled
+  manifest shipped never discovers the new plugin until it restarts.
   """
   @spec maybe_ensure_bundled() :: :ok
   def maybe_ensure_bundled do
@@ -258,22 +265,33 @@ defmodule Mydia.Plugins do
   end
 
   @doc """
-  Discovers every bundled plugin shipped in `priv/plugins/` and seeds it disabled
-  (pending approval), without copying any wasm bytes into the DB.
+  Discovers every bundled plugin shipped in `priv/plugins/` and seeds it approved
+  and enabled, without copying any wasm bytes into the DB.
 
-  Each `priv/plugins/*.json` manifest is parsed; a slug with no existing config is
-  persisted disabled, no grants, `wasm_module: nil` — its bytes resolve from the
-  filesystem at activation (see `resolve_artifact/2`). The admin approves and
-  configures it through the normal UI (R17: no new core surface). An
-  already-installed row's admin state (grants/settings/enabled) is left untouched.
+  A bundled plugin is part of the trusted host release, so first discovery stores
+  its manifest, settings, and exact effective capability grant in one insert and
+  enables it — there is no approval step. Each `priv/plugins/*.json` manifest is
+  parsed; its bytes resolve from the filesystem at activation (see
+  `resolve_artifact/2`), so the seeded row carries `wasm_module: nil`.
 
   ## Reconcile (built-in upgrade)
 
+  A pre-existing `source_url == "bundled"` row is reconciled against the shipped
+  manifest: its metadata and `granted_capabilities` are replaced, in one update,
+  with the current manifest's exact effective set (including the `net:http` hosts
+  an operator setting derives — see `effective_grants/2`). A capability the
+  shipped manifest no longer declares therefore drops out of the grant instead of
+  lingering. The administrator's `enabled` choice and settings are preserved, so
+  reconciliation never re-enables a plugin the operator disabled.
+
   An install that ran the older copy-into-DB seeding has its bundled row carrying
   stale bytes in `wasm_module`, which the resolver's DB layer would prefer over a
-  newer image artifact. Seeding nulls `wasm_module`/`integrity_hash` on any
+  newer image artifact. Reconciliation nulls `wasm_module`/`integrity_hash` on any
   `source_url == "bundled"` row so resolution falls through to the filesystem and
   a newer image ships newer code automatically.
+
+  Non-bundled rows — an index plugin, or a same-slug third-party install — are
+  left entirely alone: they keep explicit approval and re-approval.
   """
   @spec ensure_bundled() :: :ok
   def ensure_bundled do
@@ -304,21 +322,31 @@ defmodule Mydia.Plugins do
     end
   end
 
+  # First discovery of a bundled slug: one insert carrying the manifest, the
+  # settings derived from it, and the grant that matches them exactly — approved
+  # and enabled, with no admin step. Bytes stay out of the DB (`wasm_module: nil`);
+  # they resolve from the filesystem at activation.
   defp seed_bundled(manifest, raw) do
-    Settings.create_plugin_config(%{
+    settings = bundled_settings(raw)
+    manifest_map = manifest_to_map(manifest)
+
+    attrs = %{
       slug: manifest.slug,
       name: manifest.name,
       version: manifest.version,
       source_url: "bundled",
       integrity_hash: nil,
-      manifest: manifest_to_map(manifest),
+      manifest: manifest_map,
       wasm_module: nil,
-      granted_capabilities: %{},
-      enabled: false,
-      settings: bundled_settings(raw)
-    })
+      granted_capabilities: effective_grants(manifest_map, settings),
+      enabled: true,
+      settings: settings
+    }
 
-    :ok
+    case Settings.create_plugin_config(attrs) do
+      {:ok, _config} -> :ok
+      {:error, reason} -> log_bundled_reconciliation_error(manifest.slug, reason)
+    end
   end
 
   # A bundled plugin declares its delivery mode in its manifest (durable enqueues
@@ -331,34 +359,57 @@ defmodule Mydia.Plugins do
   end
 
   # Reconcile a pre-existing bundled row against the current bundled manifest
-  # (built-in upgrade): refresh the stored manifest/metadata, then null any stale
-  # DB bytes. Admin state (enabled, grants, settings) is never touched. Non-bundled
-  # rows (e.g. an index plugin) are left entirely alone.
+  # (built-in upgrade): replace the stored manifest/metadata and grant in one
+  # update, then null any stale DB bytes. Non-bundled rows (e.g. an index plugin)
+  # are left entirely alone — they keep explicit approval and re-approval.
   defp reconcile_bundled(%Settings.PluginConfig{source_url: "bundled"} = config, manifest) do
-    config
-    |> refresh_bundled_manifest(manifest)
-    |> reconcile_bundled_artifact()
+    case refresh_bundled_state(config, manifest) do
+      {:ok, updated} -> reconcile_bundled_artifact(updated)
+      {:error, _reason} -> :ok
+    end
   end
 
   defp reconcile_bundled(_config, _manifest), do: :ok
 
-  # Re-store the manifest and display metadata when the bundled definition has
-  # changed (e.g. a newly-added `settings_schema`). Runtime privilege is gated by
-  # `granted_capabilities`, not by the manifest, so refreshing the declared
-  # manifest never widens what an already-approved plugin may actually do.
-  defp refresh_bundled_manifest(config, manifest) do
+  # Replace the manifest metadata *and* the grant together, so a revised manifest
+  # never leaves the row holding a stale one. The grant is the manifest's exact
+  # effective set — the persisted settings still decide the derived `net:http`
+  # hosts — which both widens to the shipped set and drops capabilities the
+  # manifest no longer declares. `enabled` is deliberately absent from attrs: the
+  # administrator's choice survives every host upgrade.
+  defp refresh_bundled_state(config, manifest) do
+    manifest_map = manifest_to_map(manifest)
+
     attrs =
       %{}
-      |> put_changed(:manifest, manifest_to_map(manifest), config.manifest)
+      |> put_changed(:manifest, manifest_map, config.manifest)
       |> put_changed(:name, manifest.name, config.name)
       |> put_changed(:version, manifest.version, config.version)
+      |> put_changed(
+        :granted_capabilities,
+        effective_grants(manifest_map, config.settings),
+        config.granted_capabilities
+      )
 
-    with true <- attrs != %{},
-         {:ok, updated} <- Settings.update_plugin_config(config, attrs) do
-      updated
+    if attrs == %{} do
+      {:ok, config}
     else
-      _ -> config
+      case Settings.update_plugin_config(config, attrs) do
+        {:ok, updated} ->
+          {:ok, updated}
+
+        {:error, reason} ->
+          log_bundled_reconciliation_error(config.slug, reason)
+          {:error, reason}
+      end
     end
+  end
+
+  # A write failure must not abort the surrounding `Enum.each/2` over every
+  # bundled manifest: log it and continue to the next plugin.
+  defp log_bundled_reconciliation_error(slug, reason) do
+    Logger.error("plugin #{slug}: could not reconcile bundled configuration: #{inspect(reason)}")
+    :ok
   end
 
   defp put_changed(attrs, _key, value, value), do: attrs
@@ -416,9 +467,11 @@ defmodule Mydia.Plugins do
   Approves the full declared capability set for an already-installed plugin and
   activates it.
 
-  Used by the install-then-approve flow (AE1) and by re-approval after a
-  capability change — grants never auto-expand, so a manifest that newly requests
-  more requires a fresh approval here.
+  Used by the install-then-approve flow (AE1), by re-approval after a
+  third-party capability change — their grants never auto-expand, so a revised
+  manifest that newly requests more requires a fresh approval here — and by
+  bundled reconciliation, which shares `effective_grants/2` so the approved set
+  and the reconciled set can never disagree.
   """
   @spec approve(String.t(), keyword()) :: {:ok, Plugin.t()} | {:error, Error.t()}
   def approve(slug, _opts \\ []) do
@@ -426,8 +479,7 @@ defmodule Mydia.Plugins do
          manifest when not is_nil(manifest) <- config.manifest,
          {:ok, config} <-
            Settings.update_plugin_config(config, %{
-             granted_capabilities:
-               put_effective_http(manifest["capabilities"] || %{}, manifest, config.settings),
+             granted_capabilities: effective_grants(manifest, config.settings),
              enabled: true
            }) do
       activate_and_reload(config)
@@ -915,7 +967,7 @@ defmodule Mydia.Plugins do
   end
 
   # Recomputes the granted `net:http` for a settings change (never for approval,
-  # which goes through put_effective_http/3 on the manifest set). The result is
+  # which goes through effective_grants/2 on the manifest set). The result is
   # everything already granted except the hosts derived from the *previous*
   # setting values, plus the hosts derived from the new ones — so the operator's
   # old URL drops out while every other granted host, static or not, survives. No
@@ -940,9 +992,20 @@ defmodule Mydia.Plugins do
     end
   end
 
+  # The one grant a manifest and its settings imply: the declared capability set
+  # with `net:http` replaced by its effective host list. Both admin approval and
+  # bundled reconciliation call this, so an approved grant and a reconciled one
+  # can never disagree.
+  defp effective_grants(manifest_map, settings) do
+    manifest_map
+    |> Map.get("capabilities", %{})
+    |> put_effective_http(manifest_map, settings)
+  end
+
   # Replaces a capability map's `net:http` with the effective host set, but only
-  # when `net:http` is already present — so this never grants a capability the
-  # admin did not approve. Used for the manifest set at approve time.
+  # when `net:http` is already present — so this never grants a capability that
+  # was not declared. Used for the manifest set when approving, when seeding a
+  # bundled plugin, and when reconciling one (always via `effective_grants/2`).
   defp put_effective_http(map, manifest_map, settings) do
     if Map.has_key?(map, "net:http") do
       Map.put(map, "net:http", effective_http_hosts(manifest_map, settings))

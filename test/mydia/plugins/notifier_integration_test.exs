@@ -32,30 +32,29 @@ defmodule Mydia.Plugins.NotifierIntegrationTest do
     :ok
   end
 
-  test "R17: the bundled notifier installs and runs through the generic plugin plumbing (no new core surface)" do
-    # Seeded from priv/plugins, pending approval — the same path any plugin takes,
-    # with no notifier-specific route or LiveView.
+  test "R17: the bundled notifier is approved and activated through generic plugin plumbing" do
     assert :ok = Plugins.ensure_bundled()
 
     config = Settings.get_plugin_config_by_slug(@slug)
-    assert config.enabled == false
-    assert config.granted_capabilities == %{}
+    assert config.enabled
+    assert config.granted_capabilities == config.manifest["capabilities"]
     assert config.settings["delivery"] == "durable"
-    assert config.manifest["capabilities"]["net:http"] == ["discord.com"]
     # No bytes are copied into the DB — they resolve from the filesystem.
     assert config.wasm_module == nil
     assert config.integrity_hash == nil
-    refute Host.running?(@slug)
+    refute Plugins.needs_reapproval?(config)
 
-    # Approving via the generic lifecycle activates it as a durable plugin, so
-    # the dispatcher routes its events through the Oban delivery worker (U10).
-    assert {:ok, descriptor} = Plugins.approve(@slug)
+    # The ordinary registration pass activates the enabled row as a durable
+    # plugin, so the dispatcher routes its events through the Oban delivery
+    # worker (U10) — no notifier-specific route or LiveView.
+    assert :ok = Plugins.register_plugins()
+    assert {:ok, descriptor} = Registry.lookup(@slug)
     assert descriptor.delivery == :durable
     assert descriptor.events == ["media_item.added", "download.completed"]
     assert Host.running?(@slug)
   end
 
-  test "ensure_bundled does not clobber an already-installed notifier" do
+  test "ensure_bundled does not trust a same-slug non-bundled plugin" do
     {:ok, _} =
       Settings.create_plugin_config(%{
         slug: @slug,
@@ -67,10 +66,15 @@ defmodule Mydia.Plugins.NotifierIntegrationTest do
 
     assert :ok = Plugins.ensure_bundled()
 
-    # The admin's existing grants/settings/version survive.
+    # A row that is not source_url == "bundled" is third-party: discovery must
+    # leave every field — provenance, grant, runtime state, settings, version —
+    # exactly as it was.
     config = Settings.get_plugin_config_by_slug(@slug)
-    assert config.version == "0.9.0"
+    assert config.source_url == nil
+    assert config.granted_capabilities == %{"net:http" => ["discord.com"]}
+    assert config.enabled == false
     assert config.settings["webhook_url"] == "https://discord.com/api/webhooks/x"
+    assert config.version == "0.9.0"
   end
 
   test "ensure_bundled reconciles stale DB bytes on a pre-existing bundled row" do
@@ -95,8 +99,13 @@ defmodule Mydia.Plugins.NotifierIntegrationTest do
     # Stale bytes nulled so the resolver falls through to the filesystem.
     assert config.wasm_module == nil
     assert config.integrity_hash == nil
-    # Admin state is preserved.
-    assert config.granted_capabilities == %{"net:http" => ["discord.com"]}
+    # The grant is replaced with the shipped manifest's exact effective set.
+    assert config.granted_capabilities == %{
+             "events:subscribe" => ["media_item.added", "download.completed"],
+             "net:http" => ["discord.com"],
+             "data:read" => ["media_item"]
+           }
+
     assert config.enabled == true
     assert config.settings["delivery"] == "durable"
   end
