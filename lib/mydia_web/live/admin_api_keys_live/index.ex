@@ -7,7 +7,7 @@ defmodule MydiaWeb.AdminApiKeysLive.Index do
   (`Mydia.Accounts.create_api_key/2` stores a hash), so the page shows it once,
   in a modal, and never again.
 
-  A plain list rather than a stream, like the other `/admin/config` pages: an
+  A plain list rather than a stream, like the other admin pages: an
   admin's keys are a handful, and the confirm flow looks keys up in it.
   """
   use MydiaWeb, :live_view

@@ -24,17 +24,17 @@ defmodule MydiaWeb.AdminApiKeysLiveTest do
 
   test "a non-admin is sent away" do
     conn = log_in_user(build_conn(), user_fixture())
-    assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin/config/api-keys")
+    assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin/api-keys")
   end
 
   test "the page has its own active tab", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
-    assert has_element?(view, ~s|a[href="/admin/config/api-keys"].tab-active|)
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
+    assert has_element?(view, ~s|a[href="/admin/api-keys"].tab-active|)
     assert has_element?(view, "#api-keys-empty")
   end
 
   test "creates a Library API key and shows it exactly once", %{conn: conn, admin: admin} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
 
     view |> element("#new-api-key") |> render_click()
 
@@ -60,7 +60,7 @@ defmodule MydiaWeb.AdminApiKeysLiveTest do
   end
 
   test "a blank name is refused and nothing is created", %{conn: conn, admin: admin} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
     view |> element("#new-api-key") |> render_click()
 
     view
@@ -73,7 +73,7 @@ defmodule MydiaWeb.AdminApiKeysLiveTest do
 
   test "revokes a key after confirmation", %{conn: conn, admin: admin} do
     {:ok, key, _plain} = Accounts.create_api_key(admin.id, %{name: "Old", permissions: ["admin"]})
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
 
     view |> element("#revoke-api-key-#{key.id}") |> render_click()
     assert has_element?(view, "#api-key-confirm-modal", "Old")
@@ -89,7 +89,7 @@ defmodule MydiaWeb.AdminApiKeysLiveTest do
     {:ok, key, _plain} =
       Accounts.create_api_key(admin.id, %{name: "Gone", permissions: ["admin"]})
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
 
     view |> element("#delete-api-key-#{key.id}") |> render_click()
     view |> element("#confirm-api-key-action") |> render_click()
@@ -102,7 +102,7 @@ defmodule MydiaWeb.AdminApiKeysLiveTest do
     {:ok, key, _plain} =
       Accounts.create_api_key(admin.id, %{name: "Kept", permissions: ["admin"]})
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
 
     view |> element("#delete-api-key-#{key.id}") |> render_click()
     view |> element("#cancel-api-key-confirm") |> render_click()
@@ -117,20 +117,20 @@ defmodule MydiaWeb.AdminApiKeysLiveTest do
     {:ok, theirs, _plain} =
       Accounts.create_api_key(other.id, %{name: "Theirs", permissions: ["admin"]})
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
 
     refute has_element?(view, "#api-key-#{theirs.id}")
   end
 
   test "shows the LIBRARY_API_KEY row only while the variable is set", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
     refute has_element?(view, "#env-library-api-key")
 
     previous = Application.get_env(:mydia, :library_api_key)
     on_exit(fn -> Application.put_env(:mydia, :library_api_key, previous) end)
     Application.put_env(:mydia, :library_api_key, String.duplicate("k", 32))
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/api-keys")
+    {:ok, view, _html} = live(conn, ~p"/admin/api-keys")
 
     assert has_element?(
              view,

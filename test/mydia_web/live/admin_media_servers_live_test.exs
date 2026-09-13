@@ -24,7 +24,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
   describe "Authentication" do
     test "redirects unauthenticated users", %{conn: conn} do
-      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config/media-servers")
+      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/media-servers")
       assert path =~ "/auth"
     end
   end
@@ -39,7 +39,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
       %{conn: conn, view: view}
     end
 
@@ -76,7 +76,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           connection_settings: %{"sync_watched" => "true"}
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "[data-test=watched-sync-enabled]")
       assert has_element?(view, "[phx-click=sync_watched]")
@@ -97,7 +97,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           :sync_disabled
         )
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "[data-test=last-sync-run]")
     end
@@ -119,7 +119,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           :no_user_mapping
         )
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "#sync-skip-#{config.id}")
       assert render(view) =~ "Press Accounts to map them."
@@ -146,7 +146,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
       {:ok, _run} = Mydia.Sync.finish_run(run, :error, %{}, "connection refused")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "#sync-error-#{config.id}")
       assert render(view) =~ "connection refused"
@@ -172,7 +172,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
       {:ok, _run} = Mydia.Sync.finish_run(run, :ok, %{imported: 2, exported: 1}, nil)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "[data-test=last-sync-run]")
       assert render(view) =~ "Synced 2 in, 1 out"
@@ -196,7 +196,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           :some_future_reason
         )
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "#sync-skip-#{config.id}")
       assert render(view) =~ "some_future_reason"
@@ -213,7 +213,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           last_auth_error_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "[data-test=reconnect-plex]")
     end
@@ -243,7 +243,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           connection_settings: %{}
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "[aria-label='Disabled']")
     end
@@ -260,7 +260,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           connection_settings: %{}
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "[aria-label='Unknown']")
     end
@@ -301,7 +301,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           connection_settings: %{}
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       html =
         view
@@ -328,7 +328,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           connection_settings: %{}
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       html =
         view
@@ -502,7 +502,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       server = sync_enabled_server(bypass)
       Bypass.down(bypass)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       view
       |> element(~s{[phx-click="open_account_mapping"][phx-value-id="#{server.id}"]})
@@ -585,7 +585,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
       %{view: view}
     end
 
@@ -630,7 +630,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
     test "renaming via form params alone preserves machine_identifier and connections",
          %{conn: conn, config: config} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       view |> element("[phx-click='edit_media_server']") |> render_click()
 
@@ -681,7 +681,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
     test "renders the empty state with a connect action when nothing is configured",
          %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "#media-servers-empty")
       assert has_element?(view, "#media-servers-empty-cta")
@@ -703,7 +703,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
         :seeding_links
       )
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(view, "[data-test='last-sync-run']")
       refute render(view) =~ "seeding_links"
@@ -724,7 +724,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
 
     test "saving a Plex config enqueues a link seed", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       view
       |> element("#media-servers-empty-cta")
@@ -774,7 +774,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
       assert Mydia.Settings.list_media_server_user_links(config.id) == []
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       view |> element("[phx-click='edit_media_server']") |> render_click()
 
@@ -806,7 +806,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           connection_settings: %{"sync_watched" => true}
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       view |> element("[phx-click='edit_media_server']") |> render_click()
 
@@ -825,7 +825,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
 
     test "saving a Jellyfin config enqueues a link seed too", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       view
       |> element("#media-servers-empty-cta")
@@ -867,7 +867,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           connection_settings: %{"sync_watched" => true}
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       view
       |> element("button[phx-click='sync_watched'][phx-value-id='#{config.id}']")
@@ -893,7 +893,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           connection_settings: %{"sync_watched" => true}
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       assert has_element?(
                view,
@@ -915,7 +915,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
           enabled: true
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
       refute has_element?(
                view,
@@ -931,7 +931,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
   # itself: no job may ever carry a user without also carrying the link that says
   # which remote account that user is.
   defp click_sync_now(conn, server) do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+    {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
     html =
       view
@@ -993,7 +993,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
   # The account list is fetched off the LiveView process, so the modal renders
   # its loading state first and the form only once the answer lands.
   defp open_account_mapping(conn, server) do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/media-servers")
+    {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
 
     view
     |> element(~s{[phx-click="open_account_mapping"][phx-value-id="#{server.id}"]})

@@ -39,7 +39,7 @@ defmodule MydiaWeb.DashboardLive.StatTilesTest do
 
     assert has_element?(
              view,
-             ~s(#stat-tile-storage[href="/admin/config/library-paths"])
+             ~s(#stat-tile-storage[href="/admin/library-paths"])
            )
   end
 

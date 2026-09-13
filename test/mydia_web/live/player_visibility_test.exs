@@ -177,15 +177,15 @@ defmodule MydiaWeb.PlayerVisibilityTest do
 
     test "the admin tabs drop Dashboard and Remote Access", %{conn: conn} do
       start_supervised!(Mydia.Indexers.Health)
-      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
       refute has_element?(view, ~s{a[href="/admin/dashboard"]})
-      refute has_element?(view, ~s{a[href="/admin/config/remote-access"]})
+      refute has_element?(view, ~s{a[href="/admin/remote-access"]})
     end
 
     test "admin settings drop the Streaming category", %{conn: conn} do
       start_supervised!(Mydia.Indexers.Health)
-      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
       refute has_element?(view, "#hwaccel-status")
     end
@@ -220,7 +220,7 @@ defmodule MydiaWeb.PlayerVisibilityTest do
       {:ok, home, _html} = live(conn, ~p"/")
       assert has_element?(home, ~s{a[href="/devices"]})
 
-      {:ok, settings, _html} = live(conn, ~p"/admin/config/settings")
+      {:ok, settings, _html} = live(conn, ~p"/admin/settings")
       assert has_element?(settings, ~s{a[href="/admin/dashboard"]})
       assert has_element?(settings, "#hwaccel-status")
     end

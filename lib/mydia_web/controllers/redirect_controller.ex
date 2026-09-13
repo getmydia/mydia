@@ -2,10 +2,12 @@ defmodule MydiaWeb.RedirectController do
   use MydiaWeb, :controller
 
   @doc """
-  Redirects /admin and /admin/status to the consolidated /admin/config page.
+  Redirects /admin to the Status page.
   """
-  def admin_config(conn, _params) do
-    redirect(conn, to: ~p"/admin/config")
+  def admin(conn, _params) do
+    conn
+    |> put_status(:moved_permanently)
+    |> redirect(to: ~p"/admin/status")
   end
 
   @doc """

@@ -15,7 +15,7 @@ defmodule MydiaWeb.AdminSettingsLiveInvalidSettingsTest do
   end
 
   test "no alert when every row is usable", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
     refute has_element?(view, "#invalid-config-settings")
   end
@@ -25,7 +25,7 @@ defmodule MydiaWeb.AdminSettingsLiveInvalidSettingsTest do
     # validation this is the only way such a row exists.
     Repo.insert!(%ConfigSetting{key: "server.port", value: "abc", category: :server})
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
     assert has_element?(view, "#invalid-config-settings")
     assert has_element?(view, "#invalid-config-setting-server-port")
@@ -44,7 +44,7 @@ defmodule MydiaWeb.AdminSettingsLiveInvalidSettingsTest do
       category: :streaming
     })
 
-    {:ok, _view, html} = live(conn, ~p"/admin/config/settings")
+    {:ok, _view, html} = live(conn, ~p"/admin/settings")
 
     # Scope to this setting's own row via its value control's phx-value-key,
     # climbing to the row content div that also holds the source badge.
@@ -67,7 +67,7 @@ defmodule MydiaWeb.AdminSettingsLiveInvalidSettingsTest do
   test "deleting an unusable row removes it from the alert", %{conn: conn} do
     setting = Repo.insert!(%ConfigSetting{key: "server.port", value: "abc", category: :server})
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
     view
     |> element("#delete-invalid-config-setting-server-port")
@@ -82,7 +82,7 @@ defmodule MydiaWeb.AdminSettingsLiveInvalidSettingsTest do
   } do
     setting = Repo.insert!(%ConfigSetting{key: "server.port", value: "abc", category: :server})
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
     # Simulate a double-click, or a second admin clearing the same row first:
     # the row is gone from the database, but the LiveView's assigns still

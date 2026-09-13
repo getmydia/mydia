@@ -84,7 +84,7 @@ defmodule MydiaWeb.DevicesLive.PairingComponents do
                   <%= if @admin do %>
                     <.link
                       id="pairing-enable-remote-access"
-                      navigate={~p"/admin/config/remote-access"}
+                      navigate={~p"/admin/remote-access"}
                       class="link link-primary"
                     >
                       Turn it on

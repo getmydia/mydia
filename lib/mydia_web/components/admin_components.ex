@@ -53,82 +53,82 @@ defmodule MydiaWeb.AdminComponents do
           Dashboard
         </.tab_link>
       <% end %>
-      <.tab_link active={@active_tab == :status} to="/admin/config/status" icon="hero-server">
+      <.tab_link active={@active_tab == :status} to="/admin/status" icon="hero-server">
         Status
       </.tab_link>
       <.tab_link
         active={@active_tab == :settings}
-        to="/admin/config/settings"
+        to="/admin/settings"
         icon="hero-cog-6-tooth"
       >
         Settings
       </.tab_link>
       <.tab_link
         active={@active_tab == :quality}
-        to="/admin/config/quality"
+        to="/admin/quality"
         icon="hero-sparkles"
       >
         Quality
       </.tab_link>
       <.tab_link
         active={@active_tab == :custom_formats}
-        to="/admin/config/custom-formats"
+        to="/admin/custom-formats"
         icon="hero-language"
       >
         Custom Formats
       </.tab_link>
       <.tab_link
         active={@active_tab == :clients}
-        to="/admin/config/clients"
+        to="/admin/clients"
         icon="hero-arrow-down-tray"
       >
         Clients
       </.tab_link>
       <.tab_link
         active={@active_tab == :indexers}
-        to="/admin/config/indexers"
+        to="/admin/indexers"
         icon="hero-magnifying-glass"
       >
         Indexers
       </.tab_link>
       <.tab_link
         active={@active_tab == :library_paths}
-        to="/admin/config/library-paths"
+        to="/admin/library-paths"
         icon="hero-folder"
       >
         Library
       </.tab_link>
       <.tab_link
         active={@active_tab == :duplicates}
-        to="/admin/config/duplicates"
+        to="/admin/duplicates"
         icon="hero-document-duplicate"
       >
         Duplicates
       </.tab_link>
       <.tab_link
         active={@active_tab == :trash}
-        to="/admin/config/trash"
+        to="/admin/trash"
         icon="hero-trash"
       >
         Trash
       </.tab_link>
       <.tab_link
         active={@active_tab == :media_servers}
-        to="/admin/config/media-servers"
+        to="/admin/media-servers"
         icon="hero-server-stack"
       >
         Media Servers
       </.tab_link>
       <.tab_link
         active={@active_tab == :plugins}
-        to="/admin/config/plugins"
+        to="/admin/plugins"
         icon="hero-puzzle-piece"
       >
         Plugins
       </.tab_link>
       <.tab_link
         active={@active_tab == :path_mappings}
-        to="/admin/config/path-mappings"
+        to="/admin/path-mappings"
         icon="hero-arrows-right-left"
       >
         Path Mappings
@@ -136,13 +136,13 @@ defmodule MydiaWeb.AdminComponents do
       <%= if @player_enabled do %>
         <.tab_link
           active={@active_tab == :remote_access}
-          to="/admin/config/remote-access"
+          to="/admin/remote-access"
           icon="hero-signal"
         >
           Remote Access
         </.tab_link>
       <% end %>
-      <.tab_link active={@active_tab == :api_keys} to="/admin/config/api-keys" icon="hero-key">
+      <.tab_link active={@active_tab == :api_keys} to="/admin/api-keys" icon="hero-key">
         API Keys
       </.tab_link>
     </div>

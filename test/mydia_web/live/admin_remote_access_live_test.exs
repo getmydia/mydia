@@ -36,7 +36,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
 
   describe "Authentication" do
     test "redirects unauthenticated users", %{conn: conn} do
-      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config/remote-access")
+      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/remote-access")
       assert path =~ "/auth"
     end
   end
@@ -57,7 +57,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
     test "renders the remote access page when feature is available", %{conn: conn} do
       # Remote access may not be available in all test environments (depends on P2P NIF).
       # If the route is reachable, verify it renders; otherwise accept the redirect.
-      case live(conn, ~p"/admin/config/remote-access") do
+      case live(conn, ~p"/admin/remote-access") do
         {:ok, _view, html} ->
           assert html =~ "Remote Access" or html =~ "Configuration"
 
@@ -84,7 +84,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
     end
 
     test "adding a direct URL through the admin UI persists it", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/remote-access")
+      {:ok, view, _html} = live(conn, ~p"/admin/remote-access")
 
       url = "https://mydia-add-test.local:4000"
 
@@ -102,7 +102,7 @@ defmodule MydiaWeb.AdminRemoteAccessLiveTest do
       url = "https://mydia-remove-test.local:4000"
       {:ok, _config} = RemoteAccess.upsert_config(%{direct_urls: [url]})
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/remote-access")
+      {:ok, view, _html} = live(conn, ~p"/admin/remote-access")
 
       html = render_click(view, "remove_direct_url", %{"url" => url})
 

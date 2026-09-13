@@ -28,7 +28,7 @@ defmodule MydiaWeb.AdminSettingsHwaccelTest do
   end
 
   test "the streaming section reports the hardware status", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
     assert has_element?(view, "#hwaccel-status")
   end
@@ -37,7 +37,7 @@ defmodule MydiaWeb.AdminSettingsHwaccelTest do
     # With no probe running in test, capabilities/0 reports software with a
     # reason. An operator must be able to tell "no GPU" from "driver missing"
     # from "you turned it off" without reading logs.
-    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
     assert render(view) =~ "not running"
   end

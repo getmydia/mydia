@@ -21,7 +21,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.CustomFormatSection do
         <p class="text-sm opacity-70">
           Score releases by what their title contains. A rejected format is never grabbed.
           Define formats on the
-          <.link navigate={~p"/admin/config/custom-formats"} class="link">
+          <.link navigate={~p"/admin/custom-formats"} class="link">
             Custom Formats
           </.link>
           page.

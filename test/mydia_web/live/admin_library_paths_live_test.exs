@@ -22,7 +22,7 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
 
   describe "Authentication" do
     test "redirects unauthenticated users", %{conn: conn} do
-      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config/library-paths")
+      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/library-paths")
       assert path =~ "/auth"
     end
   end
@@ -37,7 +37,7 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/library-paths")
+      {:ok, view, _html} = live(conn, ~p"/admin/library-paths")
       %{conn: conn, view: view}
     end
 
@@ -55,7 +55,7 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, _view, html} = live(conn, ~p"/admin/config/library-paths")
+      {:ok, _view, html} = live(conn, ~p"/admin/library-paths")
       assert html =~ "Library Paths"
     end
 
@@ -169,7 +169,7 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/library-paths")
+      {:ok, view, _html} = live(conn, ~p"/admin/library-paths")
 
       # Every library shows a source badge (scoped per row), so the badge column
       # stays aligned across types: movies always source from TMDB, series use
@@ -208,7 +208,7 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/library-paths")
+      {:ok, view, _html} = live(conn, ~p"/admin/library-paths")
       %{conn: conn, view: view}
     end
 

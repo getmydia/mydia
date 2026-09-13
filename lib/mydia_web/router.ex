@@ -215,9 +215,7 @@ defmodule MydiaWeb.Router do
   scope "/admin", MydiaWeb do
     pipe_through [:browser, :auth, :require_authenticated, :require_admin]
 
-    # Redirect old status routes to consolidated config page
-    get "/", RedirectController, :admin_config
-    get "/status", RedirectController, :admin_config
+    get "/", RedirectController, :admin
 
     # Device management is a user action now. This kept old bookmarks working;
     # the page it replaced only ever listed the signed-in admin's own devices.
@@ -235,22 +233,21 @@ defmodule MydiaWeb.Router do
         {MydiaWeb.Live.UserAuth, :load_navigation_data}
       ] do
       live "/dashboard", AdminDashboardLive.Index, :index
-      live "/config", AdminSystemLive.Index, :index
-      live "/config/status", AdminSystemLive.Index, :index
-      live "/config/settings", AdminSettingsLive.Index, :index
-      live "/config/quality", AdminQualityProfilesLive.Index, :index
-      live "/config/custom-formats", AdminCustomFormatsLive.Index, :index
-      live "/config/clients", AdminDownloadClientsLive.Index, :index
-      live "/config/indexers", AdminIndexersLive.Index, :index
+      live "/status", AdminSystemLive.Index, :index
+      live "/settings", AdminSettingsLive.Index, :index
+      live "/quality", AdminQualityProfilesLive.Index, :index
+      live "/custom-formats", AdminCustomFormatsLive.Index, :index
+      live "/clients", AdminDownloadClientsLive.Index, :index
+      live "/indexers", AdminIndexersLive.Index, :index
       live "/subtitle-providers", AdminSubtitleProvidersLive, :index
-      live "/config/library-paths", AdminLibraryPathsLive.Index, :index
-      live "/config/duplicates", AdminDuplicatesLive.Index, :index
-      live "/config/trash", AdminTrashLive.Index, :index
-      live "/config/media-servers", AdminMediaServersLive.Index, :index
-      live "/config/plugins", AdminPluginsLive.Index, :index
-      live "/config/path-mappings", AdminPathMappingsLive.Index, :index
-      live "/config/remote-access", AdminRemoteAccessLive.Index, :index
-      live "/config/api-keys", AdminApiKeysLive.Index, :index
+      live "/library-paths", AdminLibraryPathsLive.Index, :index
+      live "/duplicates", AdminDuplicatesLive.Index, :index
+      live "/trash", AdminTrashLive.Index, :index
+      live "/media-servers", AdminMediaServersLive.Index, :index
+      live "/plugins", AdminPluginsLive.Index, :index
+      live "/path-mappings", AdminPathMappingsLive.Index, :index
+      live "/remote-access", AdminRemoteAccessLive.Index, :index
+      live "/api-keys", AdminApiKeysLive.Index, :index
       live "/import-lists", AdminImportListsLive.Index, :index
       live "/jobs", JobsLive.Index, :index
       live "/transcodes", TranscodesLive.Index, :index

@@ -22,7 +22,7 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
 
   describe "Authentication" do
     test "redirects unauthenticated users", %{conn: conn} do
-      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config/settings")
+      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/settings")
       assert path =~ "/auth"
     end
   end
@@ -37,7 +37,7 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
       %{conn: conn, view: view}
     end
 
@@ -85,7 +85,7 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
         existing -> Settings.delete_config_setting(existing)
       end
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
       view
       |> element("input[type='checkbox'][phx-value-key='crash_reporting.enabled']")
@@ -112,7 +112,7 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
       assert Mydia.CrashReporter.enabled?(),
              "legacy 'on' value should be interpreted as enabled"
 
-      {:ok, fresh_view, _html} = live(conn, ~p"/admin/config/settings")
+      {:ok, fresh_view, _html} = live(conn, ~p"/admin/settings")
 
       assert has_element?(
                fresh_view,
@@ -212,7 +212,7 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
       %{view: view}
     end
 

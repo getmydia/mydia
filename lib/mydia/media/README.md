@@ -216,7 +216,7 @@ That ranking fallback must put bitrate above codec. Jujutsu Kaisen S03E03 has
 codec-before-bitrate keeps the 520 MB av1 and trashes the source.
 
 This shipped as the prune feature in PR #520, with the admin page now at
-`/admin/config/duplicates` (`MydiaWeb.AdminDuplicatesLive`) after PR #522. The
+`/admin/duplicates` (`MydiaWeb.AdminDuplicatesLive`) after PR #522. The
 backend context is still `Mydia.Library.Prune`. The gate lives in
 `Mydia.Library.Prune.Eligibility`, where the 2% duration tolerance and the
 codec-ranks-last rule are module attributes with the reasoning in their

@@ -297,8 +297,8 @@ defmodule MydiaWeb.Layouts do
                 </li>
                 <li>
                   <.link
-                    navigate="/admin/config"
-                    class={nav_active?(@current_path, "/admin/config", false) && "active"}
+                    navigate="/admin/status"
+                    class={nav_active?(@current_path, "/admin/status", false) && "active"}
                   >
                     <.icon name="hero-cog-6-tooth" class="w-5 h-5" /> Configuration
                   </.link>

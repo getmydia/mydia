@@ -44,7 +44,7 @@ defmodule MydiaWeb.AdminSettingsLiveFeedbackTest do
   end
 
   test "admin sees feedback toggle on by default", %{admin_conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, html} = live(conn, ~p"/admin/settings")
 
     assert html =~ "Feedback"
     assert html =~ "Show Send feedback button"
@@ -56,7 +56,7 @@ defmodule MydiaWeb.AdminSettingsLiveFeedbackTest do
   end
 
   test "admin can toggle feedback off and setting persists", %{admin_conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
     html =
       view
@@ -78,7 +78,7 @@ defmodule MydiaWeb.AdminSettingsLiveFeedbackTest do
         category: :feedback
       })
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/settings")
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
     refute has_element?(
              view,
@@ -87,7 +87,7 @@ defmodule MydiaWeb.AdminSettingsLiveFeedbackTest do
   end
 
   test "non-admin users are redirected away from admin settings", %{user_conn: conn} do
-    assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin/config/settings")
+    assert {:error, {:redirect, %{to: "/"}}} = live(conn, ~p"/admin/settings")
   end
 
   test "toggle off propagates to other authenticated LiveViews", %{admin_conn: conn} do

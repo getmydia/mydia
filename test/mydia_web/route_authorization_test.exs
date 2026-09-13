@@ -30,7 +30,7 @@ defmodule MydiaWeb.RouteAuthorizationTest do
   @authenticated_routes ["/", "/movies", "/downloads", "/calendar"]
 
   # live_session :admin — guarded by {:ensure_role, :admin}
-  @admin_live_routes ["/admin/config", "/admin/users", "/admin/requests"]
+  @admin_live_routes ["/admin/status", "/admin/users", "/admin/requests"]
 
   describe "unauthenticated visitors" do
     for route <- @authenticated_routes do
@@ -98,15 +98,15 @@ defmodule MydiaWeb.RouteAuthorizationTest do
     end
   end
 
-  # /admin and /admin/status are RedirectController actions behind the
-  # :require_admin plug, not LiveViews. They need ConnTest, not live/2.
+  # /admin is a RedirectController action behind the :require_admin plug,
+  # not a LiveView. It needs ConnTest, not live/2.
   describe "/admin controller redirects" do
-    test "an admin is forwarded to the consolidated config page", %{conn: conn} do
+    test "an admin is forwarded to the Status page", %{conn: conn} do
       conn = log_in_user(conn, admin_user_fixture())
 
       conn = get(conn, "/admin")
 
-      assert redirected_to(conn) == "/admin/config"
+      assert redirected_to(conn, 301) == "/admin/status"
     end
 
     test "a non-admin is redirected away from /admin", %{conn: conn} do

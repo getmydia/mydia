@@ -16,7 +16,7 @@ defmodule MydiaWeb.PlayerDisabledTest do
 
     for path <- [
           "/devices",
-          "/admin/config/remote-access",
+          "/admin/remote-access",
           "/admin/dashboard",
           "/admin/transcodes",
           "/play/movie/00000000-0000-0000-0000-000000000000"

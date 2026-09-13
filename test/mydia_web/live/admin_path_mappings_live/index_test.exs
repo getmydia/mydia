@@ -29,14 +29,14 @@ defmodule MydiaWeb.AdminPathMappingsLive.IndexTest do
 
   describe "redirects" do
     test "unauthenticated users are redirected", %{conn: conn} do
-      assert {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config/path-mappings")
+      assert {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/path-mappings")
       assert path =~ "/auth"
     end
   end
 
   describe "CRUD" do
     setup %{conn: conn, token: token} do
-      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/config/path-mappings")
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/path-mappings")
       {:ok, view: view}
     end
 
@@ -100,7 +100,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.IndexTest do
           local_prefix: "/data/torrents/complete"
         })
 
-      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/config/path-mappings")
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/path-mappings")
 
       view
       |> element("#mapping-#{mapping.id} button[phx-click='delete_path_mapping']")
@@ -122,7 +122,7 @@ defmodule MydiaWeb.AdminPathMappingsLive.IndexTest do
         Loader.reload(config_file: "nonexistent.yml")
       end)
 
-      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/config/path-mappings")
+      {:ok, view, _html} = live(authed(conn, token), ~p"/admin/path-mappings")
       {:ok, view: view}
     end
 

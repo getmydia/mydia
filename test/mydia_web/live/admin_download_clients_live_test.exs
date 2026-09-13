@@ -22,7 +22,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
 
   describe "Authentication" do
     test "redirects unauthenticated users", %{conn: conn} do
-      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config/clients")
+      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/clients")
       assert path =~ "/auth"
     end
   end
@@ -37,7 +37,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
       %{conn: conn, view: view}
     end
 
@@ -59,7 +59,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, _view, html} = live(conn, ~p"/admin/config/clients")
+      {:ok, _view, html} = live(conn, ~p"/admin/clients")
       assert html =~ "Download Clients"
     end
 
@@ -80,7 +80,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         download_client: "qbit-doomed"
       })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
 
       view
       |> element("#delete-download-client-#{client.id}")
@@ -122,7 +122,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         })
       end
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
 
       view
       |> element("#delete-download-client-#{client.id}")
@@ -142,7 +142,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
           enabled: true
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
 
       view |> element("#delete-download-client-#{client.id}") |> render_click()
       view |> element("#confirm-delete-download-client") |> render_click()
@@ -162,7 +162,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
           enabled: true
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
 
       view |> element("#delete-download-client-#{client.id}") |> render_click()
       view |> element("#confirm-delete-download-client") |> render_click()
@@ -191,7 +191,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
           enabled: true
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
 
       view
       |> element("#delete-download-client-#{client.id}")
@@ -216,7 +216,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
           enabled: true
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
 
       view |> element("#delete-download-client-#{client.id}") |> render_click()
       assert has_element?(view, "#delete-download-client-modal")
@@ -263,7 +263,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
       %{conn: conn, view: view}
     end
 
@@ -408,7 +408,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
           "category" => "all"
         })
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
 
       view
       |> element(~s{button[phx-click="edit_download_client"][phx-value-id="#{legacy_client.id}"]})
@@ -431,7 +431,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
       %{conn: conn, view: view}
     end
 
@@ -506,7 +506,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
       %{conn: conn, view: view}
     end
 
@@ -558,7 +558,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
       %{conn: conn, view: view}
     end
 
@@ -618,7 +618,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/clients")
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
       %{conn: conn, view: view}
     end
 
@@ -757,7 +757,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
     end
 
     test "template shows disabled buttons for runtime configs", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/admin/config/clients")
+      {:ok, _view, html} = live(conn, ~p"/admin/clients")
 
       if html =~ "runtime::download_client" do
         assert html =~ "Cannot edit runtime-configured clients"
@@ -766,7 +766,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
     end
 
     test "template shows ENV badge for runtime configs", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/admin/config/clients")
+      {:ok, _view, html} = live(conn, ~p"/admin/clients")
 
       if html =~ "runtime::download_client" do
         assert html =~ "ENV"

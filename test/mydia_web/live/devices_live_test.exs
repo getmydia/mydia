@@ -353,7 +353,7 @@ defmodule MydiaWeb.DevicesLiveTest do
           Keyword.merge(pairing_assigns(nil), remote_access_enabled: false, admin: true)
         )
 
-      assert html =~ ~s(href="/admin/config/remote-access")
+      assert html =~ ~s(href="/admin/remote-access")
     end
 
     test "anyone else is told to ask an administrator" do
@@ -363,7 +363,7 @@ defmodule MydiaWeb.DevicesLiveTest do
           Keyword.merge(pairing_assigns(nil), remote_access_enabled: false, admin: false)
         )
 
-      refute html =~ ~s(href="/admin/config/remote-access")
+      refute html =~ ~s(href="/admin/remote-access")
       assert html =~ "Ask an administrator"
     end
   end

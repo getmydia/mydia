@@ -23,7 +23,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
   describe "Authentication" do
     test "redirects unauthenticated users", %{conn: conn} do
-      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config/indexers")
+      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/indexers")
       assert path =~ "/auth"
     end
   end
@@ -42,7 +42,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       %{conn: conn, view: view}
     end
 
@@ -61,7 +61,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, _view, html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, _view, html} = live(conn, ~p"/admin/indexers")
       assert html =~ "Indexers"
     end
 
@@ -332,7 +332,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
         })
 
       # Seed before mounting: the row has to be in the list the LiveView loads.
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view
       |> element(~s{button[phx-click="edit_indexer"][phx-value-id="#{indexer.id}"]})
@@ -507,7 +507,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       %{view: view, name: name, base_url: base_url, runtime_id: "runtime::indexer::#{name}"}
     end
@@ -586,7 +586,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
 
     test "renders the FlareSolverr row, always visible when unconfigured", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       assert has_element?(view, "#flaresolverr-panel", "FlareSolverr")
       assert has_element?(view, "#flaresolverr-panel", "not configured")
@@ -600,13 +600,13 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       # fixture only needs to look like one, not resolve as one (#530).
       System.put_env("FLARESOLVERR_URL", "http://env-flaresolverr.test:8191")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       assert has_element?(view, "#flaresolverr-panel .badge", "ENV")
     end
 
     test "Edit opens a modal form with the four config fields", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view
       |> element(~s{button[phx-click="edit_flaresolverr"]})
@@ -618,7 +618,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
 
     test "saving the modal form upserts the settings", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
@@ -651,7 +651,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
 
     test "invalid timeout shows a validation error and writes no setting", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
@@ -668,7 +668,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
 
     test "Test Connection from the row is handled without crashing", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view
       |> element(~s{button[phx-click="test_flaresolverr"]})
@@ -682,7 +682,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
       expect_flaresolverr_ok(bypass)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element("#flaresolverr-row-test") |> render_click()
 
       assert has_element?(view, "#flash-info", "FlareSolverr connection successful")
@@ -693,7 +693,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       # Mount disabled so its async status probe stays quiet, then enable before
       # the click. expect_once then fails the test if the click probes twice.
       put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       await_mount_status(view)
 
       put_saved_flaresolverr(enabled: true, url: "http://localhost:#{bypass.port}")
@@ -707,7 +707,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     test "a failed row Test on an enabled config marks the row unhealthy", %{conn: conn} do
       bypass = Bypass.open()
       put_saved_flaresolverr(enabled: false, url: "http://localhost:#{bypass.port}")
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       await_mount_status(view)
 
       put_saved_flaresolverr(enabled: true, url: "http://localhost:#{bypass.port}")
@@ -725,7 +725,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     test "row Test with no saved URL points the operator at Edit", %{conn: conn} do
       put_saved_flaresolverr(enabled: false, url: nil)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element("#flaresolverr-row-test") |> render_click()
 
       assert has_element?(view, "#flash-error", "No FlareSolverr URL configured")
@@ -736,7 +736,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       put_saved_flaresolverr(enabled: false, url: nil)
       expect_flaresolverr_ok(bypass)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
       view
@@ -763,7 +763,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       put_saved_flaresolverr(enabled: false, url: nil)
       expect_flaresolverr_ok(bypass)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
       view
@@ -784,7 +784,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       put_saved_flaresolverr(enabled: false, url: "http://localhost:#{saved.port}")
       expect_flaresolverr_ok(edited)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
       view
@@ -799,7 +799,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     test "modal Test with a blank URL asks for one", %{conn: conn} do
       put_saved_flaresolverr(enabled: false, url: nil)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
       view |> element("#flaresolverr-modal-test") |> render_click()
 
@@ -810,7 +810,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     test "modal Test rejects a URL without an http(s) scheme", %{conn: conn} do
       put_saved_flaresolverr(enabled: false, url: nil)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
       view
@@ -828,7 +828,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       Bypass.down(bypass)
       put_saved_flaresolverr(enabled: false, url: nil)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
       view
@@ -848,7 +848,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       {:ok, _config} = Mydia.Config.Loader.reload()
       expect_flaresolverr_ok(bypass)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
       # The URL input is disabled, so a browser never submits it and the
@@ -867,7 +867,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     test "enabling with a blank URL shows a required-error and keeps the modal open", %{
       conn: conn
     } do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
@@ -882,7 +882,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
 
     test "max_timeout below timeout shows a validation error and writes no setting", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
@@ -905,7 +905,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       # effective, so it must resolve nowhere rather than be allowlisted.
       System.put_env("FLARESOLVERR_URL", "http://env-flaresolverr.test:8191")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
@@ -928,7 +928,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
     end
 
     test "Cancel closes the modal without writing a setting", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
       assert has_element?(view, "#flaresolverr-form")
@@ -954,7 +954,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
       # Should not crash on mount or when opening the edit modal; the malformed
       # value falls back to the schema default rather than raising.
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
       view |> element(~s{button[phx-click="edit_flaresolverr"]}) |> render_click()
 
       assert has_element?(view, "#flaresolverr-form")
@@ -1018,7 +1018,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       stale = Mydia.Config.Loader.load!(sources: [:yaml, :env])
       Application.put_env(:mydia, :runtime_config, stale)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       refute Mydia.Indexers.FlareSolverr.enabled?()
 
@@ -1043,7 +1043,7 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
 
       assert {:ok, _} = Mydia.Config.Bootstrap.run()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/indexers")
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
 
       assert Mydia.Indexers.FlareSolverr.enabled?()
       assert has_element?(view, "#flaresolverr-panel .badge-success", "Enabled")

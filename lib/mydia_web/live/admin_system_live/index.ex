@@ -25,19 +25,6 @@ defmodule MydiaWeb.AdminSystemLive.Index do
      |> load_system_data()}
   end
 
-  @impl true
-  def handle_params(params, _url, socket) do
-    # Handle backward-compatible ?tab= redirects
-    case params["tab"] do
-      nil ->
-        {:noreply, socket}
-
-      tab ->
-        route = tab_to_route(tab)
-        {:noreply, push_navigate(socket, to: route)}
-    end
-  end
-
   ## Timer and PubSub handlers
 
   @impl true
@@ -172,14 +159,4 @@ defmodule MydiaWeb.AdminSystemLive.Index do
       true -> "#{seconds}s"
     end
   end
-
-  # Backward-compatible ?tab= redirect whitelist
-  defp tab_to_route("clients"), do: "/admin/config/clients"
-  defp tab_to_route("indexers"), do: "/admin/config/indexers"
-  defp tab_to_route("quality"), do: "/admin/config/quality"
-  defp tab_to_route("library"), do: "/admin/config/library-paths"
-  defp tab_to_route("media_servers"), do: "/admin/config/media-servers"
-  defp tab_to_route("remote_access"), do: "/admin/config/remote-access"
-  defp tab_to_route("general"), do: "/admin/config/settings"
-  defp tab_to_route(_), do: "/admin/config/status"
 end
