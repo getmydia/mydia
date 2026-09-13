@@ -1718,6 +1718,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#polling-for-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Polling for changes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mutations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3044,6 +3055,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#polling-for-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Polling for changes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mutations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3176,8 +3198,8 @@ and restarting. A value shorter than 32 characters is refused at boot.</p>
 <td>One item with its availability status and episodes</td>
 </tr>
 <tr>
-<td><code>mediaItems(first, after, updatedSince)</code></td>
-<td>A page of items, oldest change first (<code>updatedSince</code> is inclusive)</td>
+<td><code>mediaItemChanges(first, after)</code></td>
+<td>A page of media item changes (live items and deletions), oldest revision first (see <a href="#polling-for-changes">Polling for changes</a>)</td>
 </tr>
 <tr>
 <td><code>downloads(filter)</code></td>
@@ -3205,6 +3227,90 @@ and restarting. A value shorter than 32 characters is refused at boot.</p>
 </code></pre></div>
 <p>There is no GraphiQL or Playground page on this endpoint. Use any GraphQL client
 that can set a request header.</p>
+<h2 id="polling-for-changes">Polling for changes</h2>
+<p><code>mediaItemChanges</code> is the convergence feed: it reports every change to a media
+item, deletions included, in the order the changes were recorded. A poller keeps
+one cursor and never needs a timestamp.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">query</span><span class="w"> </span><span class="nf">Poll</span><span class="p">(</span><span class="nv">$after</span><span class="p">:</span><span class="w"> </span><span class="nb">String</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="n">mediaItemChanges</span><span class="p">(</span><span class="n">first</span><span class="p">:</span><span class="w"> </span><span class="mi">50</span><span class="p">,</span><span class="w"> </span><span class="n">after</span><span class="p">:</span><span class="w"> </span><span class="nv">$after</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="n">edges</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">      </span><span class="n">cursor</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">      </span><span class="n">node</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">        </span><span class="n">mediaItemId</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">        </span><span class="n">deleted</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">        </span><span class="n">changedAt</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">        </span><span class="n">mediaItem</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="n">title</span><span class="w"> </span><span class="n">updatedAt</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">    </span><span class="n">pageInfo</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">hasNextPage</span><span class="w"> </span><span class="n">endCursor</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="p">}</span>
+</code></pre></div>
+<p>The first request omits <code>after</code> (or sends <code>null</code>). The feed then starts at the
+oldest retained change and pages forward, so a full pass is an initial snapshot:
+by the time <code>hasNextPage</code> is false you have seen the latest state of every item.
+Keep <code>endCursor</code> and pass it as <code>after</code> on the next poll. An empty page repeats
+the cursor you sent, so a poller that always passes back <code>endCursor</code> can never
+fall back to the start of the feed.</p>
+<p>Each edge is one change:</p>
+<ul>
+<li><code>deleted: false</code> is a live item; <code>mediaItem</code> is the item's current
+  representation. Upsert it into local state keyed by <code>mediaItemId</code>.</li>
+<li><code>deleted: true</code> is a tombstone: <code>mediaItem</code> is <code>null</code> and <code>deleted</code> is true, so
+  delete the local item named by <code>mediaItemId</code> (or ignore the change if you never
+  had it). <code>mediaItemId</code> is present in both cases, which makes it the idempotency
+  key and the deletion key: you never need to keep an earlier payload to act on
+  a change.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">"edges"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="p">{</span><span class="nt">"cursor"</span><span class="p">:</span><span class="w"> </span><span class="s2">"djE6NA"</span><span class="p">,</span><span class="w"> </span><span class="nt">"node"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"mediaItemId"</span><span class="p">:</span><span class="w"> </span><span class="s2">"…"</span><span class="p">,</span><span class="w"> </span><span class="nt">"deleted"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"changedAt"</span><span class="p">:</span><span class="w"> </span><span class="s2">"…"</span><span class="p">,</span><span class="w"> </span><span class="nt">"mediaItem"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">}}</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="p">]</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">}</span>
+</code></pre></div>
+<p>Drain a response before sleeping: while <code>hasNextPage</code> is true there is another
+page waiting behind the same cursor, so call again with the new <code>endCursor</code>
+instead of waiting for the next poll interval.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>cursor = null
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>loop:
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>  page = mediaItemChanges(first: 50, after: cursor)   # omit after on the first call
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>  apply every edge: upsert node.mediaItem when deleted is false, delete node.mediaItemId when true
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>  cursor = page.pageInfo.endCursor
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  repeat immediately while page.pageInfo.hasNextPage, else wait for the next poll
+</code></pre></div>
+<p>What the contract guarantees:</p>
+<ul>
+<li><strong>The cursor is the only synchronization watermark.</strong> It is opaque and derived
+  from an internal revision number, never from a timestamp. Do not parse it,
+  compare it to <code>changedAt</code>, or build one yourself; pass <code>endCursor</code> back
+  verbatim. A malformed cursor, and any cursor minted by the retired
+  <code>mediaItems(updatedSince:)</code> feed, is refused with <code>INVALID_INPUT</code> instead of
+  being ignored, so a stale client resyncs from scratch rather than resuming
+  somewhere arbitrary.</li>
+<li><strong>Repeated delivery is safe and expected.</strong> An item can appear on two pages, or
+  change again while you are reading it, so one <code>mediaItemId</code> may arrive more than
+  once, sometimes with the same state. Apply changes idempotently and treat
+  omission (not repetition) as the only failure mode.</li>
+<li><strong>Tombstones are retained indefinitely.</strong> This grows by one row per media item
+  ever created, not per change, so a consumer that stops polling for months can
+  still resume from its last cursor and see every deletion it missed.</li>
+<li><strong><code>changedAt</code> is informational.</strong> It is when the revision was recorded; for a
+  live change it equals the node's <code>mediaItem.updatedAt</code>, which is the aggregate
+  change time of the returned representation rather than only the parent row. Both
+  are for display and for order-independent bookkeeping. Neither orders the feed
+  and neither is a polling watermark. Note that <code>MediaItem.updatedAt</code> now reports
+  the item's aggregate change time, which on upgrade is the migration instant for
+  every existing item until it next changes.</li>
+<li><strong>Some availability changes have no database write behind them.</strong> <code>status.state</code>
+  compares episode air dates with the current UTC date, so a show can leave
+  <code>UPCOMING</code> at a UTC date boundary with nothing written to the database. A
+  sweep marks the affected shows and they arrive as ordinary live changes, a
+  little after the boundary rather than at it. Expect a show to appear with no
+  child write, and re-read the whole selection from every live change instead of
+  merging only the fields you believe changed.</li>
+<li><strong>There is no push channel.</strong> The endpoint answers requests only, so poll on the
+  interval your consumers need; each page is a plain indexed read.</li>
+</ul>
 <h2 id="mutations">Mutations</h2>
 <table>
 <thead>
@@ -3267,16 +3373,16 @@ that can set a request header.</p>
 <p>Each returns a payload with the thing it changed and a <code>userErrors</code> list. An
 expected failure leaves the main field null and fills <code>userErrors</code>, each with a
 <code>code</code>, a <code>message</code>, and the <code>field</code> path of the argument that caused it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">"addMovie"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">      </span><span class="nt">"mediaItem"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">      </span><span class="nt">"userErrors"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">        </span><span class="p">{</span><span class="nt">"field"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"input"</span><span class="p">,</span><span class="w"> </span><span class="s2">"qualityProfileId"</span><span class="p">],</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"INVALID_INPUT"</span><span class="p">,</span><span class="w"> </span><span class="nt">"message"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Not a valid id"</span><span class="p">}</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">      </span><span class="p">]</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="nt">"addMovie"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">      </span><span class="nt">"mediaItem"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">      </span><span class="nt">"userErrors"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">        </span><span class="p">{</span><span class="nt">"field"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"input"</span><span class="p">,</span><span class="w"> </span><span class="s2">"qualityProfileId"</span><span class="p">],</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"INVALID_INPUT"</span><span class="p">,</span><span class="w"> </span><span class="nt">"message"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Not a valid id"</span><span class="p">}</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">      </span><span class="p">]</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="p">}</span>
 </code></pre></div>
 <table>
 <thead>
@@ -3315,15 +3421,18 @@ because both delete the download row. <code>rejectRelease</code> removes the ite
 client on a best-effort basis, as the Downloads page does.</p>
 <h2 id="events">Events</h2>
 <p><code>events</code> pages through library activity, oldest first:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="w"> </span><span class="n">events</span><span class="p">(</span><span class="n">first</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="n">after</span><span class="p">:</span><span class="w"> </span><span class="s">"…"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">edges</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">node</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">type</span><span class="w"> </span><span class="n">occurredAt</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">pageInfo</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">endCursor</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span><span class="w"> </span><span class="n">events</span><span class="p">(</span><span class="n">first</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="n">after</span><span class="p">:</span><span class="w"> </span><span class="s">"…"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">edges</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">node</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">type</span><span class="w"> </span><span class="n">occurredAt</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">pageInfo</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">endCursor</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <p>Keep <code>endCursor</code> and pass it as <code>after</code> next time. On an empty page <code>endCursor</code>
 repeats the <code>after</code> you sent, so you can always pass it back. <code>types</code> narrows
 the feed to the types you name; by default you get every published type, and a
 type outside that list is <code>INVALID_INPUT</code>. <code>data</code>'s keys depend on the type and
 may change during beta.</p>
-<p>The feed is best-effort. Use it to learn that something happened, then read
-<code>mediaItems(updatedSince:)</code> or <code>downloads</code> for the state:</p>
+<p>The feed is best-effort activity history, not a convergence feed. Use it to learn
+that something happened, then read <code>mediaItemChanges</code> or <code>downloads</code> for the
+state. If what you need is the current state of the library, poll
+<code>mediaItemChanges</code> and skip <code>events</code> entirely; the two use different cursors and
+are not interchangeable.</p>
 <ul>
 <li>Events can be missing. Mydia drops events under heavy load and loses a batch
   whose write fails.</li>
@@ -3336,17 +3445,29 @@ may change during beta.</p>
 <h2 id="cost">Cost</h2>
 <ul>
 <li><code>downloads</code> contacts <strong>every</strong> configured download client on each call, so it is
-  not paged and is the most expensive query here. Prefer <code>mediaItems(updatedSince:)</code>
-  for polling a library's changes.</li>
-<li><code>updatedSince</code> is inclusive, so the item updated exactly at that instant comes
-  back again on the next poll if you just advance <code>updatedSince</code> to its <code>updatedAt</code>.
-  Keep the last page's <code>endCursor</code> and pass it as <code>after</code> on the next poll instead,
-  or dedupe by <code>id</code> if you re-poll from the last seen <code>updatedAt</code>.</li>
-<li><code>mediaItems</code> computes availability per item. <code>first</code> accepts 1 to 200; a value
-  outside that range is rejected with <code>INVALID_INPUT</code> rather than clamped to it.</li>
+  not paged and is the most expensive query here. For polling a library's changes
+  prefer <code>mediaItemChanges</code>: it is a plain indexed read and contacts nothing.</li>
+<li><code>mediaItemChanges</code> prices a page as <code>first</code> times the cost of the selection
+  under <code>edges { node { … } }</code>, and the endpoint's complexity budget is 2000. What
+  you select inside <code>node</code> therefore decides how large a page you can take. A page
+  of <code>mediaItem { id title updatedAt status { state } }</code> costs 2200 at
+  <code>first: 200</code> and is refused; the same selection costs 550 at the default
+  <code>first: 50</code> and passes. Narrowing buys the page size back: <code>mediaItem { id }</code>
+  costs 1400 at <code>first: 200</code>, and asking only for the change itself
+  (<code>mediaItemId</code>, <code>deleted</code>, <code>changedAt</code>) costs 1000. So keep the default
+  <code>first: 50</code>, lower <code>first</code>, or select fewer <code>mediaItem</code> fields when you need a
+  larger page.</li>
+<li><code>mediaItemChanges</code> takes <code>first</code> from 1 to 200 (default 50); a value outside
+  that range is rejected with <code>INVALID_INPUT</code> rather than clamped to it. The
+  complexity refusal is a separate GraphQL error: it names complexity rather than
+  <code>INVALID_INPUT</code>, and it arrives before any query runs.</li>
+<li>A page holds one entry per changed item, so one poll page is one read however
+  many items it carries; the cost is the price of the selected fields, not of the
+  library.</li>
 <li><code>addMovie</code> and <code>addTvShow</code> each ask the metadata relay for the title, and are
   priced like <code>lookup</code>.</li>
-<li><code>events</code> takes <code>first</code> from 1 to 200 (default 100), priced like <code>mediaItems</code>.</li>
+<li><code>events</code> takes <code>first</code> from 1 to 200 (default 100), priced like
+  <code>mediaItemChanges</code>.</li>
 </ul>
 <h2 id="errors">Errors</h2>
 <p>Queries report expected failures as GraphQL errors carrying a code in
