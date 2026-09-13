@@ -14,9 +14,10 @@
 #
 # Bumping `channel` is not just a newer compiler. The bundled plugin guests are
 # wasip2 components whose WASI world tracks the Rust version (1.96 emits wasi
-# 0.2.6), and the runtime host is wasmex 0.14 / wasmtime 39, which validates no
-# higher than wasi 0.2.6. A newer channel emits wasi 0.2.9 and bundled plugins
-# fail to instantiate at runtime.
+# 0.2.6; newer stable emits 0.2.9), and the runtime host is wasmex 0.15.1 /
+# wasmtime 47, which implements wasi:cli/command@0.2.12. A guest whose world the
+# host's wasmtime does not implement fails to instantiate at runtime, so a
+# channel bump moves both sides and needs the plugin tests re-run.
 #
 # `targets` deliberately lists only wasm32-wasip2. The four Android targets are
 # installed on demand by cargokit's prepare(); listing them here would make

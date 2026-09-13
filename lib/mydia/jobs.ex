@@ -17,34 +17,23 @@ defmodule Mydia.Jobs do
   - next_run: DateTime of next scheduled run
   """
   def list_cron_jobs do
-    config = Oban.config()
-    cron_plugin = find_cron_plugin(config.plugins)
+    Enum.map(crontab(), fn
+      {expression, worker, _opts} ->
+        %{
+          worker: worker,
+          worker_name: worker_display_name(worker),
+          schedule: expression,
+          next_run: calculate_next_run(expression)
+        }
 
-    case cron_plugin do
-      nil ->
-        []
-
-      {Oban.Plugins.Cron, opts} ->
-        crontab = Keyword.get(opts, :crontab, [])
-
-        Enum.map(crontab, fn
-          {expression, worker, _opts} ->
-            %{
-              worker: worker,
-              worker_name: worker_display_name(worker),
-              schedule: expression,
-              next_run: calculate_next_run(expression)
-            }
-
-          {expression, worker} ->
-            %{
-              worker: worker,
-              worker_name: worker_display_name(worker),
-              schedule: expression,
-              next_run: calculate_next_run(expression)
-            }
-        end)
-    end
+      {expression, worker} ->
+        %{
+          worker: worker,
+          worker_name: worker_display_name(worker),
+          schedule: expression,
+          next_run: calculate_next_run(expression)
+        }
+    end)
   end
 
   @doc """
@@ -292,19 +281,20 @@ defmodule Mydia.Jobs do
 
   # Private helpers
 
-  # The one place that reads the running Cron plugin's crontab, so callers that
-  # need a worker's scheduled args do not each re-derive it.
+  # The one place that reads the running Cron service's crontab, so callers that
+  # need a worker's scheduled args or the schedule list do not each re-derive it.
+  #
+  # Oban normalizes `plugins:` when it starts and rewrites the legacy
+  # `Oban.Plugins.Cron` module to its current name, `Oban.Cron`; `Oban.config/0`
+  # returns that normalized config. Matching the legacy name here found no
+  # service at all, which silently emptied the crontab: trigger_job/1 then
+  # enqueued every worker with `%{}` instead of the `args:` its entry declared,
+  # and the jobs page listed no schedules. A configuration without a Cron
+  # service (`plugins: false` in test) legitimately yields [].
   defp crontab do
-    case find_cron_plugin(Oban.config().plugins) do
-      {Oban.Plugins.Cron, opts} -> Keyword.get(opts, :crontab, [])
-      _ -> []
-    end
-  end
-
-  defp find_cron_plugin(plugins) do
-    Enum.find(plugins, fn
-      {Oban.Plugins.Cron, _opts} -> true
-      _ -> false
+    Enum.find_value(Oban.config().plugins, [], fn
+      {Oban.Cron, opts} -> Keyword.get(opts, :crontab, [])
+      _ -> nil
     end)
   end
 

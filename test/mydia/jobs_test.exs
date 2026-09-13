@@ -91,23 +91,7 @@ defmodule Mydia.JobsTest do
   # test run.
   describe "trigger_job/1" do
     setup do
-      engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
-
-      start_supervised!(
-        {Oban,
-         repo: Mydia.Repo,
-         engine: engine,
-         queues: [],
-         plugins: [
-           {Oban.Plugins.Cron,
-            crontab: [
-              {"0 0 1 1 *", Mydia.Jobs.BlacklistCleanup,
-               args: %{"fixture" => "trigger_job_test"}},
-              {"0 0 1 1 *", Mydia.Jobs.EventCleanup}
-            ]}
-         ]}
-      )
-
+      start_fixture_oban!()
       :ok
     end
 
@@ -122,5 +106,45 @@ defmodule Mydia.JobsTest do
 
       assert job.args == %{}
     end
+  end
+
+  describe "list_cron_jobs/0" do
+    setup do
+      start_fixture_oban!()
+      :ok
+    end
+
+    test "lists the running crontab's entries" do
+      jobs = Jobs.list_cron_jobs()
+
+      assert %{worker: Mydia.Jobs.BlacklistCleanup, schedule: "0 0 1 1 *"} =
+               Enum.find(jobs, &(&1.worker == Mydia.Jobs.BlacklistCleanup))
+
+      assert %{worker: Mydia.Jobs.EventCleanup, schedule: "0 0 1 1 *"} =
+               Enum.find(jobs, &(&1.worker == Mydia.Jobs.EventCleanup))
+    end
+  end
+
+  # Both callers read the crontab out of the *running* Oban's normalized
+  # config, so the fixture declares the legacy `Oban.Plugins.Cron` module name
+  # exactly as config/config.exs does. Oban rewrites it to `Oban.Cron` on
+  # start; a lookup keyed on the legacy name finds nothing and silently yields
+  # an empty crontab, which is the regression these tests exist to catch.
+  defp start_fixture_oban! do
+    engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+
+    start_supervised!(
+      {Oban,
+       repo: Mydia.Repo,
+       engine: engine,
+       queues: [],
+       plugins: [
+         {Oban.Plugins.Cron,
+          crontab: [
+            {"0 0 1 1 *", Mydia.Jobs.BlacklistCleanup, args: %{"fixture" => "trigger_job_test"}},
+            {"0 0 1 1 *", Mydia.Jobs.EventCleanup}
+          ]}
+       ]}
+    )
   end
 end

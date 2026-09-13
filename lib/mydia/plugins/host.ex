@@ -28,14 +28,14 @@ defmodule Mydia.Plugins.Host do
   `Wasmex.StoreLimits` caps linear memory on every store. Two residuals of the
   beta component runtime narrow what that buys versus the core-wasm host:
 
-    * **Memory cap is instantiation-time only.** Wasmex 0.14 enforces
+    * **Memory cap is instantiation-time only.** Wasmex 0.15 enforces
       `StoreLimits.memory_size` when a component is instantiated (one whose
       *minimum* linear memory exceeds the cap is refused), but does **not** cap
       runtime `memory.grow` on a component store — a guest can allocate past the
       cap at runtime. The cap therefore bounds a plugin's declared footprint, not
       a runaway allocation.
     * **No CPU metering.** Fuel is not available for component stores in Wasmex
-      0.14 (`set_fuel` rejects a `Components.Store`), so the forced-fuel dispatch
+      0.15 (`set_fuel` rejects a `Components.Store`), so the forced-fuel dispatch
       guard of the core-wasm host is dropped. With no fuel/epoch interruption, a
       runaway guest's dirty-NIF thread is not reclaimed until it yields.
 

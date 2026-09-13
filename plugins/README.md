@@ -28,7 +28,7 @@ Both `nix develop .#default` and `.#rust` have `wasm32-wasip2` and `wasm-tools`.
 Host and sandbox tests use checked-in component fixtures under
 `test/support/fixtures/plugins/*/`, because WAT cannot express components.
 
-Two accepted residuals under Wasmex 0.14 component stores, documented in the
+Two accepted residuals under Wasmex 0.15 component stores, documented in the
 `lib/mydia/plugins/host.ex` moduledoc: there is no fuel or CPU metering, and
 `StoreLimits` caps memory only at instantiation rather than on runtime grow. A
 guest that writes to denied stderr on a trap trips a wasmtime-wasi sync
@@ -39,8 +39,8 @@ trap cleanly.
 
 A wasip2 component's imported WASI world version tracks the Rust toolchain
 version. rustc 1.96 emits `wasi 0.2.6` and newer stable emits `0.2.9`. The
-runtime host is wasmex 0.14 and wasmtime 39, which only validates components up
-to wasi 0.2.6.
+runtime host is wasmex 0.15.1 and wasmtime 47, which implements
+`wasi:cli/command@0.2.12`, so both worlds link today.
 
 A guest built with a too-new Rust fails `Wasmex.Components.Component.new`, and
 `Mydia.Plugins.activate/1` translates that `:compile_failed` or
