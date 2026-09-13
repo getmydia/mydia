@@ -51,9 +51,21 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
   def save_category(%{"media_item" => params}, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
       media_item = socket.assigns.media_item
-      params = Map.put(params, "category_override", params["override"] == "true")
+      category = params["category"]
 
-      case Media.update_media_item(media_item, params, reason: "Category updated") do
+      override =
+        case params["category_override"] do
+          "true" -> true
+          true -> true
+          _ -> false
+        end
+
+      case Media.update_category(media_item, category,
+             override: override,
+             reason: "Category updated",
+             actor_type: :user,
+             actor_id: to_string(socket.assigns.current_user.id)
+           ) do
         {:ok, updated_item} ->
           {:noreply,
            socket
@@ -75,10 +87,11 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
       media_item = socket.assigns.media_item
       new_category = Mydia.Media.CategoryClassifier.classify(media_item)
 
-      case Media.update_media_item(
-             media_item,
-             %{category: new_category, category_override: false},
-             reason: "Category reset to auto-detected"
+      case Media.update_category(media_item, new_category,
+             override: false,
+             reason: "Category reset to auto-detected",
+             actor_type: :user,
+             actor_id: to_string(socket.assigns.current_user.id)
            ) do
         {:ok, updated_item} ->
           {:noreply,

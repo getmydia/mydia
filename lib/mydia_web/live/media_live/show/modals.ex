@@ -1193,7 +1193,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <div class="form-control mb-4">
             <label class="label cursor-pointer justify-start gap-4">
               <.input
-                field={@category_form[:override]}
+                field={@category_form[:category_override]}
                 type="checkbox"
                 class="checkbox checkbox-primary"
               />

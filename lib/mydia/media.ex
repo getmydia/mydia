@@ -456,18 +456,22 @@ defmodule Mydia.Media do
           {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
   def update_media_item(%MediaItem{} = media_item, attrs, opts \\ []) do
     changeset = MediaItem.changeset(media_item, attrs)
+    persist_and_audit_media_item(changeset, media_item, opts)
+  end
 
+  defp persist_and_audit_media_item(changeset, original, opts) do
     case Repo.update(changeset) do
-      {:ok, updated_media_item} ->
-        # Track event with change details
+      {:ok, updated} ->
         actor_type = Keyword.get(opts, :actor_type, :system)
         actor_id = Keyword.get(opts, :actor_id, "media_context")
         reason = Keyword.get(opts, :reason, "Updated")
-        changes = extract_meaningful_changes(changeset, media_item)
+        changes = extract_meaningful_changes(changeset, original)
 
-        Events.media_item_updated(updated_media_item, actor_type, actor_id, reason, changes)
+        if changes != %{} do
+          Events.media_item_updated(updated, actor_type, actor_id, reason, changes)
+        end
 
-        {:ok, updated_media_item}
+        {:ok, updated}
 
       error ->
         error
@@ -485,7 +489,7 @@ defmodule Mydia.Media do
       # its old and new value, whichever caller made it. Without that, the
       # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
       # from an ordinary "Metadata enriched" update for three weeks.
-      |> Map.take([:title, :original_title, :year, :monitored, :monitor_new_seasons])
+      |> Map.take([:title, :original_title, :year, :monitored, :monitor_new_seasons, :category, :category_override])
       |> Enum.map(fn {field, new_value} ->
         old_value = Map.get(original, field)
         {field, %{old: old_value, new: new_value}}
@@ -2398,9 +2402,11 @@ defmodule Mydia.Media do
   @spec update_category(MediaItem.t(), atom() | String.t(), keyword()) ::
           {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
   def update_category(%MediaItem{} = media_item, category, opts \\ []) do
-    media_item
-    |> MediaItem.category_changeset(category, opts)
-    |> Repo.update()
+    override = Keyword.get(opts, :override, false)
+    audit_opts = Keyword.take(opts, [:reason, :actor_type, :actor_id])
+
+    changeset = MediaItem.category_changeset(media_item, category, override: override)
+    persist_and_audit_media_item(changeset, media_item, audit_opts)
   end
 
   @doc """
