@@ -292,17 +292,18 @@ fails for a live route under `/admin` that has no entry.
 `components.ex`. Pass the key as a literal: `admin_page/1` declares
 `values: AdminNav.keys()`, so a typo fails the build.
 
-**No page `<h1>`.** `<.admin_page>` renders the hub label, the page `<h1>` and
-the description from `AdminNav`, with header buttons in its `:actions` slot.
-Sibling pages in the same hub are tabs under the header, rendered by
-`<.admin_page>` from `AdminNav`; the sidebar links each hub to its first page.
-Longer explanatory copy stays in the page body. Content opens with
-`<div class="p-4 sm:p-6 space-y-4">` and a section header:
+**One header per page.** `<.admin_page>` renders the hub label, the page `<h1>`,
+the description and the hub's tab strip from `AdminNav`. A list page passes its
+size as `count={length(@items)}`, and its buttons go in `<:actions>` through a
+`header_actions/1` function component in the page's own `components.ex`, as
+`btn-sm` buttons (the primary one `btn-primary`). The body never repeats the
+page name. It opens with `<div class="p-4 sm:p-6 space-y-4">`, and an `<h2>` is
+only for a real subsection (Needs Attention, Scheduled Jobs):
 `<h2 class="text-lg font-semibold flex items-center gap-2">` with a leading
-`<.icon>`, the title, and `<span class="badge badge-ghost">{length(@items)}</span>`,
-with
-`<button class="btn btn-sm btn-primary" phx-click="new_<x>"><.icon name="hero-plus" class="w-4 h-4" /> New</button>`
-on the right.
+`<.icon class="w-5 h-5 opacity-60">`, the title, and an optional
+`<span class="badge badge-ghost">` count. One-of-N filters inside a page use
+`<.segmented_control>`; tabs mean hub navigation. Colours come from theme
+tokens such as `text-base-content/60`, never `text-gray-*`.
 
 **Empty state, then the list.** `<div class="alert alert-info">` with
 `hero-information-circle` when empty, otherwise

@@ -3,205 +3,207 @@
     <:actions>
       <button
         phx-click="open_create_modal"
-        class="btn btn-primary"
+        class="btn btn-sm btn-primary"
       >
-        <.icon name="hero-plus" class="w-5 h-5" /> Create Local User
+        <.icon name="hero-plus" class="w-4 h-4" /> Create Local User
       </button>
     </:actions>
 
-    <%!-- OIDC Info Banner --%>
-    <div class="alert alert-info mb-6">
-      <.icon name="hero-information-circle" class="w-6 h-6" />
-      <div>
-        <div class="font-semibold">OIDC Auto-Registration</div>
-        <div class="text-sm">
-          Users authenticating via OIDC will be automatically registered on first login.
-          Use "Create Local User" to manually create users with local authentication.
-        </div>
-      </div>
-    </div>
-
-    <%!-- Filters and Search --%>
-    <div class="card bg-base-100 shadow-sm mb-6">
-      <div class="card-body p-4">
-        <div class="flex flex-col md:flex-row gap-4">
-          <%!-- Search --%>
-          <div class="form-control flex-1">
-            <label class="label">
-              <span class="label-text">Search users</span>
-            </label>
-            <.form
-              for={%{}}
-              as={:search}
-              phx-change="search"
-              class="w-full"
-            >
-              <input
-                type="text"
-                name="search"
-                value={@search_query}
-                placeholder="Search by username, email, or name..."
-                class="input input-bordered w-full"
-              />
-            </.form>
-          </div>
-
-          <%!-- Role Filter --%>
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">Filter by role</span>
-            </label>
-            <select
-              phx-change="filter"
-              name="role"
-              class="select select-bordered"
-            >
-              <option value="all" selected={@filter_role == "all"}>All Roles</option>
-              <option value="admin" selected={@filter_role == "admin"}>Admin</option>
-              <option value="user" selected={@filter_role == "user"}>User</option>
-              <option value="readonly" selected={@filter_role == "readonly"}>Read Only</option>
-              <option value="guest" selected={@filter_role == "guest"}>Guest</option>
-            </select>
+    <div class="p-4 sm:p-6 space-y-6">
+      <%!-- OIDC Info Banner --%>
+      <div class="alert alert-info mb-6">
+        <.icon name="hero-information-circle" class="w-6 h-6" />
+        <div>
+          <div class="font-semibold">OIDC Auto-Registration</div>
+          <div class="text-sm">
+            Users authenticating via OIDC will be automatically registered on first login.
+            Use "Create Local User" to manually create users with local authentication.
           </div>
         </div>
       </div>
-    </div>
 
-    <%!-- Users Table --%>
-    <div class="bg-base-100 rounded-lg shadow-lg overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="table table-zebra w-full">
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Auth Type</th>
-              <th>Role</th>
-              <th>Last Login</th>
-              <th>Statistics</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <%= if @users == [] do %>
+      <%!-- Filters and Search --%>
+      <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body p-4">
+          <div class="flex flex-col md:flex-row gap-4">
+            <%!-- Search --%>
+            <div class="form-control flex-1">
+              <label class="label">
+                <span class="label-text">Search users</span>
+              </label>
+              <.form
+                for={%{}}
+                as={:search}
+                phx-change="search"
+                class="w-full"
+              >
+                <input
+                  type="text"
+                  name="search"
+                  value={@search_query}
+                  placeholder="Search by username, email, or name..."
+                  class="input input-bordered w-full"
+                />
+              </.form>
+            </div>
+
+            <%!-- Role Filter --%>
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">Filter by role</span>
+              </label>
+              <select
+                phx-change="filter"
+                name="role"
+                class="select select-bordered"
+              >
+                <option value="all" selected={@filter_role == "all"}>All Roles</option>
+                <option value="admin" selected={@filter_role == "admin"}>Admin</option>
+                <option value="user" selected={@filter_role == "user"}>User</option>
+                <option value="readonly" selected={@filter_role == "readonly"}>Read Only</option>
+                <option value="guest" selected={@filter_role == "guest"}>Guest</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <%!-- Users Table --%>
+      <div class="bg-base-100 rounded-lg shadow-lg overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="table table-zebra w-full">
+            <thead>
               <tr>
-                <td colspan="6" class="text-center py-8 text-base-content/60">
-                  No users found
-                </td>
+                <th>User</th>
+                <th>Auth Type</th>
+                <th>Role</th>
+                <th>Last Login</th>
+                <th>Statistics</th>
+                <th>Actions</th>
               </tr>
-            <% else %>
-              <%= for user_data <- @users do %>
-                <% user = user_data.user %>
+            </thead>
+            <tbody>
+              <%= if @users == [] do %>
                 <tr>
-                  <%!-- User Info --%>
-                  <td>
-                    <div class="flex items-center gap-3">
-                      <div class="avatar placeholder">
-                        <div class="bg-primary text-primary-content rounded-full w-12">
-                          <%= if user.avatar_url do %>
-                            <img src={user.avatar_url} alt={User.label(user)} />
-                          <% else %>
-                            <span class="text-lg">
-                              {user |> User.label() |> String.first() |> String.upcase()}
-                            </span>
+                  <td colspan="6" class="text-center py-8 text-base-content/60">
+                    No users found
+                  </td>
+                </tr>
+              <% else %>
+                <%= for user_data <- @users do %>
+                  <% user = user_data.user %>
+                  <tr>
+                    <%!-- User Info --%>
+                    <td>
+                      <div class="flex items-center gap-3">
+                        <div class="avatar placeholder">
+                          <div class="bg-primary text-primary-content rounded-full w-12">
+                            <%= if user.avatar_url do %>
+                              <img src={user.avatar_url} alt={User.label(user)} />
+                            <% else %>
+                              <span class="text-lg">
+                                {user |> User.label() |> String.first() |> String.upcase()}
+                              </span>
+                            <% end %>
+                          </div>
+                        </div>
+                        <div>
+                          <div class="font-bold" id={"user-name-#{user.id}"}>
+                            {User.label(user)}
+                          </div>
+                          <div class="text-sm text-base-content/70">{user.email}</div>
+                          <%= if user.display_name && user.display_name != User.label(user) do %>
+                            <div class="text-xs text-base-content/50">{user.display_name}</div>
                           <% end %>
                         </div>
                       </div>
-                      <div>
-                        <div class="font-bold" id={"user-name-#{user.id}"}>
-                          {User.label(user)}
+                    </td>
+
+                    <%!-- Auth Type --%>
+                    <td>
+                      <span class="font-mono text-sm">{auth_type_text(user)}</span>
+                    </td>
+
+                    <%!-- Role --%>
+                    <td>
+                      <span class={"badge #{role_badge_class(user.role)} badge-lg"}>
+                        {String.capitalize(user.role)}
+                      </span>
+                    </td>
+
+                    <%!-- Last Login --%>
+                    <td>
+                      <span class="text-sm">{format_date(user.last_login_at)}</span>
+                    </td>
+
+                    <%!-- Statistics --%>
+                    <td>
+                      <div class="text-sm">
+                        <div class="flex items-center gap-1">
+                          <.icon name="hero-inbox-arrow-down" class="w-4 h-4" />
+                          <span class="font-semibold">{user_data.requests_submitted}</span>
+                          <span class="text-base-content/60">submitted</span>
                         </div>
-                        <div class="text-sm text-base-content/70">{user.email}</div>
-                        <%= if user.display_name && user.display_name != User.label(user) do %>
-                          <div class="text-xs text-base-content/50">{user.display_name}</div>
-                        <% end %>
+                        <div class="flex items-center gap-1">
+                          <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
+                          <span class="font-semibold">{user_data.requests_approved}</span>
+                          <span class="text-base-content/60">approved</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                          <.icon name="hero-x-circle" class="w-4 h-4 text-error" />
+                          <span class="font-semibold">{user_data.requests_rejected}</span>
+                          <span class="text-base-content/60">rejected</span>
+                        </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  <%!-- Auth Type --%>
-                  <td>
-                    <span class="font-mono text-sm">{auth_type_text(user)}</span>
-                  </td>
-
-                  <%!-- Role --%>
-                  <td>
-                    <span class={"badge #{role_badge_class(user.role)} badge-lg"}>
-                      {String.capitalize(user.role)}
-                    </span>
-                  </td>
-
-                  <%!-- Last Login --%>
-                  <td>
-                    <span class="text-sm">{format_date(user.last_login_at)}</span>
-                  </td>
-
-                  <%!-- Statistics --%>
-                  <td>
-                    <div class="text-sm">
-                      <div class="flex items-center gap-1">
-                        <.icon name="hero-inbox-arrow-down" class="w-4 h-4" />
-                        <span class="font-semibold">{user_data.requests_submitted}</span>
-                        <span class="text-base-content/60">submitted</span>
-                      </div>
-                      <div class="flex items-center gap-1">
-                        <.icon name="hero-check-circle" class="w-4 h-4 text-success" />
-                        <span class="font-semibold">{user_data.requests_approved}</span>
-                        <span class="text-base-content/60">approved</span>
-                      </div>
-                      <div class="flex items-center gap-1">
-                        <.icon name="hero-x-circle" class="w-4 h-4 text-error" />
-                        <span class="font-semibold">{user_data.requests_rejected}</span>
-                        <span class="text-base-content/60">rejected</span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <%!-- Actions --%>
-                  <td>
-                    <div class="flex gap-2">
-                      <button
-                        phx-click="open_edit_role_modal"
-                        phx-value-id={user.id}
-                        class="btn btn-sm btn-ghost"
-                        title="Edit role"
-                      >
-                        <.icon name="hero-pencil" class="w-4 h-4" />
-                      </button>
-
-                      <%= if !is_oidc_user?(user) do %>
+                    <%!-- Actions --%>
+                    <td>
+                      <div class="flex gap-2">
                         <button
-                          phx-click="open_reset_password_modal"
+                          phx-click="open_edit_role_modal"
                           phx-value-id={user.id}
                           class="btn btn-sm btn-ghost"
-                          title="Reset password"
+                          title="Edit role"
                         >
-                          <.icon name="hero-key" class="w-4 h-4" />
+                          <.icon name="hero-pencil" class="w-4 h-4" />
                         </button>
-                      <% end %>
 
-                      <%= if user.id != @current_user.id do %>
-                        <button
-                          phx-click="open_delete_modal"
-                          phx-value-id={user.id}
-                          class="btn btn-sm btn-ghost text-error"
-                          title="Delete user"
-                        >
-                          <.icon name="hero-trash" class="w-4 h-4" />
-                        </button>
-                      <% end %>
-                    </div>
-                  </td>
-                </tr>
+                        <%= if !is_oidc_user?(user) do %>
+                          <button
+                            phx-click="open_reset_password_modal"
+                            phx-value-id={user.id}
+                            class="btn btn-sm btn-ghost"
+                            title="Reset password"
+                          >
+                            <.icon name="hero-key" class="w-4 h-4" />
+                          </button>
+                        <% end %>
+
+                        <%= if user.id != @current_user.id do %>
+                          <button
+                            phx-click="open_delete_modal"
+                            phx-value-id={user.id}
+                            class="btn btn-sm btn-ghost text-error"
+                            title="Delete user"
+                          >
+                            <.icon name="hero-trash" class="w-4 h-4" />
+                          </button>
+                        <% end %>
+                      </div>
+                    </td>
+                  </tr>
+                <% end %>
               <% end %>
-            <% end %>
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
 
-    <%!-- User Count --%>
-    <div class="mt-4 text-sm text-base-content/70 text-center">
-      Showing {length(@users)} user(s)
+      <%!-- User Count --%>
+      <div class="mt-4 text-sm text-base-content/70 text-center">
+        Showing {length(@users)} user(s)
+      </div>
     </div>
   </.admin_page>
 

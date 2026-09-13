@@ -170,6 +170,34 @@ defmodule MydiaWeb.AdminNavLiveTest do
       assert has_element?(view, "h1#admin-page-title", "Background Jobs")
       assert has_element?(view, "#admin-page-actions button[phx-click=refresh]")
     end
+
+    test "Requests filters by status with a segmented control, not tabs", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/requests")
+
+      assert has_element?(
+               view,
+               ~s|#requests-status-filter button[phx-value-status="pending"][aria-pressed="true"]|
+             )
+
+      assert has_element?(view, "[role=tablist]#admin-page-tabs")
+
+      assert view
+             |> render()
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("main [role=tablist]")
+             |> Enum.count() == 1
+    end
+
+    test "Background Jobs uses theme colours and the shared section style", %{conn: conn} do
+      engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+      start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/jobs")
+
+      assert has_element?(view, "h2.text-lg", "Scheduled Jobs")
+      assert has_element?(view, "h2.text-lg", "Job History")
+      refute render(view) =~ "text-gray-"
+    end
   end
 
   test "a non-admin sees no Admin section" do
