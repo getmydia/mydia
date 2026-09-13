@@ -25,6 +25,13 @@ defmodule Mydia.Plugins.NotifierIntegrationTest do
         Application.delete_env(:mydia, :runtime_config)
       end
 
+      # `Plugins.register_plugins/0` activates *every* enabled row, so a test
+      # here also starts the other shipped bundle (simkl_sync). Stop each
+      # running pool before clearing the descriptors: a leaked pool is silently
+      # reused by the next test's `Host.start_plugin/3` (an already-started slug
+      # returns the existing process), which would run it with this test's
+      # imports and settings.
+      Enum.each(Registry.list(), &Host.stop_plugin(&1.slug))
       Host.stop_plugin(@slug)
       Registry.clear()
     end)
