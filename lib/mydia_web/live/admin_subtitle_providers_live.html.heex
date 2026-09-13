@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page page={:subtitle_providers}>
+  <.admin_page page={:subtitle_providers} count={length(@providers)}>
+    <:actions>
+      <MydiaWeb.AdminSubtitleProvidersLive.Components.header_actions />
+    </:actions>
     <MydiaWeb.AdminSubtitleProvidersLive.Components.providers_tab
       providers={@providers}
       circuit={@circuit}

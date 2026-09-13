@@ -92,25 +92,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   def plugins_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 class="text-lg font-semibold flex items-center gap-2">
-            <.icon name="hero-puzzle-piece" class="w-5 h-5 opacity-60" /> Plugins
-            <span class="badge badge-ghost">{length(@installed)}</span>
-          </h2>
-          <p class="text-sm text-base-content/70 mt-1">
-            Sandboxed extensions. Each plugin runs with only the capabilities you approve.
-          </p>
-        </div>
-        <.button
-          id="browse-store"
-          variant="primary"
-          class="btn btn-sm btn-primary"
-          phx-click="browse_store"
-        >
-          <.icon name="hero-squares-plus" class="w-4 h-4" /> Browse store
-        </.button>
-      </div>
+      <p class="text-sm text-base-content/70">
+        Each plugin runs with only the capabilities you approve.
+      </p>
 
       <%!-- Installed plugins --%>
       <div id="plugins-installed" class="space-y-2">
@@ -137,6 +121,20 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         </div>
       </div>
     </div>
+    """
+  end
+
+  @doc "The page header's Browse store button."
+  def header_actions(assigns) do
+    ~H"""
+    <.button
+      id="browse-store"
+      variant="primary"
+      class="btn btn-sm btn-primary"
+      phx-click="browse_store"
+    >
+      <.icon name="hero-squares-plus" class="w-4 h-4" /> Browse store
+    </.button>
     """
   end
 

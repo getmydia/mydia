@@ -85,7 +85,23 @@ defmodule MydiaWeb.AdminNavLiveTest do
       assert has_element?(view, "#admin-page-hub", "Administration")
       assert has_element?(view, "h1#admin-page-title", "Trash")
       assert has_element?(view, "#admin-page-description", "Deleted files waiting to be purged")
-      refute has_element?(view, "#admin-page-actions")
+      assert has_element?(view, "#admin-page-actions #trash-scan")
+      assert has_element?(view, "#admin-page-count", "0")
+    end
+
+    test "a page's card header merges into the page header", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
+
+      assert has_element?(view, "h1#admin-page-title", "Clients")
+      assert has_element?(view, "#admin-page-count", "0")
+      assert has_element?(view, "#admin-page-actions button[phx-click=new_download_client]")
+      refute has_element?(view, "main h2", "Download Clients")
+    end
+
+    test "pages without a list show no count", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+
+      refute has_element?(view, "#admin-page-count")
     end
 
     test "tabs list the current hub's pages with the current page active", %{conn: conn} do

@@ -52,7 +52,7 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Components do
             />
           </div>
           <div>
-            <h2 class="font-semibold">Player Remote Access</h2>
+            <div class="font-semibold">Allow player connections</div>
             <p class="text-xs text-base-content/50">
               <%= cond do %>
                 <% !@remote_access_setting -> %>

@@ -10,20 +10,19 @@ defmodule MydiaWeb.AdminCustomFormatsLive.Components do
   def custom_formats_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-language" class="w-5 h-5 opacity-60" /> Custom Formats
-          <span class="badge badge-ghost">{length(@formats)}</span>
-        </h2>
-        <button id="custom-format-new" class="btn btn-sm btn-primary" phx-click="new_custom_format">
-          <.icon name="hero-plus" class="w-4 h-4" /> New
-        </button>
-      </div>
-
       <div class="bg-base-200 rounded-box divide-y divide-base-300">
         <.custom_format_row :for={format <- @formats} format={format} />
       </div>
     </div>
+    """
+  end
+
+  @doc "The page header's New button."
+  def header_actions(assigns) do
+    ~H"""
+    <button id="custom-format-new" class="btn btn-sm btn-primary" phx-click="new_custom_format">
+      <.icon name="hero-plus" class="w-4 h-4" /> New
+    </button>
     """
   end
 

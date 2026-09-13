@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page page={:api_keys}>
+  <.admin_page page={:api_keys} count={length(@api_keys)}>
+    <:actions>
+      <Components.header_actions />
+    </:actions>
     <Components.api_keys_tab api_keys={@api_keys} env_key_set={@env_key_set} />
     <Components.api_key_modal :if={@show_api_key_modal} form={@api_key_form} />
     <Components.created_key_modal :if={@created_key} key={@created_key} />

@@ -87,6 +87,8 @@ defmodule MydiaWeb.AdminComponents do
     values: AdminNav.keys(),
     doc: "the `MydiaWeb.AdminNav` key of the page, passed as a literal"
 
+  attr :count, :integer, default: nil, doc: "item count shown beside the title"
+
   slot :actions, doc: "header buttons, right-aligned from the md breakpoint up"
   slot :inner_block, required: true
 
@@ -117,12 +119,15 @@ defmodule MydiaWeb.AdminComponents do
         <p id="admin-page-hub" class="text-xs uppercase tracking-wide text-base-content/60">
           {@hub_label}
         </p>
-        <h1 id="admin-page-title" class="text-3xl font-bold">{@nav_page.label}</h1>
+        <h1 id="admin-page-title" class="text-3xl font-bold flex items-center gap-3">
+          {@nav_page.label}
+          <span :if={@count} id="admin-page-count" class="badge badge-ghost">{@count}</span>
+        </h1>
         <p id="admin-page-description" class="text-base-content/70 mt-1">
           {@nav_page.description}
         </p>
       </div>
-      <div :if={@actions != []} id="admin-page-actions" class="flex items-center gap-2">
+      <div :if={@actions != []} id="admin-page-actions" class="flex flex-wrap items-center gap-2">
         {render_slot(@actions)}
       </div>
     </div>

@@ -38,33 +38,6 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   def trash_tab(assigns) do
     ~H"""
     <div id="trash-content" class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-trash" class="w-5 h-5 opacity-60" /> Trash
-          <span class="badge badge-ghost">{@summary.count}</span>
-        </h2>
-
-        <div class="join">
-          <button
-            id="trash-scan"
-            type="button"
-            class="btn btn-sm btn-ghost join-item"
-            phx-click="scan_directory"
-          >
-            <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Scan directory
-          </button>
-          <button
-            id="trash-empty"
-            type="button"
-            class="btn btn-sm btn-error join-item"
-            phx-click="confirm_empty"
-            disabled={@summary.count == 0}
-          >
-            <.icon name="hero-trash" class="w-4 h-4" /> Empty trash
-          </button>
-        </div>
-      </div>
-
       <.summary_bar summary={@summary} retention_days={@retention_days} />
 
       <div :if={@scanning} class="alert">
@@ -102,6 +75,33 @@ defmodule MydiaWeb.AdminTrashLive.Components do
         page_size={@page_size}
         total_matching={@total_matching}
       />
+    </div>
+    """
+  end
+
+  @doc "The page header's scan and empty buttons."
+  attr :summary, :map, required: true
+
+  def header_actions(assigns) do
+    ~H"""
+    <div class="join">
+      <button
+        id="trash-scan"
+        type="button"
+        class="btn btn-sm btn-ghost join-item"
+        phx-click="scan_directory"
+      >
+        <.icon name="hero-magnifying-glass" class="w-4 h-4" /> Scan directory
+      </button>
+      <button
+        id="trash-empty"
+        type="button"
+        class="btn btn-sm btn-error join-item"
+        phx-click="confirm_empty"
+        disabled={@summary.count == 0}
+      >
+        <.icon name="hero-trash" class="w-4 h-4" /> Empty trash
+      </button>
     </div>
     """
   end

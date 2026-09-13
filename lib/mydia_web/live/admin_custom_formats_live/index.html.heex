@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page page={:custom_formats}>
+  <.admin_page page={:custom_formats} count={length(@formats)}>
+    <:actions>
+      <MydiaWeb.AdminCustomFormatsLive.Components.header_actions />
+    </:actions>
     <MydiaWeb.AdminCustomFormatsLive.Components.custom_formats_tab formats={@formats} />
 
     <%!-- Custom Format Modal --%>

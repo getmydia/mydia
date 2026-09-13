@@ -102,16 +102,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
   def download_clients_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-arrow-down-tray" class="w-5 h-5 opacity-60" /> Download Clients
-          <span class="badge badge-ghost">{length(@download_clients)}</span>
-        </h2>
-        <button class="btn btn-sm btn-primary" phx-click="new_download_client">
-          <.icon name="hero-plus" class="w-4 h-4" /> New
-        </button>
-      </div>
-
       <%= if @download_clients == [] do %>
         <div class="alert alert-info">
           <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -247,6 +237,15 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  @doc "The page header's New button."
+  def header_actions(assigns) do
+    ~H"""
+    <button class="btn btn-sm btn-primary" phx-click="new_download_client">
+      <.icon name="hero-plus" class="w-4 h-4" /> New
+    </button>
     """
   end
 

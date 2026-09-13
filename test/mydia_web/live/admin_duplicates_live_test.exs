@@ -152,17 +152,19 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       assert has_element?(view, ~s|a#admin-tab-trash[href="/admin/trash"]|, "Trash")
     end
 
-    test "heads its sections with h2 and leaves the page h1 to the admin shell", %{conn: conn} do
+    test "keeps h2 for its Needs Attention subsection and leaves the page h1 to the admin shell",
+         %{conn: conn} do
       duplicated_episode()
       refused_movie()
 
       {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
-      # <.admin_page> renders the page's only <h1>. Every admin page opens its
-      # body with an <h2> section header carrying a count badge.
-      assert has_element?(view, "h2", "Duplicates")
+      # <.admin_page> renders the page's only <h1> and its count. A body <h2>
+      # is only for a real subsection, never a second copy of the page name.
+      refute has_element?(view, "main h2", "Duplicates")
       assert has_element?(view, "h2", "Needs Attention")
       assert has_element?(view, "h2 span.badge-ghost")
+      assert has_element?(view, "#admin-page-count", "1")
 
       main_h1_count =
         view |> render() |> LazyHTML.from_fragment() |> LazyHTML.query("main h1") |> Enum.count()

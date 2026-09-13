@@ -34,40 +34,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   attr :retention_days, :integer, required: true
 
   def duplicates_tab(assigns) do
-    total_losers =
-      Enum.reduce(assigns.decisions, 0, fn decision, acc -> acc + length(decision.losers) end)
-
-    assigns = assign(assigns, :all_selected?, MapSet.size(assigns.selected) == total_losers)
-
     ~H"""
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold flex items-center gap-2">
-        <.icon name="hero-document-duplicate" class="w-5 h-5 opacity-60" /> Duplicates
-        <span class="badge badge-ghost">{length(@decisions)}</span>
-      </h2>
-      <div class="join">
-        <button
-          :if={not @all_selected?}
-          id="duplicates-trash-all"
-          type="button"
-          class="btn btn-sm btn-ghost join-item"
-          phx-click="trash_all_duplicates"
-        >
-          <.icon name="hero-check-circle" class="w-4 h-4" /> Mark all for trash
-        </button>
-        <button
-          id="duplicates-trash-selected"
-          type="button"
-          class="btn btn-sm btn-error join-item"
-          disabled={MapSet.size(@selected) == 0}
-          phx-click="open_trash_modal"
-        >
-          <.icon name="hero-trash" class="w-4 h-4" />
-          Trash {file_count(MapSet.size(@selected))} ({humanize_bytes(@reclaimable)})
-        </button>
-      </div>
-    </div>
-
     <p class="text-sm text-base-content/60">
       Items holding more than one file, where every copy is proven to be the same content.
       Each file is set to either <span class="font-medium text-base-content">Keep</span>
@@ -93,6 +60,42 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         <.decision_row :for={decision <- @decisions} decision={decision} selected={@selected} />
       </div>
     <% end %>
+    """
+  end
+
+  @doc "The page header's bulk trash buttons."
+  attr :decisions, :list, required: true
+  attr :selected, :any, required: true
+  attr :reclaimable, :integer, required: true
+
+  def header_actions(assigns) do
+    total_losers =
+      Enum.reduce(assigns.decisions, 0, fn decision, acc -> acc + length(decision.losers) end)
+
+    assigns = assign(assigns, :all_selected?, MapSet.size(assigns.selected) == total_losers)
+
+    ~H"""
+    <div class="join">
+      <button
+        :if={not @all_selected?}
+        id="duplicates-trash-all"
+        type="button"
+        class="btn btn-sm btn-ghost join-item"
+        phx-click="trash_all_duplicates"
+      >
+        <.icon name="hero-check-circle" class="w-4 h-4" /> Mark all for trash
+      </button>
+      <button
+        id="duplicates-trash-selected"
+        type="button"
+        class="btn btn-sm btn-error join-item"
+        disabled={MapSet.size(@selected) == 0}
+        phx-click="open_trash_modal"
+      >
+        <.icon name="hero-trash" class="w-4 h-4" />
+        Trash {file_count(MapSet.size(@selected))} ({humanize_bytes(@reclaimable)})
+      </button>
+    </div>
     """
   end
 

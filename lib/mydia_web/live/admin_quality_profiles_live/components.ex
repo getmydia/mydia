@@ -41,27 +41,6 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
         </div>
       </div>
 
-      <div class="divider my-2"></div>
-
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-sparkles" class="w-5 h-5 opacity-60" /> Quality Profiles
-          <span class="badge badge-ghost">{length(@quality_profiles)}</span>
-        </h2>
-        <div class="flex flex-wrap gap-2">
-          <button class="btn btn-sm btn-ghost" phx-click="show_browse_presets_modal">
-            <.icon name="hero-sparkles" class="w-4 h-4" />
-            <span class="hidden sm:inline">Browse</span> Presets
-          </button>
-          <button class="btn btn-sm btn-ghost" phx-click="show_import_modal">
-            <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Import
-          </button>
-          <button class="btn btn-sm btn-primary" phx-click="new_quality_profile">
-            <.icon name="hero-plus" class="w-4 h-4" /> New
-          </button>
-        </div>
-      </div>
-
       <%= if @quality_profiles == [] do %>
         <div class="alert alert-info">
           <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -184,6 +163,22 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  @doc "The page header's preset, import and New buttons."
+  def header_actions(assigns) do
+    ~H"""
+    <button class="btn btn-sm btn-ghost" phx-click="show_browse_presets_modal">
+      <.icon name="hero-sparkles" class="w-4 h-4" />
+      <span class="hidden sm:inline">Browse</span> Presets
+    </button>
+    <button class="btn btn-sm btn-ghost" phx-click="show_import_modal">
+      <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Import
+    </button>
+    <button class="btn btn-sm btn-primary" phx-click="new_quality_profile">
+      <.icon name="hero-plus" class="w-4 h-4" /> New
+    </button>
     """
   end
 

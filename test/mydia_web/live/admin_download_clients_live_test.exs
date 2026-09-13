@@ -172,7 +172,7 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       # before the DOM re-renders, must not reach
       # Settings.delete_download_client_config/1 with nil and crash the
       # LiveView process.
-      assert render_click(view, "delete_download_client", %{}) =~ "Download Clients"
+      assert render_click(view, "delete_download_client", %{}) =~ "id=\"admin-page-title\""
 
       assert_raise Ecto.NoResultsError, fn ->
         Mydia.Settings.get_download_client_config!(client.id)

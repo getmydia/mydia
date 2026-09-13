@@ -1,5 +1,11 @@
 <Layouts.app {assigns}>
-  <.admin_page page={:indexers}>
+  <.admin_page page={:indexers} count={length(@indexers) + length(@library_indexers)}>
+    <:actions>
+      <MydiaWeb.AdminIndexersLive.Components.header_actions
+        cardigann_enabled={@cardigann_enabled}
+        library_indexer_stats={@library_indexer_stats}
+      />
+    </:actions>
     <MydiaWeb.AdminIndexersLive.Components.indexers_tab
       indexers={@indexers}
       indexer_health={@indexer_health}

@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page page={:quality}>
+  <.admin_page page={:quality} count={length(@quality_profiles)}>
+    <:actions>
+      <MydiaWeb.AdminQualityProfilesLive.Components.header_actions />
+    </:actions>
     <MydiaWeb.AdminQualityProfilesLive.Components.quality_profiles_tab
       quality_profiles={@quality_profiles}
       default_quality_profile_id={@default_quality_profile_id}
