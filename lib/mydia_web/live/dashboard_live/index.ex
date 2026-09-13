@@ -429,7 +429,7 @@ defmodule MydiaWeb.DashboardLive.Index do
           socket
           |> assign(:home_widgets, defaults)
           |> then(fn s ->
-            if :system_health not in defaults, do: cancel_health_refresh(s), else: s
+            if :system_health in defaults, do: s, else: cancel_health_refresh(s)
           end)
           |> then(fn s ->
             Enum.reduce(defaults, s, fn k, acc -> load_widget(acc, k) end)
