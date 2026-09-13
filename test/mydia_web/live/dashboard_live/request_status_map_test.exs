@@ -17,6 +17,8 @@ defmodule MydiaWeb.DashboardLive.RequestStatusMapTest do
   import Mydia.MetadataCacheHelpers
   import MydiaWeb.AuthHelpers
 
+  alias Mydia.Media.ProviderKey
+
   setup do
     # DashboardLive.Index unconditionally loads both trending rails on
     # connected mount (#530).
@@ -58,6 +60,7 @@ defmodule MydiaWeb.DashboardLive.RequestStatusMapTest do
     conn = log_in_user(conn, user_fixture(%{role: "guest"}))
     {:ok, view, _html} = live(conn, ~p"/")
 
-    assert :sys.get_state(view.pid).socket.assigns.request_status_map == %{tmdb_id => "pending"}
+    assert :sys.get_state(view.pid).socket.assigns.request_status_map ==
+             %{ProviderKey.new(:movie, :tmdb, tmdb_id) => "pending"}
   end
 end

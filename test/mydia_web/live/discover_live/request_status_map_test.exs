@@ -17,6 +17,8 @@ defmodule MydiaWeb.DiscoverLive.RequestStatusMapTest do
   import Mydia.MetadataCacheHelpers
   import MydiaWeb.AuthHelpers
 
+  alias Mydia.Media.ProviderKey
+
   setup do
     # DiscoverLive.Index unconditionally loads the movie genre list and its
     # default (trending) category on connected mount (#530).
@@ -59,6 +61,7 @@ defmodule MydiaWeb.DiscoverLive.RequestStatusMapTest do
     conn = log_in_user(conn, user_fixture(%{role: "guest"}))
     {:ok, view, _html} = live(conn, ~p"/discover")
 
-    assert :sys.get_state(view.pid).socket.assigns.request_status_map == %{tmdb_id => "pending"}
+    assert :sys.get_state(view.pid).socket.assigns.request_status_map ==
+             %{ProviderKey.new(:movie, :tmdb, tmdb_id) => "pending"}
   end
 end
