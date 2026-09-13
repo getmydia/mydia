@@ -5,7 +5,7 @@ defmodule MydiaWeb.Schema.MediaTypes do
 
   use Absinthe.Schema.Notation
 
-  alias MydiaWeb.Schema.Resolvers.MediaResolver
+  alias MydiaWeb.Schema.Resolvers.{MediaResolver, NodeId}
 
   @desc "Rolled-up watch state for a browsable item"
   object :watch_status do
@@ -274,7 +274,6 @@ defmodule MydiaWeb.Schema.MediaTypes do
       description("Season global ID (season:<show_id>:<season_number>)")
 
       resolve(fn season, _args, _info ->
-        alias MydiaWeb.Schema.Resolvers.NodeId
         show_id = season._media_item_id
         season_number = season.season_number
         {:ok, NodeId.encode(:season, show_id, season_number)}
