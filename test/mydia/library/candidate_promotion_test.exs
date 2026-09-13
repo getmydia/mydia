@@ -9,6 +9,7 @@ defmodule Mydia.Library.CandidatePromotionTest do
   alias Mydia.Events
   alias Mydia.Events.Event
   alias Mydia.Library.{CandidatePromotion, ImportCandidate, MediaFile}
+  alias Mydia.LibraryApi.MediaItemRevision
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
 
@@ -403,6 +404,16 @@ defmodule Mydia.Library.CandidatePromotionTest do
         # SQLite test database, permanently.
         Repo.delete_all(from event in Event, where: event.resource_id == ^movie.id)
         Repo.delete(movie)
+
+        # The delete above fires the aggregate-revision trigger, which writes a
+        # committed tombstone marker on this same real connection. Same reasoning
+        # as the Event row: leave it and every run leaks one marker into the
+        # session-persistent test database, where the feed tests that page the
+        # whole `media_item_revisions` table then see a stranger's row.
+        Repo.delete_all(
+          from(marker in MediaItemRevision, where: marker.media_item_id == ^movie.id)
+        )
+
         Repo.delete(library_path)
       end)
     end)

@@ -64,7 +64,7 @@ See [Environment Variables](environment-variables.md) for the full entry.
 | --- | --- |
 | `lookup(query, type, year)` | Metadata-provider hits, each saying whether the library already has it |
 | `mediaItem(id \| tmdbId \| tvdbId \| imdbId)` | One item with its availability status and episodes |
-| `mediaItems(first, after, updatedSince)` | A page of items, oldest change first (`updatedSince` is inclusive) |
+| `mediaItemChanges(first, after)` | A page of media item changes (live items and deletions), oldest revision first (see [Polling for changes](#polling-for-changes)) |
 | `downloads(filter)` | The download queue and history |
 | `events(first, after, types)` | Library activity, oldest first (see [Events](#events)) |
 | `qualityProfiles` | Profiles available to assign |
@@ -81,6 +81,100 @@ curl -s http://localhost:4000/api/library/graphql \
 
 There is no GraphiQL or Playground page on this endpoint. Use any GraphQL client
 that can set a request header.
+
+## Polling for changes
+
+`mediaItemChanges` is the convergence feed: it reports every change to a media
+item, deletions included, in the order the changes were recorded. A poller keeps
+one cursor and never needs a timestamp.
+
+```graphql
+query Poll($after: String) {
+  mediaItemChanges(first: 50, after: $after) {
+    edges {
+      cursor
+      node {
+        mediaItemId
+        deleted
+        changedAt
+        mediaItem { id title updatedAt status { state } }
+      }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+```
+
+The first request omits `after` (or sends `null`). The feed then starts at the
+oldest retained change and pages forward, so a full pass is an initial snapshot:
+by the time `hasNextPage` is false you have seen the latest state of every item.
+Keep `endCursor` and pass it as `after` on the next poll. An empty page repeats
+the cursor you sent, so a poller that always passes back `endCursor` can never
+fall back to the start of the feed.
+
+Each edge is one change:
+
+- `deleted: false` is a live item; `mediaItem` is the item's current
+  representation. Upsert it into local state keyed by `mediaItemId`.
+- `deleted: true` is a tombstone: `mediaItem` is `null` and `deleted` is true, so
+  delete the local item named by `mediaItemId` (or ignore the change if you never
+  had it). `mediaItemId` is present in both cases, which makes it the idempotency
+  key and the deletion key: you never need to keep an earlier payload to act on
+  a change.
+
+```json
+{
+  "edges": [
+    {"cursor": "djE6NA", "node": {"mediaItemId": "…", "deleted": true, "changedAt": "…", "mediaItem": null}}
+  ]
+}
+```
+
+Drain a response before sleeping: while `hasNextPage` is true there is another
+page waiting behind the same cursor, so call again with the new `endCursor`
+instead of waiting for the next poll interval.
+
+```text
+cursor = null
+loop:
+  page = mediaItemChanges(first: 50, after: cursor)   # omit after on the first call
+  apply every edge: upsert node.mediaItem when deleted is false, delete node.mediaItemId when true
+  cursor = page.pageInfo.endCursor
+  repeat immediately while page.pageInfo.hasNextPage, else wait for the next poll
+```
+
+What the contract guarantees:
+
+- **The cursor is the only synchronization watermark.** It is opaque and derived
+  from an internal revision number, never from a timestamp. Do not parse it,
+  compare it to `changedAt`, or build one yourself; pass `endCursor` back
+  verbatim. A malformed cursor, and any cursor minted by the retired
+  `mediaItems(updatedSince:)` feed, is refused with `INVALID_INPUT` instead of
+  being ignored, so a stale client resyncs from scratch rather than resuming
+  somewhere arbitrary.
+- **Repeated delivery is safe and expected.** An item can appear on two pages, or
+  change again while you are reading it, so one `mediaItemId` may arrive more than
+  once, sometimes with the same state. Apply changes idempotently and treat
+  omission (not repetition) as the only failure mode.
+- **Tombstones are retained indefinitely.** This grows by one row per media item
+  ever created, not per change, so a consumer that stops polling for months can
+  still resume from its last cursor and see every deletion it missed.
+- **`changedAt` is informational.** It is when the revision was recorded; for a
+  live change it equals the node's `mediaItem.updatedAt`, which is the aggregate
+  change time of the returned representation rather than only the parent row. Both
+  are for display and for order-independent bookkeeping. Neither orders the feed
+  and neither is a polling watermark. Note that `MediaItem.updatedAt` now reports
+  the item's aggregate change time, which on upgrade is the migration instant for
+  every existing item until it next changes.
+- **Some availability changes have no database write behind them.** `status.state`
+  compares episode air dates with the current UTC date, so a show can leave
+  `UPCOMING` at a UTC date boundary with nothing written to the database. A
+  sweep marks the affected shows and they arrive as ordinary live changes, a
+  little after the boundary rather than at it. Expect a show to appear with no
+  child write, and re-read the whole selection from every live change instead of
+  merging only the fields you believe changed.
+- **There is no push channel.** The endpoint answers requests only, so poll on the
+  interval your consumers need; each page is a plain indexed read.
 
 ## Mutations
 
@@ -144,8 +238,11 @@ the feed to the types you name; by default you get every published type, and a
 type outside that list is `INVALID_INPUT`. `data`'s keys depend on the type and
 may change during beta.
 
-The feed is best-effort. Use it to learn that something happened, then read
-`mediaItems(updatedSince:)` or `downloads` for the state:
+The feed is best-effort activity history, not a convergence feed. Use it to learn
+that something happened, then read `mediaItemChanges` or `downloads` for the
+state. If what you need is the current state of the library, poll
+`mediaItemChanges` and skip `events` entirely; the two use different cursors and
+are not interchangeable.
 
 - Events can be missing. Mydia drops events under heavy load and loses a batch
   whose write fails.
@@ -158,17 +255,29 @@ The feed is best-effort. Use it to learn that something happened, then read
 ## Cost
 
 - `downloads` contacts **every** configured download client on each call, so it is
-  not paged and is the most expensive query here. Prefer `mediaItems(updatedSince:)`
-  for polling a library's changes.
-- `updatedSince` is inclusive, so the item updated exactly at that instant comes
-  back again on the next poll if you just advance `updatedSince` to its `updatedAt`.
-  Keep the last page's `endCursor` and pass it as `after` on the next poll instead,
-  or dedupe by `id` if you re-poll from the last seen `updatedAt`.
-- `mediaItems` computes availability per item. `first` accepts 1 to 200; a value
-  outside that range is rejected with `INVALID_INPUT` rather than clamped to it.
+  not paged and is the most expensive query here. For polling a library's changes
+  prefer `mediaItemChanges`: it is a plain indexed read and contacts nothing.
+- `mediaItemChanges` prices a page as `first` times the cost of the selection
+  under `edges { node { … } }`, and the endpoint's complexity budget is 2000. What
+  you select inside `node` therefore decides how large a page you can take. A page
+  of `mediaItem { id title updatedAt status { state } }` costs 2200 at
+  `first: 200` and is refused; the same selection costs 550 at the default
+  `first: 50` and passes. Narrowing buys the page size back: `mediaItem { id }`
+  costs 1400 at `first: 200`, and asking only for the change itself
+  (`mediaItemId`, `deleted`, `changedAt`) costs 1000. So keep the default
+  `first: 50`, lower `first`, or select fewer `mediaItem` fields when you need a
+  larger page.
+- `mediaItemChanges` takes `first` from 1 to 200 (default 50); a value outside
+  that range is rejected with `INVALID_INPUT` rather than clamped to it. The
+  complexity refusal is a separate GraphQL error: it names complexity rather than
+  `INVALID_INPUT`, and it arrives before any query runs.
+- A page holds one entry per changed item, so one poll page is one read however
+  many items it carries; the cost is the price of the selected fields, not of the
+  library.
 - `addMovie` and `addTvShow` each ask the metadata relay for the title, and are
   priced like `lookup`.
-- `events` takes `first` from 1 to 200 (default 100), priced like `mediaItems`.
+- `events` takes `first` from 1 to 200 (default 100), priced like
+  `mediaItemChanges`.
 
 ## Errors
 

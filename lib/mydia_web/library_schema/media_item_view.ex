@@ -12,7 +12,7 @@ defmodule MydiaWeb.LibrarySchema.MediaItemView do
   alias Mydia.Media.MediaItem
 
   @doc """
-  The preloads every item must carry before `item_map/1` runs.
+  The preloads every item must carry before `item_map/2` runs.
 
   Mandatory, not an optimisation: `get_media_status/1` reads an item's downloads,
   its media files, and each episode's media files, so an item that is not
@@ -32,9 +32,17 @@ defmodule MydiaWeb.LibrarySchema.MediaItemView do
     ]
   end
 
-  @doc "Maps a preloaded media item onto the GraphQL shape."
-  @spec item_map(MediaItem.t()) :: map()
-  def item_map(%MediaItem{} = item) do
+  @doc """
+  Maps a preloaded media item onto the GraphQL shape.
+
+  `changed_at` is the item's aggregate revision timestamp from
+  `Mydia.LibraryApi.MediaItemRevision`, not `item.updated_at`: every observable
+  write -- a child episode, a media file, a download, a quality profile rename --
+  advances the marker, so a consumer polling the change feed sees one timestamp
+  that covers the whole item.
+  """
+  @spec item_map(MediaItem.t(), DateTime.t()) :: map()
+  def item_map(%MediaItem{} = item, %DateTime{} = changed_at) do
     %{
       id: item.id,
       type: String.to_existing_atom(item.type),
@@ -47,7 +55,7 @@ defmodule MydiaWeb.LibrarySchema.MediaItemView do
       quality_profile: item.quality_profile,
       status: Media.get_media_status(item),
       added_at: item.inserted_at,
-      updated_at: item.updated_at,
+      updated_at: changed_at,
       episodes: Map.get(item, :episodes) || []
     }
   end

@@ -1,7 +1,6 @@
 defmodule MydiaWeb.LibrarySchema.PagingTest do
   use MydiaWeb.ConnCase
 
-  alias Mydia.LibraryApi.Principal
   alias MydiaWeb.LibrarySchema.Paging
 
   describe "page_size/3" do
@@ -36,31 +35,5 @@ defmodule MydiaWeb.LibrarySchema.PagingTest do
       assert Paging.cost(%{first: 10_000}, 50, 200, 3) == 600
       assert Paging.cost(%{first: -5}, 50, 200, 3) == 3
     end
-  end
-
-  test "mediaItems repeats the cursor it was given on an empty page" do
-    insert(:media_item)
-    admin = %Principal{role: "admin", source: :env}
-
-    page = fn variables ->
-      {:ok, %{data: %{"mediaItems" => connection}}} =
-        Absinthe.run(
-          """
-          query P($after: String) {
-            mediaItems(first: 200, after: $after) { edges { node { id } } pageInfo { endCursor } }
-          }
-          """,
-          MydiaWeb.LibrarySchema,
-          variables: variables,
-          context: %{principal: admin}
-        )
-
-      connection
-    end
-
-    cursor = page.(%{})["pageInfo"]["endCursor"]
-    assert is_binary(cursor)
-
-    assert page.(%{"after" => cursor}) == %{"edges" => [], "pageInfo" => %{"endCursor" => cursor}}
   end
 end

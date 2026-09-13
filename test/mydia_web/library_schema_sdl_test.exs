@@ -37,7 +37,8 @@ defmodule MydiaWeb.LibrarySchemaSdlTest do
 
     object_names = ~w(
       MediaItem Episode AvailabilityStatus LookupResult Download DownloadClient Indexer
-      QualityProfile LibraryPath PageInfo MediaItemEdge MediaItemConnection
+      QualityProfile LibraryPath PageInfo
+      MediaItemChange MediaItemChangeEdge MediaItemChangeConnection
       UserError MediaItemPayload EpisodePayload AddMediaPayload RemoveMediaItemPayload
       SearchPayload RemoveDownloadPayload Event EventEdge EventConnection
     )
@@ -90,7 +91,9 @@ defmodule MydiaWeb.LibrarySchemaSdlTest do
       |> MapSet.new()
 
     approved =
-      MapSet.new(~w(lookup mediaItem mediaItems downloads events qualityProfiles libraryPaths))
+      MapSet.new(
+        ~w(lookup mediaItem mediaItemChanges downloads events qualityProfiles libraryPaths)
+      )
 
     assert fields == approved,
            "the RootQueryType fields differ from the approved set. Missing: " <>

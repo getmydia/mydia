@@ -45,15 +45,11 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       resolve(&MydiaWeb.LibrarySchema.Resolvers.Library.media_item/3)
     end
 
-    @desc "Media items changed recently, oldest first"
-    field :media_items, non_null(:media_item_connection) do
+    @desc "Media item changes, oldest revision first. Includes deletions."
+    field :media_item_changes, non_null(:media_item_change_connection) do
       meta(action: :read_library)
       arg(:first, :integer, default_value: 50)
       arg(:after, :string)
-
-      arg(:updated_since, :datetime,
-        description: "Only items updated at or after this instant (inclusive)"
-      )
 
       # Absinthe defaults to 1 + child complexity; explicitly account for page
       # size, matching the resolver's default of 50 and cap of 200. The floor of
@@ -63,7 +59,7 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
         MydiaWeb.LibrarySchema.Paging.cost(args, 50, 200, child_complexity)
       end)
 
-      resolve(&MydiaWeb.LibrarySchema.Resolvers.Library.media_items/3)
+      resolve(&MydiaWeb.LibrarySchema.Resolvers.MediaItemChanges.media_item_changes/3)
     end
 
     @desc "The download queue and history. Contacts every configured client."

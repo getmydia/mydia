@@ -1,7 +1,12 @@
 defmodule MydiaWeb.LibrarySchema.LookupTest do
   use MydiaWeb.ConnCase
 
+  import Mydia.Factory
+  import Ecto.Query
+
+  alias Mydia.LibraryApi.MediaItemRevision
   alias Mydia.LibraryApi.Principal
+  alias Mydia.Repo
 
   @admin %Principal{role: "admin", source: :api_key}
 
@@ -76,6 +81,39 @@ defmodule MydiaWeb.LibrarySchema.LookupTest do
     assert result["year"] == 1999
     assert result["posterUrl"] =~ "/matrix.jpg"
     assert result["imdbId"] == "tt0133093"
+    assert result["inLibrary"] == nil
+  end
+
+  test "an in-library hit deleted between the item query and the marker read reports no inLibrary" do
+    bypass = Bypass.open()
+
+    stub_tmdb_movie_search(bypass, [
+      %{
+        "id" => 604,
+        "title" => "In Library",
+        "release_date" => "2001-01-01",
+        "poster_path" => "/in-library.jpg",
+        "overview" => "A hit that is already in the library.",
+        "media_type" => "movie"
+      }
+    ])
+
+    previous = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, relay_config(bypass).base_url)
+    on_exit(fn -> Application.put_env(:mydia, :metadata_relay_url, previous) end)
+
+    movie = insert(:media_item, type: "movie", title: "In Library", tmdb_id: 604)
+
+    # The hit was hydrated before a concurrent delete committed, so the item
+    # still resolves while its marker is already a tombstone.
+    Repo.update_all(
+      from(r in MediaItemRevision, where: r.media_item_id == ^movie.id),
+      set: [deleted: true]
+    )
+
+    assert {:ok, %{data: %{"lookup" => [result]}}} =
+             run(@lookup, %{"query" => "In Library", "type" => "MOVIE"})
+
     assert result["inLibrary"] == nil
   end
 end
