@@ -8,15 +8,15 @@ import rawRoutes from "./routes.json";
 // relay, only the relay against itself (see below), so the harness mechanics
 // are proven and the actual port parity is not.
 //
-// This file runs as the separate "contract" Vitest project (see
-// vitest.workspace.ts), under plain Node rather than workerd: it treats both
-// services as opaque HTTP endpoints reached by URL, needs no Workers-specific
-// runtime capability, and workerd's self-contained root CA store does not
-// necessarily trust every network's TLS-intercepting proxy the way the host
-// OS's trust store does (observed directly: identical fetch() calls succeed
-// under Node and fail with a cert-trust error under workerd, in a sandbox
-// that proxies outbound HTTPS). Plain `process.env` therefore works
-// normally here, unlike inside a workerd test.
+// This file runs as the separate "contract" Vitest project (see the
+// `test.projects` list in vitest.config.ts), under plain Node rather than
+// workerd: it treats both services as opaque HTTP endpoints reached by URL,
+// needs no Workers-specific runtime capability, and workerd's self-contained
+// root CA store does not necessarily trust every network's TLS-intercepting
+// proxy the way the host OS's trust store does (observed directly: identical
+// fetch() calls succeed under Node and fail with a cert-trust error under
+// workerd, in a sandbox that proxies outbound HTTPS). Plain `process.env`
+// therefore works normally here, unlike inside a workerd test.
 //
 // CONTRACT_WORKER_URL is unset by default, so this whole suite is skipped in
 // ordinary `npm run test` / CI runs -- there is no staging Worker to compare

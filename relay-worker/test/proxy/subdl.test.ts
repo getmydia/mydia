@@ -1,7 +1,8 @@
-import { env, SELF, fetchMock } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, it, expect, beforeAll } from "vitest";
 import { zipSync, strToU8 } from "fflate";
 import { subdlApiKey } from "../../src/proxy/subdl";
+import { fetchMock } from "../support/fetch-mock";
 
 beforeAll(() => {
   fetchMock.activate();

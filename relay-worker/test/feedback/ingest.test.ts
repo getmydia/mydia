@@ -1,4 +1,4 @@
-import { env, SELF, fetchMock, applyD1Migrations } from "cloudflare:test";
+import { env, SELF, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import {
   validateSubmission,
@@ -7,6 +7,7 @@ import {
   checkFeedbackRateLimit,
   FEEDBACK_RATE_LIMIT,
 } from "../../src/feedback/ingest";
+import { fetchMock } from "../support/fetch-mock";
 
 const json = { "content-type": "application/json" };
 const FEEDBACK_URL = "https://relay.mydia.dev/feedback";

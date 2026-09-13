@@ -1,7 +1,8 @@
-import { env, SELF, fetchMock, applyD1Migrations } from "cloudflare:test";
+import { env, SELF, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { serviceFromPath } from "../../src/obs/log";
 import { isExemptFromProxyLimit } from "../../src/obs/ratelimit";
+import { fetchMock } from "../support/fetch-mock";
 
 describe("serviceFromPath", () => {
   it("labels each proxied upstream", () => {

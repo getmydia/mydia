@@ -1,5 +1,6 @@
-import { env, SELF, fetchMock } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { fetchMock } from "../support/fetch-mock";
 
 beforeAll(async () => {
   fetchMock.activate();

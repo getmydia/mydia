@@ -1,19 +1,22 @@
-import type { Env } from "../src/env";
-import type { D1Migration } from "@cloudflare/vitest-pool-workers/config";
+import type { Env as WorkerEnv } from "../src/env";
+import type { D1Migration } from "@cloudflare/vitest-pool-workers";
 
-// `cloudflare:test`'s `env` export is typed as an empty `ProvidedEnv` until a
-// test augments it via declaration merging (see the comment in
-// @cloudflare/vitest-pool-workers/types/cloudflare-test.d.ts). Without this,
-// `import { env } from "cloudflare:test"` types as `{}` and every binding
-// access fails to typecheck.
+// `cloudflare:test`'s `env` export is typed as the global `Cloudflare.Env`
+// namespace as of @cloudflare/vitest-pool-workers 0.13.0 -- it was a test-only
+// `ProvidedEnv` interface before -- so the suite's bindings are declared by
+// merging into that namespace, the same shape `wrangler types` generates.
+// Without this, `import { env } from "cloudflare:test"` types as the empty
+// `Cloudflare.Env` and every binding access fails to typecheck.
 //
 // TEST_MIGRATIONS is injected only by vitest.config.ts's miniflare bindings
 // (see readD1Migrations there) and applied in test setup via
 // applyD1Migrations -- it has no production equivalent, so it lives on this
-// test-only interface rather than on Env, where production code could reach
-// for it.
-declare module "cloudflare:test" {
-  interface ProvidedEnv extends Env {
-    TEST_MIGRATIONS: D1Migration[];
+// test-only augmentation rather than on src/env.ts's Env, where production
+// code could reach for it.
+declare global {
+  namespace Cloudflare {
+    interface Env extends WorkerEnv {
+      TEST_MIGRATIONS: D1Migration[];
+    }
   }
 }
