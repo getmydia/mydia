@@ -124,4 +124,35 @@ defmodule MydiaWeb.PosterCardComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders a single horizontal rail of placeholder cards shaped like a `media_rail/1` card.
+  """
+  attr :id, :string, default: nil
+  attr :count, :integer, default: 10
+
+  def poster_card_rail_skeleton(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      class="flex gap-3 overflow-x-auto pb-2"
+      role="status"
+      aria-label="Loading titles"
+    >
+      <div :for={_ <- 1..@count//1} class="flex-shrink-0 w-36">
+        <div class="card bg-base-100 shadow-lg h-full">
+          <div class="skeleton aspect-[2/3] rounded-t-box rounded-b-none"></div>
+          <div class="card-body p-3">
+            <div class="skeleton h-4 w-full"></div>
+            <div class="skeleton h-4 w-2/3"></div>
+            <div class="mt-auto flex flex-col gap-4">
+              <div class="skeleton h-4 w-10"></div>
+              <div class="skeleton h-8 w-full"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
 end
