@@ -419,7 +419,10 @@ defmodule MydiaWeb.Layouts do
           <% end %>
 
           <!-- Feedback and theme -->
-          <div class="space-y-3 p-4 border-t border-base-300">
+          <div class={[
+            "space-y-3 p-4 border-t border-base-300",
+            !@feedback_enabled? && "hidden lg:block"
+          ]}>
             <button
               :if={@feedback_enabled?}
               type="button"

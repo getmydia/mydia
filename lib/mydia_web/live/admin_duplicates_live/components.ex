@@ -30,7 +30,6 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   attr :decisions, :list, required: true
   attr :refusals, :list, required: true
   attr :selected, :any, required: true
-  attr :reclaimable, :integer, required: true
   attr :retention_days, :integer, required: true
 
   def duplicates_tab(assigns) do

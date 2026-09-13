@@ -460,7 +460,7 @@ defmodule MydiaWeb.LibraryComponents do
         Delete <strong>{@selected_count}</strong> {@item_word}?
       </:title>
 
-      <form phx-change="toggle_delete_files">
+      <form id={"#{@id}-form"} phx-change="toggle_delete_files">
         <div class="space-y-2.5">
           <label class={[
             "flex items-start gap-3 p-3.5 rounded-lg border-2 cursor-pointer transition-all hover:shadow-sm",

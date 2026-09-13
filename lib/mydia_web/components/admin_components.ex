@@ -121,7 +121,7 @@ defmodule MydiaWeb.AdminComponents do
         </p>
         <h1 id="admin-page-title" class="text-3xl font-bold flex items-center gap-3">
           {@nav_page.label}
-          <span :if={@count} id="admin-page-count" class="badge badge-ghost">{@count}</span>
+          <span :if={@count} id="admin-page-count" class="badge badge-neutral">{@count}</span>
         </h1>
         <p id="admin-page-description" class="text-base-content/70 mt-1">
           {@nav_page.description}
@@ -132,7 +132,11 @@ defmodule MydiaWeb.AdminComponents do
       </div>
     </div>
 
-    <div id="admin-page-tabs" role="tablist" class="tabs tabs-border flex-nowrap overflow-x-auto mb-6">
+    <div
+      id="admin-page-tabs"
+      role="tablist"
+      class="tabs tabs-border flex-nowrap overflow-x-auto mb-6 [scrollbar-width:none]"
+    >
       <.link
         :for={tab <- @tabs}
         id={"admin-tab-#{tab.key}"}
