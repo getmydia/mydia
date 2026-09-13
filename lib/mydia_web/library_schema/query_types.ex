@@ -45,7 +45,7 @@ defmodule MydiaWeb.LibrarySchema.QueryTypes do
       resolve(&MydiaWeb.LibrarySchema.Resolvers.Library.media_item/3)
     end
 
-    @desc "Media items changed recently, oldest revision first. Includes deletions."
+    @desc "Media item changes, oldest revision first. Includes deletions."
     field :media_item_changes, non_null(:media_item_change_connection) do
       meta(action: :read_library)
       arg(:first, :integer, default_value: 50)

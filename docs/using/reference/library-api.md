@@ -64,7 +64,7 @@ See [Environment Variables](environment-variables.md) for the full entry.
 | --- | --- |
 | `lookup(query, type, year)` | Metadata-provider hits, each saying whether the library already has it |
 | `mediaItem(id \| tmdbId \| tvdbId \| imdbId)` | One item with its availability status and episodes |
-| `mediaItemChanges(first, after)` | A page of media item changes — live items and deletions — oldest revision first (see [Polling for changes](#polling-for-changes)) |
+| `mediaItemChanges(first, after)` | A page of media item changes (live items and deletions), oldest revision first (see [Polling for changes](#polling-for-changes)) |
 | `downloads(filter)` | The download queue and history |
 | `events(first, after, types)` | Library activity, oldest first (see [Events](#events)) |
 | `qualityProfiles` | Profiles available to assign |
@@ -119,7 +119,7 @@ Each edge is one change:
 - `deleted: true` is a tombstone: `mediaItem` is `null` and `deleted` is true, so
   delete the local item named by `mediaItemId` (or ignore the change if you never
   had it). `mediaItemId` is present in both cases, which makes it the idempotency
-  key and the deletion key — you never need to keep an earlier payload to act on
+  key and the deletion key: you never need to keep an earlier payload to act on
   a change.
 
 ```json
@@ -155,7 +155,7 @@ What the contract guarantees:
 - **Repeated delivery is safe and expected.** An item can appear on two pages, or
   change again while you are reading it, so one `mediaItemId` may arrive more than
   once, sometimes with the same state. Apply changes idempotently and treat
-  omission — not repetition — as the only failure mode.
+  omission (not repetition) as the only failure mode.
 - **Tombstones are retained indefinitely.** This grows by one row per media item
   ever created, not per change, so a consumer that stops polling for months can
   still resume from its last cursor and see every deletion it missed.

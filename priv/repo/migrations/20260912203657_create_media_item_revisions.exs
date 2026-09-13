@@ -75,15 +75,23 @@ defmodule Mydia.Repo.Migrations.CreateMediaItemRevisions do
   def up do
     create_revision_table()
     create_clock_table()
-    backfill_markers()
-    seed_clock()
 
+    # Triggers are installed BEFORE the backfill, and the backfill runs inside
+    # the same transaction. Installing a trigger takes a lock that blocks
+    # writers until this transaction commits, so ordering the install first
+    # closes the window where a concurrent update or delete could commit after
+    # the backfill's snapshot but before the trigger existed. Such a write
+    # would leave the feed holding a stale marker or a live marker for a
+    # deleted row, and no later revision would ever report the change.
     if postgres?() do
       install_postgres_functions()
       install_postgres_triggers()
     else
       install_sqlite_triggers()
     end
+
+    backfill_markers()
+    seed_clock()
   end
 
   def down do

@@ -16,7 +16,7 @@ type RootQueryType {
   "One media item, by id or by an external id"
   mediaItem(id: ID, type: MediaType, tmdbId: Int, tvdbId: Int, imdbId: String): MediaItem
 
-  "Media items changed recently, oldest revision first. Includes deletions."
+  "Media item changes, oldest revision first. Includes deletions."
   mediaItemChanges(first: Int, after: String): MediaItemChangeConnection!
 
   "The download queue and history. Contacts every configured client."
