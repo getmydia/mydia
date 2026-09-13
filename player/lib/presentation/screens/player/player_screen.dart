@@ -3026,7 +3026,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _showUpNextOverlay(UpNextTarget target) {
     _upNextCountdown?.dispose();
     final countdown = UpNextCountdown(
-      onElapsed: () => _playNextEpisode(fromAutoCountdown: true),
+      onElapsed: bindUpNextCountdownElapsed(_playNextEpisode),
     );
     _upNextCountdown = countdown;
 
@@ -5212,6 +5212,19 @@ KeyEventResult handleEpisodeNavKey(
       return KeyEventResult.ignored;
   }
 }
+
+/// The countdown's `onElapsed` callback, bound so a fire is always marked
+/// as automatic.
+///
+/// A tear-off of `_playNextEpisode` would pass `fromAutoCountdown: false`
+/// (the default), which is exactly the regression this helper exists to
+/// prevent: after a dismiss, an elapsed countdown would navigate. Tests
+/// pin this binding independently of mounting `PlayerScreen`.
+@visibleForTesting
+VoidCallback bindUpNextCountdownElapsed(
+  void Function({bool fromAutoCountdown}) playNext,
+) =>
+    () => playNext(fromAutoCountdown: true);
 
 /// media_kit's current audio track list mapped onto the app's own model,
 /// together with the reverse lookup needed to hand a chosen track back to
