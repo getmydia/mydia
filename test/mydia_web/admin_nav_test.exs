@@ -120,8 +120,9 @@ defmodule MydiaWeb.AdminNavTest do
       assert AdminNav.hub_landing_path(:system) == "/admin/status"
     end
 
-    test "Activity is a System page at /activity and Import Lists is not a hub page" do
-      assert %Page{hub: :system, path: "/activity"} = AdminNav.page_for_path("/activity")
+    test "Activity and Import Lists are not hub pages" do
+      assert AdminNav.page_for_path("/activity") == nil
+      refute :activity in AdminNav.keys()
       refute :import_lists in AdminNav.keys()
       assert AdminNav.page_for_path("/admin/import-lists") == nil
     end

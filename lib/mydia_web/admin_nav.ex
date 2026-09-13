@@ -40,7 +40,6 @@ defmodule MydiaWeb.AdminNav do
     :trash,
     :status,
     :dashboard,
-    :activity,
     :settings,
     :users,
     :api_keys,
@@ -191,14 +190,6 @@ defmodule MydiaWeb.AdminNav do
         icon: "hero-chart-bar",
         path: ~p"/admin/dashboard",
         requires: :player
-      },
-      %Page{
-        key: :activity,
-        hub: :system,
-        label: "Activity",
-        description: "Recent events and system activity",
-        icon: "hero-clock",
-        path: ~p"/activity"
       },
       %Page{
         key: :settings,

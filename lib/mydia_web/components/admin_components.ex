@@ -87,10 +87,6 @@ defmodule MydiaWeb.AdminComponents do
     values: AdminNav.keys(),
     doc: "the `MydiaWeb.AdminNav` key of the page, passed as a literal"
 
-  attr :hub_nav, :boolean,
-    default: true,
-    doc: "render the hub label and tab strip; false for a viewer outside the admin area"
-
   attr :count, :integer, default: nil, doc: "item count shown beside the title"
 
   slot :actions, doc: "header buttons, right-aligned from the md breakpoint up"
@@ -120,11 +116,7 @@ defmodule MydiaWeb.AdminComponents do
       class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6"
     >
       <div>
-        <p
-          :if={@hub_nav}
-          id="admin-page-hub"
-          class="text-xs uppercase tracking-wide text-base-content/60"
-        >
+        <p id="admin-page-hub" class="text-xs uppercase tracking-wide text-base-content/60">
           {@hub_label}
         </p>
         <h1 id="admin-page-title" class="text-3xl font-bold flex items-center gap-3">
@@ -140,12 +132,7 @@ defmodule MydiaWeb.AdminComponents do
       </div>
     </div>
 
-    <div
-      :if={@hub_nav}
-      id="admin-page-tabs"
-      role="tablist"
-      class="tabs tabs-border flex-nowrap overflow-x-auto mb-6"
-    >
+    <div id="admin-page-tabs" role="tablist" class="tabs tabs-border flex-nowrap overflow-x-auto mb-6">
       <.link
         :for={tab <- @tabs}
         id={"admin-tab-#{tab.key}"}

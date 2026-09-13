@@ -353,8 +353,7 @@ defmodule MydiaWeb.Layouts do
                   <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Search
                 </.link>
               </li>
-              <%!-- Admins reach Activity as a System tab. --%>
-              <li :if={!(@current_user && @current_user.role == "admin")}>
+              <li>
                 <.link
                   navigate="/activity"
                   class={nav_active?(@current_path, "/activity", false) && "menu-active"}

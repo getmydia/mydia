@@ -17,7 +17,7 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
     test "renders the activity page", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/activity")
 
-      assert html =~ "Activity"
+      assert html =~ "Activity Feed"
       assert html =~ "Recent events and system activity"
     end
 
