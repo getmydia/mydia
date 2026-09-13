@@ -33,7 +33,12 @@ Future<StorageSettings> storageSettings(Ref ref) async {
 }
 
 /// Provider to update storage settings.
-@riverpod
+///
+/// `keepAlive` is load-bearing, not a memory choice: the closure invalidates
+/// after its `await`, and call sites reach this provider with `ref.read` while
+/// nothing watches it. See `player/docs/riverpod.md` for why an unwatched
+/// autoDispose provider cannot hold a Ref across an await (#744).
+@Riverpod(keepAlive: true)
 Future<void> Function(StorageSettings) updateStorageSettings(Ref ref) {
   return (StorageSettings settings) async {
     final box = await ref.read(storageSettingsBoxProvider.future);

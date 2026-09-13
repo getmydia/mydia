@@ -92,3 +92,43 @@ A plan once specified a throwing-`build()` fake to cover a synchronous throw fro
 the code path it targeted cannot be reached that way. If a test uses a throwing
 `build()` and passes, confirm it actually goes red without the fix before
 believing it.
+
+## An unwatched autoDispose provider loses its Ref at the first await
+
+`flutter_riverpod` 3.3.2 pulls in `riverpod` 3.3.2, whose scheduler rework
+changed when an autoDispose provider with no listeners is torn down: it is
+already disposed by the time the first `await` inside it resumes. `read` never
+adds a listener, so a provider the app only ever reads no longer survives a
+single microtask, and `Ref.mounted` reads `false` in the continuation.
+
+That breaks the shape the repo uses for every "command" provider —
+`updateDownloadSettings`, `updateStorageSettings`, `saveCollectionSync`,
+`removeCollectionSync` and `SidebarLayoutController._mutate`:
+
+```dart
+@riverpod                               // autoDispose, and nothing watches it
+Future<void> Function(T) save(Ref ref) {
+  return (T value) async {
+    await write(value);                 // the Ref dies here
+    ref.invalidate(theStateProvider);   // UnmountedRefException
+  };
+}
+```
+
+The throw lands in a continuation the caller never awaits, so the write still
+lands and the flow just stops: a new sidebar filter never appeared, and the
+storage sheet aborted before the download half of its save and never closed.
+Nothing about the call sites looks wrong, which is why this went out with the
+bump. On the previous pin the disposal was deferred past that microtask, so the
+same tests passed.
+
+`@Riverpod(keepAlive: true)` is the fix for a stateless command provider: it
+holds no state, so keeping the element alive costs nothing else.
+`ref.read(p.notifier)` captured in a field, or a `container.listen`
+subscription held around the call, also keeps it alive, but pushes the
+requirement onto every call site — and the subscription is what hid this:
+`player/test/core/downloads/download_providers_test.dart`'s `saveSettings`
+helper held one, so it never exercised the shape the app uses.
+
+Reproduce with one probe rather than by reasoning: `debugPrint('${ref.mounted}')`
+either side of the `await`. `true` then `false` is this bug.

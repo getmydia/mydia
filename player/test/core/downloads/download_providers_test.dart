@@ -60,19 +60,16 @@ void main() {
 
   /// Save settings the way the storage sheet does.
   ///
-  /// `updateDownloadSettingsProvider` is auto-dispose, so it has to be held
-  /// with a live subscription; reading it and calling the returned closure
-  /// later hits a disposed Ref.
+  /// `keepAlive` on `updateDownloadSettingsProvider` is what lets this read the
+  /// closure and await it with nothing watching the provider, which is exactly
+  /// what downloads_screen.dart does. An earlier revision of this helper held a
+  /// live subscription instead, which is why the provider losing its Ref at the
+  /// first await went unnoticed until riverpod 3.3.2 (#744).
   Future<void> saveSettings(
     ProviderContainer container,
     DownloadSettings settings,
   ) async {
-    final sub = container.listen(
-      updateDownloadSettingsProvider,
-      (_, __) {},
-    );
-    await sub.read()(settings);
-    sub.close();
+    await container.read(updateDownloadSettingsProvider)(settings);
     await container.read(downloadSettingsProvider.future);
   }
 
