@@ -105,6 +105,12 @@ jobs:
       - name: Assert the Android shell resolves the pinned Flutter
         run: nix eval --raw .#packages.x86_64-linux.flutter.version
 
+      # Assert npmDeps.hash in nix/packages/flake-module.nix matches assets/package-lock.json.
+      # A mismatch fails as "error: hash mismatch in fixed-output derivation '...npm-deps.drv'".
+      # This runs in seconds and catches stale hashes on PRs before auto-merge.
+      - name: Assert npmDeps.hash matches assets/package-lock.json
+        run: nix build .#packages.x86_64-linux.default.npmDeps --no-link
+
   apple-deployment-targets:
     name: Check / Apple Deployment Targets
     runs-on: ubuntu-latest

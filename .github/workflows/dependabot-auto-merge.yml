@@ -36,10 +36,12 @@ on:
   workflow_run:
     workflows:
       - CI
+      - CI / Appcast
       - CI / Documentation
       - CI / Fastlane
       - CI / Nix
       - CI / Player Desktop
+      - CI / Player E2E
       - CI / Relay
       # `CI / Relay` above is metadata-relay/ (Elixir). This is relay-worker/
       # (the Cloudflare Worker) -- a different service, and one that had no

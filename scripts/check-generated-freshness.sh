@@ -79,7 +79,7 @@ done
 # exactly the state a manifest-only bump leaves behind. The Nix build vendors
 # from these locks, so a stale one is a build failure there rather than here.
 if command -v cargo >/dev/null 2>&1; then
-  for d in native/mydia_p2p native/mydia_subsync plugins/webhook_notifier plugins/simkl_sync; do
+  for d in native/mydia_p2p native/mydia_subsync plugins/webhook_notifier plugins/simkl_sync server player/rust/mydia_player_p2p; do
     [ -f "$d/Cargo.lock" ] || continue
     if ! err="$(cd "$d" && cargo metadata --locked --format-version 1 2>&1 >/dev/null)"; then
       fail "$d/Cargo.lock does not satisfy its manifest:
@@ -89,6 +89,101 @@ $(echo "$err" | sed 's/^/    /' | head -5)
   done
 else
   echo "note: cargo not on PATH, skipping the lockfile half of this check" >&2
+fi
+
+# --- Nix pins and Elixir/asset manifests -------------------------------------
+#
+# nix/packages/flake-module.nix and deps.nix pin versions and hashes that must
+# stay in lockstep with mix.lock and assets/package.json. Because the NixOS VM
+# and package tests run on master push only, a mismatch here passes PR CI and
+# breaks master CI once merged.
+if [ -f nix/packages/flake-module.nix ] && [ -f mix.lock ] && [ -f assets/package.json ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    if ! err="$(python3 - << 'PYEOF' 2>&1
+import re, sys
+
+status = 0
+
+with open("nix/packages/flake-module.nix") as f:
+    nix_text = f.read()
+with open("mix.lock") as f:
+    mix_lock = f.read()
+with open("assets/package.json") as f:
+    pkg_json = f.read()
+
+fine_pin = re.search(r'fineVersion\s*=\s*"([^"]+)"', nix_text)
+fine_lock = re.search(r'"fine":\s*\{:hex,\s*:fine,\s*"([^"]+)"', mix_lock)
+if fine_pin and fine_lock and fine_pin.group(1) != fine_lock.group(1):
+    print(f"fine version mismatch: nix/packages/flake-module.nix ({fine_pin.group(1)}) != mix.lock ({fine_lock.group(1)})")
+    status = 1
+
+wasmex_pin = re.search(r'wasmexVersion\s*=\s*"([^"]+)"', nix_text)
+wasmex_lock = re.search(r'"wasmex":\s*\{:hex,\s*:wasmex,\s*"([^"]+)"', mix_lock)
+if wasmex_pin and wasmex_lock and wasmex_pin.group(1) != wasmex_lock.group(1):
+    print(f"wasmex version mismatch: nix/packages/flake-module.nix ({wasmex_pin.group(1)}) != mix.lock ({wasmex_lock.group(1)})")
+    status = 1
+
+tailwind_pin = re.search(r'tailwindVersion\s*=\s*"([^"]+)"', nix_text)
+tailwind_pkg = re.search(r'"tailwindcss":\s*"[\^~=]*([^"]+)"', pkg_json)
+if tailwind_pin and tailwind_pkg and tailwind_pin.group(1) != tailwind_pkg.group(1):
+    print(f"tailwind version mismatch: nix/packages/flake-module.nix ({tailwind_pin.group(1)}) != assets/package.json ({tailwind_pkg.group(1)})")
+    status = 1
+
+import os
+if os.path.exists("deps.nix"):
+    with open("deps.nix") as f:
+        deps_nix = f.read()
+
+    mix_deps = {}
+    for m in re.finditer(r'"([a-zA-Z0-9_]+)":\s*\{:hex,\s*:[a-zA-Z0-9_]+,\s*"([^"]+)",.*?\"hexpm\",\s*"([^"]+)"\}', mix_lock):
+        mix_deps[m.group(1)] = (m.group(2), m.group(3))
+
+    nix_deps = {}
+    for m in re.finditer(r'^\s*([a-zA-Z0-9_]+)\s*=\s*build(?:Mix|Rebar3|ErlangMk)\s+rec\s*\{', deps_nix, re.MULTILINE):
+        name = m.group(1)
+        start = m.end()
+        end = deps_nix.find('    };', start)
+        block = deps_nix[start:end]
+        ver_m = re.search(r'version\s*=\s*"([^"]+)"', block)
+        sha_m = re.search(r'sha256\s*=\s*"([^"]+)"', block)
+        if ver_m and sha_m:
+            nix_deps[name] = (ver_m.group(1), sha_m.group(1))
+
+    missing = set(mix_deps.keys()) - set(nix_deps.keys())
+    if missing:
+        print(f"deps.nix is missing dependencies from mix.lock: {', '.join(sorted(missing))}")
+        status = 1
+
+    mismatches = []
+    for k, (m_ver, m_sha) in mix_deps.items():
+        if k in nix_deps:
+            n_ver, n_sha = nix_deps[k]
+            if m_ver != n_ver or m_sha != n_sha:
+                mismatches.append(f"{k} (mix.lock {m_ver} vs deps.nix {n_ver})")
+    if mismatches:
+        print(f"deps.nix version/hash mismatch with mix.lock: {', '.join(mismatches)}")
+        status = 1
+
+sys.exit(status)
+PYEOF
+)"; then
+      fail "Nix dependency pins do not match manifests:
+$(echo "$err" | sed 's/^/    /')
+  Update nix/packages/flake-module.nix or deps.nix to match mix.lock / assets/package.json."
+    fi
+  fi
+fi
+
+# --- Nix npm dependencies: lockfile matches the pinned hash -----------------
+#
+# When nix is available, assert npmDeps.hash in nix/packages/flake-module.nix
+# matches assets/package-lock.json without a full build.
+if command -v nix >/dev/null 2>&1; then
+  if ! err="$(nix build .#packages.x86_64-linux.default.npmDeps --no-link 2>&1)"; then
+    fail "assets/package-lock.json does not match npmDeps.hash in nix/packages/flake-module.nix:
+$(echo "$err" | sed 's/^/    /' | tail -5)
+  Update npmDeps.hash in nix/packages/flake-module.nix with the 'got:' hash above."
+  fi
 fi
 
 if [ "$status" -eq 0 ]; then
