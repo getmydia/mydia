@@ -222,30 +222,4 @@ defmodule MydiaWeb.AdminNavLiveTest do
     refute has_element?(view, "a#nav-import-lists")
     assert has_element?(view, ~s|nav a[href="/activity"]|)
   end
-
-  describe "account menu" do
-    test "sits under the logo and holds the personal pages", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/trash")
-
-      assert has_element?(view, "#sidebar-account + nav")
-      assert has_element?(view, "#sidebar-account #sidebar-user-menu")
-      assert has_element?(view, ~s|#sidebar-account a#user-menu-profile[href="/profile"]|)
-
-      assert has_element?(
-               view,
-               ~s|#sidebar-account a#user-menu-integrations[href="/integrations"]|
-             )
-
-      assert has_element?(view, ~s|#sidebar-account a#user-menu-devices[href="/devices"]|)
-      assert has_element?(view, ~s|#sidebar-account a#user-menu-changelog[href="/changelog"]|)
-      assert has_element?(view, ~s|#sidebar-account a[href="/auth/logout"]|)
-    end
-
-    test "Integrations and Devices leave Management", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/trash")
-
-      refute has_element?(view, ~s|nav a[href="/integrations"]|)
-      refute has_element?(view, ~s|nav a[href="/devices"]|)
-    end
-  end
 end

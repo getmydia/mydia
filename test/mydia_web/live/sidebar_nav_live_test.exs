@@ -10,6 +10,9 @@ defmodule MydiaWeb.SidebarNavLiveTest do
   import Mydia.MetadataCacheHelpers
 
   alias Mydia.Repo
+  alias Mydia.Accounts
+  alias Mydia.Changelog
+  alias Mydia.Settings
 
   defp mount_as(role, path \\ "/calendar") do
     conn = log_in_user(build_conn(), user_fixture(%{role: role}))
@@ -154,6 +157,77 @@ defmodule MydiaWeb.SidebarNavLiveTest do
       for role <- ~w(user readonly guest) do
         refute has_element?(mount_as(role), "#sidebar-running-jobs")
       end
+    end
+  end
+
+  describe "account menu" do
+    setup do
+      admin = admin_user_fixture()
+      %{conn: log_in_user(build_conn(), admin), admin: admin}
+    end
+
+    test "is the last block of the sidebar, below the nav", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/calendar")
+
+      assert has_element?(view, "aside > #sidebar-account:last-child")
+      refute has_element?(view, "#sidebar-account + nav")
+      assert has_element?(view, "#sidebar-account .dropdown.dropdown-top #sidebar-user-menu")
+      assert has_element?(view, "#sidebar-user-menu .avatar.avatar-placeholder")
+    end
+
+    test "holds the personal pages, theme, What's new, feedback and Log out", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/calendar")
+
+      assert has_element?(view, ~s|#sidebar-account a#user-menu-profile[href="/profile"]|)
+
+      assert has_element?(
+               view,
+               ~s|#sidebar-account a#user-menu-integrations[href="/integrations"]|
+             )
+
+      assert has_element?(view, ~s|#sidebar-account a#user-menu-devices[href="/devices"]|)
+      assert has_element?(view, "#sidebar-account #theme-toggle-account")
+      assert has_element?(view, ~s|#sidebar-account a#user-menu-changelog[href="/changelog"]|)
+
+      assert has_element?(
+               view,
+               ~s|#sidebar-account button#user-menu-feedback[phx-click="open_feedback_modal"]|,
+               "Send feedback"
+             )
+
+      assert has_element?(view, ~s|#sidebar-account a[href="/auth/logout"]|, "Log out")
+    end
+
+    test "replaces the feedback card and the sidebar theme row", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/calendar")
+
+      refute has_element?(view, "#sidebar-send-feedback")
+      refute has_element?(view, "#theme-toggle-sidebar")
+      refute has_element?(view, ~s|aside nav a[href="/integrations"]|)
+      refute has_element?(view, ~s|aside nav a[href="/devices"]|)
+    end
+
+    test "has no feedback item when feedback is disabled", %{conn: conn} do
+      {:ok, _setting} =
+        Settings.create_config_setting(%{
+          key: "feedback.enabled",
+          value: "false",
+          category: :feedback
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/calendar")
+
+      refute has_element?(view, "#user-menu-feedback")
+    end
+
+    test "marks What's new only while release notes are unread", %{conn: conn, admin: admin} do
+      {:ok, _} = Accounts.mark_changelog_seen(admin, "0.2.0")
+      {:ok, view, _html} = live(conn, ~p"/calendar")
+      assert has_element?(view, "#user-menu-changelog .badge", "New")
+
+      {:ok, _} = Accounts.mark_changelog_seen(admin, Changelog.latest())
+      {:ok, view, _html} = live(conn, ~p"/calendar")
+      refute has_element?(view, "#user-menu-changelog .badge")
     end
   end
 end

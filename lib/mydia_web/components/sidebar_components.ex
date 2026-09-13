@@ -101,4 +101,133 @@ defmodule MydiaWeb.SidebarComponents do
     </div>
     """
   end
+
+  attr :current_user, :map, required: true
+  attr :current_path, :string, default: nil
+  attr :feedback_enabled?, :boolean, default: false
+  attr :changelog_notice, :map, default: nil, doc: "set while release notes are unread"
+
+  @doc """
+  The account chip pinned to the bottom of the sidebar. Its menu opens upward
+  and holds the personal pages, the theme switcher, What's new, Send feedback
+  and Log out.
+  """
+  def account_menu(assigns) do
+    ~H"""
+    <div
+      id="sidebar-account"
+      class="px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] border-t border-base-content/10"
+    >
+      <div class="dropdown dropdown-top w-full">
+        <div
+          id="sidebar-user-menu"
+          tabindex="0"
+          role="button"
+          aria-label="Account menu"
+          class="btn btn-ghost w-full justify-start gap-3 h-auto py-2"
+        >
+          <div class="avatar avatar-placeholder">
+            <div class="bg-neutral text-neutral-content rounded-full w-8 overflow-hidden">
+              <img
+                :if={@current_user.avatar_url}
+                src={@current_user.avatar_url}
+                alt="Avatar"
+                class="w-full h-full object-cover"
+              />
+              <span :if={!@current_user.avatar_url} class="text-xs">
+                {initials(@current_user)}
+              </span>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0 text-left">
+            <div class="text-sm font-medium truncate">{display_name(@current_user)}</div>
+            <div class="text-xs opacity-60 capitalize">{@current_user.role}</div>
+          </div>
+          <.icon name="hero-chevron-up-down" class="w-4 h-4 opacity-60" />
+        </div>
+
+        <div
+          tabindex="0"
+          class="dropdown-content z-50 mb-2 w-full rounded-box bg-base-200 p-2 shadow-lg"
+        >
+          <div class="px-3 py-2">
+            <div class="text-sm font-semibold truncate">{display_name(@current_user)}</div>
+            <div :if={@current_user.email} class="text-xs text-base-content/60 truncate">
+              {@current_user.email}
+            </div>
+          </div>
+
+          <ul class="menu w-full p-0">
+            <li>
+              <.link
+                id="user-menu-profile"
+                navigate={~p"/profile"}
+                class={[nav_active?(@current_path, "/profile", false) && "menu-active"]}
+              >
+                <.icon name="hero-user-circle" class="w-4 h-4" /> Profile
+              </.link>
+            </li>
+            <li>
+              <.link
+                id="user-menu-integrations"
+                navigate={~p"/integrations"}
+                class={[nav_active?(@current_path, "/integrations", false) && "menu-active"]}
+              >
+                <.icon name="hero-puzzle-piece" class="w-4 h-4" /> Integrations
+              </.link>
+            </li>
+            <li :if={Mydia.Player.enabled?()}>
+              <.link
+                id="user-menu-devices"
+                navigate={~p"/devices"}
+                class={[nav_active?(@current_path, "/devices", false) && "menu-active"]}
+              >
+                <.icon name="hero-device-phone-mobile" class="w-4 h-4" /> Devices
+              </.link>
+            </li>
+          </ul>
+
+          <div class="my-1 border-t border-base-content/10"></div>
+
+          <div class="flex items-center justify-between gap-2 px-3 py-1.5">
+            <span class="text-sm">Theme</span>
+            <MydiaWeb.Layouts.theme_toggle id="theme-toggle-account" />
+          </div>
+
+          <ul class="menu w-full p-0">
+            <li>
+              <.link id="user-menu-changelog" navigate={~p"/changelog"}>
+                <.icon name="hero-sparkles" class="w-4 h-4" /> What's new
+                <span :if={@changelog_notice} class="badge badge-primary badge-xs">New</span>
+              </.link>
+            </li>
+            <li :if={@feedback_enabled?}>
+              <button type="button" id="user-menu-feedback" phx-click="open_feedback_modal">
+                <.icon name="hero-chat-bubble-left-right" class="w-4 h-4" /> Send feedback
+              </button>
+            </li>
+          </ul>
+
+          <div class="my-1 border-t border-base-content/10"></div>
+
+          <ul class="menu w-full p-0">
+            <li>
+              <a href="/auth/logout" class="text-error">
+                <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp display_name(user), do: user.username || user.email
+
+  defp initials(user) do
+    (user.username || user.email || "U")
+    |> String.slice(0..1)
+    |> String.upcase()
+  end
 end

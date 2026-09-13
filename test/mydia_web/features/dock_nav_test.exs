@@ -115,9 +115,20 @@ defmodule MydiaWeb.Features.DockNavTest do
         description: "the drawer sidebar finishing its slide-in"
       )
 
-      # The account menu sits under the logo, so it is on screen as soon as
-      # the drawer finishes opening. It must not be covered by the dock or
-      # the drawer overlay.
+      # The account chip is pinned to the bottom of the sidebar, the edge the
+      # dock floats over. Only the nav above it scrolls, so scroll that to the
+      # bottom to probe the worst case. The dock hides while the drawer is
+      # open, so neither it nor the drawer overlay may cover the chip.
+      scroll_bottom = """
+      var nav = document.querySelector('.drawer-side aside nav');
+      if (!nav) { return '__missing__'; }
+      nav.scrollTop = nav.scrollHeight;
+      return nav.scrollTop;
+      """
+
+      refute eval_js(session, scroll_bottom) == "__missing__",
+             "expected the sidebar nav to exist"
+
       # `refute_covered/2` skips sample points that fall outside the viewport
       # (elementFromPoint returns null there), so an off-screen element would
       # pass vacuously. Assert the rect is on screen first, so the cover check
