@@ -17,6 +17,7 @@ import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
+import '../../../core/player/player_orientation_lease_controller.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_delay.dart';
 import '../../../core/player/video_output_config.dart';
@@ -792,6 +793,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `LateInitializationError` there instead of letting `dispose` finish.
   PlayerWindowSizer? _windowSizer;
 
+  /// Identity handle for this screen's orientation lease. The controller
+  /// tracks owners by identity, so a replacement screen's handle is distinct
+  /// from this one's and only the last release restores normal orientations.
+  final Object _orientationLeaseOwner = Object();
+
+  /// Whether [initState] acquired the lease above, so [dispose] releases only
+  /// what this screen actually owns.
+  bool _ownsOrientationLease = false;
+
   @override
   void initState() {
     super.initState();
@@ -837,16 +847,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // the player makes the next reveal start from a known place.
     _chromeVisibility.addListener(_onChromeVisibilityChanged);
 
-    // Force landscape orientation on mobile devices. Skipped on a television,
-    // which is already landscape and has nothing to rotate.
-    if (PlayerScreen.wantsForcedLandscape(
+    // Keep one shared lease for the complete player route lifetime. During an
+    // episode replacement, the incoming and outgoing screens hand this lease
+    // off without briefly restoring portrait-capable orientations.
+    _ownsOrientationLease = PlayerScreen.wantsForcedLandscape(
       isMobile: PlatformFeatures.isMobile,
       directionalPrimary: InputCapabilities.directionalPrimary,
-    )) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
+    );
+    if (_ownsOrientationLease) {
+      playerOrientationLeaseController.acquire(_orientationLeaseOwner);
     }
 
     // Register beforeunload handler for web to terminate HLS session on tab close
@@ -4380,14 +4389,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       unawaited(windowSizer.detach());
     }
 
-    // Restore portrait orientation on mobile devices
-    if (PlatformFeatures.isMobile) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
+    // Final release restores normal orientations after the handoff frame. A
+    // replacement PlayerScreen cancels that restore by acquiring its lease.
+    if (_ownsOrientationLease) {
+      playerOrientationLeaseController.release(_orientationLeaseOwner);
     }
 
     // Save progress before disposing (fire and forget - can't await in
