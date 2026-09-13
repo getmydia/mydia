@@ -576,7 +576,7 @@ defmodule MydiaWeb.DashboardLive.Index do
         Mydia.MediaServer.Health.status_map(Mydia.Settings.list_media_server_configs())
 
       trash_summary = Library.trashed_summary()
-      flaresolverr_enabled = socket.assigns[:flaresolverr_enabled]
+      flaresolverr_enabled = Mydia.Indexers.FlareSolverr.enabled?()
 
       socket =
         socket
@@ -585,17 +585,20 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:indexers_rollup, Rollup.from_status_map(indexer_status))
         |> assign(:media_servers_rollup, Rollup.from_status_map(media_server_status))
         |> assign(:trash_summary, trash_summary)
+        |> assign(:flaresolverr_enabled, flaresolverr_enabled)
         |> start_async(:duplicate_count, fn ->
           plan = Mydia.Library.Prune.plan()
           length(plan.decisions)
         end)
         |> then(fn s ->
           if flaresolverr_enabled do
-            start_async(s, :flaresolverr_status, fn ->
+            s
+            |> assign(:flaresolverr_status, :checking)
+            |> start_async(:flaresolverr_status, fn ->
               Mydia.Indexers.FlareSolverr.status()
             end)
           else
-            s
+            assign(s, :flaresolverr_status, :disabled)
           end
         end)
 
