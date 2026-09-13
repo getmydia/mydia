@@ -118,6 +118,27 @@ void main() {
       );
     });
   });
+  group('shouldBlockAutoPlayNext', () {
+    test('blocks auto countdown after the viewer dismissed up-next', () {
+      expect(
+        shouldBlockAutoPlayNext(
+          autoPlayCancelled: true,
+          fromAutoCountdown: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('allows manual next after the viewer dismissed up-next', () {
+      expect(
+        shouldBlockAutoPlayNext(
+          autoPlayCancelled: true,
+          fromAutoCountdown: false,
+        ),
+        isFalse,
+      );
+    });
+  });
 
   group('UpNextTarget', () {
     const target = UpNextTarget(

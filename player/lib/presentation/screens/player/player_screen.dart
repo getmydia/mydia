@@ -3025,7 +3025,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _showUpNextOverlay(UpNextTarget target) {
     _upNextCountdown?.dispose();
-    final countdown = UpNextCountdown(onElapsed: _playNextEpisode);
+    final countdown = UpNextCountdown(
+      onElapsed: () => _playNextEpisode(fromAutoCountdown: true),
+    );
     _upNextCountdown = countdown;
 
     if (!mounted) return;
@@ -3067,14 +3069,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   /// Play the next episode immediately.
-  void _playNextEpisode() {
+  ///
+  /// [fromAutoCountdown] is true only when the up-next countdown elapsed on
+  /// its own. Manual transport, keyboard, and remote actions pass false so
+  /// a prior dismiss of auto-play does not block explicit navigation.
+  void _playNextEpisode({bool fromAutoCountdown = false}) {
     _upNextCountdown?.cancel();
     _upNextPlayingSub?.cancel();
     _upNextPlayingSub = null;
 
     // Re-check after the countdown: `_cancelAutoPlay` may have run between
-    // the fire being scheduled and this executing.
-    if (_autoPlayCancelled) return;
+    // the fire being scheduled and this executing. Manual next is unaffected.
+    if (shouldBlockAutoPlayNext(
+      autoPlayCancelled: _autoPlayCancelled,
+      fromAutoCountdown: fromAutoCountdown,
+    )) {
+      return;
+    }
 
     final target = _upNextTarget;
     if (target != null) {

@@ -48,6 +48,18 @@ bool shouldOfferUpNext({
   return duration - position <= upNextFallbackWindow;
 }
 
+/// Whether an auto-countdown firing should be suppressed after the viewer
+/// dismissed up-next for this file.
+///
+/// Manual next-episode actions ignore [autoPlayCancelled]; only the countdown
+/// path checks it, as a belt against a fire that was scheduled before
+/// [_cancelAutoPlay] ran.
+bool shouldBlockAutoPlayNext({
+  required bool autoPlayCancelled,
+  required bool fromAutoCountdown,
+}) =>
+    fromAutoCountdown && autoPlayCancelled;
+
 /// The minimal shape [resolveInSeasonNext] and [resolveSeasonPremiere] need
 /// from an episode.
 ///
