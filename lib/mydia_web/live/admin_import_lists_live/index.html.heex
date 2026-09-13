@@ -15,9 +15,9 @@
       </div>
     </div>
 
-    <div class="p-4 sm:p-6 space-y-6">
+    <div class="space-y-6">
       <%!-- Quick Add Presets Section (Compact) --%>
-      <div class="p-4 bg-base-200/50 rounded-xl">
+      <div id="import-lists-quick-add" class="p-4 bg-base-100 rounded-box shadow-sm">
         <div class="flex items-center gap-2 mb-3">
           <.icon name="hero-bolt" class="w-4 h-4 text-warning" />
           <span class="text-sm font-medium">Quick Add</span>
@@ -35,7 +35,7 @@
               <button
                 phx-click="enable_preset"
                 phx-value-preset-id={preset.id}
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-base-100 border border-base-300 hover:border-primary hover:bg-primary/5 text-sm transition-colors"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-base-200 border border-base-300 hover:border-primary hover:bg-primary/5 text-sm transition-colors"
                 title={preset.description}
               >
                 <.icon
@@ -58,7 +58,7 @@
         </h2>
 
         <%= if @import_lists == [] do %>
-          <div class="alert">
+          <div id="import-lists-empty" class="alert alert-info">
             <.icon name="hero-information-circle" class="w-5 h-5" />
             <span>No import lists configured. Enable a preset above or create a custom list.</span>
           </div>
