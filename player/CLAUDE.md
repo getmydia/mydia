@@ -43,6 +43,44 @@ Deeper reference lives alongside this file in `player/docs/`:
 ./dev flutter test        # Run tests
 ```
 
+### Android and Android TV
+
+Android builds go through the root flake's dev shells instead of the web dev
+server, so they are not part of `./dev up`:
+
+```bash
+./dev player android build      # Release APK (arm only)
+./dev player android run        # Debug build on a connected device
+./dev player android tv-run     # Provision/start the pinned API 36 Android TV
+                                # emulator and run the debug app
+./dev player android shell      # .#android shell for manual commands
+```
+
+`tv-run` uses a second Nix shell, `.#android-tv`, with the pinned API 36
+revision 4 `android-tv` x86_64 image and emulator. Release APKs stay arm-only;
+x86_64 is debug/emulator only.
+
+- **Requirements:** Linux KVM (`/dev/kvm` readable and writable; user in the
+  `kvm` group) and a graphical Wayland or X11 session. The emulator is headful
+  and the runner refuses to start without a display. It passes `-gpu host`
+  because the `tv_1080p` software GLES path has crashed once the app paints;
+  try other `-gpu` modes if host GPU passthrough fails on your machine.
+- **First run** fetches the system image (~990 MB compressed, ~8.7 GB unpacked)
+  plus the emulator into the Nix store. Later runs reuse them; nothing is
+  installed with `sdkmanager`.
+- **AVD state** lives in `${ANDROID_AVD_HOME:-$HOME/.android/avd}` as
+  `mydia-tv-api-36.avd/` and `mydia-tv-api-36.ini`. Delete both to start clean.
+- **Ownership:** the run stops only an emulator it started. An already-running
+  `mydia-tv-api-36` is reused and left running on exit.
+- Extra arguments pass through to `flutter run`, e.g.
+  `./dev player android tv-run --dart-define=SOME_FLAG=1`.
+
+Inspect or drive the running emulator from a second shell:
+
+```bash
+nix develop .#android-tv --command adb devices
+```
+
 ### Development
 
 Access the player at: **http://localhost:4000/player**

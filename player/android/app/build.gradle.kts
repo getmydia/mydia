@@ -36,23 +36,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        ndk {
-            // x86_64 reaches emulators and Intel Chromebooks only, and cost
-            // 62 MB of a 165 MB APK. Dropping it takes the download to
-            // ~103 MB, which matters: a Chromecast with Google TV has a 4 GB
-            // /data and routinely sits near full, and an install there failed
-            // outright with 517 MB free.
-            //
-            // Both remaining ABIs are load-bearing. armeabi-v7a is the only
-            // one Chromecast with Google TV and most Android TV boxes can run
-            // (they have no arm64 userspace); arm64-v8a is the only one Pixel
-            // 7 and later can run (they have no 32-bit runtime).
-            //
-            // Requires disable-abi-filtering=true in ../gradle.properties, or
-            // the Flutter Gradle plugin overwrites this list.
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-        }
     }
 
     signingConfigs {
@@ -73,6 +56,25 @@ android {
             } else {
                 // Fall back to debug signing for local development
                 signingConfigs.getByName("debug")
+            }
+
+            ndk {
+                // Release serves physical phones and televisions. x86_64 is
+                // kept debug-only for local emulators so it does not add
+                // ~62 MB to the shipped APK.
+                //
+                // Both remaining ABIs are load-bearing. armeabi-v7a is the
+                // only one Chromecast with Google TV and most Android TV boxes
+                // can run (they have no arm64 userspace); arm64-v8a is the
+                // only one Pixel 7 and later can run (they have no 32-bit
+                // runtime). The size matters on exactly those devices: a
+                // Chromecast with Google TV has a 4 GB /data and routinely
+                // sits near full, and an install there failed outright with
+                // 517 MB free.
+                //
+                // Requires disable-abi-filtering=true in ../gradle.properties,
+                // or the Flutter Gradle plugin's own defaultConfig list wins.
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
             }
         }
     }
