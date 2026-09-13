@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page active_tab={@active_tab}>
+  <.admin_page page={:plugins} count={length(@installed)}>
+    <:actions>
+      <MydiaWeb.AdminPluginsLive.Components.header_actions />
+    </:actions>
     <MydiaWeb.AdminPluginsLive.Components.plugins_tab
       installed={@installed}
       catalog={@catalog}

@@ -24,7 +24,6 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Remote Access")
-     |> assign(:active_tab, :remote_access)
      |> assign(:show_add_url_modal, false)
      |> assign(:new_url, "")
      |> assign(:show_advanced, false)

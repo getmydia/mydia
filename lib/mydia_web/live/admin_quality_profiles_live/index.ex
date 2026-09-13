@@ -13,7 +13,6 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Quality Profiles")
-     |> assign(:active_tab, :quality)
      |> assign(:custom_formats, CustomFormats.list_all())
      |> load_data()}
   end

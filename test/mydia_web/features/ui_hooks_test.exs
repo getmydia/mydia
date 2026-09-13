@@ -14,24 +14,20 @@ defmodule MydiaWeb.Features.UiHooksTest do
   @moduletag :feature
 
   describe "ThemeToggle" do
-    # `<.theme_toggle>` (lib/mydia_web/components/layouts.ex:504) is rendered
-    # TWICE on every authenticated page: once in the `lg:hidden` mobile
-    # header (layouts.ex:85, id="theme-toggle") and once in the `hidden
-    # lg:flex` desktop sidebar (layouts.ex:436-438, id="theme-toggle-sidebar").
-    # A bare `[phx-hook="ThemeToggle"]` selector matches both nodes; Wallaby's
-    # default `visible: true` filter only excludes the `display:none` one, so
-    # this is safe at any viewport, but pinning the viewport makes which copy
-    # is exercised deterministic instead of depending on the local shell's
-    # default (headless-Chrome) window size vs. CI's 1920x1080. Desktop,
-    # matching the convention in add_config_flow_test.exs, exercises the
-    # sidebar copy.
+    # `<.theme_toggle>` is rendered TWICE on every authenticated page: in the
+    # `lg:hidden` mobile header (id="theme-toggle") and inside the sidebar's
+    # account menu (id="theme-toggle-account"). The account menu is a daisyUI
+    # focus dropdown, so its copy is not displayed until the trigger
+    # `#sidebar-user-menu` has focus. At the pinned 1400px desktop viewport the
+    # header copy is `display:none`, so the test opens the account menu and
+    # clicks inside `#theme-toggle-account`.
     #
     # The hook itself (`phx-hook="ThemeToggle"`) only tracks the indicator
     # position via a MutationObserver; it does not receive clicks. The three
     # theme buttons inside it call `window.mydiaTheme.setTheme(...)` directly
     # via a plain `onclick`, so `click(Query.css(~s([phx-hook="ThemeToggle"])))`
     # would click the wrapper div rather than a button. Clicking a specific
-    # button (by its `title` attribute, layouts.ex:521/529/537) is both
+    # button (by its `title` attribute, layouts.ex theme_toggle/1) is both
     # correct and unambiguous about which theme gets applied.
     @tag :feature
     test "toggling changes the document theme and it survives navigation",
@@ -52,7 +48,8 @@ defmodule MydiaWeb.Features.UiHooksTest do
       target_title = if before == "mydia-dark", do: "Light theme", else: "Dark theme"
 
       session
-      |> click(Query.css(~s([title="#{target_title}"])))
+      |> click(Query.css("#sidebar-user-menu"))
+      |> click(Query.css(~s(#theme-toggle-account [title="#{target_title}"])))
 
       # The DOM write happens in plain JS triggered by a real click, so poll
       # the attribute rather than asserting once. Wallaby's Query retries; a

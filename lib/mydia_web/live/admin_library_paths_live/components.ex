@@ -19,16 +19,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
 
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-folder" class="w-5 h-5 opacity-60" /> Library Paths
-          <span class="badge badge-ghost">{length(@library_paths)}</span>
-        </h2>
-        <button class="btn btn-sm btn-primary" phx-click="new_library_path">
-          <.icon name="hero-plus" class="w-4 h-4" /> New
-        </button>
-      </div>
-
       <%= if @library_paths == [] do %>
         <div class="alert alert-info">
           <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -65,6 +55,15 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
         <% end %>
       <% end %>
     </div>
+    """
+  end
+
+  @doc "The page header's New button."
+  def header_actions(assigns) do
+    ~H"""
+    <button class="btn btn-sm btn-primary" phx-click="new_library_path">
+      <.icon name="hero-plus" class="w-4 h-4" /> New
+    </button>
     """
   end
 

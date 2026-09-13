@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page active_tab={@active_tab}>
+  <.admin_page page={:library_paths} count={length(@library_paths)}>
+    <:actions>
+      <MydiaWeb.AdminLibraryPathsLive.Components.header_actions />
+    </:actions>
     <MydiaWeb.AdminLibraryPathsLive.Components.library_paths_tab
       library_paths={@library_paths}
       reorganizing_library_ids={@reorganizing_library_ids}

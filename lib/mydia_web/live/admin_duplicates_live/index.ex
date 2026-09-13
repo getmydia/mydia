@@ -78,7 +78,6 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Duplicates")
-     |> assign(:active_tab, :duplicates)
      |> assign(:kept, MapSet.new())
      |> assign(:keepers, %{})
      |> assign(:review_overrides, %{})

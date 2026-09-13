@@ -88,7 +88,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Activity")
+     |> assign(:page_title, "Downloads")
      |> assign(:active_tab, :queue)
      |> assign(:sort_by, @default_sort)
      |> assign(:selected_ids, MapSet.new())

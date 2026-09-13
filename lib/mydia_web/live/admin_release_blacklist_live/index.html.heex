@@ -1,151 +1,148 @@
 <Layouts.app {assigns}>
-  <div>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Release Blacklist</h1>
-        <p class="text-base-content/70 mt-1">
-          Releases that failed to download are temporarily blocked so the next search avoids them.
-          Default TTL is 30 days. Use "Block Forever" to make a block permanent, or "Remove" to lift it immediately.
-        </p>
-      </div>
-    </div>
+  <.admin_page page={:release_blacklist}>
+    <div class="p-4 sm:p-6 space-y-4">
+      <p id="blacklist-ttl-note" class="text-sm text-base-content/70">
+        Releases that failed to download are temporarily blocked so the next search avoids them.
+        Default TTL is 30 days. Use "Block Forever" to make a block permanent, or "Remove" to lift it immediately.
+      </p>
 
-    <div class="flex flex-col md:flex-row md:items-end gap-4 mb-4">
-      <form
-        id="blacklist-filter-form"
-        phx-change="filter"
-        class="flex flex-col sm:flex-row gap-2 sm:items-end flex-1"
-      >
-        <label class="form-control w-full sm:max-w-xs">
-          <span class="label label-text">Failure reason</span>
-          <select
-            name="failure_reason"
-            id="failure-reason-filter"
-            class="select select-bordered"
-          >
-            <option value="">All</option>
-            <%= for reason <- @failure_reasons do %>
-              <option value={reason} selected={reason == @failure_reason_filter}>
-                {reason_label(reason)}
-              </option>
-            <% end %>
-          </select>
-        </label>
-        <%= if @failure_reason_filter != "" do %>
-          <button
-            type="button"
-            id="clear-filter-btn"
-            class="btn btn-ghost btn-sm"
-            phx-click="clear_filter"
-          >
-            Clear filter
-          </button>
-        <% end %>
-      </form>
-      <div class="text-sm text-base-content/70">
-        Showing {length(@rows)} of {@total_count} row{(@total_count == 1 && "") || "s"}
+      <div class="flex flex-col md:flex-row md:items-end gap-4 mb-4">
+        <form
+          id="blacklist-filter-form"
+          phx-change="filter"
+          class="flex flex-col sm:flex-row gap-2 sm:items-end flex-1"
+        >
+          <label class="form-control w-full sm:max-w-xs">
+            <span class="label label-text">Failure reason</span>
+            <select
+              name="failure_reason"
+              id="failure-reason-filter"
+              class="select select-bordered"
+            >
+              <option value="">All</option>
+              <%= for reason <- @failure_reasons do %>
+                <option value={reason} selected={reason == @failure_reason_filter}>
+                  {reason_label(reason)}
+                </option>
+              <% end %>
+            </select>
+          </label>
+          <%= if @failure_reason_filter != "" do %>
+            <button
+              type="button"
+              id="clear-filter-btn"
+              class="btn btn-ghost btn-sm"
+              phx-click="clear_filter"
+            >
+              Clear filter
+            </button>
+          <% end %>
+        </form>
+        <div class="text-sm text-base-content/70">
+          Showing {length(@rows)} of {@total_count} row{(@total_count == 1 && "") || "s"}
+        </div>
       </div>
-    </div>
 
-    <div class="overflow-x-auto bg-base-100 rounded-box border border-base-300">
-      <table id="blacklist-table" class="table table-zebra">
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Indexer</th>
-            <th>GUID</th>
-            <th>Reason</th>
-            <th>Added</th>
-            <th>Expires</th>
-            <th class="text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="blacklist-rows">
-          <%= if @rows == [] do %>
-            <tr id="blacklist-empty">
-              <td colspan="7" class="text-center text-base-content/60 py-8">
-                No releases are currently blacklisted.
-              </td>
+      <div class="overflow-x-auto bg-base-100 rounded-box border border-base-300">
+        <table id="blacklist-table" class="table table-zebra">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Indexer</th>
+              <th>GUID</th>
+              <th>Reason</th>
+              <th>Added</th>
+              <th>Expires</th>
+              <th class="text-right">Actions</th>
             </tr>
-          <% else %>
-            <%= for row <- @rows do %>
-              <tr id={"blacklist-row-#{row.id}"}>
-                <td class="font-mono text-xs max-w-md truncate" title={row.title}>
-                  {row.title}
-                </td>
-                <td>{row.indexer}</td>
-                <td class="font-mono text-xs max-w-xs truncate" title={row.guid}>
-                  {row.guid}
-                </td>
-                <td>
-                  <span class="badge badge-warning badge-sm" title={row.failure_reason}>
-                    {reason_label(row.failure_reason)}
-                  </span>
-                </td>
-                <td class="text-xs">{format_datetime(row.inserted_at)}</td>
-                <td class="text-xs">
-                  <span class={[
-                    row.expires_at == nil && "badge badge-error badge-sm",
-                    row.expires_at != nil && "text-base-content/80"
-                  ]}>
-                    {expires_label(row.expires_at)}
-                  </span>
-                </td>
-                <td class="text-right space-x-2 whitespace-nowrap">
-                  <%= if row.expires_at != nil do %>
-                    <button
-                      type="button"
-                      id={"block-forever-#{row.id}"}
-                      class="btn btn-xs btn-warning"
-                      phx-click="block_forever"
-                      phx-value-id={row.id}
-                      data-confirm="Block this release forever?"
-                    >
-                      Block forever
-                    </button>
-                  <% end %>
-                  <button
-                    type="button"
-                    id={"remove-#{row.id}"}
-                    class="btn btn-xs btn-ghost"
-                    phx-click="remove"
-                    phx-value-id={row.id}
-                    data-confirm="Remove this release from the blacklist?"
-                  >
-                    Remove
-                  </button>
+          </thead>
+          <tbody id="blacklist-rows">
+            <%= if @rows == [] do %>
+              <tr id="blacklist-empty">
+                <td colspan="7" class="text-center text-base-content/60 py-8">
+                  No releases are currently blacklisted.
                 </td>
               </tr>
+            <% else %>
+              <%= for row <- @rows do %>
+                <tr id={"blacklist-row-#{row.id}"}>
+                  <td class="font-mono text-xs max-w-md truncate" title={row.title}>
+                    {row.title}
+                  </td>
+                  <td>{row.indexer}</td>
+                  <td class="font-mono text-xs max-w-xs truncate" title={row.guid}>
+                    {row.guid}
+                  </td>
+                  <td>
+                    <span class="badge badge-warning badge-sm" title={row.failure_reason}>
+                      {reason_label(row.failure_reason)}
+                    </span>
+                  </td>
+                  <td class="text-xs">{format_datetime(row.inserted_at)}</td>
+                  <td class="text-xs">
+                    <span class={[
+                      row.expires_at == nil && "badge badge-error badge-sm",
+                      row.expires_at != nil && "text-base-content/80"
+                    ]}>
+                      {expires_label(row.expires_at)}
+                    </span>
+                  </td>
+                  <td class="text-right space-x-2 whitespace-nowrap">
+                    <%= if row.expires_at != nil do %>
+                      <button
+                        type="button"
+                        id={"block-forever-#{row.id}"}
+                        class="btn btn-xs btn-warning"
+                        phx-click="block_forever"
+                        phx-value-id={row.id}
+                        data-confirm="Block this release forever?"
+                      >
+                        Block forever
+                      </button>
+                    <% end %>
+                    <button
+                      type="button"
+                      id={"remove-#{row.id}"}
+                      class="btn btn-xs btn-ghost"
+                      phx-click="remove"
+                      phx-value-id={row.id}
+                      data-confirm="Remove this release from the blacklist?"
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              <% end %>
             <% end %>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
-
-    <%= if @total_count > @page_size do %>
-      <div class="flex items-center justify-between mt-4">
-        <button
-          type="button"
-          id="prev-page-btn"
-          class="btn btn-sm btn-ghost"
-          phx-click="prev_page"
-          disabled={@page <= 1}
-        >
-          <.icon name="hero-chevron-left" class="w-4 h-4" /> Previous
-        </button>
-        <span class="text-sm text-base-content/70">
-          Page {@page} of {total_pages(@total_count, @page_size)}
-        </span>
-        <button
-          type="button"
-          id="next-page-btn"
-          class="btn btn-sm btn-ghost"
-          phx-click="next_page"
-          disabled={@page >= total_pages(@total_count, @page_size)}
-        >
-          Next <.icon name="hero-chevron-right" class="w-4 h-4" />
-        </button>
+          </tbody>
+        </table>
       </div>
-    <% end %>
-  </div>
+
+      <%= if @total_count > @page_size do %>
+        <div class="flex items-center justify-between mt-4">
+          <button
+            type="button"
+            id="prev-page-btn"
+            class="btn btn-sm btn-ghost"
+            phx-click="prev_page"
+            disabled={@page <= 1}
+          >
+            <.icon name="hero-chevron-left" class="w-4 h-4" /> Previous
+          </button>
+          <span class="text-sm text-base-content/70">
+            Page {@page} of {total_pages(@total_count, @page_size)}
+          </span>
+          <button
+            type="button"
+            id="next-page-btn"
+            class="btn btn-sm btn-ghost"
+            phx-click="next_page"
+            disabled={@page >= total_pages(@total_count, @page_size)}
+          >
+            Next <.icon name="hero-chevron-right" class="w-4 h-4" />
+          </button>
+        </div>
+      <% end %>
+    </div>
+  </.admin_page>
 </Layouts.app>

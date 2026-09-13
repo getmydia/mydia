@@ -10,16 +10,6 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
   def api_keys_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-key" class="w-5 h-5 opacity-60" /> API Keys
-          <span class="badge badge-ghost">{length(@api_keys)}</span>
-        </h2>
-        <button id="new-api-key" class="btn btn-sm btn-primary" phx-click="new_api_key">
-          <.icon name="hero-plus" class="w-4 h-4" /> New
-        </button>
-      </div>
-
       <p class="text-sm text-base-content/70">
         Keys for the Library API at <code>/api/library/graphql</code>, sent as the
         <code>x-api-key</code>
@@ -53,6 +43,15 @@ defmodule MydiaWeb.AdminApiKeysLive.Components do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  @doc "The page header's New button."
+  def header_actions(assigns) do
+    ~H"""
+    <button id="new-api-key" class="btn btn-sm btn-primary" phx-click="new_api_key">
+      <.icon name="hero-plus" class="w-4 h-4" /> New
+    </button>
     """
   end
 

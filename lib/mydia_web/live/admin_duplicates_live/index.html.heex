@@ -1,11 +1,17 @@
 <Layouts.app {assigns}>
-  <.admin_page active_tab={@active_tab}>
+  <.admin_page page={:duplicates} count={length(@decisions)}>
+    <:actions>
+      <MydiaWeb.AdminDuplicatesLive.Components.header_actions
+        decisions={@decisions}
+        selected={@selected}
+        reclaimable={@reclaimable}
+      />
+    </:actions>
     <div class="p-4 sm:p-6 space-y-4">
       <MydiaWeb.AdminDuplicatesLive.Components.duplicates_tab
         decisions={@decisions}
         refusals={@refusals}
         selected={@selected}
-        reclaimable={@reclaimable}
         retention_days={@retention_days}
       />
 

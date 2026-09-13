@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page active_tab={@active_tab}>
+  <.admin_page page={:path_mappings} count={length(@path_mappings)}>
+    <:actions>
+      <MydiaWeb.AdminPathMappingsLive.Components.header_actions />
+    </:actions>
     <MydiaWeb.AdminPathMappingsLive.Components.path_mappings_tab path_mappings={@path_mappings} />
 
     <%= if @show_modal do %>

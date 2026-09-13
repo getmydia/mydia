@@ -12,16 +12,6 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
   def path_mappings_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-arrows-right-left" class="w-5 h-5 opacity-60" /> Path Mappings
-          <span class="badge badge-ghost">{length(@path_mappings)}</span>
-        </h2>
-        <button class="btn btn-sm btn-primary" phx-click="new_path_mapping">
-          <.icon name="hero-plus" class="w-4 h-4" /> Add mapping
-        </button>
-      </div>
-
       <p class="text-sm text-base-content/70">
         Translate paths reported by download clients into paths Mydia can see.
         The longest matching prefix wins.
@@ -46,6 +36,15 @@ defmodule MydiaWeb.AdminPathMappingsLive.Components do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  @doc "The page header's Add mapping button."
+  def header_actions(assigns) do
+    ~H"""
+    <button class="btn btn-sm btn-primary" phx-click="new_path_mapping">
+      <.icon name="hero-plus" class="w-4 h-4" /> Add mapping
+    </button>
     """
   end
 

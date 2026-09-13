@@ -22,7 +22,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
 
   describe "Authentication" do
     test "redirects unauthenticated users", %{conn: conn} do
-      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config/quality")
+      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/quality")
       assert path =~ "/auth"
     end
   end
@@ -37,12 +37,13 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
       %{conn: conn, view: view}
     end
 
     test "displays quality profiles section", %{view: view} do
-      assert has_element?(view, "h2", "Quality Profiles")
+      assert has_element?(view, "h1#admin-page-title", "Quality")
+      assert has_element?(view, "#quality-profiles-section")
     end
 
     test "displays existing quality profiles", %{conn: conn} do
@@ -59,7 +60,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
           }
         })
 
-      {:ok, _view, html} = live(conn, ~p"/admin/config/quality")
+      {:ok, _view, html} = live(conn, ~p"/admin/quality")
 
       assert html =~ "HD"
     end
@@ -140,7 +141,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
     } do
       {:ok, _} = Settings.set_default_quality_profile(nil)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
       assert has_element?(
                view,
@@ -159,7 +160,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
 
       {:ok, _} = Settings.set_default_quality_profile(profile.id)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
       assert has_element?(
                view,
@@ -185,7 +186,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
       # The tabs only exist inside the profile modal.
       view |> element("button[phx-click='new_quality_profile']") |> render_click()
@@ -231,7 +232,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
       %{conn: conn, view: view, profile: profile}
     end

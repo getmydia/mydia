@@ -25,7 +25,7 @@ LIBRARY_PATH_2_TYPE=mixed
 
 ### Via Admin UI
 
-1. Navigate to **Admin > Configuration**, then the **Library** tab
+1. Navigate to **Admin > Configuration > Library**
 2. Click **New** in the Library Paths panel
 3. Fill in the form:
    - **Path** (required) is the path inside the container
@@ -93,7 +93,7 @@ TV_PATH=/new/path/tv
 
 **Via Admin UI:**
 
-1. Navigate to **Admin > Configuration**, then the **Library** tab
+1. Navigate to **Admin > Configuration > Library**
 2. Edit the library and change its **Path**
 3. Save
 

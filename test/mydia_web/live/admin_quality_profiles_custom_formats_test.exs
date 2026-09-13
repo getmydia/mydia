@@ -14,7 +14,7 @@ defmodule MydiaWeb.AdminQualityProfilesCustomFormatsTest do
   end
 
   test "lists every known format when editing a profile", %{conn: conn, profile: profile} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+    {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
     view
     |> element(~s{button[phx-click="edit_quality_profile"][phx-value-id="#{profile.id}"]})
@@ -26,7 +26,7 @@ defmodule MydiaWeb.AdminQualityProfilesCustomFormatsTest do
   end
 
   test "saves scores and reject flags", %{conn: conn, profile: profile} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+    {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
     view
     |> element(~s{button[phx-click="edit_quality_profile"][phx-value-id="#{profile.id}"]})
@@ -56,7 +56,7 @@ defmodule MydiaWeb.AdminQualityProfilesCustomFormatsTest do
   end
 
   test "an unscored format is not persisted", %{conn: conn, profile: profile} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+    {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
     view
     |> element(~s{button[phx-click="edit_quality_profile"][phx-value-id="#{profile.id}"]})
@@ -76,7 +76,7 @@ defmodule MydiaWeb.AdminQualityProfilesCustomFormatsTest do
   end
 
   test "reports an error when custom format scores are invalid", %{conn: conn, profile: profile} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+    {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
     view
     |> element(~s{button[phx-click="edit_quality_profile"][phx-value-id="#{profile.id}"]})

@@ -58,12 +58,12 @@ defmodule MydiaWeb.FeedbackModalTest do
     assert html =~ "Your message and optional contact info are sent to the Mydia developer"
   end
 
-  test "clicking the sidebar entry opens the modal", %{conn: conn} do
+  test "clicking the account menu entry opens the modal", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
 
     html =
       view
-      |> element("#sidebar-send-feedback")
+      |> element("#user-menu-feedback")
       |> render_click()
 
     assert html =~ ~s(id="feedback-modal")
@@ -74,7 +74,7 @@ defmodule MydiaWeb.FeedbackModalTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> element("#sidebar-send-feedback")
+    |> element("#user-menu-feedback")
     |> render_click()
 
     html =
@@ -89,7 +89,7 @@ defmodule MydiaWeb.FeedbackModalTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> element("#sidebar-send-feedback")
+    |> element("#user-menu-feedback")
     |> render_click()
 
     html =
@@ -104,7 +104,7 @@ defmodule MydiaWeb.FeedbackModalTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> element("#sidebar-send-feedback")
+    |> element("#user-menu-feedback")
     |> render_click()
 
     html =
@@ -121,7 +121,7 @@ defmodule MydiaWeb.FeedbackModalTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> element("#sidebar-send-feedback")
+    |> element("#user-menu-feedback")
     |> render_click()
 
     html =
@@ -156,7 +156,7 @@ defmodule MydiaWeb.FeedbackModalTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> element("#sidebar-send-feedback")
+    |> element("#user-menu-feedback")
     |> render_click()
 
     html =
@@ -189,7 +189,7 @@ defmodule MydiaWeb.FeedbackModalTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> element("#sidebar-send-feedback")
+    |> element("#user-menu-feedback")
     |> render_click()
 
     html =
@@ -213,7 +213,7 @@ defmodule MydiaWeb.FeedbackModalTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> element("#sidebar-send-feedback")
+    |> element("#user-menu-feedback")
     |> render_click()
 
     html =
@@ -222,7 +222,7 @@ defmodule MydiaWeb.FeedbackModalTest do
       |> render_submit()
 
     assert html =~ "Feedback service is temporarily unavailable"
-    assert html =~ "Dashboard"
+    assert html =~ "Welcome to Mydia"
   end
 
   test "feedback disabled removes the sidebar entry and modal markup", %{conn: conn} do

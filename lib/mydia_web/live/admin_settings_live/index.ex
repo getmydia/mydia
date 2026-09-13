@@ -13,7 +13,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Settings")
-     |> assign(:active_tab, :settings)
      |> load_data()}
   end
 

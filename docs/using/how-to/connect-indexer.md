@@ -10,7 +10,7 @@ Prowlarr is an indexer manager that aggregates multiple indexers into a single A
 
 ### Setup
 
-1. Navigate to **Admin > Configuration**, then the **Indexers** tab
+1. Navigate to **Admin > Configuration > Indexers**
 2. Click **Add Indexer**
 3. Select **Prowlarr**
 4. Enter connection details:
@@ -29,7 +29,7 @@ Jackett is an alternative indexer proxy.
 
 ### Setup
 
-1. Navigate to **Admin > Configuration**, then the **Indexers** tab
+1. Navigate to **Admin > Configuration > Indexers**
 2. Click **Add Indexer**
 3. Select **Jackett**
 4. Enter connection details:
@@ -49,7 +49,7 @@ service works here, including meta search aggregators such as NZBHydra2.
 
 ### Setup
 
-1. Navigate to **Admin > Configuration**, then the **Indexers** tab
+1. Navigate to **Admin > Configuration > Indexers**
 2. Click **Add Indexer**
 3. Select **Newznab**
 4. Enter connection details:

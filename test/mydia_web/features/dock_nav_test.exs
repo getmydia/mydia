@@ -115,19 +115,34 @@ defmodule MydiaWeb.Features.DockNavTest do
         description: "the drawer sidebar finishing its slide-in"
       )
 
-      # The sidebar scrolls: scrollHeight runs past the viewport once the
-      # admin nav section renders. The user menu only reaches the bottom edge
-      # of the screen, where the dock floats, when it is scrolled all the way
-      # down, so probe that worst case rather than the initial position.
-      scroll_bottom = """
+      # iOS Safari resolves 100vh to the viewport with its toolbar collapsed,
+      # taller than the 100dvh daisyUI gives .drawer-side while the toolbar
+      # shows. A viewport-unit min-height (Tailwind's min-h-screen) beats that
+      # height and pushes the pinned account chip under the toolbar. Chromium
+      # resolves vh and dvh identically, so geometry alone cannot catch this:
+      # assert the drawer carries no min-height at all.
+      min_height = """
       var side = document.querySelector('.drawer-side');
       if (!side) { return '__missing__'; }
-      side.scrollTop = side.scrollHeight;
-      return side.scrollTop;
+      return window.getComputedStyle(side).minHeight;
+      """
+
+      assert eval_js(session, min_height) in ["0px", "auto"],
+             "expected .drawer-side to have no min-height, got #{inspect(eval_js(session, min_height))}"
+
+      # The account chip is pinned to the bottom of the sidebar, the edge the
+      # dock floats over. Only the nav above it scrolls, so scroll that to the
+      # bottom to probe the worst case. The dock hides while the drawer is
+      # open, so neither it nor the drawer overlay may cover the chip.
+      scroll_bottom = """
+      var nav = document.querySelector('.drawer-side aside nav');
+      if (!nav) { return '__missing__'; }
+      nav.scrollTop = nav.scrollHeight;
+      return nav.scrollTop;
       """
 
       refute eval_js(session, scroll_bottom) == "__missing__",
-             "expected a .drawer-side element to scroll"
+             "expected the sidebar nav to exist"
 
       # `refute_covered/2` skips sample points that fall outside the viewport
       # (elementFromPoint returns null there), so an off-screen element would

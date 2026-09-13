@@ -28,7 +28,7 @@ defmodule MydiaWeb.Features.AuthTest do
       session
       |> wait_for_liveview()
       |> assert_path("/")
-      |> assert_has_text("Dashboard")
+      |> assert_has_text("Welcome to Mydia")
     end
 
     @tag :feature

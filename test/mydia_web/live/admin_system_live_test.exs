@@ -31,7 +31,7 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
 
     test "redirects unauthenticated users", %{conn: conn} do
-      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/config")
+      {:error, {:redirect, %{to: path}}} = live(conn, ~p"/admin/status")
       assert path =~ "/auth"
     end
 
@@ -52,7 +52,7 @@ defmodule MydiaWeb.AdminSystemLiveTest do
         |> put_session(:guardian_default_token, regular_token)
         |> put_req_header("authorization", "Bearer #{regular_token}")
 
-      conn = get(conn, ~p"/admin/config")
+      conn = get(conn, ~p"/admin/status")
       assert redirected_to(conn) == "/"
     end
 
@@ -63,30 +63,8 @@ defmodule MydiaWeb.AdminSystemLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, _view, html} = live(conn, ~p"/admin/config")
-      assert html =~ "Configuration"
-    end
-  end
-
-  describe "Redirects" do
-    setup %{conn: conn, token: token} do
-      conn =
-        conn
-        |> init_test_session(%{})
-        |> put_session(:guardian_default_token, token)
-        |> put_req_header("authorization", "Bearer #{token}")
-
-      %{conn: conn}
-    end
-
-    test "/admin redirects to /admin/config", %{conn: conn} do
-      conn = get(conn, ~p"/admin")
-      assert redirected_to(conn) == "/admin/config"
-    end
-
-    test "/admin/status redirects to /admin/config", %{conn: conn} do
-      conn = get(conn, ~p"/admin/status")
-      assert redirected_to(conn) == "/admin/config"
+      {:ok, view, _html} = live(conn, ~p"/admin/status")
+      assert has_element?(view, "h1#admin-page-title", "Status")
     end
   end
 
@@ -100,12 +78,13 @@ defmodule MydiaWeb.AdminSystemLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config")
+      {:ok, view, _html} = live(conn, ~p"/admin/status")
       %{conn: conn, view: view}
     end
 
-    test "renders system status tab by default", %{view: view} do
-      assert has_element?(view, ~s{a[class*="tab-active"]}, "Status")
+    test "renders the Status header under the System hub", %{view: view} do
+      assert has_element?(view, "#admin-page-hub", "System")
+      assert has_element?(view, "h1#admin-page-title", "Status")
     end
 
     test "displays system information", %{view: view} do
@@ -151,7 +130,7 @@ defmodule MydiaWeb.AdminSystemLiveTest do
     end
 
     test "stays quiet when nothing is stuck mid-upgrade", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config")
+      {:ok, view, _html} = live(conn, ~p"/admin/status")
 
       refute has_element?(view, "#stuck-upgrades-alert")
     end
@@ -161,45 +140,10 @@ defmodule MydiaWeb.AdminSystemLiveTest do
       stuck = insert(:media_file, supersedes_media_file_id: superseded.id)
       backdate!(stuck, hours: 2)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config")
+      {:ok, view, _html} = live(conn, ~p"/admin/status")
 
       assert has_element?(view, "#stuck-upgrades-alert")
       assert has_element?(view, ~s{#stuck-upgrades-alert a[href="/admin/jobs"]})
-    end
-  end
-
-  describe "Tab Navigation" do
-    setup %{conn: conn, token: token} do
-      start_supervised!(Mydia.Indexers.Health)
-
-      conn =
-        conn
-        |> init_test_session(%{})
-        |> put_session(:guardian_default_token, token)
-        |> put_req_header("authorization", "Bearer #{token}")
-
-      {:ok, view, _html} = live(conn, ~p"/admin/config")
-      %{conn: conn, view: view}
-    end
-
-    test "renders tab navigation links", %{view: view} do
-      assert has_element?(view, ~s{a[role="tab"]}, "Status")
-      assert has_element?(view, ~s{a[role="tab"]}, "Settings")
-      assert has_element?(view, ~s{a[role="tab"]}, "Quality")
-      assert has_element?(view, ~s{a[role="tab"]}, "Clients")
-      assert has_element?(view, ~s{a[role="tab"]}, "Indexers")
-      assert has_element?(view, ~s{a[role="tab"]}, "Library")
-      assert has_element?(view, ~s{a[role="tab"]}, "Media Servers")
-    end
-
-    test "tab links point to correct routes", %{view: view} do
-      html = render(view)
-      assert html =~ ~s{href="/admin/config/settings"}
-      assert html =~ ~s{href="/admin/config/quality"}
-      assert html =~ ~s{href="/admin/config/clients"}
-      assert html =~ ~s{href="/admin/config/indexers"}
-      assert html =~ ~s{href="/admin/config/library-paths"}
-      assert html =~ ~s{href="/admin/config/media-servers"}
     end
   end
 
@@ -216,7 +160,7 @@ defmodule MydiaWeb.AdminSystemLiveTest do
         |> put_session(:guardian_default_token, token)
         |> put_req_header("authorization", "Bearer #{token}")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/status")
+      {:ok, view, _html} = live(conn, ~p"/admin/status")
 
       refute has_element?(view, "button[phx-click='clear_recent_activity']")
       refute has_element?(view, "button[phx-click='delete_transcode_job']")
@@ -225,8 +169,8 @@ defmodule MydiaWeb.AdminSystemLiveTest do
       # section itself is gone (always rendered today via the Activity divider).
       refute has_element?(view, "div.divider", "Activity")
 
-      # The tab itself must still render; only the activity section is gone.
-      assert has_element?(view, "a[href='/admin/dashboard']")
+      # The page itself must still render; only the activity section is gone.
+      assert has_element?(view, "h1#admin-page-title", "Status")
     end
   end
 

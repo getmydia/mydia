@@ -270,29 +270,40 @@ The guideline still holds where `<.button>`'s variants and defaults do real work
 Check the component's `attr` declarations before converting, and reply with
 specifics rather than complying reflexively or dismissing it.
 
-## The /admin/config scaffolding standard
+## The admin page scaffolding standard
 
-Every page under `/admin/config` (`lib/mydia_web/live/admin_*_live/`) is built
-from the same scaffolding, not just the external-service ones. Verified
-2026-08-10 against download clients, indexers, media servers, library paths and
-quality profiles, which are byte-for-byte consistent on the class strings below.
-Convention drift here reads as a defect on its own, independent of whether the
-page works.
+Every admin page (`lib/mydia_web/live/admin_*_live/`) is built from the same
+scaffolding, not just the external-service ones. Verified 2026-08-10 against
+download clients, indexers, media servers, library paths and quality profiles,
+which are byte-for-byte consistent on the class strings below. Convention drift
+here reads as a defect on its own, independent of whether the page works.
+
+**Registered in `MydiaWeb.AdminNav`.** A new admin page needs an entry in
+`lib/mydia_web/admin_nav.ex` with its hub (Configuration for acquisition levers,
+Administration for work to act on, System for the server itself), label,
+one-line description, icon and `~p` path under `/admin/<slug>`. That entry is
+the page's sidebar link and its header. `test/mydia_web/admin_nav_test.exs`
+fails for a live route under `/admin` that has no entry.
 
 **Thin template shell.** `index.html.heex` contains only
-`<Layouts.app {assigns}><.admin_page active_tab={@active_tab}>`, one call to the
-sibling `<MydiaWeb.Admin<X>Live.Components.<x>_tab ...>`, then each modal behind
+`<Layouts.app {assigns}><.admin_page page={:<key>}>`, one call to the sibling
+`<MydiaWeb.Admin<X>Live.Components.<x>_tab ...>`, then each modal behind
 `<%= if assigns[:show_<x>_modal] do %>`. All markup lives in a sibling
-`components.ex`.
+`components.ex`. Pass the key as a literal: `admin_page/1` declares
+`values: AdminNav.keys()`, so a typo fails the build.
 
-**No page `<h1>`.** `<.admin_page>` (`components/admin_components.ex:107`)
-already renders the Configuration h1 and the tab bar. Tab content opens with
-`<div class="p-4 sm:p-6 space-y-4">` and a section header:
+**One header per page.** `<.admin_page>` renders the hub label, the page `<h1>`,
+the description and the hub's tab strip from `AdminNav`. A list page passes its
+size as `count={length(@items)}`, and its buttons go in `<:actions>` through a
+`header_actions/1` function component in the page's own `components.ex`, as
+`btn-sm` buttons (the primary one `btn-primary`). The body never repeats the
+page name. It opens with `<div class="p-4 sm:p-6 space-y-4">`, and an `<h2>` is
+only for a real subsection (Needs Attention, Scheduled Jobs):
 `<h2 class="text-lg font-semibold flex items-center gap-2">` with a leading
-`<.icon>`, the title, and `<span class="badge badge-ghost">{length(@items)}</span>`,
-with
-`<button class="btn btn-sm btn-primary" phx-click="new_<x>"><.icon name="hero-plus" class="w-4 h-4" /> New</button>`
-on the right.
+`<.icon class="w-5 h-5 opacity-60">`, the title, and an optional
+`<span class="badge badge-ghost">` count. One-of-N filters inside a page use
+`<.segmented_control>`; tabs mean hub navigation. Colours come from theme
+tokens such as `text-base-content/60`, never `text-gray-*`.
 
 **Empty state, then the list.** `<div class="alert alert-info">` with
 `hero-information-circle` when empty, otherwise
@@ -326,6 +337,36 @@ Copy `admin_library_paths_live/` for the smallest complete example, or
 (`download_client_modal`). Env-sourced fields (`Settings.runtime_config?/1`)
 render read-only with an ENV lock badge and disabled Edit and Delete. Singletons
 such as FlareSolverr use one row plus Edit, with no add or delete.
+
+## The sidebar
+
+`MydiaWeb.Layouts.app/1` composes the sidebar from `MydiaWeb.SidebarComponents`.
+A new link is a `<.nav_item>` in the section it belongs to, never hand-written
+`<li><.link>` markup.
+
+| Section | Holds | Visible to |
+|---|---|---|
+| (no heading) | Home, Discover, My Requests | all; My Requests only when `Authorization.can_submit_request?/1` (guests) |
+| Library | Movies, TV Shows, pinned sections, Collections, Calendar | all |
+| Acquisition | Search, Downloads, Import, Import Lists, Activity | `Authorization.can_update_media?/1` (admin, user); Import Lists also needs `is_admin?/1` and the feature flag |
+| Admin | the three `AdminNav` hubs | `Authorization.is_admin?/1` |
+
+Visibility only hides links. Every page still enforces its own authorization.
+
+**Badges mean "needs attention".** `nav_item/1`'s `badge` renders only above
+zero (Downloads, Import, Administration). A library total is `count`, a muted
+number, never a badge.
+
+**The account menu is the footer.** `account_menu/1` is the aside's last child
+and opens upward (`dropdown dropdown-top`). It holds Profile, Integrations,
+Devices, the theme switcher, What's new and Send feedback. The aside is
+`h-full`, not `min-h-full`, and the nav is `flex-1 min-h-0 overflow-y-auto`.
+`.drawer-side` is a viewport-height scroll container, so an aside with
+`min-h-full` would grow to its content and the footer would scroll away with
+it. Never give `.drawer-side` a viewport-unit `min-height` such as
+`min-h-screen`: iOS Safari resolves `100vh` taller than daisyUI's `100dvh`
+while its toolbar shows, which pushes the chip under the toolbar.
+`dock_nav_test.exs` asserts the drawer has no `min-height`.
 
 ## Sidebar sections are pinned collections, and exclusion is page scoped
 

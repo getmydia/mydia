@@ -25,7 +25,6 @@ defmodule MydiaWeb.AdminReleaseBlacklistLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Release Blacklist")
-     |> assign(:active_tab, :release_blacklist)
      |> assign(:failure_reason_filter, "")
      |> assign(:page, 1)
      |> assign(:page_size, @page_size)

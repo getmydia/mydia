@@ -552,7 +552,7 @@ defmodule Mydia.Jobs.LibraryScanner do
                 Logger.warning(
                   "Restored a trashed media file whose library path was already occupied; " <>
                     "the trashed copy was left in place and nothing will purge it " <>
-                    "automatically. See the trash directory audit on /admin/config/trash.",
+                    "automatically. See the trash directory audit on /admin/trash.",
                   path: file_info.path,
                   relative_path: relative_path
                 )

@@ -16,7 +16,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Library Paths")
-     |> assign(:active_tab, :library_paths)
      |> assign(:reorganizing_library_ids, MapSet.new())
      |> assign(:reclassifying_library_ids, MapSet.new())
      |> load_data()}

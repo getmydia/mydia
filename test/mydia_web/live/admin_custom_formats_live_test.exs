@@ -10,7 +10,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
   end
 
   test "lists the built-in formats", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     assert has_element?(view, "#custom-format-row-lang-vff")
     assert has_element?(view, "#custom-format-row-lang-vfq")
@@ -21,7 +21,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
   test "saving a format that was deleted meanwhile does not crash", %{conn: conn} do
     format = Mydia.SettingsFixtures.custom_format_fixture(%{name: "Doomed", slug: "doomed"})
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     view |> element("#custom-format-edit-#{format.slug}") |> render_click()
 
@@ -39,19 +39,19 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
   # Without a nav entry the page is reachable only by typing the URL, which for
   # a self-hosted operator means the feature may as well not exist.
   test "is reachable from the admin tab nav", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
-    assert has_element?(view, ~s|a[href="/admin/config/custom-formats"]|)
+    assert has_element?(view, ~s|a[href="/admin/custom-formats"]|)
   end
 
   test "the admin nav on a sibling page links here", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/quality")
+    {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
-    assert has_element?(view, ~s|a[href="/admin/config/custom-formats"]|)
+    assert has_element?(view, ~s|a[href="/admin/custom-formats"]|)
   end
 
   test "opens the edit modal for a built-in", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     view |> element("#custom-format-edit-lang-vff") |> render_click()
     assert has_element?(view, "#custom-format-form")
@@ -60,7 +60,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
   test "saves an override for a built-in format without submitting the disabled name", %{
     conn: conn
   } do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     view |> element("#custom-format-edit-lang-vff") |> render_click()
 
@@ -81,7 +81,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
   end
 
   test "creates a user format", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     view |> element("#custom-format-new") |> render_click()
 
@@ -95,7 +95,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
   end
 
   test "rejects an invalid pattern with a visible error", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     view |> element("#custom-format-new") |> render_click()
 
@@ -110,7 +110,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
   end
 
   test "the test box reports which patterns match a title", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     view |> element("#custom-format-edit-lang-vff") |> render_click()
 
@@ -129,7 +129,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
         patterns: ["\\bONLYVFF\\b"]
       })
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     view |> element("#custom-format-reset-lang-vff") |> render_click()
 
@@ -140,7 +140,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
   # An unmodified built-in has nothing to reset. The button still renders so the
   # action column keeps a fixed width, but it must not be clickable.
   test "reset is disabled on an unmodified built-in and enabled once overridden", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     assert has_element?(view, "#custom-format-reset-lang-vff[disabled]")
 
@@ -150,7 +150,7 @@ defmodule MydiaWeb.AdminCustomFormatsLiveTest do
         patterns: ["\\bONLYVFF\\b"]
       })
 
-    {:ok, view, _html} = live(conn, ~p"/admin/config/custom-formats")
+    {:ok, view, _html} = live(conn, ~p"/admin/custom-formats")
 
     assert has_element?(view, "#custom-format-reset-lang-vff")
     refute has_element?(view, "#custom-format-reset-lang-vff[disabled]")

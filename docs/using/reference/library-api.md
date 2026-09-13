@@ -36,7 +36,7 @@ Two kinds of key work.
 
 ### A database API key
 
-Create one under **Configuration → API Keys**. Give it a name, an expiry (never,
+Create one under **Admin > System > API Keys**. Give it a name, an expiry (never,
 30, 90 or 365 days) and the *Library API* scope, which is stored as the `admin`
 permission. The owner must be an admin. The plain key is shown once, when you
 create it; copy it then. Revoke or delete a key from the same page.

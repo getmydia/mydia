@@ -8,7 +8,7 @@ See [Download Clients](../reference/download-clients.md) for the full list of su
 
 ### Via Admin UI
 
-1. Navigate to **Admin > Configuration**, then the **Clients** tab
+1. Navigate to **Admin > Configuration > Clients**
 2. Click **New**
 3. Select client type
 4. Enter connection details

@@ -19,64 +19,12 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
   attr :flaresolverr_status, :map, default: %{configured: false, status: :loading}
 
   def indexers_tab(assigns) do
-    # Calculate total count of enabled indexers
-    assigns =
-      assign(
-        assigns,
-        :total_indexers,
-        length(assigns.indexers) + length(assigns.library_indexers)
-      )
-
     ~H"""
     <div class="p-4 sm:p-6 space-y-6">
       <FlareSolverrComponents.flaresolverr_row
         flaresolverr={@flaresolverr}
         flaresolverr_status={@flaresolverr_status}
       />
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-magnifying-glass" class="w-5 h-5 opacity-60" /> Indexers
-          <span class="badge badge-ghost">{@total_indexers}</span>
-        </h2>
-        <div class="flex gap-2">
-          <%!-- Add Indexer Dropdown --%>
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-sm btn-primary">
-              <.icon name="hero-plus" class="w-4 h-4" /> Add Indexer
-              <.icon name="hero-chevron-down" class="w-3 h-3" />
-            </div>
-            <ul
-              tabindex="0"
-              class="dropdown-content z-[1] menu p-2 shadow bg-base-200 rounded-box w-64"
-            >
-              <li>
-                <button phx-click="new_indexer" class="flex items-start gap-3">
-                  <.icon name="hero-server" class="w-5 h-5 mt-0.5 opacity-60" />
-                  <div class="text-left">
-                    <div class="font-medium">Connect to Prowlarr/Jackett</div>
-                    <div class="text-xs text-base-content/60">
-                      Use an existing indexer aggregator
-                    </div>
-                  </div>
-                </button>
-              </li>
-              <%= if @cardigann_enabled do %>
-                <li>
-                  <button phx-click="show_indexer_library" class="flex items-start gap-3">
-                    <.icon name="hero-book-open" class="w-5 h-5 mt-0.5 opacity-60" />
-                    <div class="text-left">
-                      <div class="font-medium">Browse Indexer Library</div>
-                      <div class="text-xs text-base-content/60">
-                        {@library_indexer_stats.total} indexers available
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              <% end %>
-            </ul>
-          </div>
-        </div>
-      </div>
 
       <%= if @indexers == [] and @library_indexers == [] do %>
         <div class="alert alert-info">
@@ -348,6 +296,47 @@ defmodule MydiaWeb.AdminIndexersLive.Components do
           </div>
         <% end %>
       <% end %>
+    </div>
+    """
+  end
+
+  @doc "The page header's Add Indexer menu."
+  attr :cardigann_enabled, :boolean, required: true
+  attr :library_indexer_stats, :map, required: true
+
+  def header_actions(assigns) do
+    ~H"""
+    <div class="dropdown dropdown-end">
+      <div tabindex="0" role="button" class="btn btn-sm btn-primary">
+        <.icon name="hero-plus" class="w-4 h-4" /> Add Indexer
+        <.icon name="hero-chevron-down" class="w-3 h-3" />
+      </div>
+      <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-200 rounded-box w-64">
+        <li>
+          <button phx-click="new_indexer" class="flex items-start gap-3">
+            <.icon name="hero-server" class="w-5 h-5 mt-0.5 opacity-60" />
+            <div class="text-left">
+              <div class="font-medium">Connect to Prowlarr/Jackett</div>
+              <div class="text-xs text-base-content/60">
+                Use an existing indexer aggregator
+              </div>
+            </div>
+          </button>
+        </li>
+        <%= if @cardigann_enabled do %>
+          <li>
+            <button phx-click="show_indexer_library" class="flex items-start gap-3">
+              <.icon name="hero-book-open" class="w-5 h-5 mt-0.5 opacity-60" />
+              <div class="text-left">
+                <div class="font-medium">Browse Indexer Library</div>
+                <div class="text-xs text-base-content/60">
+                  {@library_indexer_stats.total} indexers available
+                </div>
+              </div>
+            </button>
+          </li>
+        <% end %>
+      </ul>
     </div>
     """
   end

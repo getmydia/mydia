@@ -79,7 +79,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   def handle_params(_params, _url, socket) do
     {:noreply,
      socket
-     |> assign(:page_title, "Dashboard")}
+     |> assign(:page_title, "Home")}
   end
 
   defp load_dashboard_data(socket) do

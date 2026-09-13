@@ -127,7 +127,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       # inferred from a colour.
       {_show, episode, files} = duplicated_episode()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       group_html = view |> element("#duplicates-group-#{episode.id}") |> render()
 
@@ -141,35 +141,41 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       refute group_html =~ "type=\"checkbox\""
     end
 
-    test "renders the admin tab strip with duplicates as the active tab", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+    test "renders the admin page header with Duplicates as the active tab", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
-      assert has_element?(view, "div[role=tablist]")
-      assert has_element?(view, "a.tab-active", "Duplicates")
-      # Every other admin page's tab must still be reachable from here, or an
-      # operator who lands on this page has no way back to the rest of admin.
-      assert has_element?(view, "a[href='/admin/config/library-paths']", "Library")
+      assert has_element?(view, "#admin-page-hub", "Administration")
+      assert has_element?(view, "h1#admin-page-title", "Duplicates")
+      assert has_element?(view, ~s|a#admin-tab-duplicates.tab-active[href="/admin/duplicates"]|)
+      # Sibling pages must be one click away, or an operator who lands here
+      # has to go back through the sidebar.
+      assert has_element?(view, ~s|a#admin-tab-trash[href="/admin/trash"]|, "Trash")
     end
 
-    test "heads its sections with h2 and leaves the page h1 to the admin shell", %{conn: conn} do
+    test "keeps h2 for its Needs Attention subsection and leaves the page h1 to the admin shell",
+         %{conn: conn} do
       duplicated_episode()
       refused_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
-      # <.admin_page> already renders the "Configuration" <h1> and the tab
-      # strip. Every other /admin/config tab opens its body with an <h2>
-      # section header carrying a count badge, and adds no <h1> of its own.
-      assert has_element?(view, "h2", "Duplicates")
+      # <.admin_page> renders the page's only <h1> and its count. A body <h2>
+      # is only for a real subsection, never a second copy of the page name.
+      refute has_element?(view, "main h2", "Duplicates")
       assert has_element?(view, "h2", "Needs Attention")
       assert has_element?(view, "h2 span.badge-ghost")
-      refute has_element?(view, "h1", "Duplicate")
+      assert has_element?(view, "#admin-page-count", "1")
+
+      main_h1_count =
+        view |> render() |> LazyHTML.from_fragment() |> LazyHTML.query("main h1") |> Enum.count()
+
+      assert main_h1_count == 1
     end
 
     test "renders a refused group without any Keep or Trash control", %{conn: conn} do
       movie = refused_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       assert has_element?(view, "#duplicates-refusal-#{movie.id}")
       refute has_element?(view, "#duplicates-refusal-#{movie.id} input[aria-label='Keep']")
@@ -180,7 +186,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
          %{conn: conn} do
       {movie, own, stray} = misfiled_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       assert has_element?(view, "#duplicates-suspect-#{stray.id}")
       refute has_element?(view, "#duplicates-suspect-#{own.id}")
@@ -194,7 +200,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       # folder, which suspect_files/1 deliberately does not flag.
       movie = refused_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       refute has_element?(view, "#duplicates-refusal-#{movie.id} [id^='duplicates-suspect-']")
       assert has_element?(view, "#duplicates-review-group-#{movie.id}[disabled]")
@@ -203,7 +209,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
     test "a group's last Leave file cannot be put on Review", %{conn: conn} do
       {movie, own, _stray} = misfiled_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       assert has_element?(view, "#duplicates-review-#{own.id}[disabled]")
 
@@ -216,7 +222,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
     test "Leave takes a stray back off Review", %{conn: conn} do
       {movie, _own, stray} = misfiled_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-leave-#{stray.id}") |> render_click()
 
@@ -228,7 +234,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       {_movie, _own, stray} = misfiled_movie()
       other = refused_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       render_click(view, "leave_file", %{"subject" => other.id, "file" => stray.id})
 
@@ -238,7 +244,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
     test "sending a group detaches its marked file and links to Review", %{conn: conn} do
       {movie, own, stray} = misfiled_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-review-group-#{movie.id}") |> render_click()
 
@@ -266,7 +272,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
         set: [library_path_id: nil, relative_path: nil]
       )
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       assert has_element?(
                view,
@@ -296,7 +302,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
         set: [library_path_id: nil, relative_path: nil]
       )
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       assert has_element?(view, "#duplicates-refusal-#{movie.id}")
       refute has_element?(view, "#duplicates-refusal-#{movie.id} input")
@@ -311,7 +317,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       # that they disagreed.
       movie = refused_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       group_html = view |> element("#duplicates-refusal-#{movie.id}") |> render()
 
@@ -325,7 +331,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
       losers = Enum.reject(files, &(&1.id == keeper.id))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       assert has_element?(view, "#duplicates-keep-#{keeper.id}[checked]")
       refute has_element?(view, "#duplicates-trash-#{keeper.id}[checked]")
@@ -343,7 +349,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
       losers = Enum.reject(files, &(&1.id == keeper.id))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-trash-selected") |> render_click()
       view |> element("#duplicates-confirm") |> render_click()
@@ -359,7 +365,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       spared = Enum.find(files, &(&1.relative_path =~ "480p"))
       doomed = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-keep-#{spared.id}") |> render_click()
       assert has_element?(view, "#duplicates-keep-#{spared.id}[checked]")
@@ -378,7 +384,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
       losers = Enum.reject(files, &(&1.id == keeper.id))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-group-mark-#{episode.id}") |> render_click()
 
@@ -403,7 +409,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       keeper_a = Enum.find(files_a, &(&1.relative_path =~ "1080p"))
       losers_a = Enum.reject(files_a, &(&1.id == keeper_a.id))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-group-trash-#{episode_a.id}") |> render_click()
 
@@ -418,7 +424,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       spared = Enum.find(files, &(&1.relative_path =~ "480p"))
       doomed = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-keep-#{spared.id}") |> render_click()
       view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
@@ -436,7 +442,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       high = Enum.find(files, &(&1.relative_path =~ "1080p"))
       low = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-trash-#{high.id}") |> render_click()
       view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
@@ -451,7 +457,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       # reappear under Needs Attention as a :nothing_to_prune refusal.
       {_show, episode, _files} = duplicated_episode()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
       assert has_element?(view, "#duplicates-group-#{episode.id}")
 
       view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
@@ -464,7 +470,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
          %{conn: conn} do
       {_show, episode, _files} = duplicated_episode(@three_files)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       refute has_element?(view, "#duplicates-group-trash-#{episode.id}[disabled]")
 
@@ -477,7 +483,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
          %{conn: conn} do
       {_show, _episode, files} = duplicated_episode()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       refute has_element?(view, "#duplicates-confirm-modal")
 
@@ -501,7 +507,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       keeper_b = Enum.find(files_b, &(&1.relative_path =~ "1080p"))
       spared_b = Enum.find(files_b, &(&1.relative_path =~ "480p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-keep-#{spared_b.id}") |> render_click()
       assert has_element?(view, "#duplicates-keep-#{spared_b.id}[checked]")
@@ -521,7 +527,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
       losers = Enum.reject(files, &(&1.id == keeper.id))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       render_click(view, "keep_file", %{"subject" => episode.id, "file" => Ecto.UUID.generate()})
       render_click(view, "keep_file", %{"subject" => Ecto.UUID.generate(), "file" => keeper.id})
@@ -545,7 +551,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       spared = Enum.find(files, &(&1.relative_path =~ "480p"))
       doomed = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-keep-#{spared.id}") |> render_click()
       view |> element("#duplicates-trash-selected") |> render_click()
@@ -571,7 +577,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       high = Enum.find(files, &(&1.relative_path =~ "1080p"))
       low = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-trash-#{high.id}") |> render_click()
 
@@ -589,7 +595,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       high = Enum.find(files, &(&1.relative_path =~ "1080p"))
       low = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-trash-#{high.id}") |> render_click()
       view |> element("#duplicates-trash-selected") |> render_click()
@@ -609,7 +615,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       mid = Enum.find(files, &(&1.relative_path =~ "360p"))
       spared = Enum.find(files, &(&1.relative_path =~ "480p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-keep-#{spared.id}") |> render_click()
       view |> element("#duplicates-trash-#{high.id}") |> render_click()
@@ -632,7 +638,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       # nothing. Each click on the current top row promotes the next one.
       {_show, _episode, files} = duplicated_episode(@three_files)
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       for file <- files do
         view |> element("#duplicates-trash-#{file.id}") |> render_click()
@@ -650,7 +656,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
     test "a group run raises an undo toast naming the item", %{conn: conn} do
       {_show, episode, _files} = duplicated_episode()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
       refute has_element?(view, "#duplicates-undo-toast")
 
       view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
@@ -667,7 +673,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       keeper = Enum.find(files, &(&1.relative_path =~ "1080p"))
       loser = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
       assert trashed?(loser)
@@ -686,7 +692,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       {_show, episode, files} = duplicated_episode()
       loser = Enum.find(files, &(&1.relative_path =~ "360p"))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-group-trash-#{episode.id}") |> render_click()
       view |> element("#duplicates-undo-dismiss") |> render_click()
@@ -706,7 +712,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       keeper_b = Enum.find(files_b, &(&1.relative_path =~ "1080p"))
       losers_b = Enum.reject(files_b, &(&1.id == keeper_b.id))
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-group-trash-#{episode_a.id}") |> render_click()
       view |> element("#duplicates-group-trash-#{episode_b.id}") |> render_click()
@@ -724,7 +730,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       duplicated_episode()
       duplicated_episode()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-trash-selected") |> render_click()
       view |> element("#duplicates-confirm") |> render_click()
@@ -737,7 +743,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
       {_movie_a, own_a, stray_a} = misfiled_movie("Zephyr Station", "Starveil")
       {_movie_b, own_b, stray_b} = misfiled_movie("Emberline", "Quillmoor")
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-review-selected") |> render_click()
       assert has_element?(view, "#duplicates-review-modal")
@@ -755,7 +761,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
     test "Cancel closes the confirm modal and sends nothing", %{conn: conn} do
       {_movie, _own, stray} = misfiled_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       view |> element("#duplicates-review-selected") |> render_click()
       view |> element("#duplicates-review-cancel") |> render_click()
@@ -767,7 +773,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
     test "the page-level send is disabled when nothing is marked", %{conn: conn} do
       _movie = refused_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       assert has_element?(view, "#duplicates-review-selected[disabled]")
     end
@@ -775,7 +781,7 @@ defmodule MydiaWeb.AdminDuplicatesLiveTest do
     test "Mark flagged puts the operator's changes back to the defaults", %{conn: conn} do
       {_movie, _own, stray} = misfiled_movie()
 
-      {:ok, view, _html} = live(conn, ~p"/admin/config/duplicates")
+      {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
 
       refute has_element?(view, "#duplicates-review-reset")
 

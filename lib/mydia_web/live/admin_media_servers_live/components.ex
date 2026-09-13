@@ -18,20 +18,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   def media_servers_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-server-stack" class="w-5 h-5 opacity-60" /> Media Servers
-          <span class="badge badge-ghost">{length(@media_servers)}</span>
-        </h2>
-        <button
-          id="new-media-server"
-          class="btn btn-primary w-full min-h-11 sm:btn-sm sm:w-auto sm:min-h-8"
-          phx-click="new_media_server"
-        >
-          <.icon name="hero-plus" class="w-4 h-4" /> New
-        </button>
-      </div>
-
       <%= if @media_servers == [] do %>
         <div
           id="media-servers-empty"
@@ -273,6 +259,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  @doc "The page header's New button."
+  def header_actions(assigns) do
+    ~H"""
+    <button
+      id="new-media-server"
+      class="btn btn-primary w-full min-h-11 sm:btn-sm sm:w-auto sm:min-h-8"
+      phx-click="new_media_server"
+    >
+      <.icon name="hero-plus" class="w-4 h-4" /> New
+    </button>
     """
   end
 

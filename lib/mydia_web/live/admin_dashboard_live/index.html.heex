@@ -1,5 +1,5 @@
 <Layouts.app {assigns}>
-  <.admin_page active_tab={@active_tab}>
+  <.admin_page page={:dashboard}>
     <div class="space-y-6 sm:space-y-8 p-4 sm:p-6">
       <MydiaWeb.AdminDashboardLive.Components.kpi_row
         active_streams={length(@active_sessions)}

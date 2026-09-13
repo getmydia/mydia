@@ -91,7 +91,7 @@ defmodule MydiaWeb do
       import MydiaWeb.LibraryComponents
       # Collection components for collection views
       import MydiaWeb.CollectionComponents
-      # Admin configuration page chrome (admin_page)
+      # Admin chrome: sidebar Admin section (admin_nav) and page header (admin_page)
       import MydiaWeb.AdminComponents
       # Poster card body: shared title box and bottom-pinned metadata
       import MydiaWeb.PosterCardComponents

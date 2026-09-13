@@ -26,7 +26,7 @@ from inside the TestFlight app, not from these links.
 ### Enable Remote Access
 
 Remote access is on by default. Switch it off or back on under **Admin ›
-Configuration › Remote Access**; the p2p node stops or starts right away, with no
+System › Remote Access**; the p2p node stops or starts right away, with no
 restart.
 
 To pin it from the environment instead, set `ENABLE_REMOTE_ACCESS=true` or
@@ -65,8 +65,8 @@ why the window is so short.
 
 ### App won't connect
 
-1. **Check remote access is on** - the toggle under Admin > Configuration > Remote
-   Access. If the tab is missing, the whole player is off: `ENABLE_PLAYER=false`
+1. **Check remote access is on** - the toggle under Admin > System > Remote
+   Access. If that page is missing from the sidebar, the whole player is off: `ENABLE_PLAYER=false`
 2. **Verify p2p server is running** - check logs for startup messages
 3. **Generate a fresh claim code** - codes expire five minutes after you create
    them and cannot be reused, so a code left on screen while you fetched your

@@ -1,6 +1,6 @@
 defmodule Mydia.Library.TrashQueriesTest do
   @moduledoc """
-  Read helpers behind /admin/config/trash. The counts drive the filter chips
+  Read helpers behind /admin/trash. The counts drive the filter chips
   and the summary drives the header, so both have to agree with the list.
   """
   use Mydia.DataCase, async: false

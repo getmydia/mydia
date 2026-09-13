@@ -184,12 +184,12 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   test "redirects unauthenticated users", %{} do
-    {:error, {:redirect, %{to: path}}} = live(build_conn(), ~p"/admin/config/plugins")
+    {:error, {:redirect, %{to: path}}} = live(build_conn(), ~p"/admin/plugins")
     assert path =~ "/auth"
   end
 
   test "renders an empty state when no plugins are installed", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/admin/config/plugins")
+    {:ok, view, _html} = live(conn, ~p"/admin/plugins")
     assert has_element?(view, "#plugins-installed")
     assert render(view) =~ "No plugins installed"
   end
@@ -199,7 +199,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
          %{conn: conn} do
       seed_plugin("webhook-notifier", "Webhook Notifier", enabled: false)
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       # Pending plugin is inactive and offers a review/approve action.
       assert has_element?(view, "#plugin-row-webhook-notifier")
@@ -224,7 +224,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "declining closes the modal without activating", %{conn: conn} do
       seed_plugin("webhook-notifier", "Webhook Notifier", enabled: false)
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       view |> element("#approve-webhook-notifier") |> render_click()
       view |> element("#decline-approval") |> render_click()
@@ -264,7 +264,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "the row is visually distinct and names what it needs", %{conn: conn} do
       seed_stale_grant("notifier", "Notifier")
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       assert has_element?(view, "#reapproval-badge-notifier")
       assert has_element?(view, "#reapproval-note-notifier")
@@ -285,7 +285,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         }
       )
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       refute has_element?(view, "#reapproval-badge-notifier")
       refute has_element?(view, "#approve-notifier")
@@ -293,7 +293,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "re-approving is reachable from the row and grants the requested set", %{conn: conn} do
       seed_stale_grant("notifier", "Notifier")
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       # The row keeps its normal lifecycle actions and gains a re-approve action.
       assert has_element?(view, "#toggle-notifier")
@@ -317,7 +317,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "opening the row's details lists what is requested but not granted", %{conn: conn} do
       seed_stale_grant("notifier", "Notifier")
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       view |> element("#details-notifier") |> render_click()
 
@@ -327,7 +327,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "declining leaves the grant untouched", %{conn: conn} do
       seed_stale_grant("notifier", "Notifier")
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       view |> element("#approve-notifier") |> render_click()
       view |> element("#decline-approval") |> render_click()
@@ -345,7 +345,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         granted: %{"net:http" => ["discord.com"]}
       )
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       assert has_element?(view, "#plugin-row-notifier")
       view |> element("#remove-notifier") |> render_click()
@@ -369,7 +369,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
           metadata: %{"slug" => "notifier"}
         })
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       assert has_element?(view, "#update-badge-notifier")
     end
   end
@@ -377,7 +377,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   describe "operator settings + host disclosure (U3, U4)" do
     test "configuring a host-granting url grants its host (R5, R6)", %{conn: conn} do
       seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       assert has_element?(view, "#settings-webhook-notifier")
       view |> element("#settings-webhook-notifier") |> render_click()
@@ -399,7 +399,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "rejects a scheme-less webhook_url instead of silently dropping the grant", %{conn: conn} do
       seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#settings-webhook-notifier") |> render_click()
 
       html =
@@ -423,7 +423,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         settings: %{"ntfy_token" => "tk_supersecret"}
       )
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#settings-webhook-notifier") |> render_click()
 
       refute render(view) =~ "tk_supersecret"
@@ -435,7 +435,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         settings: %{"ntfy_token" => "tk_keep", "target" => "ntfy"}
       )
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#settings-webhook-notifier") |> render_click()
 
       view
@@ -451,7 +451,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "the approval modal discloses the host-granting field (U4)", %{conn: conn} do
       seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: false, granted: %{})
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       view |> element("#approve-webhook-notifier") |> render_click()
       assert has_element?(view, "#approval-host-grant")
@@ -465,7 +465,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         granted: %{"net:http" => ["discord.com"]}
       )
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       assert has_element?(view, "#plugin-row-notifier")
       # The button is always present (never silently hidden) but disabled here.
       assert has_element?(view, "#settings-notifier[disabled]")
@@ -480,7 +480,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         }
       )
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#settings-webhook-notifier") |> render_click()
 
       # Discord selected: only target + webhook_url show; ntfy/custom fields hidden.
@@ -507,7 +507,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         settings: %{"target" => "custom"}
       )
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#settings-webhook-notifier") |> render_click()
 
       view
@@ -551,7 +551,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         end
       end)
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       assert has_element?(view, "#plugin-row-envp")
       assert render(view) =~ "configured via env"
@@ -587,7 +587,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       seed_enabled_notifier()
       log!(%{message: "posting to webhook"})
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#logs-notifier") |> render_click()
 
       assert has_element?(view, "#plugin-logs")
@@ -599,7 +599,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       log!(%{level: :debug, message: "debug noise"})
       log!(%{source: :host, level: :error, message: "boom trap"})
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#logs-notifier") |> render_click()
       assert render(view) =~ "debug noise"
 
@@ -610,7 +610,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "a broadcast log line appends to the open timeline live", %{conn: conn} do
       seed_enabled_notifier()
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#logs-notifier") |> render_click()
 
       log!(%{invocation_id: "live", message: "live tail line"})
@@ -620,7 +620,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
     test "the Test control renders for an enabled plugin with subscribed events", %{conn: conn} do
       seed_enabled_notifier()
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#logs-notifier") |> render_click()
 
       assert has_element?(view, "#test-plugin")
@@ -649,7 +649,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
           }
         })
 
-      {:ok, view, _} = live(conn, ~p"/admin/config/plugins")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
       view |> element("#logs-notifier") |> render_click()
 
       html = render(view)

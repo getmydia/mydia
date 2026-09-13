@@ -11,20 +11,6 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
   def providers_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 class="text-lg font-semibold flex items-center gap-2">
-          <.icon name="hero-chat-bubble-bottom-center-text" class="w-5 h-5 opacity-60" />
-          Subtitle Providers <span class="badge badge-ghost">{length(@providers)}</span>
-        </h2>
-        <button
-          id="subtitle-provider-add"
-          class="btn btn-sm btn-primary"
-          phx-click="new_subtitle_provider"
-        >
-          <.icon name="hero-plus" class="w-4 h-4" /> New
-        </button>
-      </div>
-
       <%= if @providers == [] do %>
         <div class="alert alert-info">
           <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -142,6 +128,19 @@ defmodule MydiaWeb.AdminSubtitleProvidersLive.Components do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  @doc "The page header's New button."
+  def header_actions(assigns) do
+    ~H"""
+    <button
+      id="subtitle-provider-add"
+      class="btn btn-sm btn-primary"
+      phx-click="new_subtitle_provider"
+    >
+      <.icon name="hero-plus" class="w-4 h-4" /> New
+    </button>
     """
   end
 

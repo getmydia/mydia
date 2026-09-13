@@ -6,7 +6,7 @@ See [Quality Profiles](../reference/quality-profiles.md) for the built-in profil
 
 ## Creating Custom Profiles
 
-1. Navigate to **Admin > Configuration**, then the **Quality** tab
+1. Navigate to **Admin > Configuration > Quality**
 2. Click **New**
 3. Configure settings
 4. Save profile
@@ -20,7 +20,7 @@ Instead of building a profile from scratch, click **Browse Presets** on the Qual
 Every search resolves a profile through two tiers:
 
 1. **The media item's own profile**, if one is set. This always wins.
-2. **The global default profile**, chosen at the top of **Admin > Configuration**, **Quality** tab. It governs every item that has no profile of its own.
+2. **The global default profile**, chosen at the top of **Admin > Configuration > Quality**. It governs every item that has no profile of its own.
 
 Wherever you pick a profile for a media item, the blank choice reads **Use default (name)**. Picking it clears the item's own profile so the item follows the global default, including any later change to that default. Setting a profile on the item instead pins it, and it stops tracking the default.
 

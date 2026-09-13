@@ -16,7 +16,7 @@ defmodule MydiaWeb.PlayerDisabledTest do
 
     for path <- [
           "/devices",
-          "/admin/config/remote-access",
+          "/admin/remote-access",
           "/admin/dashboard",
           "/admin/transcodes",
           "/play/movie/00000000-0000-0000-0000-000000000000"
@@ -25,6 +25,14 @@ defmodule MydiaWeb.PlayerDisabledTest do
         assert {:error, {:redirect, %{to: "/", flash: flash}}} = live(conn, unquote(path))
         assert flash["error"] =~ "player is disabled"
       end
+    end
+
+    test "the System tabs drop Dashboard and Remote Access", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/admin/settings")
+
+      refute has_element?(view, "#admin-tab-dashboard")
+      refute has_element?(view, "#admin-tab-remote_access")
+      assert has_element?(view, "#admin-tab-status")
     end
   end
 

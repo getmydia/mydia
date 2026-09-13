@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page active_tab={@active_tab}>
+  <.admin_page page={:media_servers} count={length(@media_servers)}>
+    <:actions>
+      <MydiaWeb.AdminMediaServersLive.Components.header_actions />
+    </:actions>
     <MydiaWeb.AdminMediaServersLive.Components.media_servers_tab
       media_servers={@media_servers}
       media_server_health={@media_server_health}

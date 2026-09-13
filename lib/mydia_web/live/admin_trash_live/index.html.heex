@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page active_tab={@active_tab}>
+  <.admin_page page={:trash} count={@summary.count}>
+    <:actions>
+      <MydiaWeb.AdminTrashLive.Components.header_actions summary={@summary} />
+    </:actions>
     <MydiaWeb.AdminTrashLive.Components.trash_tab
       summary={@summary}
       retention_days={@retention_days}

@@ -1,298 +1,272 @@
 <Layouts.app {assigns}>
-  <div>
-    <%!-- Header --%>
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-      <div>
-        <h1 class="text-3xl font-bold">Manage Media Requests</h1>
-        <p class="text-base-content/70 mt-1">
-          Review and approve or reject media requests from guest users
-        </p>
-      </div>
-    </div>
+  <.admin_page page={:requests}>
+    <div class="p-4 sm:p-6 space-y-6">
+      <.segmented_control
+        id="requests-status-filter"
+        value={@filter_status}
+        event="filter"
+        param="status"
+        label="Filter requests by status"
+      >
+        <:option value="pending" label="Pending" />
+        <:option value="all" label="All" />
+        <:option value="approved" label="Approved" />
+        <:option value="rejected" label="Rejected" />
+      </.segmented_control>
 
-    <%!-- Filter Tabs --%>
-    <div role="tablist" class="tabs tabs-border mb-6">
-      <button
-        role="tab"
-        class={"tab " <> if(@filter_status == "pending", do: "tab-active", else: "")}
-        phx-click="filter"
-        phx-value-status="pending"
-      >
-        Pending
-      </button>
-      <button
-        role="tab"
-        class={"tab " <> if(@filter_status == "all", do: "tab-active", else: "")}
-        phx-click="filter"
-        phx-value-status="all"
-      >
-        All
-      </button>
-      <button
-        role="tab"
-        class={"tab " <> if(@filter_status == "approved", do: "tab-active", else: "")}
-        phx-click="filter"
-        phx-value-status="approved"
-      >
-        Approved
-      </button>
-      <button
-        role="tab"
-        class={"tab " <> if(@filter_status == "rejected", do: "tab-active", else: "")}
-        phx-click="filter"
-        phx-value-status="rejected"
-      >
-        Rejected
-      </button>
-    </div>
-
-    <%!-- Empty State --%>
-    <%= if @requests == [] do %>
-      <div class="text-center py-12">
-        <.icon name="hero-inbox" class="w-16 h-16 mx-auto text-base-content/30 mb-4" />
-        <h3 class="text-lg font-semibold mb-2">No requests found</h3>
-        <p class="text-base-content/70">
-          <%= if @filter_status == "pending" do %>
-            No pending requests at this time. Great job keeping up!
-          <% else %>
-            No {status_text(@filter_status)} requests found.
-          <% end %>
-        </p>
-      </div>
-    <% else %>
-      <%!-- Requests List --%>
-      <div class="space-y-4">
-        <%= for request <- @requests do %>
-          <.request_card request={request}>
-            <:badges>
-              <span :if={request.tvdb_id} class="badge badge-sm badge-ghost">
-                TVDB: {request.tvdb_id}
-              </span>
-              <span :if={request.tmdb_id} class="badge badge-sm badge-ghost">
-                TMDB: {request.tmdb_id}
-              </span>
-            </:badges>
-
-            <:details>
-              <div class="flex items-center gap-2 text-base-content/70">
-                <.icon name="hero-user" class="w-4 h-4" />
-                <span>
-                  Requested by {request.requester.email} on {format_date(request.inserted_at)}
+      <%!-- Empty State --%>
+      <%= if @requests == [] do %>
+        <div class="text-center py-12">
+          <.icon name="hero-inbox" class="w-16 h-16 mx-auto text-base-content/30 mb-4" />
+          <h3 class="text-lg font-semibold mb-2">No requests found</h3>
+          <p class="text-base-content/70">
+            <%= if @filter_status == "pending" do %>
+              No pending requests at this time. Great job keeping up!
+            <% else %>
+              No {status_text(@filter_status)} requests found.
+            <% end %>
+          </p>
+        </div>
+      <% else %>
+        <%!-- Requests List --%>
+        <div class="space-y-4">
+          <%= for request <- @requests do %>
+            <.request_card request={request}>
+              <:badges>
+                <span :if={request.tvdb_id} class="badge badge-sm badge-ghost">
+                  TVDB: {request.tvdb_id}
                 </span>
-              </div>
-              <div :if={request.status == "approved"} class="flex items-start gap-2 text-success">
-                <.icon name="hero-check-circle" class="w-4 h-4 mt-0.5" />
-                <div>
-                  <div>
-                    <%= if request.approved_by do %>
-                      Approved by {request.approved_by.email} on {format_date(request.approved_at)}
-                    <% else %>
-                      Approved automatically on {format_date(request.approved_at)}
-                    <% end %>
-                  </div>
-                  <div :if={request.admin_notes} class="text-xs mt-1">
-                    Admin notes: {request.admin_notes}
-                  </div>
-                </div>
-              </div>
-              <div :if={request.status == "rejected"} class="flex items-start gap-2 text-error">
-                <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
-                <div>
-                  <div>
-                    Rejected by {request.approved_by.email} on {format_date(request.rejected_at)}
-                  </div>
-                  <div :if={request.rejection_reason} class="text-xs mt-1">
-                    Reason: {request.rejection_reason}
-                  </div>
-                  <div :if={request.admin_notes} class="text-xs mt-1">
-                    Admin notes: {request.admin_notes}
-                  </div>
-                </div>
-              </div>
-            </:details>
+                <span :if={request.tmdb_id} class="badge badge-sm badge-ghost">
+                  TMDB: {request.tmdb_id}
+                </span>
+              </:badges>
 
-            <:actions>
-              <%= if request.status == "pending" do %>
-                <button
-                  class="btn btn-success btn-sm"
-                  phx-click="open_approve_modal"
-                  phx-value-id={request.id}
-                >
-                  <.icon name="hero-check" class="w-4 h-4" /> Approve
-                </button>
-                <button
-                  class="btn btn-error btn-sm"
-                  phx-click="open_reject_modal"
-                  phx-value-id={request.id}
-                >
-                  <.icon name="hero-x-mark" class="w-4 h-4" /> Reject
-                </button>
-              <% end %>
-              <.link
-                :if={request.status == "approved" and request.media_item}
-                navigate={~p"/media/#{request.media_item.id}"}
-                class="btn btn-sm btn-success"
-              >
-                <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
-              </.link>
-            </:actions>
-          </.request_card>
-        <% end %>
-      </div>
-    <% end %>
-
-    <%!-- Detail popup. config_open is false because this page never opens the
-          configure-before-adding dialog. --%>
-    <.live_component
-      module={MydiaWeb.Live.Components.TrendingDetailModal}
-      id="request-detail-modal"
-      item={@detail_item}
-      metadata={@detail_metadata}
-      loading={@detail_loading}
-      current_user={@current_user}
-      open={@detail_item != nil}
-      config_open={false}
-    >
-      <:actions>
-        <button class="btn btn-ghost" phx-click="close_details">Close</button>
-        <.link
-          :if={@detail_request && @detail_request.media_item}
-          navigate={~p"/media/#{@detail_request.media_item.id}"}
-          class="btn btn-primary"
-        >
-          <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
-        </.link>
-        <%= if @detail_request && @detail_request.status == "pending" do %>
-          <button
-            class="btn btn-error"
-            phx-click="open_reject_modal"
-            phx-value-id={@detail_request.id}
-          >
-            <.icon name="hero-x-mark" class="w-4 h-4" /> Reject
-          </button>
-          <button
-            class="btn btn-success"
-            phx-click="open_approve_modal"
-            phx-value-id={@detail_request.id}
-          >
-            <.icon name="hero-check" class="w-4 h-4" /> Approve
-          </button>
-        <% end %>
-      </:actions>
-    </.live_component>
-
-    <%!-- Approve Modal --%>
-    <%= if @show_approve_modal and @selected_request do %>
-      <div class="modal modal-open">
-        <div class="modal-box max-w-2xl">
-          <h3 class="font-bold text-lg mb-4">Approve Request</h3>
-          <div class="alert alert-success mb-4">
-            <.icon name="hero-information-circle" class="w-5 h-5" />
-            <div>
-              <p class="font-semibold">{@selected_request.title}</p>
-              <p class="text-sm">This will create the media item in your library.</p>
-            </div>
-          </div>
-          <.form
-            for={@approve_form}
-            phx-change="validate_approve"
-            phx-submit="submit_approve"
-            id="approve-form"
-          >
-            <.add_config_fields
-              :if={@approve_config}
-              config={@approve_config}
-              quality_profiles={@quality_profiles}
-            />
-            <div class="form-control mb-4">
-              <label class="label">
-                <span class="label-text font-semibold">Admin Notes (Optional)</span>
-              </label>
-              <textarea
-                name="approve[admin_notes]"
-                class="textarea textarea-bordered h-24"
-                placeholder="Add any notes about this approval..."
-              >{@approve_form[:admin_notes].value}</textarea>
-            </div>
-            <div class="modal-action">
-              <button type="button" class="btn btn-ghost" phx-click="close_approve_modal">
-                Cancel
-              </button>
-              <button
-                type="submit"
-                class="btn btn-success"
-                disabled={@approve_config && @approve_config.libraries == []}
-              >
-                <.icon name="hero-check" class="w-5 h-5" /> Approve & Add to Library
-              </button>
-            </div>
-          </.form>
-        </div>
-        <div class="modal-backdrop" phx-click="close_approve_modal"></div>
-      </div>
-    <% end %>
-
-    <%!-- Reject Modal --%>
-    <%= if @show_reject_modal and @selected_request do %>
-      <div class="modal modal-open">
-        <div class="modal-box max-w-lg">
-          <h3 class="font-bold text-lg mb-4">Reject Request</h3>
-          <div class="alert alert-error mb-4">
-            <.icon name="hero-information-circle" class="w-5 h-5" />
-            <div>
-              <p class="font-semibold">{@selected_request.title}</p>
-              <p class="text-sm">Please provide a reason for rejecting this request.</p>
-            </div>
-          </div>
-          <.form
-            for={@reject_form}
-            phx-change="validate_reject"
-            phx-submit="submit_reject"
-            id="reject-form"
-          >
-            <div class="form-control mb-4">
-              <label class="label">
-                <span class="label-text font-semibold">Rejection Reason</span>
-                <span class="label-text-alt text-error">*</span>
-              </label>
-              <textarea
-                name="reject[rejection_reason]"
-                class="textarea textarea-bordered h-24"
-                placeholder="Explain why this request is being rejected..."
-                required
-              >{@reject_form[:rejection_reason].value}</textarea>
-              <%= if @reject_form[:rejection_reason].errors != [] do %>
-                <label class="label">
-                  <span class="label-text-alt text-error">
-                    {Enum.map_join(@reject_form[:rejection_reason].errors, ", ", fn {msg, _} ->
-                      msg
-                    end)}
+              <:details>
+                <div class="flex items-center gap-2 text-base-content/70">
+                  <.icon name="hero-user" class="w-4 h-4" />
+                  <span>
+                    Requested by {request.requester.email} on {format_date(request.inserted_at)}
                   </span>
-                </label>
-              <% end %>
-            </div>
-            <div class="form-control mb-4">
-              <label class="label">
-                <span class="label-text font-semibold">Admin Notes (Optional)</span>
-              </label>
-              <textarea
-                name="reject[admin_notes]"
-                class="textarea textarea-bordered h-20"
-                placeholder="Add any additional notes..."
-              >{@reject_form[:admin_notes].value}</textarea>
-            </div>
-            <div class="modal-action">
-              <button type="button" class="btn btn-ghost" phx-click="close_reject_modal">
-                Cancel
-              </button>
-              <button type="submit" class="btn btn-error">
-                <.icon name="hero-x-mark" class="w-5 h-5" /> Reject Request
-              </button>
-            </div>
-          </.form>
+                </div>
+                <div
+                  :if={request.status == "approved"}
+                  class="flex items-start gap-2 text-success"
+                >
+                  <.icon name="hero-check-circle" class="w-4 h-4 mt-0.5" />
+                  <div>
+                    <div>
+                      <%= if request.approved_by do %>
+                        Approved by {request.approved_by.email} on {format_date(
+                          request.approved_at
+                        )}
+                      <% else %>
+                        Approved automatically on {format_date(request.approved_at)}
+                      <% end %>
+                    </div>
+                    <div :if={request.admin_notes} class="text-xs mt-1">
+                      Admin notes: {request.admin_notes}
+                    </div>
+                  </div>
+                </div>
+                <div :if={request.status == "rejected"} class="flex items-start gap-2 text-error">
+                  <.icon name="hero-x-circle" class="w-4 h-4 mt-0.5" />
+                  <div>
+                    <div>
+                      Rejected by {request.approved_by.email} on {format_date(request.rejected_at)}
+                    </div>
+                    <div :if={request.rejection_reason} class="text-xs mt-1">
+                      Reason: {request.rejection_reason}
+                    </div>
+                    <div :if={request.admin_notes} class="text-xs mt-1">
+                      Admin notes: {request.admin_notes}
+                    </div>
+                  </div>
+                </div>
+              </:details>
+
+              <:actions>
+                <%= if request.status == "pending" do %>
+                  <button
+                    class="btn btn-success btn-sm"
+                    phx-click="open_approve_modal"
+                    phx-value-id={request.id}
+                  >
+                    <.icon name="hero-check" class="w-4 h-4" /> Approve
+                  </button>
+                  <button
+                    class="btn btn-error btn-sm"
+                    phx-click="open_reject_modal"
+                    phx-value-id={request.id}
+                  >
+                    <.icon name="hero-x-mark" class="w-4 h-4" /> Reject
+                  </button>
+                <% end %>
+                <.link
+                  :if={request.status == "approved" and request.media_item}
+                  navigate={~p"/media/#{request.media_item.id}"}
+                  class="btn btn-sm btn-success"
+                >
+                  <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
+                </.link>
+              </:actions>
+            </.request_card>
+          <% end %>
         </div>
-        <div class="modal-backdrop" phx-click="close_reject_modal"></div>
-      </div>
-    <% end %>
-  </div>
+      <% end %>
+
+      <%!-- Detail popup. config_open is false because this page never opens the
+          configure-before-adding dialog. --%>
+      <.live_component
+        module={MydiaWeb.Live.Components.TrendingDetailModal}
+        id="request-detail-modal"
+        item={@detail_item}
+        metadata={@detail_metadata}
+        loading={@detail_loading}
+        current_user={@current_user}
+        open={@detail_item != nil}
+        config_open={false}
+      >
+        <:actions>
+          <button class="btn btn-ghost" phx-click="close_details">Close</button>
+          <.link
+            :if={@detail_request && @detail_request.media_item}
+            navigate={~p"/media/#{@detail_request.media_item.id}"}
+            class="btn btn-primary"
+          >
+            <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" /> View in Library
+          </.link>
+          <%= if @detail_request && @detail_request.status == "pending" do %>
+            <button
+              class="btn btn-error"
+              phx-click="open_reject_modal"
+              phx-value-id={@detail_request.id}
+            >
+              <.icon name="hero-x-mark" class="w-4 h-4" /> Reject
+            </button>
+            <button
+              class="btn btn-success"
+              phx-click="open_approve_modal"
+              phx-value-id={@detail_request.id}
+            >
+              <.icon name="hero-check" class="w-4 h-4" /> Approve
+            </button>
+          <% end %>
+        </:actions>
+      </.live_component>
+
+      <%!-- Approve Modal --%>
+      <%= if @show_approve_modal and @selected_request do %>
+        <div class="modal modal-open">
+          <div class="modal-box max-w-2xl">
+            <h3 class="font-bold text-lg mb-4">Approve Request</h3>
+            <div class="alert alert-success mb-4">
+              <.icon name="hero-information-circle" class="w-5 h-5" />
+              <div>
+                <p class="font-semibold">{@selected_request.title}</p>
+                <p class="text-sm">This will create the media item in your library.</p>
+              </div>
+            </div>
+            <.form
+              for={@approve_form}
+              phx-change="validate_approve"
+              phx-submit="submit_approve"
+              id="approve-form"
+            >
+              <.add_config_fields
+                :if={@approve_config}
+                config={@approve_config}
+                quality_profiles={@quality_profiles}
+              />
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-semibold">Admin Notes (Optional)</span>
+                </label>
+                <textarea
+                  name="approve[admin_notes]"
+                  class="textarea textarea-bordered h-24"
+                  placeholder="Add any notes about this approval..."
+                >{@approve_form[:admin_notes].value}</textarea>
+              </div>
+              <div class="modal-action">
+                <button type="button" class="btn btn-ghost" phx-click="close_approve_modal">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  class="btn btn-success"
+                  disabled={@approve_config && @approve_config.libraries == []}
+                >
+                  <.icon name="hero-check" class="w-5 h-5" /> Approve & Add to Library
+                </button>
+              </div>
+            </.form>
+          </div>
+          <div class="modal-backdrop" phx-click="close_approve_modal"></div>
+        </div>
+      <% end %>
+
+      <%!-- Reject Modal --%>
+      <%= if @show_reject_modal and @selected_request do %>
+        <div class="modal modal-open">
+          <div class="modal-box max-w-lg">
+            <h3 class="font-bold text-lg mb-4">Reject Request</h3>
+            <div class="alert alert-error mb-4">
+              <.icon name="hero-information-circle" class="w-5 h-5" />
+              <div>
+                <p class="font-semibold">{@selected_request.title}</p>
+                <p class="text-sm">Please provide a reason for rejecting this request.</p>
+              </div>
+            </div>
+            <.form
+              for={@reject_form}
+              phx-change="validate_reject"
+              phx-submit="submit_reject"
+              id="reject-form"
+            >
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-semibold">Rejection Reason</span>
+                  <span class="label-text-alt text-error">*</span>
+                </label>
+                <textarea
+                  name="reject[rejection_reason]"
+                  class="textarea textarea-bordered h-24"
+                  placeholder="Explain why this request is being rejected..."
+                  required
+                >{@reject_form[:rejection_reason].value}</textarea>
+                <%= if @reject_form[:rejection_reason].errors != [] do %>
+                  <label class="label">
+                    <span class="label-text-alt text-error">
+                      {Enum.map_join(@reject_form[:rejection_reason].errors, ", ", fn {msg, _} ->
+                        msg
+                      end)}
+                    </span>
+                  </label>
+                <% end %>
+              </div>
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-semibold">Admin Notes (Optional)</span>
+                </label>
+                <textarea
+                  name="reject[admin_notes]"
+                  class="textarea textarea-bordered h-20"
+                  placeholder="Add any additional notes..."
+                >{@reject_form[:admin_notes].value}</textarea>
+              </div>
+              <div class="modal-action">
+                <button type="button" class="btn btn-ghost" phx-click="close_reject_modal">
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-error">
+                  <.icon name="hero-x-mark" class="w-5 h-5" /> Reject Request
+                </button>
+              </div>
+            </.form>
+          </div>
+          <div class="modal-backdrop" phx-click="close_reject_modal"></div>
+        </div>
+      <% end %>
+    </div>
+  </.admin_page>
 </Layouts.app>

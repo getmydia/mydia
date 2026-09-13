@@ -40,9 +40,9 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
     end
 
     test "the nav link is present", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/dashboard")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
-      assert has_element?(view, "a[href='/admin/import-lists']")
+      assert has_element?(view, "a#nav-import-lists[href='/admin/import-lists']")
     end
 
     test "the auto-add warning explains what turning it on does", %{conn: conn} do
@@ -71,14 +71,14 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
     test "mounting redirects instead of rendering the page", %{conn: conn} do
       assert {:error, {:redirect, redirect}} = live(conn, ~p"/admin/import-lists")
 
-      assert redirect.to == ~p"/admin/config"
+      assert redirect.to == ~p"/admin/status"
       assert redirect.flash["error"] =~ "disabled"
     end
 
     test "the nav link is absent", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/dashboard")
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
-      refute has_element?(view, "a[href='/admin/import-lists']")
+      refute has_element?(view, "a#nav-import-lists")
     end
   end
 

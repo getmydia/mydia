@@ -42,7 +42,6 @@ defmodule MydiaWeb.AdminTrashLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Trash")
-     |> assign(:active_tab, :trash)
      |> assign(:reason, nil)
      |> assign(:page, 0)
      |> assign(:page_size, @per_page)

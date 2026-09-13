@@ -1,5 +1,8 @@
 <Layouts.app {assigns}>
-  <.admin_page active_tab={@active_tab}>
+  <.admin_page page={:clients} count={length(@download_clients)}>
+    <:actions>
+      <MydiaWeb.AdminDownloadClientsLive.Components.header_actions />
+    </:actions>
     <MydiaWeb.AdminDownloadClientsLive.Components.download_clients_tab
       download_clients={@download_clients}
       client_health={@client_health}
