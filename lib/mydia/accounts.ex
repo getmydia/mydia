@@ -13,7 +13,16 @@ defmodule Mydia.Accounts do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Accounts.{User, ApiKey, UserPreference, ApiKeyRateLimiter, Avatar, UsernameSource}
+
+  alias Mydia.Accounts.{
+    User,
+    ApiKey,
+    UserPreference,
+    ApiKeyRateLimiter,
+    Avatar,
+    UsernameSource,
+    HomeLayout
+  }
 
   @changelog_key "last_seen_changelog_version"
   @anime_nudge_key "anime_nudge_dismissed"
@@ -653,6 +662,43 @@ defmodule Mydia.Accounts do
     user
     |> get_user_preference!()
     |> update_preference(%{"player_banner_dismissed" => true})
+  end
+
+  @doc """
+  Gets the resolved list of home widget keys (as atoms) for a user.
+  """
+  @spec home_widgets(User.t() | nil) :: [atom()]
+  def home_widgets(nil), do: HomeLayout.default_keys("guest")
+
+  def home_widgets(%User{} = user) do
+    pref = get_user_preference!(user)
+    stored = Map.get(pref.preferences || %{}, "home_widgets")
+    HomeLayout.resolve(user, stored)
+  end
+
+  @doc """
+  Saves the list of visible home widget keys for a user.
+  """
+  @spec put_home_widgets(User.t(), [atom() | String.t()]) ::
+          {:ok, UserPreference.t()} | {:error, Ecto.Changeset.t()}
+  def put_home_widgets(%User{} = user, keys) when is_list(keys) do
+    string_keys = Enum.map(keys, &HomeLayout.to_string_key/1)
+
+    user
+    |> get_user_preference!()
+    |> update_preference(%{"home_widgets" => string_keys})
+  end
+
+  @doc """
+  Resets the home layout preferences for a user, reverting to role defaults.
+  """
+  @spec reset_home_widgets(User.t()) ::
+          {:ok, UserPreference.t()} | {:error, Ecto.Changeset.t()}
+  def reset_home_widgets(%User{} = user) do
+    user
+    |> get_user_preference!()
+    |> UserPreference.delete_preference_changeset("home_widgets")
+    |> Repo.update()
   end
 
   @doc """

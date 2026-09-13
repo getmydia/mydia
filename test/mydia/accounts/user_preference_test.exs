@@ -63,6 +63,70 @@ defmodule Mydia.Accounts.UserPreferenceTest do
     end
   end
 
+  describe "home_widgets validation" do
+    test "accepts a valid list of known widget strings" do
+      changeset =
+        UserPreference.changeset(%UserPreference{}, %{
+          preferences: %{"home_widgets" => ["library_stats", "trending_movies"]}
+        })
+
+      assert changeset.valid?
+    end
+
+    test "accepts an empty list" do
+      changeset =
+        UserPreference.changeset(%UserPreference{}, %{
+          preferences: %{"home_widgets" => []}
+        })
+
+      assert changeset.valid?
+    end
+
+    test "rejects unknown widget keys" do
+      changeset =
+        UserPreference.changeset(%UserPreference{}, %{
+          preferences: %{"home_widgets" => ["library_stats", "invalid_key"]}
+        })
+
+      refute changeset.valid?
+      assert %{preferences: [_ | _]} = errors_on(changeset)
+    end
+
+    test "rejects duplicate widget keys" do
+      changeset =
+        UserPreference.changeset(%UserPreference{}, %{
+          preferences: %{"home_widgets" => ["library_stats", "library_stats"]}
+        })
+
+      refute changeset.valid?
+      assert %{preferences: [_ | _]} = errors_on(changeset)
+    end
+
+    test "rejects non-list and non-string elements" do
+      for invalid <- ["library_stats", 123, [:library_stats], [123]] do
+        changeset =
+          UserPreference.changeset(%UserPreference{}, %{
+            preferences: %{"home_widgets" => invalid}
+          })
+
+        refute changeset.valid?, "expected #{inspect(invalid)} to be invalid"
+      end
+    end
+  end
+
+  describe "delete_preference_changeset/2" do
+    test "removes the given key from preferences" do
+      pref = %UserPreference{
+        preferences: %{"theme" => "dark", "home_widgets" => ["library_stats"]}
+      }
+
+      changeset = UserPreference.delete_preference_changeset(pref, "home_widgets")
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_change(changeset, :preferences) == %{"theme" => "dark"}
+    end
+  end
+
   describe "update_preference/2 reference validation" do
     test "rejects a quality profile id that does not exist" do
       user = user_fixture()
