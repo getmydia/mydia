@@ -3,9 +3,8 @@ defmodule MydiaWeb.AdminNav.Page do
   One admin page in `MydiaWeb.AdminNav`.
 
   `requires` names the feature gate that hides the page: `:player`
-  (`Mydia.Player.enabled?/0`) or `:import_lists`
-  (`Mydia.ImportLists.FeatureFlags.enabled?/0`). It stays an atom so the struct
-  is plain data; `MydiaWeb.AdminNav.visible?/1` interprets it.
+  (`Mydia.Player.enabled?/0`). It stays an atom so the struct is plain data;
+  `MydiaWeb.AdminNav.visible?/1` interprets it.
   """
 
   @type hub :: :configuration | :administration | :system
@@ -17,7 +16,7 @@ defmodule MydiaWeb.AdminNav.Page do
           description: String.t(),
           icon: String.t(),
           path: String.t(),
-          requires: nil | :player | :import_lists
+          requires: nil | :player
         }
 
   @enforce_keys [:key, :hub, :label, :description, :icon, :path]

@@ -230,6 +230,18 @@ defmodule MydiaWeb.Layouts do
                   </span>
                 </.link>
               </li>
+              <li :if={
+                @current_user && @current_user.role == "admin" &&
+                  Mydia.ImportLists.FeatureFlags.enabled?()
+              }>
+                <.link
+                  id="nav-import-lists"
+                  navigate={~p"/admin/import-lists"}
+                  class={nav_active?(@current_path, "/admin/import-lists", false) && "menu-active"}
+                >
+                  <.icon name="hero-arrow-down-on-square-stack" class="w-5 h-5" /> Import Lists
+                </.link>
+              </li>
               <li>
                 <.link
                   navigate="/downloads"
@@ -255,7 +267,8 @@ defmodule MydiaWeb.Layouts do
                   <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Search
                 </.link>
               </li>
-              <li>
+              <%!-- Admins reach Activity as a System tab. --%>
+              <li :if={!(@current_user && @current_user.role == "admin")}>
                 <.link
                   navigate="/activity"
                   class={nav_active?(@current_path, "/activity", false) && "menu-active"}

@@ -89,17 +89,6 @@ defmodule MydiaWeb.AdminNavTest do
       refute :remote_access in keys
       assert :status in keys
     end
-
-    test "hides Import Lists when its flag is off" do
-      original = Application.get_env(:mydia, :features, [])
-      Application.put_env(:mydia, :features, Keyword.put(original, :import_lists_enabled, false))
-      on_exit(fn -> Application.put_env(:mydia, :features, original) end)
-
-      keys = hub_keys(:configuration)
-
-      refute :import_lists in keys
-      assert :quality in keys
-    end
   end
 
   describe "lookups" do
@@ -130,14 +119,23 @@ defmodule MydiaWeb.AdminNavTest do
       assert AdminNav.hub_landing_path(:administration) == "/admin/requests"
       assert AdminNav.hub_landing_path(:system) == "/admin/status"
     end
+
+    test "Activity is a System page at /activity and Import Lists is not a hub page" do
+      assert %Page{hub: :system, path: "/activity"} = AdminNav.page_for_path("/activity")
+      refute :import_lists in AdminNav.keys()
+      assert AdminNav.page_for_path("/admin/import-lists") == nil
+    end
   end
 
   defp hub_keys(hub), do: hub |> AdminNav.visible_pages() |> Enum.map(& &1.key)
 
-  # ErrorTracker mounts its own live routes under /admin/errors, and
-  # /admin/transcodes is a bare page the Dashboard already covers.
+  # ErrorTracker mounts its own live routes under /admin/errors,
+  # /admin/transcodes is a bare page the Dashboard already covers, and
+  # /admin/import-lists is a Management page that keeps its admin-only URL.
   defp unlisted?("/admin/transcodes"), do: true
   defp unlisted?("/admin/errors"), do: true
   defp unlisted?("/admin/errors/" <> _), do: true
+  # A Management page that keeps its admin-only URL (spec, Revision 2).
+  defp unlisted?("/admin/import-lists"), do: true
   defp unlisted?(_path), do: false
 end

@@ -9,6 +9,6 @@ defmodule MydiaWeb.ActivityLive.IndexSimpleTest do
     conn = log_in_user_session(conn, admin)
 
     {:ok, _view, html} = live(conn, ~p"/activity")
-    assert html =~ "Activity Feed"
+    assert html =~ "Activity"
   end
 end

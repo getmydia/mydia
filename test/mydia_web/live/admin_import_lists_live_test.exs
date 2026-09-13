@@ -42,7 +42,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
     test "the nav link is present", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
-      assert has_element?(view, "a[href='/admin/import-lists']")
+      assert has_element?(view, "a#nav-import-lists[href='/admin/import-lists']")
     end
 
     test "the auto-add warning explains what turning it on does", %{conn: conn} do
@@ -78,7 +78,7 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
     test "the nav link is absent", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/quality")
 
-      refute has_element?(view, "a[href='/admin/import-lists']")
+      refute has_element?(view, "a#nav-import-lists")
     end
   end
 

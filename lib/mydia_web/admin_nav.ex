@@ -32,7 +32,6 @@ defmodule MydiaWeb.AdminNav do
     :library_paths,
     :path_mappings,
     :subtitle_providers,
-    :import_lists,
     :media_servers,
     :requests,
     :jobs,
@@ -41,6 +40,7 @@ defmodule MydiaWeb.AdminNav do
     :trash,
     :status,
     :dashboard,
+    :activity,
     :settings,
     :users,
     :api_keys,
@@ -128,15 +128,6 @@ defmodule MydiaWeb.AdminNav do
         path: ~p"/admin/subtitle-providers"
       },
       %Page{
-        key: :import_lists,
-        hub: :configuration,
-        label: "Import Lists",
-        description: "Lists that add media automatically",
-        icon: "hero-arrow-down-on-square-stack",
-        path: ~p"/admin/import-lists",
-        requires: :import_lists
-      },
-      %Page{
         key: :media_servers,
         hub: :configuration,
         label: "Media Servers",
@@ -202,6 +193,14 @@ defmodule MydiaWeb.AdminNav do
         requires: :player
       },
       %Page{
+        key: :activity,
+        hub: :system,
+        label: "Activity",
+        description: "Recent events and system activity",
+        icon: "hero-clock",
+        path: ~p"/activity"
+      },
+      %Page{
         key: :settings,
         hub: :system,
         label: "Settings",
@@ -253,7 +252,6 @@ defmodule MydiaWeb.AdminNav do
   @spec visible?(Page.t()) :: boolean()
   def visible?(%Page{requires: nil}), do: true
   def visible?(%Page{requires: :player}), do: Mydia.Player.enabled?()
-  def visible?(%Page{requires: :import_lists}), do: Mydia.ImportLists.FeatureFlags.enabled?()
 
   @doc "The page registered under `key`. Raises `ArgumentError` for an unknown key."
   @spec fetch!(atom()) :: Page.t()

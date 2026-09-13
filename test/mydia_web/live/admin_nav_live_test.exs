@@ -139,12 +139,25 @@ defmodule MydiaWeb.AdminNavLiveTest do
       refute has_element?(view, "h1", "Manage Media Requests")
     end
 
-    test "Import Lists puts its sync and create buttons in the header", %{conn: conn} do
+    test "Import Lists is a Management page with its own header", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/import-lists")
 
-      assert has_element?(view, "#admin-page-hub", "Configuration")
-      assert has_element?(view, "#admin-page-actions button[phx-click=sync_all]")
-      assert has_element?(view, "#admin-page-actions button[phx-click=new_list]")
+      assert has_element?(view, "h1", "Import Lists")
+      assert has_element?(view, "button[phx-click=sync_all]")
+      assert has_element?(view, "button[phx-click=new_list]")
+      refute has_element?(view, "#admin-page-tabs")
+      refute has_element?(view, "#admin-page-hub")
+      assert has_element?(view, ~s|a#nav-import-lists.menu-active[href="/admin/import-lists"]|)
+      refute has_element?(view, "#admin-tab-import_lists")
+    end
+
+    test "Activity is a System tab for admins", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/activity")
+
+      assert has_element?(view, "#admin-page-hub", "System")
+      assert has_element?(view, ~s|a#admin-tab-activity.tab-active[href="/activity"]|)
+      assert has_element?(view, "a#admin-nav-system.menu-active")
+      refute has_element?(view, ~s|nav a[href="/activity"]:not([role=tab])|)
     end
 
     test "Release Blacklist keeps its TTL note in the body", %{conn: conn} do
@@ -207,5 +220,17 @@ defmodule MydiaWeb.AdminNavLiveTest do
 
     refute has_element?(view, "li.menu-title", "Admin")
     refute has_element?(view, "a#admin-nav-configuration")
+    refute has_element?(view, "a#nav-import-lists")
+    assert has_element?(view, ~s|nav a[href="/activity"]|)
+  end
+
+  test "a non-admin gets Activity without admin chrome" do
+    conn = log_in_user(build_conn(), user_fixture())
+
+    {:ok, view, _html} = live(conn, ~p"/activity")
+
+    assert has_element?(view, "h1#admin-page-title", "Activity")
+    refute has_element?(view, "#admin-page-hub")
+    refute has_element?(view, "#admin-page-tabs")
   end
 end
