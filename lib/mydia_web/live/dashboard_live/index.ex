@@ -157,7 +157,9 @@ defmodule MydiaWeb.DashboardLive.Index do
             Mydia.Indexers.FlareSolverr.status()
           end)
         else
-          assign(s, :flaresolverr_status, :disabled)
+          s
+          |> cancel_async(:flaresolverr_status)
+          |> assign(:flaresolverr_status, :disabled)
         end
       end)
     else
@@ -456,12 +458,20 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   def handle_async(:flaresolverr_status, {:ok, %{status: status}}, socket) do
-    {:noreply, assign(socket, :flaresolverr_status, status)}
+    if socket.assigns[:flaresolverr_enabled] do
+      {:noreply, assign(socket, :flaresolverr_status, status)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_async(:flaresolverr_status, {:exit, reason}, socket) do
-    Logger.warning("FlareSolverr probe failed in dashboard health widget: #{inspect(reason)}")
-    {:noreply, assign(socket, :flaresolverr_status, :unhealthy)}
+    if socket.assigns[:flaresolverr_enabled] do
+      Logger.warning("FlareSolverr probe failed in dashboard health widget: #{inspect(reason)}")
+      {:noreply, assign(socket, :flaresolverr_status, :unhealthy)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -598,7 +608,9 @@ defmodule MydiaWeb.DashboardLive.Index do
               Mydia.Indexers.FlareSolverr.status()
             end)
           else
-            assign(s, :flaresolverr_status, :disabled)
+            s
+            |> cancel_async(:flaresolverr_status)
+            |> assign(:flaresolverr_status, :disabled)
           end
         end)
 
