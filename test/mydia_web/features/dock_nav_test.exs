@@ -115,20 +115,9 @@ defmodule MydiaWeb.Features.DockNavTest do
         description: "the drawer sidebar finishing its slide-in"
       )
 
-      # The sidebar scrolls: scrollHeight runs past the viewport once the
-      # admin nav section renders. The user menu only reaches the bottom edge
-      # of the screen, where the dock floats, when it is scrolled all the way
-      # down, so probe that worst case rather than the initial position.
-      scroll_bottom = """
-      var side = document.querySelector('.drawer-side');
-      if (!side) { return '__missing__'; }
-      side.scrollTop = side.scrollHeight;
-      return side.scrollTop;
-      """
-
-      refute eval_js(session, scroll_bottom) == "__missing__",
-             "expected a .drawer-side element to scroll"
-
+      # The account menu sits under the logo, so it is on screen as soon as
+      # the drawer finishes opening. It must not be covered by the dock or
+      # the drawer overlay.
       # `refute_covered/2` skips sample points that fall outside the viewport
       # (elementFromPoint returns null there), so an off-screen element would
       # pass vacuously. Assert the rect is on screen first, so the cover check

@@ -156,6 +156,92 @@ defmodule MydiaWeb.Layouts do
             </div>
           </div>
 
+          <!-- Account menu -->
+          <div id="sidebar-account" class="px-2 py-2 border-b border-base-content/10">
+            <div class="dropdown w-full">
+              <label
+                id="sidebar-user-menu"
+                tabindex="0"
+                class="btn btn-ghost w-full justify-start gap-3 h-auto py-2"
+              >
+                <div class="avatar placeholder">
+                  <div class="bg-neutral text-neutral-content rounded-full w-8 overflow-hidden">
+                    <%= if @current_user && @current_user.avatar_url do %>
+                      <img
+                        src={@current_user.avatar_url}
+                        alt="Avatar"
+                        class="w-full h-full object-cover"
+                      />
+                    <% else %>
+                      <span class="text-xs">
+                        <%= if @current_user do %>
+                          {String.upcase(
+                            String.slice(@current_user.username || @current_user.email || "U", 0..1)
+                          )}
+                        <% else %>
+                          U
+                        <% end %>
+                      </span>
+                    <% end %>
+                  </div>
+                </div>
+                <div class="flex-1 text-left">
+                  <%= if @current_user do %>
+                    <div class="text-sm font-medium">
+                      {@current_user.username || @current_user.email}
+                    </div>
+                    <div class="text-xs opacity-60 capitalize">{@current_user.role}</div>
+                  <% else %>
+                    <span>Guest</span>
+                  <% end %>
+                </div>
+                <.icon name="hero-chevron-down" class="w-4 h-4" />
+              </label>
+              <ul
+                tabindex="0"
+                class="dropdown-content menu z-50 mt-1 w-full p-2 shadow-lg bg-base-200 rounded-box"
+              >
+                <li>
+                  <.link
+                    id="user-menu-profile"
+                    navigate={~p"/profile"}
+                    class={nav_active?(@current_path, "/profile", false) && "menu-active"}
+                  >
+                    <.icon name="hero-user-circle" class="w-4 h-4" /> Profile
+                  </.link>
+                </li>
+                <li>
+                  <.link
+                    id="user-menu-integrations"
+                    navigate={~p"/integrations"}
+                    class={nav_active?(@current_path, "/integrations", false) && "menu-active"}
+                  >
+                    <.icon name="hero-puzzle-piece" class="w-4 h-4" /> Integrations
+                  </.link>
+                </li>
+                <li :if={Mydia.Player.enabled?()}>
+                  <.link
+                    id="user-menu-devices"
+                    navigate={~p"/devices"}
+                    class={nav_active?(@current_path, "/devices", false) && "menu-active"}
+                  >
+                    <.icon name="hero-device-phone-mobile" class="w-4 h-4" /> Devices
+                  </.link>
+                </li>
+                <li>
+                  <.link id="user-menu-changelog" navigate={~p"/changelog"}>
+                    <.icon name="hero-sparkles" class="w-4 h-4" /> What's new
+                  </.link>
+                </li>
+                <li class="mt-2 border-t border-base-300 pt-2">
+                  <a href="/auth/logout" class="text-error">
+                    <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Logout
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
           <!-- Navigation menu -->
           <nav class="flex-1 overflow-y-auto">
             <ul class="menu w-full space-y-1 px-2 py-4">
@@ -284,22 +370,6 @@ defmodule MydiaWeb.Layouts do
                   <.icon name="hero-folder" class="w-5 h-5" /> Collections
                 </.link>
               </li>
-              <li>
-                <.link
-                  navigate="/integrations"
-                  class={nav_active?(@current_path, "/integrations", false) && "menu-active"}
-                >
-                  <.icon name="hero-puzzle-piece" class="w-5 h-5" /> Integrations
-                </.link>
-              </li>
-              <li :if={Mydia.Player.enabled?()}>
-                <.link
-                  navigate="/devices"
-                  class={nav_active?(@current_path, "/devices", false) && "menu-active"}
-                >
-                  <.icon name="hero-device-phone-mobile" class="w-5 h-5" /> Devices
-                </.link>
-              </li>
               <%= if @current_user && @current_user.role == "admin" do %>
                 <li class="menu-title mt-4">
                   <span>Admin</span>
@@ -349,7 +419,7 @@ defmodule MydiaWeb.Layouts do
             </div>
           <% end %>
 
-          <!-- User menu at bottom -->
+          <!-- Feedback and theme -->
           <div class="space-y-3 p-4 border-t border-base-300">
             <button
               :if={@feedback_enabled?}
@@ -366,63 +436,6 @@ defmodule MydiaWeb.Layouts do
                 </span>
               </span>
             </button>
-
-            <div class="dropdown dropdown-top dropdown-end w-full">
-              <label id="sidebar-user-menu" tabindex="0" class="btn btn-ghost w-full justify-start">
-                <div class="avatar placeholder">
-                  <div class="bg-neutral text-neutral-content rounded-full w-8 overflow-hidden">
-                    <%= if @current_user && @current_user.avatar_url do %>
-                      <img
-                        src={@current_user.avatar_url}
-                        alt="Avatar"
-                        class="w-full h-full object-cover"
-                      />
-                    <% else %>
-                      <span class="text-xs">
-                        <%= if @current_user do %>
-                          {String.upcase(
-                            String.slice(@current_user.username || @current_user.email || "U", 0..1)
-                          )}
-                        <% else %>
-                          U
-                        <% end %>
-                      </span>
-                    <% end %>
-                  </div>
-                </div>
-                <div class="flex-1 text-left">
-                  <%= if @current_user do %>
-                    <div class="text-sm font-medium">
-                      {@current_user.username || @current_user.email}
-                    </div>
-                    <div class="text-xs opacity-60 capitalize">{@current_user.role}</div>
-                  <% else %>
-                    <span>Guest</span>
-                  <% end %>
-                </div>
-                <.icon name="hero-chevron-up" class="w-4 h-4" />
-              </label>
-              <ul
-                tabindex="0"
-                class="dropdown-content menu p-2 shadow-lg bg-base-200 rounded-box w-52 mb-2"
-              >
-                <li>
-                  <a href="/profile">
-                    <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
-                  </a>
-                </li>
-                <li>
-                  <.link navigate={~p"/changelog"}>
-                    <.icon name="hero-sparkles" class="w-4 h-4" /> What's new
-                  </.link>
-                </li>
-                <li class="mt-2 border-t border-base-300 pt-2">
-                  <a href="/auth/logout" class="text-error">
-                    <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Logout
-                  </a>
-                </li>
-              </ul>
-            </div>
 
             <!-- Theme toggle (desktop only) -->
             <div class="hidden lg:flex justify-center">
