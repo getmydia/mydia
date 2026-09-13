@@ -128,4 +128,55 @@ defmodule MydiaWeb.DashboardLive.Components do
     </div>
     """
   end
+
+  @doc """
+  Renders a consistent quick action card shortcut.
+  """
+  attr :id, :string, default: nil
+  attr :navigate, :string, required: true
+  attr :icon, :string, required: true
+  attr :title, :string, required: true
+  attr :description, :string, required: true
+  attr :color, :string, default: "primary"
+  attr :badge, :any, default: nil
+  attr :border_class, :string, default: nil
+
+  def quick_action_card(assigns) do
+    ~H"""
+    <.link
+      id={@id}
+      navigate={@navigate}
+      class={[
+        "card bg-base-100 shadow-sm hover:shadow-md transition-shadow",
+        @border_class
+      ]}
+    >
+      <div class="card-body flex-row items-center gap-4">
+        <div class={[
+          "w-12 h-12 rounded-full flex items-center justify-center shrink-0",
+          color_bg_class(@color)
+        ]}>
+          <.icon name={@icon} class={"w-6 h-6 #{color_text_class(@color)}"} />
+        </div>
+        <div class="flex-1 min-w-0">
+          <h3 class="font-semibold truncate">{@title}</h3>
+          <p class="text-sm text-base-content/60 truncate">{@description}</p>
+        </div>
+        <div :if={@badge} class="badge badge-warning shrink-0">{@badge}</div>
+      </div>
+    </.link>
+    """
+  end
+
+  defp color_bg_class("primary"), do: "bg-primary/10"
+  defp color_bg_class("secondary"), do: "bg-secondary/10"
+  defp color_bg_class("accent"), do: "bg-accent/10"
+  defp color_bg_class("warning"), do: "bg-warning/10"
+  defp color_bg_class(_), do: "bg-base-200"
+
+  defp color_text_class("primary"), do: "text-primary"
+  defp color_text_class("secondary"), do: "text-secondary"
+  defp color_text_class("accent"), do: "text-accent"
+  defp color_text_class("warning"), do: "text-warning"
+  defp color_text_class(_), do: "text-base-content"
 end

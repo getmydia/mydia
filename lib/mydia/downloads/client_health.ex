@@ -110,6 +110,15 @@ defmodule Mydia.Downloads.ClientHealth do
     GenServer.cast(__MODULE__, :refresh_all)
   end
 
+  @doc """
+  Maps download client configs to health results for display, reading cache only.
+  Never performs I/O.
+  """
+  @spec status_map([struct()]) :: %{String.t() => Health.health_result()}
+  def status_map(configs \\ Settings.list_download_client_configs()) do
+    Map.new(configs, fn config -> {config.id, cached_status(config)} end)
+  end
+
   ## GenServer Implementation
 
   @impl true
@@ -270,5 +279,22 @@ defmodule Mydia.Downloads.ClientHealth do
       details: %{},
       error: error_message
     }
+  end
+
+  defp cached_status(%{enabled: false}), do: disabled_result()
+
+  defp cached_status(config) do
+    case get_cached_health(config.id) do
+      {:ok, health} -> health
+      :not_found -> unknown_result()
+    end
+  end
+
+  defp unknown_result do
+    %{status: :unknown, checked_at: nil, details: %{}, error: nil}
+  end
+
+  defp disabled_result do
+    %{status: :disabled, checked_at: nil, details: %{}, error: nil}
   end
 end

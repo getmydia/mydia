@@ -6,15 +6,19 @@ defmodule MydiaWeb.DashboardLive.Index do
   require Logger
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.HomeLayout
+  alias Mydia.Health.Rollup
+  alias Mydia.Downloads.ClientHealth
   alias Mydia.Media
   alias Mydia.Media.RecentlyAdded
   alias Mydia.Library
   alias Mydia.Downloads
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
-  alias Mydia.MediaRequests
   alias Mydia.Accounts.Authorization
   alias MydiaWeb.DashboardLive.Components
+  alias MydiaWeb.DashboardLive.HealthComponents
+  alias MydiaWeb.DashboardLive.EditHomeComponents
   alias MydiaWeb.Live.Authorization, as: LiveAuthorization
   alias MydiaWeb.Live.Helpers.DetailModal
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
@@ -30,109 +34,145 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
+    user = socket.assigns[:current_user]
+    home_widgets = Accounts.home_widgets(user)
+
+    socket =
+      socket
+      |> assign(:editing_home, false)
+      |> assign(:home_widgets, home_widgets)
+      |> assign(:trending_rail_limit, @trending_rail_limit)
+      |> assign(:trending_prerequisites_loaded, false)
+      |> assign(:library_status_map, %{})
+      |> assign(:request_status_map, %{})
+      |> assign(:quality_profiles, [])
+      |> assign(:adding_item_ids, MapSet.new())
+      |> assign(:requesting_item_id, nil)
+      |> DetailModal.init()
+      |> assign(:add_config, nil)
+      |> assign_initial_widget_values()
+
     socket =
       if connected?(socket) do
         Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
 
-        socket
-        |> assign(:trending_movies_loading, true)
-        |> assign(:trending_tv_loading, true)
-        |> assign(:trending_movies, [])
-        |> assign(:trending_tv, [])
-        |> assign(:trending_rail_limit, @trending_rail_limit)
-        |> assign(:library_status_map, %{})
-        |> assign(:adding_item_ids, MapSet.new())
-        |> assign(:requesting_item_id, nil)
-        |> assign(:request_status_map, %{})
-        |> DetailModal.init()
-        |> assign(:add_config, nil)
-        |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
-        |> load_dashboard_data()
+        Enum.reduce(home_widgets, socket, fn key, acc ->
+          load_widget(acc, key)
+        end)
       else
         socket
-        |> assign(:trending_movies_loading, false)
-        |> assign(:trending_tv_loading, false)
-        |> assign(:trending_movies, [])
-        |> assign(:trending_tv, [])
-        |> assign(:trending_rail_limit, @trending_rail_limit)
-        |> assign(:movie_count, 0)
-        |> assign(:tv_show_count, 0)
-        |> assign(:active_downloads_count, 0)
-        |> assign(:total_storage, "0 GB")
-        |> assign(:recent_episodes, [])
-        |> assign(:upcoming_episodes, [])
-        |> assign(:recently_added, [])
-        |> assign(:library_status_map, %{})
-        |> assign(:adding_item_ids, MapSet.new())
-        |> assign(:requesting_item_id, nil)
-        |> assign(:request_status_map, %{})
-        |> assign(:pending_requests_count, 0)
-        |> DetailModal.init()
-        |> assign(:add_config, nil)
-        |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
       end
 
     {:ok, socket}
   end
 
-  @impl true
-  def handle_params(_params, _url, socket) do
-    {:noreply,
-     socket
-     |> assign(:page_title, "Home")}
+  defp assign_initial_widget_values(socket) do
+    socket
+    |> assign(:movie_count, 0)
+    |> assign(:tv_show_count, 0)
+    |> assign(:active_downloads_count, 0)
+    |> assign(:total_storage, "0 GB")
+    |> assign(:recent_episodes, [])
+    |> assign(:upcoming_episodes, [])
+    |> assign(:recently_added, [])
+    |> assign(:recently_added_movies, [])
+    |> assign(:recently_added_tv, [])
+    |> assign(:trending_movies, [])
+    |> assign(:trending_tv, [])
+    |> assign(:trending_movies_loading, false)
+    |> assign(:trending_tv_loading, false)
+    |> assign(:pending_requests_count, socket.assigns[:pending_requests_count] || 0)
+    |> assign(:clients_rollup, %Rollup{
+      healthy: 0,
+      unhealthy: 0,
+      unknown: 0,
+      total: 0,
+      state: :none
+    })
+    |> assign(:indexers_rollup, %Rollup{
+      healthy: 0,
+      unhealthy: 0,
+      unknown: 0,
+      total: 0,
+      state: :none
+    })
+    |> assign(:media_servers_rollup, %Rollup{
+      healthy: 0,
+      unhealthy: 0,
+      unknown: 0,
+      total: 0,
+      state: :none
+    })
+    |> assign(:duplicates_state, :checking)
+    |> assign(:duplicates_count, 0)
+    |> assign(:trash_summary, %{count: 0, bytes: 0})
+    |> assign(:flaresolverr_enabled, false)
+    |> assign(:flaresolverr_status, :checking)
   end
 
-  defp load_dashboard_data(socket) do
-    # Load basic stats. The nav hook (MydiaWeb.Live.UserAuth.on_mount
-    # :load_navigation_data) runs before mount/3 and already assigns
-    # :excluded_categories, so reuse it here rather than recomputing it. This
-    # keeps the dashboard's :movie_count / :tv_show_count assigns in sync with
-    # the sidebar badges, which the same assign keys drive in Layouts.app.
+  defp load_widget(socket, :library_stats) do
     excluded_categories = socket.assigns[:excluded_categories] || []
     movie_count = Media.count_movies(exclude_categories: excluded_categories)
     tv_show_count = Media.count_tv_shows(exclude_categories: excluded_categories)
     active_downloads_count = Downloads.count_active_downloads()
     total_storage = Library.total_storage_bytes() |> format_bytes()
 
-    # Load library status map for efficient lookups
-    library_status_map = Media.get_library_status_map()
+    socket
+    |> assign(:movie_count, movie_count)
+    |> assign(:tv_show_count, tv_show_count)
+    |> assign(:active_downloads_count, active_downloads_count)
+    |> assign(:total_storage, total_storage)
+  end
 
-    # Load recent and upcoming content for monitored media
-    today = Date.utc_today()
-    seven_days_ago = Date.add(today, -7)
-    seven_days_ahead = Date.add(today, 7)
+  defp load_widget(socket, :system_health) do
+    user = socket.assigns[:current_user]
 
-    recent_episodes = Media.list_episodes_by_air_date(seven_days_ago, today, monitored: true)
-    upcoming_episodes = Media.list_episodes_by_air_date(today, seven_days_ahead, monitored: true)
+    if user && user.role == "admin" do
+      client_status = ClientHealth.status_map()
+      indexer_status = Mydia.Indexers.Health.status_map()
 
-    # Load pending requests count for admins
-    pending_requests_count =
-      if Authorization.can_manage_requests?(socket.assigns.current_user) do
-        MediaRequests.count_pending_requests()
-      else
-        0
-      end
+      media_server_status =
+        Mydia.MediaServer.Health.status_map(Mydia.Settings.list_media_server_configs())
 
-    # request_status only ever affects the Request button, which only a guest
-    # sees (Authorization.can_submit_request?/1), so a viewer who cannot
-    # submit a request skips the two unfiltered list_requests/1 scans
-    # entirely rather than paying for a result they can never act on.
-    # Mirrors FranchiseEvents/RecommendationEvents (#461).
-    request_status_map =
-      if Authorization.can_submit_request?(socket.assigns.current_user) do
-        MediaRequestHelpers.request_status_map()
-      else
-        %{}
-      end
+      trash_summary = Library.trashed_summary()
+      flaresolverr_enabled = Mydia.Indexers.FlareSolverr.enabled?()
 
-    # Load trending data asynchronously
-    send(self(), :load_trending_movies)
-    send(self(), :load_trending_tv)
+      socket
+      |> schedule_health_refresh()
+      |> assign(:clients_rollup, Rollup.from_status_map(client_status))
+      |> assign(:indexers_rollup, Rollup.from_status_map(indexer_status))
+      |> assign(:media_servers_rollup, Rollup.from_status_map(media_server_status))
+      |> assign(:trash_summary, trash_summary)
+      |> assign(:flaresolverr_enabled, flaresolverr_enabled)
+      |> assign(:duplicates_state, :checking)
+      |> start_async(:duplicate_count, fn ->
+        plan = Mydia.Library.Prune.plan()
+        length(plan.decisions)
+      end)
+      |> then(fn s ->
+        if flaresolverr_enabled do
+          s
+          |> assign(:flaresolverr_status, :checking)
+          |> start_async(:flaresolverr_status, fn ->
+            Mydia.Indexers.FlareSolverr.status()
+          end)
+        else
+          s
+          |> cancel_async(:flaresolverr_status)
+          |> assign(:flaresolverr_status, :disabled)
+        end
+      end)
+    else
+      socket
+    end
+  end
 
-    # Same window and semantics the player's rail uses
-    # (discovery_resolver.ex:39), so both clients agree on what "recently
-    # added" means. This is a local query, so unlike the trending rails below
-    # it does not need to be pushed off the mount path.
+  defp load_widget(socket, :quick_actions) do
+    # Nav hook assigns pending_requests_count; reuse it directly
+    socket
+  end
+
+  defp load_widget(socket, :recently_added) do
     recently_added =
       RecentlyAdded.list_recent(
         since: DateTime.add(DateTime.utc_now(), -30, :day),
@@ -140,17 +180,86 @@ defmodule MydiaWeb.DashboardLive.Index do
         limit: 12
       )
 
+    assign(socket, :recently_added, recently_added)
+  end
+
+  defp load_widget(socket, :recently_added_movies) do
+    recently_added_movies =
+      RecentlyAdded.list_recent(
+        since: DateTime.add(DateTime.utc_now(), -30, :day),
+        types: ["movie"],
+        limit: 12
+      )
+
+    assign(socket, :recently_added_movies, recently_added_movies)
+  end
+
+  defp load_widget(socket, :recently_added_tv) do
+    recently_added_tv =
+      RecentlyAdded.list_recent(
+        since: DateTime.add(DateTime.utc_now(), -30, :day),
+        types: ["tv_show"],
+        limit: 12
+      )
+
+    assign(socket, :recently_added_tv, recently_added_tv)
+  end
+
+  defp load_widget(socket, :trending_movies) do
     socket
-    |> assign(:movie_count, movie_count)
-    |> assign(:tv_show_count, tv_show_count)
-    |> assign(:active_downloads_count, active_downloads_count)
-    |> assign(:total_storage, total_storage)
-    |> assign(:library_status_map, library_status_map)
-    |> assign(:request_status_map, request_status_map)
+    |> ensure_trending_prerequisites()
+    |> assign(:trending_movies_loading, true)
+    |> tap(fn _ -> send(self(), :load_trending_movies) end)
+  end
+
+  defp load_widget(socket, :trending_tv) do
+    socket
+    |> ensure_trending_prerequisites()
+    |> assign(:trending_tv_loading, true)
+    |> tap(fn _ -> send(self(), :load_trending_tv) end)
+  end
+
+  defp load_widget(socket, :episodes) do
+    today = Date.utc_today()
+    seven_days_ago = Date.add(today, -7)
+    seven_days_ahead = Date.add(today, 7)
+
+    recent_episodes = Media.list_episodes_by_air_date(seven_days_ago, today, monitored: true)
+    upcoming_episodes = Media.list_episodes_by_air_date(today, seven_days_ahead, monitored: true)
+
+    socket
     |> assign(:recent_episodes, Enum.take(recent_episodes, 10))
     |> assign(:upcoming_episodes, Enum.take(upcoming_episodes, 10))
-    |> assign(:pending_requests_count, pending_requests_count)
-    |> assign(:recently_added, recently_added)
+  end
+
+  defp load_widget(socket, _unknown), do: socket
+
+  defp ensure_trending_prerequisites(socket) do
+    if socket.assigns.trending_prerequisites_loaded do
+      socket
+    else
+      user = socket.assigns[:current_user]
+
+      request_status_map =
+        if Authorization.can_submit_request?(user) do
+          MediaRequestHelpers.request_status_map()
+        else
+          %{}
+        end
+
+      socket
+      |> assign(:trending_prerequisites_loaded, true)
+      |> assign(:library_status_map, Media.get_library_status_map())
+      |> assign(:request_status_map, request_status_map)
+      |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
+    end
+  end
+
+  @impl true
+  def handle_params(_params, _url, socket) do
+    {:noreply,
+     socket
+     |> assign(:page_title, "Home")}
   end
 
   @impl true
@@ -249,6 +358,120 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   def handle_event("close_details", _, socket) do
     {:noreply, DetailModal.close(socket)}
+  end
+
+  def handle_event("open_edit_home", _params, socket) do
+    {:noreply, assign(socket, :editing_home, true)}
+  end
+
+  def handle_event("close_edit_home", _params, socket) do
+    {:noreply, assign(socket, :editing_home, false)}
+  end
+
+  def handle_event("toggle_home_widget", %{"key" => raw_key}, socket) do
+    user = socket.assigns.current_user
+    allowed = HomeLayout.available(user) |> Enum.map(& &1.key)
+    key = HomeLayout.to_key(raw_key)
+
+    if key && key in allowed do
+      new_widgets = HomeLayout.toggle(socket.assigns.home_widgets, key)
+
+      case Accounts.put_home_widgets(user, new_widgets) do
+        {:ok, _pref} ->
+          socket =
+            socket
+            |> assign(:home_widgets, new_widgets)
+            |> then(fn s ->
+              if key in new_widgets do
+                load_widget(s, key)
+              else
+                if key == :system_health, do: cancel_health_refresh(s), else: s
+              end
+            end)
+
+          {:noreply, socket}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("move_home_widget", %{"key" => raw_key, "direction" => dir_str}, socket) do
+    user = socket.assigns.current_user
+    direction = if dir_str == "up", do: :up, else: :down
+
+    case HomeLayout.to_key(raw_key) do
+      nil ->
+        {:noreply, socket}
+
+      key ->
+        new_widgets = HomeLayout.move(socket.assigns.home_widgets, key, direction)
+
+        case Accounts.put_home_widgets(user, new_widgets) do
+          {:ok, _pref} ->
+            {:noreply, assign(socket, :home_widgets, new_widgets)}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
+        end
+    end
+  end
+
+  def handle_event("reset_home_widgets", _params, socket) do
+    user = socket.assigns.current_user
+
+    case Accounts.reset_home_widgets(user) do
+      {:ok, _pref} ->
+        defaults = Accounts.home_widgets(user)
+
+        socket =
+          socket
+          |> assign(:home_widgets, defaults)
+          |> then(fn s ->
+            if :system_health in defaults, do: s, else: cancel_health_refresh(s)
+          end)
+          |> then(fn s ->
+            Enum.reduce(defaults, s, fn k, acc -> load_widget(acc, k) end)
+          end)
+
+        {:noreply, socket}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not save your Home layout.")}
+    end
+  end
+
+  @impl true
+  def handle_async(:duplicate_count, {:ok, count}, socket) when is_integer(count) do
+    {:noreply,
+     socket
+     |> assign(:duplicates_count, count)
+     |> assign(:duplicates_state, if(count == 0, do: :none, else: :review))}
+  end
+
+  def handle_async(:duplicate_count, {:exit, reason}, socket) do
+    Logger.warning("Duplicates plan failed in dashboard health widget: #{inspect(reason)}")
+    {:noreply, assign(socket, :duplicates_state, :unavailable)}
+  end
+
+  def handle_async(:flaresolverr_status, {:ok, %{status: status}}, socket) do
+    if socket.assigns[:flaresolverr_enabled] do
+      {:noreply, assign(socket, :flaresolverr_status, status)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_async(:flaresolverr_status, {:exit, reason}, socket) do
+    if socket.assigns[:flaresolverr_enabled] do
+      Logger.warning("FlareSolverr probe failed in dashboard health widget: #{inspect(reason)}")
+      {:noreply, assign(socket, :flaresolverr_status, :unhealthy)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -351,6 +574,52 @@ defmodule MydiaWeb.DashboardLive.Index do
   def handle_info({:grab_failed, _payload}, socket), do: {:noreply, socket}
   def handle_info({:grab_duplicate, _payload}, socket), do: {:noreply, socket}
 
+  @impl true
+  def handle_info(:refresh_health, socket) do
+    user = socket.assigns[:current_user]
+
+    if user && user.role == "admin" && :system_health in (socket.assigns[:home_widgets] || []) do
+      client_status = ClientHealth.status_map()
+      indexer_status = Mydia.Indexers.Health.status_map()
+
+      media_server_status =
+        Mydia.MediaServer.Health.status_map(Mydia.Settings.list_media_server_configs())
+
+      trash_summary = Library.trashed_summary()
+      flaresolverr_enabled = Mydia.Indexers.FlareSolverr.enabled?()
+
+      socket =
+        socket
+        |> schedule_health_refresh()
+        |> assign(:clients_rollup, Rollup.from_status_map(client_status))
+        |> assign(:indexers_rollup, Rollup.from_status_map(indexer_status))
+        |> assign(:media_servers_rollup, Rollup.from_status_map(media_server_status))
+        |> assign(:trash_summary, trash_summary)
+        |> assign(:flaresolverr_enabled, flaresolverr_enabled)
+        |> start_async(:duplicate_count, fn ->
+          plan = Mydia.Library.Prune.plan()
+          length(plan.decisions)
+        end)
+        |> then(fn s ->
+          if flaresolverr_enabled do
+            s
+            |> assign(:flaresolverr_status, :checking)
+            |> start_async(:flaresolverr_status, fn ->
+              Mydia.Indexers.FlareSolverr.status()
+            end)
+          else
+            s
+            |> cancel_async(:flaresolverr_status)
+            |> assign(:flaresolverr_status, :disabled)
+          end
+        end)
+
+      {:noreply, socket}
+    else
+      {:noreply, cancel_health_refresh(socket)}
+    end
+  end
+
   def handle_info(msg, socket) do
     # Catch-all for unhandled messages to prevent crashes
     Logger.warning("Unhandled message in DashboardLive.Index: #{inspect(msg)}")
@@ -364,6 +633,20 @@ defmodule MydiaWeb.DashboardLive.Index do
   def trending_rail_limit, do: @trending_rail_limit
 
   ## Private Helpers
+
+  defp schedule_health_refresh(socket) do
+    socket = cancel_health_refresh(socket)
+    ref = Process.send_after(self(), :refresh_health, 60_000)
+    assign(socket, :health_timer_ref, ref)
+  end
+
+  defp cancel_health_refresh(socket) do
+    if timer = socket.assigns[:health_timer_ref] do
+      Process.cancel_timer(timer)
+    end
+
+    assign(socket, :health_timer_ref, nil)
+  end
 
   defp add_with_opts(ref, media_type, opts, socket) do
     opts =

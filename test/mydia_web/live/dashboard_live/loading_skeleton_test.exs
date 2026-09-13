@@ -36,7 +36,7 @@ defmodule MydiaWeb.DashboardLive.LoadingSkeletonTest do
     refute doc |> LazyHTML.query("#trending-tv-skeleton") |> Enum.empty?()
   end
 
-  test "each skeleton uses the rail's own five-column grid", %{conn: conn} do
+  test "each skeleton uses the rail's horizontal flex layout", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/")
 
     doc = LazyHTML.from_document(html)
@@ -47,8 +47,8 @@ defmodule MydiaWeb.DashboardLive.LoadingSkeletonTest do
     [tv_class] = doc |> LazyHTML.query("#trending-tv-skeleton") |> LazyHTML.attribute("class")
 
     for class <- [movies_class, tv_class] do
-      assert class =~ "grid-cols-2"
-      assert class =~ "lg:grid-cols-5"
+      assert class =~ "flex"
+      assert class =~ "overflow-x-auto"
       assert class =~ "gap-3"
     end
   end
@@ -66,12 +66,9 @@ defmodule MydiaWeb.DashboardLive.LoadingSkeletonTest do
 
     doc = LazyHTML.from_document(html)
 
-    movies_cards = doc |> LazyHTML.query("#trending-movies-skeleton div.card") |> Enum.count()
-    tv_cards = doc |> LazyHTML.query("#trending-tv-skeleton div.card") |> Enum.count()
+    movies_cards = doc |> LazyHTML.query("#trending-movies-skeleton .w-36") |> Enum.count()
+    tv_cards = doc |> LazyHTML.query("#trending-tv-skeleton .w-36") |> Enum.count()
 
-    # Asserted against the LiveView's own limit, not a literal, so a change to
-    # @trending_rail_limit in index.ex cannot leave this test green while the
-    # skeleton and the settled row count drift apart.
     limit = MydiaWeb.DashboardLive.Index.trending_rail_limit()
 
     assert movies_cards == limit

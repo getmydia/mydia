@@ -194,6 +194,17 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preferences()
   end
 
+  @doc """
+  Changeset that drops a specific preference key from the preferences map.
+  """
+  def delete_preference_changeset(%__MODULE__{} = user_preference, key) when is_binary(key) do
+    new_prefs = Map.delete(user_preference.preferences || %{}, key)
+
+    user_preference
+    |> cast(%{preferences: new_prefs}, [:preferences])
+    |> validate_preferences()
+  end
+
   # Validate individual preference values
   defp validate_preferences(changeset) do
     changeset
@@ -212,6 +223,46 @@ defmodule Mydia.Accounts.UserPreference do
     )
     |> validate_preference_value("hide_player", [true, false])
     |> validate_preference_value("player_banner_dismissed", [true, false])
+    |> validate_home_widgets()
+  end
+
+  defp validate_home_widgets(changeset) do
+    case get_change(changeset, :preferences) do
+      nil ->
+        changeset
+
+      prefs when is_map(prefs) ->
+        case Map.get(prefs, "home_widgets") do
+          nil ->
+            changeset
+
+          widgets when is_list(widgets) ->
+            valid_keys = Mydia.Accounts.HomeLayout.valid_key_strings()
+            all_strings? = Enum.all?(widgets, &is_binary/1)
+            all_known? = Enum.all?(widgets, &(&1 in valid_keys))
+            no_duplicates? = length(widgets) == length(Enum.uniq(widgets))
+
+            if all_strings? and all_known? and no_duplicates? do
+              changeset
+            else
+              add_error(
+                changeset,
+                :preferences,
+                "invalid value for home_widgets: #{inspect(widgets)}"
+              )
+            end
+
+          invalid ->
+            add_error(
+              changeset,
+              :preferences,
+              "invalid value for home_widgets: #{inspect(invalid)}"
+            )
+        end
+
+      _ ->
+        changeset
+    end
   end
 
   defp validate_preference_value(changeset, key, valid_values) do

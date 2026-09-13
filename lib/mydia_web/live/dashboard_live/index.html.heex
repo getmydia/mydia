@@ -4,6 +4,15 @@
       <h1 class="text-3xl font-bold">Welcome to Mydia</h1>
       <p class="text-base-content/70 mt-1">Your personal media management system</p>
     </div>
+
+    <button
+      id="edit-home-btn"
+      type="button"
+      phx-click="open_edit_home"
+      class="btn btn-ghost btn-sm self-start md:self-center gap-1.5"
+    >
+      <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Edit Home
+    </button>
   </div>
 
   <!-- Player CTA Banner -->
@@ -42,338 +51,350 @@
     </div>
   </div>
 
-  <!-- Stats Cards -->
-  <% admin? = @current_user && @current_user.role == "admin" %>
-  <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
-    <Components.stat_tile
-      id="stat-tile-movies"
-      icon="hero-film"
-      label="Movies"
-      value={@movie_count}
-      caption="Total movies"
-      navigate={~p"/movies"}
-    />
-    <Components.stat_tile
-      id="stat-tile-tv-shows"
-      icon="hero-tv"
-      label="TV Shows"
-      value={@tv_show_count}
-      caption="Total series"
-      navigate={~p"/tv"}
-    />
-    <Components.stat_tile
-      id="stat-tile-downloads"
-      icon="hero-arrow-down-tray"
-      label="Downloads"
-      value={@active_downloads_count}
-      caption="Active downloads"
-      navigate={~p"/downloads"}
-    />
-    <Components.stat_tile
-      id="stat-tile-storage"
-      icon="hero-circle-stack"
-      label="Storage"
-      value={@total_storage}
-      caption="Total storage used"
-      navigate={if(admin?, do: ~p"/admin/library-paths", else: nil)}
-    />
-  </div>
-
-  <!-- Quick Actions -->
-  <div class="mb-6 md:mb-8">
-    <h2 class="text-2xl font-bold mb-3 md:mb-4">Quick Actions</h2>
-    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-      <%= if @current_user && @current_user.role == "guest" do %>
-        <%!-- Guest users see request options --%>
-        <.link
-          navigate={~p"/discover?type=movie"}
-          class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
+  <!-- Dynamic Home Widgets Loop -->
+  <%= for key <- @home_widgets do %>
+    <%= case key do %>
+      <% :library_stats -> %>
+        <% admin? = @current_user && @current_user.role == "admin" %>
+        <div
+          id="library-stats-widget"
+          class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8"
         >
-          <div class="card-body flex-row items-center gap-4">
-            <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <.icon name="hero-film" class="w-6 h-6 text-primary" />
-            </div>
-            <div class="flex-1">
-              <h3 class="font-semibold">Request Movie</h3>
-              <p class="text-sm text-base-content/60">Submit a movie request</p>
-            </div>
-          </div>
-        </.link>
-
-        <.link
-          navigate={~p"/discover?type=tv_show"}
-          class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
-        >
-          <div class="card-body flex-row items-center gap-4">
-            <div class="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center">
-              <.icon name="hero-tv" class="w-6 h-6 text-secondary" />
-            </div>
-            <div class="flex-1">
-              <h3 class="font-semibold">Request Series</h3>
-              <p class="text-sm text-base-content/60">Submit a series request</p>
-            </div>
-          </div>
-        </.link>
-
-        <.link
-          navigate={~p"/requests"}
-          class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
-        >
-          <div class="card-body flex-row items-center gap-4">
-            <div class="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-              <.icon name="hero-queue-list" class="w-6 h-6 text-accent" />
-            </div>
-            <div class="flex-1">
-              <h3 class="font-semibold">My Requests</h3>
-              <p class="text-sm text-base-content/60">View your requests</p>
-            </div>
-          </div>
-        </.link>
-      <% else %>
-        <%!-- Admin users see add and import options --%>
-        <.link
-          navigate={~p"/discover?type=movie"}
-          class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
-        >
-          <div class="card-body flex-row items-center gap-4">
-            <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <.icon name="hero-plus" class="w-6 h-6 text-primary" />
-            </div>
-            <div class="flex-1">
-              <h3 class="font-semibold">Add Movie</h3>
-              <p class="text-sm text-base-content/60">Search and add movies</p>
-            </div>
-          </div>
-        </.link>
-
-        <.link
-          navigate={~p"/discover?type=tv_show"}
-          class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
-        >
-          <div class="card-body flex-row items-center gap-4">
-            <div class="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center">
-              <.icon name="hero-plus" class="w-6 h-6 text-secondary" />
-            </div>
-            <div class="flex-1">
-              <h3 class="font-semibold">Add TV Show</h3>
-              <p class="text-sm text-base-content/60">Search and add series</p>
-            </div>
-          </div>
-        </.link>
-
-        <.link
-          navigate={~p"/import"}
-          class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow"
-        >
-          <div class="card-body flex-row items-center gap-4">
-            <div class="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-              <.icon name="hero-arrow-down-tray" class="w-6 h-6 text-accent" />
-            </div>
-            <div class="flex-1">
-              <h3 class="font-semibold">Import Files</h3>
-              <p class="text-sm text-base-content/60">Scan and import media</p>
-            </div>
-          </div>
-        </.link>
-
-        <%= if @pending_requests_count > 0 do %>
-          <.link
-            navigate={~p"/admin/requests"}
-            class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow border-2 border-warning"
-          >
-            <div class="card-body flex-row items-center gap-4">
-              <div class="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
-                <.icon name="hero-inbox-stack" class="w-6 h-6 text-warning" />
-              </div>
-              <div class="flex-1">
-                <h3 class="font-semibold">Pending Requests</h3>
-                <p class="text-sm text-base-content/60">
-                  {@pending_requests_count} request(s) awaiting review
-                </p>
-              </div>
+          <Components.stat_tile
+            id="stat-tile-movies"
+            icon="hero-film"
+            label="Movies"
+            value={@movie_count}
+            caption="Total movies"
+            navigate={~p"/movies"}
+          />
+          <Components.stat_tile
+            id="stat-tile-tv-shows"
+            icon="hero-tv"
+            label="TV Shows"
+            value={@tv_show_count}
+            caption="Total series"
+            navigate={~p"/tv"}
+          />
+          <Components.stat_tile
+            id="stat-tile-downloads"
+            icon="hero-arrow-down-tray"
+            label="Downloads"
+            value={@active_downloads_count}
+            caption="Active downloads"
+            navigate={~p"/downloads"}
+          />
+          <Components.stat_tile
+            id="stat-tile-storage"
+            icon="hero-circle-stack"
+            label="Storage"
+            value={@total_storage}
+            caption="Total storage used"
+            navigate={if(admin?, do: ~p"/admin/library-paths", else: nil)}
+          />
+        </div>
+      <% :system_health -> %>
+        <%= if @current_user && @current_user.role == "admin" do %>
+          <HealthComponents.system_health_widget
+            clients_rollup={@clients_rollup}
+            indexers_rollup={@indexers_rollup}
+            media_servers_rollup={@media_servers_rollup}
+            duplicates_state={@duplicates_state}
+            duplicates_count={@duplicates_count}
+            trash_summary={@trash_summary}
+            flaresolverr_enabled={@flaresolverr_enabled}
+            flaresolverr_status={@flaresolverr_status}
+          />
+        <% end %>
+      <% :quick_actions -> %>
+        <div id="quick-actions-widget" class="mb-6 md:mb-8">
+          <h2 class="text-lg md:text-xl font-semibold mb-3 md:mb-4">Quick Actions</h2>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+            <%= if @current_user && @current_user.role == "guest" do %>
+              <Components.quick_action_card
+                id="qa-request-movie"
+                navigate={~p"/discover?type=movie"}
+                icon="hero-film"
+                title="Request Movie"
+                description="Submit a movie request"
+                color="primary"
+              />
+              <Components.quick_action_card
+                id="qa-request-tv"
+                navigate={~p"/discover?type=tv_show"}
+                icon="hero-tv"
+                title="Request Series"
+                description="Submit a series request"
+                color="secondary"
+              />
+              <Components.quick_action_card
+                id="qa-my-requests"
+                navigate={~p"/requests"}
+                icon="hero-queue-list"
+                title="My Requests"
+                description="View your requests"
+                color="accent"
+              />
+            <% else %>
+              <Components.quick_action_card
+                id="qa-add-movie"
+                navigate={~p"/discover?type=movie"}
+                icon="hero-plus"
+                title="Add Movie"
+                description="Search and add movies"
+                color="primary"
+              />
+              <Components.quick_action_card
+                id="qa-add-tv"
+                navigate={~p"/discover?type=tv_show"}
+                icon="hero-plus"
+                title="Add TV Show"
+                description="Search and add series"
+                color="secondary"
+              />
+              <Components.quick_action_card
+                id="qa-import"
+                navigate={~p"/import"}
+                icon="hero-arrow-down-tray"
+                title="Import Files"
+                description="Scan and import media"
+                color="accent"
+              />
               <%= if @pending_requests_count > 0 do %>
-                <div class="badge badge-warning">{@pending_requests_count}</div>
+                <Components.quick_action_card
+                  id="qa-pending-requests"
+                  navigate={~p"/admin/requests"}
+                  icon="hero-inbox-stack"
+                  title="Pending Requests"
+                  description={"#{@pending_requests_count} request(s) awaiting review"}
+                  color="warning"
+                  badge={@pending_requests_count}
+                  border_class="border-2 border-warning"
+                />
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+      <% :recently_added -> %>
+        <Components.recently_added_rail
+          id="recently-added-rail"
+          title="Recently Added"
+          entries={@recently_added}
+        />
+      <% :recently_added_movies -> %>
+        <Components.recently_added_rail
+          id="recently-added-movies-rail"
+          title="Recently Added Movies"
+          entries={@recently_added_movies}
+        />
+      <% :recently_added_tv -> %>
+        <Components.recently_added_rail
+          id="recently-added-tv-rail"
+          title="Recently Added TV Shows"
+          entries={@recently_added_tv}
+        />
+      <% :trending_movies -> %>
+        <div id="trending-movies-widget" class="mb-6 md:mb-8">
+          <%= cond do %>
+            <% @trending_movies_loading -> %>
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg md:text-xl font-semibold truncate">Trending Movies</h2>
+              </div>
+              <.poster_card_rail_skeleton
+                id="trending-movies-skeleton"
+                count={@trending_rail_limit}
+              />
+            <% @trending_movies == [] -> %>
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg md:text-xl font-semibold truncate">Trending Movies</h2>
+              </div>
+              <div class="alert alert-info">
+                <.icon name="hero-information-circle" class="w-5 h-5" />
+                <span>No trending movies available at the moment.</span>
+              </div>
+            <% true -> %>
+              <.media_rail
+                id="trending-movies-rail"
+                title="Trending Movies"
+                items={@trending_movies}
+                media_type={:movie}
+                current_user={@current_user}
+                adding_ids={@adding_item_ids}
+                requesting_item_id={@requesting_item_id}
+                on_select="show_details"
+              >
+                <:badge>
+                  <.link navigate={~p"/discover?type=movie"} class="btn btn-sm btn-ghost">
+                    View All <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
+                  </.link>
+                </:badge>
+              </.media_rail>
+          <% end %>
+        </div>
+      <% :trending_tv -> %>
+        <div id="trending-tv-widget" class="mb-6 md:mb-8">
+          <%= cond do %>
+            <% @trending_tv_loading -> %>
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg md:text-xl font-semibold truncate">Trending TV Shows</h2>
+              </div>
+              <.poster_card_rail_skeleton
+                id="trending-tv-skeleton"
+                count={@trending_rail_limit}
+              />
+            <% @trending_tv == [] -> %>
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg md:text-xl font-semibold truncate">Trending TV Shows</h2>
+              </div>
+              <div class="alert alert-info">
+                <.icon name="hero-information-circle" class="w-5 h-5" />
+                <span>No trending TV shows available at the moment.</span>
+              </div>
+            <% true -> %>
+              <.media_rail
+                id="trending-tv-rail"
+                title="Trending TV Shows"
+                items={@trending_tv}
+                media_type={:tv_show}
+                current_user={@current_user}
+                adding_ids={@adding_item_ids}
+                requesting_item_id={@requesting_item_id}
+                on_select="show_details"
+              >
+                <:badge>
+                  <.link navigate={~p"/discover?type=tv_show"} class="btn btn-sm btn-ghost">
+                    View All <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
+                  </.link>
+                </:badge>
+              </.media_rail>
+          <% end %>
+        </div>
+      <% :episodes -> %>
+        <%= if @recent_episodes != [] || @upcoming_episodes != [] do %>
+          <div id="episodes-widget" class="mb-6 md:mb-8">
+            <h2 class="text-lg md:text-xl font-semibold mb-3 md:mb-4">Your Activity</h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+              <!-- Recent Episodes -->
+              <%= if @recent_episodes != [] do %>
+                <div class="card bg-base-100 shadow-sm">
+                  <div class="card-body">
+                    <h3 class="card-title text-base font-semibold">
+                      <.icon name="hero-clock" class="w-5 h-5" /> Recently Aired
+                    </h3>
+                    <div class="space-y-2">
+                      <%= for episode <- @recent_episodes do %>
+                        <div class="flex items-start gap-3 p-2 rounded hover:bg-base-200 transition-colors">
+                          <div class="flex-1 min-w-0">
+                            <p class="font-medium text-sm truncate">{episode.media_item_title}</p>
+                            <p class="text-xs text-base-content/70">
+                              S{String.pad_leading(to_string(episode.season_number), 2, "0")}E{String.pad_leading(
+                                to_string(episode.episode_number),
+                                2,
+                                "0"
+                              )} - {episode.title}
+                            </p>
+                            <p class="text-xs text-base-content/50">
+                              {Calendar.strftime(episode.air_date, "%b %d, %Y")}
+                            </p>
+                          </div>
+                          <%= if episode.has_files do %>
+                            <.icon
+                              name="hero-check-circle"
+                              class="w-5 h-5 text-success flex-shrink-0"
+                            />
+                          <% else %>
+                            <.icon
+                              name="hero-arrow-down-tray"
+                              class="w-5 h-5 text-warning flex-shrink-0"
+                            />
+                          <% end %>
+                        </div>
+                      <% end %>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+
+              <!-- Upcoming Episodes -->
+              <%= if @upcoming_episodes != [] do %>
+                <div class="card bg-base-100 shadow-sm">
+                  <div class="card-body">
+                    <h3 class="card-title text-base font-semibold">
+                      <.icon name="hero-calendar" class="w-5 h-5" /> Coming Soon
+                    </h3>
+                    <div class="space-y-2">
+                      <%= for episode <- @upcoming_episodes do %>
+                        <div class="flex items-start gap-3 p-2 rounded hover:bg-base-200 transition-colors">
+                          <div class="flex-1 min-w-0">
+                            <p class="font-medium text-sm truncate">{episode.media_item_title}</p>
+                            <p class="text-xs text-base-content/70">
+                              S{String.pad_leading(to_string(episode.season_number), 2, "0")}E{String.pad_leading(
+                                to_string(episode.episode_number),
+                                2,
+                                "0"
+                              )} - {episode.title}
+                            </p>
+                            <p class="text-xs text-base-content/50">
+                              {Calendar.strftime(episode.air_date, "%b %d, %Y")}
+                            </p>
+                          </div>
+                        </div>
+                      <% end %>
+                    </div>
+                  </div>
+                </div>
               <% end %>
             </div>
-          </.link>
-        <% end %>
-      <% end %>
-    </div>
-  </div>
-
-  <Components.recently_added_rail entries={@recently_added} />
-
-  <!-- Trending Movies -->
-  <div class="mb-6 md:mb-8">
-    <div class="flex items-center justify-between mb-3 md:mb-4">
-      <h2 class="text-2xl font-bold">Trending Movies</h2>
-      <.link navigate={~p"/discover?#{%{"type" => "movie"}}"} class="btn btn-sm btn-ghost">
-        View All <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
-      </.link>
-    </div>
-
-    <%= cond do %>
-      <% @trending_movies_loading -> %>
-        <%!-- count is @trending_rail_limit, the same limit index.ex's
-              :load_trending_movies handler passes to Enum.take/2, so the
-              placeholder always matches the settled row count --%>
-        <.poster_card_grid_skeleton
-          id="trending-movies-skeleton"
-          count={@trending_rail_limit}
-          columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-          gap="gap-3 md:gap-4"
-        />
-      <% @trending_movies == [] -> %>
-        <div class="alert alert-info">
-          <.icon name="hero-information-circle" class="w-5 h-5" />
-          <span>No trending movies available at the moment.</span>
-        </div>
-      <% true -> %>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-          <%= for {movie, index} <- Enum.with_index(@trending_movies) do %>
-            <.trending_card
-              item={movie}
-              media_type={:movie}
-              current_user={@current_user}
-              adding_ids={@adding_item_ids}
-              requesting_item_id={@requesting_item_id}
-              loading={if(index < 6, do: nil, else: "lazy")}
-            />
-          <% end %>
-        </div>
-    <% end %>
-  </div>
-
-  <!-- Trending TV Shows -->
-  <div class="mb-6 md:mb-8">
-    <div class="flex items-center justify-between mb-3 md:mb-4">
-      <h2 class="text-2xl font-bold">Trending TV Shows</h2>
-      <.link navigate={~p"/discover?#{%{"type" => "tv_show"}}"} class="btn btn-sm btn-ghost">
-        View All <.icon name="hero-arrow-right" class="w-4 h-4 ml-1" />
-      </.link>
-    </div>
-
-    <%= cond do %>
-      <% @trending_tv_loading -> %>
-        <%!-- count is @trending_rail_limit, the same limit index.ex's
-              :load_trending_tv handler passes to Enum.take/2, so the
-              placeholder always matches the settled row count --%>
-        <.poster_card_grid_skeleton
-          id="trending-tv-skeleton"
-          count={@trending_rail_limit}
-          columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-          gap="gap-3 md:gap-4"
-        />
-      <% @trending_tv == [] -> %>
-        <div class="alert alert-info">
-          <.icon name="hero-information-circle" class="w-5 h-5" />
-          <span>No trending TV shows available at the moment.</span>
-        </div>
-      <% true -> %>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-          <%= for {show, index} <- Enum.with_index(@trending_tv) do %>
-            <.trending_card
-              item={show}
-              media_type={:tv_show}
-              current_user={@current_user}
-              adding_ids={@adding_item_ids}
-              requesting_item_id={@requesting_item_id}
-              loading={if(index < 6, do: nil, else: "lazy")}
-            />
-          <% end %>
-        </div>
-    <% end %>
-  </div>
-
-  <!-- User Activity Section (for users with monitored content) -->
-  <%= if @recent_episodes != [] || @upcoming_episodes != [] do %>
-    <div class="mb-6 md:mb-8">
-      <h2 class="text-2xl font-bold mb-3 md:mb-4">Your Activity</h2>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-        <!-- Recent Episodes -->
-        <%= if @recent_episodes != [] do %>
-          <div class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-              <h3 class="card-title text-lg">
-                <.icon name="hero-clock" class="w-5 h-5" /> Recently Aired
-              </h3>
-              <div class="space-y-2">
-                <%= for episode <- @recent_episodes do %>
-                  <div class="flex items-start gap-3 p-2 rounded hover:bg-base-200 transition-colors">
-                    <div class="flex-1 min-w-0">
-                      <p class="font-medium text-sm truncate">{episode.media_item_title}</p>
-                      <p class="text-xs text-base-content/70">
-                        S{String.pad_leading(to_string(episode.season_number), 2, "0")}E{String.pad_leading(
-                          to_string(episode.episode_number),
-                          2,
-                          "0"
-                        )} - {episode.title}
-                      </p>
-                      <p class="text-xs text-base-content/50">
-                        {Calendar.strftime(episode.air_date, "%b %d, %Y")}
-                      </p>
-                    </div>
-                    <%= if episode.has_files do %>
-                      <.icon name="hero-check-circle" class="w-5 h-5 text-success flex-shrink-0" />
-                    <% else %>
-                      <.icon
-                        name="hero-arrow-down-tray"
-                        class="w-5 h-5 text-warning flex-shrink-0"
-                      />
-                    <% end %>
-                  </div>
-                <% end %>
-              </div>
-            </div>
           </div>
         <% end %>
+    <% end %>
+  <% end %>
 
-        <!-- Upcoming Episodes -->
-        <%= if @upcoming_episodes != [] do %>
-          <div class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-              <h3 class="card-title text-lg">
-                <.icon name="hero-calendar" class="w-5 h-5" /> Coming Soon
-              </h3>
-              <div class="space-y-2">
-                <%= for episode <- @upcoming_episodes do %>
-                  <div class="flex items-start gap-3 p-2 rounded hover:bg-base-200 transition-colors">
-                    <div class="flex-1 min-w-0">
-                      <p class="font-medium text-sm truncate">{episode.media_item_title}</p>
-                      <p class="text-xs text-base-content/70">
-                        S{String.pad_leading(to_string(episode.season_number), 2, "0")}E{String.pad_leading(
-                          to_string(episode.episode_number),
-                          2,
-                          "0"
-                        )} - {episode.title}
-                      </p>
-                      <p class="text-xs text-base-content/50">
-                        {Calendar.strftime(episode.air_date, "%b %d, %Y")}
-                      </p>
-                    </div>
-                  </div>
-                <% end %>
-              </div>
-            </div>
-          </div>
-        <% end %>
+  <!-- Empty state when all widgets are hidden -->
+  <%= if @home_widgets == [] do %>
+    <div id="home-empty" class="text-center py-16 px-4">
+      <div class="w-16 h-16 rounded-full bg-base-200 flex items-center justify-center mx-auto mb-4 text-base-content/60">
+        <.icon name="hero-squares-plus" class="w-8 h-8" />
       </div>
+      <h2 class="text-xl font-bold mb-2">Your Home is empty</h2>
+      <p class="text-base-content/70 max-w-md mx-auto mb-6">
+        All sections are currently hidden. Choose which widgets to show to customize your dashboard.
+      </p>
+      <button
+        type="button"
+        phx-click="open_edit_home"
+        class="btn btn-primary"
+      >
+        <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Edit Home
+      </button>
     </div>
   <% end %>
 
   <!-- Getting Started (shown when library is empty) -->
   <%= if @movie_count == 0 && @tv_show_count == 0 do %>
-    <div class="alert alert-info">
+    <div class="alert alert-info mt-4">
       <.icon name="hero-information-circle" class="w-5 h-5" />
       <div>
         <p class="font-semibold">Getting Started</p>
         <p class="text-sm">
-          Your media library is empty. Start by adding movies or TV shows from the trending content above!
+          Your media library is empty. Start by adding movies or TV shows from <.link
+            navigate={~p"/discover"}
+            class="link font-medium"
+          >Discover</.link>!
         </p>
       </div>
     </div>
   <% end %>
+
+  <!-- Edit Home Modal -->
+  <EditHomeComponents.edit_home_modal
+    editing_home={@editing_home}
+    visible_widgets={Enum.map(@home_widgets, &HomeLayout.get_widget/1) |> Enum.reject(&is_nil/1)}
+    hidden_widgets={
+      HomeLayout.hidden(@current_user, @home_widgets) |> Enum.map(&HomeLayout.get_widget/1)
+    }
+  />
 
   <%!-- Trending Detail Modal --%>
   <.live_component

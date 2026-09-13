@@ -217,4 +217,43 @@ defmodule Mydia.Downloads.ClientHealthTest do
       assert is_map(health.details)
     end
   end
+
+  describe "status_map/1" do
+    test "reports disabled clients as :disabled without a network call" do
+      bypass = Bypass.open()
+      Bypass.down(bypass)
+
+      {:ok, client} =
+        Settings.create_download_client_config(%{
+          name: "Disabled client",
+          type: :qbittorrent,
+          host: "localhost",
+          port: bypass.port,
+          enabled: false,
+          priority: 1
+        })
+
+      map = ClientHealth.status_map([client])
+      assert map[client.id].status == :disabled
+    end
+
+    test "reports :unknown on cache miss without probing" do
+      bypass = Bypass.open()
+      # Down bypass would fail if probed
+      Bypass.down(bypass)
+
+      {:ok, client} =
+        Settings.create_download_client_config(%{
+          name: "Unchecked client",
+          type: :qbittorrent,
+          host: "localhost",
+          port: bypass.port,
+          enabled: true,
+          priority: 1
+        })
+
+      map = ClientHealth.status_map([client])
+      assert map[client.id].status == :unknown
+    end
+  end
 end
