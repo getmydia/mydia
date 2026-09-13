@@ -111,14 +111,16 @@ subscribes to, and the capabilities it wants. The smallest useful one:
 ```
 
 Save it as `priv/plugins/my-plugin.json` in your Mydia checkout. Mydia
-discovers every manifest under `priv/plugins/` and seeds it as a disabled,
-unapproved plugin the next time the app boots, or the next time you open the
-admin Plugins page, whichever comes first: it's the same mechanism the
+discovers every manifest under `priv/plugins/` and grants it the capabilities
+it declares, enabling it the next time the app boots, or the next time you
+open the admin Plugins page, whichever comes first: a manifest in that
+directory is trusted as part of the host release, the same mechanism the
 bundled webhook notifier and Simkl plugins use to register themselves, and
 for local development it's the natural way to get a brand-new manifest known
-to the host without a remote plugin index. See the full field reference in
-[Manifest & Settings](../reference/manifest.md) when you need more than the
-basics.
+to the host without a remote plugin index. Plugins installed from an index or
+remote package instead go through the manual review-and-approve flow. See the
+full field reference in [Manifest & Settings](../reference/manifest.md) when
+you need more than the basics.
 
 ## Step 5: Load It and Watch It Run
 
@@ -132,9 +134,9 @@ export PLUGINS_OVERRIDE_DIR=/path/mydia/reads
 cp target/wasm32-wasip2/release/my_plugin.wasm "$PLUGINS_OVERRIDE_DIR/my-plugin.wasm"
 ```
 
-Open **Admin > System > Plugins**. Your plugin shows up in the installed list, pending
-approval. Approve it: this grants the capabilities it declared and activates
-it, resolving the Wasm bytes you just dropped in.
+Open **Admin > System > Plugins**. Your plugin shows up in the installed
+list already approved and enabled with the capabilities it declared, and it
+runs the Wasm bytes you just dropped into the override directory.
 
 Now add or import a movie or show. Open the plugin's activity log: you'll see
 the `on_event` result recorded for the `media_item.added` event you just

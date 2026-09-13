@@ -72,22 +72,33 @@ host's latest release.
 Every class of thing a plugin might want to do (make an HTTP request, read a
 media record, hold a key/value store, run on a schedule) is a named
 **capability**, and capabilities are deny-by-default. A plugin's manifest
-*declares* what it wants; the operator sees that declaration and approves it
-before the plugin runs at all. A plugin can never widen its own grant at
-runtime; there's no equivalent of asking for permission mid-execution the way
-a mobile app might.
+*declares* what it wants; for a third-party plugin the operator sees that
+declaration and approves it before the plugin runs at all. A plugin can never
+widen its own grant at runtime; there's no equivalent of asking for permission
+mid-execution the way a mobile app might.
 
-Grants never auto-expand, and that is the guarantee worth trusting: what an
-approved plugin may do is fixed at the moment the operator approved it, in the
-`granted_capabilities` the host stores, and the host re-checks that grant on
-every call rather than trusting the manifest.
+Third-party plugin grants never auto-expand. A plugin installed from an index or
+remote package runs only with the capability set an administrator approved, and
+a revised manifest that asks for more remains on its old grant until explicit
+re-approval.
 
-It's worth being precise about what "never auto-expand" does **not** mean.
-Revising a manifest to declare a new capability class, a new `net:http` host, or
-a new subscribed event does not return the plugin to unapproved, and it does not
-grant the new capability either. The stored grant is left exactly as it was, and
-the plugin keeps running on it. Calls against anything newly declared come back
-`Denied` until an operator re-approves.
+Image-bundled system plugins are the deliberate exception. They are delivered as
+part of the trusted Mydia host release, so discovery grants their complete
+shipped capability set and enables a new system plugin. Later host upgrades
+replace that grant with the bundled manifest's current effective set, including
+settings-derived HTTP hosts. Upgrades preserve whether the administrator has
+since enabled or disabled the plugin.
+
+What both cases share is the guarantee worth trusting: what a plugin may do is
+fixed in the `granted_capabilities` the host stores, and the host re-checks that
+grant on every call rather than trusting the manifest.
+
+It's worth being precise about what third-party grants not auto-expanding does
+**not** mean. Revising a third-party manifest to declare a new capability class,
+a new `net:http` host, or a new subscribed event does not return the plugin to
+unapproved, and it does not grant the new capability either. The stored grant is
+left exactly as it was, and the plugin keeps running on it. Calls against
+anything newly declared come back `Denied` until an operator re-approves.
 
 What changed is that this is no longer silent. Mydia compares each installed
 plugin's declared capabilities against its grant, value by value, so a new host
@@ -97,14 +108,15 @@ whole new class. A plugin whose manifest has outgrown its grant is badged
 for beyond what you approved, and its **Review & re-approve** button opens the
 same approval modal with the new capabilities called out separately from the
 rest. Re-approving grants the currently requested set. The host also logs a
-warning naming the ungranted capabilities whenever such a plugin starts, so an
-upgrade that widens a bundled manifest is visible in the server log as well as in
-the UI.
+warning naming the ungranted capabilities whenever such a plugin starts, so
+non-bundled capability drift is visible in the server log as well as in the UI.
 
-Nothing about the safety property moved: the grant still only widens when an
-operator approves it, saving unrelated plugin settings will not pull newly
-declared hosts into the allowlist, and until you re-approve, the plugin runs on
-exactly what it had.
+For a third-party plugin, nothing about the safety property moved: the grant
+still only widens when an operator approves it, saving unrelated plugin settings
+will not pull newly declared hosts into the allowlist, and until you re-approve,
+the plugin runs on exactly what it had. A bundled system plugin is trusted
+differently on purpose: its grant tracks the manifest in the host release the
+administrator chose to run, and enabling or disabling it stays their decision.
 
 This is also why `net:http` is an exact-hostname allowlist with no wildcards:
 a wildcard subdomain grant is effectively an open exfiltration channel, since

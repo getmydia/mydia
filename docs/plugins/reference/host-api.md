@@ -43,8 +43,11 @@ is sampled (one per 5% bucket); `playback.paused` is reserved but not yet emitte
 ## Capabilities
 
 Capabilities are **deny-by-default** and enforced server-side on every call. A
-plugin can never widen its own grant. A manifest *declares* what it wants; the
-operator approves it.
+plugin can never widen its own grant. A manifest *declares* what it wants; for a
+plugin installed from an index or remote package the operator approves it, while
+plugins bundled in Mydia's `priv/plugins/` directory are granted their declared
+set on discovery as part of the host release (see the
+[manifest reference](manifest.md#capabilities)).
 
 | Class | Meaning |
 |-------|---------|

@@ -258,8 +258,8 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "manifest revisions vs. grants (R5, deny-by-default)" do
-    # A revision is exactly what `refresh_bundled_manifest/2` does: re-store the
-    # declared manifest, never touch `granted_capabilities`.
+    # A revision re-stores the declared manifest and never touches
+    # `granted_capabilities` — the non-bundled install/re-approval path.
     defp revise!(config, capabilities) do
       manifest = Map.put(config.manifest, "capabilities", capabilities)
       {:ok, revised} = Settings.update_plugin_config(config, %{manifest: manifest})
@@ -425,51 +425,59 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "ensure_bundled/0 manifest reconciliation" do
-    test "refreshes a stale stored manifest while leaving admin state untouched" do
-      # A bundled row seeded before settings_schema was added to the JSON: its
-      # stored manifest lacks the field, so the Settings UI can't render.
-      {:ok, config} =
+    test "refreshes manifest and exact effective grant while preserving enabled state and settings" do
+      settings = %{
+        "target" => "ntfy",
+        "webhook_url" => "https://ntfy.example.com/mydia"
+      }
+
+      {:ok, _config} =
         Settings.create_plugin_config(%{
           slug: "webhook-notifier",
-          name: "Webhook Notifier",
+          name: "Old Notifier",
           version: "1.0.0",
           source_url: "bundled",
           enabled: true,
-          granted_capabilities: %{"net:http" => ["discord.com"]},
-          settings: %{"target" => "ntfy"},
+          granted_capabilities: %{
+            "net:http" => ["discord.com"],
+            "obsolete" => ["remove-me"]
+          },
+          settings: settings,
           manifest: %{
             "slug" => "webhook-notifier",
-            "name" => "Webhook Notifier",
+            "name" => "Old Notifier",
             "version" => "1.0.0",
             "capabilities" => %{"net:http" => ["discord.com"]}
           }
         })
 
-      refute get_in(config.manifest, ["settings_schema"])
-
-      Plugins.ensure_bundled()
+      assert :ok = Plugins.ensure_bundled()
 
       refreshed = Settings.get_plugin_config_by_slug("webhook-notifier")
-      schema = get_in(refreshed.manifest, ["settings_schema"])
 
-      assert is_list(schema) and schema != []
-      assert Enum.any?(schema, &(&1["key"] == "webhook_url" and &1["grants_host"] == true))
+      expected =
+        refreshed.manifest["capabilities"]
+        |> Map.put("net:http", ["discord.com", "ntfy.example.com"])
 
-      # Admin state must survive a built-in upgrade.
       assert refreshed.enabled
-      assert refreshed.granted_capabilities == %{"net:http" => ["discord.com"]}
-      assert refreshed.settings == %{"target" => "ntfy"}
+      assert refreshed.settings == settings
+      assert refreshed.granted_capabilities == expected
+      refute Plugins.needs_reapproval?(refreshed)
     end
 
-    test "a built-in upgrade that requests more than was granted is flagged for re-approval" do
-      {:ok, config} =
+    test "refreshes a disabled bundled plugin grant without enabling it" do
+      {:ok, _config} =
         Settings.create_plugin_config(%{
           slug: "webhook-notifier",
           name: "Webhook Notifier",
           version: "1.0.0",
           source_url: "bundled",
-          enabled: true,
-          granted_capabilities: %{"net:http" => ["discord.com"]},
+          enabled: false,
+          granted_capabilities: %{
+            "net:http" => ["discord.com"],
+            "obsolete" => ["remove-me"]
+          },
+          settings: %{"delivery" => "durable"},
           manifest: %{
             "slug" => "webhook-notifier",
             "name" => "Webhook Notifier",
@@ -478,17 +486,13 @@ defmodule Mydia.PluginsTest do
           }
         })
 
-      # Before the upgrade the grant matches the declaration exactly.
-      refute Plugins.needs_reapproval?(config)
-
-      Plugins.ensure_bundled()
+      assert :ok = Plugins.ensure_bundled()
 
       refreshed = Settings.get_plugin_config_by_slug("webhook-notifier")
-      assert Plugins.needs_reapproval?(refreshed)
-      assert Map.has_key?(Plugins.ungranted_capabilities(refreshed), "events:subscribe")
-
-      # ...and the grant itself was left exactly as approved.
-      assert refreshed.granted_capabilities == %{"net:http" => ["discord.com"]}
+      refute refreshed.enabled
+      assert refreshed.granted_capabilities == refreshed.manifest["capabilities"]
+      refute Map.has_key?(refreshed.granted_capabilities, "obsolete")
+      refute Plugins.needs_reapproval?(refreshed)
     end
   end
 
@@ -512,6 +516,45 @@ defmodule Mydia.PluginsTest do
       slugs = Settings.get_db_plugin_configs() |> Enum.map(& &1.slug) |> MapSet.new()
       assert MapSet.member?(slugs, "webhook-notifier")
       assert MapSet.member?(slugs, "simkl_sync")
+    end
+
+    test "starts a bundled plugin discovered on a running node, so its enabled row is not left unregistered" do
+      Application.put_env(:mydia, :start_health_monitors, true)
+      on_exit(fn -> Application.put_env(:mydia, :start_health_monitors, false) end)
+
+      refute Host.running?("webhook-notifier")
+
+      assert :ok = Plugins.maybe_ensure_bundled()
+
+      assert Host.running?("webhook-notifier")
+    end
+
+    test "is idempotent and never starts a bundled plugin the operator disabled" do
+      Application.put_env(:mydia, :start_health_monitors, true)
+      on_exit(fn -> Application.put_env(:mydia, :start_health_monitors, false) end)
+
+      {:ok, _config} =
+        Settings.create_plugin_config(%{
+          slug: "simkl_sync",
+          name: "Simkl Sync",
+          version: "1.1.0",
+          source_url: "bundled",
+          enabled: false,
+          granted_capabilities: %{"net:http" => ["api.simkl.com"]},
+          settings: %{},
+          manifest: %{
+            "slug" => "simkl_sync",
+            "name" => "Simkl Sync",
+            "version" => "1.1.0",
+            "capabilities" => %{"net:http" => ["api.simkl.com"]}
+          }
+        })
+
+      assert :ok = Plugins.maybe_ensure_bundled()
+      assert :ok = Plugins.maybe_ensure_bundled()
+
+      assert Host.running?("webhook-notifier")
+      refute Host.running?("simkl_sync")
     end
   end
 
