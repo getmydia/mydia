@@ -102,16 +102,20 @@ started_emulator=false
 emulator_log="$(mktemp -t mydia-android-tv.XXXXXX.log)"
 
 # Reached on normal exit, error exit, and Ctrl-C. Killing via `adb emu kill`
-# asks the emulator to shut down cleanly; the PID branch is a fallback for an
-# emulator that is running but never registered with adb. A pre-existing
-# matching emulator has started_emulator=false and is deliberately left up.
+# asks the emulator to shut down cleanly, and the PID is signalled too: the
+# console kill has nothing to reach when the emulator never registered with
+# adb, and it can also fail against a wedged console. A pre-existing matching
+# emulator has started_emulator=false and is deliberately left up.
 cleanup() {
     local status=$?
     trap - EXIT INT TERM
-    if [[ "$started_emulator" == true && -n "$emulator_serial" ]]; then
-        "$ADB" -s "$emulator_serial" emu kill >/dev/null 2>&1 || true
-    elif [[ "$started_emulator" == true && -n "$emulator_pid" ]]; then
-        kill "$emulator_pid" >/dev/null 2>&1 || true
+    if [[ "$started_emulator" == true ]]; then
+        if [[ -n "$emulator_serial" ]]; then
+            "$ADB" -s "$emulator_serial" emu kill >/dev/null 2>&1 || true
+        fi
+        if [[ -n "$emulator_pid" ]]; then
+            kill "$emulator_pid" >/dev/null 2>&1 || true
+        fi
     fi
     [[ -n "$emulator_pid" ]] && wait "$emulator_pid" 2>/dev/null || true
     rm -f "$emulator_log"
@@ -159,9 +163,13 @@ if [[ -z "$emulator_serial" ]]; then
     exit 1
 fi
 
-"$ADB" -s "$emulator_serial" wait-for-device
+# Bounded like the registration wait above: `adb wait-for-device` takes no
+# deadline of its own and would hang forever on an emulator that registered
+# but never came back online. The same deadline covers both stages.
 while [[ $SECONDS -lt $deadline ]]; do
-    [[ "$("$ADB" -s "$emulator_serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]] && break
+    if [[ "$("$ADB" -s "$emulator_serial" get-state 2>/dev/null | tr -d '\r')" == device ]]; then
+        [[ "$("$ADB" -s "$emulator_serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]] && break
+    fi
     sleep 2
 done
 if [[ "$("$ADB" -s "$emulator_serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != 1 ]]; then

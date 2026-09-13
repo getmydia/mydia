@@ -78,7 +78,7 @@
       # to androidComposition above. composeAndroidPackages takes the cross
       # product of platformVersions, systemImageTypes and abiVersions, so
       # includeSystemImages there would download a TV image for each of the
-      # five build platforms and three build ABIs. Nothing here builds an APK:
+      # six build platforms and three build ABIs. Nothing here builds an APK:
       # the build SDK above stays the only one Gradle and the NDK linkers see.
       androidTvComposition = pkgs.androidenv.composeAndroidPackages {
         cmdLineToolsVersion = "13.0";
