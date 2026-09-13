@@ -56,7 +56,13 @@
         cmdLineToolsVersion = "13.0";
         platformToolsVersion = "35.0.2";
         buildToolsVersions = [ "30.0.3" "33.0.1" "34.0.0" "35.0.0" "36.0.0" ];
-        platformVersions = [ "30" "33" "34" "35" "36" ];
+        # 37.0 is load-bearing, not padding. The pinned
+        # flutter_secure_storage package declares compileSdk = 37
+        # (10.3.1 declared 36), and AGP reacts by
+        # trying to install the missing platform, which cannot work against
+        # this read-only store SDK: the release build dies with "The SDK
+        # directory is not writable" before assembling anything.
+        platformVersions = [ "30" "33" "34" "35" "36" "37.0" ];
         abiVersions = [ "arm64-v8a" "armeabi-v7a" "x86_64" ];
         includeNDK = true;
         ndkVersions = [ "27.0.12077973" "28.2.13676358" ];
@@ -68,6 +74,27 @@
       ndkPath = "${androidSdk}/libexec/android-sdk/ndk/28.2.13676358";
       ndkBin =
         "${ndkPath}/toolchains/llvm/prebuilt/linux-x86_64/bin";
+
+      # The Android TV emulator runtime, composed on its own rather than added
+      # to androidComposition above. composeAndroidPackages takes the cross
+      # product of platformVersions, systemImageTypes and abiVersions, so
+      # includeSystemImages there would download a TV image for each of the
+      # six build platforms and three build ABIs. Nothing here builds an APK:
+      # the build SDK above stays the only one Gradle and the NDK linkers see.
+      androidTvComposition = pkgs.androidenv.composeAndroidPackages {
+        cmdLineToolsVersion = "13.0";
+        platformToolsVersion = "35.0.2";
+        buildToolsVersions = [ ];
+        platformVersions = [ "36" ];
+        abiVersions = [ "x86_64" ];
+        includeSystemImages = true;
+        systemImageTypes = [ "android-tv" ];
+        includeEmulator = true;
+        includeCmake = false;
+      };
+
+      androidTvSdk = androidTvComposition.androidsdk;
+      androidTvSdkRoot = "${androidTvSdk}/libexec/android-sdk";
 
       # Linux build dependencies for Flutter plugins
       linuxBuildDeps = with pkgs; [
@@ -102,9 +129,12 @@
         libxkbcommon
         libepoxy
       ];
-    in
-    {
-      devShells.android = pkgs.mkShell {
+
+      # The one Android build environment, shared by both shells. Everything a
+      # shell needs to compile the player lives here, so the TV shell cannot
+      # drift from the build shell: the env vars, the four Android targets'
+      # linker/CC/AR settings and the codegen hook are defined once.
+      androidShellAttrs = {
         buildInputs = [
           flutterPkg
           androidSdk
@@ -189,6 +219,21 @@
           echo ""
         '';
       };
+    in
+    {
+      devShells.android = pkgs.mkShell androidShellAttrs;
+
+      # Same shell plus the emulator runtime. The extra SDK is an input, never
+      # a PATH-priority change: the emulator, avdmanager and the API 36
+      # android-tv x86_64 image are read from MYDIA_ANDROID_TV_SDK_ROOT, so
+      # nothing here can displace the build SDK's own tools.
+      devShells.android-tv = pkgs.mkShell (androidShellAttrs // {
+        buildInputs = androidShellAttrs.buildInputs ++ [ androidTvSdk ];
+        MYDIA_ANDROID_TV_SDK_ROOT = androidTvSdkRoot;
+        shellHook = androidShellAttrs.shellHook + ''
+          echo "  mydia Android TV image               - API 36 x86_64"
+        '';
+      });
 
       # Exposed so CI can assert the pinned Flutter resolves without building an
       # SDK or any Android tooling:

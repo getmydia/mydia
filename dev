@@ -9,7 +9,8 @@
 #
 # Unchanged, intentionally NOT devenv-backed:
 #   - relay <build|push|restart|deploy>   (Docker + kubectl)
-#   - player android <build|run|shell>    (nix devShell .#android, native Nix)
+#   - player android <build|run|tv-run|shell>  (nix devShell .#android /
+#     .#android-tv, native Nix)
 #   - player macos <build|run>            (host Xcode/CocoaPods/rustup toolchain)
 #   - player flatpak <build|install|run>  (host flatpak + flatpak-builder)
 #   - player e2e / e2e-build              (Docker E2E stack, compose.player-e2e.yml)
@@ -159,6 +160,8 @@ ${YELLOW}Player (Flutter):${NC}
 ${YELLOW}Player Android (native, uses the .#android nix devShell):${NC}
   player android build Build Android APK (release)
   player android run   Build and run on connected Android device
+  player android tv-run [args]
+                       Provision an Android TV emulator and run the debug app
   player android shell Open the .#android nix develop shell
 
 ${YELLOW}Player macOS (native, uses the host Xcode/CocoaPods/rustup toolchain):${NC}
@@ -630,13 +633,23 @@ case "$COMMAND" in
                         extra_args="${@:3}"
                         nix develop .#android --command bash -c "cd player && flutter pub get && flutter pub run build_runner build && flutter run $extra_args"
                         ;;
+                    tv-run)
+                        # The runner owns the whole sequence (AVD creation,
+                        # emulator start/ownership, boot wait, flutter run), so
+                        # this branch only enters the TV shell and passes the
+                        # remaining arguments as argv — never interpolated into
+                        # a `bash -c` string, which would lose their quoting.
+                        echo -e "${GREEN}Starting Mydia on the Nix-managed Android TV emulator...${NC}"
+                        nix develop .#android-tv --command \
+                            bash player/tool/run_android_tv.sh "${@:3}"
+                        ;;
                     shell)
                         echo -e "${GREEN}Opening the .#android nix develop shell...${NC}"
                         nix develop .#android
                         ;;
                     *)
                         echo -e "${RED}Error: Unknown android command: $2${NC}"
-                        echo "Usage: ./dev player android <build|run|shell>"
+                        echo "Usage: ./dev player android <build|run|tv-run|shell>"
                         exit 1
                         ;;
                 esac

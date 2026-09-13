@@ -67,6 +67,7 @@ Android builds use the root flake's `.#android` dev shell (`nix/devShells/flake-
 
 - `./dev player android build` - Build release APK
 - `./dev player android run` - Build and run on connected Android device
+- `./dev player android tv-run` - Android TV emulator (see `player/CLAUDE.md`)
 - `./dev player android shell` - Open nix develop shell for manual commands
 
 **Output:** `player/build/app/outputs/flutter-apk/app-release.apk`
