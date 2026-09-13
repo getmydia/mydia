@@ -56,8 +56,9 @@
         cmdLineToolsVersion = "13.0";
         platformToolsVersion = "35.0.2";
         buildToolsVersions = [ "30.0.3" "33.0.1" "34.0.0" "35.0.0" "36.0.0" ];
-        # 37.0 is load-bearing, not padding. The pinned flutter_secure_storage
-        # 11 declares compileSdk = 37 (10.3.1 declared 36), and AGP reacts by
+        # 37.0 is load-bearing, not padding. The pinned
+        # flutter_secure_storage package declares compileSdk = 37
+        # (10.3.1 declared 36), and AGP reacts by
         # trying to install the missing platform, which cannot work against
         # this read-only store SDK: the release build dies with "The SDK
         # directory is not writable" before assembling anything.

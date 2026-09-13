@@ -78,6 +78,27 @@ find_avd_serial() {
     return 1
 }
 
+# Console ports are even; adb uses port+1. Pinning the console port makes the
+# serial (`emulator-<port>`) known before adb lists the device, so cleanup
+# cannot follow a later-discovered sibling AVD.
+pick_console_port() {
+    local port
+    for ((port = 5554; port <= 5584; port += 2)); do
+        if "$ADB" devices | awk '{print $1}' | grep -qx "emulator-$port"; then
+            continue
+        fi
+        if (echo >/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1; then
+            continue
+        fi
+        if (echo >/dev/tcp/127.0.0.1/"$((port + 1))") >/dev/null 2>&1; then
+            continue
+        fi
+        printf '%s\n' "$port"
+        return 0
+    done
+    return 1
+}
+
 # Idempotent: create the AVD only when the exact name is absent. The prompt is
 # the "custom hardware profile?" question, answered no so the --device profile
 # is used as-is. avdmanager writes to the normal ${ANDROID_AVD_HOME:-$HOME/.android/avd}.
@@ -98,6 +119,7 @@ fi
 
 emulator_pid=""
 emulator_serial=""
+cleanup_serial=""
 started_emulator=false
 emulator_log="$(mktemp -t mydia-android-tv.XXXXXX.log)"
 
@@ -110,8 +132,8 @@ cleanup() {
     local status=$?
     trap - EXIT INT TERM
     if [[ "$started_emulator" == true ]]; then
-        if [[ -n "$emulator_serial" ]]; then
-            "$ADB" -s "$emulator_serial" emu kill >/dev/null 2>&1 || true
+        if [[ -n "$cleanup_serial" ]]; then
+            "$ADB" -s "$cleanup_serial" emu kill >/dev/null 2>&1 || true
         fi
         if [[ -n "$emulator_pid" ]]; then
             kill "$emulator_pid" >/dev/null 2>&1 || true
@@ -137,7 +159,13 @@ if [[ -z "$emulator_serial" ]]; then
     # gfxstream's RenderThread as soon as the app painted (coredump:
     # libGLESv2.so <- gles2_decoder_context_t::decode). The host GPU path ran
     # the same workload with D-pad input for minutes without a crash, so pin it.
-    "${tv_sdk_env[@]}" "$EMULATOR" -avd "$AVD_NAME" -no-boot-anim -no-snapshot \
+    console_port="$(pick_console_port)" || {
+        echo "Error: no free emulator console port in 5554-5584" >&2
+        exit 1
+    }
+    cleanup_serial="emulator-$console_port"
+    "${tv_sdk_env[@]}" "$EMULATOR" -avd "$AVD_NAME" -port "$console_port" \
+        -no-boot-anim -no-snapshot \
         -gpu host \
         >"$emulator_log" 2>&1 &
     emulator_pid=$!
@@ -154,7 +182,13 @@ while [[ -z "$emulator_serial" && $SECONDS -lt $deadline ]]; do
         exit 1
     fi
     sleep 2
-    emulator_serial="$(find_avd_serial || true)"
+    if [[ -n "$cleanup_serial" ]]; then
+        if [[ "$("$ADB" -s "$cleanup_serial" get-state 2>/dev/null | tr -d '\r')" == device ]]; then
+            emulator_serial="$cleanup_serial"
+        fi
+    else
+        emulator_serial="$(find_avd_serial || true)"
+    fi
 done
 
 if [[ -z "$emulator_serial" ]]; then
