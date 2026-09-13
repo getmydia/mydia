@@ -44,7 +44,7 @@ LOCAL_AUTH_ENABLED=true
 
 Admins can create users through the Admin UI:
 
-1. Navigate to **Admin > Users**
+1. Navigate to **Admin > System > Users**
 2. Click **Create Local User**
 3. Enter username and email
 4. Select a role: Guest, Read Only, User, or Admin
@@ -75,13 +75,13 @@ Guest users can request media:
     Mydia does not email, push, or otherwise notify anyone about requests. Nothing
     tells an admin that a request arrived, and nothing tells the guest it was
     approved or rejected. Both sides find out by looking. Admins should check
-    **Admin > Requests** periodically, and guests can watch **My Requests**.
+    **Admin > Administration > Requests** periodically, and guests can watch **My Requests**.
 
 ### Managing Requests
 
 Admins can view and manage requests:
 
-1. Navigate to **Admin > Requests**
+1. Navigate to **Admin > Administration > Requests**
 2. View pending requests
 3. Approve or reject each request
 4. Approving opens a dialog for the root folder, quality profile, monitoring,
@@ -90,7 +90,7 @@ Admins can view and manage requests:
    changes is still two clicks, as long as at least one library path is
    already configured. Without one, the root folder field has nothing to
    offer and approval is blocked until a library path is added under
-   **Admin > Configuration**, on the **Library** tab.
+   **Admin > Configuration > Library**.
 5. A rejection requires a reason, which the requester can see
 
 ## Disabling Authentication

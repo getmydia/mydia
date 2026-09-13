@@ -299,7 +299,7 @@ INDEXER_3_API_PATH=/api
 
 Some indexers report zero seeders when they could not read the count rather than when a torrent is dead, so any nonzero floor can silently empty their
 results. See [How Mydia decides which release to grab](../explanation/quality-decisions.md#minimum-seeders-is-a-filter-and-the-only-one-you-are-likely-to-set)
-before raising it. Also settable under **Admin > Configuration > Settings > Downloads**.
+before raising it. Also settable under **Admin > System > Settings > Downloads**.
 
 ## PostgreSQL Configuration
 
@@ -334,7 +334,7 @@ For PostgreSQL deployments (using `latest-pg` image):
 
 The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See [Architecture](../../contributing/architecture.md) for details.
 
-`METADATA_LANGUAGE` can also be set per-instance from **Admin > Configuration > Settings**, under **Metadata**, in the admin UI; the env var overrides the database value when both are set.
+`METADATA_LANGUAGE` can also be set per-instance from **Admin > System > Settings**, under **Metadata**, in the admin UI; the env var overrides the database value when both are set.
 
 ## FlareSolverr
 
@@ -367,7 +367,7 @@ See [Automatic Quality Upgrades](../how-to/automatic-quality-upgrades.md) for wh
 
 A transcode only happens when a file's codec is not playable as-is, or when a player asks for a quality below the source. This ceiling bounds those; it never
 upscales, and it does not apply when a file is streamed without re-encoding. Set it on a server that cannot encode 4K in realtime, which is what an
-incompatible 4K file would otherwise ask of it. Also settable under **Admin > Configuration > Settings > Streaming**.
+incompatible 4K file would otherwise ask of it. Also settable under **Admin > System > Settings > Streaming**.
 
 ## Advanced Configuration
 

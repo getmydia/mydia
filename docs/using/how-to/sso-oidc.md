@@ -123,7 +123,7 @@ The first user to log in via OIDC is automatically promoted to admin role. Subse
 Currently, role assignment is manual after first login:
 
 1. Admin logs in
-2. Navigates to Admin > Users
+2. Navigates to Admin > System > Users
 3. Updates user role as needed
 
 ### Combining with Local Auth
@@ -229,7 +229,7 @@ Verify the setup end to end before you rely on it:
    the redirect URI matches what you registered with your provider.
 2. Log out, then use the OIDC button on the login page. A successful round trip
    lands you back on the dashboard with your provider account.
-3. Check **Admin > Users**. A first-time OIDC login creates the user. If no admin
+3. Check **Admin > System > Users**. A first-time OIDC login creates the user. If no admin
    account exists yet, that user is promoted to admin so an OIDC-only deployment
    is not left with nobody who can administer it.
 4. Keep at least one working local admin account until you have confirmed OIDC

@@ -104,7 +104,7 @@ The floor for automatic searches lives in the layered configuration as
 `downloads.min_seeders`, so you can set it three ways, in increasing order of
 precedence:
 
-- **Settings > Configuration > Downloads** in the web UI, as *Minimum Seeders
+- **Admin > System > Settings > Downloads** in the web UI, as *Minimum Seeders
   (automatic search)*. This is the usual way and takes effect without a restart.
 - `downloads.min_seeders` in `config.yml`.
 - The `AUTO_SEARCH_MIN_SEEDERS` environment variable, which wins over both.

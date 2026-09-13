@@ -10,8 +10,8 @@ assigns it a score or marks it as rejecting, so the same format can be worth
 
 ## Where things live
 
-- **Admin > Custom Formats** defines formats: their name and their patterns.
-- **Admin > Quality Profiles > (a profile)** assigns each format a score or a
+- **Admin > Configuration > Custom Formats** defines formats: their name and their patterns.
+- **Admin > Configuration > Quality > (a profile)** assigns each format a score or a
   reject flag for that profile only.
 
 ## Scoring

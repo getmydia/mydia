@@ -40,7 +40,7 @@ LOG_LEVEL=debug  # or info, warning, error
 
 Most of what Mydia does on your behalf (scans, metadata refreshes, download
 monitoring, imports) runs as a background job rather than in a request. When
-something is not happening and the logs are quiet, **Admin > Background Jobs**
+something is not happening and the logs are quiet, **Admin > Administration > Background Jobs**
 shows the queues, what is running, and what failed.
 
 ## Next Steps

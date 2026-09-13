@@ -81,7 +81,7 @@ next candidate and remembers the new one. No configuration is involved.
 
 ### Adding a Cardigann Indexer
 
-1. Navigate to **Admin > Configuration**, then the **Indexers** tab
+1. Navigate to **Admin > Configuration > Indexers**
 2. Click **Add Indexer**
 3. Select the indexer from the Cardigann list
 4. Enter required credentials (if applicable)

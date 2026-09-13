@@ -12,7 +12,7 @@ Environment variables override all other configuration sources. See [Environment
 
 Settings configured through the Admin UI are stored in the database and persist across restarts.
 
-Access via **Admin > Configuration > Settings**.
+Access via **Admin > System > Settings**.
 
 ### 3. YAML Configuration File
 

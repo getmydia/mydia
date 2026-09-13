@@ -29,7 +29,7 @@ whole season at a fraction of the indexer cost.
 ## Turning it on for a profile
 
 Automatic upgrades are controlled per quality profile, not globally. Open
-**Admin > Configuration**, go to the **Quality** tab, edit a profile, and look for **Allow automatic
+**Admin > Configuration > Quality**, edit a profile, and look for **Allow automatic
 quality upgrades** on the Basic tab. This is checked by default on new
 profiles, but the built-in profiles Mydia ships with are not all the same:
 only **Any** and **SD** have it on out of the box. The other six
@@ -158,12 +158,12 @@ copies for real and trashed the loser, which normally happens a minute or two
 after import.
 
 If it has not cleared an hour later, the upgrade is wedged and both copies
-are still taking up room. **Admin > Configuration > Status** says so at the
+are still taking up room. **Admin > System > Status** says so at the
 top of the page, with a count of the files affected and a link to the jobs
 page. Nothing is shown there when the count is zero, so a Status page with no
 such warning means nothing is stuck.
 
-Two things cause it, and both leave a trace on **Admin > Jobs**:
+Two things cause it, and both leave a trace on **Admin > Administration > Background Jobs**:
 
 - The new file was never analyzed, so the step that finishes the upgrade was
   never queued in the first place. There is no `UpgradeFinalize` job for the

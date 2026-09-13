@@ -11,8 +11,8 @@ Complete reference of the indexer types Mydia supports.
 
 ## Configuration Fields
 
-These fields appear when adding or editing an indexer on **Admin > Configuration**,
-under the **Indexers** tab.
+These fields appear when adding or editing an indexer on
+**Admin > Configuration > Indexers**.
 
 | Option | Description | Example |
 |--------|-------------|---------|

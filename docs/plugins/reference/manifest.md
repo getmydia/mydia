@@ -92,7 +92,7 @@ Every `playback.*` event carries an `origin` in its metadata: `player` (a real c
     against anything newly declared come back `Denied`.
 
     Mydia flags the state rather than leaving it quiet: the plugin is badged
-    **needs re-approval** in Configuration > Plugins, its row names the
+    **needs re-approval** in Admin > System > Plugins, its row names the
     capabilities it is asking for beyond what was approved, and **Review &
     re-approve** grants the currently declared set. The host also logs a warning
     naming them when such a plugin starts. Until you re-approve, nothing widens.
