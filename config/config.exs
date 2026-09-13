@@ -333,7 +333,9 @@ config :mydia, Oban,
        {"30 4 * * *", Mydia.Jobs.PluginLogCleanup},
        # Look for quality upgrades to existing files daily at 1 AM. Deliberately
        # slower than the missing-file searches: this can touch the whole library.
-       {"0 1 * * *", Mydia.Jobs.UpgradeSweep}
+       {"0 1 * * *", Mydia.Jobs.UpgradeSweep},
+       # Advance aggregate library revisions after UTC air-date transitions.
+       {"5 0 * * *", Mydia.Jobs.LibraryRevisionClock}
      ]}
   ]
 

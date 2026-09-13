@@ -22,6 +22,12 @@ defmodule MydiaWeb.Plugs.LibraryApiAuthTest do
     previous_config = Application.get_env(:mydia, :library_api_key)
 
     on_exit(fn ->
+      # "rate limits repeated failures with 429" deliberately exhausts this
+      # bucket, and the limiter's window is an hour, so leaving it saturated
+      # would 429 every later request from this IP for the rest of the suite
+      # run -- including HTTP tests that authenticate with a valid key.
+      ApiKeyRateLimiter.reset_rate_limit(@bucket)
+
       case previous_env do
         nil -> System.delete_env("LIBRARY_API_KEY")
         value -> System.put_env("LIBRARY_API_KEY", value)

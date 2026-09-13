@@ -13,8 +13,9 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
   require Logger
 
   alias Mydia.Downloads
-  alias Mydia.Media
   alias Mydia.LibraryApi.Principal
+  alias Mydia.LibraryApi.RevisionFeed
+  alias Mydia.Media
   alias MydiaWeb.LibrarySchema.Loaders
   alias MydiaWeb.LibrarySchema.MediaItemView
   alias MydiaWeb.LibrarySchema.UserError
@@ -43,13 +44,15 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
   @spec client_state(atom() | nil) :: atom()
   def client_state(value), do: Map.get(@client_state_map, value, :unknown)
 
-  @spec downloads(any(), map(), Absinthe.Resolution.t()) :: {:ok, [map()]}
+  @spec downloads(any(), map(), Absinthe.Resolution.t()) :: {:ok, [map()]} | {:error, String.t()}
   def downloads(_parent, args, _info) do
     filter = Map.get(args, :filter) || :active
     rows = Downloads.list_downloads_with_status(filter: filter)
     {items, episodes} = hydrate_associations(rows)
 
-    {:ok, Enum.map(rows, &download_map(&1, items, episodes))}
+    with {:ok, changed_at_by_id} <- RevisionFeed.live_changed_at_by_ids(Map.keys(items)) do
+      {:ok, Enum.map(rows, &download_map(&1, items, changed_at_by_id, episodes))}
+    end
   end
 
   @spec cancel_download(any(), map(), Absinthe.Resolution.t()) :: {:ok, map()}
@@ -112,6 +115,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
 
   # History only preloads episode.media_item. Batch the standard API preloads
   # so nested availability and episode.hasFile never read unloaded associations.
+  # The marker read is one query for the whole page, in the caller, not one per
+  # row.
   defp hydrate_associations(rows) do
     item_ids =
       rows
@@ -123,21 +128,21 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
 
     items =
       case item_ids do
-        [] -> %{}
+        [] -> []
         ids -> Media.list_media_items(ids: ids, preload: MediaItemView.preloads())
       end
-      |> Map.new(&{&1.id, &1})
+
+    by_id = Map.new(items, &{&1.id, &1})
 
     episodes =
       items
-      |> Map.values()
       |> Enum.flat_map(& &1.episodes)
       |> Map.new(&{&1.id, &1})
 
-    {items, episodes}
+    {by_id, episodes}
   end
 
-  defp download_map(row, items, episodes) do
+  defp download_map(row, items, changed_at_by_id, episodes) do
     %{
       id: row.id,
       title: row.title,
@@ -151,18 +156,24 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
       error_message: row.error_message,
       import_failure_reason: row.import_failure_reason,
       import_failed_at: row.import_failed_at,
-      media_item: media_item(row.media_item_id, items),
+      media_item: media_item(row.media_item_id, items, changed_at_by_id),
       episode: episode(row.episode_id, episodes),
       added_at: row.inserted_at
     }
   end
 
-  defp media_item(nil, _items), do: nil
+  defp media_item(nil, _items, _changed_at_by_id), do: nil
 
-  defp media_item(id, items) do
+  defp media_item(id, items, changed_at_by_id) do
     case Map.get(items, id) do
-      nil -> nil
-      item -> MediaItemView.item_map(item)
+      nil ->
+        nil
+
+      item ->
+        case Map.fetch!(changed_at_by_id, id) do
+          nil -> nil
+          changed_at -> MediaItemView.item_map(item, changed_at)
+        end
     end
   end
 

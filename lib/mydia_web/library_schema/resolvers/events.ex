@@ -2,8 +2,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Events do
   @moduledoc """
   Resolves `events` over `Mydia.LibraryApi.EventFeed`.
 
-  The feed is best-effort (see EventFeed's moduledoc): `mediaItems(updatedSince:)`
-  and `downloads` stay the source of truth.
+  The feed is best-effort (see EventFeed's moduledoc): `mediaItemChanges` and
+  `downloads` stay the source of truth.
   """
 
   alias Mydia.LibraryApi.Cursor

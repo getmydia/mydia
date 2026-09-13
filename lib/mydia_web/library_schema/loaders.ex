@@ -3,20 +3,21 @@ defmodule MydiaWeb.LibrarySchema.Loaders do
   Loads what a mutation's arguments name, or the `UserError` to report instead.
 
   Every mutation that takes an id needs the same three answers (malformed, names
-  nothing, found) and the same preloads before `MediaItemView.item_map/1` can
+  nothing, found) and the same preloads before `MediaItemView.item_map/2` can
   run, so they live here once.
   """
 
   alias Mydia.Downloads
   alias Mydia.Downloads.Download
   alias Mydia.Library.MediaFile
+  alias Mydia.LibraryApi.RevisionFeed
   alias Mydia.Media
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaItem
   alias MydiaWeb.LibrarySchema.MediaItemView
   alias MydiaWeb.LibrarySchema.UserError
 
-  @doc "The media item `id` names, preloaded for `MediaItemView.item_map/1`."
+  @doc "The media item `id` names, preloaded for `MediaItemView.item_map/2`."
   @spec item(term(), [String.t()]) :: {:ok, MediaItem.t()} | {:error, UserError.t()}
   def item(id, field) do
     with {:ok, id} <- UserError.cast_id(id, field) do
@@ -31,13 +32,24 @@ defmodule MydiaWeb.LibrarySchema.Loaders do
   The GraphQL map for a freshly reloaded item, or nil when it is gone.
 
   Reloaded rather than reusing a struct a context function returned: the payload
-  must carry the preloads `item_map/1` reads, and updates do not return them.
+  must carry the preloads `item_map/2` reads, and updates do not return them.
+  The aggregate timestamp comes from the item's single revision marker; a
+  tombstone reads as nil because the item was deleted concurrently, while a
+  wholly absent marker keeps the invariant error `live_changed_at!/1` raises --
+  every write advances a marker, so a missing one is a broken invariant rather
+  than an absent value.
   """
   @spec item_map(Ecto.UUID.t()) :: map() | nil
   def item_map(id) do
     case load(id) do
-      nil -> nil
-      item -> MediaItemView.item_map(item)
+      nil ->
+        nil
+
+      item ->
+        case RevisionFeed.live_changed_at!(item.id) do
+          nil -> nil
+          changed_at -> MediaItemView.item_map(item, changed_at)
+        end
     end
   end
 

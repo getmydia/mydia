@@ -10,7 +10,7 @@ defmodule Mydia.LibraryApi.EventFeed do
   Best-effort, and the API says so:
 
     * `Mydia.Events.Writer` drops events under overload and loses a batch whose
-      insert fails, so the feed can have gaps. `mediaItems(updatedSince:)` and
+      insert fails, so the feed can have gaps. `mediaItemChanges` and
       `downloads` stay the source of truth.
     * `inserted_at` is stamped in the caller's process before the event is
       flushed; the writer can block in Repo.insert_all/2 for up to the

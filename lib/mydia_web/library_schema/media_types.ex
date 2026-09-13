@@ -62,16 +62,4 @@ defmodule MydiaWeb.LibrarySchema.MediaTypes do
     field :in_library, :media_item,
       description: "The library item this hit corresponds to, if Mydia already has it"
   end
-
-  @desc "One item in a mediaItems page"
-  object :media_item_edge do
-    field :node, non_null(:media_item)
-    field :cursor, non_null(:string)
-  end
-
-  @desc "A page of media items"
-  object :media_item_connection do
-    field :edges, non_null(list_of(non_null(:media_item_edge)))
-    field :page_info, non_null(:page_info)
-  end
 end

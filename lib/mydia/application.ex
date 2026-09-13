@@ -125,7 +125,11 @@ defmodule Mydia.Application do
       # because it runs before this tree exists. Must sit after the migrator: on
       # a fresh install config_settings does not exist until the migrator has
       # run. Returns :ignore once done. See the module doc.
-      {Mydia.Config.Bootstrap, skip: skip_config_merge?()}
+      {Mydia.Config.Bootstrap, skip: skip_config_merge?()},
+      # Runs the UTC-day revision catch-up once, after the migrator and the config
+      # merge, and before the endpoint can serve a stale revision feed. Returns
+      # :ignore once done. See the module doc.
+      {Mydia.LibraryApi.RevisionClockBootstrap, skip: skip_revision_clock?()}
     ] ++
       [
         # Releases import runs whose coordinator died with the previous node.
@@ -310,6 +314,15 @@ defmodule Mydia.Application do
   # child has to stay between Ecto.Migrator and its consumers, so it stays in
   # the list and no-ops instead.
   defp skip_config_merge? do
+    not Application.get_env(:mydia, :start_health_monitors, true)
+  end
+
+  # The catch-up sweep opens a transaction from the supervisor's own process,
+  # which owns no SQL Sandbox connection, so running it under `mix test` raises
+  # DBConnection.OwnershipError before any test starts. Like the config merge it
+  # stays in the list and no-ops instead of being spliced out, because its
+  # position between the migrator and the endpoint is load-bearing.
+  defp skip_revision_clock? do
     not Application.get_env(:mydia, :start_health_monitors, true)
   end
 
