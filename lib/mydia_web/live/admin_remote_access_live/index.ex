@@ -44,6 +44,11 @@ defmodule MydiaWeb.AdminRemoteAccessLive.Index do
     {:noreply, refresh_status(socket)}
   end
 
+  def handle_info(msg, socket) do
+    Logger.warning("Unhandled message in AdminRemoteAccessLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
+  end
+
   ## Event Handlers
 
   @impl true

@@ -13,7 +13,14 @@ defmodule MydiaWeb.UnhandledMessageTest do
     MydiaWeb.CalendarLive.Index,
     MydiaWeb.SearchLive.Index,
     MydiaWeb.DownloadsLive.Index,
-    MydiaWeb.MediaLive.Index
+    MydiaWeb.MediaLive.Index,
+    MydiaWeb.ActivityLive.Index,
+    MydiaWeb.AdminImportListsLive.Index,
+    MydiaWeb.AdminLibraryPathsLive.Index,
+    MydiaWeb.AdminPluginsLive.Index,
+    MydiaWeb.AdminRemoteAccessLive.Index,
+    MydiaWeb.AdminSystemLive.Index,
+    MydiaWeb.TranscodesLive.Index
   ]
 
   # The existing MediaLive.Index precedent logs the module name *without* the
@@ -27,14 +34,48 @@ defmodule MydiaWeb.UnhandledMessageTest do
       socket = %Socket{}
       module = unquote(module)
 
+      for message <- [{:totally_unexpected, :message}, :totally_unexpected] do
+        log =
+          capture_log(fn ->
+            assert {:noreply, ^socket} = module.handle_info(message, socket)
+          end)
+
+        assert log =~ "Unhandled message in #{short_name(module)}"
+      end
+    end
+  end
+
+  @scan_events [
+    :library_scan_started,
+    :library_scan_progress,
+    :library_scan_completed,
+    :library_scan_failed
+  ]
+
+  for event <- @scan_events do
+    test "AdminLibraryPathsLive.Index ignores #{event} silently" do
+      socket = %Socket{}
+
       log =
         capture_log(fn ->
           assert {:noreply, ^socket} =
-                   module.handle_info({:totally_unexpected, :message}, socket)
+                   MydiaWeb.AdminLibraryPathsLive.Index.handle_info({unquote(event), %{}}, socket)
         end)
 
-      assert log =~ "Unhandled message in #{short_name(module)}"
+      refute log =~ "Unhandled message in AdminLibraryPathsLive.Index"
     end
+  end
+
+  test "AdminLibraryPathsLive.Index tracks a started library reorganization" do
+    socket = Phoenix.Component.assign(%Socket{}, :reorganizing_library_ids, MapSet.new())
+
+    assert {:noreply, updated_socket} =
+             MydiaWeb.AdminLibraryPathsLive.Index.handle_info(
+               {:library_reorganize_started, %{library_path_id: "test-library"}},
+               socket
+             )
+
+    assert updated_socket.assigns.reorganizing_library_ids == MapSet.new(["test-library"])
   end
 
   # `Mydia.Downloads.Grabber` broadcasts these three shapes on the "downloads"

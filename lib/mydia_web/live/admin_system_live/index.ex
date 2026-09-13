@@ -7,6 +7,8 @@ defmodule MydiaWeb.AdminSystemLive.Index do
   alias Mydia.Settings
   alias Mydia.System
 
+  require Logger
+
   # Capture Mix.env at compile time since Mix is not available in releases
   @env Mix.env()
 
@@ -43,6 +45,11 @@ defmodule MydiaWeb.AdminSystemLive.Index do
   @impl true
   def handle_info(:refresh_system_data, socket) do
     {:noreply, load_system_data(socket)}
+  end
+
+  def handle_info(msg, socket) do
+    Logger.warning("Unhandled message in AdminSystemLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
   end
 
   ## Private Helpers

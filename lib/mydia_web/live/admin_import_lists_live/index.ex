@@ -79,6 +79,11 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
     {:noreply, socket}
   end
 
+  def handle_info(msg, socket) do
+    Logger.warning("Unhandled message in AdminImportListsLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
+  end
+
   ## Data Loading
 
   defp load_data(socket) do

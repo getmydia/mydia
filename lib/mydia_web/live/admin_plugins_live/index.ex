@@ -277,6 +277,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     end
   end
 
+  def handle_info(msg, socket) do
+    Logger.warning("Unhandled message in AdminPluginsLive.Index: #{inspect(msg)}")
+    {:noreply, socket}
+  end
+
   ## Helpers
 
   defp approval_flash(%{ungranted: ungranted, name: name}) when ungranted != %{},
