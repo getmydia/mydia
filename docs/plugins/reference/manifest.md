@@ -89,7 +89,7 @@ Every `playback.*` event carries an `origin` in its metadata: `player` (a real c
 !!! warning "Third-party manifest revisions need re-approval"
     A plugin installed from an index or remote package cannot widen its grant.
     New capability classes, hosts, or events remain denied until an administrator
-    reviews and re-approves the revised manifest.
+    reviews and re-approves the revised manifest in **Admin > System > Plugins**.
 
 !!! note "Bundled system plugins follow the host release"
     Plugins shipped in Mydia's `priv/plugins/` directory are trusted as part of
