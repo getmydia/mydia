@@ -173,4 +173,88 @@ defmodule MydiaWeb.DashboardLive.HomeLayoutTest do
       assert assigns.clients_rollup.state == :none
     end
   end
+
+  describe "integration: layout customization and rendering" do
+    test "default widgets and order for admin and guest", %{conn: conn} do
+      admin = user_fixture(%{role: "admin"})
+      {:ok, admin_view, _} = live(log_in_user(conn, admin), ~p"/")
+
+      assert has_element?(admin_view, "#library-stats-widget")
+      assert has_element?(admin_view, "#system-health-widget")
+      assert has_element?(admin_view, "#quick-actions-widget")
+
+      admin_html = render(admin_view)
+      stats_pos = :binary.match(admin_html, "id=\"library-stats-widget\"") |> elem(0)
+      health_pos = :binary.match(admin_html, "id=\"system-health-widget\"") |> elem(0)
+      qa_pos = :binary.match(admin_html, "id=\"quick-actions-widget\"") |> elem(0)
+
+      assert stats_pos < health_pos
+      assert health_pos < qa_pos
+
+      guest = user_fixture(%{role: "guest"})
+      {:ok, guest_view, _} = live(log_in_user(conn, guest), ~p"/")
+
+      assert has_element?(guest_view, "#library-stats-widget")
+      refute has_element?(guest_view, "#system-health-widget")
+      assert has_element?(guest_view, "#qa-request-movie")
+    end
+
+    test "stored custom layout renders in stored order", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:quick_actions, :library_stats])
+
+      {:ok, view, _} = live(log_in_user(conn, user), ~p"/")
+
+      assert has_element?(view, "#quick-actions-widget")
+      assert has_element?(view, "#library-stats-widget")
+      refute has_element?(view, "#trending-movies-widget")
+
+      html = render(view)
+      qa_pos = :binary.match(html, "id=\"quick-actions-widget\"") |> elem(0)
+      stats_pos = :binary.match(html, "id=\"library-stats-widget\"") |> elem(0)
+      assert qa_pos < stats_pos
+    end
+
+    test "toggle, move and reset through the modal persist and re-render", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, view, _} = live(log_in_user(conn, user), ~p"/")
+
+      # Toggle off quick_actions
+      view
+      |> element("#edit-home-widget-quick_actions input[type=checkbox]")
+      |> render_click()
+
+      refute has_element?(view, "#quick-actions-widget")
+      assert :quick_actions not in Accounts.home_widgets(user)
+
+      # Move library_stats down
+      view
+      |> element("#edit-home-widget-library_stats button[aria-label='Move Library stats down']")
+      |> render_click()
+
+      assert Accounts.home_widgets(user) |> Enum.at(0) != :library_stats
+
+      # Reset
+      view
+      |> element("#reset-home-widgets")
+      |> render_click()
+
+      assert :quick_actions in Accounts.home_widgets(user)
+      assert has_element?(view, "#quick-actions-widget")
+    end
+
+    test "hiding both trending widgets means no load_trending messages are sent", %{conn: conn} do
+      user = user_fixture(%{role: "user"})
+      {:ok, _} = Accounts.put_home_widgets(user, [:library_stats])
+
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      # No trending loading triggered
+      refute_received :load_trending_movies
+      refute_received :load_trending_tv
+
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert assigns.trending_prerequisites_loaded == false
+    end
+  end
 end
