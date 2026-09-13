@@ -219,7 +219,7 @@ defmodule MydiaWeb.Router do
 
     # Admin pages lived under /admin/config until they moved to flat
     # /admin/<slug> URLs. These keep old bookmarks working.
-    get "/config", RedirectController, :legacy_admin_config
+    get "/config", RedirectController, :legacy_admin_config_root
     get "/config/*slug", RedirectController, :legacy_admin_config
 
     # Device management is a user action now. This kept old bookmarks working;

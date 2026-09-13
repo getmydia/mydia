@@ -21,6 +21,10 @@ defmodule MydiaWeb.RedirectControllerTest do
       assert conn |> get("/admin/config") |> redirected_to(301) == "/admin/quality"
     end
 
+    test "a slug query param on bare /admin/config does not act as a path", %{conn: conn} do
+      assert conn |> get("/admin/config?slug[]=trash") |> redirected_to(301) == "/admin/quality"
+    end
+
     for {tab, target} <- [
           {"clients", "/admin/clients"},
           {"indexers", "/admin/indexers"},
