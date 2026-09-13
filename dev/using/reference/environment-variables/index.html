@@ -3668,7 +3668,7 @@ regardless of what you set here. If you serve Mydia over plain http, set
 </tr>
 <tr>
 <td><code>ENABLE_REMOTE_ACCESS</code></td>
-<td>P2P remote access for the player. Also a toggle under <strong>Admin › Configuration › Remote Access</strong>; when the variable is set it wins and the toggle is locked</td>
+<td>P2P remote access for the player. Also a toggle under <strong>Admin › System › Remote Access</strong>; when the variable is set it wins and the toggle is locked</td>
 <td><code>true</code></td>
 </tr>
 </tbody>
@@ -3996,7 +3996,7 @@ configurations should use <code>newznab</code>.</p>
 </table>
 <p>Some indexers report zero seeders when they could not read the count rather than when a torrent is dead, so any nonzero floor can silently empty their
 results. See <a href="../../explanation/quality-decisions/#minimum-seeders-is-a-filter-and-the-only-one-you-are-likely-to-set">How Mydia decides which release to grab</a>
-before raising it. Also settable under <strong>Admin &gt; Configuration &gt; Settings &gt; Downloads</strong>.</p>
+before raising it. Also settable under <strong>Admin &gt; System &gt; Settings &gt; Downloads</strong>.</p>
 <h2 id="postgresql-configuration">PostgreSQL Configuration</h2>
 <p>For PostgreSQL deployments (using <code>latest-pg</code> image):</p>
 <table>
@@ -4094,7 +4094,7 @@ before raising it. Also settable under <strong>Admin &gt; Configuration &gt; Set
 </tbody>
 </table>
 <p>The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See <a href="../../../contributing/architecture/">Architecture</a> for details.</p>
-<p><code>METADATA_LANGUAGE</code> can also be set per-instance from <strong>Admin &gt; Configuration &gt; Settings</strong>, under <strong>Metadata</strong>, in the admin UI; the env var overrides the database value when both are set.</p>
+<p><code>METADATA_LANGUAGE</code> can also be set per-instance from <strong>Admin &gt; System &gt; Settings</strong>, under <strong>Metadata</strong>, in the admin UI; the env var overrides the database value when both are set.</p>
 <h2 id="flaresolverr">FlareSolverr</h2>
 <p>FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer sites. Used by Cardigann indexers that require browser-based challenge solving.</p>
 <table>
@@ -4176,7 +4176,7 @@ before raising it. Also settable under <strong>Admin &gt; Configuration &gt; Set
 </table>
 <p>A transcode only happens when a file's codec is not playable as-is, or when a player asks for a quality below the source. This ceiling bounds those; it never
 upscales, and it does not apply when a file is streamed without re-encoding. Set it on a server that cannot encode 4K in realtime, which is what an
-incompatible 4K file would otherwise ask of it. Also settable under <strong>Admin &gt; Configuration &gt; Settings &gt; Streaming</strong>.</p>
+incompatible 4K file would otherwise ask of it. Also settable under <strong>Admin &gt; System &gt; Settings &gt; Streaming</strong>.</p>
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 <table>
 <thead>

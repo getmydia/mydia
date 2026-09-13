@@ -3076,7 +3076,7 @@ of searching every episode individually, since one pack search covers the
 whole season at a fraction of the indexer cost.</p>
 <h2 id="turning-it-on-for-a-profile">Turning it on for a profile</h2>
 <p>Automatic upgrades are controlled per quality profile, not globally. Open
-<strong>Admin &gt; Configuration</strong>, go to the <strong>Quality</strong> tab, edit a profile, and look for <strong>Allow automatic
+<strong>Admin &gt; Configuration &gt; Quality</strong>, edit a profile, and look for <strong>Allow automatic
 quality upgrades</strong> on the Basic tab. This is checked by default on new
 profiles, but the built-in profiles Mydia ships with are not all the same:
 only <strong>Any</strong> and <strong>SD</strong> have it on out of the box. The other six
@@ -3201,11 +3201,11 @@ is meant to replace. That record clears as soon as Mydia has scored both
 copies for real and trashed the loser, which normally happens a minute or two
 after import.</p>
 <p>If it has not cleared an hour later, the upgrade is wedged and both copies
-are still taking up room. <strong>Admin &gt; Configuration &gt; Status</strong> says so at the
+are still taking up room. <strong>Admin &gt; System &gt; Status</strong> says so at the
 top of the page, with a count of the files affected and a link to the jobs
 page. Nothing is shown there when the count is zero, so a Status page with no
 such warning means nothing is stuck.</p>
-<p>Two things cause it, and both leave a trace on <strong>Admin &gt; Jobs</strong>:</p>
+<p>Two things cause it, and both leave a trace on <strong>Admin &gt; Administration &gt; Background Jobs</strong>:</p>
 <ul>
 <li>The new file was never analyzed, so the step that finishes the upgrade was
   never queued in the first place. There is no <code>UpgradeFinalize</code> job for the

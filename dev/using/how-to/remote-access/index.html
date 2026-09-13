@@ -3181,7 +3181,7 @@ from inside the TestFlight app, not from these links.</p>
 <h2 id="configuration">Configuration</h2>
 <h3 id="enable-remote-access">Enable Remote Access</h3>
 <p>Remote access is on by default. Switch it off or back on under <strong>Admin ›
-Configuration › Remote Access</strong>; the p2p node stops or starts right away, with no
+System › Remote Access</strong>; the p2p node stops or starts right away, with no
 restart.</p>
 <p>To pin it from the environment instead, set <code>ENABLE_REMOTE_ACCESS=true</code> or
 <code>ENABLE_REMOTE_ACCESS=false</code> on the container. The variable wins over the toggle,
@@ -3209,8 +3209,8 @@ why the window is so short.</p>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="app-wont-connect">App won't connect</h3>
 <ol>
-<li><strong>Check remote access is on</strong> - the toggle under Admin &gt; Configuration &gt; Remote
-   Access. If the tab is missing, the whole player is off: <code>ENABLE_PLAYER=false</code></li>
+<li><strong>Check remote access is on</strong> - the toggle under Admin &gt; System &gt; Remote
+   Access. If that page is missing from the sidebar, the whole player is off: <code>ENABLE_PLAYER=false</code></li>
 <li><strong>Verify p2p server is running</strong> - check logs for startup messages</li>
 <li><strong>Generate a fresh claim code</strong> - codes expire five minutes after you create
    them and cannot be reused, so a code left on screen while you fetched your

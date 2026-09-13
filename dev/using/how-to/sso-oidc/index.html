@@ -3519,7 +3519,7 @@
 <p>Currently, role assignment is manual after first login:</p>
 <ol>
 <li>Admin logs in</li>
-<li>Navigates to Admin &gt; Users</li>
+<li>Navigates to Admin &gt; System &gt; Users</li>
 <li>Updates user role as needed</li>
 </ol>
 <h3 id="combining-with-local-auth">Combining with Local Auth</h3>
@@ -3600,7 +3600,7 @@ proxy that terminates TLS is the better answer where you have the choice.</p>
    the redirect URI matches what you registered with your provider.</li>
 <li>Log out, then use the OIDC button on the login page. A successful round trip
    lands you back on the dashboard with your provider account.</li>
-<li>Check <strong>Admin &gt; Users</strong>. A first-time OIDC login creates the user. If no admin
+<li>Check <strong>Admin &gt; System &gt; Users</strong>. A first-time OIDC login creates the user. If no admin
    account exists yet, that user is promoted to admin so an OIDC-only deployment
    is not left with nobody who can administer it.</li>
 <li>Keep at least one working local admin account until you have confirmed OIDC

@@ -3148,7 +3148,7 @@ first time Mydia looks for them):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">PLUGINS_OVERRIDE_DIR</span><span class="o">=</span>/path/mydia/reads
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>cp<span class="w"> </span>target/wasm32-wasip2/release/my_plugin.wasm<span class="w"> </span><span class="s2">"</span><span class="nv">$PLUGINS_OVERRIDE_DIR</span><span class="s2">/my-plugin.wasm"</span>
 </code></pre></div>
-<p>Open <strong>Admin &gt; Configuration &gt; Plugins</strong>. Your plugin shows up in the installed list, pending
+<p>Open <strong>Admin &gt; System &gt; Plugins</strong>. Your plugin shows up in the installed list, pending
 approval. Approve it: this grants the capabilities it declared and activates
 it, resolving the Wasm bytes you just dropped in.</p>
 <p>Now add or import a movie or show. Open the plugin's activity log: you'll see
