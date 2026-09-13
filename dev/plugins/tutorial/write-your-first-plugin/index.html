@@ -3132,14 +3132,16 @@ subscribes to, and the capabilities it wants. The smallest useful one:</p>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">}</span>
 </code></pre></div>
 <p>Save it as <code>priv/plugins/my-plugin.json</code> in your Mydia checkout. Mydia
-discovers every manifest under <code>priv/plugins/</code> and seeds it as a disabled,
-unapproved plugin the next time the app boots, or the next time you open the
-admin Plugins page, whichever comes first: it's the same mechanism the
+discovers every manifest under <code>priv/plugins/</code> and grants it the capabilities
+it declares, enabling it the next time the app boots, or the next time you
+open the admin Plugins page, whichever comes first: a manifest in that
+directory is trusted as part of the host release, the same mechanism the
 bundled webhook notifier and Simkl plugins use to register themselves, and
 for local development it's the natural way to get a brand-new manifest known
-to the host without a remote plugin index. See the full field reference in
-<a href="../../reference/manifest/">Manifest &amp; Settings</a> when you need more than the
-basics.</p>
+to the host without a remote plugin index. Plugins installed from an index or
+remote package instead go through the manual review-and-approve flow. See the
+full field reference in <a href="../../reference/manifest/">Manifest &amp; Settings</a> when
+you need more than the basics.</p>
 <h2 id="step-5-load-it-and-watch-it-run">Step 5: Load It and Watch It Run</h2>
 <p>Point Mydia's plugin override directory at your build and drop the component
 in, named after the manifest slug (export this in the same environment the
@@ -3148,9 +3150,9 @@ first time Mydia looks for them):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">PLUGINS_OVERRIDE_DIR</span><span class="o">=</span>/path/mydia/reads
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>cp<span class="w"> </span>target/wasm32-wasip2/release/my_plugin.wasm<span class="w"> </span><span class="s2">"</span><span class="nv">$PLUGINS_OVERRIDE_DIR</span><span class="s2">/my-plugin.wasm"</span>
 </code></pre></div>
-<p>Open <strong>Admin &gt; System &gt; Plugins</strong>. Your plugin shows up in the installed list, pending
-approval. Approve it: this grants the capabilities it declared and activates
-it, resolving the Wasm bytes you just dropped in.</p>
+<p>Open <strong>Admin &gt; System &gt; Plugins</strong>. Your plugin shows up in the installed
+list already approved and enabled with the capabilities it declared, and it
+runs the Wasm bytes you just dropped into the override directory.</p>
 <p>Now add or import a movie or show. Open the plugin's activity log: you'll see
 the <code>on_event</code> result recorded for the <code>media_item.added</code> event you just
 triggered.</p>

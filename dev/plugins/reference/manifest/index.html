@@ -3229,8 +3229,9 @@ This page is a practical reference, using the bundled webhook notifier
 </table>
 <h2 id="capabilities">Capabilities</h2>
 <p>Capabilities are <strong>deny-by-default</strong> and enforced server-side on every host
-call. The manifest <em>declares</em> what the plugin wants; the operator approves it at
-install time. A plugin can never widen its own grant at runtime.</p>
+call. The manifest <em>declares</em> what the plugin wants; for a third-party plugin
+the operator approves that declaration at install time. A plugin can never widen
+its own grant at runtime.</p>
 <table>
 <thead>
 <tr>
@@ -3294,16 +3295,22 @@ users, and <code>ensure-watched</code> is rejected for a user without an active
 connection. The same consent gate applies to <code>ensure-favorite</code>.</p>
 </div>
 <div class="admonition warning">
-<p class="admonition-title">A manifest revision needs a re-approval</p>
-<p>Declaring a new capability class, a new <code>net:http</code> host, or a new subscribed
-event in a revised manifest does <strong>not</strong> grant it. The stored grant is left
-untouched, the plugin stays approved and enabled on its old grant, and calls
-against anything newly declared come back <code>Denied</code>.</p>
-<p>Mydia flags the state rather than leaving it quiet: the plugin is badged
-<strong>needs re-approval</strong> in Admin &gt; System &gt; Plugins, its row names the
-capabilities it is asking for beyond what was approved, and <strong>Review &amp;
-re-approve</strong> grants the currently declared set. The host also logs a warning
-naming them when such a plugin starts. Until you re-approve, nothing widens.</p>
+<p class="admonition-title">Third-party manifest revisions need re-approval</p>
+<p>A plugin installed from an index or remote package cannot widen its grant.
+New capability classes, hosts, or events remain denied until an administrator
+reviews and re-approves the revised manifest in <strong>Admin &gt; System &gt; Plugins</strong>.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Bundled system plugins follow the host release</p>
+<p>Plugins shipped in Mydia's <code>priv/plugins/</code> directory are trusted as part of
+the host release. First discovery grants and enables them automatically.
+Later releases replace their grants with the exact effective capabilities in
+the shipped manifest while preserving the administrator's enabled/disabled
+choice and settings.</p>
+<p>Because the host release is the source of truth, Remove and Revoke are not
+final for a bundled plugin: the next reconciliation restores the
+release-declared capabilities, and Remove re-seeds the row approved and
+enabled. Disable is the control that persists across upgrades.</p>
 </div>
 <div class="admonition warning">
 <p class="admonition-title"><code>net:http</code> is an exact-host allowlist</p>

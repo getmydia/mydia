@@ -3226,8 +3226,11 @@ to the plugin that originated it, so write-backs don't echo. <code>playback.prog
 is sampled (one per 5% bucket); <code>playback.paused</code> is reserved but not yet emitted.</p>
 <h2 id="capabilities">Capabilities</h2>
 <p>Capabilities are <strong>deny-by-default</strong> and enforced server-side on every call. A
-plugin can never widen its own grant. A manifest <em>declares</em> what it wants; the
-operator approves it.</p>
+plugin can never widen its own grant. A manifest <em>declares</em> what it wants; for a
+plugin installed from an index or remote package the operator approves it, while
+plugins bundled in Mydia's <code>priv/plugins/</code> directory are granted their declared
+set on discovery as part of the host release (see the
+<a href="../manifest/#capabilities">manifest reference</a>).</p>
 <table>
 <thead>
 <tr>

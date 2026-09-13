@@ -2861,8 +2861,10 @@ state both ways. The bundled Simkl plugin does all of this.</p>
 <code>mydia-plugin-sdk</code> crate. You write one typed handler function; the SDK turns it
 into a component the host can load. The plugin runs in a sandbox with no ambient
 network, filesystem, or OS access. The only way out is through a small set of
-capability-gated host functions you declare up front, approved by the operator
-before the plugin ever runs.</p>
+capability-gated host functions you declare up front. Plugins installed from an
+index or remote package are approved by the operator before they ever run;
+plugins shipped in Mydia's own <code>priv/plugins/</code> directory are trusted as part of
+the host release and granted their declared capabilities on discovery.</p>
 <h2 id="where-to-start">Where to start</h2>
 <div class="grid cards">
 <ul>
