@@ -229,5 +229,15 @@ defmodule MydiaWeb.SidebarNavLiveTest do
       {:ok, view, _html} = live(conn, ~p"/calendar")
       refute has_element?(view, "#user-menu-changelog .badge")
     end
+
+    test "names a user without a username by their display name" do
+      user = nameless_user_fixture(%{display_name: "Wren Halloway"})
+      conn = log_in_user(build_conn(), user)
+
+      {:ok, view, _html} = live(conn, ~p"/calendar")
+
+      assert has_element?(view, "#sidebar-user-menu", "Wren Halloway")
+      assert has_element?(view, "#sidebar-user-menu span", "WR")
+    end
   end
 end

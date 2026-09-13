@@ -360,13 +360,13 @@ number, never a badge.
 **The account menu is the footer.** `account_menu/1` is the aside's last child
 and opens upward (`dropdown dropdown-top`). It holds Profile, Integrations,
 Devices, the theme switcher, What's new and Send feedback. The aside is
-`h-full` and the nav `flex-1 min-h-0 overflow-y-auto`: `.drawer-side` is a
-sticky, viewport-height scroll container, so with `min-h-full` the aside
-grows to its content and the footer scrolls away with it. Never give
-`.drawer-side` a viewport-unit `min-height` such as `min-h-screen`: iOS
-Safari resolves `100vh` taller than daisyUI's `100dvh` while its toolbar
-shows, which pushes the chip under the toolbar. `dock_nav_test.exs` asserts
-the drawer has no `min-height`.
+`h-full`, not `min-h-full`, and the nav is `flex-1 min-h-0 overflow-y-auto`.
+`.drawer-side` is a viewport-height scroll container, so an aside with
+`min-h-full` would grow to its content and the footer would scroll away with
+it. Never give `.drawer-side` a viewport-unit `min-height` such as
+`min-h-screen`: iOS Safari resolves `100vh` taller than daisyUI's `100dvh`
+while its toolbar shows, which pushes the chip under the toolbar.
+`dock_nav_test.exs` asserts the drawer has no `min-height`.
 
 ## Sidebar sections are pinned collections, and exclusion is page scoped
 

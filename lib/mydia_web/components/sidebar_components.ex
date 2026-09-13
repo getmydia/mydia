@@ -223,10 +223,11 @@ defmodule MydiaWeb.SidebarComponents do
     """
   end
 
-  defp display_name(user), do: user.username || user.email
+  defp display_name(user), do: Mydia.Accounts.User.label(user)
 
   defp initials(user) do
-    (user.username || user.email || "U")
+    user
+    |> display_name()
     |> String.slice(0..1)
     |> String.upcase()
   end
