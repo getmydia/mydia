@@ -298,14 +298,11 @@ class SidebarContent extends ConsumerWidget {
       ),
     );
 
-    // sidebarLayoutControllerProvider is plain @riverpod (autoDispose) with no
-    // watcher anywhere, so a controller captured before the dialog's await
-    // does not survive it: the provider is torn down once its listener count
-    // hits zero, and calling a method on the stale instance afterwards throws
-    // UnmountedRefException. Reading it fresh here, mirroring onDelete above
-    // and showFilterEditor's onSave, rebuilds the (stateless) controller on
-    // demand instead of reusing a possibly-disposed one. The context.mounted
-    // guard covers the SidebarContent-unmounted-during-the-dialog case.
+    // The controller is stateless and keepAlive, so its Ref survives this
+    // dialog's await; see sidebar_layout_providers.dart for why keepAlive is
+    // load-bearing there. Reading it at the point of use mirrors onDelete
+    // above and showFilterEditor's onSave, and the context.mounted guard
+    // covers the SidebarContent-unmounted-during-the-dialog case.
     if ((confirmed ?? false) && context.mounted) {
       await ref.read(sidebarLayoutControllerProvider).resetToDefaults();
     }

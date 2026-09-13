@@ -54,7 +54,12 @@ Future<Map<String, Map<String, String>>> allSyncedCollections(Ref ref) async {
 }
 
 /// Save a collection sync config.
-@riverpod
+///
+/// `keepAlive` is load-bearing, not a memory choice: the closure invalidates
+/// after its `await`, and call sites reach this provider with `ref.read` while
+/// nothing watches it. See `player/docs/riverpod.md` for why an unwatched
+/// autoDispose provider cannot hold a Ref across an await (#744).
+@Riverpod(keepAlive: true)
 Future<void> Function({
   required String collectionId,
   required String name,
@@ -74,7 +79,9 @@ Future<void> Function({
 }
 
 /// Remove a collection sync config.
-@riverpod
+///
+/// `keepAlive` for the same reason as [saveCollectionSync].
+@Riverpod(keepAlive: true)
 Future<void> Function(String collectionId) removeCollectionSync(Ref ref) {
   return (String collectionId) async {
     final box = await ref.read(collectionSyncBoxProvider.future);

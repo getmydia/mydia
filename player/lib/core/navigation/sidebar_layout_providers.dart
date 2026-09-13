@@ -74,7 +74,15 @@ Future<List<SidebarEditRow>> sidebarEditRows(Ref ref) async {
   return layout.reconcileForEditing(downloadSupported: isDownloadSupported);
 }
 
-@riverpod
+/// The mutation facade the sidebar's controls call.
+///
+/// `keepAlive: true` is load-bearing, not a memory choice: the controller is
+/// stateless, so its only cost is the element itself, and every mutation writes
+/// through the store with an `await` before invalidating [sidebarLayoutProvider].
+/// Nothing watches it here — call sites reach it through `ref.read` — so riverpod
+/// 3.3.2 tore the provider down at that await and the `invalidate` threw
+/// UnmountedRefException once the store write had already landed (#744).
+@Riverpod(keepAlive: true)
 SidebarLayoutController sidebarLayoutController(Ref ref) =>
     SidebarLayoutController(ref);
 

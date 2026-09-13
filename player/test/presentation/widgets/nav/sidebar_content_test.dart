@@ -214,6 +214,7 @@ void main() {
     await store.save(SidebarLayout.defaults.withHidden('collections'));
 
     await _pump(tester, location: '/', store: store);
+    expect(find.text('Collections'), findsNothing);
 
     await tester.tap(find.byTooltip('Edit sidebar'));
     await tester.pumpAndSettle();
@@ -222,6 +223,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.get()!.hidden, isNot(contains('collections')));
+
+    // The store is only half of it: the mutation also has to invalidate the
+    // layout provider, or the sidebar keeps rendering the layout it read
+    // before the write. Leaving edit mode is what makes that visible, since
+    // edit mode renders hidden rows regardless.
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Collections'), findsOneWidget);
   });
 
   testWidgets(
