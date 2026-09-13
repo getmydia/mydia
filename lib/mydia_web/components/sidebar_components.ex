@@ -74,4 +74,31 @@ defmodule MydiaWeb.SidebarComponents do
     </li>
     """
   end
+
+  attr :executing_jobs, :list, required: true, doc: "maps with a :worker_name"
+
+  @doc "The admin card listing jobs executing right now, linked to Background Jobs."
+  def running_jobs(assigns) do
+    ~H"""
+    <div :if={@executing_jobs != []} class="px-4 py-2 border-t border-base-content/10">
+      <.link
+        id="sidebar-running-jobs"
+        navigate={~p"/admin/jobs"}
+        class="block bg-base-200 rounded-lg p-2 hover:bg-base-100 transition-colors"
+      >
+        <div class="flex items-center gap-2 text-sm font-medium mb-1">
+          <span class="loading loading-spinner loading-xs text-primary"></span>
+          <span>Running Jobs</span>
+          <span class="badge badge-primary badge-xs">{length(@executing_jobs)}</span>
+        </div>
+        <ul class="text-xs opacity-70 space-y-0.5 pl-5">
+          <li :for={job <- Enum.take(@executing_jobs, 3)} class="truncate">{job.worker_name}</li>
+          <li :if={length(@executing_jobs) > 3} class="text-primary">
+            +{length(@executing_jobs) - 3} more...
+          </li>
+        </ul>
+      </.link>
+    </div>
+    """
+  end
 end

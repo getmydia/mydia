@@ -132,11 +132,11 @@ defmodule MydiaWeb.AdminNavTest do
 
   # ErrorTracker mounts its own live routes under /admin/errors,
   # /admin/transcodes is a bare page the Dashboard already covers, and
-  # /admin/import-lists is a Management page that keeps its admin-only URL.
+  # /admin/import-lists is an Acquisition page that keeps its admin-only URL.
   defp unlisted?("/admin/transcodes"), do: true
   defp unlisted?("/admin/errors"), do: true
   defp unlisted?("/admin/errors/" <> _), do: true
-  # A Management page that keeps its admin-only URL (spec, Revision 2).
+  # An Acquisition page that keeps its admin-only URL (spec, Revision 2).
   defp unlisted?("/admin/import-lists"), do: true
   defp unlisted?(_path), do: false
 end

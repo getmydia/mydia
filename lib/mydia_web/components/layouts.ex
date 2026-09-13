@@ -5,6 +5,9 @@ defmodule MydiaWeb.Layouts do
   """
   use MydiaWeb, :html
 
+  import MydiaWeb.SidebarComponents
+
+  alias Mydia.Accounts.Authorization
   alias MydiaWeb.FeedbackComponents
 
   # Embed all files in layouts/* within this module.
@@ -245,178 +248,138 @@ defmodule MydiaWeb.Layouts do
           <!-- Navigation menu -->
           <nav class="flex-1 overflow-y-auto">
             <ul class="menu w-full space-y-1 px-2 py-4">
-              <li>
-                <.link navigate="/" class={nav_active?(@current_path, "/", true) && "menu-active"}>
-                  <.icon name="hero-home" class="w-5 h-5" /> Dashboard
-                </.link>
-              </li>
-              <li>
-                <.link
-                  navigate="/discover"
-                  class={nav_active?(@current_path, "/discover", false) && "menu-active"}
-                >
-                  <.icon name="hero-sparkles" class="w-5 h-5" /> Discover
-                </.link>
-              </li>
-              <li>
-                <.link
-                  navigate="/movies"
-                  class={nav_active?(@current_path, "/movies", false) && "menu-active"}
-                >
-                  <.icon name="hero-film" class="w-5 h-5" /> Movies
-                  <span id="nav-movie-count" class="badge badge-sm">{@movie_count}</span>
-                </.link>
-              </li>
-              <li>
-                <.link
-                  navigate="/tv"
-                  class={nav_active?(@current_path, "/tv", false) && "menu-active"}
-                >
-                  <.icon name="hero-tv" class="w-5 h-5" /> TV Shows
-                  <span id="nav-tv-count" class="badge badge-sm">{@tv_show_count}</span>
-                </.link>
-              </li>
-              <li :for={section <- @sections}>
-                <.link
-                  id={"nav-section-#{section.id}"}
-                  navigate={~p"/sections/#{section.id}"}
-                  class={
-                    nav_active?(@current_path, "/sections/#{section.id}", false) && "menu-active"
-                  }
-                >
-                  <.icon name={section.sidebar_icon || "hero-squares-2x2"} class="w-5 h-5" />
-                  {section.name}
-                </.link>
-              </li>
-              <li>
-                <.link
-                  id="nav-add-section"
-                  navigate={~p"/sections/new"}
-                  class="text-base-content/60 hover:text-base-content"
-                >
-                  <.icon name="hero-plus" class="w-5 h-5" /> Add section
-                </.link>
-              </li>
-              <li class="menu-title mt-4">
-                <span>Management</span>
-              </li>
+              <.nav_item
+                id="nav-home"
+                path="/"
+                icon="hero-home"
+                label="Home"
+                current_path={@current_path}
+                exact
+              />
+              <.nav_item
+                id="nav-discover"
+                path="/discover"
+                icon="hero-sparkles"
+                label="Discover"
+                current_path={@current_path}
+              />
+              <.nav_item
+                :if={Authorization.can_submit_request?(@current_user)}
+                id="nav-my-requests"
+                path="/requests"
+                icon="hero-queue-list"
+                label="My Requests"
+                current_path={@current_path}
+                exact
+              />
 
-              <li>
-                <.link
-                  navigate="/import"
-                  class={nav_active?(@current_path, "/import", false) && "menu-active"}
-                >
-                  <.icon name="hero-inbox-stack" class="w-5 h-5" /> Import
-                  <span
-                    :if={@import_candidate_group_count > 0}
-                    id="nav-import-badge"
-                    class="badge badge-primary badge-sm"
+              <.nav_title id="nav-title-library" label="Library">
+                <:action>
+                  <.link
+                    id="nav-add-section"
+                    navigate={~p"/sections/new"}
+                    class="btn btn-ghost btn-xs btn-square"
+                    aria-label="Add section"
+                    title="Add section"
                   >
-                    {@import_candidate_group_count}
-                  </span>
-                </.link>
-              </li>
-              <li :if={
-                @current_user && @current_user.role == "admin" &&
-                  Mydia.ImportLists.FeatureFlags.enabled?()
-              }>
-                <.link
-                  id="nav-import-lists"
-                  navigate={~p"/admin/import-lists"}
-                  class={nav_active?(@current_path, "/admin/import-lists", false) && "menu-active"}
-                >
-                  <.icon name="hero-arrow-down-on-square-stack" class="w-5 h-5" /> Import Lists
-                </.link>
-              </li>
-              <li>
-                <.link
-                  navigate="/downloads"
-                  class={nav_active?(@current_path, "/downloads", false) && "menu-active"}
-                >
-                  <.icon name="hero-arrow-down-tray" class="w-5 h-5" /> Downloads
-                  <span class="badge badge-primary badge-sm">{@downloads_count}</span>
-                </.link>
-              </li>
-              <li>
-                <.link
-                  navigate="/calendar"
-                  class={nav_active?(@current_path, "/calendar", false) && "menu-active"}
-                >
-                  <.icon name="hero-calendar" class="w-5 h-5" /> Calendar
-                </.link>
-              </li>
-              <li>
-                <.link
-                  navigate="/search"
-                  class={nav_active?(@current_path, "/search", false) && "menu-active"}
-                >
-                  <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Search
-                </.link>
-              </li>
-              <li>
-                <.link
-                  navigate="/activity"
-                  class={nav_active?(@current_path, "/activity", false) && "menu-active"}
-                >
-                  <.icon name="hero-clock" class="w-5 h-5" /> Activity
-                </.link>
-              </li>
-              <li>
-                <.link
-                  navigate="/collections"
-                  class={nav_active?(@current_path, "/collections", false) && "menu-active"}
-                >
-                  <.icon name="hero-folder" class="w-5 h-5" /> Collections
-                </.link>
-              </li>
-              <%= if @current_user && @current_user.role == "admin" do %>
-                <li class="menu-title mt-4">
-                  <span>Admin</span>
-                </li>
+                    <.icon name="hero-plus" class="w-4 h-4" />
+                  </.link>
+                </:action>
+              </.nav_title>
+              <.nav_item
+                path="/movies"
+                icon="hero-film"
+                label="Movies"
+                current_path={@current_path}
+                count={@movie_count}
+                count_id="nav-movie-count"
+              />
+              <.nav_item
+                path="/tv"
+                icon="hero-tv"
+                label="TV Shows"
+                current_path={@current_path}
+                count={@tv_show_count}
+                count_id="nav-tv-count"
+              />
+              <.nav_item
+                :for={section <- @sections}
+                id={"nav-section-#{section.id}"}
+                path={~p"/sections/#{section.id}"}
+                icon={section.sidebar_icon || "hero-squares-2x2"}
+                label={section.name}
+                current_path={@current_path}
+              />
+              <.nav_item
+                path="/collections"
+                icon="hero-folder"
+                label="Collections"
+                current_path={@current_path}
+              />
+              <.nav_item
+                path="/calendar"
+                icon="hero-calendar"
+                label="Calendar"
+                current_path={@current_path}
+              />
 
+              <%= if Authorization.can_update_media?(@current_user) do %>
+                <.nav_title id="nav-title-acquisition" label="Acquisition" />
+                <.nav_item
+                  path="/search"
+                  icon="hero-magnifying-glass"
+                  label="Search"
+                  current_path={@current_path}
+                />
+                <.nav_item
+                  path="/downloads"
+                  icon="hero-arrow-down-tray"
+                  label="Downloads"
+                  current_path={@current_path}
+                  badge={@downloads_count}
+                  badge_id="nav-downloads-badge"
+                />
+                <.nav_item
+                  path="/import"
+                  icon="hero-inbox-stack"
+                  label="Import"
+                  current_path={@current_path}
+                  badge={@import_candidate_group_count}
+                  badge_id="nav-import-badge"
+                />
+                <.nav_item
+                  :if={
+                    Authorization.is_admin?(@current_user) and
+                      Mydia.ImportLists.FeatureFlags.enabled?()
+                  }
+                  id="nav-import-lists"
+                  path={~p"/admin/import-lists"}
+                  icon="hero-arrow-down-on-square-stack"
+                  label="Import Lists"
+                  current_path={@current_path}
+                />
+                <.nav_item
+                  path="/activity"
+                  icon="hero-clock"
+                  label="Activity"
+                  current_path={@current_path}
+                />
+              <% end %>
+
+              <%= if Authorization.is_admin?(@current_user) do %>
+                <.nav_title id="nav-title-admin" label="Admin" />
                 <.admin_nav
                   current_path={@current_path}
                   pending_requests_count={@pending_requests_count}
                 />
               <% end %>
-
-              <%= if @current_user && @current_user.role == "guest" do %>
-                <li class="menu-title mt-4">
-                  <span>Requests</span>
-                </li>
-
-                <li>
-                  <.link
-                    navigate="/requests"
-                    class={nav_active?(@current_path, "/requests", true) && "menu-active"}
-                  >
-                    <.icon name="hero-queue-list" class="w-5 h-5" /> My Requests
-                  </.link>
-                </li>
-              <% end %>
             </ul>
           </nav>
 
-          <!-- Running jobs status -->
-          <%= if @executing_jobs != [] do %>
-            <div class="px-4 py-2 border-t border-base-content/10">
-              <div class="bg-base-200 rounded-lg p-2">
-                <div class="flex items-center gap-2 text-sm font-medium mb-1">
-                  <span class="loading loading-spinner loading-xs text-primary"></span>
-                  <span>Running Jobs</span>
-                  <span class="badge badge-primary badge-xs">{length(@executing_jobs)}</span>
-                </div>
-                <ul class="text-xs opacity-70 space-y-0.5 pl-5">
-                  <%= for job <- Enum.take(@executing_jobs, 3) do %>
-                    <li class="truncate">{job.worker_name}</li>
-                  <% end %>
-                  <%= if length(@executing_jobs) > 3 do %>
-                    <li class="text-primary">+{length(@executing_jobs) - 3} more...</li>
-                  <% end %>
-                </ul>
-              </div>
-            </div>
-          <% end %>
+          <.running_jobs
+            :if={Authorization.is_admin?(@current_user)}
+            executing_jobs={@executing_jobs}
+          />
 
           <!-- Feedback and theme -->
           <div class={[
@@ -657,12 +620,6 @@ defmodule MydiaWeb.Layouts do
     </.link>
     """
   end
-
-  defp nav_active?(nil, _path, _exact), do: false
-  defp nav_active?(current, path, true), do: current == path
-
-  defp nav_active?(current, path, false),
-    do: current == path || String.starts_with?(current, path <> "/")
 
   defp earlier_releases_label(1), do: "and 1 earlier release"
   defp earlier_releases_label(count), do: "and #{count} earlier releases"

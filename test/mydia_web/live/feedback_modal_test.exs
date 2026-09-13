@@ -222,7 +222,7 @@ defmodule MydiaWeb.FeedbackModalTest do
       |> render_submit()
 
     assert html =~ "Feedback service is temporarily unavailable"
-    assert html =~ "Dashboard"
+    assert html =~ "Welcome to Mydia"
   end
 
   test "feedback disabled removes the sidebar entry and modal markup", %{conn: conn} do

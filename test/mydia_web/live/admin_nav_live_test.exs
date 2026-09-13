@@ -77,9 +77,10 @@ defmodule MydiaWeb.AdminNavLiveTest do
       refute has_element?(view, "a#admin-nav-administration .badge")
     end
 
-    test "Activity is in Management for admins too", %{conn: conn} do
+    test "Activity is in Acquisition for admins", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/trash")
 
+      assert has_element?(view, "#nav-title-acquisition")
       assert has_element?(view, ~s|nav a[href="/activity"]|, "Activity")
       refute has_element?(view, "#admin-tab-activity")
     end
@@ -146,7 +147,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
       refute has_element?(view, "h1", "Manage Media Requests")
     end
 
-    test "Import Lists is a Management page with its own header", %{conn: conn} do
+    test "Import Lists is an Acquisition page with its own header", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/import-lists")
 
       assert has_element?(view, "h1", "Import Lists")
