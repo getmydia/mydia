@@ -459,6 +459,7 @@ defmodule Mydia.Media do
     persist_and_audit_media_item(changeset, media_item, opts)
   end
 
+  @doc false
   defp persist_and_audit_media_item(changeset, original, opts) do
     case Repo.update(changeset) do
       {:ok, updated} ->
@@ -478,7 +479,7 @@ defmodule Mydia.Media do
     end
   end
 
-  # Extracts meaningful changes from a changeset for activity logging
+  @doc false
   defp extract_meaningful_changes(changeset, original) do
     changes = changeset.changes
 
@@ -489,7 +490,17 @@ defmodule Mydia.Media do
       # its old and new value, whichever caller made it. Without that, the
       # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
       # from an ordinary "Metadata enriched" update for three weeks.
-      |> Map.take([:title, :original_title, :year, :monitored, :monitor_new_seasons, :category, :category_override])
+      |> Map.take([
+        :title,
+        :original_title,
+        :year,
+        :monitored,
+        :monitor_new_seasons,
+        :category,
+        :category_override,
+        :tmdb_id,
+        :tvdb_id
+      ])
       |> Enum.map(fn {field, new_value} ->
         old_value = Map.get(original, field)
         {field, %{old: old_value, new: new_value}}
@@ -2390,6 +2401,9 @@ defmodule Mydia.Media do
 
   ## Options
     - `:override` - If true, sets `category_override` flag to prevent auto-reclassification (default: false)
+    - `:reason` - Description recorded in history (e.g., "Category updated")
+    - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :system
+    - `:actor_id` - The ID of the actor (user_id, job name, etc.)
 
   ## Examples
 

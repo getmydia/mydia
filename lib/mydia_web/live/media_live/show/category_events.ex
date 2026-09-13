@@ -48,6 +48,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
     {:noreply, assign(socket, :category_form, Phoenix.Component.to_form(changeset))}
   end
 
+  @doc false
   def save_category(%{"media_item" => params}, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
       media_item = socket.assigns.media_item
@@ -82,6 +83,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
     end
   end
 
+  @doc false
   def reset_category_to_auto(_params, socket) do
     with :ok <- Authorization.authorize_update_media(socket) do
       media_item = socket.assigns.media_item
