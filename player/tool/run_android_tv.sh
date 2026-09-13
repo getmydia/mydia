@@ -107,7 +107,7 @@ pick_console_port() {
 # exits on the first match, and under `pipefail` that early exit can fail the
 # pipeline while the AVD *is* present (seen during acceptance as an unnecessary
 # re-create of an AVD that already existed).
-avd_listing="$("$AVDMANAGER" list avd 2>/dev/null || true)"
+avd_listing="$("${tv_sdk_env[@]}" "$AVDMANAGER" list avd 2>/dev/null || true)"
 if ! grep -q "^[[:space:]]*Name: $AVD_NAME$" <<<"$avd_listing"; then
     echo "Creating Android TV AVD $AVD_NAME..."
     printf 'no\n' | "${tv_sdk_env[@]}" "$AVDMANAGER" create avd \
