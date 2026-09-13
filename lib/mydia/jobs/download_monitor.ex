@@ -238,6 +238,9 @@ defmodule Mydia.Jobs.DownloadMonitor do
           :still_seeding ->
             :ok
 
+          :deferred ->
+            :ok
+
           :skipped ->
             :ok
 

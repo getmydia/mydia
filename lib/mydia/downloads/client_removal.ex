@@ -62,10 +62,14 @@ defmodule Mydia.Downloads.ClientRemoval do
     else
       case client_info(download) do
         {:error, :missing_client} ->
-          case stamp(download) do
-            :ok -> :removed
-            {:error, _} = err -> err
-          end
+          # Leave pending: a rename/re-add/adoption may restore the client.
+          # Stamp only after remove_download :ok or a confirmed :not_found.
+          Logger.warning("Deferring client removal; download client not found",
+            download_id: download.id,
+            client: download.download_client
+          )
+
+          :deferred
 
         {:ok, %{remove_completed: false}} ->
           :skipped
@@ -137,10 +141,12 @@ defmodule Mydia.Downloads.ClientRemoval do
     else
       case client_info(download, configs) do
         {:error, :missing_client} ->
-          case stamp(download) do
-            :ok -> :removed
-            {:error, _} = err -> err
-          end
+          Logger.warning("Deferring client removal; download client not found",
+            download_id: download.id,
+            client: download.download_client
+          )
+
+          :deferred
 
         {:ok, info} ->
           if info.remove_completed || false do

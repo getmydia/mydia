@@ -140,7 +140,7 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     assert %DateTime{} = Downloads.get_download!(download.id).client_removed_at
   end
 
-  test "finish_pending_removal stamps when client config is missing" do
+  test "finish_pending_removal leaves row pending when client config is missing" do
     download =
       download_fixture(%{
         download_client: "does-not-exist-#{System.unique_integer([:positive])}",
@@ -148,8 +148,20 @@ defmodule Mydia.Downloads.ClientRemovalTest do
         imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
       })
 
-    assert :removed = ClientRemoval.finish_pending_removal(download)
-    assert %DateTime{} = Downloads.get_download!(download.id).client_removed_at
+    assert :deferred = ClientRemoval.finish_pending_removal(download)
+    assert is_nil(Downloads.get_download!(download.id).client_removed_at)
+  end
+
+  test "maybe_remove_after_import leaves row pending when client config is missing" do
+    download =
+      download_fixture(%{
+        download_client: "does-not-exist-#{System.unique_integer([:positive])}",
+        download_client_id: "x",
+        imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
+
+    assert :deferred = ClientRemoval.maybe_remove_after_import(download)
+    assert is_nil(Downloads.get_download!(download.id).client_removed_at)
   end
 
   test "list_pending_removals excludes unresolved_files downloads" do
