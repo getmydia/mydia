@@ -232,6 +232,18 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       refute has_element?(view, "#approval-modal")
       refute Host.running?("webhook-notifier")
     end
+
+    test "an approved disabled plugin offers Enable instead of another approval", %{conn: conn} do
+      capabilities = manifest_map("notifier", "Notifier")["capabilities"]
+      seed_plugin("notifier", "Notifier", enabled: false, granted: capabilities)
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#plugin-row-notifier")
+      assert has_element?(view, "#toggle-notifier")
+      refute has_element?(view, "#approve-notifier")
+      refute has_element?(view, "#reapproval-badge-notifier")
+    end
   end
 
   describe "manifest outgrew its grant (re-approval)" do

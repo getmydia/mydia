@@ -376,7 +376,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # asking for more than it holds and failing Denied at just those call sites.
       ungranted: Plugins.ungranted_capabilities(config),
       needs_reapproval: Plugins.needs_reapproval?(config),
-      pending_approval: not config.enabled and capabilities != %{},
+      # Enabled/disabled is a runtime choice after approval; an empty grant means
+      # capabilities are still pending approval.
+      pending_approval: capabilities != %{} and granted == %{},
       has_settings: settings_schema != [],
       # Once approved, the granted net:http reflects the operator-configured host.
       network_hosts: Map.get(granted, "net:http", Map.get(capabilities, "net:http", []))
