@@ -1509,60 +1509,32 @@ defmodule Mydia.Media do
   """
   @spec get_media_status(MediaItem.t()) :: AvailabilityStatus.t()
   def get_media_status(%MediaItem{type: "movie"} = media_item) do
-    has_files = media_item.media_files != []
-    has_downloads = Enum.any?(media_item.downloads, &download_active?/1)
-
-    state =
-      cond do
-        has_files -> :downloaded
-        has_downloads -> :downloading
-        true -> :missing
-      end
-
-    %AvailabilityStatus{
-      state: state,
-      monitored: media_item.monitored,
-      file_count: length(media_item.media_files)
-    }
+    AvailabilityStatus.for_movie(
+      length(media_item.media_files),
+      Enum.any?(media_item.downloads, &download_active?/1),
+      media_item.monitored
+    )
   end
 
   def get_media_status(%MediaItem{type: "tv_show", episodes: episodes} = media_item) do
-    monitored_episodes = Enum.filter(episodes, & &1.monitored)
+    AvailabilityStatus.for_series(
+      episode_counts(episodes),
+      episodes |> Enum.filter(& &1.monitored) |> episode_counts(),
+      media_item.monitored
+    )
+  end
 
-    # With nothing monitored there is no meaningful denominator, so fall back to every
-    # episode. That keeps the x/y counts readable instead of rendering 0/0.
-    scope = if monitored_episodes == [], do: episodes, else: monitored_episodes
+  # The counts AvailabilityStatus.for_series/3 classifies, taken from preloaded
+  # episodes. Mydia.Media.LibraryListing computes the same counts in SQL.
+  defp episode_counts(episodes) do
+    today = Date.utc_today()
 
-    total = length(scope)
-    downloaded_count = Enum.count(scope, fn ep -> ep.media_files != [] end)
-
-    has_active_downloads =
-      Enum.any?(scope, fn ep -> Enum.any?(ep.downloads, &download_active?/1) end)
-
-    all_upcoming =
-      scope != [] and
-        Enum.all?(scope, fn ep ->
-          ep.air_date && Date.compare(ep.air_date, Date.utc_today()) == :gt
-        end)
-
-    state =
-      cond do
-        total > 0 and downloaded_count == total -> :downloaded
-        has_active_downloads -> :downloading
-        all_upcoming -> :upcoming
-        downloaded_count > 0 -> :partial
-        true -> :missing
-      end
-
-    %AvailabilityStatus{
-      state: state,
-      # A monitored show with every episode unmonitored is not chasing anything, so it
-      # renders muted rather than claiming a pursuit that will never happen. A show with
-      # no episodes at all is a different case: nothing contradicts the show's own flag
-      # yet, so a freshly added show awaiting metadata stays un-muted.
-      monitored: media_item.monitored and (episodes == [] or monitored_episodes != []),
-      downloaded: downloaded_count,
-      total: total
+    %{
+      total: length(episodes),
+      downloaded: Enum.count(episodes, &(&1.media_files != [])),
+      downloading:
+        Enum.count(episodes, fn episode -> Enum.any?(episode.downloads, &download_active?/1) end),
+      upcoming: Enum.count(episodes, &(&1.air_date && Date.compare(&1.air_date, today) == :gt))
     }
   end
 
