@@ -35,10 +35,21 @@ defmodule Mydia.Media do
   """
   @spec list_media_items(keyword()) :: [MediaItem.t()]
   def list_media_items(opts \\ []) do
-    (opts[:base_query] || MediaItem)
-    |> apply_media_item_filters(opts)
+    opts
+    |> media_items_query()
     |> maybe_preload(opts[:preload])
     |> Repo.all()
+  end
+
+  @doc """
+  The filtered query `list_media_items/1` runs, without preloads.
+
+  Takes the same filter options. Start here to compose on the filtered set, for
+  instance to scope an aggregate to it with `subquery/1`.
+  """
+  @spec media_items_query(keyword()) :: Ecto.Queryable.t()
+  def media_items_query(opts \\ []) do
+    apply_media_item_filters(opts[:base_query] || MediaItem, opts)
   end
 
   @doc """
@@ -2360,8 +2371,9 @@ defmodule Mydia.Media do
     end)
   end
 
-  # Helper function to check if a download is active
-  # Downloads are active if they haven't completed and haven't failed
+  # A download is active until it completes or fails.
+  # Mydia.Media.LibraryListing.active_downloads/0 is this predicate in SQL.
+  # Change the two together.
   defp download_active?(download) do
     is_nil(download.completed_at) && is_nil(download.error_message)
   end
