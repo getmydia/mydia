@@ -336,7 +336,7 @@
     <div :if={@view_mode == :list} class="card bg-base-100 shadow-lg overflow-hidden">
       <%!-- List View Header --%>
       <div class="flex items-center bg-base-200 font-semibold text-sm px-4 py-3 border-b border-base-300">
-        <div class="w-10 flex-shrink-0"></div>
+        <div class="w-16 flex-shrink-0"></div>
         <div class="w-14 flex-shrink-0"></div>
         <div class="flex-1 min-w-0">Title</div>
         <div class="w-20 hidden md:block text-center flex-shrink-0">Year</div>
@@ -344,6 +344,18 @@
         <div class="w-20 hidden lg:block text-center flex-shrink-0">Quality</div>
         <div class="w-24 hidden xl:block text-right flex-shrink-0">Size</div>
       </div>
+    </div>
+
+    <%!-- Clears the cards' browser-side selection marks when selection mode ends.
+         It cannot sit on #media-items: phx-viewport-bottom already gives that
+         element LiveView's infinite-scroll hook, and an element runs one hook. --%>
+    <div
+      id="media-selection-sync"
+      phx-hook="MediaSelection"
+      data-container="media-items"
+      data-selecting={to_string(@selection_mode)}
+      hidden
+    >
     </div>
 
     <%!-- Unified Media Items Container (single stream for both grid and list) --%>
@@ -372,23 +384,6 @@
             phx-click="toggle_select"
             phx-value-id={item.id}
           >
-            <%!-- Selection indicator (always rendered, shown/hidden via CSS based on selection-mode) --%>
-            <div class="absolute top-2 left-2 z-20 pointer-events-none selection-indicator hidden">
-              <div class="swap swap-flip pointer-events-none">
-                <input
-                  type="checkbox"
-                  class="select-checkbox"
-                  checked={MapSet.member?(@selected_ids, item.id)}
-                />
-                <div class="swap-on btn btn-circle btn-sm btn-primary shadow-lg">
-                  <.icon name="hero-check" class="w-4 h-4" />
-                </div>
-                <div class="swap-off btn btn-circle btn-sm bg-base-100/90 shadow-lg border-2 border-base-300">
-                  <.icon name="hero-plus" class="w-4 h-4 opacity-40" />
-                </div>
-              </div>
-            </div>
-
             <%!-- Monitored toggle button (outside link, hidden in selection mode) --%>
             <button
               type="button"
@@ -412,21 +407,48 @@
             </button>
 
             <div class="card h-full bg-base-100 shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden">
-              <.link navigate={~p"/media/#{item.id}"}>
-                <% progress = get_progress(item) %>
-                <.poster_figure src={get_poster_url(item)} alt={item.title}>
-                  <:overlay>
-                    <.progress_bar :if={progress} progress={progress} class="hide-on-select" />
-                    <%!-- Playback status and quality, stacked in one top-right container --%>
-                    <.poster_badges
-                      id={"poster-badges-#{item.id}"}
-                      progress={progress}
-                      quality={get_quality_badge(item)}
-                      class="hide-on-select"
+              <%!-- Poster. The bottom-left corner holds the selection controls:
+                   the top-left belongs to the bookmark and the top-right to the
+                   badges, and on narrow cards those fill the top edge. A button
+                   cannot sit inside the link, so both live beside it. --%>
+              <div class="relative">
+                <.link navigate={~p"/media/#{item.id}"}>
+                  <% progress = get_progress(item) %>
+                  <.poster_figure src={get_poster_url(item)} alt={item.title}>
+                    <:overlay>
+                      <.progress_bar :if={progress} progress={progress} class="hide-on-select" />
+                      <%!-- Playback status and quality, stacked in one top-right container --%>
+                      <.poster_badges
+                        id={"poster-badges-#{item.id}"}
+                        progress={progress}
+                        quality={get_quality_badge(item)}
+                        class="hide-on-select"
+                      />
+                    </:overlay>
+                  </.poster_figure>
+                </.link>
+                <.start_selection_button
+                  item={item}
+                  target={"#grid-item-#{item.id}"}
+                  class="absolute bottom-2 left-2 z-20"
+                />
+                <%!-- Selection indicator (always rendered, shown/hidden via CSS based on selection-mode) --%>
+                <div class="absolute bottom-2 left-2 z-20 pointer-events-none selection-indicator hidden">
+                  <div class="swap swap-flip pointer-events-none">
+                    <input
+                      type="checkbox"
+                      class="select-checkbox"
+                      checked={MapSet.member?(@selected_ids, item.id)}
                     />
-                  </:overlay>
-                </.poster_figure>
-              </.link>
+                    <div class="swap-on btn btn-circle btn-sm btn-primary shadow-lg">
+                      <.icon name="hero-check" class="w-4 h-4" />
+                    </div>
+                    <div class="swap-off btn btn-circle btn-sm bg-base-100/90 shadow-lg border-2 border-base-300">
+                      <.icon name="hero-plus" class="w-4 h-4 opacity-40" />
+                    </div>
+                  </div>
+                </div>
+              </div>
               <% status = get_media_item_status(item) %>
               <.poster_card_body title={item.title}>
                 <:meta>
@@ -464,13 +486,20 @@
           <%!-- List Row View --%>
           <div
             id={"list-item-#{item.id}"}
-            class="flex items-center px-4 py-3 hover:bg-base-200/50 border-b border-base-200 last:border-b-0 transition-colors cursor-pointer media-list-item"
+            class="group flex items-center px-4 py-3 hover:bg-base-200/50 border-b border-base-200 last:border-b-0 transition-colors cursor-pointer media-list-item"
             data-selected={to_string(MapSet.member?(@selected_ids, item.id))}
             phx-click="toggle_select"
             phx-value-id={item.id}
           >
-            <%!-- Checkbox/Bookmark column --%>
-            <div class="w-10 flex-shrink-0">
+            <%!-- Checkbox/Bookmark column. Slot 1 holds the hover checkbox at rest
+                 and the selection check while selecting; the hidden checkbox
+                 keeps its width, so the bookmark in slot 2 never moves. --%>
+            <div class="w-16 flex-shrink-0 flex items-center gap-2">
+              <.start_selection_button
+                item={item}
+                target={"#list-item-#{item.id}"}
+                size={:xs}
+              />
               <%!-- Selection checkbox (always rendered, shown via CSS in selection-mode) --%>
               <div class="swap pointer-events-none selection-indicator hidden">
                 <input

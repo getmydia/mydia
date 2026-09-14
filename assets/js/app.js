@@ -28,6 +28,12 @@ import VideoPlayer from "./hooks/video_player";
 import PlexOAuth from "./hooks/plex_oauth";
 import DockNav from "./hooks/dock_nav";
 import PersistedCheckbox from "./hooks/persisted_checkbox.mjs";
+import {
+  MediaSelection,
+  setAllSelected,
+  setItemSelected,
+  toggleAllSelected,
+} from "./hooks/media_selection.mjs";
 // Alpine.js for reactive UI components
 import Alpine from "alpinejs";
 import { videoPlayer } from "./alpine_components/video_player";
@@ -388,43 +394,30 @@ const csrfToken = document
   .getAttribute("content");
 
 // Selection sync - listen for custom DOM events dispatched via JS.dispatch
-// Select all items
+function mediaItemsContainer(e) {
+  return e.target.closest("#media-items") || document.getElementById("media-items");
+}
+
 document.addEventListener("mydia:select-all", (e) => {
-  const container = e.target.closest("#media-items") || document.getElementById("media-items");
-  if (!container) return;
-
-  container.querySelectorAll(".media-grid-item, .media-list-item").forEach((item) => {
-    item.dataset.selected = "true";
-    const checkbox = item.querySelector("input.select-checkbox");
-    if (checkbox) checkbox.checked = true;
-  });
+  const container = mediaItemsContainer(e);
+  if (container) setAllSelected(container, true);
 });
 
-// Clear all selections
 document.addEventListener("mydia:clear-selection", (e) => {
-  const container = e.target.closest("#media-items") || document.getElementById("media-items");
-  if (!container) return;
-
-  container.querySelectorAll(".media-grid-item, .media-list-item").forEach((item) => {
-    item.dataset.selected = "false";
-    const checkbox = item.querySelector("input.select-checkbox");
-    if (checkbox) checkbox.checked = false;
-  });
+  const container = mediaItemsContainer(e);
+  if (container) setAllSelected(container, false);
 });
 
-// Toggle select all - check current state and toggle
 document.addEventListener("mydia:toggle-select-all", (e) => {
-  const container = e.target.closest("#media-items") || document.getElementById("media-items");
-  if (!container) return;
+  const container = mediaItemsContainer(e);
+  if (container) toggleAllSelected(container);
+});
 
-  const items = container.querySelectorAll(".media-grid-item, .media-list-item");
-  const allSelected = Array.from(items).every((item) => item.dataset.selected === "true");
-
-  items.forEach((item) => {
-    item.dataset.selected = allSelected ? "false" : "true";
-    const checkbox = item.querySelector("input.select-checkbox");
-    if (checkbox) checkbox.checked = !allSelected;
-  });
+// A card's hover checkbox dispatches this on the card itself while it pushes
+// start_selection. The click-delegation listener below ignores that click,
+// because #media-items has no selection-mode class until the server replies.
+document.addEventListener("mydia:start-selection", (e) => {
+  setItemSelected(e.target, true);
 });
 
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -444,6 +437,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     PersistedCheckbox,
     AddDirectUrl,
     BatchSelect,
+    MediaSelection,
   },
   // Preserve Alpine.js state and selection across LiveView DOM patches
   dom: {
@@ -562,15 +556,7 @@ document.addEventListener("click", (e) => {
     return;
   }
 
-  // Toggle selection using data attribute
-  const wasSelected = item.dataset.selected === "true";
-  item.dataset.selected = wasSelected ? "false" : "true";
-
-  // Also toggle the checkbox if present
-  const checkbox = item.querySelector("input.select-checkbox");
-  if (checkbox) {
-    checkbox.checked = item.dataset.selected === "true";
-  }
+  setItemSelected(item, item.dataset.selected !== "true");
 });
 
 // expose liveSocket on window for web console debug logs and latency simulation:

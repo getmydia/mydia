@@ -959,6 +959,91 @@ defmodule MydiaWeb.MediaLive.IndexTest do
     end
   end
 
+  describe "starting selection from a card" do
+    setup %{conn: conn} do
+      held = insert(:media_item, type: "movie", title: "Cinder Almanac")
+      other = insert(:media_item, type: "movie", title: "Lowtide Registry")
+
+      %{conn: log_in_user(conn, admin_user_fixture()), held: held, other: other}
+    end
+
+    test "every grid card carries a labelled checkbox inside its hover group", %{
+      conn: conn,
+      held: held,
+      other: other
+    } do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      assert has_element?(
+               view,
+               "#grid-item-#{held.id}.group #select-from-card-#{held.id}[aria-label='Select Cinder Almanac']"
+             )
+
+      assert has_element?(view, "#grid-item-#{other.id}.group #select-from-card-#{other.id}")
+    end
+
+    test "clicking a grid card's checkbox turns on selection with that item selected", %{
+      conn: conn,
+      held: held
+    } do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      refute has_element?(view, "#media-items.selection-mode")
+
+      html = view |> element("#select-from-card-#{held.id}") |> render_click()
+
+      # A navigation would come back as {:error, {:live_redirect, _}}, which is
+      # what the card's own toggle_select does outside selection mode.
+      assert is_binary(html)
+      assert has_element?(view, "#media-items.selection-mode")
+      refute has_element?(view, "#batch-auto-search-btn[disabled]")
+
+      render_click(view, "toggle_select", %{"id" => held.id})
+
+      assert has_element?(view, "#batch-auto-search-btn[disabled]")
+    end
+
+    test "list rows carry the checkbox and it starts selection the same way", %{
+      conn: conn,
+      held: held
+    } do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_view", %{"mode" => "list"})
+
+      assert has_element?(view, "#list-item-#{held.id}.group #select-from-card-#{held.id}")
+
+      html = view |> element("#select-from-card-#{held.id}") |> render_click()
+
+      assert is_binary(html)
+      assert has_element?(view, "#media-items.selection-mode")
+      refute has_element?(view, "#batch-auto-search-btn[disabled]")
+    end
+
+    test "a start_selection push without a usable id changes nothing", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "start_selection", %{})
+      render_click(view, "start_selection", %{"id" => nil})
+      render_click(view, "start_selection", %{"id" => ""})
+      render_click(view, "start_selection", %{"id" => "not-a-uuid"})
+
+      refute has_element?(view, "#media-items.selection-mode")
+    end
+
+    # Batch actions query `id in ^ids` against a :binary_id key, and on
+    # PostgreSQL a malformed id there raises Ecto.Query.CastError.
+    test "toggle_select keeps a malformed id out of the selection", %{conn: conn, held: held} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view |> element("#select-from-card-#{held.id}") |> render_click()
+      render_click(view, "toggle_select", %{"id" => "not-a-uuid"})
+      render_click(view, "toggle_select", %{"id" => held.id})
+
+      assert has_element?(view, "#batch-auto-search-btn[disabled]")
+    end
+  end
+
   describe "batch edit" do
     setup %{conn: conn} do
       %{conn: log_in_user(conn, admin_user_fixture())}
