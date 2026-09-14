@@ -6,7 +6,6 @@ import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/crash_reporting/crash_reporter_provider.dart';
 import '../../../core/graphql/graphql_provider.dart';
-import '../../../core/playback/playback_memory_providers.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/remote/node_registration_providers.dart';
@@ -183,13 +182,6 @@ class _PlaybackSection extends ConsumerWidget {
                   .read(settingsControllerProvider.notifier)
                   .setAutoSkipSegments(value),
         ),
-        SettingsRow.action(
-          key: const Key('forget-playback-problems-row'),
-          icon: Icons.restart_alt,
-          title: 'Forget playback problems',
-          subtitle: 'Try direct play again on files that failed before',
-          onTap: () => _forgetPlaybackProblems(context, ref),
-        ),
         if (failed)
           SettingsRow.action(
             key: const Key('settings-retry-row'),
@@ -226,24 +218,6 @@ class _PlaybackSection extends ConsumerWidget {
     await ref
         .read(settingsControllerProvider.notifier)
         .setDefaultQuality(picked.storageKey);
-  }
-
-  Future<void> _forgetPlaybackProblems(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final memory = await ref.read(playbackMemoryProvider.future);
-      await memory.clear();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Playback problems forgotten')),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not clear playback memory: $e')),
-      );
-    }
   }
 }
 

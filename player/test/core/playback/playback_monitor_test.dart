@@ -12,6 +12,7 @@ class _Signals {
   final buffering = StreamController<bool>.broadcast();
   final playing = StreamController<bool>.broadcast();
   final error = StreamController<String>.broadcast();
+  final track = StreamController<Object>.broadcast();
 
   PlayerSignals get signals => PlayerSignals(
         position: position.stream,
@@ -19,6 +20,7 @@ class _Signals {
         buffering: buffering.stream,
         playing: playing.stream,
         error: error.stream,
+        track: track.stream,
       );
 }
 
@@ -133,6 +135,43 @@ void main() {
       async.elapse(const Duration(seconds: 2));
       async.flushMicrotasks();
       expect(seen.map((x) => x.fault), [true, false]);
+      monitor.dispose();
+    });
+  });
+
+  test('a track change is reported as an interruption on the next sample', () {
+    fakeAsync((async) {
+      final s = _Signals();
+      final monitor = PlaybackMonitor(
+        signals: s.signals,
+        sampler: const NoFrameStatsSampler(),
+      );
+      final seen = <HealthSample>[];
+      monitor.samples.listen(seen.add);
+      monitor.start();
+      s.track.add(Object());
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(seen.map((x) => x.interrupted), [true, false]);
+      monitor.dispose();
+    });
+  });
+
+  test('a seek noted by the screen is reported as an interruption', () {
+    fakeAsync((async) {
+      final s = _Signals();
+      final monitor = PlaybackMonitor(
+        signals: s.signals,
+        sampler: const NoFrameStatsSampler(),
+      );
+      final seen = <HealthSample>[];
+      monitor.samples.listen(seen.add);
+      monitor.start();
+      async.elapse(const Duration(seconds: 1));
+      monitor.noteInterruption();
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(seen.map((x) => x.interrupted), [false, true, false]);
       monitor.dispose();
     });
   });

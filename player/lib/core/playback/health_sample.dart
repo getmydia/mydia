@@ -11,6 +11,7 @@ class HealthSample {
     this.droppedFrames,
     this.throughputKbps,
     this.fault = false,
+    this.interrupted = false,
   });
 
   /// Time since the monitor started or was last reset.
@@ -32,11 +33,15 @@ class HealthSample {
   /// An error event arrived since the previous sample.
   final bool fault;
 
+  /// A track switch or seek happened since the previous sample. mpv
+  /// rebuffers after either, and that says nothing about the link.
+  final bool interrupted;
+
   @override
   String toString() => 'HealthSample(at: ${at.inSeconds}s, '
       'pos: ${position.inSeconds}s, ahead: ${bufferedAhead.inSeconds}s, '
       'buffering: $buffering, playing: $playing, dropped: $droppedFrames, '
-      'kbps: $throughputKbps, fault: $fault)';
+      'kbps: $throughputKbps, fault: $fault, interrupted: $interrupted)';
 }
 
 /// Cumulative counters read from the engine.

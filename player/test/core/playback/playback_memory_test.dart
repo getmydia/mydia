@@ -103,15 +103,6 @@ void main() {
         await memory.boundThroughput(server, 3600);
         expect(memory.throughputKbps(server), 3600);
       });
-
-      test('clear forgets everything', () async {
-        await memory.recordFailure(server, key, FailureReason.decodeFailed,
-            now: now);
-        await memory.observeThroughput(server, 5000);
-        await memory.clear();
-        expect(memory.failuresFor(server, now: now), isEmpty);
-        expect(memory.throughputKbps(server), isNull);
-      });
     });
   }
 

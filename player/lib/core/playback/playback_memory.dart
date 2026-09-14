@@ -74,8 +74,6 @@ abstract class PlaybackMemory {
 
   /// Records that throughput is at most [upperKbps]. Never raises the estimate.
   Future<void> boundThroughput(String serverKey, int upperKbps);
-
-  Future<void> clear();
 }
 
 /// One server's record, as stored: a map so the Hive box needs no adapter.
@@ -197,9 +195,6 @@ class HivePlaybackMemory implements PlaybackMemory {
     final record = _read(serverKey)..bound(upperKbps);
     await _write(serverKey, record);
   }
-
-  @override
-  Future<void> clear() => _box.clear();
 }
 
 class InMemoryPlaybackMemory implements PlaybackMemory {
@@ -232,7 +227,4 @@ class InMemoryPlaybackMemory implements PlaybackMemory {
   @override
   Future<void> boundThroughput(String serverKey, int upperKbps) async =>
       _record(serverKey).bound(upperKbps);
-
-  @override
-  Future<void> clear() async => _records.clear();
 }
