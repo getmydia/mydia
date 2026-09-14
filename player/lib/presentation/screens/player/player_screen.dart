@@ -98,6 +98,7 @@ import '../../../core/remote/remote_control_intent.dart';
 import '../../../core/remote/remote_target_controller.dart';
 import '../../../native/lib.dart';
 import '../settings/settings_controller.dart';
+import 'subtitle_content_query.dart';
 import 'subtitle_track_builder.dart';
 
 export '../../../core/player/resume_plan.dart'
@@ -3860,12 +3861,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     try {
       final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
       final result = await graphqlClient.query(
-        QueryOptions(
-          document: documentNodeQuerySubtitleContent,
-          variables: Variables$Query$SubtitleContent(
-            mediaFileId: widget.fileId,
-            trackId: track.id,
-          ).toJson(),
+        subtitleContentQueryOptions(
+          mediaFileId: widget.fileId,
+          trackId: track.id,
         ),
       );
 
