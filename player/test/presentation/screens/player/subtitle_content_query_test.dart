@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
@@ -21,23 +23,47 @@ class _SlowLink extends Link {
   }
 }
 
+/// Runs the SubtitleContent query against a link answering after [delay],
+/// and advances the fake clock by [wait].
+QueryResult? _query({required Duration delay, required Duration wait}) {
+  QueryResult? result;
+  fakeAsync((async) {
+    stubClient(_SlowLink(delay))
+        .query(subtitleContentQueryOptions(mediaFileId: 'file-1', trackId: '4'))
+        .then((r) => result = r);
+    async.elapse(wait);
+  });
+  return result;
+}
+
 void main() {
   test('waits out an extraction slower than graphql\'s 5 s default', () {
-    fakeAsync((async) {
-      // 10.7 s is what extracting one ASS track from a 2.4 GB 4K episode
-      // took on a real server.
-      final client = stubClient(_SlowLink(const Duration(milliseconds: 10700)));
-      QueryResult? result;
+    // 10.7 s is what extracting one ASS track from a 2.4 GB 4K episode took
+    // on a real server.
+    final result = _query(
+      delay: const Duration(milliseconds: 10700),
+      wait: const Duration(seconds: 11),
+    );
 
-      client
-          .query(
-              subtitleContentQueryOptions(mediaFileId: 'file-1', trackId: '4'))
-          .then((r) => result = r);
-      async.elapse(const Duration(seconds: 11));
+    expect(result, isNotNull);
+    expect(result!.exception, isNull);
+    expect(result.data?['subtitleContent'], 'WEBVTT\n');
+  });
 
-      expect(result, isNotNull);
-      expect(result!.exception, isNull);
-      expect(result!.data?['subtitleContent'], 'WEBVTT\n');
-    });
+  test('still gives up once kSubtitleContentTimeout has passed', () {
+    // The answer never arrives inside the window: graphql's QueryManager
+    // throws on a response that lands after its own timeout fired.
+    final result = _query(
+      delay: kSubtitleContentTimeout * 2,
+      wait: kSubtitleContentTimeout + const Duration(seconds: 1),
+    );
+
+    expect(result, isNotNull);
+    final linkException = result!.exception?.linkException;
+    expect(linkException, isA<UnknownException>());
+    expect(
+      (linkException! as UnknownException).originalException,
+      isA<TimeoutException>(),
+    );
   });
 }
