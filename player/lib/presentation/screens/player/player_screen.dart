@@ -3317,6 +3317,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         ? seekableEnd
         : local;
 
+    // mpv rebuffers after a seek, which is no evidence about the link.
+    _monitor?.noteInterruption();
     await player.seek(seekTarget);
   }
 

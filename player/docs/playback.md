@@ -70,6 +70,16 @@ seconds ahead replace it with a transcode at the same position, on the same
 looser: three stalls in two minutes, or three consecutive 10-second windows
 each over the drop limit. The numbers live in `AdaptationThresholds`.
 
+A stall only counts once playback has run. media_kit reports buffering from
+mpv's `start-file` until the file loads, and `play()` has been called by then,
+so the open's own loading looks exactly like a stall; a 4K MKV with 38 MB of
+embedded fonts spends seconds there. Nor does a stall that starts within 10
+seconds of a track switch or seek: switching subtitle track makes mpv reopen
+the byte range from the first cluster and pause for cache while it catches
+up. The monitor learns of track switches from `player.stream.track` and of
+seeks from `seekToReal`. Before both rules, opening such a file and picking
+its English subtitles was two stalls, and a fallback for "your connection".
+
 This kind of switch logs its own line, not the `Plan:` line above:
 `[PlayerScreen] Falling back to <plan>: <reason> at <n>s`. `<plan>` is the
 fallback's own `describe()` (always ends `(fallbackFromFailure)`, since

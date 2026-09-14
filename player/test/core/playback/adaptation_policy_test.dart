@@ -19,6 +19,7 @@ class _Script {
     int? dropped = 0,
     int? kbps,
     bool fault = false,
+    bool interrupted = false,
     int step = 1,
   }) {
     _t += step;
@@ -32,6 +33,7 @@ class _Script {
       droppedFrames: dropped,
       throughputKbps: kbps,
       fault: fault,
+      interrupted: interrupted,
     );
   }
 }
@@ -281,6 +283,86 @@ void main() {
         (action as FallbackToTranscode).reason,
         FailureReason.decodeTooSlow,
       );
+    });
+  });
+
+  group('buffering that is not the link', () {
+    test('loading before playback first runs is not a stall', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      // media_kit reports buffering from mpv's start-file until the file
+      // loads, and PlayerScreen has already called play() by then. A 4K MKV
+      // carrying 38 MB of embedded fonts spends seconds there.
+      final samples = [
+        s.next(buffering: true),
+        s.next(buffering: true),
+        s.next(),
+        s.next(buffering: true),
+        s.next(),
+      ];
+      expect(_drive(policy, samples), isA<NoAction>());
+
+      // The one real stall above still counted.
+      final action = policy.observe(s.next(buffering: true));
+      expect(action, isA<FallbackToTranscode>());
+      expect((action as FallbackToTranscode).reason, FailureReason.bandwidth);
+    });
+
+    test('a rebuffer right after a track switch or seek is not a stall', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      // Switching subtitle track makes mpv reopen the byte range from the
+      // first cluster and pause for cache while it catches up.
+      final samples = [
+        s.next(),
+        s.next(buffering: true),
+        s.next(),
+        s.next(interrupted: true),
+        s.next(buffering: true),
+        s.next(),
+        s.next(interrupted: true, buffering: true),
+        s.next(),
+      ];
+      expect(_drive(policy, samples), isA<NoAction>());
+    });
+
+    test('a stall after the interruption grace counts again', () {
+      final policy = AdaptationPolicy(
+        source: SourceKind.direct,
+        thresholds: const AdaptationThresholds(
+          interruptionGrace: Duration(seconds: 3),
+        ),
+      );
+      final s = _Script();
+      final samples = [
+        s.next(),
+        s.next(buffering: true),
+        s.next(interrupted: true),
+        s.next(),
+        s.next(),
+        s.next(),
+        s.next(buffering: true),
+      ];
+      final action = _drive(policy, samples);
+      expect(action, isA<FallbackToTranscode>());
+      expect((action as FallbackToTranscode).reason, FailureReason.bandwidth);
+    });
+
+    test('the open resetting tracks does not excuse later stalls', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      // `Player.open` stops the previous media, which emits an empty track
+      // selection before anything has played.
+      final samples = [
+        s.next(interrupted: true, buffering: true),
+        s.next(),
+        s.next(buffering: true),
+        s.next(),
+        s.next(buffering: true),
+      ];
+      final action = _drive(policy, samples);
+      expect(action, isA<FallbackToTranscode>());
+      expect((action as FallbackToTranscode).reason, FailureReason.bandwidth);
     });
   });
 

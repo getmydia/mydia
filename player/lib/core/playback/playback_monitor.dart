@@ -16,6 +16,7 @@ class PlayerSignals {
     required this.buffering,
     required this.playing,
     required this.error,
+    this.track = const Stream.empty(),
   });
 
   factory PlayerSignals.of(Player player) => PlayerSignals(
@@ -24,6 +25,7 @@ class PlayerSignals {
         buffering: player.stream.buffering,
         playing: player.stream.playing,
         error: player.stream.error,
+        track: player.stream.track,
       );
 
   final Stream<Duration> position;
@@ -34,6 +36,10 @@ class PlayerSignals {
   final Stream<bool> buffering;
   final Stream<bool> playing;
   final Stream<String> error;
+
+  /// media_kit's selected tracks, which emit on every `setAudioTrack` and
+  /// `setSubtitleTrack`, whoever called them.
+  final Stream<Object?> track;
 }
 
 class PlaybackMonitor {
@@ -57,6 +63,7 @@ class PlaybackMonitor {
   bool _buffering = false;
   bool _playing = false;
   bool _fault = false;
+  bool _interrupted = false;
   int? _lastDropped;
   int _ticks = 0;
   bool _sampling = false;
@@ -73,9 +80,14 @@ class PlaybackMonitor {
       _signals.buffering.listen((b) => _buffering = b),
       _signals.playing.listen((p) => _playing = p),
       _signals.error.listen((_) => _fault = true),
+      _signals.track.listen((_) => _interrupted = true),
     ]);
     _timer = Timer.periodic(interval, (_) => _tick());
   }
+
+  /// Marks the next sample as following a seek. media_kit has no seek
+  /// stream, so the screen reports its own.
+  void noteInterruption() => _interrupted = true;
 
   /// Starts the clock and the dropped-frame baseline over, for a new source.
   void reset() {
@@ -83,6 +95,7 @@ class PlaybackMonitor {
     _ticks = 0;
     _lastDropped = null;
     _fault = false;
+    _interrupted = false;
   }
 
   Future<void> _tick() async {
@@ -115,8 +128,10 @@ class PlaybackMonitor {
         droppedFrames: dropped,
         throughputKbps: stats?.throughputKbps,
         fault: _fault,
+        interrupted: _interrupted,
       );
       _fault = false;
+      _interrupted = false;
       if (!_samples.isClosed) _samples.add(sample);
     } finally {
       _sampling = false;

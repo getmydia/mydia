@@ -40,6 +40,8 @@ class AdaptationPolicy {
   Duration _playingTime = Duration.zero;
   bool _advanced = false;
   Duration? _firstPosition;
+  bool _started = false;
+  Duration? _lastInterruption;
   bool _inStall = false;
   final List<Duration> _stalls = [];
   Duration? _previousAhead;
@@ -71,9 +73,19 @@ class AdaptationPolicy {
     _firstPosition ??= sample.position;
     if (sample.position > _firstPosition!) _advanced = true;
 
+    // Only a stall after playback has run once counts. Before that, buffering
+    // is the open still loading: media_kit reports it from mpv's start-file,
+    // after PlayerScreen has already called play(), and a 4K MKV with its
+    // fonts embedded spends seconds there. The open's own track reset lands
+    // in the same window and is not a viewer's switch.
+    if (_started && sample.interrupted) _lastInterruption = sample.at;
+
     final stalled = sample.buffering && sample.playing;
-    if (stalled && !_inStall) _stalls.add(sample.at);
+    if (stalled && !_inStall && _started && !_interruptionExplains(sample.at)) {
+      _stalls.add(sample.at);
+    }
     _inStall = stalled;
+    if (sample.playing && !sample.buffering) _started = true;
 
     final elapsed = _elapsedSince(sample.at);
     _previousAt = sample.at;
@@ -159,6 +171,14 @@ class AdaptationPolicy {
       if (sum <= _dropLimit()) return false;
     }
     return true;
+  }
+
+  /// Whether a stall starting [at] follows a track switch or seek closely
+  /// enough to be its rebuffer.
+  bool _interruptionExplains(Duration at) {
+    final interruption = _lastInterruption;
+    return interruption != null &&
+        at - interruption <= thresholds.interruptionGrace;
   }
 
   int _stallsWithin(Duration window, Duration now) =>

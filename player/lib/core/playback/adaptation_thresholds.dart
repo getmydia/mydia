@@ -14,6 +14,7 @@ class AdaptationThresholds {
     this.drainSamples = 15,
     this.drainBelow = const Duration(seconds: 10),
     this.sustainedDropWindows = 3,
+    this.interruptionGrace = const Duration(seconds: 10),
   });
 
   /// Playing time after a source starts during which the strict thresholds
@@ -41,4 +42,10 @@ class AdaptationThresholds {
   /// After verification, consecutive [dropWindow]s that must each exceed
   /// [maxDropsPerSecond] before decode counts as too slow.
   final int sustainedDropWindows;
+
+  /// How long after a track switch or seek a stall is put down to it rather
+  /// than to the link. Switching subtitle track makes mpv reopen the byte
+  /// range from the first cluster, and on a 4K file it pauses for cache
+  /// while it catches up.
+  final Duration interruptionGrace;
 }
