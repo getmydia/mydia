@@ -227,28 +227,22 @@ defmodule MydiaWeb.MediaLive.Index do
   # Sent by a card's hover checkbox. Unknown or filtered-out ids are accepted
   # exactly as toggle_select accepts them; MapSet.put makes a repeated click
   # harmless.
-  def handle_event("start_selection", %{"id" => id}, socket)
-      when is_binary(id) and id != "" do
-    {:noreply,
-     socket
-     |> assign(:selection_mode, true)
-     |> assign(:selected_ids, MapSet.put(socket.assigns.selected_ids, id))}
-  end
+  def handle_event("start_selection", params, socket) do
+    case selection_id(params["id"]) do
+      {:ok, id} ->
+        {:noreply,
+         socket
+         |> assign(:selection_mode, true)
+         |> assign(:selected_ids, MapSet.put(socket.assigns.selected_ids, id))}
 
-  def handle_event("start_selection", _params, socket), do: {:noreply, socket}
+      :error ->
+        {:noreply, socket}
+    end
+  end
 
   def handle_event("toggle_select", %{"id" => id}, socket) do
     if socket.assigns.selection_mode do
-      selected_ids = socket.assigns.selected_ids
-
-      updated_ids =
-        if MapSet.member?(selected_ids, id) do
-          MapSet.delete(selected_ids, id)
-        else
-          MapSet.put(selected_ids, id)
-        end
-
-      {:noreply, assign(socket, :selected_ids, updated_ids)}
+      {:noreply, toggle_selected_id(socket, selection_id(id))}
     else
       # Not in selection mode, navigate to the item
       {:noreply, push_navigate(socket, to: ~p"/media/#{id}")}
@@ -855,6 +849,21 @@ defmodule MydiaWeb.MediaLive.Index do
         put_flash(socket, :error, "Failed to queue searches")
     end
   end
+
+  # Selected ids end up in batch queries on a :binary_id key, where PostgreSQL
+  # raises Ecto.Query.CastError for anything that is not a UUID.
+  defp selection_id(id) when is_binary(id), do: Ecto.UUID.cast(id)
+  defp selection_id(_id), do: :error
+
+  defp toggle_selected_id(socket, {:ok, id}) do
+    update(socket, :selected_ids, fn selected_ids ->
+      if MapSet.member?(selected_ids, id),
+        do: MapSet.delete(selected_ids, id),
+        else: MapSet.put(selected_ids, id)
+    end)
+  end
+
+  defp toggle_selected_id(socket, :error), do: socket
 
   defp load_media_items(socket, opts) do
     reset? = Keyword.get(opts, :reset, false)

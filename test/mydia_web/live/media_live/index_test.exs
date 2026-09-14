@@ -1026,8 +1026,21 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       render_click(view, "start_selection", %{})
       render_click(view, "start_selection", %{"id" => nil})
       render_click(view, "start_selection", %{"id" => ""})
+      render_click(view, "start_selection", %{"id" => "not-a-uuid"})
 
       refute has_element?(view, "#media-items.selection-mode")
+    end
+
+    # Batch actions query `id in ^ids` against a :binary_id key, and on
+    # PostgreSQL a malformed id there raises Ecto.Query.CastError.
+    test "toggle_select keeps a malformed id out of the selection", %{conn: conn, held: held} do
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view |> element("#select-from-card-#{held.id}") |> render_click()
+      render_click(view, "toggle_select", %{"id" => "not-a-uuid"})
+      render_click(view, "toggle_select", %{"id" => held.id})
+
+      assert has_element?(view, "#batch-auto-search-btn[disabled]")
     end
   end
 
