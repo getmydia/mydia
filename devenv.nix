@@ -460,6 +460,13 @@ in
       excludes = [ "\\.(g|freezed)\\.dart$" ];
       pass_filenames = false;
     };
+    no-scratch-docs = {
+      enable = true;
+      name = "no scratch docs";
+      entry = "scripts/check-no-scratch-docs.sh";
+      pass_filenames = false;
+      always_run = true;
+    };
   };
 
   # ── Shell-entry banner (R10) ────────────────────────────────────────────────

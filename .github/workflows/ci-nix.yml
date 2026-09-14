@@ -188,6 +188,19 @@ jobs:
       - name: Assert generated artifacts match their manifests
         run: ./scripts/check-generated-freshness.sh
 
+  scratch-docs:
+    name: Check / No Scratch Docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The pre-commit hook blocks staging these paths locally; this asserts
+      # the script itself keeps that contract on a clean checkout.
+      - name: Assert the scratch-docs guard holds its contract
+        run: ./scripts/check-no-scratch-docs-test.sh
+
   # Both NixOS VM tests run on push only. They are the slowest and least
   # reliable jobs in CI, combining a QEMU boot with a full Nix build on top of
   # the FlakeHub cache 503s that can hit any Nix job, and breaking the NixOS
