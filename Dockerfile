@@ -278,6 +278,10 @@ LABEL org.opencontainers.image.title="Mydia" \
 # mesa-va-gallium because its gallium driver compiles shaders through LLVM;
 # intel-media-driver itself is only ~38MB. The compressed layer delta will
 # be smaller, but on that order.
+# Alpine builds intel-media-driver for x86_64 only, and apk fails the whole
+# install on a missing package, so it is added on amd64 alone. PR CI builds
+# only amd64; the arm64 image is first built by release.yml.
+ARG TARGETARCH
 RUN apk add --no-cache \
     sqlite \
     libpq \
@@ -287,14 +291,14 @@ RUN apk add --no-cache \
     chromaprint \
     fdk-aac \
     mesa-va-gallium \
-    intel-media-driver \
     libva-utils \
     su-exec \
     tzdata \
     shadow \
     openssl \
     libstdc++ \
-    ncurses-libs
+    ncurses-libs && \
+    if [ "$TARGETARCH" = "amd64" ]; then apk add --no-cache intel-media-driver; fi
 
 # Create app user with default UID/GID (will be updated by entrypoint if needed)
 RUN addgroup -g 1000 mydia && \
