@@ -94,8 +94,9 @@ decision": a remembered shape skips direct play and copy for Auto on the next
 play, and Original bypasses it regardless of where that choice came from. A
 bandwidth fallback lowers the remembered throughput, and that check applies
 unconditionally, so a slow link is remembered on the very next attempt
-regardless of choice. Settings has a "Forget playback problems" row that
-clears the box.
+regardless of choice. There is no control to clear the box: a remembered
+shape expires after 14 days, Original skips it before then, and remembered
+throughput keeps updating from what playback measures.
 
 ## The switch
 

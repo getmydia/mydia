@@ -12,8 +12,6 @@ import 'package:http/testing.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
-import 'package:player/core/playback/playback_memory.dart';
-import 'package:player/core/playback/playback_memory_providers.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
@@ -172,7 +170,6 @@ Future<void> _pump(
   RegistrationStatus registration = const RegistrationIdle(),
   UpdateState? updateState,
   CrashReporter? crashReporter,
-  List<dynamic> extraOverrides = const [],
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -215,7 +212,6 @@ Future<void> _pump(
         ),
         if (crashReporter != null)
           crashReporterProvider.overrideWithValue(crashReporter),
-        ...extraOverrides,
       ],
       child: MaterialApp.router(
         routerConfig: GoRouter(
@@ -602,32 +598,6 @@ void main() {
       expect(find.byKey(const Key('remote-control-retry-row')), findsNothing);
       expect(find.text('Discoverable by your other devices'), findsOneWidget);
     });
-  });
-
-  testWidgets('forget playback problems clears the memory', (tester) async {
-    final memory = InMemoryPlaybackMemory();
-    await memory.recordFailure(
-      'https://mydia.example',
-      const FailureKey(videoCodec: 'hvc1.2.4.L120.B0', heightBucket: 2160),
-      FailureReason.decodeTooSlow,
-      now: DateTime.now(),
-    );
-
-    await _pump(tester, extraOverrides: [
-      playbackMemoryProvider.overrideWith((ref) async => memory),
-    ]);
-    await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('forget-playback-problems-row')),
-      200,
-    );
-    await tester.tap(find.byKey(const Key('forget-playback-problems-row')));
-    await tester.pumpAndSettle();
-
-    expect(memory.failuresFor('https://mydia.example', now: DateTime.now()),
-        isEmpty);
-    expect(find.text('Playback problems forgotten'), findsOneWidget);
   });
 
   testWidgets('hides the crash-reporting row when the reporter cannot send',
