@@ -16,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   import MydiaWeb.GridDensityComponents
   import MydiaWeb.MediaLive.Index.SectionComponents
+  import MydiaWeb.MediaLive.Index.SelectionComponents
 
   require Logger
 
@@ -222,6 +223,19 @@ defmodule MydiaWeb.MediaLive.Index do
       {:noreply, socket}
     end
   end
+
+  # Sent by a card's hover checkbox. Unknown or filtered-out ids are accepted
+  # exactly as toggle_select accepts them; MapSet.put makes a repeated click
+  # harmless.
+  def handle_event("start_selection", %{"id" => id}, socket)
+      when is_binary(id) and id != "" do
+    {:noreply,
+     socket
+     |> assign(:selection_mode, true)
+     |> assign(:selected_ids, MapSet.put(socket.assigns.selected_ids, id))}
+  end
+
+  def handle_event("start_selection", _params, socket), do: {:noreply, socket}
 
   def handle_event("toggle_select", %{"id" => id}, socket) do
     if socket.assigns.selection_mode do
