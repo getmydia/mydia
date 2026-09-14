@@ -346,6 +346,18 @@
       </div>
     </div>
 
+    <%!-- Clears the cards' browser-side selection marks when selection mode ends.
+         It cannot sit on #media-items: phx-viewport-bottom already gives that
+         element LiveView's infinite-scroll hook, and an element runs one hook. --%>
+    <div
+      id="media-selection-sync"
+      phx-hook="MediaSelection"
+      data-container="media-items"
+      data-selecting={to_string(@selection_mode)}
+      hidden
+    >
+    </div>
+
     <%!-- Unified Media Items Container (single stream for both grid and list) --%>
     <div
       id="media-items"

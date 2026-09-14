@@ -29,6 +29,7 @@ import PlexOAuth from "./hooks/plex_oauth";
 import DockNav from "./hooks/dock_nav";
 import PersistedCheckbox from "./hooks/persisted_checkbox.mjs";
 import {
+  MediaSelection,
   setAllSelected,
   setItemSelected,
   toggleAllSelected,
@@ -436,6 +437,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     PersistedCheckbox,
     AddDirectUrl,
     BatchSelect,
+    MediaSelection,
   },
   // Preserve Alpine.js state and selection across LiveView DOM patches
   dom: {

@@ -6,7 +6,8 @@ defmodule MydiaWeb.Features.HoverSelectTest do
   `Phoenix.LiveViewTest` covers the `start_selection` event. It cannot run the
   browser half: the `mydia:start-selection` listener that outlines the clicked
   card, which the server cannot do because streamed cards never re-render from
-  assigns alone.
+  assigns alone, and the `MediaSelection` hook that removes outlines when
+  selection mode ends.
   """
   use MydiaWeb.FeatureCase, async: false
 
@@ -60,5 +61,31 @@ defmodule MydiaWeb.Features.HoverSelectTest do
 
     assert await_marked(session, ["grid-item-#{held.id}"]) == ["grid-item-#{held.id}"]
     assert_path(session, "/movies")
+  end
+
+  test "pressing Escape removes the outline the checkbox added",
+       %{session: session, held: held} do
+    login_as_admin(session)
+    start_selection_from_card(session, held)
+    await_marked(session, ["grid-item-#{held.id}"])
+
+    send_keys(session, [:escape])
+
+    # refute_has checks once and does not wait for an element to go away, so it
+    # fails before the server's reply lands. assert_has retries until found.
+    assert_has(session, Query.css("#media-items:not(.selection-mode)"))
+    assert await_marked(session, []) == []
+  end
+
+  test "leaving selection with the header Select button removes the outline",
+       %{session: session, held: held} do
+    login_as_admin(session)
+    start_selection_from_card(session, held)
+    await_marked(session, ["grid-item-#{held.id}"])
+
+    click(session, Query.css("#toggle-selection-mode"))
+
+    assert_has(session, Query.css("#media-items:not(.selection-mode)"))
+    assert await_marked(session, []) == []
   end
 end
