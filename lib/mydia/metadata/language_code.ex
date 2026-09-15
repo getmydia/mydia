@@ -111,6 +111,20 @@ defmodule Mydia.Metadata.LanguageCode do
   def original_language_from(_), do: nil
 
   @doc """
+  Extracts a title's spoken-language codes from a metadata struct or map,
+  returning `[]` when absent. TMDB sends ISO 639-1 codes and TVDB sends none.
+  Codes come back as stored, so callers canonicalize them.
+  """
+  def spoken_languages_from(%{spoken_languages: languages}) when is_list(languages),
+    do: languages
+
+  # Some paths carry metadata as a string-key map rather than a MediaMetadata struct.
+  def spoken_languages_from(%{"spoken_languages" => languages}) when is_list(languages),
+    do: languages
+
+  def spoken_languages_from(_), do: []
+
+  @doc """
   Selects a field value from a TVDB translation list by trying each preferred
   language code in order. TVDB translation entries look like
   `%{"language" => "eng", "name" => "..."}`. Returns the first non-empty match,

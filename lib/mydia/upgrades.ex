@@ -23,6 +23,7 @@ defmodule Mydia.Upgrades do
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.Quality
   alias Mydia.Media.{AudioLanguagePolicy, Episode, MediaItem}
+  alias Mydia.Metadata.LanguageCode
   alias Mydia.Repo
   alias Mydia.Search
   alias Mydia.Search.SearchBackoff
@@ -115,23 +116,52 @@ defmodule Mydia.Upgrades do
   @doc """
   The audio language policy the upgrade pipeline judges `media_item` by.
 
-  It is `AudioLanguagePolicy.effective/2` (same options), with one addition for
-  the server default: English is always acceptable there, ranked after the
-  configured download languages. So under the default `"original"` an
+  It is `AudioLanguagePolicy.effective/2` (same options), with two additions for
+  the server default, both ranked after the configured download languages.
+
+  English is always acceptable. So under the default `"original"` an
   English-only copy of a Japanese show is not replaced for language, and a
-  release in a third language can never replace it. A show's own choice is a
-  request and is used as is. Ranking of new grabs does not use this; it reads
-  `AudioLanguagePolicy.effective/2` directly.
+  release in a third language can never replace it.
+
+  TMDB's spoken languages are acceptable too, after English, when they do not
+  include the item's original language. Metadata that contradicts itself that
+  way cannot be trusted to say which language is original, so a file in any
+  spoken language stays. When the original is spoken it is trusted, because
+  TMDB also lists incidental dialogue as spoken, and a dub in one of those
+  languages is still replaced.
+
+  A show's own choice is a request and is used as is. Ranking of new grabs does
+  not use this; it reads `AudioLanguagePolicy.effective/2` directly.
   """
   @spec upgrade_policy(MediaItem.t(), keyword()) :: AudioLanguagePolicy.t()
   def upgrade_policy(%MediaItem{} = media_item, opts \\ []) do
     case AudioLanguagePolicy.effective(media_item, opts) do
       %AudioLanguagePolicy{source: :server, languages: [_ | _] = languages} = policy ->
-        %{policy | languages: Enum.uniq(languages ++ ["en"])}
+        spoken = mismatched_spoken_languages(media_item, policy)
+        %{policy | languages: Enum.uniq(languages ++ ["en"] ++ spoken)}
 
       policy ->
         policy
     end
+  end
+
+  # The item's canonical spoken languages when its original language is known
+  # and not among them, otherwise none. The policy's original_language is
+  # already canonical (AudioLanguagePolicy.new/3), so both sides compare alike.
+  defp mismatched_spoken_languages(_media_item, %AudioLanguagePolicy{original_language: nil}),
+    do: []
+
+  defp mismatched_spoken_languages(%MediaItem{metadata: metadata}, %AudioLanguagePolicy{
+         original_language: original
+       }) do
+    spoken =
+      metadata
+      |> LanguageCode.spoken_languages_from()
+      |> Enum.map(&LanguageCode.canonical/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    if original in spoken, do: [], else: spoken
   end
 
   @doc """
