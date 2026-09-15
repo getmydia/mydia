@@ -3327,6 +3327,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await player.seek(seekTarget);
   }
 
+  /// Switches the audio track, noting the switch with the monitor first.
+  ///
+  /// mpv rebuffers after a track switch, which is no evidence about the link.
+  /// Noting it before the call, as [seekToReal] does for seeks, puts the
+  /// switch on record ahead of the stall it causes, however late media_kit's
+  /// own `stream.track` event arrives.
+  Future<void> _setAudioTrack(Player player, AudioTrack track) {
+    _monitor?.noteInterruption();
+    return player.setAudioTrack(track);
+  }
+
+  /// Switches the subtitle track, noting the switch first; see
+  /// [_setAudioTrack].
+  Future<void> _setSubtitleTrack(Player player, SubtitleTrack track) {
+    _monitor?.noteInterruption();
+    return player.setSubtitleTrack(track);
+  }
+
   /// Refreshes everything that reflects watched state. Deliberately not called
   /// from the 10-second progress sync: that would refetch Home hundreds of
   /// times per movie over what may be a p2p relay.
@@ -3496,7 +3514,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       if (selected == null) {
         // "Off" - disable subtitles
-        await player.setSubtitleTrack(SubtitleTrack.no());
+        await _setSubtitleTrack(player, SubtitleTrack.no());
         if (!_canApplySubtitleSelection(generation)) {
           _resetPendingSubtitleSelection(generation);
           return;
@@ -3610,7 +3628,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return;
       }
 
-      await currentPlayer.setSubtitleTrack(mkTrack);
+      await _setSubtitleTrack(currentPlayer, mkTrack);
 
       // Re-checked again, not only before this await: dispose() or
       // _restartLocalPlayback landing during *this specific* call is exactly
@@ -3930,7 +3948,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       final mkTrack = _mediaKitAudioTrackMap[selected.id];
       if (mkTrack != null) {
-        await player.setAudioTrack(mkTrack);
+        await _setAudioTrack(player, mkTrack);
         debugPrint('[PlayerScreen] Set audio track: ${selected.displayName}');
       } else {
         debugPrint(
@@ -4490,14 +4508,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         final mkTrack = _mediaKitAudioTrackMap[id];
         final player = _player;
         if (track == null || mkTrack == null || player == null) return;
-        await player.setAudioTrack(mkTrack);
+        await _setAudioTrack(player, mkTrack);
         if (mounted) setState(() => _selectedAudioTrack = track);
 
       case TrackKind.subtitle:
         if (id == null) {
           final player = _player;
           if (player == null) return;
-          await player.setSubtitleTrack(SubtitleTrack.no());
+          await _setSubtitleTrack(player, SubtitleTrack.no());
           if (mounted) {
             setState(() => _selectedSubtitleTrack = null);
             await _onSubtitleTrackChanged();
@@ -4514,7 +4532,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // `setSubtitleTrack` call.
         final player = _player;
         if (player == null) return;
-        await player.setSubtitleTrack(mkTrack);
+        await _setSubtitleTrack(player, mkTrack);
         if (mounted) {
           setState(() => _selectedSubtitleTrack = track);
           await _onSubtitleTrackChanged();

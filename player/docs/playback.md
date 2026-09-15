@@ -83,9 +83,12 @@ so the open's own loading looks exactly like a stall; a 4K MKV with 38 MB of
 embedded fonts spends seconds there. Nor does a stall that starts within 10
 seconds of a track switch or seek: switching subtitle track makes mpv reopen
 the byte range from the first cluster and pause for cache while it catches
-up. The monitor learns of track switches from `player.stream.track` and of
-seeks from `seekToReal`. Before both rules, opening such a file and picking
-its English subtitles was two stalls, and a fallback for "your connection".
+up. The screen notes a track switch with the monitor just before asking
+media_kit for it (`_setAudioTrack`, `_setSubtitleTrack`), as `seekToReal`
+does for seeks, so the switch is on record before the rebuffer it causes;
+`player.stream.track` still catches a switch the screen did not start.
+Before both rules, opening such a file and picking its English subtitles was
+two stalls, and a fallback for "your connection".
 
 This kind of switch logs its own line, not the `Plan:` line above:
 `[PlayerScreen] Falling back to <plan>: <reason> at <n>s (<detail>)`.

@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
+import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -76,6 +77,16 @@ class _Decoder extends PlatformPlayer {
   void buffering(bool value) {
     state = state.copyWith(buffering: value);
     bufferingController.add(value);
+  }
+
+  int subtitleTrackCalls = 0;
+
+  /// Accepts the switch and emits nothing on `trackController`. That is how
+  /// a switch looks to the monitor when media_kit's own track event arrives
+  /// after mpv has already started rebuffering.
+  @override
+  Future<void> setSubtitleTrack(SubtitleTrack track) async {
+    subtitleTrackCalls++;
   }
 
   /// `errorController` is `@protected` on `PlatformPlayer`: only reachable
@@ -535,6 +546,49 @@ void main() {
       expect(decoder.opened, hasLength(1));
       expect(link.requests.where((r) => r.variables.containsKey('strategy')),
           isEmpty);
+      expect(find.textContaining('Switched to transcoding'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets(
+      'a rebuffer right after a subtitle switch is not a stall, however late '
+      'media_kit reports the switch', (tester) async {
+    final decoder = _Decoder();
+    final container = buildPlayerScreenContainer(
+      link: _server(directPlay: true),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(tester, () => decoder.state.playing, maxTries: 500);
+      final binding =
+          tester.state(find.byType(PlayerScreen)) as RemotePlayerBinding;
+
+      await _tick(tester); // playback has run once
+      decoder.buffering(true);
+      await _tick(tester); // stall 1
+      decoder.buffering(false);
+      await _tick(tester);
+
+      // `_Decoder.setSubtitleTrack` emits no track event, so only the
+      // screen's own note can explain the rebuffer that follows. Auto, so a
+      // second counted stall would fall back.
+      final callsBefore = decoder.subtitleTrackCalls;
+      await binding.selectTrack(TrackKind.subtitle, null);
+      expect(decoder.subtitleTrackCalls, callsBefore + 1);
+      decoder.buffering(true);
+      await _tick(tester); // would be stall 2 without the note
+      decoder.buffering(false);
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(decoder.opened, hasLength(1));
       expect(find.textContaining('Switched to transcoding'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
