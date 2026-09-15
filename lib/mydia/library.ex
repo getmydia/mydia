@@ -1201,11 +1201,10 @@ defmodule Mydia.Library do
   defp reject_extras(files, false), do: Enum.filter(files, &is_nil(&1.extra_kind))
 
   @doc """
-  Matches unassociated media files to their episodes for a TV show.
-
-  Finds all media files that are linked to a media_item but not to specific episodes,
-  parses their filenames to extract season/episode information, and associates them
-  with the correct episode records.
+  Finds the non-extra media files attached straight to a TV show (a shape only
+  rows written before `MediaFile.changeset/2` refused it can have), parses
+  their filenames for season/episode information, and associates them with
+  the matching episode records. Used by `Mydia.Jobs.ShowFileRepair`.
 
   Returns `{:ok, matched_count}` where matched_count is the number of files that
   were successfully matched to episodes.
@@ -1220,12 +1219,14 @@ defmodule Mydia.Library do
   """
   @spec match_files_to_episodes(binary()) :: {:ok, non_neg_integer()}
   def match_files_to_episodes(media_item_id) do
-    # Get all media files for this item that don't have an episode_id
+    # Files attached straight to the show. Extras may legitimately sit there,
+    # so they are left alone even when their name carries an SxxEyy.
     unmatched_files =
       MediaFile
       |> where([mf], mf.media_item_id == ^media_item_id)
       |> where([mf], is_nil(mf.episode_id))
       |> where([mf], is_nil(mf.trashed_at))
+      |> where([mf], is_nil(mf.extra_kind))
       |> Repo.all()
 
     Logger.info(

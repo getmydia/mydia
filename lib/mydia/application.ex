@@ -87,6 +87,11 @@ defmodule Mydia.Application do
         # shrinking to a cheap no-match. enqueue_once/0 protects its own
         # Oban.insert/1 call.
         Mydia.Jobs.MonitoringRepair.enqueue_once()
+        # One-shot repair for TV files attached straight to their show before
+        # MediaFile.changeset/2 refused that shape. Idempotent by row state:
+        # once drained, this is one query returning nothing. enqueue_once/0
+        # protects its own Oban.insert/1 call.
+        Mydia.Jobs.ShowFileRepair.enqueue_once()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()
       end
