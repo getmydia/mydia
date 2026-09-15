@@ -1,0 +1,210 @@
+Exqlite 0.40.0: never block a scheduler in the statement destructor.
+
+Applied by the Dockerfile to deps/exqlite before `mix deps.compile`, then
+checked by patches/exqlite/destructor_probe.exs. Dev, CI and the Nix package
+run upstream Exqlite unpatched; the canary test
+test/mydia/repo/exqlite_destructor_canary_test.exs watches for upstream fixing
+this, at which point this directory, its Dockerfile steps and the canary go.
+
+The bug. statement_type_destructor locks the connection mutex before
+finalizing. Destructors run on whichever scheduler drops the last reference,
+usually a normal one during GC. A query busy-waiting on another connection's
+write lock holds that mutex for the whole busy timeout (30s in Mydia). If the
+write lock's owner drops a stale statement from the waiting connection, it
+cannot commit until the waiter gives up: every write stalls for exactly
+busy_timeout, and the stuck scheduler blocks thread progress for the whole VM.
+On a production install this froze Mydia for 30-60s about twenty times a day,
+stalling video segments and every GraphQL call.
+
+The fix. The destructor only trylocks. When the connection is busy it queues
+the sqlite3_stmt and returns. The next connection_acquire_lock on that
+connection finalizes the queue, and the connection destructor does too, so a
+connection nobody calls again still cleans up. mix.exs forces a source build;
+otherwise elixir_make downloads the precompiled upstream NIF and this patch
+never takes effect.
+
+diff --git a/mix.exs b/mix.exs
+--- a/mix.exs
++++ b/mix.exs
+@@ -11,7 +11,7 @@
+       compilers: [:elixir_make] ++ Mix.compilers(),
+       make_targets: ["all"],
+       make_clean: ["clean"],
+-      make_force_build: Application.get_env(:exqlite, :force_build, false),
++      make_force_build: true,
+       make_precompiler: make_precompiler(),
+       make_precompiler_url:
+         "https://github.com/elixir-sqlite/exqlite/releases/download/v#{@version}/@{artefact_filename}",
+diff --git a/c_src/sqlite3_nif.c b/c_src/sqlite3_nif.c
+--- a/c_src/sqlite3_nif.c
++++ b/c_src/sqlite3_nif.c
+@@ -56,11 +56,24 @@
+ // currently defined SQLite action code is SQLITE_RECURSIVE (33).
+ #define AUTHORIZER_DENY_SIZE 64
+
++// A statement whose resource was destroyed while its connection was busy.
++// Finalizing it needs the connection mutex, which the destructor must not
++// wait for, so it is queued here until the next call takes the lock.
++typedef struct pending_finalize
++{
++    sqlite3_stmt* statement;
++    struct pending_finalize* next;
++} pending_finalize_t;
++
+ typedef struct connection
+ {
+     sqlite3* db;
+     ErlNifMutex* mutex;
+     ErlNifMutex* interrupt_mutex;
++    // Guards `pending`. Only ever held for a list splice, never while
++    // waiting on anything else, so a destructor may take it.
++    ErlNifMutex* pending_mutex;
++    pending_finalize_t* pending;
+     ErlNifPid update_hook_pid;
+     int authorizer_deny[AUTHORIZER_DENY_SIZE];
+
+@@ -277,11 +290,36 @@
+     return row;
+ }
+
++// Finalizes the statements queued by statement_type_destructor.
++// Must be called while holding conn->mutex.
++static void
++connection_finalize_pending(connection_t* conn)
++{
++    pending_finalize_t* entry;
++
++    if (!conn->pending_mutex) {
++        return;
++    }
++
++    enif_mutex_lock(conn->pending_mutex);
++    entry         = conn->pending;
++    conn->pending = NULL;
++    enif_mutex_unlock(conn->pending_mutex);
++
++    while (entry) {
++        pending_finalize_t* next = entry->next;
++        sqlite3_finalize(entry->statement);
++        enif_free(entry);
++        entry = next;
++    }
++}
++
+ static inline void
+ connection_acquire_lock(connection_t* conn)
+ {
+     assert(conn);
+     enif_mutex_lock(conn->mutex);
++    connection_finalize_pending(conn);
+ }
+
+ static inline void
+@@ -484,6 +522,8 @@
+     conn->db              = db;
+     conn->mutex           = mutex;
+     conn->interrupt_mutex = NULL;
++    conn->pending_mutex   = NULL;
++    conn->pending         = NULL;
+     memset(conn->authorizer_deny, 0, sizeof(conn->authorizer_deny));
+
+     // Initialize busy handler fields
+@@ -498,6 +538,12 @@
+         return make_error_tuple(env, am_failed_to_create_mutex);
+     }
+
++    conn->pending_mutex = enif_mutex_create("exqlite:pending_finalize");
++    if (conn->pending_mutex == NULL) {
++        enif_release_resource(conn);
++        return make_error_tuple(env, am_failed_to_create_mutex);
++    }
++
+     // Install our custom busy handler + progress handler
+     sqlite3_busy_handler(db, exqlite_busy_handler, conn);
+     connection_configure_progress_handler(conn);
+@@ -1370,6 +1416,7 @@
+
+     connection_t* conn = (connection_t*)arg;
+
++    // Also finalizes any statement still queued, before the close below.
+     if (conn->mutex) {
+         connection_acquire_lock(conn);
+     }
+@@ -1403,6 +1450,11 @@
+         enif_mutex_destroy(conn->interrupt_mutex);
+         conn->interrupt_mutex = NULL;
+     }
++
++    if (conn->pending_mutex) {
++        enif_mutex_destroy(conn->pending_mutex);
++        conn->pending_mutex = NULL;
++    }
+ }
+
+ void
+@@ -1412,16 +1464,59 @@
+     assert(arg);
+
+     statement_t* statement = (statement_t*)arg;
+-    statement_acquire_lock(statement);
++    connection_t* conn     = statement->conn;
++    pending_finalize_t* entry;
+
+-    if (statement->statement) {
+-        sqlite3_finalize(statement->statement);
+-        statement->statement = NULL;
++    // Nothing else can reach a resource that is being destroyed, so its own
++    // fields can be read without the lock. A released statement has nothing
++    // left to finalize.
++    if (statement->statement == NULL) {
++        statement->conn = NULL;
++        enif_release_resource(conn);
++        return;
+     }
+
+-    statement_release_lock(statement);
+-    enif_release_resource(statement->conn);
++    // This runs on whichever thread drops the last reference, usually a normal
++    // scheduler during garbage collection. Another call can hold conn->mutex
++    // for a whole busy wait, and blocking here would stall this scheduler, and
++    // through thread progress the whole VM, for just as long. If the lock
++    // holder is waiting on a transaction owned by a process on this scheduler,
++    // nothing moves until the busy timeout expires.
++    //
++    // So never wait: when the lock is taken, queue the statement. The next
++    // connection_acquire_lock on this connection finalizes it, and so does the
++    // connection's destructor if no call ever comes.
++    //
++    // Queue before releasing this statement's connection reference. The lock
++    // holder keeps the connection alive while it holds the lock, but it may
++    // let go in between, and if this release then destroys the connection,
++    // its destructor finalizes the queue before closing.
++    if (enif_mutex_trylock(conn->mutex) != 0) {
++        entry = enif_alloc(sizeof(pending_finalize_t));
++        if (entry) {
++            entry->statement = statement->statement;
++            enif_mutex_lock(conn->pending_mutex);
++            entry->next   = conn->pending;
++            conn->pending = entry;
++            enif_mutex_unlock(conn->pending_mutex);
++
++            statement->statement = NULL;
++            statement->conn      = NULL;
++            enif_release_resource(conn);
++            return;
++        }
++
++        // Out of memory: fall back to waiting for the lock.
++        enif_mutex_lock(conn->mutex);
++    }
++
++    connection_finalize_pending(conn);
++    sqlite3_finalize(statement->statement);
++    statement->statement = NULL;
++    enif_mutex_unlock(conn->mutex);
++
+     statement->conn = NULL;
++    enif_release_resource(conn);
+ }
+
+ int
