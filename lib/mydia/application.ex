@@ -492,5 +492,6 @@ defmodule Mydia.Application do
     # Create ETS tables for O(1) media token lookups
     # These must be created before the supervision tree starts
     Mydia.Media.TokenCache.create_table()
+    Mydia.RemoteAccess.LivenessThrottle.create_table()
   end
 end
