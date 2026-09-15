@@ -1,13 +1,9 @@
 defmodule Mydia.Upgrades do
   @moduledoc """
-  Eligibility and pacing for automatic quality upgrades.
-
-  Scoring cannot be expressed in SQL, so selection is two-phase: a query
-  narrows to plausible rows ordered by staleness, then `Comparator` filters
-  by score in Elixir. `eligible_movies/1` truncates that filtered result to
-  the caller's `limit` — one movie is exactly one search, so item count and
-  search-cost budget are the same number. `eligible_episodes/1` does not:
-  see its own doc for why.
+  Eligibility and pacing for automatic upgrades: quality upgrades for files
+  below their profile's cutoff, and audio language replacements for files
+  missing the preferred language (`language_eligible_movies/2`,
+  `language_eligible_episodes/2`).
   """
 
   import Ecto.Query, warn: false
@@ -25,15 +21,21 @@ defmodule Mydia.Upgrades do
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.Quality
-  alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Media.{AudioLanguagePolicy, Episode, MediaItem}
   alias Mydia.Repo
+  alias Mydia.Search
   alias Mydia.Search.SearchBackoff
   alias Mydia.Settings.QualityProfile
-  alias Mydia.Upgrades.Comparator
+  alias Mydia.Upgrades.{Comparator, FileLanguages, Reasons}
 
   # Over-fetch factor. Most candidate rows will already be above cutoff, so
   # fetching exactly `limit` rows would routinely return a near-empty batch.
   @overfetch 5
+
+  # A resource whose language search has failed for this long stops being
+  # searched. A dub that has not appeared in three months is not arriving on
+  # the next daily sweep, and every search for it costs an indexer query.
+  @language_give_up_days 90
 
   @doc """
   Returns up to `limit` below-cutoff movies, ordered by staleness.
@@ -107,6 +109,137 @@ defmodule Mydia.Upgrades do
     |> Repo.all()
     |> Queue.reject_episodes_in_active_season_packs()
     |> Enum.flat_map(&episode_candidate/1)
+  end
+
+  @doc """
+  Returns up to `limit` movies whose current file misses the preferred audio
+  language, ordered by `last_language_check_at`.
+
+  "Current file" is the one the quality path upgrades, the best-scoring
+  analyzed file, so a search carrying both reasons targets one file. A gap is
+  `FileLanguages.gap?/2` under the movie's `AudioLanguagePolicy`.
+
+  Reads a page of `limit * #{@overfetch}` movies and stamps every one without a
+  gap, so the scan walks the library instead of re-reading the same stale page
+  each day. Candidates are left unstamped for `Mydia.Jobs.UpgradeSweep`, which
+  stamps the ones it searches.
+
+  Independent of `upgrades_allowed` and the cutoff: a file can be good enough
+  on quality and still be in the wrong language. It still needs a resolvable
+  quality profile, because picking the current file scores against one.
+  Excluded while `"movie_language_upgrade"` is backing off, and for good once
+  that bucket's first failure is #{@language_give_up_days} days old.
+
+  ## Options
+
+    * `:media_item_id` - scan only this item
+  """
+  @spec language_eligible_movies(pos_integer(), keyword()) :: [map()]
+  def language_eligible_movies(limit, opts \\ []) when is_integer(limit) and limit > 0 do
+    bucket = Reasons.bucket(:movie, :language)
+
+    MediaItem
+    |> where([m], m.type == "movie" and m.monitored == true)
+    |> where([m], m.id in subquery(analyzed_movie_ids()))
+    |> where([m], m.id not in subquery(occupying_media_item_ids()))
+    |> where([m], m.id not in subquery(backed_off_ids(bucket)))
+    |> where([m], m.id not in subquery(given_up_ids(bucket)))
+    |> scope_movies(Keyword.get(opts, :media_item_id))
+    |> order_by([m], asc_nulls_first: m.last_language_check_at)
+    |> limit(^(limit * @overfetch))
+    |> preload([:quality_profile, media_files: ^analyzed_files_query()])
+    |> Repo.all()
+    |> split_language_gaps(&movie_language_candidate/1, :movie)
+    |> Enum.take(limit)
+  end
+
+  @doc """
+  Returns episodes whose current file misses the preferred audio language,
+  ordered by `last_language_check_at`.
+
+  Like `eligible_episodes/1`, `limit` only sizes the over-fetch page and the
+  result is not truncated, so a season's episodes stay together for the
+  season-pack decision in `Mydia.Jobs.UpgradeSweep`. Stamping, give-up and
+  options follow `language_eligible_movies/2`, with the
+  `"episode_language_upgrade"` bucket. Episodes inside an active season-pack
+  download are dropped, for the reason `eligible_episodes/1` gives.
+  """
+  @spec language_eligible_episodes(pos_integer(), keyword()) :: [map()]
+  def language_eligible_episodes(limit, opts \\ []) when is_integer(limit) and limit > 0 do
+    bucket = Reasons.bucket(:episode, :language)
+
+    Episode
+    |> join(:inner, [e], m in assoc(e, :media_item))
+    |> where([e, m], e.monitored == true and m.monitored == true)
+    |> where([e, _m], e.id in subquery(analyzed_episode_ids()))
+    |> where([e, _m], e.id not in subquery(occupying_episode_ids()))
+    |> where([e, _m], e.id not in subquery(backed_off_ids(bucket)))
+    |> where([e, _m], e.id not in subquery(given_up_ids(bucket)))
+    |> scope_episodes(Keyword.get(opts, :media_item_id))
+    |> order_by([e, _m], asc_nulls_first: e.last_language_check_at)
+    |> limit(^(limit * @overfetch))
+    |> preload([_e, _m], media_item: :quality_profile, media_files: ^analyzed_files_query())
+    |> Repo.all()
+    |> Queue.reject_episodes_in_active_season_packs()
+    |> split_language_gaps(&episode_language_candidate/1, :episode)
+  end
+
+  @doc """
+  Merges quality and language candidates into one list with one entry per
+  `key_fun` value, whose `:reasons` holds every reason that found it.
+
+  The lists are interleaved before merging, so when both outgrow a caller's
+  budget, `Enum.take/2` gives each reason about half of it and a library full
+  of below-cutoff files cannot starve the language scan. Entries without
+  `:reasons` count as quality candidates.
+  """
+  @spec merge_candidates([map()], [map()], (map() -> term())) :: [map()]
+  def merge_candidates(quality, language, key_fun) do
+    {keys, by_key} =
+      quality
+      |> Enum.map(&Map.put_new(&1, :reasons, [:quality]))
+      |> interleave(language)
+      |> Enum.reduce({[], %{}}, fn candidate, {keys, by_key} ->
+        key = key_fun.(candidate)
+
+        case by_key do
+          %{^key => existing} ->
+            reasons = Enum.uniq(existing.reasons ++ candidate.reasons)
+            {keys, Map.put(by_key, key, %{existing | reasons: reasons})}
+
+          _ ->
+            {[key | keys], Map.put(by_key, key, candidate)}
+        end
+      end)
+
+    keys |> Enum.reverse() |> Enum.map(&Map.fetch!(by_key, &1))
+  end
+
+  @doc """
+  Whether `reason`'s backoff bucket for `kind` lets `resource_id` be searched
+  now: not backing off and, for `:language`, not given up. Pass
+  `season_number:` for `:season`.
+  """
+  @spec bucket_open?(Reasons.kind(), Reasons.reason(), binary(), keyword()) :: boolean()
+  def bucket_open?(kind, reason, resource_id, opts \\ []) do
+    bucket = Reasons.bucket(kind, reason)
+
+    Search.eligible?(bucket, resource_id, opts) and
+      not (reason == :language and given_up?(bucket, resource_id, opts))
+  end
+
+  @doc "Stamps `last_language_check_at` on the given movies or episodes."
+  @spec stamp_language_checked(:movie | :episode, [binary()]) :: {non_neg_integer(), nil}
+  def stamp_language_checked(_type, []), do: {0, nil}
+
+  def stamp_language_checked(type, ids) when type in [:movie, :episode] and is_list(ids) do
+    schema = if type == :movie, do: MediaItem, else: Episode
+
+    schema
+    |> where([row], row.id in ^ids)
+    |> Repo.update_all(
+      set: [last_language_check_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+    )
   end
 
   @doc """
@@ -637,6 +770,93 @@ defmodule Mydia.Upgrades do
     end
   end
 
+  # Candidates keep their place at the front of the staleness order; every
+  # other scanned row is stamped so the next run reads further in.
+  defp split_language_gaps(rows, candidate_fun, type) do
+    {candidates, clean_ids} =
+      Enum.reduce(rows, {[], []}, fn row, {candidates, clean_ids} ->
+        case candidate_fun.(row) do
+          [candidate] -> {[candidate | candidates], clean_ids}
+          [] -> {candidates, [row.id | clean_ids]}
+        end
+      end)
+
+    stamp_language_checked(type, clean_ids)
+    Enum.reverse(candidates)
+  end
+
+  defp movie_language_candidate(%MediaItem{} = item) do
+    case language_gap(item, item.media_files, :movie) do
+      {:gap, file, profile, score} ->
+        [
+          %{
+            media_item: item,
+            media_file: file,
+            profile: profile,
+            score: score,
+            reasons: [:language]
+          }
+        ]
+
+      :none ->
+        []
+    end
+  end
+
+  defp episode_language_candidate(%Episode{} = episode) do
+    case language_gap(episode.media_item, episode.media_files, :episode) do
+      {:gap, file, profile, score} ->
+        [
+          %{
+            episode: episode,
+            media_file: file,
+            profile: profile,
+            score: score,
+            reasons: [:language]
+          }
+        ]
+
+      :none ->
+        []
+    end
+  end
+
+  defp language_gap(%MediaItem{} = media_item, files, media_type) do
+    with profile when not is_nil(profile) <- QualityProfileResolver.resolve(media_item),
+         {file, score} <- best_file(files, profile, media_type),
+         policy = AudioLanguagePolicy.effective(media_item),
+         true <- FileLanguages.gap?(policy, FileLanguages.detect(file)) do
+      {:gap, file, profile, score}
+    else
+      _ -> :none
+    end
+  end
+
+  defp scope_movies(query, nil), do: query
+  defp scope_movies(query, media_item_id), do: where(query, [m], m.id == ^media_item_id)
+
+  defp scope_episodes(query, nil), do: query
+
+  defp scope_episodes(query, media_item_id),
+    do: where(query, [e, _m], e.media_item_id == ^media_item_id)
+
+  defp interleave([], rest), do: rest
+  defp interleave(rest, []), do: rest
+
+  defp interleave([first | firsts], [second | seconds]),
+    do: [first, second | interleave(firsts, seconds)]
+
+  defp given_up?(bucket, resource_id, opts) do
+    case Search.get_backoff(bucket, resource_id, opts) do
+      %SearchBackoff{first_failed_at: %DateTime{} = first_failed_at} ->
+        DateTime.diff(DateTime.utc_now(), first_failed_at, :second) >
+          @language_give_up_days * 86_400
+
+      _ ->
+        false
+    end
+  end
+
   # "The current file" for the whole feature: the highest-scoring analyzed
   # untrashed file. Unanalyzed files are filtered out by the preload query
   # before scoring, never scored and discarded. The winning score is
@@ -726,6 +946,18 @@ defmodule Mydia.Upgrades do
     SearchBackoff
     |> where([b], b.resource_type == ^resource_type)
     |> where([b], not is_nil(b.next_eligible_at) and b.next_eligible_at > ^now)
+    |> select([b], b.resource_id)
+  end
+
+  defp given_up_ids(resource_type) do
+    cutoff =
+      DateTime.utc_now()
+      |> DateTime.truncate(:second)
+      |> DateTime.add(-@language_give_up_days * 86_400, :second)
+
+    SearchBackoff
+    |> where([b], b.resource_type == ^resource_type)
+    |> where([b], not is_nil(b.first_failed_at) and b.first_failed_at < ^cutoff)
     |> select([b], b.resource_id)
   end
 end
