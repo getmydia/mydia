@@ -2109,6 +2109,13 @@ async fn handle_connection(
     }
 }
 
+/// The most `handle_send_request` reads back from a peer. Requests stay capped
+/// at 64 KiB in `handle_connection`, but responses carry whole GraphQL
+/// documents: a season with many subtitle tracks came to 254 KB on a real
+/// library, and the old 64 KiB cap failed every such request with "stream too
+/// long". The bound is only a guard against a misbehaving peer.
+const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+
 /// Send a request to a connected peer
 async fn handle_send_request(
     connected_peers: &HashMap<String, PeerConnections>,
@@ -2151,7 +2158,7 @@ async fn handle_send_request(
 
     // Read the response
     let response_data = recv
-        .read_to_end(64 * 1024)
+        .read_to_end(MAX_RESPONSE_BYTES)
         .await
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
