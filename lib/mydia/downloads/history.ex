@@ -407,19 +407,32 @@ defmodule Mydia.Downloads.History do
     # callback.
     downloads_by_client = group_downloads_by_client(downloads)
 
-    clients
-    |> Task.async_stream(&fetch_client_status(&1, downloads_by_client), stream_opts(bounded?))
-    # async_stream keeps input order, so each result lines up with its client.
-    # A task killed at the deadline reports `{:exit, :timeout}`, which carries
-    # no client name of its own.
-    |> Enum.zip(clients)
-    |> Map.new(fn
-      {{:ok, {client_name, result}}, _client_config} ->
-        {client_name, result}
+    collect = fn ->
+      clients
+      |> Task.async_stream(&fetch_client_status(&1, downloads_by_client), stream_opts(bounded?))
+      # async_stream keeps input order, so each result lines up with its client.
+      # A task killed at the deadline reports `{:exit, :timeout}`, which carries
+      # no client name of its own.
+      |> Enum.zip(clients)
+      |> Map.new(fn
+        {{:ok, {client_name, result}}, _client_config} ->
+          {client_name, result}
 
-      {{:exit, _reason}, client_config} ->
-        {client_config.name, last_known_status(client_config.name)}
-    end)
+        {{:exit, _reason}, client_config} ->
+          {client_config.name, last_known_status(client_config.name)}
+      end)
+    end
+
+    # LiveView traps exits. A linked Task.async_stream then never yields
+    # {:exit, :timeout}, so the page waits for the client instead of using
+    # the snapshot. Collect from an unlinked task that does not trap.
+    if bounded? do
+      Mydia.TaskSupervisor
+      |> Task.Supervisor.async_nolink(collect)
+      |> Task.await(:infinity)
+    else
+      collect.()
+    end
   end
 
   defp fetch_client_status(client_config, downloads_by_client) do
@@ -459,6 +472,12 @@ defmodule Mydia.Downloads.History do
 
         {client_config.name, :unreachable}
     catch
+      # LiveView traps exits, so Task.async_stream's deadline arrives here as
+      # `{:exit, :timeout}` instead of `{:exit, :timeout}` on the stream.
+      # Treat it as a bounded miss and use the last snapshot.
+      :exit, reason when reason in [:timeout, :killed] ->
+        {client_config.name, last_known_status(client_config.name)}
+
       # `rescue` only catches raised exceptions. A pool checkout timeout
       # or a GenServer.call timeout inside the adapter terminates via
       # `exit/1`, not `raise/1` — uncaught, that unwinds this task and,

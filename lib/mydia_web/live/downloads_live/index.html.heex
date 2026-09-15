@@ -135,6 +135,19 @@
       </div>
     <% end %>
 
+    <%!-- A client too busy to answer in time: rows show its last known status --%>
+    <div
+      :if={@stale_status}
+      id="client-busy-notice"
+      role="status"
+      class="alert alert-info alert-soft mb-4 text-sm"
+    >
+      <.icon name="hero-clock" class="size-4 shrink-0" />
+      <span>
+        {@stale_status.client} is busy, showing status from {status_age(@stale_status.as_of)}.
+      </span>
+    </div>
+
     <%!-- Empty state --%>
     <%= if @downloads_empty? do %>
       <div class="card bg-base-100 shadow-lg">

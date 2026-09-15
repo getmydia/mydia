@@ -35,7 +35,7 @@ defmodule MydiaWeb.MediaLive.Show.Loaders do
 
   def load_downloads_with_status(media_item) do
     # Get all downloads with real-time status from clients
-    all_downloads = Downloads.list_downloads_with_status(filter: :all)
+    all_downloads = Downloads.list_downloads_with_status(filter: :all, bounded: true)
 
     # Filter to only downloads for this media item
     all_downloads

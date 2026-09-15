@@ -114,6 +114,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
      # Match / re-match modal state (in-flight correction + post-import re-match)
      |> assign(:match_modal, nil)
      |> assign(:stall_grace_map, Settings.download_client_grace_map())
+     |> assign(:stale_status, nil)
      # Initialize all streams
      |> stream(:downloads, [])
      |> stream(:needs_matching, [])
@@ -1034,7 +1035,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
       _ ->
         downloads = get_current_downloads(socket)
-        stream(socket, :downloads, downloads, reset: true)
+
+        socket
+        |> assign(:stale_status, stale_status(downloads))
+        |> stream(:downloads, downloads, reset: true)
     end
   end
 
@@ -1172,7 +1176,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
         # Get all matching downloads for the current tab with real-time status from clients
         all_downloads =
-          Downloads.list_downloads_with_status(filter: filter)
+          Downloads.list_downloads_with_status(filter: filter, bounded: true)
           |> apply_sorting(socket.assigns.sort_by)
 
         # Apply pagination
@@ -1191,6 +1195,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         reset? = page == 0
 
         socket
+        |> assign(:stale_status, stale_status(all_downloads))
         |> assign(:has_more, has_more)
         |> assign(:downloads_empty?, reset? and paginated_downloads == [])
         |> stream(:downloads, paginated_downloads, reset: reset?)
@@ -1198,7 +1203,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp load_issues_downloads(socket) do
-    all_downloads = Downloads.list_downloads_with_status()
+    all_downloads = Downloads.list_downloads_with_status(bounded: true)
 
     # Needs Matching is derived from the clients, not from the database: these
     # torrents have no download row and never will unless the user matches one.
@@ -1226,6 +1231,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     all_empty = counts.unmatched == 0 and counts.unresolved == 0 and counts.other == 0
 
     socket
+    |> assign(:stale_status, stale_status(all_downloads))
     |> assign(:has_more, false)
     |> assign(:downloads_empty?, all_empty)
     |> assign(:issues_counts, counts)
@@ -1240,6 +1246,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     scan = socket.assigns.scan
 
     socket
+    |> assign(:stale_status, nil)
     |> assign(:has_more, false)
     |> assign(:downloads_empty?, scan.external == [])
     |> assign(:scan, scan)
@@ -1461,7 +1468,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
         :issues -> :all
       end
 
-    Downloads.list_downloads_with_status(filter: filter)
+    Downloads.list_downloads_with_status(filter: filter, bounded: true)
     |> apply_sorting(socket.assigns.sort_by)
     |> annotate_rematch_eligibility(socket.assigns.active_tab)
   end
@@ -1720,6 +1727,24 @@ defmodule MydiaWeb.DownloadsLive.Index do
       DateTime.add(download.stalled_since, StallDetector.escalation_minutes(grace) * 60, :second)
 
     max(DateTime.diff(deadline, DateTime.utc_now(), :second), 0)
+  end
+
+  # The oldest last-known status among the rows about to render, when a client
+  # was too busy to answer the page's bounded poll. nil when every row is live.
+  defp stale_status(downloads) do
+    downloads
+    |> Enum.filter(& &1.status_as_of)
+    |> Enum.min_by(& &1.status_as_of, DateTime, fn -> nil end)
+    |> case do
+      nil -> nil
+      row -> %{client: row.download_client, as_of: row.status_as_of}
+    end
+  end
+
+  defp status_age(%DateTime{} = as_of) do
+    seconds = max(DateTime.diff(DateTime.utc_now(), as_of, :second), 0)
+
+    if seconds < 60, do: "#{seconds}s ago", else: format_relative_time(as_of)
   end
 
   defp format_ratio(nil), do: "0.00"

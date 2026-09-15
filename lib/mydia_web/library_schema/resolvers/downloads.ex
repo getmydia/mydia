@@ -47,7 +47,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
   @spec downloads(any(), map(), Absinthe.Resolution.t()) :: {:ok, [map()]} | {:error, String.t()}
   def downloads(_parent, args, _info) do
     filter = Map.get(args, :filter) || :active
-    rows = Downloads.list_downloads_with_status(filter: filter)
+    rows = Downloads.list_downloads_with_status(filter: filter, bounded: true)
     {items, episodes} = hydrate_associations(rows)
 
     with {:ok, changed_at_by_id} <- RevisionFeed.live_changed_at_by_ids(Map.keys(items)) do
