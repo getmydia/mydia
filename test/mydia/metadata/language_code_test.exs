@@ -179,4 +179,40 @@ defmodule Mydia.Metadata.LanguageCodeTest do
       refute LanguageCode.matches?("und", "und")
     end
   end
+
+  describe "known?/1" do
+    test "recognizes two- and three-letter codes, including bibliographic forms" do
+      assert LanguageCode.known?("ja")
+      assert LanguageCode.known?("jpn")
+      assert LanguageCode.known?("ger")
+      assert LanguageCode.known?("pt-BR")
+    end
+
+    test "rejects codec names, blanks and nil" do
+      refute LanguageCode.known?("dts")
+      refute LanguageCode.known?("aac")
+      refute LanguageCode.known?("und")
+      refute LanguageCode.known?("")
+      refute LanguageCode.known?(nil)
+    end
+  end
+
+  describe "canonical/1" do
+    test "reduces every form of a language to its ISO 639-1 code" do
+      assert LanguageCode.canonical("jpn") == "ja"
+      assert LanguageCode.canonical("JA") == "ja"
+      assert LanguageCode.canonical("en-US") == "en"
+      assert LanguageCode.canonical("fre") == "fr"
+    end
+
+    test "keeps an unknown tag as itself so identical tags still meet" do
+      assert LanguageCode.canonical("kling") == "kling"
+    end
+
+    test "returns nil for blank, undetermined and nil" do
+      assert LanguageCode.canonical("") == nil
+      assert LanguageCode.canonical("und") == nil
+      assert LanguageCode.canonical(nil) == nil
+    end
+  end
 end
