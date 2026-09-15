@@ -45,6 +45,28 @@ defmodule MydiaWeb.Schema.SubtitleTest do
   }
   """
 
+  # The player screen's SeasonEpisodes query, subtitles included, as installed
+  # players send it.
+  @season_episodes_with_subtitles_query """
+  query SeasonEpisodes($showId: ID!, $seasonNumber: Int!) {
+    seasonEpisodes(showId: $showId, seasonNumber: $seasonNumber) {
+      id
+      files {
+        id
+        subtitles {
+          trackId
+          language
+          title
+          format
+          embedded
+          deliverable
+          url(format: VTT)
+        }
+      }
+    }
+  }
+  """
+
   describe "media file subtitles field" do
     setup do
       user = AccountsFixtures.user_fixture()
@@ -88,6 +110,42 @@ defmodule MydiaWeb.Schema.SubtitleTest do
       [file] = episode_data["files"]
       assert file["id"] == media_file.id
       assert file["subtitles"] == []
+    end
+
+    test "seasonEpisodes leaves subtitles empty while the episode query still lists them", %{
+      user: user
+    } do
+      show = MediaFixtures.media_item_fixture(%{type: "tv_show", title: "Test Show"})
+
+      episode =
+        MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1
+        })
+
+      MediaFixtures.media_file_fixture(%{
+        episode_id: episode.id,
+        metadata: %{
+          "streams" => [
+            %{"type" => "subtitle", "language" => "eng", "index" => 2, "codec" => "subrip"}
+          ]
+        }
+      })
+
+      assert {:ok, %{data: %{"episode" => %{"files" => [with_tracks]}}}} =
+               run_query(@episode_with_subtitles_query, %{"id" => episode.id}, user)
+
+      assert [%{"language" => "eng"}] = with_tracks["subtitles"]
+
+      assert {:ok, %{data: %{"seasonEpisodes" => [%{"files" => [season_file]}]}}} =
+               run_query(
+                 @season_episodes_with_subtitles_query,
+                 %{"showId" => show.id, "seasonNumber" => 1},
+                 user
+               )
+
+      assert season_file["subtitles"] == []
     end
   end
 
