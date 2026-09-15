@@ -24,6 +24,10 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
     "metadata.language" => "METADATA_LANGUAGE"
   }
 
+  # An ISO 639-1 (2-letter) or 639-2 (3-letter) primary subtag, optionally
+  # followed by BCP 47 subtags: "de", "en-US", "pt-BR", "zh-Hant-TW".
+  @language_tag ~r/\A[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*\z/
+
   @type setting :: %{value: term(), source: :env | :database | :default}
 
   @doc "Each language key's resolved value and the layer it came from."
@@ -147,12 +151,15 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       else: [{"downloads.audio_language", :invalid}]
   end
 
-  # The same bounds metadata_changeset/2 enforces, so a value the merged
-  # config would reject never reaches the database layer.
+  # The length bound mirrors metadata_changeset/2, but the tag-shape check
+  # (@language_tag) is enforced here, on write, and deliberately not added to
+  # Mydia.Config.Schema: a stricter schema check would refuse to boot an
+  # install whose existing YAML, env, or database value was accepted before
+  # this validation existed.
   defp parse({"metadata_language", tag}, _params) when is_binary(tag) do
     tag = String.trim(tag)
 
-    if String.length(tag) in 2..16,
+    if String.length(tag) in 2..16 and Regex.match?(@language_tag, tag),
       do: [{"metadata.language", tag}],
       else: [{"metadata.language", :invalid}]
   end

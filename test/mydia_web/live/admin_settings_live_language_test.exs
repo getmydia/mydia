@@ -59,8 +59,16 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
     end
 
     test "is read-only when DOWNLOAD_AUDIO_LANGUAGE is set", %{conn: conn} do
+      original = System.get_env("DOWNLOAD_AUDIO_LANGUAGE")
       System.put_env("DOWNLOAD_AUDIO_LANGUAGE", "ja")
-      on_exit(fn -> System.delete_env("DOWNLOAD_AUDIO_LANGUAGE") end)
+
+      on_exit(fn ->
+        if original do
+          System.put_env("DOWNLOAD_AUDIO_LANGUAGE", original)
+        else
+          System.delete_env("DOWNLOAD_AUDIO_LANGUAGE")
+        end
+      end)
 
       {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
@@ -114,6 +122,23 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
       change(view, %{"metadata_language" => "d"})
 
       assert Settings.get_config_setting_by_key("metadata.language") == nil
+    end
+
+    test "rejects a value that is not a language tag", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      html = change(view, %{"metadata_language" => "not-a-tag!"})
+
+      assert html =~ "Invalid value for metadata.language"
+      assert Settings.get_config_setting_by_key("metadata.language") == nil
+    end
+
+    test "accepts a language tag with script and region subtags", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"metadata_language" => "zh-Hant-TW"})
+
+      assert Settings.get_config_setting_by_key("metadata.language").value == "zh-Hant-TW"
     end
   end
 
