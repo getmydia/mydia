@@ -300,20 +300,22 @@ defmodule Mydia.P2p.Server do
     Logger.info("P2P Request: Pairing from #{req.device_name}")
 
     serve_request(state.resource, request_id, "pairing", fn ->
-      response =
-        if Mydia.Player.remote_access_enabled?() do
-          handle_pairing_request(req)
-        else
-          Logger.info("P2P Request: Pairing refused, remote access is disabled")
+      Mydia.Perf.p2p_span("pairing", fn ->
+        response =
+          if Mydia.Player.remote_access_enabled?() do
+            handle_pairing_request(req)
+          else
+            Logger.info("P2P Request: Pairing refused, remote access is disabled")
 
-          %P2p.PairingResponse{
-            success: false,
-            error: "Remote access is disabled on this server"
-          }
-        end
+            %P2p.PairingResponse{
+              success: false,
+              error: "Remote access is disabled on this server"
+            }
+          end
 
-      # Wrap in tagged enum tuple as expected by NIF
-      {:pairing, response}
+        # Wrap in tagged enum tuple as expected by NIF
+        {:pairing, response}
+      end)
     end)
 
     {:noreply, state}
@@ -330,7 +332,9 @@ defmodule Mydia.P2p.Server do
     peer_connection_type = infer_peer_connection_type(state.connected_peers)
 
     serve_request(state.resource, request_id, "GraphQL request", fn ->
-      {:graphql, graphql_response(req, peer_connection_type)}
+      Mydia.Perf.p2p_span("graphql", fn ->
+        {:graphql, graphql_response(req, peer_connection_type)}
+      end)
     end)
 
     {:noreply, state}
@@ -641,7 +645,7 @@ defmodule Mydia.P2p.Server do
     # up, so the bound is what makes the longer wait safe to have.
     task = fn ->
       t0 = System.monotonic_time(:millisecond)
-      handle_hls_stream(resource, stream_id, req)
+      Mydia.Perf.p2p_span("hls", fn -> handle_hls_stream(resource, stream_id, req) end)
       elapsed = System.monotonic_time(:millisecond) - t0
 
       Logger.info(
