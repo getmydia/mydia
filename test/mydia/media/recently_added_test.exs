@@ -79,7 +79,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
 
     test "an unmatched show file with no episode still resolves to its show" do
       show = media_item_fixture(%{type: "tv_show"})
-      file = media_file_fixture(%{media_item_id: show.id})
+      file = legacy_show_media_file_fixture(%{media_item_id: show.id})
       backdate_media_file(file, @yesterday)
 
       assert RecentlyAdded.added_at_map() == %{show.id => @yesterday}
@@ -186,7 +186,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
     test "a show whose newest slot is unmatched files has a count but no episode",
          %{since: since} do
       show = media_item_fixture(%{type: "tv_show"})
-      backdate_media_file(media_file_fixture(%{media_item_id: show.id}), @yesterday)
+      backdate_media_file(legacy_show_media_file_fixture(%{media_item_id: show.id}), @yesterday)
 
       assert [entry] = RecentlyAdded.list_recent(since: since)
       assert entry.new_episode_count == 1
@@ -199,7 +199,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
       old_ep = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
 
       backdate_media_file(media_file_fixture(%{episode_id: old_ep.id}), @long_ago)
-      backdate_media_file(media_file_fixture(%{media_item_id: show.id}), @yesterday)
+      backdate_media_file(legacy_show_media_file_fixture(%{media_item_id: show.id}), @yesterday)
 
       assert [entry] = RecentlyAdded.list_recent(since: since)
       assert entry.new_episode_count == 1

@@ -264,8 +264,15 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
 
     file_before = {marker!(file_old.id), marker!(file_new.id)}
 
-    {:ok, _moved_file} =
-      Library.update_media_file(Repo.reload!(file), %{episode_id: nil, media_item_id: file_new.id})
+    # Library.update_media_file/2 now refuses landing a file straight on a show
+    # with no episode. The point here is the revision trigger on media_files,
+    # which fires on the raw column write regardless, so this goes straight to
+    # the row instead of through the changeset.
+    {1, _} =
+      Repo.update_all(
+        from(f in MediaFile, where: f.id == ^file.id),
+        set: [episode_id: nil, media_item_id: file_new.id]
+      )
 
     assert_advanced(file_old.id, elem(file_before, 0))
     assert_advanced(file_new.id, elem(file_before, 1))
@@ -342,13 +349,18 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
     episode = insert(:episode, media_item: show)
     library_path = insert(:library_path, type: :series)
 
-    {:ok, file} =
-      Library.create_media_file(%{
+    # A file attached straight to the show, with no episode: the shape
+    # Library.create_media_file/1 now refuses, but the point of this test is
+    # that its cascade-delete still leaves the tombstone marker in place, so
+    # it is inserted as a legacy row would be.
+    file =
+      %MediaFile{
         relative_path: "show.mkv",
         library_path_id: library_path.id,
         media_item_id: show.id,
         size: byte_size("video bytes")
-      })
+      }
+      |> Repo.insert!()
 
     {:ok, download} =
       History.create_download(%{media_item_id: show.id, episode_id: episode.id, title: "Fetch"})
