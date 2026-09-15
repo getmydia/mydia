@@ -39,6 +39,7 @@ defmodule Mydia.Downloads.ClientRemoval do
     from(d in Download,
       where:
         not is_nil(d.imported_at) and is_nil(d.client_removed_at) and
+          is_nil(d.removal_requested_at) and
           d.download_client in ^remove_names and
           (is_nil(d.match_status) or d.match_status != "unresolved_files")
     )

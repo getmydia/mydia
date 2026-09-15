@@ -102,8 +102,13 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Allow tests to inject a deterministic clock via job args (`"now" => iso8601`).
     now = resolve_now(args)
 
-    # Get all downloads with their real-time status from clients
-    downloads = Downloads.list_downloads_with_status(filter: :all)
+    # Get all downloads with their real-time status from clients. A download the
+    # operator asked to remove belongs to Mydia.Jobs.RemoveDownload until it is
+    # gone: acting on it here raced that job, saw the torrent vanish
+    # mid-removal, and flagged the row missing.
+    downloads =
+      Downloads.list_downloads_with_status(filter: :all)
+      |> Enum.reject(& &1.removal_requested_at)
 
     # Re-adopt downloads whose client was renamed, deleted, or disabled but
     # whose torrent is still sitting in exactly one other configured client.

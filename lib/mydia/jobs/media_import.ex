@@ -132,6 +132,15 @@ defmodule Mydia.Jobs.MediaImport do
     download_id = download.id
 
     cond do
+      not is_nil(download.removal_requested_at) ->
+        # The operator asked for this download to be removed and its files may
+        # be mid-delete. Mydia.Jobs.RemoveDownload owns the row now.
+        Logger.info("Media import short-circuit: removal requested",
+          download_id: download_id
+        )
+
+        :ok
+
       not is_nil(download.imported_at) ->
         # Idempotency guard: download already imported. Duplicate enqueues
         # from polling, retries, or snooze races land here harmlessly. Do

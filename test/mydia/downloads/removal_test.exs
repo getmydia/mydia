@@ -222,4 +222,13 @@ defmodule Mydia.Downloads.RemovalTest do
       assert is_nil(Repo.get!(Download, in_flight.id).removal_requested_at)
     end
   end
+
+  describe "count_completed/0" do
+    test "does not count imported rows already being removed" do
+      download_fixture(%{imported_at: now()})
+      download_fixture(%{imported_at: now(), removal_requested_at: now(), removal_kind: "clear"})
+
+      assert Downloads.count_completed() == 1
+    end
+  end
 end

@@ -69,6 +69,7 @@ defmodule Mydia.Downloads.History do
     |> where([d], is_nil(d.completed_at))
     |> where([d], is_nil(d.imported_at))
     |> where([d], d.inserted_at < ^cutoff)
+    |> where([d], is_nil(d.removal_requested_at))
     |> Repo.all()
   end
 
@@ -102,7 +103,7 @@ defmodule Mydia.Downloads.History do
   """
   def count_completed do
     Download
-    |> where([d], not is_nil(d.imported_at))
+    |> where([d], not is_nil(d.imported_at) and is_nil(d.removal_requested_at))
     |> Repo.aggregate(:count)
   end
 
@@ -371,6 +372,7 @@ defmodule Mydia.Downloads.History do
     |> where([d], is_nil(d.imported_at))
     |> where([d], is_nil(d.import_failed_at))
     |> where([d], d.completed_at < ^threshold_time)
+    |> where([d], is_nil(d.removal_requested_at))
     |> maybe_preload(opts[:preload])
     |> Repo.all()
   end
