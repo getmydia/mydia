@@ -52,11 +52,7 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
     end
 
     test "toggles authentication settings without :atom.cast/1 error", %{view: view} do
-      # auth.local_enabled and auth.oidc_enabled are cross-validated: turning
-      # local auth off with OIDC left disabled makes the merged config
-      # invalid, and Loader.reload/0 correctly leaves it applying after a
-      # restart instead. Seed a valid OIDC config first so this test keeps
-      # exercising the toggle itself, not that unrelated validation rule.
+      # See seed_valid_oidc_config/0: keeps this toggle's merged config valid.
       seed_valid_oidc_config()
 
       html =
@@ -221,8 +217,7 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
     end
 
     test "a toggle takes effect without a restart", %{view: view} do
-      # Same cross-validation as above: seed a valid OIDC config so turning
-      # local auth off still merges into a valid config and actually reloads.
+      # See seed_valid_oidc_config/0: keeps this toggle's merged config valid.
       seed_valid_oidc_config()
 
       before = Mydia.Config.get().auth.local_enabled
