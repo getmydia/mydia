@@ -843,6 +843,13 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
         do: parts ++ ["moved #{deleted} file(s) to trash"],
         else: parts
 
+    staged = Map.get(scan_result, :staged, 0)
+
+    parts =
+      if staged > 0,
+        do: parts ++ ["sent #{staged} file(s) to Import for review"],
+        else: parts
+
     parts = parts ++ ["refreshed metadata for #{refreshed} file(s)"]
 
     scan_errors = Map.get(scan_result, :scan_errors, [])

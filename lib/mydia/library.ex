@@ -1252,49 +1252,68 @@ defmodule Mydia.Library do
   end
 
   defp match_file_to_episode(media_file, media_item_id, show_title) do
-    # Use relative_path for filename parsing
-    filename =
-      case media_file.relative_path do
-        nil ->
-          Logger.warning("Media file missing relative_path during episode matching",
-            media_file_id: media_file.id
-          )
+    if is_nil(media_file.relative_path) do
+      Logger.warning("Media file missing relative_path during episode matching",
+        media_file_id: media_file.id
+      )
+    end
 
-          # Cannot match without relative_path
-          nil
+    with {:ok, episodes} <-
+           resolve_file_episodes(media_file.relative_path, media_item_id, show_title) do
+      attach_file_to_episodes(media_file, episodes)
+    end
+  end
 
-        relative_path ->
-          Path.basename(relative_path)
-      end
+  # The episodes a TV file's name refers to, without touching any row. Shared by
+  # the legacy re-link above and by the re-scan, which has to know the episode
+  # before it creates the row: MediaFile.changeset/2 refuses a TV file attached
+  # to the show itself.
+  defp resolve_file_episodes(nil, _media_item_id, _show_title), do: {:error, :no_relative_path}
 
-    # Parse the filename to extract season/episode information
-    if is_nil(filename) do
-      {:error, :no_relative_path}
-    else
-      parsed_info = FileParser.parse(filename)
-      season = parsed_info.season
-      episode_numbers = parsed_info.episodes
+  defp resolve_file_episodes(relative_path, media_item_id, show_title) do
+    filename = Path.basename(relative_path)
+    parsed_info = FileParser.parse(filename)
+    season = parsed_info.season
+    episode_numbers = parsed_info.episodes
 
-      cond do
-        not (is_integer(season) and is_list(episode_numbers) and episode_numbers != []) ->
-          Logger.debug("File did not contain valid episode information", filename: filename)
-          {:error, :no_episode_info}
+    cond do
+      not (is_integer(season) and is_list(episode_numbers) and episode_numbers != []) ->
+        Logger.debug("File did not contain valid episode information", filename: filename)
+        {:error, :no_episode_info}
 
-        title_belongs_to_other_show?(parsed_info.title, show_title) ->
-          # A file carrying an SxxEyy pattern must not be bound to this show
-          # purely because the numbers line up — e.g. a stray "Shark Tank India
-          # S04E07" must not match "FROM" S04E07. Guard on the parsed title.
-          Logger.debug("Skipping file: parsed title belongs to a different show",
-            filename: filename,
-            parsed_title: parsed_info.title,
-            show_title: show_title
-          )
+      title_belongs_to_other_show?(parsed_info.title, show_title) ->
+        # A file carrying an SxxEyy pattern must not be bound to this show
+        # purely because the numbers line up, e.g. a stray file from another
+        # show whose S04E07 happens to exist here too. Guard on the parsed title.
+        Logger.debug("Skipping file: parsed title belongs to a different show",
+          filename: filename,
+          parsed_title: parsed_info.title,
+          show_title: show_title
+        )
 
-          {:error, :title_mismatch}
+        {:error, :title_mismatch}
 
-        true ->
-          match_parsed_episode(media_file, media_item_id, filename, season, episode_numbers)
-      end
+      true ->
+        # A multi-episode release (S01E09E10) holds every episode it names.
+        # Resolve all of them: the first becomes `episode_id` (the primary,
+        # which existing queries join on), and every one gets a
+        # media_file_episodes row so no episode of the file reads as missing.
+        episode_numbers
+        |> Enum.map(&Mydia.Media.get_episode_by_number(media_item_id, season, &1))
+        |> Enum.reject(&is_nil/1)
+        |> case do
+          [] ->
+            Logger.debug("No episode found for file",
+              filename: filename,
+              season: season,
+              episode: List.first(episode_numbers)
+            )
+
+            {:error, :episode_not_found}
+
+          episodes ->
+            {:ok, episodes}
+        end
     end
   end
 
@@ -1318,53 +1337,26 @@ defmodule Mydia.Library do
     end
   end
 
-  defp match_parsed_episode(media_file, media_item_id, filename, season, episode_numbers) do
-    # A multi-episode release (S01E09E10) holds every episode it names. Resolve
-    # all of them: the first becomes `episode_id` (the primary, which existing
-    # queries join on), and every one gets a media_file_episodes row so no
-    # episode of the file reads as missing.
-    episodes =
-      episode_numbers
-      |> Enum.map(&Mydia.Media.get_episode_by_number(media_item_id, season, &1))
-      |> Enum.reject(&is_nil/1)
+  defp attach_file_to_episodes(media_file, [primary | _] = episodes) do
+    case update_media_file(media_file, %{media_item_id: nil, episode_id: primary.id}) do
+      {:ok, updated_file} ->
+        {:ok, _} = link_file_to_episodes(updated_file, episodes)
 
-    case episodes do
-      [] ->
-        Logger.debug("No episode found for file",
-          filename: filename,
-          season: season,
-          episode: List.first(episode_numbers)
+        Logger.debug("Matched file to episode",
+          relative_path: updated_file.relative_path,
+          episode_id: primary.id,
+          covers: Enum.map(episodes, & &1.episode_number)
         )
 
-        {:error, :episode_not_found}
+        {:ok, updated_file}
 
-      [primary | _] = matched ->
-        # Update the media file with the episode_id
-        case update_media_file(media_file, %{
-               media_item_id: nil,
-               episode_id: primary.id
-             }) do
-          {:ok, updated_file} ->
-            {:ok, _} = link_file_to_episodes(updated_file, matched)
+      {:error, reason} ->
+        Logger.warning("Failed to update media file",
+          relative_path: media_file.relative_path,
+          reason: inspect(reason)
+        )
 
-            Logger.debug("Matched file to episode",
-              filename: filename,
-              season: season,
-              episode: primary.episode_number,
-              episode_id: primary.id,
-              covers: Enum.map(matched, & &1.episode_number)
-            )
-
-            {:ok, updated_file}
-
-          {:error, reason} ->
-            Logger.warning("Failed to update media file",
-              filename: filename,
-              reason: inspect(reason)
-            )
-
-            {:error, reason}
-        end
+        {:error, reason}
     end
   end
 
@@ -1543,11 +1535,8 @@ defmodule Mydia.Library do
                 total_scanned: length(scan_result.files)
               )
 
-              # Create MediaFile records for new files
-              {created_count, create_errors} =
-                create_media_files_for_series(new_files, media_item_id, library_paths)
-
-              # Refresh episodes from TMDB to ensure we have all episode metadata
+              # Refresh episodes before creating rows: a new file is attached only
+              # once it names an episode the show has, so resolution needs them.
               case Media.refresh_episodes_for_tv_show(media_item, season_monitoring: "all") do
                 {:ok, episode_count} ->
                   Logger.info("Refreshed episode metadata",
@@ -1562,14 +1551,14 @@ defmodule Mydia.Library do
                   )
               end
 
-              # Match unassociated files to episodes
-              {:ok, matched_count} = match_files_to_episodes(media_item_id)
+              %{created: created_count, staged: staged_count, errors: create_errors} =
+                create_media_files_for_series(new_files, media_item, library_paths)
 
               Logger.info("Re-scan complete",
                 media_item_id: media_item_id,
                 new_files: created_count,
+                staged: staged_count,
                 deleted_files: trashed_count,
-                matched: matched_count,
                 errors: length(create_errors)
               )
 
@@ -1577,7 +1566,8 @@ defmodule Mydia.Library do
                %{
                  new_files: created_count,
                  deleted_files: trashed_count,
-                 matched: matched_count,
+                 matched: created_count,
+                 staged: staged_count,
                  errors: create_errors,
                  scan_errors: scan_result.errors
                }}
@@ -1719,11 +1709,8 @@ defmodule Mydia.Library do
                 total_season_files: length(season_files)
               )
 
-              # Create MediaFile records for new files
-              {created_count, create_errors} =
-                create_media_files_for_series(new_files, media_item_id, library_paths)
-
-              # Refresh episodes from TMDB for this season
+              # Refresh episodes before creating rows: a new file is attached only
+              # once it names an episode the show has, so resolution needs them.
               case Media.refresh_episodes_for_tv_show(media_item, season_monitoring: "all") do
                 {:ok, episode_count} ->
                   Logger.info("Refreshed episode metadata for season",
@@ -1740,15 +1727,15 @@ defmodule Mydia.Library do
                   )
               end
 
-              # Match unassociated files to episodes (will match all seasons, but that's fine)
-              {:ok, matched_count} = match_files_to_episodes(media_item_id)
+              %{created: created_count, staged: staged_count, errors: create_errors} =
+                create_media_files_for_series(new_files, media_item, library_paths)
 
               Logger.info("Season re-scan complete",
                 media_item_id: media_item_id,
                 season: season_number,
                 new_files: created_count,
+                staged: staged_count,
                 deleted_files: trashed_count,
-                matched: matched_count,
                 errors: length(create_errors)
               )
 
@@ -1756,7 +1743,8 @@ defmodule Mydia.Library do
                %{
                  new_files: created_count,
                  deleted_files: trashed_count,
-                 matched: matched_count,
+                 matched: created_count,
+                 staged: staged_count,
                  errors: create_errors,
                  scan_errors: scan_result.errors
                }}
@@ -2005,44 +1993,78 @@ defmodule Mydia.Library do
     end
   end
 
-  # Creates MediaFile records for a list of scanned files
-  defp create_media_files_for_series(file_infos, media_item_id, library_paths) do
-    results =
-      Enum.map(file_infos, fn file_info ->
-        # Find matching library_path and calculate relative_path
-        {library_path_id, relative_path} = calculate_relative_path(file_info.path, library_paths)
+  # Creates rows for newly scanned files of a TV show. A file becomes a
+  # media_files row only once it names an episode the show has. Anything else is
+  # staged as an import candidate under the show's provider identity: a TV file
+  # attached to the show itself is an orphan, and MediaFile.changeset/2 refuses it.
+  defp create_media_files_for_series(file_infos, media_item, library_paths) do
+    results = Enum.map(file_infos, &create_series_file(&1, media_item, library_paths))
 
-        attrs = %{
-          relative_path: relative_path,
-          library_path_id: library_path_id,
-          size: file_info.size,
-          media_item_id: media_item_id
-        }
+    %{
+      created: Enum.count(results, &match?({:ok, %MediaFile{}}, &1)),
+      staged: Enum.count(results, &match?({:ok, :staged}, &1)),
+      errors: Enum.filter(results, &match?({:error, _}, &1))
+    }
+  end
 
-        case create_scanned_media_file(attrs) do
-          {:ok, media_file} ->
-            Logger.debug("Created media file record",
-              relative_path: relative_path,
-              library_path_id: library_path_id,
-              media_file_id: media_file.id
-            )
+  defp create_series_file(file_info, media_item, library_paths) do
+    case calculate_relative_path(file_info.path, library_paths) do
+      {nil, nil} ->
+        {:error, {:create_failed, file_info.path}}
 
-            {:ok, media_file}
+      {library_path_id, relative_path} ->
+        library_path = Enum.find(library_paths, &(&1.id == library_path_id))
 
-          {:error, changeset} ->
-            Logger.warning("Failed to create media file record",
-              path: file_info.path,
-              errors: inspect(changeset.errors)
-            )
+        case resolve_file_episodes(relative_path, media_item.id, media_item.title) do
+          {:ok, episodes} ->
+            insert_series_file(file_info, library_path, relative_path, episodes)
 
-            {:error, {:create_failed, file_info.path}}
+          {:error, _reason} ->
+            stage_series_file(file_info, media_item, library_path, relative_path)
         end
-      end)
+    end
+  end
 
-    created_count = Enum.count(results, &match?({:ok, _}, &1))
-    errors = Enum.filter(results, &match?({:error, _}, &1))
+  defp insert_series_file(file_info, library_path, relative_path, [primary | _] = episodes) do
+    attrs = %{
+      relative_path: relative_path,
+      library_path_id: library_path.id,
+      size: file_info.size,
+      episode_id: primary.id
+    }
 
-    {created_count, errors}
+    case create_scanned_media_file(attrs) do
+      {:ok, media_file} ->
+        {:ok, _} = link_file_to_episodes(media_file, episodes)
+        {:ok, media_file}
+
+      {:error, changeset} ->
+        Logger.warning("Failed to create media file record",
+          path: file_info.path,
+          errors: inspect(changeset.errors)
+        )
+
+        {:error, {:create_failed, file_info.path}}
+    end
+  end
+
+  defp stage_series_file(file_info, media_item, library_path, relative_path) do
+    case Mydia.ImportCandidates.stage_show_file(media_item, library_path, %{
+           relative_path: relative_path,
+           size: file_info.size,
+           discovered_at: DateTime.utc_now() |> DateTime.truncate(:second)
+         }) do
+      {:ok, _candidate} ->
+        {:ok, :staged}
+
+      {:error, changeset} ->
+        Logger.warning("Failed to stage scanned TV file for import",
+          path: file_info.path,
+          errors: inspect(changeset.errors)
+        )
+
+        {:error, {:stage_failed, file_info.path}}
+    end
   end
 
   # Finds the base directory for a movie by looking at existing media file paths
