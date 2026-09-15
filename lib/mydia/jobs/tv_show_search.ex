@@ -61,6 +61,7 @@ defmodule Mydia.Jobs.TVShowSearch do
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Library
   alias Mydia.Media.{MediaItem, Episode}
+  alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Library.MediaFile
   alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
@@ -1141,17 +1142,20 @@ defmodule Mydia.Jobs.TVShowSearch do
         # Log search completed event - search found and selected a result
         Events.search_completed(
           media_item,
-          %{
-            "query" => query,
-            "results_count" => length(results),
-            "selected_release" => best_result.title,
-            "score" => score,
-            "breakdown" => stringify_keys(breakdown),
-            "season_number" => season_number,
-            "search_type" => "season_pack",
-            "episodes_included" => length(episodes),
-            "all_results" => build_filter_stats(candidates, ranking_opts)
-          }
+          Map.merge(
+            %{
+              "query" => query,
+              "results_count" => length(results),
+              "selected_release" => best_result.title,
+              "score" => score,
+              "breakdown" => stringify_keys(breakdown),
+              "season_number" => season_number,
+              "search_type" => "season_pack",
+              "episodes_included" => length(episodes),
+              "all_results" => build_filter_stats(candidates, ranking_opts)
+            },
+            RankingOptions.audio_event_fields(ranking_opts)
+          )
         )
 
         case initiate_season_pack_download(media_item, season_number, episodes, best_result, opts) do
@@ -1418,14 +1422,17 @@ defmodule Mydia.Jobs.TVShowSearch do
         # Log search completed event - search found and selected a result
         Events.search_completed(
           episode.media_item,
-          %{
-            "query" => query,
-            "results_count" => length(results),
-            "selected_release" => best_result.title,
-            "score" => score,
-            "breakdown" => stringify_keys(breakdown),
-            "all_results" => build_filter_stats(results, ranking_opts)
-          },
+          Map.merge(
+            %{
+              "query" => query,
+              "results_count" => length(results),
+              "selected_release" => best_result.title,
+              "score" => score,
+              "breakdown" => stringify_keys(breakdown),
+              "all_results" => build_filter_stats(results, ranking_opts)
+            },
+            RankingOptions.audio_event_fields(ranking_opts)
+          ),
           episode: episode
         )
 
@@ -1466,6 +1473,7 @@ defmodule Mydia.Jobs.TVShowSearch do
     RankingOptions.build(%{
       quality_profile: profile,
       custom_formats: CustomFormats.resolve_for_profile(profile),
+      audio_policy: AudioLanguagePolicy.effective(episode.media_item),
       media_type: :episode,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
@@ -1488,6 +1496,8 @@ defmodule Mydia.Jobs.TVShowSearch do
     RankingOptions.build(%{
       quality_profile: profile,
       custom_formats: CustomFormats.resolve_for_profile(profile),
+      audio_policy: AudioLanguagePolicy.effective(media_item),
+      episode_count: Media.season_pack_episode_count(media_item.id, season_number),
       media_type: :episode,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
