@@ -190,7 +190,10 @@ defmodule Mydia.Downloads.History do
       # Filtering applies here too: a client-less install is exactly where a caller
       # asking for :active must not be handed completed rows.
       Enum.map(downloads, fn download ->
-        enriched = enrich_download_with_empty_status(download)
+        enriched =
+          download
+          |> enrich_download_with_empty_status()
+          |> with_removal_state(download)
 
         if is_nil(download.download_client) do
           enriched
@@ -205,9 +208,11 @@ defmodule Mydia.Downloads.History do
 
       # Enrich downloads with client status
       downloads
-      |> Enum.map(
-        &enrich_download_with_status(&1, client_statuses, client_types, configured_names)
-      )
+      |> Enum.map(fn download ->
+        download
+        |> enrich_download_with_status(client_statuses, client_types, configured_names)
+        |> with_removal_state(download)
+      end)
       |> apply_status_filters(opts[:filter] || :all)
     end
   end
@@ -553,6 +558,16 @@ defmodule Mydia.Downloads.History do
 
   defp with_adoptable_client(%EnrichedDownload{} = enriched, claimant) do
     %{enriched | adoptable_client: claimant}
+  end
+
+  defp with_removal_state(%EnrichedDownload{} = enriched, %Download{} = download) do
+    %{
+      enriched
+      | removal_requested_at: download.removal_requested_at,
+        removal_kind: download.removal_kind,
+        removal_delete_files: download.removal_delete_files,
+        removal_error: download.removal_error
+    }
   end
 
   # The download's own client answered and still holds the torrent, so whatever

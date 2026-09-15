@@ -34,6 +34,10 @@ defmodule Mydia.Downloads.Download do
           stalled_since: DateTime.t() | nil,
           bytes_pulled: integer() | nil,
           content_checked_at: DateTime.t() | nil,
+          removal_requested_at: DateTime.t() | nil,
+          removal_kind: String.t() | nil,
+          removal_delete_files: boolean(),
+          removal_error: String.t() | nil,
           media_item: Mydia.Media.MediaItem.t() | Ecto.Association.NotLoaded.t(),
           episode: Mydia.Media.Episode.t() | nil | Ecto.Association.NotLoaded.t(),
           library_path: Mydia.Settings.LibraryPath.t() | nil | Ecto.Association.NotLoaded.t(),
@@ -94,6 +98,13 @@ defmodule Mydia.Downloads.Download do
     # evaluated"; once set, the enumeration is never repeated. See
     # Mydia.Jobs.DownloadMonitor.evaluate_content/1.
     field :content_checked_at, :utc_datetime
+    # Operator-requested removal, carried out by Mydia.Jobs.RemoveDownload.
+    # `removal_requested_at` is set while it is in flight; `removal_error` once
+    # the last attempt gave up. See Mydia.Downloads.Removal.
+    field :removal_requested_at, :utc_datetime
+    field :removal_kind, :string
+    field :removal_delete_files, :boolean, default: false
+    field :removal_error, :string
 
     belongs_to :media_item, Mydia.Media.MediaItem
     belongs_to :episode, Mydia.Media.Episode
@@ -166,10 +177,15 @@ defmodule Mydia.Downloads.Download do
       :last_observed_at,
       :stalled_since,
       :bytes_pulled,
-      :content_checked_at
+      :content_checked_at,
+      :removal_requested_at,
+      :removal_kind,
+      :removal_delete_files,
+      :removal_error
     ])
     |> validate_required([:title])
     |> validate_inclusion(:match_status, ["unresolved_files", "partial_pack"])
+    |> validate_inclusion(:removal_kind, ~w(cancel clear reject))
     |> foreign_key_constraint(:media_item_id)
     |> foreign_key_constraint(:episode_id)
     |> foreign_key_constraint(:library_path_id)
