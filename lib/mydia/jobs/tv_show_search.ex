@@ -1684,7 +1684,14 @@ defmodule Mydia.Jobs.TVShowSearch do
 
       {:packs, season_pack_results, query} ->
         episodes = load_season_episodes(media_item.id, season_number)
-        episode_count = max(length(episodes), 1)
+
+        # Same divisor build_ranking_options_for_season/4 gives the ranker
+        # for this pack (via Media.season_pack_episode_count/2, aired
+        # episodes only) - not `length(episodes)`, which counts every
+        # episode in the season including ones that have not aired yet. A
+        # mid-air season would otherwise judge the same pack against two
+        # different per-episode sizes in one search.
+        episode_count = Media.season_pack_episode_count(media_item.id, season_number)
 
         opts = [
           candidate_filter: season_pack_candidate_filter(file, profile, episode_count),
@@ -1720,10 +1727,13 @@ defmodule Mydia.Jobs.TVShowSearch do
   # configured always scores as oversized (a flat, large penalty regardless
   # of how far over), suppressing the pack-upgrade mode outright; with only
   # `episode_min_size_mb` set, a pack trivially clears it for an unearned
-  # bonus. Dividing by the season's episode count before handing candidates
-  # to the shared filter estimates a per-episode size for comparison
-  # purposes only - the un-normalized `results` list that reaches ranking
-  # and the grab (which need the real pack size) is untouched.
+  # bonus. Dividing by `episode_count` (the caller passes
+  # Media.season_pack_episode_count/2's aired-episode figure, matching what
+  # build_ranking_options_for_season/4 gives the ranker for the same pack,
+  # not the season's total episode count) before handing candidates to the
+  # shared filter estimates a per-episode size for comparison purposes only
+  # - the un-normalized `results` list that reaches ranking and the grab
+  # (which need the real pack size) is untouched.
   defp season_pack_candidate_filter(file, profile, episode_count) do
     fn candidates ->
       candidates
@@ -1744,10 +1754,13 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   # All episodes in the season, not just the ones missing files - a season
   # upgrade replaces files for a season that (by definition, since it was
-  # selected by Upgrades.eligible_episodes/1) already has files. Used both
-  # to size the season-pack metadata (episode_count/episode_ids) the way
-  # search_season/5's `episodes` list does for the missing-file path, and
-  # as the divisor season_pack_candidate_filter/3 normalizes pack size by.
+  # selected by Upgrades.eligible_episodes/1) already has files. Used to
+  # size the season-pack metadata (episode_count/episode_ids) the way
+  # search_season/5's `episodes` list does for the missing-file path.
+  # season_pack_candidate_filter/3's divisor is a separate figure -
+  # Media.season_pack_episode_count/2, aired episodes only - so it agrees
+  # with build_ranking_options_for_season/4's :episode_count for the same
+  # pack; this list is not it.
   defp load_season_episodes(media_item_id, season_number) do
     Episode
     |> where([e], e.media_item_id == ^media_item_id and e.season_number == ^season_number)

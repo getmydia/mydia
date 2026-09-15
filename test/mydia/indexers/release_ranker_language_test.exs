@@ -14,6 +14,13 @@ defmodule Mydia.Indexers.ReleaseRankerLanguageTest do
   @italian "Kaiju Garden S02 Parte 1 (2023) 1080p WEBDL x265 iTALiAN AC3 iDN_CreW"
   @english_dub "[TRC] Kaiju Garden - S02 [English Dub] [CR WEB-RIP 1080p HEVC-10 AAC]"
 
+  @lantern_eng "[RAWG] Paper Lantern Club S01 ENG [WEB-DL 1080p HEVC AAC]"
+  @lantern_italian "[RAWG] Paper Lantern Club S01 iTALiAN [WEB-DL 1080p HEVC AC3]"
+  @lantern_untagged "[RAWG] Paper Lantern Club S01 [WEB-DL 1080p HEVC AAC]"
+
+  @lantern_dual "[RAWG] Paper Lantern Club S01 [Dual Audio][WEB-DL 1080p HEVC AAC]"
+  @lantern_jpn "[RAWG] Paper Lantern Club S01 JPN [WEB-DL 1080p HEVC AAC]"
+
   # Shaped like the season pack search that grabbed a Japanese-only 2160p pack
   # over five English-audio ones.
   defp candidates do
@@ -133,6 +140,51 @@ defmodule Mydia.Indexers.ReleaseRankerLanguageTest do
     assert first["language_rank"] == 0
     assert first["audio_assumed"] == false
     assert "en" in first["audio_languages"]
+  end
+
+  test "unknown original language leaves an untagged release unranked by language" do
+    # original_language is nil here, so the "original" sentinel resolves to
+    # nothing and the policy is effectively just ["en"]. An untagged release
+    # (ReleaseLanguages.detect/2 returns languages: [], assumed?: true) has no
+    # preferred language to match, so it lands at the worst rank - tying with
+    # an explicitly foreign-only release - exactly like an unconsidered
+    # release did before this branch. This is intended, not a regression: it
+    # is only pinned here so it does not silently change.
+    policy = AudioLanguagePolicy.new(["original", "en"], :server, nil)
+
+    untagged = result(@lantern_untagged, 10, 4_000)
+    italian = result(@lantern_italian, 10, 4_000)
+    eng = result(@lantern_eng, 10, 4_000)
+
+    opts = [media_type: :episode, quality_profile: hd_profile(), audio_policy: policy]
+
+    ranked = ReleaseRanker.rank_all([untagged, italian, eng], opts)
+
+    assert hd(ranked).result.title == @lantern_eng
+
+    ranks = Map.new(ranked, &{&1.result.title, &1.breakdown.language_rank})
+    assert ranks[@lantern_untagged] == 1
+    assert ranks[@lantern_italian] == 1
+  end
+
+  test "Activity's filter stats break a language-rank tie on matches, not raw score" do
+    # score_all_with_reasons/2 (behind build_filter_stats/2) used to sort by
+    # {language_rank, -custom_format_score, -score}, omitting language_matches,
+    # so a single-language release with a higher score could list above a
+    # dual-audio release that rank_all/2 - and therefore the actual grab -
+    # ranks first. Give the JPN-only release far more seeders so raw score
+    # alone would put it first; the corrected sort must not let that happen.
+    policy = AudioLanguagePolicy.new(["original", "en"], :server, "ja")
+
+    dual = result(@lantern_dual, 10, 4_000)
+    jpn = result(@lantern_jpn, 200, 4_000)
+
+    opts = [media_type: :episode, quality_profile: hd_profile(), audio_policy: policy]
+
+    stats = ReleaseRanker.build_filter_stats([dual, jpn], opts)
+
+    assert [first | _] = stats["results"]
+    assert first["title"] == @lantern_dual
   end
 
   describe "season pack size" do

@@ -811,7 +811,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
           })
       end
     end)
-    |> Enum.sort_by(&{&1.language_rank, -&1.custom_format_score, -&1.score})
+    |> Enum.sort_by(&{&1.language_rank, -&1.language_matches, -&1.custom_format_score, -&1.score})
   end
 
   @doc """
