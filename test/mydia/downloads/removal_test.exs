@@ -59,7 +59,19 @@ defmodule Mydia.Downloads.RemovalTest do
 
       @barrier_timeout 30_000
       test "concurrent requests keep the first removal intent" do
-        download = Sandbox.unboxed_run(Repo, &download_fixture/0)
+        # Committed for real so both connections can see it. Inserted bare, not
+        # through download_fixture/1: that also commits a media item and its
+        # media_item.added event, which on_exit does not delete, and later tests
+        # that count media items or events then see them.
+        download =
+          Sandbox.unboxed_run(Repo, fn ->
+            Repo.insert!(%Download{
+              title: "Fictional Concurrent Release",
+              download_client: "fictional-client",
+              download_client_id: "concurrent-#{System.unique_integer([:positive])}"
+            })
+          end)
+
         parent = self()
         barrier = make_ref()
         handler_id = "removal-request-lock-#{inspect(barrier)}"
