@@ -102,6 +102,9 @@ defmodule Mydia.Downloads do
     - `:filter` - Filter by status (:active, :completed, :failed, :all) - default :all
     - `:media_item_id` - Filter by media item
     - `:episode_id` - Filter by episode
+    - `:bounded` - wait at most `:client_status_wait_ms` (default 2000) per
+      client, then use its last answer from `Mydia.Downloads.ClientStatusCache`.
+      For pages. Jobs that act on status must not pass it. Default `false`.
   """
   @spec list_downloads_with_status(keyword()) :: [EnrichedDownload.t()]
   defdelegate list_downloads_with_status(opts \\ []), to: Mydia.Downloads.History

@@ -109,7 +109,11 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     :removal_requested_at,
     :removal_kind,
     :removal_delete_files,
-    :removal_error
+    :removal_error,
+    # When a bounded poll timed out and the status fields came from
+    # `Mydia.Downloads.ClientStatusCache`, the time that snapshot was taken.
+    # nil for a live answer.
+    :status_as_of
   ]
 
   @type t :: %__MODULE__{
@@ -167,7 +171,8 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           removal_requested_at: DateTime.t() | nil,
           removal_kind: String.t() | nil,
           removal_delete_files: boolean() | nil,
-          removal_error: String.t() | nil
+          removal_error: String.t() | nil,
+          status_as_of: DateTime.t() | nil
         }
 
   @doc """

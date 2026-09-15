@@ -23,6 +23,17 @@ defmodule Mydia.Downloads.ClientAdoptionTest do
       assert {:ok, "new-qbit"} = ClientAdoption.find_claimant("hash-a", statuses, types)
     end
 
+    test "never picks a client whose status is a stale snapshot" do
+      statuses = %{
+        "busy-transmission" =>
+          {:stale, %{"hash-a" => torrent("hash-a")}, ~U[2026-09-15 08:40:47Z]}
+      }
+
+      assert ClientAdoption.find_claimant("hash-a", statuses, %{
+               "busy-transmission" => :transmission
+             }) == :none
+    end
+
     test "refuses when two clients hold the same id" do
       statuses = %{
         "qbit-one" => {:reachable, %{"hash-a" => torrent("hash-a")}},
