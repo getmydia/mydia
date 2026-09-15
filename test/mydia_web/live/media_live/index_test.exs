@@ -1293,4 +1293,67 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert has_element?(view, "#list-item-#{show.id}", "1.0 GB")
     end
   end
+
+  describe "listing rows" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "toggling monitored rebuilds the card from a fresh row", %{conn: conn} do
+      movie = media_item_fixture(%{title: "Ember Causeway", type: "movie", monitored: true})
+      media_file_fixture(%{media_item_id: movie.id, resolution: "2160p"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#grid-item-#{movie.id} button[phx-click='toggle_item_monitored']")
+      |> render_click()
+
+      assert has_element?(view, "#grid-item-#{movie.id} button[title='Monitor']")
+      # The quality badge needs the item's files, so it survives only if the
+      # card was rebuilt from a complete row.
+      assert has_element?(view, "#poster-badges-#{movie.id} .badge-neutral", "2160p")
+    end
+
+    test "Ctrl+A selects every matching item, not only the rendered page", %{conn: conn} do
+      for n <- 1..51, do: insert(:media_item, type: "movie", title: "Ledger Volume #{n}")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_keydown(view, "keydown", %{"key" => "a", "ctrlKey" => true})
+
+      assert has_element?(view, "label span.tabular-nums", "51")
+    end
+  end
+
+  describe "first paint" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "the HTTP render shows a skeleton and no cards", %{conn: conn} do
+      show = media_item_fixture(%{title: "Northwind Relay", type: "tv_show"})
+
+      html = conn |> get(~p"/tv") |> html_response(200)
+      document = LazyHTML.from_document(html)
+
+      assert document |> LazyHTML.query("#media-items-skeleton") |> LazyHTML.attribute("id") ==
+               ["media-items-skeleton"]
+
+      assert document |> LazyHTML.query("#grid-item-#{show.id}") |> LazyHTML.attribute("id") ==
+               []
+
+      refute html =~ "No media found"
+    end
+
+    test "the connected render replaces the skeleton with cards", %{conn: conn} do
+      show = media_item_fixture(%{title: "Northwind Relay", type: "tv_show"})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view, "#media-items-skeleton")
+      assert has_element?(view, "#grid-item-#{show.id}")
+    end
+  end
 end

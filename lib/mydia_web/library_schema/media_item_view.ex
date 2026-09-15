@@ -18,9 +18,10 @@ defmodule MydiaWeb.LibrarySchema.MediaItemView do
   its media files, and each episode's media files, so an item that is not
   preloaded raises rather than reporting a wrong status.
 
-  Mirrors `lib/mydia_web/live/media_live/index.ex`'s shape, including
-  `MediaFile.versions/0` -- the one place trashed files and extras are excluded --
-  so this API's `status` and `hasFile` agree with the UI badge.
+  Uses `MediaFile.versions/0`, the one place trashed files and extras are
+  excluded, as `Mydia.Media.LibraryListing` does. Both classify through
+  `AvailabilityStatus.for_movie/3` and `for_series/3`, so this API's `status` and
+  `hasFile` agree with the UI badge.
   """
   @spec preloads() :: keyword()
   def preloads do

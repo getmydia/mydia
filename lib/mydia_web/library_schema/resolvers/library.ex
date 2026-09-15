@@ -2,7 +2,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
   @moduledoc """
   Resolves `mediaItem`.
 
-  Every item is hydrated with the media index's preload shape. `get_media_status/1`
+  Every item is hydrated with `MediaItemView.preloads/0`. `get_media_status/1`
   reads an item's downloads, its media files, and each episode's media files, so
   an item that is not preloaded raises on access rather than reporting a wrong
   status.
