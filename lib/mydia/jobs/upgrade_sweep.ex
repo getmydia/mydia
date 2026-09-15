@@ -175,6 +175,16 @@ defmodule Mydia.Jobs.UpgradeSweep do
     for candidate <- candidates, reason in candidate.reasons, do: id_fun.(candidate)
   end
 
+  # Like ids_for/3, but reads the reasons actually searched for each
+  # candidate rather than the candidate's own full `.reasons` - see
+  # plan_group/3, which narrows a season pack's per-candidate reasons to the
+  # ones the pack itself carried.
+  defp ids_for_searched(attempted, reason, id_fun) do
+    for {candidate, searched_reasons} <- attempted,
+        reason in searched_reasons,
+        do: id_fun.(candidate)
+  end
+
   # Episodes are not swept one at a time. A season where most episodes are
   # below cutoff is better served by one season-pack search than by N
   # individual ones, so candidates are grouped by {show, season} and routed
@@ -222,12 +232,10 @@ defmodule Mydia.Jobs.UpgradeSweep do
     groups =
       candidates
       |> Enum.group_by(fn c -> {c.episode.media_item_id, c.episode.season_number} end)
-      |> Enum.map(fn {{item_id, season}, group} ->
-        {group, plan_group(item_id, season, group)}
-      end)
+      |> Enum.map(fn {{item_id, season}, group} -> plan_group(item_id, season, group) end)
 
     {searches, attempted} =
-      Enum.reduce_while(groups, {0, []}, fn {group, plan}, {spent, attempted} ->
+      Enum.reduce_while(groups, {0, []}, fn {plan, searched}, {spent, attempted} ->
         remaining = budget - spent
         cost = length(plan)
 
@@ -240,23 +248,33 @@ defmodule Mydia.Jobs.UpgradeSweep do
 
           true ->
             enqueued = Enum.count(plan, &(enqueue(&1) == 1))
-            {:cont, {spent + enqueued, [group | attempted]}}
+            {:cont, {spent + enqueued, [searched | attempted]}}
         end
       end)
 
     attempted = List.flatten(attempted)
-    Upgrades.stamp_checked(:episode, ids_for(attempted, :quality, & &1.episode.id))
-    Upgrades.stamp_language_checked(:episode, ids_for(attempted, :language, & &1.episode.id))
+    Upgrades.stamp_checked(:episode, ids_for_searched(attempted, :quality, & &1.episode.id))
+
+    Upgrades.stamp_language_checked(
+      :episode,
+      ids_for_searched(attempted, :language, & &1.episode.id)
+    )
+
     searches
   end
 
-  # Decides pack-vs-individual and returns the list of TVShowSearch args
-  # this group would need, without enqueuing anything. The list's length is
-  # the group's search cost — always 1 for a pack regardless of how many
-  # episodes it covers, or one entry per episode otherwise — letting the
-  # caller check whether it fits the remaining budget before committing to
-  # it. Not pure (it reads season_pack_upgrade_eligible?/2's backoff row),
-  # but idempotent and side-effect-free otherwise.
+  # Decides pack-vs-individual and returns {plan, searched}, without
+  # enqueuing anything. `plan` is the list of TVShowSearch args this group
+  # would need; its length is the group's search cost, always 1 for a pack
+  # regardless of how many episodes it covers, or one entry per episode
+  # otherwise, letting the caller check whether it fits the remaining
+  # budget before committing to it. `searched` is a {candidate,
+  # searched_reasons} pair per candidate in the group, for stamping: a
+  # season pack narrows its reasons to the ones whose season bucket is open
+  # (see below), so a candidate must only be stamped for the intersection
+  # of its own reasons with what the pack actually carried, not its full
+  # `.reasons`. Not pure (it reads season_pack_upgrade_eligible?/2's backoff
+  # row), but idempotent and side-effect-free otherwise.
   #
   # Reuses TVShowSearch's existing 70% missing-episode threshold unchanged;
   # only the input set changes, from "episodes missing" to "episodes below
@@ -295,19 +313,22 @@ defmodule Mydia.Jobs.UpgradeSweep do
 
     case pack_reasons do
       [] ->
-        Enum.map(group, fn c ->
-          %{
-            "mode" => "upgrade_episode",
-            "episode_id" => c.episode.id,
-            "media_file_id" => c.media_file.id,
-            "reasons" => Reasons.encode(c.reasons)
-          }
-        end)
+        plan =
+          Enum.map(group, fn c ->
+            %{
+              "mode" => "upgrade_episode",
+              "episode_id" => c.episode.id,
+              "media_file_id" => c.media_file.id,
+              "reasons" => Reasons.encode(c.reasons)
+            }
+          end)
+
+        {plan, Enum.map(group, &{&1, &1.reasons})}
 
       _ ->
         target = Enum.max_by(group, & &1.score)
 
-        [
+        plan = [
           %{
             "mode" => "upgrade_season",
             "media_item_id" => item_id,
@@ -316,6 +337,9 @@ defmodule Mydia.Jobs.UpgradeSweep do
             "reasons" => Reasons.encode(pack_reasons)
           }
         ]
+
+        searched = Enum.map(group, &{&1, Enum.filter(&1.reasons, fn r -> r in pack_reasons end)})
+        {plan, searched}
     end
   end
 

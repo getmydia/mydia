@@ -7,6 +7,7 @@ defmodule Mydia.Jobs.UpgradeSweepLanguageTest do
   alias Mydia.Jobs.UpgradeSweep
   alias Mydia.Library.Structs.{FileMetadata, StreamInfo}
   alias Mydia.Metadata.Structs.MediaMetadata
+  alias Mydia.Streaming.Codec
 
   setup do
     original = Application.get_env(:mydia, :runtime_config)
@@ -122,6 +123,83 @@ defmodule Mydia.Jobs.UpgradeSweepLanguageTest do
     show
   end
 
+  # A profile whose cutoff separates the two fixtures below: 720p + "AAC
+  # Stereo" scores 75.5 (below the 90 cutoff), 2160p + "AAC 5.1" + a Dolby
+  # Vision-over-HDR10 layer scores 94.0 (above it). See
+  # test/mydia/jobs/upgrade_sweep_test.exs's below_cutoff_episode/1 and
+  # above_cutoff_episode/1 for the derivation; this mirrors both shapes so
+  # the same scores apply.
+  defp scoring_profile do
+    quality_profile_fixture(%{
+      name: "Sweep mixed #{System.unique_integer([:positive])}",
+      upgrades_allowed: true,
+      upgrade_until_score: 90,
+      quality_standards: %{
+        preferred_resolutions: ["2160p"],
+        preferred_audio_channels: ["5.1"]
+      }
+    })
+  end
+
+  # Below cutoff (quality candidate), audio in the show's chosen language so
+  # it carries no language gap.
+  defp quality_only_episode(show, profile, season_number, episode_number) do
+    episode =
+      insert(:episode,
+        media_item: show,
+        season_number: season_number,
+        episode_number: episode_number,
+        monitored: true
+      )
+
+    insert(:media_file,
+      episode: episode,
+      resolution: "720p",
+      codec: "h264",
+      audio_codec: Codec.normalize_audio_codec("AAC Stereo"),
+      metadata: %FileMetadata{
+        audio_codec_raw: "AAC Stereo",
+        streams: [%StreamInfo{index: 1, type: :audio, language: "eng"}]
+      },
+      size: 2 * 1024 * 1024 * 1024,
+      analyzed_at: now(),
+      quality_profile: profile
+    )
+
+    episode
+  end
+
+  # Above cutoff (not a quality candidate), audio missing the show's chosen
+  # language so it carries a language gap.
+  defp language_only_episode(show, profile, season_number, episode_number) do
+    episode =
+      insert(:episode,
+        media_item: show,
+        season_number: season_number,
+        episode_number: episode_number,
+        monitored: true
+      )
+
+    insert(:media_file,
+      episode: episode,
+      resolution: "4K",
+      codec: "h264",
+      audio_codec: Codec.normalize_audio_codec("AAC 5.1"),
+      metadata: %FileMetadata{
+        audio_codec_raw: "AAC 5.1",
+        streams: [%StreamInfo{index: 1, type: :audio, language: "jpn"}]
+      },
+      hdr_format: :hdr10,
+      dolby_vision_profile: 8,
+      dolby_vision_bl_compat_id: 1,
+      size: 2 * 1024 * 1024 * 1024,
+      analyzed_at: now(),
+      quality_profile: profile
+    )
+
+    episode
+  end
+
   defp jobs(worker), do: Enum.filter(Repo.all(Oban.Job), &(&1.worker == worker))
 
   test "a movie missing its language is searched for language even with upgrades off" do
@@ -185,6 +263,38 @@ defmodule Mydia.Jobs.UpgradeSweepLanguageTest do
     assert length(episode_jobs) == 8
     assert Enum.all?(episode_jobs, &(&1.args["mode"] == "upgrade_episode"))
     assert Enum.all?(episode_jobs, &(&1.args["reasons"] == ["language"]))
+  end
+
+  test "a pack search dropping the backed-off language reason stamps only what it searched" do
+    profile = scoring_profile()
+
+    show =
+      insert(:tv_show,
+        title: "Kaiju Garden",
+        monitored: true,
+        download_audio_language: "en",
+        quality_profile: profile,
+        metadata: metadata(:tv_show)
+      )
+
+    quality_only = for n <- 1..4, do: quality_only_episode(show, profile, 1, n)
+    language_only = for n <- 5..8, do: language_only_episode(show, profile, 1, n)
+
+    {:ok, _backoff} =
+      Mydia.Search.record_failure("season_language_upgrade", show.id, "all_filtered",
+        season_number: 1
+      )
+
+    assert {:ok, %{searches: 1}} =
+             UpgradeSweep.perform(%Oban.Job{args: %{"lead" => "episodes"}})
+
+    assert [job] = jobs("Mydia.Jobs.TVShowSearch")
+    assert job.args["mode"] == "upgrade_season"
+    assert job.args["media_item_id"] == show.id
+    assert job.args["reasons"] == ["quality"]
+
+    assert Enum.all?(quality_only, fn ep -> Repo.reload!(ep).last_upgrade_check_at end)
+    refute Enum.any?(language_only, fn ep -> Repo.reload!(ep).last_language_check_at end)
   end
 
   test "a scoped sweep searches only that item, for language only" do
