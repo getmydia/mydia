@@ -889,6 +889,14 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     <span class="badge badge-ghost badge-sm font-mono">
                       {format_search_size(result)}
                     </span>
+                    <%!-- Audio languages the release title claims --%>
+                    <MydiaWeb.AudioLanguageComponents.audio_badge
+                      :if={breakdown}
+                      id={"#{id}-audio"}
+                      languages={breakdown.audio_languages}
+                      assumed={breakdown.audio_assumed}
+                      rank={breakdown.language_rank}
+                    />
                     <%!-- Seeders badge --%>
                     <span class={[
                       "badge badge-sm",

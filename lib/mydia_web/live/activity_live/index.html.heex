@@ -301,6 +301,7 @@
                           <thead class="sticky top-0 bg-base-200">
                             <tr>
                               <th>Release</th>
+                              <th>Audio</th>
                               <th class="text-right">Score</th>
                               <th class="text-right">Seeds</th>
                               <th>Status</th>
@@ -311,6 +312,13 @@
                               <tr>
                                 <td class="max-w-xs truncate" title={result["title"]}>
                                   {result["title"]}
+                                </td>
+                                <td>
+                                  <MydiaWeb.AudioLanguageComponents.audio_badge
+                                    languages={result["audio_languages"] || []}
+                                    assumed={result["audio_assumed"] == true}
+                                    rank={result["language_rank"]}
+                                  />
                                 </td>
                                 <td class="text-right font-mono text-sm">
                                   {Float.round((result["score"] || 0) * 1.0, 1)}
@@ -396,6 +404,7 @@
                       <thead class="sticky top-0 bg-base-200">
                         <tr>
                           <th>Release</th>
+                          <th>Audio</th>
                           <th class="text-right">Score</th>
                           <th class="text-right">Seeds</th>
                           <th>Status</th>
@@ -412,6 +421,13 @@
                                 <.icon name="hero-check" class="w-4 h-4 text-success inline mr-1" />
                               <% end %>
                               {result["title"]}
+                            </td>
+                            <td>
+                              <MydiaWeb.AudioLanguageComponents.audio_badge
+                                languages={result["audio_languages"] || []}
+                                assumed={result["audio_assumed"] == true}
+                                rank={result["language_rank"]}
+                              />
                             </td>
                             <td class="text-right font-mono text-sm">
                               {Float.round((result["score"] || 0) * 1.0, 1)}
