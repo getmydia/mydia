@@ -158,12 +158,30 @@ RUN --mount=type=cache,target=/root/.hex,sharing=locked \
 # advertise but don't properly support
 COPY patches/ueberauth_oidcc_request.ex ./deps/ueberauth_oidcc/lib/ueberauth_oidcc/request.ex
 
+# Patch Exqlite so dropping a prepared statement never blocks a BEAM scheduler
+# while its connection busy-waits. Unpatched, SQLite lock contention can freeze
+# the whole VM for the full busy_timeout; the patch header has the details.
+# The patch is written against Exqlite 0.40.0 only, so a version bump stops the
+# build here. Whoever bumps it runs
+# test/mydia/repo/exqlite_destructor_canary_test.exs: if it fails, upstream
+# fixed the bug and patches/exqlite goes; if it passes, rebase the patch.
+COPY patches/exqlite ./patches/exqlite
+RUN grep -qF '{<<"version">>,<<"0.40.0">>}.' deps/exqlite/hex_metadata.config || \
+      { echo "deps/exqlite is not 0.40.0: rebase or retire patches/exqlite" >&2; exit 1; } && \
+    patch -p1 -d deps/exqlite -i /app/patches/exqlite/statement-destructor-never-blocks.patch
+
 # Compile dependencies
 # Cache cargo registry for Rust NIF compilation (mydia_p2p_core)
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/app/native/mydia_p2p_core/target,sharing=locked \
     mix deps.compile
+
+# Prove the Exqlite patch took effect. This fails if the NIF came from Exqlite's
+# precompiled download instead of the patched source, or if it still stalls.
+# A single normal scheduler makes the stall it looks for deterministic.
+RUN elixir --erl "+S 1:1" -pa _build/prod/lib/exqlite/ebin \
+      -r patches/exqlite/destructor_probe.exs -e 'ExqliteDestructorProbe.assert_patched!()'
 
 # Copy application source
 COPY config ./config
