@@ -116,6 +116,26 @@ defmodule Mydia.Upgrades.LanguageCandidatesTest do
                  :movie
                )
     end
+
+    test "a guess that names no language is ignored" do
+      policy = AudioLanguagePolicy.new(["en"], :show, nil)
+      current = file(["eng"], "720p")
+      candidate = detected([], true)
+
+      assert {:ok, %{reason: :quality}} = judge(current, candidate, policy, [:quality], 0)
+      assert {:error, :same_language} = judge(current, candidate, policy, [:language])
+    end
+
+    test "a guessed original language still cannot replace the show's chosen language" do
+      assert {:error, :drops_language} =
+               judge(
+                 file(["eng"], "720p"),
+                 detected(["ja"], true),
+                 show_policy(["en", "ja"]),
+                 [:quality],
+                 0
+               )
+    end
   end
 
   describe "Upgrades.filter_candidates/5 and upgrade_reason/5" do

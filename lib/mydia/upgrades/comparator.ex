@@ -115,6 +115,9 @@ defmodule Mydia.Upgrades.Comparator do
        comparison decides, but only when `:quality` is among the reasons. A
        language-only search gets `{:error, :same_language}`.
 
+  An assumed detection naming no language at all is ignored outright, tying
+  rather than losing, since it carries no evidence either way.
+
   A language upgrade returns `{:ok, %{reason: :language}}`. The quality
   comparison returns `{:ok, %{reason: :quality, current:, candidate:, delta:}}`,
   or `{:error, :unscorable}` / `{:error, :below_margin}`.
@@ -185,6 +188,14 @@ defmodule Mydia.Upgrades.Comparator do
         :equal
     end
   end
+
+  # An assumed detection naming no language at all is no evidence either way
+  # (see ReleaseLanguages.detect/2: the only language it ever assumes is the
+  # item's original, and only when one is known), so it skips the language
+  # rules entirely rather than ranking last and refusing every marker-free
+  # quality upgrade.
+  defp judge_language(_file, %ReleaseLanguages{assumed?: true, languages: []}, _policy, _reasons),
+    do: :equal
 
   defp judge_language(file, %ReleaseLanguages{} = candidate, policy, reasons) do
     current = FileLanguages.detect(file)
