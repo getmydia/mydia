@@ -194,22 +194,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("cancel_download", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      with_download(socket, id, fn download ->
-        case Downloads.cancel_download(download, delete_files: false) do
-          {:ok, _} ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "Download cancelled and removed from client")
-             |> load_downloads()}
-
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to cancel download: #{inspect(reason)}")}
-        end
-      end)
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
+    start_removal(socket, id, fn _download -> {"cancel", [delete_files: false]} end)
   end
 
   def handle_event("pause_download", %{"id" => id}, socket) do
@@ -374,26 +359,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("delete_download", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      with_download(socket, id, fn download ->
-        # First try to remove from client (ignore errors if already removed)
-        _ = Downloads.cancel_download(download, delete_files: true)
+    start_removal(socket, id, fn _download -> {"cancel", [delete_files: true]} end)
+  end
 
-        # Then delete from database
-        case Downloads.delete_download(download) do
-          {:ok, _deleted} ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "Download removed")
-             |> load_downloads()}
-
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Failed to delete download")}
-        end
-      end)
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
+  def handle_event("retry_removal", %{"id" => id}, socket) do
+    start_removal(socket, id, fn download ->
+      {download.removal_kind || "cancel", [delete_files: download.removal_delete_files]}
+    end)
   end
 
   def handle_event("batch_retry", _params, socket) do
@@ -445,10 +417,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
                 {:ok, :already_removed}
 
               download ->
-                # Try to remove from client (ignore errors)
-                _ = Downloads.cancel_download(download, delete_files: true)
-                # Delete from database
-                Downloads.delete_download(download)
+                Downloads.request_removal(download, "cancel", delete_files: true)
             end
           rescue
             _ -> {:error, :failed}
@@ -461,7 +430,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
        socket
        |> assign(:selected_ids, MapSet.new())
        |> assign(:selection_mode, false)
-       |> put_flash(:info, "#{success_count} download(s) removed")
+       |> put_flash(:info, "Removing #{success_count} download(s)")
        |> load_downloads()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -494,13 +463,13 @@ defmodule MydiaWeb.DownloadsLive.Index do
       # Phoenix checkboxes submit the string "true" (or omit the key); coerce to
       # a real boolean so the adapter's [delete_files: boolean()] contract holds.
       delete_files = delete_files?(params)
-      {:ok, count} = Downloads.clear_all_completed(delete_files: delete_files)
+      {:ok, count} = Downloads.request_clear_all_completed(delete_files: delete_files)
 
       message =
         if delete_files do
-          "#{count} completed download(s) cleared and files deleted from disk"
+          "Clearing #{count} completed download(s) and deleting their files from disk"
         else
-          "#{count} completed download(s) cleared"
+          "Clearing #{count} completed download(s)"
         end
 
       {:noreply,
@@ -515,22 +484,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   def handle_event("clear_single_completed", %{"id" => id}, socket) do
-    with :ok <- Authorization.authorize_manage_downloads(socket) do
-      with_download(socket, id, fn download ->
-        case Downloads.clear_completed(download) do
-          {:ok, _} ->
-            {:noreply,
-             socket
-             |> put_flash(:info, "Download cleared from history")
-             |> load_downloads()}
-
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Failed to clear download: #{inspect(reason)}")}
-        end
-      end)
-    else
-      {:unauthorized, socket} -> {:noreply, socket}
-    end
+    start_removal(socket, id, fn _download -> {"clear", [delete_files: false]} end)
   end
 
   def handle_event("load_more", _params, socket) do
@@ -862,15 +816,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
   def handle_event("reject_release", %{"id" => id}, socket) do
     with :ok <- Authorization.authorize_manage_downloads(socket) do
       with_download(socket, id, fn download ->
-        case Downloads.reject_release(download) do
-          {:ok, :rejected} ->
+        case Downloads.request_reject(download) do
+          {:ok, _pending} ->
             flash =
               case Blacklists.extract_key(download) do
                 {:ok, _indexer, _guid} ->
-                  "Release blacklisted and a new search was queued"
+                  "Release blacklisted. Mydia is removing it and will search again."
 
                 {:error, _} ->
-                  "Download removed and a new search was queued"
+                  "Mydia is removing the download and will search again."
               end
 
             {:noreply,
@@ -879,6 +833,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
              |> assign(:match_files_error, nil)
              |> put_flash(:info, flash)
              |> load_downloads()}
+
+          {:error, :not_found} ->
+            {:noreply, download_vanished(socket)}
 
           {:error, _reason} ->
             {:noreply, assign(socket, :match_files_error, "Failed to reject the release.")}
@@ -1160,6 +1117,34 @@ defmodule MydiaWeb.DownloadsLive.Index do
     |> load_downloads()
   end
 
+  # Every per-row removal goes through here. The client call runs in
+  # Mydia.Jobs.RemoveDownload, so the click returns at once and the row
+  # re-renders as removing. `intent` maps the loaded download to the removal
+  # kind and options.
+  defp start_removal(socket, id, intent) do
+    with :ok <- Authorization.authorize_manage_downloads(socket) do
+      with_download(socket, id, fn download ->
+        {kind, opts} = intent.(download)
+
+        case Downloads.request_removal(download, kind, opts) do
+          {:ok, _pending} ->
+            {:noreply, load_downloads(socket)}
+
+          {:error, :not_found} ->
+            {:noreply, download_vanished(socket)}
+
+          {:error, _reason} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, "Could not start removing that download")
+             |> load_downloads()}
+        end
+      end)
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
   defp maybe_add_opt(opts, _key, nil), do: opts
   defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)
 
@@ -1226,7 +1211,8 @@ defmodule MydiaWeb.DownloadsLive.Index do
     other =
       all_downloads
       |> Enum.filter(fn d ->
-        (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at)) and
+        (d.status in ["failed", "missing"] || not is_nil(d.import_failed_at) ||
+           not is_nil(d.removal_error)) and
           d.match_status != "unresolved_files"
       end)
       |> enrich_path_mapping_suggestions()
@@ -1708,6 +1694,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # soft-stall does not keep rendering a stale warning — `stalled_since` is only
   # cleared while the download is observed downloading, so it can linger on a row
   # that has since moved on.
+  # A removal is in flight for this row. Mydia.Jobs.RemoveDownload deletes the
+  # row when it finishes, so until then the row only has to say so.
+  defp removing?(download), do: not is_nil(download.removal_requested_at)
+
   defp soft_stalled?(download) do
     download.status == "downloading" and
       not is_nil(download.stalled_since) and is_nil(download.import_failed_at)

@@ -179,7 +179,10 @@
         <li
           :for={{id, download} <- @streams.downloads}
           id={id}
-          class="list-row items-center gap-3 py-2.5 hover:bg-base-300/40 transition-colors"
+          class={[
+            "list-row items-center gap-3 py-2.5 hover:bg-base-300/40 transition-colors",
+            removing?(download) && "opacity-60"
+          ]}
         >
           <%!-- Checkbox (only shown in selection mode) --%>
           <div class={[
@@ -225,6 +228,13 @@
                   Added outside Mydia
                 </span>
               <% end %>
+              <span
+                :if={removing?(download)}
+                id={"removing-#{download.id}"}
+                class="badge badge-ghost badge-xs shrink-0 gap-1"
+              >
+                <span class="loading loading-spinner loading-xs"></span> Removing…
+              </span>
             </div>
             <%!-- Line 2: release title (muted), only when it differs from the display title --%>
             <%= if get_display_title(download) != download.title do %>
@@ -251,12 +261,23 @@
                 <% end %>
               </div>
             <% end %>
+            <%= if download.removal_error do %>
+              <div
+                id={"removal-error-#{download.id}"}
+                class="text-xs text-error flex items-center gap-1.5 mt-0.5"
+              >
+                <.icon name="hero-exclamation-triangle" class="size-3 shrink-0" />
+                <span class="truncate">
+                  Couldn't remove from {download.download_client}: {download.removal_error}
+                </span>
+              </div>
+            <% end %>
             <%!-- Soft-stall: a recoverable warning. import_issue is nil here
                  (a soft-stall never sets import_failed_at), so this is a
                  sibling of the block above, not an alternative to it. This is
                  the only place the give-up rule is visible while the operator
                  can still change the outcome. --%>
-            <%= if soft_stalled?(download) do %>
+            <%= if soft_stalled?(download) and not removing?(download) do %>
               <div class="text-xs text-warning flex flex-wrap items-center gap-1.5 mt-0.5">
                 <.icon name="hero-clock" class="size-3 shrink-0" />
                 <span>
@@ -378,6 +399,7 @@
           <%!-- Action buttons --%>
           <div class="flex items-center gap-1 shrink-0">
             <%= cond do %>
+              <% removing?(download) -> %>
               <% @active_tab == :queue -> %>
                 <button
                   type="button"
@@ -688,6 +710,10 @@
                     {badge_label}
                   </span>
                   <%= cond do %>
+                    <% download.removal_error -> %>
+                      <span class="text-error">
+                        Couldn't remove from {download.download_client}: {download.removal_error}
+                      </span>
                     <% download.import_last_error -> %>
                       <span class="text-error">
                         Import failed: {download.import_last_error}
@@ -765,6 +791,17 @@
                     <.icon name="hero-arrow-path" class="size-4" />
                   </button>
                 <% end %>
+                <button
+                  :if={download.removal_error}
+                  type="button"
+                  id={"retry-removal-#{download.id}"}
+                  class="btn btn-square btn-ghost btn-sm"
+                  phx-click="retry_removal"
+                  phx-value-id={download.id}
+                  title="Try removing it again"
+                >
+                  <.icon name="hero-arrow-path" class="size-4" />
+                </button>
                 <button
                   type="button"
                   id={"match-files-#{download.id}"}
