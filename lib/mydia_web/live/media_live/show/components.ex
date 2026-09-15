@@ -235,6 +235,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             />
           </button>
 
+          <MydiaWeb.MediaLive.Show.AudioLanguageComponents.audio_language_row media_item={@media_item} />
+
           <LibraryComponents.target_library_row
             media_item={@media_item}
             target_library={@target_library}

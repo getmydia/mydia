@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Indexers.SearchScorer
   alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Media
+  alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Settings.CustomFormats
 
   def generate_result_id(%SearchResult{} = result) do
@@ -253,6 +254,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       RankingOptions.build(%{
         quality_profile: quality_profile,
         custom_formats: CustomFormats.resolve_for_profile(quality_profile),
+        # This back-compat entry never sees a media item, so there is no
+        # preference to rank by. nil is the explicit "resolved, none".
+        audio_policy: nil,
         media_type: media_type,
         search_query: search_query
       })
@@ -357,6 +361,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
     RankingOptions.build(%{
       quality_profile: profile,
       custom_formats: CustomFormats.resolve_for_profile(profile),
+      audio_policy: AudioLanguagePolicy.effective(media_item),
+      episode_count: manual_episode_count(media_item, context),
       media_type: get_media_type(media_item),
       min_seeders: Map.get(assigns, :min_seeders),
       search_query: Map.get(assigns, :manual_search_query),
@@ -365,6 +371,13 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       expected_episode: expected_episode
     })
   end
+
+  # Only a season search ranks season packs, so only it sizes them per episode.
+  defp manual_episode_count(media_item, %{type: :season, season_number: season})
+       when is_integer(season),
+       do: Media.season_pack_episode_count(media_item.id, season)
+
+  defp manual_episode_count(_media_item, _context), do: nil
 
   # Prefer the season/episode the modal already loaded into the context, so
   # re-sorts and modal re-renders don't re-query the episode on every call.
@@ -428,6 +441,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       RankingOptions.build(%{
         quality_profile: quality_profile,
         custom_formats: CustomFormats.resolve_for_profile(quality_profile),
+        # This back-compat entry never sees a media item, so there is no
+        # preference to rank by. nil is the explicit "resolved, none".
+        audio_policy: nil,
         media_type: media_type
       })
     )

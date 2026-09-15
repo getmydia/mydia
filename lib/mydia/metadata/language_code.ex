@@ -273,6 +273,31 @@ defmodule Mydia.Metadata.LanguageCode do
 
   def equivalents(_), do: []
 
+  @doc """
+  Whether `code` names a language in the equivalence table, in any form
+  `equivalents/1` accepts.
+
+  A known language always expands to at least a two-letter and a three-letter
+  form, while an unrecognized tag expands only to itself. That is what separates
+  `"jpn"` from a codec name like `"dts"` sitting in the same bracket of a
+  release title.
+  """
+  @spec known?(String.t() | nil) :: boolean()
+  def known?(code), do: length(equivalents(code)) >= 2
+
+  @doc """
+  The single code the rest of the app compares languages by: the ISO 639-1 form
+  when the table knows the language, the lowercased tag itself when it does not,
+  and `nil` for blank or undetermined input.
+  """
+  @spec canonical(String.t() | nil) :: String.t() | nil
+  def canonical(code) do
+    case equivalents(code) do
+      [] -> nil
+      [primary | _] -> primary
+    end
+  end
+
   # "und" is ffprobe's explicit "undetermined" tag, and a bare "" is what a
   # file with no language tag at all yields. Neither names a language, so
   # neither may satisfy a request for one.

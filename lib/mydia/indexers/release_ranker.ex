@@ -53,15 +53,24 @@ defmodule Mydia.Indexers.ReleaseRanker do
     list is grabbed regardless. A release with no resolution token counts as
     `QualityParser.assumed_resolution/0`. Manual search passes `false`, for the same R8 reason as
     `:apply_source_exclusion`.
+  - `:audio_policy` - `Mydia.Media.AudioLanguagePolicy` the results are ranked against. A
+    release's language rank is the outermost sort key, ahead of resolution preference, so a
+    release in a preferred language beats one without it among everything the hard removals
+    keep. `nil` ranks every release equally. (default: `nil`)
+  - `:episode_count` - episodes a season pack for the searched season should hold. A result
+    that `ReleaseParser` reads as a season pack is sized and scored per episode
+    (`size / episode_count`), so a normal pack is not judged against per-episode size bounds.
+    Single-episode results are never divided. (default: `nil`, no division)
   """
 
   require Logger
 
   alias Mydia.Downloads.ReleaseValidator
-  alias Mydia.Indexers.{QualityParser, SearchResult, SearchScorer}
+  alias Mydia.Indexers.{QualityParser, ReleaseLanguages, SearchResult, SearchScorer}
   alias Mydia.Indexers.Structs.{RankedResult, ScoreBreakdown}
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.ParsedFileInfo
+  alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Quality.Sources
   alias Mydia.Settings.CustomFormats.Matcher
   alias Mydia.Settings.QualityProfile
@@ -86,7 +95,9 @@ defmodule Mydia.Indexers.ReleaseRanker do
           now: DateTime.t() | nil,
           apply_source_exclusion: boolean() | nil,
           apply_resolution_floor: boolean() | nil,
-          custom_formats: [map()]
+          custom_formats: [map()],
+          audio_policy: AudioLanguagePolicy.t() | nil,
+          episode_count: pos_integer() | nil
         ]
 
   @default_min_seeders 0
@@ -454,7 +465,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
       search_query: search_query
     ]
 
-    score_result = SearchScorer.score_result_with_breakdown(result, scorer_opts)
+    # Size math sees a season pack per episode; everything else (display, grab)
+    # keeps the real result.
+    sized_result = per_episode_sized(result, Keyword.get(opts, :episode_count))
+    score_result = SearchScorer.score_result_with_breakdown(sized_result, scorer_opts)
 
     # Extract individual components for the breakdown struct
     breakdown = score_result.breakdown
@@ -478,9 +492,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
     # Soft penalties derived per-result from the ranking options. Each helper
     # returns a value <= 0.0 that is layered onto the base score. They stay at
     # 0.0 when the relevant option is absent or the result is within bounds.
-    size_penalty = size_penalty(result, Keyword.get(opts, :size_range))
+    size_penalty = size_penalty(sized_result, Keyword.get(opts, :size_range))
     seeder_penalty = seeder_penalty(result, opts)
     identity_penalty = identity_penalty(result, opts)
+    audio = audio_fields(result, opts)
 
     size_mb = bytes_to_mb(result.size)
     seeders = result.seeders || 0
@@ -521,7 +536,11 @@ defmodule Mydia.Indexers.ReleaseRanker do
       total: round_score(total_score),
       size_penalty: round_score(size_penalty),
       seeder_penalty: round_score(seeder_penalty),
-      identity_penalty: round_score(identity_penalty)
+      identity_penalty: round_score(identity_penalty),
+      language_rank: audio.language_rank,
+      language_matches: audio.language_matches,
+      audio_languages: audio.audio_languages,
+      audio_assumed: audio.audio_assumed
     })
   end
 
@@ -658,23 +677,33 @@ defmodule Mydia.Indexers.ReleaseRanker do
   ## Private Functions - Sorting
 
   # Sort keys, outermost first:
-  #   1. resolution preference index, so a profile's resolution choice is never
+  #   1. identity tier, so a release whose parsed season/episode does not match
+  #      the search never outranks one that does, regardless of language,
+  #      resolution, or format
+  #   2. language rank, so a release in a preferred audio language beats one
+  #      without it among everything the hard removals kept
+  #   3. resolution preference index, so a profile's resolution choice is never
   #      overridden by a format score
-  #   2. custom format score, so within a tier a preferred-language release
-  #      beats a better-seeded one
-  #   3. the base composite score
-  defp sort_by_score_and_preferences(ranked_results, nil) do
-    Enum.sort_by(ranked_results, fn %{score: score, breakdown: breakdown} ->
-      {-breakdown.custom_format_score, -score}
+  #   4. language matches, so dual audio beats a single matching language
+  #   5. custom format score, so within a tier a preferred format beats a
+  #      better-seeded release
+  #   6. the base composite score
+  # With no audio policy the second and fourth keys are 0 for every release,
+  # which reproduces the order from before languages were ranked.
+  defp sort_by_score_and_preferences(ranked_results, preferred_qualities) do
+    Enum.sort_by(ranked_results, fn %{result: result, score: score, breakdown: breakdown} ->
+      {identity_tier(breakdown), breakdown.language_rank,
+       quality_preference_index(result, preferred_qualities), -breakdown.language_matches,
+       -breakdown.custom_format_score, -score}
     end)
   end
 
-  defp sort_by_score_and_preferences(ranked_results, preferred_qualities) do
-    Enum.sort_by(ranked_results, fn %{result: result, score: score, breakdown: breakdown} ->
-      {quality_preference_index(result, preferred_qualities), -breakdown.custom_format_score,
-       -score}
-    end)
-  end
+  # Identity is the outermost sort tier so an identity mismatch never wins on
+  # language, resolution, or formats. Rejected rows (score_all_with_reasons/2)
+  # carry breakdown: nil and sort into tier 0 with everything else that has no
+  # penalty.
+  defp identity_tier(%{identity_penalty: penalty}) when penalty < 0.0, do: 1
+  defp identity_tier(_), do: 0
 
   defp quality_preference_index(_result, nil) do
     # No preferred qualities set, return 0 so all results sort by score only
@@ -737,12 +766,16 @@ defmodule Mydia.Indexers.ReleaseRanker do
       size_mb = bytes_to_mb(result.size)
       resolution = if result.quality, do: result.quality.resolution, else: nil
 
-      base_info = %{
-        title: result.title,
-        seeders: result.seeders,
-        size_mb: Float.round(size_mb, 1),
-        resolution: resolution
-      }
+      base_info =
+        Map.merge(
+          %{
+            title: result.title,
+            seeders: result.seeders,
+            size_mb: Float.round(size_mb, 1),
+            resolution: resolution
+          },
+          audio_fields(result, opts)
+        )
 
       # Only hard removals are reported as rejections now; size/seeders/ratio
       # shortcomings are penalties on accepted results (mirrors filter_acceptable
@@ -789,7 +822,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
           })
       end
     end)
-    |> Enum.sort_by(&{-&1.custom_format_score, -&1.score})
+    |> Enum.sort_by(
+      &{identity_tier(&1.breakdown), &1.language_rank, -&1.language_matches,
+       -&1.custom_format_score, -&1.score}
+    )
   end
 
   @doc """
@@ -836,7 +872,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
       "seeders" => r.seeders,
       "size_mb" => r.size_mb,
       "resolution" => r.resolution,
-      "status" => to_string(r.status)
+      "status" => to_string(r.status),
+      "audio_languages" => r.audio_languages,
+      "audio_assumed" => r.audio_assumed,
+      "language_rank" => r.language_rank
     }
 
     base
@@ -1105,6 +1144,44 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
     # 10 points per matching tag
     matching_tags * 10.0
+  end
+
+  # A season pack's size is the sum of its episodes, while a profile's episode
+  # size bounds describe one episode. Without this division every normal pack
+  # took the full size penalty and lost file-size quality points, so the
+  # smallest packs won regardless of what they contained.
+  defp per_episode_sized(%SearchResult{size: size} = result, count)
+       when is_integer(size) and is_integer(count) and count > 1 do
+    if season_pack?(result), do: %{result | size: div(size, count)}, else: result
+  end
+
+  defp per_episode_sized(result, _count), do: result
+
+  defp season_pack?(%SearchResult{title: title}) do
+    case ReleaseParser.parse(title) do
+      %ParsedFileInfo{season: season, episodes: episodes} when is_integer(season) ->
+        episodes in [nil, []]
+
+      _ ->
+        false
+    end
+  end
+
+  # Detected audio languages and their rank against the search's policy. Runs
+  # for rejected rows too, so Activity can show what a dropped release carried.
+  defp audio_fields(%SearchResult{title: title}, opts) do
+    policy = Keyword.get(opts, :audio_policy)
+    original = policy && policy.original_language
+
+    %ReleaseLanguages{languages: languages, assumed?: assumed?} =
+      ReleaseLanguages.detect(title, original)
+
+    %{
+      audio_languages: languages,
+      audio_assumed: assumed?,
+      language_rank: AudioLanguagePolicy.rank(policy, languages),
+      language_matches: AudioLanguagePolicy.matches(policy, languages)
+    }
   end
 
   defp bytes_to_mb(bytes) when is_integer(bytes) do

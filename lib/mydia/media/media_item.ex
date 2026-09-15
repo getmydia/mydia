@@ -5,6 +5,8 @@ defmodule Mydia.Media.MediaItem do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Metadata.LanguageCode
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -24,6 +26,7 @@ defmodule Mydia.Media.MediaItem do
           monitor_new_seasons: :all | :none,
           category: String.t() | nil,
           category_override: boolean(),
+          audio_languages: [String.t()] | nil,
           seasons_refreshed_at: DateTime.t() | nil,
           last_upgrade_check_at: DateTime.t() | nil,
           quality_profile: Mydia.Settings.QualityProfile.t() | Ecto.Association.NotLoaded.t(),
@@ -39,6 +42,7 @@ defmodule Mydia.Media.MediaItem do
         }
 
   @type_values ~w(movie tv_show)
+  @max_audio_languages 3
 
   schema "media_items" do
     field :type, :string
@@ -67,6 +71,9 @@ defmodule Mydia.Media.MediaItem do
 
     field :category, :string
     field :category_override, :boolean, default: false
+    # Ordered audio languages this show's releases are ranked against, or nil to
+    # inherit streaming.audio_language. See Mydia.Media.AudioLanguagePolicy.
+    field :audio_languages, {:array, :string}
     # Owned by the season refresh, which stamps it through
     # Media.stamp_seasons_refreshed/1; never cast from user input. It was
     # previously written by passing it to Media.update_media_item/3, which casts
@@ -108,12 +115,15 @@ defmodule Mydia.Media.MediaItem do
       :monitored,
       :monitor_new_seasons,
       :quality_profile_id,
-      :library_path_id
+      :library_path_id,
+      :audio_languages
     ])
     |> validate_required([:type, :title])
     |> validate_inclusion(:type, @type_values)
     |> validate_number(:year, greater_than: 1800, less_than: 2200)
     |> validate_year_for_movies()
+    |> normalize_audio_languages()
+    |> validate_audio_languages()
     # Named after the partial composite indexes in
     # `20260905143012_scope_provider_id_uniqueness_by_type.exs`. A bare
     # `unique_constraint/2` expects `media_items_tmdb_id_index`, which no longer
@@ -135,6 +145,55 @@ defmodule Mydia.Media.MediaItem do
     else
       changeset
     end
+  end
+
+  # "", nil and [] all mean "inherit the server default", stored as NULL so there
+  # is one spelling of it. Known codes collapse to their canonical form ("jpn"
+  # becomes "ja"); unknown ones are kept as typed so validation can name them.
+  defp normalize_audio_languages(changeset) do
+    case fetch_change(changeset, :audio_languages) do
+      {:ok, languages} when is_list(languages) ->
+        normalized =
+          languages
+          |> Enum.map(&normalize_audio_language/1)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.uniq()
+
+        put_change(changeset, :audio_languages, if(normalized == [], do: nil, else: normalized))
+
+      _ ->
+        changeset
+    end
+  end
+
+  defp normalize_audio_language(code) when is_binary(code) do
+    case code |> String.trim() |> String.downcase() do
+      "" ->
+        nil
+
+      "original" ->
+        "original"
+
+      trimmed ->
+        if LanguageCode.known?(trimmed), do: LanguageCode.canonical(trimmed), else: trimmed
+    end
+  end
+
+  defp normalize_audio_language(_), do: nil
+
+  defp validate_audio_languages(changeset) do
+    validate_change(changeset, :audio_languages, fn :audio_languages, languages ->
+      cond do
+        length(languages) > @max_audio_languages ->
+          [audio_languages: "can list at most #{@max_audio_languages} languages"]
+
+        Enum.all?(languages, &(&1 == "original" or LanguageCode.known?(&1))) ->
+          []
+
+        true ->
+          [audio_languages: "contains an unknown language code"]
+      end
+    end)
   end
 
   @doc """

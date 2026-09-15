@@ -834,6 +834,15 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 <% score_data = profile? && profile_score_breakdown(result, @manual_ranking_opts) %>
                 <% breakdown = score_data && score_data.breakdown %>
                 <% score = (score_data && score_data.score) || 0 %>
+                <%!-- Detection does not need a quality profile: compute it directly
+                     when no profile-scored breakdown is available so the badge
+                     still shows. --%>
+                <% audio =
+                  breakdown ||
+                    Mydia.Indexers.ReleaseRanker.calculate_score_breakdown(
+                      result,
+                      @manual_ranking_opts
+                    ) %>
                 <% ring_value = max(0, trunc(score)) %>
                 <% has_penalty =
                   profile? and breakdown != nil and
@@ -889,6 +898,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     <span class="badge badge-ghost badge-sm font-mono">
                       {format_search_size(result)}
                     </span>
+                    <%!-- Audio languages the release title claims --%>
+                    <MydiaWeb.AudioLanguageComponents.audio_badge
+                      id={"#{id}-audio"}
+                      languages={audio.audio_languages}
+                      assumed={audio.audio_assumed}
+                      rank={audio.language_rank}
+                    />
                     <%!-- Seeders badge --%>
                     <span class={[
                       "badge badge-sm",

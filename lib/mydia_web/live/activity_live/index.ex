@@ -492,9 +492,15 @@ defmodule MydiaWeb.ActivityLive.Index do
       "size_penalty" -> "Size penalty"
       "seeder_penalty" -> "Seeder penalty"
       "identity_penalty" -> "Identity mismatch"
+      "language_rank" -> "Language rank"
+      "language_matches" -> "Language matches"
+      "audio_languages" -> "Audio"
+      "audio_assumed" -> "Audio assumed"
       _ -> String.replace(key, "_", " ") |> String.capitalize()
     end
   end
+
+  defp format_breakdown_value(value) when is_list(value), do: Enum.join(value, "+")
 
   defp format_breakdown_value(value) when is_float(value) do
     :erlang.float_to_binary(value, decimals: 1)

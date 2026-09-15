@@ -41,6 +41,7 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades
@@ -404,13 +405,19 @@ defmodule Mydia.Jobs.MovieSearch do
         )
 
         # Log search completed event - search found and selected a result
-        Events.search_completed(movie, %{
-          "query" => query,
-          "results_count" => length(results),
-          "selected_release" => best_result.title,
-          "score" => score,
-          "breakdown" => stringify_keys(breakdown)
-        })
+        Events.search_completed(
+          movie,
+          Map.merge(
+            %{
+              "query" => query,
+              "results_count" => length(results),
+              "selected_release" => best_result.title,
+              "score" => score,
+              "breakdown" => stringify_keys(breakdown)
+            },
+            RankingOptions.audio_event_fields(ranking_opts)
+          )
+        )
 
         case initiate_download(movie, best_result) do
           :ok ->
@@ -620,13 +627,19 @@ defmodule Mydia.Jobs.MovieSearch do
         )
 
         # Log search completed event - search found and selected a result
-        Events.search_completed(movie, %{
-          "query" => query,
-          "results_count" => length(results),
-          "selected_release" => best_result.title,
-          "score" => score,
-          "breakdown" => stringify_keys(breakdown)
-        })
+        Events.search_completed(
+          movie,
+          Map.merge(
+            %{
+              "query" => query,
+              "results_count" => length(results),
+              "selected_release" => best_result.title,
+              "score" => score,
+              "breakdown" => stringify_keys(breakdown)
+            },
+            RankingOptions.audio_event_fields(ranking_opts)
+          )
+        )
 
         case initiate_download(movie, best_result, opts) do
           :ok ->
@@ -658,6 +671,7 @@ defmodule Mydia.Jobs.MovieSearch do
     RankingOptions.build(%{
       quality_profile: profile,
       custom_formats: CustomFormats.resolve_for_profile(profile),
+      audio_policy: AudioLanguagePolicy.effective(movie),
       media_type: :movie,
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
