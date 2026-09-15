@@ -125,13 +125,27 @@ defmodule Mydia.Perf.KeysTest do
 
     test "oban_job/1 uses the worker and the final state" do
       metadata = %{
-        worker: "Mydia.Jobs.ExampleWorker",
-        queue: "default",
+        conf: nil,
+        job: %Oban.Job{worker: "Mydia.Jobs.ExampleWorker"},
         state: :success,
-        job: %Oban.Job{}
+        result: :ok
       }
 
       assert Keys.oban_job(metadata) == %{worker: "Mydia.Jobs.ExampleWorker", state: "success"}
+    end
+
+    test "oban_job/1 keys an exception by its state" do
+      metadata = %{
+        conf: nil,
+        job: %Oban.Job{worker: "Mydia.Jobs.ExampleWorker"},
+        state: :failure,
+        kind: :error,
+        reason: %RuntimeError{message: "boom"},
+        result: nil,
+        stacktrace: []
+      }
+
+      assert Keys.oban_job(metadata) == %{worker: "Mydia.Jobs.ExampleWorker", state: "failure"}
     end
 
     test "p2p_request/1 uses the kind" do

@@ -94,7 +94,7 @@ defmodule Mydia.Perf.Keys do
   @spec oban_job(term()) :: %{worker: String.t(), state: String.t()}
   def oban_job(metadata) do
     guard(%{worker: @unknown, state: @unknown}, fn ->
-      %{worker: worker} = metadata
+      %{job: %Oban.Job{worker: worker}} = metadata
       %{worker: to_string(worker), state: metadata |> Map.get(:state, @unknown) |> to_string()}
     end)
   end
