@@ -69,6 +69,23 @@ defmodule Mydia.Metadata.LanguageCodeTest do
     end
   end
 
+  describe "spoken_languages_from/1" do
+    test "extracts the list from a struct or atom-key map" do
+      assert LanguageCode.spoken_languages_from(%{spoken_languages: ["de", "pl"]}) == ["de", "pl"]
+    end
+
+    test "extracts from a string-key map too" do
+      assert LanguageCode.spoken_languages_from(%{"spoken_languages" => ["ger"]}) == ["ger"]
+    end
+
+    test "returns [] for absent or non-list values" do
+      assert LanguageCode.spoken_languages_from(%{spoken_languages: nil}) == []
+      assert LanguageCode.spoken_languages_from(%{"spoken_languages" => nil}) == []
+      assert LanguageCode.spoken_languages_from(%{}) == []
+      assert LanguageCode.spoken_languages_from(nil) == []
+    end
+  end
+
   describe "select_translation/3" do
     setup do
       translations = [
