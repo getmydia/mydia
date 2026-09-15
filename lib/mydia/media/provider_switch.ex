@@ -178,10 +178,10 @@ defmodule Mydia.Media.ProviderSwitch do
     * The destructive swap (delete old episodes, set the new provider id, clear
       the old one, recreate episodes from the pre-fetched data, re-link files)
       runs in a single `Repo.transaction` with no network calls inside it.
-    * Files are captured before the wipe and re-stamped with `media_item_id` so
-      `match_files_to_episodes/1` can re-link them by filename. Files that no
-      longer parse to a known episode stay attached to the show rather than
-      orphaned.
+    * Each episode's files are demoted to import candidates before the wipe
+      (`Mydia.ImportCandidates.demote_episode_files/1`), keeping the bytes on
+      disk, so they return through `/import` against the new episodes rather
+      than being attached to the show.
 
   Episode-level watch progress and download history reference episodes with
   `ON DELETE SET NULL`, so a switch resets that per-episode state (the caller is

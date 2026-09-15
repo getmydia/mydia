@@ -140,16 +140,22 @@ defmodule Mydia.Jobs.ShowFileRepair do
 
   defp repair_show(show_id, acc) do
     {:ok, relinked} = Library.match_files_to_episodes(show_id)
-    show = Repo.get!(MediaItem, show_id)
+    acc = %{acc | relinked: acc.relinked + relinked}
 
-    from(f in show_level_files(), where: f.media_item_id == ^show_id, preload: :library_path)
-    |> Repo.all()
-    |> Enum.reduce(%{acc | relinked: acc.relinked + relinked}, fn file, acc ->
-      case demote(show, file) do
-        :demoted -> %{acc | demoted: acc.demoted + 1}
-        :skipped -> %{acc | skipped: acc.skipped + 1}
-      end
-    end)
+    case Repo.get(MediaItem, show_id) do
+      nil ->
+        acc
+
+      show ->
+        from(f in show_level_files(), where: f.media_item_id == ^show_id, preload: :library_path)
+        |> Repo.all()
+        |> Enum.reduce(acc, fn file, acc ->
+          case demote(show, file) do
+            :demoted -> %{acc | demoted: acc.demoted + 1}
+            :skipped -> %{acc | skipped: acc.skipped + 1}
+          end
+        end)
+    end
   end
 
   defp demote(_show, %MediaFile{library_path: nil} = file), do: skip(file, :no_library_path)

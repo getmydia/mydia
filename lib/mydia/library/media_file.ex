@@ -433,14 +433,14 @@ defmodule Mydia.Library.MediaFile do
   # A TV file belongs to an episode. One attached straight to its show renders as
   # a loose file on the show page and no episode reaches it; an unmatched TV file
   # is an import candidate instead (Mydia.ImportCandidates.stage_show_file/3).
-  # Extras may sit on the show. Checked only when a parent column is written, so
-  # a legacy row can still be updated (or trashed and restored) until
-  # Mydia.Jobs.ShowFileRepair clears it. The type lookup runs last, so only a
-  # parent write with media_item_id set and no episode pays for it.
+  # Extras may sit on the show. Checked only when a parent column or extra_kind
+  # is written, so a legacy row can still be updated (or trashed and restored)
+  # until Mydia.Jobs.ShowFileRepair clears it. The type lookup runs last, so only
+  # a parent write with media_item_id set and no episode pays for it.
   defp validate_tv_file_has_episode(changeset) do
     media_item_id = get_field(changeset, :media_item_id)
 
-    if parent_written?(changeset) and not is_nil(media_item_id) and
+    if shape_written?(changeset) and not is_nil(media_item_id) and
          is_nil(get_field(changeset, :episode_id)) and
          is_nil(get_field(changeset, :extra_kind)) and
          get_media_type_for_item(media_item_id) == "tv_show" do
@@ -450,9 +450,10 @@ defmodule Mydia.Library.MediaFile do
     end
   end
 
-  defp parent_written?(changeset) do
+  defp shape_written?(changeset) do
     Map.has_key?(changeset.changes, :media_item_id) or
-      Map.has_key?(changeset.changes, :episode_id)
+      Map.has_key?(changeset.changes, :episode_id) or
+      Map.has_key?(changeset.changes, :extra_kind)
   end
 
   # Validates that the media type is compatible with the library path type

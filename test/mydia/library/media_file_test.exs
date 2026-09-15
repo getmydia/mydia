@@ -450,6 +450,39 @@ defmodule Mydia.Library.MediaFileTest do
 
       assert changeset.valid?
     end
+
+    test "rejects clearing extra_kind on an extra attached to a show", %{
+      library: library,
+      show: show
+    } do
+      extra =
+        Repo.insert!(%MediaFile{
+          relative_path: "Lantern Coast/Featurettes/making-of.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          extra_kind: :other,
+          size: 1_000
+        })
+
+      changeset = MediaFile.changeset(extra, %{extra_kind: nil, extra_source: :operator})
+
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
+    end
+
+    test "allows marking a show-level file as an extra", %{library: library, show: show} do
+      legacy =
+        Repo.insert!(%MediaFile{
+          relative_path: "Lantern Coast/loose-extra.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          size: 1_000
+        })
+
+      changeset = MediaFile.changeset(legacy, %{extra_kind: :other, extra_source: :operator})
+
+      assert changeset.valid?
+    end
   end
 
   describe "validation edge cases" do
