@@ -194,4 +194,77 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
       assert has_element?(view, "#language-row-download-audio")
     end
   end
+
+  describe "subtitle languages" do
+    test "checked chips save as a list", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"subtitle_language" => ["en", "es"]})
+
+      setting = Settings.get_config_setting_by_key("streaming.subtitle_language")
+      assert setting.value == "en,es"
+      assert Mydia.Config.get().streaming.subtitle_language == ["en", "es"]
+    end
+
+    test "More languages adds one", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"subtitle_language" => ["en"], "subtitle_language_add" => "th"})
+
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "en,th"
+      assert has_element?(view, "#language-subtitle-th[checked]")
+    end
+
+    test "the last checked chip cannot be unchecked", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(view, "#language-subtitle-en[disabled][checked]")
+    end
+
+    test "an unrelated change never reorders a configured list", %{conn: conn} do
+      {:ok, _} =
+        Settings.upsert_config_setting(%{
+          key: "streaming.subtitle_language",
+          value: "es,en",
+          category: :streaming
+        })
+
+      {:ok, _} = Mydia.Config.Loader.reload()
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      # Chips submit in display order (en before es), not preference order.
+      change(view, %{"download_audio_language" => "ja", "subtitle_language" => ["en", "es"]})
+
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "es,en"
+      assert Settings.get_config_setting_by_key("downloads.audio_language").value == "ja"
+    end
+
+    test "adding from More languages saves when it is the target", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{
+        "_target" => ["subtitle_language_add"],
+        "subtitle_language" => ["en"],
+        "subtitle_language_add" => "th"
+      })
+
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "en,th"
+    end
+
+    test "unchecking a chip saves", %{conn: conn} do
+      {:ok, _} =
+        Settings.upsert_config_setting(%{
+          key: "streaming.subtitle_language",
+          value: "en,es",
+          category: :streaming
+        })
+
+      {:ok, _} = Mydia.Config.Loader.reload()
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"_target" => ["subtitle_language"], "subtitle_language" => ["es"]})
+
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "es"
+    end
+  end
 end

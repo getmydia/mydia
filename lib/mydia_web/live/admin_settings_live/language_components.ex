@@ -52,6 +52,16 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           </.language_row>
 
           <.language_row
+            id="language-row-subtitles"
+            label="Subtitle languages"
+            key="streaming.subtitle_language"
+            source={@settings["streaming.subtitle_language"].source}
+            description="Subtitles fetched for your files, and the languages subtitle search starts with."
+          >
+            <.subtitle_languages_control setting={@settings["streaming.subtitle_language"]} />
+          </.language_row>
+
+          <.language_row
             id="language-row-metadata"
             label="Metadata language"
             key="metadata.language"
@@ -205,6 +215,71 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
         disabled={@setting.source == :env}
       />
     </label>
+    """
+  end
+
+  attr :setting, :map, required: true
+
+  # Same chip set as the subtitle search modal: the common languages plus any
+  # selected one outside them, with the rest behind a picker. The last selected
+  # chip is disabled so the list cannot become empty, and a hidden input still
+  # submits it, since a disabled checkbox is never sent.
+  defp subtitle_languages_control(assigns) do
+    selected = assigns.setting.value
+    common = MydiaWeb.Languages.common()
+    common_codes = Enum.map(common, &elem(&1, 0))
+
+    chips =
+      common ++
+        (selected
+         |> Enum.reject(&(&1 in common_codes))
+         |> Enum.map(&{&1, MydiaWeb.Languages.name(&1)}))
+
+    chip_codes = Enum.map(chips, &elem(&1, 0))
+
+    assigns =
+      assigns
+      |> assign(:selected, selected)
+      |> assign(:chips, chips)
+      |> assign(
+        :more,
+        Enum.reject(MydiaWeb.Languages.all(), fn {code, _} -> code in chip_codes end)
+      )
+      |> assign(:locked?, assigns.setting.source == :env)
+
+    ~H"""
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+      <div class="filter" role="group" aria-label="Subtitle languages">
+        <%= for {code, label} <- @chips do %>
+          <input
+            :if={not @locked? and @selected == [code]}
+            type="hidden"
+            name="subtitle_language[]"
+            value={code}
+          />
+          <input
+            id={"language-subtitle-#{code}"}
+            class="btn btn-sm"
+            type="checkbox"
+            name="subtitle_language[]"
+            value={code}
+            aria-label={label}
+            checked={code in @selected}
+            disabled={@locked? or @selected == [code]}
+          />
+        <% end %>
+      </div>
+      <select
+        :if={@more != []}
+        id="language-subtitle-add"
+        name="subtitle_language_add"
+        class="select select-sm select-bordered w-40"
+        disabled={@locked?}
+      >
+        <option value="" selected>More languages</option>
+        <option :for={{code, label} <- @more} value={code}>{label}</option>
+      </select>
+    </div>
     """
   end
 

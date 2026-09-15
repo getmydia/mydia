@@ -71,6 +71,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       params
       |> submitted_fields()
       |> Enum.flat_map(fn field -> parse({field, Map.get(params, field)}, params) end)
+      |> Enum.map(fn {key, value} -> {key, keep_order(key, settings[key].value, value)} end)
       |> Enum.reject(fn {key, value} ->
         settings[key].source == :env or settings[key].value == value
       end)
@@ -108,8 +109,18 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
   # `params` is that same form's current (possibly uncommitted) state, not
   # this change. Without `_target`, every present field is used, matching the
   # behaviour before per-field targeting existed.
-  defp submitted_fields(%{"_target" => [field | _]}) when is_binary(field), do: [field]
+  defp submitted_fields(%{"_target" => [field | _]}) when is_binary(field),
+    do: [field_for_target(field)]
+
   defp submitted_fields(params), do: params |> Map.delete("_target") |> Map.keys()
+
+  # The "More languages" picker is a separate form field from the chip
+  # checkboxes it feeds, so a change fired from it targets
+  # "subtitle_language_add" while the value it should parse lives under
+  # "subtitle_language". Route it there; every other target names its own
+  # field already.
+  defp field_for_target("subtitle_language_add"), do: "subtitle_language"
+  defp field_for_target(field), do: field
 
   @doc """
   The languages a picker offers: `MydiaWeb.Languages.all/0`, plus any current
@@ -159,9 +170,31 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
   defp parse({"prefer_default_audio_track", flag}, _params) when flag in ["true", "false"],
     do: [{"streaming.prefer_default_audio_track", flag == "true"}]
 
+  defp parse({"subtitle_language", codes}, params) when is_list(codes) do
+    languages =
+      (codes ++ List.wrap(params["subtitle_language_add"]))
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.uniq()
+
+    cond do
+      languages == [] -> []
+      Enum.all?(languages, &LanguageCode.known?/1) -> [{"streaming.subtitle_language", languages}]
+      true -> [{"streaming.subtitle_language", :invalid}]
+    end
+  end
+
   defp parse(_field, _params), do: []
 
   defp audio_choice?(code), do: code == "original" or LanguageCode.known?(code)
+
+  # Chips submit in display order, not preference order. Keep the configured
+  # order for languages that stay and append new ones, so an unrelated change
+  # on the form never rewrites a YAML or default list just by reordering it.
+  defp keep_order("streaming.subtitle_language", current, submitted) when is_list(submitted) do
+    Enum.filter(current, &(&1 in submitted)) ++ Enum.reject(submitted, &(&1 in current))
+  end
+
+  defp keep_order(_key, _current, value), do: value
 
   defp encode(list) when is_list(list), do: Enum.join(list, ",")
   defp encode(value), do: to_string(value)
