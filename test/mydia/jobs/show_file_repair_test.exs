@@ -107,4 +107,21 @@ defmodule Mydia.Jobs.ShowFileRepairTest do
     assert :ok = perform_job(ShowFileRepair, %{})
     assert is_nil(Repo.get(MediaFile, file.id))
   end
+
+  test "fails a row whose staging errors, so Oban retries it", %{
+    show: show,
+    library_path: library_path
+  } do
+    # An empty relative_path is not nil, so it reaches the transaction, and
+    # ImportCandidate.changeset/2's validate_required([:relative_path, ...])
+    # rejects it there. That is a staging failure the row should be retried
+    # for, unlike the no-library-path/no-relative-path shapes above.
+    file = show_level_file(show, library_path, "")
+
+    assert {:ok, %{relinked: 0, demoted: 0, skipped: 0, failed: 1}} = ShowFileRepair.run()
+
+    assert %MediaFile{} = Repo.get!(MediaFile, file.id)
+
+    assert {:error, {:show_file_repair_failed, 1}} = perform_job(ShowFileRepair, %{})
+  end
 end

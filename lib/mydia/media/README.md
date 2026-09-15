@@ -33,8 +33,10 @@ show-page re-scan and re-match all used to write it. A TV file with no
 resolvable episode is an import candidate (`ImportCandidates.stage_show_file/3`)
 or, during download import, an `unresolved_files` entry on the download.
 `Mydia.Jobs.ShowFileRepair` clears rows written before the guard. The check runs
-only when a parent column or `extra_kind` is written, so a test that needs a
-legacy row inserts `%MediaFile{}` directly with `Repo.insert!/1`.
+on every insert, and on an update whenever a parent column or `extra_kind` is
+written, so a test that needs a legacy row inserts `%MediaFile{}` directly with
+`Repo.insert!/1`, bypassing the changeset entirely rather than casting onto a new
+struct.
 
 ## One file can cover several episodes, and episode.media_files is many_to_many
 

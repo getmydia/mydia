@@ -218,6 +218,12 @@ defmodule Mydia.Jobs.MediaImport do
   # no less unfixable for it.
   defp terminal_failure?(:partial_import, attempt) when attempt >= 3, do: true
   defp terminal_failure?({:partial_import, _reason}, attempt) when attempt >= 3, do: true
+  # Every file resolved to no episode, and the download is flagged
+  # unresolved_files for an operator to assign. A few retries let a
+  # metadata refresh add a missing episode; past that, re-walking the same
+  # files every day changes nothing, and a pending retry keeps the download
+  # occupying its target. Stop and leave it in the issues queue.
+  defp terminal_failure?(:all_files_unresolved, attempt) when attempt >= 3, do: true
   # Too many distinct files claiming one destination filename. Retrying tries
   # the same exhausted suffixes; the parse or the download contents need
   # looking at.

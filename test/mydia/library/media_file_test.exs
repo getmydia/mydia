@@ -404,6 +404,36 @@ defmodule Mydia.Library.MediaFileTest do
       assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
     end
 
+    test "changeset/2 rejects a new struct whose parent was set before cast", %{
+      library: library,
+      show: show
+    } do
+      changeset =
+        MediaFile.changeset(%MediaFile{media_item_id: show.id}, %{
+          relative_path: "Lantern Coast/loose.mkv",
+          library_path_id: library.id,
+          size: 1_000
+        })
+
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
+    end
+
+    test "scan_changeset/2 rejects a new struct whose parent was set before cast", %{
+      library: library,
+      show: show
+    } do
+      changeset =
+        MediaFile.scan_changeset(%MediaFile{media_item_id: show.id}, %{
+          relative_path: "Lantern Coast/loose.mkv",
+          library_path_id: library.id,
+          size: 1_000
+        })
+
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
+    end
+
     test "allows an extra on the show", %{library: library, show: show} do
       changeset =
         MediaFile.changeset(%MediaFile{}, %{

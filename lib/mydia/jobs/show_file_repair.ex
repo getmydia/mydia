@@ -15,7 +15,9 @@ defmodule Mydia.Jobs.ShowFileRepair do
   bytes. Trashed rows are left for `TrashCleanup`, and extras (`extra_kind`
   set) may legitimately sit on the show. A row with no library path or
   relative path cannot key a candidate, so it is left in place and counted as
-  skipped.
+  skipped. A row whose staging or deletion errors inside the transaction is
+  counted as failed instead, and `perform/1` fails the job so Oban retries it,
+  since the repair is idempotent and a later attempt may succeed.
 
   Idempotent by row state with no stamp column, like
   `Mydia.Jobs.MonitoringRepair`: once drained, a boot costs one query that
@@ -64,10 +66,15 @@ defmodule Mydia.Jobs.ShowFileRepair do
   end
 
   @impl Oban.Worker
-  @spec perform(Oban.Job.t()) :: :ok
+  @spec perform(Oban.Job.t()) :: :ok | {:error, {:show_file_repair_failed, pos_integer()}}
   def perform(%Oban.Job{}) do
-    {:ok, _result} = run()
-    :ok
+    {:ok, result} = run()
+
+    if result.failed > 0 do
+      {:error, {:show_file_repair_failed, result.failed}}
+    else
+      :ok
+    end
   end
 
   @doc """
@@ -80,15 +87,20 @@ defmodule Mydia.Jobs.ShowFileRepair do
   """
   @spec run(keyword()) ::
           {:ok,
-           %{relinked: non_neg_integer(), demoted: non_neg_integer(), skipped: non_neg_integer()}}
+           %{
+             relinked: non_neg_integer(),
+             demoted: non_neg_integer(),
+             skipped: non_neg_integer(),
+             failed: non_neg_integer()
+           }}
   def run(opts \\ []) do
     batch_size = Keyword.get(opts, :batch_size, @default_batch_size)
-    result = repair_pages(nil, %{relinked: 0, demoted: 0, skipped: 0}, batch_size)
+    result = repair_pages(nil, %{relinked: 0, demoted: 0, skipped: 0, failed: 0}, batch_size)
 
-    if result.relinked + result.demoted + result.skipped > 0 do
+    if result.relinked + result.demoted + result.skipped + result.failed > 0 do
       Logger.info(
         "Show file repair: relinked #{result.relinked}, demoted #{result.demoted}, " <>
-          "skipped #{result.skipped}"
+          "skipped #{result.skipped}, failed #{result.failed}"
       )
     end
 
@@ -153,6 +165,7 @@ defmodule Mydia.Jobs.ShowFileRepair do
           case demote(show, file) do
             :demoted -> %{acc | demoted: acc.demoted + 1}
             :skipped -> %{acc | skipped: acc.skipped + 1}
+            :failed -> %{acc | failed: acc.failed + 1}
           end
         end)
     end
@@ -177,7 +190,7 @@ defmodule Mydia.Jobs.ShowFileRepair do
     end)
     |> case do
       {:ok, :demoted} -> :demoted
-      {:error, reason} -> skip(file, reason)
+      {:error, reason} -> fail(file, reason)
     end
   end
 
@@ -188,5 +201,14 @@ defmodule Mydia.Jobs.ShowFileRepair do
     )
 
     :skipped
+  end
+
+  defp fail(file, reason) do
+    Logger.warning("Show file repair: failed to demote a show-level file",
+      media_file_id: file.id,
+      reason: inspect(reason)
+    )
+
+    :failed
   end
 end

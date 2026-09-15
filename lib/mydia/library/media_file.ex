@@ -433,10 +433,11 @@ defmodule Mydia.Library.MediaFile do
   # A TV file belongs to an episode. One attached straight to its show renders as
   # a loose file on the show page and no episode reaches it; an unmatched TV file
   # is an import candidate instead (Mydia.ImportCandidates.stage_show_file/3).
-  # Extras may sit on the show. Checked only when a parent column or extra_kind
-  # is written, so a legacy row can still be updated (or trashed and restored)
-  # until Mydia.Jobs.ShowFileRepair clears it. The type lookup runs last, so only
-  # a parent write with media_item_id set and no episode pays for it.
+  # Extras may sit on the show. The check runs on every insert, and on an update
+  # whenever a parent column or extra_kind is written, so a legacy row can still
+  # be updated (or trashed and restored) until Mydia.Jobs.ShowFileRepair clears
+  # it. The type lookup runs last, so only a parent write with media_item_id set
+  # and no episode pays for it.
   defp validate_tv_file_has_episode(changeset) do
     media_item_id = get_field(changeset, :media_item_id)
 
@@ -451,7 +452,8 @@ defmodule Mydia.Library.MediaFile do
   end
 
   defp shape_written?(changeset) do
-    Map.has_key?(changeset.changes, :media_item_id) or
+    Ecto.get_meta(changeset.data, :state) == :built or
+      Map.has_key?(changeset.changes, :media_item_id) or
       Map.has_key?(changeset.changes, :episode_id) or
       Map.has_key?(changeset.changes, :extra_kind)
   end
