@@ -293,7 +293,7 @@ defmodule Mydia.Media.LibraryListing do
       |> Repo.all()
       |> Enum.group_by(& &1.media_item_id)
 
-    Enum.map(rows, fn row ->
+    Enum.map(rows, fn %LibraryRow{} = row ->
       case Map.get(progress, row.id) do
         [first | _] -> %LibraryRow{row | progress: first}
         nil -> row
