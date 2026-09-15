@@ -395,6 +395,26 @@ defmodule MydiaWeb.ActivityLive.IndexTest do
       assert html =~ "not monitored"
     end
 
+    test "expands a back-filled provider id change", %{conn: conn} do
+      {:ok, _} =
+        Events.create_event(%{
+          category: "media",
+          type: "media_item.updated",
+          actor_type: :system,
+          actor_id: "media_context",
+          metadata: %{
+            "title" => "Nightfall Station",
+            "reason" => "Metadata refreshed",
+            "changes" => %{"tvdb_id" => %{"old" => nil, "new" => 424_242}}
+          }
+        })
+
+      {:ok, _view, html} = live(conn, ~p"/activity")
+
+      assert html =~ "TVDB ID"
+      assert html =~ "424242"
+    end
+
     test "expands a monitor_new_seasons change with humanized field and values", %{conn: conn} do
       {:ok, _} =
         Events.create_event(%{

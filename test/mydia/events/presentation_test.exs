@@ -229,6 +229,52 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Severance, 9 episodes"
     end
 
+    test "episode_titles_updated names the episode for a single change" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.episode_titles_updated",
+            metadata: %{
+              "title" => "Lantern Bay",
+              "count" => 1,
+              "changes" => [
+                %{"season" => 4, "episode" => 8, "old" => "TBA ", "new" => "Harbor Lights"}
+              ]
+            }
+          )
+        )
+
+      assert detail == ~s(Lantern Bay, S04E08 "TBA" → "Harbor Lights")
+    end
+
+    test "episode_titles_updated renders a missing old title as TBA" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.episode_titles_updated",
+            metadata: %{
+              "title" => "Lantern Bay",
+              "count" => 1,
+              "changes" => [%{"season" => 1, "episode" => 2, "old" => nil, "new" => "Quiet Tide"}]
+            }
+          )
+        )
+
+      assert detail == ~s(Lantern Bay, S01E02 "TBA" → "Quiet Tide")
+    end
+
+    test "episode_titles_updated counts several changes" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.episode_titles_updated",
+            metadata: %{"title" => "Lantern Bay", "count" => 3, "changes" => []}
+          )
+        )
+
+      assert detail == "Lantern Bay, 3 episode titles updated"
+    end
+
     test "updated does not raise on a metadata_fields entry with a malformed field name" do
       # A hand-edited or legacy row could carry anything under "field". This
       # must render, not crash the whole Activity Feed over one bad event.
@@ -251,6 +297,45 @@ defmodule Mydia.Events.PresentationTest do
 
       assert is_binary(detail)
       assert detail =~ "Arrival"
+    end
+
+    test "every field update_media_item/3 audits renders in the summary with a label" do
+      for field <- Mydia.Media.audited_media_item_fields() do
+        name = Atom.to_string(field)
+
+        assert name in Presentation.simple_change_fields(),
+               "#{name} is audited but never rendered"
+
+        detail =
+          Presentation.detail(
+            event(
+              type: "media_item.updated",
+              metadata: %{
+                "title" => "Lantern Bay",
+                "reason" => "Metadata refreshed",
+                "changes" => %{name => %{"old" => 1, "new" => 2}}
+              }
+            )
+          )
+
+        assert detail == "Lantern Bay, metadata refreshed (#{Presentation.field_label(name)})"
+      end
+    end
+
+    test "updated labels a back-filled provider id" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Lantern Bay",
+              "reason" => "Metadata refreshed",
+              "changes" => %{"tvdb_id" => %{"old" => nil, "new" => 424_242}}
+            }
+          )
+        )
+
+      assert detail == "Lantern Bay, metadata refreshed (TVDB ID)"
     end
   end
 

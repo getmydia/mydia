@@ -311,6 +311,12 @@ config :mydia, Oban,
        {"*/5 * * * *", Mydia.Jobs.SegmentDetectionScheduler},
        # Refresh metadata for all monitored items weekly on Sunday at 5 AM
        {"0 5 * * 0", Mydia.Jobs.MetadataRefresh, args: %{"refresh_all" => true}},
+       # Re-read seasons of airing shows whose episodes still carry placeholder
+       # titles, or aired without an overview or screencap. Every due season
+       # runs just after the UTC date turns over; episodes airing within a day
+       # of today are also re-read every six hours in between.
+       {"30 0 * * *", Mydia.Jobs.AiringEpisodeRefresh, args: %{"scope" => "all"}},
+       {"30 6,12,18 * * *", Mydia.Jobs.AiringEpisodeRefresh, args: %{"scope" => "hot"}},
        # Repair media items stored with no metadata (blank posters) daily at 5:15 AM
        {"15 5 * * *", Mydia.Jobs.MetadataBackfill},
        # Permanently delete trashed media files past retention period daily at 5 AM

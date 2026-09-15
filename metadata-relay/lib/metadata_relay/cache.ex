@@ -16,6 +16,8 @@ defmodule MetadataRelay.Cache do
   - Movie/TV details by ID: 30 days TTL
   - Images: 90 days TTL (images never change)
   - Season/episode data: 14 days TTL
+  - Season/episode data still being filled in: 6 hours TTL (see
+    `MetadataRelay.Cache.Settling`)
   - Search results: 7 days TTL
   - Trending: 1 hour TTL
   - Default: 24 hours TTL

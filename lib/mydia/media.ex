@@ -7,7 +7,16 @@ defmodule Mydia.Media do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Media.{AvailabilityStatus, MediaItem, Episode, CategoryClassifier, ProviderKey}
+
+  alias Mydia.Media.{
+    AvailabilityStatus,
+    MediaItem,
+    Episode,
+    EpisodePlaceholder,
+    CategoryClassifier,
+    ProviderKey
+  }
+
   alias Mydia.Media.Structs.CalendarEntry
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Events
@@ -490,28 +499,37 @@ defmodule Mydia.Media do
     end
   end
 
+  # :monitored and :monitor_new_seasons are operator settings, not metadata.
+  # They are here so that a write of either lands in the item's history with
+  # its old and new value, whichever caller made it. Without that, the
+  # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
+  # from an ordinary "Metadata enriched" update for three weeks.
+  #
+  # Every field here must render in the activity feed; presentation_test.exs
+  # enforces it, because an audited field the feed cannot show reads as a
+  # refresh that changed nothing.
+  @audited_media_item_fields [
+    :title,
+    :original_title,
+    :year,
+    :monitored,
+    :monitor_new_seasons,
+    :category,
+    :category_override,
+    :tmdb_id,
+    :tvdb_id
+  ]
+
+  @doc false
+  def audited_media_item_fields, do: @audited_media_item_fields
+
   @doc false
   defp extract_meaningful_changes(changeset, original) do
     changes = changeset.changes
 
     simple_changes =
       changes
-      # :monitored and :monitor_new_seasons are operator settings, not metadata.
-      # They are here so that a write of either lands in the item's history with
-      # its old and new value, whichever caller made it. Without that, the
-      # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
-      # from an ordinary "Metadata enriched" update for three weeks.
-      |> Map.take([
-        :title,
-        :original_title,
-        :year,
-        :monitored,
-        :monitor_new_seasons,
-        :category,
-        :category_override,
-        :tmdb_id,
-        :tvdb_id
-      ])
+      |> Map.take(@audited_media_item_fields)
       |> Enum.map(fn {field, new_value} ->
         old_value = Map.get(original, field)
         {field, %{old: old_value, new: new_value}}
@@ -549,7 +567,7 @@ defmodule Mydia.Media do
         old_val = MetadataAccess.get(old_metadata, field)
         new_val = MetadataAccess.get(new_metadata, field)
 
-        if values_differ?(old_val, new_val) do
+        if metadata_value_changed?(field, old_val, new_val) do
           [{label, format_metadata_change(field, old_val, new_val)} | acc]
         else
           acc
@@ -566,6 +584,14 @@ defmodule Mydia.Media do
       %{metadata_fields: Enum.reverse(changes)}
     end
   end
+
+  # A rating is shown to one decimal, so it only counts as changed at that
+  # precision. Comparing raw floats recorded provider vote drift (7.81 to 7.84)
+  # as "Rating 7.8 → 7.8" on every weekly refresh.
+  defp metadata_value_changed?(:vote_average, old, new),
+    do: format_rating(old) != format_rating(new)
+
+  defp metadata_value_changed?(_field, old, new), do: values_differ?(old, new)
 
   defp values_differ?(nil, nil), do: false
   defp values_differ?(nil, ""), do: false
@@ -1608,6 +1634,9 @@ defmodule Mydia.Media do
         window. Defaults to `false`. Pass it whenever a person asked for this
         show specifically; leave it off for sweeps. See
         `should_skip_season_refresh?/1`.
+      - `:actor_type` / `:actor_id` - Recorded on the
+        `media_item.episode_titles_updated` event when a title changed.
+        Default `:system` / `"media_context"`.
 
   ## Returns
     - `{:ok, count}` - Number of episodes created
@@ -1711,41 +1740,23 @@ defmodule Mydia.Media do
             )
 
             # Invalidate season cache to ensure fresh data with translations
-            has_tvdb = not is_nil(media_item.tvdb_id)
-
-            Enum.each(seasons, fn season ->
-              tvdb_season_id =
-                if has_tvdb, do: Map.get(season, :tvdb_season_id), else: nil
-
-              # Use the configured language so the deleted key matches the one
-              # fetch_season_cached writes under (it now keys by configured
-              # language, not a hardcoded "en-US").
-              cache_key =
-                Metadata.build_season_cache_key(
-                  provider_id,
-                  season.season_number,
-                  Metadata.metadata_language(),
-                  tvdb_season_id
-                )
-
-              Mydia.Metadata.Cache.delete(cache_key)
-            end)
+            Enum.each(seasons, &invalidate_season_cache(media_item, provider_id, &1))
 
             # Fetch and create episodes for each season. Track failures: the
             # timestamp below throttles the next refresh, so stamping it after a
             # partial pass would hide the seasons that failed until the
             # threshold expires.
-            {episode_count, failed_seasons} =
-              Enum.reduce_while(seasons, {0, 0}, fn season, {count, failed} ->
+            {episode_count, failed_seasons, title_changes} =
+              Enum.reduce_while(seasons, {0, 0, []}, fn season, {count, failed, changes} ->
                 Logger.info("Processing episodes for season #{season.season_number}")
 
                 case create_episodes_for_season(media_item, season, config) do
-                  {:ok, created} ->
+                  {:ok, created, season_changes} ->
                     Logger.info(
                       "Processed #{created} episodes for season #{season.season_number}"
                     )
 
-                    {:cont, {count + created, failed}}
+                    {:cont, {count + created, failed, changes ++ season_changes}}
 
                   # An ordering switch or a provider switch landed while this
                   # pass was fetching. Every season still to come was fetched
@@ -1754,24 +1765,26 @@ defmodule Mydia.Media do
                   # is what leaves `seasons_refreshed_at` unstamped, which is
                   # what makes the next refresh re-fetch against the show as
                   # it actually is now.
-                  {:error, :refresh_target_changed} ->
+                  {:error, :refresh_target_changed, _season_changes} ->
                     Logger.warning(
                       "Aborting season refresh: show changed mid-refresh",
                       media_item_id: media_item.id
                     )
 
-                    {:halt, {count, failed + 1}}
+                    {:halt, {count, failed + 1, changes}}
 
-                  {:error, reason} ->
+                  {:error, reason, season_changes} ->
                     Logger.error(
                       "Failed to create episodes for season #{season.season_number}: #{inspect(reason)}"
                     )
 
-                    {:cont, {count, failed + 1}}
+                    {:cont, {count, failed + 1, changes ++ season_changes}}
                 end
               end)
 
             Logger.info("Total episodes processed: #{episode_count}")
+
+            record_title_changes(media_item, title_changes, opts)
 
             if failed_seasons > 0 do
               Logger.warning(
@@ -1796,6 +1809,92 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  Re-reads only the named seasons of a TV show from its provider.
+
+  Narrower than `refresh_episodes_for_tv_show/2` on purpose, because
+  `Mydia.Jobs.AiringEpisodeRefresh` calls it several times a day:
+
+    * It never fetches the show. Each season's `tvdb_season_id` comes from the
+      seasons stored in `media_item.metadata`, and a season missing there is
+      skipped.
+    * It never attempts title recovery. A show without a provider id returns
+      `{:error, :missing_provider_id}` and is left to the weekly pass.
+    * It does not update the media item row, stamp `seasons_refreshed_at`, or
+      consult the season throttle.
+
+  When an episode title changed it records one
+  `media_item.episode_titles_updated` event and rewrites exported NFOs.
+
+  ## Options
+    - `:config` - Metadata relay config. Defaults to `Metadata.default_relay_config/0`.
+    - `:actor_type` / `:actor_id` - Recorded on the title-change event.
+      Default `:system` / `"media_context"`.
+
+  ## Returns
+    - `{:ok, title_changes}` - every named season refreshed or was skipped
+    - `{:error, {:failed_seasons, count}}` - at least one season failed; title
+      changes from the seasons that succeeded are still recorded
+    - `{:error, :missing_provider_id}`
+  """
+  @spec refresh_seasons(MediaItem.t(), [non_neg_integer()], keyword()) ::
+          {:ok, [map()]} | {:error, term()}
+  def refresh_seasons(media_item, season_numbers, opts \\ [])
+
+  def refresh_seasons(%MediaItem{type: "tv_show"} = media_item, season_numbers, opts) do
+    config = Keyword.get(opts, :config) || Mydia.Metadata.default_relay_config()
+
+    case Mydia.Media.Refresh.resolve_provider(media_item) do
+      {nil, _source} ->
+        {:error, :missing_provider_id}
+
+      {provider_id, _source} ->
+        stored_seasons = stored_seasons_by_number(media_item)
+
+        {title_changes, failed} =
+          Enum.reduce(season_numbers, {[], 0}, fn season_number, {changes, failed} ->
+            case Map.fetch(stored_seasons, season_number) do
+              {:ok, season} ->
+                invalidate_season_cache(media_item, to_string(provider_id), season)
+
+                case create_episodes_for_season(media_item, season, config) do
+                  {:ok, _count, season_changes} ->
+                    {changes ++ season_changes, failed}
+
+                  {:error, reason, season_changes} ->
+                    Logger.warning("Season refresh failed",
+                      media_item_id: media_item.id,
+                      season_number: season_number,
+                      reason: inspect(reason)
+                    )
+
+                    {changes ++ season_changes, failed + 1}
+                end
+
+              :error ->
+                Logger.warning("Season missing from stored metadata, skipping refresh",
+                  media_item_id: media_item.id,
+                  season_number: season_number
+                )
+
+                {changes, failed}
+            end
+          end)
+
+        record_title_changes(media_item, title_changes, opts)
+
+        if title_changes != [] do
+          Mydia.Metadata.NfoWriter.maybe_write_nfos(media_item)
+        end
+
+        if failed > 0, do: {:error, {:failed_seasons, failed}}, else: {:ok, title_changes}
+    end
+  end
+
+  def refresh_seasons(%MediaItem{type: type}, _season_numbers, _opts) do
+    {:error, {:invalid_type, "Expected tv_show, got #{type}"}}
+  end
+
+  @doc """
   Records that a show's seasons were successfully refreshed.
 
   Writes straight to the column rather than through `changeset/2`, matching
@@ -1812,6 +1911,44 @@ defmodule Mydia.Media do
     |> where([m], m.id == ^id)
     |> Repo.update_all(set: [seasons_refreshed_at: now])
   end
+
+  # Deletes a season's Mydia-side cache entry so the next fetch goes to the
+  # relay. Uses the configured language so the deleted key matches the one
+  # fetch_season_by_ref_cached/4 writes under.
+  defp invalidate_season_cache(media_item, provider_id, season) do
+    tvdb_season_id =
+      if is_nil(media_item.tvdb_id), do: nil, else: Map.get(season, :tvdb_season_id)
+
+    provider_id
+    |> Mydia.Metadata.build_season_cache_key(
+      season.season_number,
+      Mydia.Metadata.metadata_language(),
+      tvdb_season_id
+    )
+    |> Mydia.Metadata.Cache.delete()
+  end
+
+  # One event per refresh, never one per season, and none when nothing
+  # changed: re-reading identical titles must stay out of the activity feed.
+  defp record_title_changes(_media_item, [], _opts), do: :ok
+
+  defp record_title_changes(media_item, title_changes, opts) do
+    Events.episode_titles_updated(
+      media_item,
+      title_changes,
+      Keyword.get(opts, :actor_type, :system),
+      Keyword.get(opts, :actor_id, "media_context")
+    )
+  end
+
+  defp stored_seasons_by_number(%MediaItem{
+         metadata: %Mydia.Metadata.Structs.MediaMetadata{seasons: seasons}
+       })
+       when is_list(seasons) do
+    Map.new(seasons, &{&1.season_number, &1})
+  end
+
+  defp stored_seasons_by_number(%MediaItem{}), do: %{}
 
   ## Calendar
 
@@ -1966,10 +2103,19 @@ defmodule Mydia.Media do
     # drift into monitoring everything regardless of the show's intent.
     monitor_new? = Keyword.fetch!(opts, :monitor_new?)
 
+    {count, _title_changes} = upsert_season_episodes(media_item, season_data, monitor_new?)
+    {:ok, count}
+  end
+
+  # The body of upsert_episodes_from_season/3, also returning the title changes
+  # it wrote so a refresh can report them. The public function keeps its
+  # {:ok, count} contract for the scanner, enricher and provider switch, none of
+  # which report titles.
+  defp upsert_season_episodes(media_item, season_data, monitor_new?) do
     episodes = season_data.episodes || []
 
-    count =
-      Enum.reduce(episodes, 0, fn episode, acc ->
+    {count, title_changes} =
+      Enum.reduce(episodes, {0, []}, fn episode, {count, title_changes} = acc ->
         season_num = episode.season_number
         episode_num = episode.episode_number
 
@@ -1993,7 +2139,7 @@ defmodule Mydia.Media do
                    metadata: Map.from_struct(episode),
                    monitored: monitor_new?
                  }) do
-              {:ok, _episode} -> acc + 1
+              {:ok, _episode} -> {count + 1, title_changes}
               {:error, _changeset} -> acc
             end
           else
@@ -2020,14 +2166,32 @@ defmodule Mydia.Media do
                    air_date: air_date,
                    metadata: Map.from_struct(episode)
                  }) do
-              {:ok, _episode} -> acc + 1
-              {:error, _changeset} -> acc
+              {:ok, _episode} ->
+                {count + 1, maybe_add_title_change(title_changes, existing, episode)}
+
+              {:error, _changeset} ->
+                acc
             end
           end
         end
       end)
 
-    {:ok, count}
+    {count, Enum.reverse(title_changes)}
+  end
+
+  defp maybe_add_title_change(title_changes, %Episode{title: old_title}, episode) do
+    if EpisodePlaceholder.title_change?(old_title, episode.name) do
+      change = %{
+        season: episode.season_number,
+        episode: episode.episode_number,
+        old: old_title,
+        new: episode.name
+      }
+
+      [change | title_changes]
+    else
+      title_changes
+    end
   end
 
   # Provider episode id is the only identity stable across a season
@@ -2126,11 +2290,11 @@ defmodule Mydia.Media do
         if refresh_target_unchanged?(media_item) do
           upsert_season(media_item, season, season_data)
         else
-          {:error, :refresh_target_changed}
+          {:error, :refresh_target_changed, []}
         end
 
       {:error, reason} ->
-        {:error, reason}
+        {:error, reason, []}
     end
   end
 
@@ -2146,14 +2310,19 @@ defmodule Mydia.Media do
         &(not is_nil(&1.season_number) and not is_nil(&1.episode_number))
       )
 
-    case upsert_episodes_from_season(media_item, season_data,
-           monitor_new?: should_monitor_new_episode?(media_item, season.season_number)
-         ) do
-      {:ok, count} when count < expected ->
-        {:error, {:incomplete_episode_upsert, expected, count}}
+    monitor_new? = should_monitor_new_episode?(media_item, season.season_number)
 
-      other ->
-        other
+    case upsert_season_episodes(media_item, season_data, monitor_new?) do
+      {count, title_changes} when count < expected ->
+        # The episodes upserted before the count fell short are already
+        # written, so any title change among them already landed in the
+        # database. Report it rather than dropping it: the caller still
+        # treats this as a failed season (so seasons_refreshed_at stays
+        # unstamped), but the title changes it already collected are not lost.
+        {:error, {:incomplete_episode_upsert, expected, count}, title_changes}
+
+      {count, title_changes} ->
+        {:ok, count, title_changes}
     end
   end
 

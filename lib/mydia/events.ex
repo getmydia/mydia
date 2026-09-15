@@ -809,6 +809,56 @@ defmodule Mydia.Events do
     })
   end
 
+  @max_title_change_samples 10
+
+  @doc """
+  Records a media_item.episode_titles_updated event.
+
+  One per show per refresh, and only when at least one episode title really
+  changed (see `Mydia.Media.EpisodePlaceholder.title_change?/2`). `count`
+  carries the full number of changes, while `changes` keeps the first ten so a
+  provider-wide rename cannot bloat the row.
+
+  ## Parameters
+    - `media_item` - The TV show MediaItem struct
+    - `changes` - `[%{season: integer, episode: integer, old: String.t() | nil, new: String.t()}]`
+    - `actor_type` - :user, :system, or :job
+    - `actor_id` - The ID of the actor
+
+  ## Examples
+
+      iex> episode_titles_updated(media_item, [%{season: 1, episode: 8, old: "TBA", new: "Harbor Lights"}], :job, "airing_episode_refresh")
+      :ok
+  """
+  def episode_titles_updated(media_item, changes, actor_type, actor_id) do
+    samples =
+      changes
+      |> Enum.take(@max_title_change_samples)
+      |> Enum.map(fn change ->
+        %{
+          "season" => change.season,
+          "episode" => change.episode,
+          "old" => change.old,
+          "new" => change.new
+        }
+      end)
+
+    create_event_async(%{
+      category: "media",
+      type: "media_item.episode_titles_updated",
+      actor_type: actor_type,
+      actor_id: actor_id,
+      resource_type: "media_item",
+      resource_id: media_item.id,
+      metadata: %{
+        "title" => media_item.title,
+        "media_type" => media_item.type,
+        "count" => length(changes),
+        "changes" => samples
+      }
+    })
+  end
+
   @doc """
   Records a download.initiated event.
 

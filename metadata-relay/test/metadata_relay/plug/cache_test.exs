@@ -80,6 +80,15 @@ defmodule MetadataRelay.Plug.CacheTest do
 
   defp calls(counter), do: Agent.get(counter, & &1)
 
+  # The TTL the in-memory adapter recorded for an exact cache key.
+  defp entry_ttl_ms(key) do
+    :metadata_relay_cache
+    |> :ets.tab2list()
+    |> Enum.find_value(fn {entry_key, _value, expires_at, _seq} ->
+      if entry_key == key, do: DateTime.diff(expires_at, DateTime.utc_now(), :millisecond)
+    end)
+  end
+
   # The TTL the plug chose is not visible in the response, so read the expiry
   # the in-memory adapter recorded for the stored search entry.
   defp search_entry_ttl_ms do
@@ -254,6 +263,40 @@ defmodule MetadataRelay.Plug.CacheTest do
       assert second.status == 200
       assert second.resp_body == first.resp_body
       assert calls(counter) == 1
+    end
+  end
+
+  describe "GET episode data" do
+    test "a season still settling is cached for six hours, a settled one keeps the season TTL" do
+      TMDBHelpers.set_tmdb_adapter(fn request ->
+        {request,
+         Req.Response.new(
+           status: 200,
+           body: %{
+             "episodes" => [
+               %{"episode_number" => 8, "air_date" => "2099-01-01", "name" => "Episode 8"}
+             ]
+           }
+         )}
+      end)
+
+      assert Router.call(Plug.Test.conn(:get, "/tmdb/tv/shows/9001/2"), @opts).status == 200
+      assert entry_ttl_ms("GET:/tmdb/tv/shows/9001/2:") <= :timer.hours(6)
+
+      TMDBHelpers.set_tmdb_adapter(fn request ->
+        {request,
+         Req.Response.new(
+           status: 200,
+           body: %{
+             "episodes" => [
+               %{"episode_number" => 1, "air_date" => "2001-01-01", "name" => "Quiet Tide"}
+             ]
+           }
+         )}
+      end)
+
+      assert Router.call(Plug.Test.conn(:get, "/tmdb/tv/shows/9001/1"), @opts).status == 200
+      assert entry_ttl_ms("GET:/tmdb/tv/shows/9001/1:") > :timer.hours(24)
     end
   end
 end

@@ -405,7 +405,7 @@ defmodule MydiaWeb.ActivityLive.Index do
   defp format_change_details(changes) do
     simple_changes =
       changes
-      |> Map.take(["title", "original_title", "year", "monitored", "monitor_new_seasons"])
+      |> Map.take(Presentation.simple_change_fields())
       |> Enum.map(fn {field, change} ->
         %{
           field: humanize_field_name(field),

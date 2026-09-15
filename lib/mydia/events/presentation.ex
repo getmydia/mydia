@@ -76,6 +76,12 @@ defmodule Mydia.Events.Presentation do
       title: "Episodes refreshed"
     },
     %{
+      type: "media_item.episode_titles_updated",
+      icon: "hero-pencil-square",
+      color: "text-info",
+      title: "Episode titles updated"
+    },
+    %{
       type: "media_item.duplicate_provider_id",
       icon: "hero-exclamation-triangle",
       color: "text-warning",
@@ -371,6 +377,20 @@ defmodule Mydia.Events.Presentation do
     "#{title_of(metadata)}, #{count} #{suffix}"
   end
 
+  def detail(%Event{type: "media_item.episode_titles_updated", metadata: metadata}) do
+    case {metadata["count"], metadata["changes"]} do
+      {1, [%{} = change]} ->
+        "#{title_of(metadata)}, S#{pad(change["season"])}E#{pad(change["episode"])} " <>
+          "\"#{episode_title_label(change["old"])}\" → \"#{episode_title_label(change["new"])}\""
+
+      {count, _changes} when is_integer(count) and count > 1 ->
+        "#{title_of(metadata)}, #{count} episode titles updated"
+
+      _ ->
+        title_of(metadata)
+    end
+  end
+
   def detail(%Event{type: "media_file.imported", metadata: metadata}) do
     title = metadata["media_title"] || "Unknown"
 
@@ -589,6 +609,16 @@ defmodule Mydia.Events.Presentation do
 
   defp resolution_of(metadata, prefix), do: metadata["#{prefix}_resolution"] || "unknown"
 
+  # The top-level (non-metadata) fields a media_item.updated changeset can
+  # carry. Shared by changes_summary/1 and
+  # MydiaWeb.ActivityLive.Index.format_change_details/1 so the one-line summary
+  # and the expanded breakdown always render the same fields.
+  @simple_change_fields ~w(title original_title year monitored monitor_new_seasons category category_override tmdb_id tvdb_id)
+
+  @doc "Top-level media_item.updated change fields the feed renders."
+  @spec simple_change_fields() :: [String.t()]
+  def simple_change_fields, do: @simple_change_fields
+
   # Short summary of a media_item.updated changeset, for the one-line label.
   # The expandable per-field breakdown stays in the LiveView.
   defp changes_summary(nil), do: nil
@@ -603,7 +633,7 @@ defmodule Mydia.Events.Presentation do
 
     simple_fields =
       changes
-      |> Map.take(["title", "original_title", "year", "monitored", "monitor_new_seasons"])
+      |> Map.take(@simple_change_fields)
       |> Map.keys()
       |> Enum.map(&field_label/1)
 
@@ -640,6 +670,10 @@ defmodule Mydia.Events.Presentation do
     "year" => "Year",
     "monitored" => "Monitoring",
     "monitor_new_seasons" => "New season monitoring",
+    "category" => "Category",
+    "category_override" => "Category override",
+    "tmdb_id" => "TMDB ID",
+    "tvdb_id" => "TVDB ID",
     "overview" => "Description",
     "poster" => "Poster",
     "backdrop" => "Backdrop",
@@ -698,6 +732,16 @@ defmodule Mydia.Events.Presentation do
   end
 
   defp pad(number), do: String.pad_leading("#{number}", 2, "0")
+
+  # The UI renders a missing episode title as "TBA", so the feed does too.
+  defp episode_title_label(title) when is_binary(title) do
+    case String.trim(title) do
+      "" -> "TBA"
+      trimmed -> trimmed
+    end
+  end
+
+  defp episode_title_label(_title), do: "TBA"
 
   defp humanize_bytes(bytes) when bytes >= 1_073_741_824,
     do: "#{Float.round(bytes / 1_073_741_824, 1)} GB"

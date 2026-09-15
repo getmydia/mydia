@@ -187,3 +187,25 @@ successful switch answers 201 rather than 200, so status checks need
 The failure was silent for a long time, because `seed_links/2` logs "could not
 mint a per-user token" and skips the profile. The symptom was an empty
 `media_server_user_links` table rather than an error anywhere.
+
+## Unannounced episodes arrive as placeholders
+
+Measured against relay.mydia.dev on 2026-09-14 for four shows with episodes
+airing that week:
+
+| Provider | Unannounced title | Unannounced overview | Screencap before air |
+| --- | --- | --- | --- |
+| TVDB (season extended, episode translations) | `"TBA "` (trailing space) or `"TBA"` | `null` or `"TBC"` | `image: null` |
+| TMDB (season) | `"Episode 8"` (the episode number) | `""` | `still_path: null` |
+
+TVDB can carry a real name days before air with no overview or screencap, and
+screencaps land around the air date. The stored episode name comes from
+`nameTranslations` when present (`EpisodeData.from_tvdb_response/2`), so the
+per-episode translations response goes stale the same way the season response
+does.
+
+`Mydia.Media.EpisodePlaceholder` is the single definition of these forms.
+`Mydia.Jobs.AiringEpisodeRefresh` re-reads seasons holding such episodes near
+their air date, and `MetadataRelay.Cache.Settling` shortens the relay's cache
+TTL for responses that still contain them. The relay keeps its own copy of the
+title rule because it is deployed separately.
