@@ -150,6 +150,23 @@ rather than a single code. See `Mydia.Metadata.LanguageCode.tvdb_candidates/1`.
 The relay does not proxy `/tvdb/languages`, so there is no authoritative list
 endpoint; validate against real show bundles.
 
+## TMDB's original_language can contradict spoken_languages
+
+TMDB's `original_language` is the language a title is catalogued under, and it
+is sometimes wrong. A film can carry `original_language: "en"` while its
+`spoken_languages` are `de`, `pl` and `yi`, with no English anywhere, and the
+file on disk is the German original.
+
+`Mydia.Upgrades.upgrade_policy/2` reads that disagreement as a metadata error.
+Under the server default, when the original is not among the spoken languages,
+every spoken language becomes acceptable, ranked after the original and
+English, so the audio language sweep leaves the file alone.
+
+When the original is spoken, it is trusted. `spoken_languages` also lists
+incidental dialogue, so an English film that lists Mandarin as spoken still has
+a Mandarin-only dub replaced. TVDB sends no spoken languages, so the rule never
+applies to TVDB shows.
+
 ## Metadata.genres/1 returns atom-keyed maps
 
 `Mydia.Metadata.genres/1` returns `{:ok, [%{id: integer(), name: String.t()}]}`.
