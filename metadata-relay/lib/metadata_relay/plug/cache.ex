@@ -18,13 +18,16 @@ defmodule MetadataRelay.Plug.Cache do
   - Uses method:path:query_string as cache key, where a cached POST's body
     fingerprint stands in for the query string
   - Applies appropriate TTL based on endpoint type, shortened to an hour for a
-    subtitle search that found nothing (see `@empty_result_ttl`)
+    subtitle search that found nothing (see `@empty_result_ttl`) and to six
+    hours for episode data still being filled in (see
+    `MetadataRelay.Cache.Settling`)
   - Skips caching for every other request and for errors
   """
 
   import Plug.Conn
 
   alias MetadataRelay.Cache
+  alias MetadataRelay.Cache.Settling
 
   # The only POST the relay caches. Search is the single request that spends the
   # shared SubDL key -- one key, 2000 searches a day, every install behind it --
@@ -209,20 +212,27 @@ defmodule MetadataRelay.Plug.Cache do
         body: body
       }
 
-      Cache.put(cache_key, cached_response, put_opts(conn, body))
+      Cache.put(cache_key, cached_response, put_opts(conn, cache_key, body))
     end
 
     conn
   end
 
-  defp put_opts(%Plug.Conn{method: "POST", request_path: @cacheable_post}, body) do
+  defp put_opts(%Plug.Conn{method: "POST", request_path: @cacheable_post}, _cache_key, body) do
     case Jason.decode(body) do
       {:ok, %{"subtitles" => []}} -> [ttl: @empty_result_ttl]
       _ -> []
     end
   end
 
-  defp put_opts(_conn, _body), do: []
+  defp put_opts(%Plug.Conn{method: "GET"}, cache_key, body) do
+    case Settling.ttl(cache_key, body) do
+      nil -> []
+      ttl -> [ttl: ttl]
+    end
+  end
+
+  defp put_opts(_conn, _cache_key, _body), do: []
 
   defp filter_headers(headers) do
     # Keep only relevant headers for cached responses. content-disposition is
