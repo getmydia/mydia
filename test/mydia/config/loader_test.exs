@@ -50,6 +50,7 @@ defmodule Mydia.Config.LoaderTest do
         "OBAN_POLL_INTERVAL",
         "MAX_TRANSCODE_HEIGHT",
         "AUTO_SEARCH_MIN_SEEDERS",
+        "DOWNLOAD_AUDIO_LANGUAGE",
         "TRASH_RETENTION_DAYS",
         "SUBTITLE_LANGUAGE",
         "DEFAULT_SEASON_MONITORING",
@@ -941,6 +942,21 @@ defmodule Mydia.Config.LoaderTest do
       {:ok, config} = Loader.load(config_file: @test_yaml_path)
 
       assert config.downloads.min_seeders == 0
+    end
+
+    test "DOWNLOAD_AUDIO_LANGUAGE sets the download audio choice" do
+      System.put_env("DOWNLOAD_AUDIO_LANGUAGE", "ja")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.downloads.audio_language == "ja"
+    end
+
+    test "download audio defaults to original, separate from playback audio" do
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.downloads.audio_language == "original"
+      assert config.streaming.audio_language == ["original", "en"]
     end
 
     test "an unparseable AUTO_SEARCH_MIN_SEEDERS is ignored, not applied" do

@@ -330,9 +330,20 @@ For PostgreSQL deployments (using `latest-pg` image):
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `METADATA_RELAY_URL` | URL for the metadata relay service | `https://relay.mydia.dev` |
-| `METADATA_LANGUAGE` | Language sent to TMDB/TVDB for titles, descriptions, and posters. Accepts ISO 639-1 codes (`de`) or BCP 47 tags (`de-DE`, `pt-BR`). | `en-US` |
 
 The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See [Architecture](../../contributing/architecture.md) for details.
+
+## Language
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DOWNLOAD_AUDIO_LANGUAGE` | Audio that automatic and manual search prefer when choosing a release: `original` for the show or film's own language, or a language code such as `en`, which prefers that dub and falls back to the original. Each show can override it from its page | `original` |
+| `AUDIO_LANGUAGE` | Audio track that plays, as a comma-separated list tried in order, for example `original,en`. When none matches, the track the file marks as default plays | `original,en` |
+| `PREFER_DEFAULT_AUDIO_TRACK` | Play the track the file marks as default and ignore `AUDIO_LANGUAGE` | `false` |
+| `SUBTITLE_LANGUAGE` | Subtitle languages to fetch, comma-separated, for example `en,es` | `en` |
+| `METADATA_LANGUAGE` | Language sent to TMDB/TVDB for titles, descriptions, and posters. Accepts ISO 639-1 codes (`de`) or BCP 47 tags (`de-DE`, `pt-BR`). | `en-US` |
+
+Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays.
 
 `METADATA_LANGUAGE` can also be set per-instance from **Admin > System > Settings**, under **Metadata**, in the admin UI; the env var overrides the database value when both are set.
 
