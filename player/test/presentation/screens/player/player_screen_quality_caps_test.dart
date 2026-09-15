@@ -477,4 +477,51 @@ void main() {
         reason: 'Original is the viewer overriding the memory');
     expect(sessionRequests(link), isEmpty);
   });
+
+  testWidgets(
+      'a stored Original direct plays despite remembered throughput below '
+      'the file bitrate', (tester) async {
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
+      // 11872000 bps = 11872 kbps, and 11872 * 1.3 = 15434 > 10685, so Auto
+      // would not direct play this file.
+      streamingCandidatesResponse(
+        duration: 1423,
+        height: 2160,
+        bitrate: 11872000,
+        directPlay: true,
+      ),
+      endStreamingSessionResponse(),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      settingsService: FakeSettingsService(defaultQuality: 'original'),
+    );
+    addTearDown(container.dispose);
+
+    // Seeded before the screen ever reads memory, at the same key
+    // `serverUrlProvider` resolves to for a non-p2p connection.
+    final memory = await container.read(playbackMemoryProvider.future);
+    await memory.observeThroughput('https://mydia.test', 10685);
+
+    final logs = <String>[];
+    await withCapturedDebugPrint(logs, () async {
+      await pumpPlayerScreen(tester, container);
+      await pumpUntil(
+          tester, () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')));
+    });
+
+    final planLine =
+        logs.firstWhere((l) => l.startsWith('[PlayerScreen] Plan: '));
+    expect(planLine, contains('directPlay'),
+        reason: 'Original asks for the file itself; a remembered slow link '
+            'does not turn it into a transcode');
+    expect(sessionRequests(link), isEmpty);
+  });
 }

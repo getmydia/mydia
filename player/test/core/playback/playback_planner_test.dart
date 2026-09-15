@@ -160,13 +160,26 @@ void main() {
       expect(plan.reason, PlanReason.directPlayAccepted);
     });
 
-    test('a bitrate that does not fit throughput with headroom transcodes', () {
+    test('Auto transcodes when the bitrate does not fit throughput', () {
       // 20000 * 1.3 = 26000 > 25000
-      final plan = planPlayback(
-        _inputs(fileBitrateKbps: 20000, knownThroughputKbps: 25000),
-      );
+      final plan = planPlayback(_inputs(
+        choice: QualityChoice.auto,
+        fileBitrateKbps: 20000,
+        knownThroughputKbps: 25000,
+      ));
       expect(plan.reason, PlanReason.bitrateExceedsThroughput);
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
+    });
+
+    test('Original direct plays even when the bitrate does not fit throughput',
+        () {
+      // The viewer asked for the file's own bytes: a slow link buffers
+      // rather than being swapped for a transcode.
+      final plan = planPlayback(
+        _inputs(fileBitrateKbps: 20000, knownThroughputKbps: 10000),
+      );
+      expect(plan, isA<DirectPlayPlan>());
+      expect(plan.reason, PlanReason.directPlayAccepted);
     });
 
     test('a bitrate that fits, or an unknown one, direct plays', () {
@@ -280,15 +293,29 @@ void main() {
       expect(plan.reason, PlanReason.copyRejectedByMime);
     });
 
-    test('a bandwidth blocker also blocks copy, which carries the same bytes',
-        () {
+    test(
+        'for Auto a bandwidth blocker also blocks copy, which carries the '
+        'same bytes', () {
       final plan = planPlayback(_inputs(
         candidates: _remuxList,
+        choice: QualityChoice.auto,
         fileBitrateKbps: 20000,
         knownThroughputKbps: 20000,
       ));
       expect((plan as HlsPlan).strategy, HlsStrategy.transcode);
       expect(plan.reason, PlanReason.bitrateExceedsThroughput);
+    });
+
+    test('Original copies even when the bitrate does not fit throughput', () {
+      // Web, so direct play is structurally out and copy is what decides.
+      final plan = planPlayback(_inputs(
+        candidates: _remuxList,
+        isWeb: true,
+        fileBitrateKbps: 20000,
+        knownThroughputKbps: 10000,
+      ));
+      expect((plan as HlsPlan).strategy, HlsStrategy.copy);
+      expect(plan.reason, PlanReason.copyAccepted);
     });
   });
 
@@ -413,7 +440,11 @@ void main() {
 
   group('fallbackPlan', () {
     test('unknown throughput lands one below the top', () {
-      final plan = fallbackPlan(sourceHeight: 1080, throughputKbps: null);
+      final plan = fallbackPlan(
+        choice: QualityChoice.auto,
+        sourceHeight: 1080,
+        throughputKbps: null,
+      );
       expect(plan.strategy, HlsStrategy.transcode);
       expect(plan.rung.label, '720p');
       expect(plan.adaptive, isTrue);
@@ -422,23 +453,47 @@ void main() {
 
     test('a one-rung ladder lands on that rung', () {
       expect(
-        fallbackPlan(sourceHeight: 400, throughputKbps: null).rung.label,
+        fallbackPlan(
+          choice: QualityChoice.auto,
+          sourceHeight: 400,
+          throughputKbps: null,
+        ).rung.label,
         '360p',
       );
     });
 
     test('known throughput uses the same rule as starting', () {
       expect(
-        fallbackPlan(sourceHeight: 1080, throughputKbps: 6000).rung.label,
+        fallbackPlan(
+          choice: QualityChoice.auto,
+          sourceHeight: 1080,
+          throughputKbps: 6000,
+        ).rung.label,
         '720p',
       );
     });
 
     test('a source below every rung falls back to Original', () {
       expect(
-        fallbackPlan(sourceHeight: 200, throughputKbps: null).rung,
+        fallbackPlan(
+          choice: QualityChoice.auto,
+          sourceHeight: 200,
+          throughputKbps: null,
+        ).rung,
         QualityRung.original,
       );
+    });
+
+    test('Original lands on a transcode at the source resolution', () {
+      final plan = fallbackPlan(
+        choice: QualityChoice.original,
+        sourceHeight: 2160,
+        throughputKbps: 6000,
+      );
+      expect(plan.strategy, HlsStrategy.transcode);
+      expect(plan.rung, QualityRung.original);
+      expect(plan.adaptive, isFalse);
+      expect(plan.reason, PlanReason.fallbackFromFailure);
     });
   });
 }

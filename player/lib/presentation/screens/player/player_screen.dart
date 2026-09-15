@@ -1730,6 +1730,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final position = _timeline.toReal(player.state.position);
     final throughput = action.throughputKbps ?? inputs.knownThroughputKbps;
     final plan = fallbackPlan(
+      choice: QualityChoice.fromRung(_selectedQuality),
       sourceHeight: inputs.sourceHeight,
       throughputKbps: throughput,
     );
@@ -1761,10 +1762,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
-    // A choice that could not be honoured becomes Auto for the rest of this
-    // playback. Only in memory: the stored default is the viewer's, and one
-    // file failing here says nothing about the next.
-    if (mounted) setState(() => _settledQuality = QualityRung.auto);
+    // The choice stays the viewer's: `fallbackPlan` already honours it as
+    // closely as this device allows. The stored default is never written
+    // here either, since one file failing says nothing about the next.
     _showPlaybackSnackBar(fallbackMessage(action.reason));
     try {
       await _switchSource(plan, at: position);

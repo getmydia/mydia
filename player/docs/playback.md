@@ -33,24 +33,25 @@ throughput says the file will not fit, in which case it asks for the highest
 adaptive rung that does. Knowing nothing about the connection is not evidence
 against it, so a first play, and every web play (web never measures
 throughput), transcodes uncapped. A fallback after a playback failure is a
-different case: it steps down deliberately rather than waiting for evidence
-(`fallbackPlan`; see "Verification" below). Original is the viewer's
-override: it bypasses remembered decode failures, wherever that choice came
-from. A fixed rung pins its own caps and always transcodes, skipping both
-checks below.
+different case: under Auto it steps down deliberately rather than waiting for
+evidence (`fallbackPlan`; see "Verification" below). Original is the viewer's
+override: it bypasses remembered decode failures and remembered throughput,
+wherever that choice came from. A fixed rung pins its own caps and always
+transcodes, skipping both checks below.
 
 Three rules, in order, decide between direct play, copy and transcode for
 Auto and Original alike. Direct play needs native, a leading DIRECT_PLAY or
-REMUX, no fixed rung chosen, and a bitrate that fits remembered throughput
-with 30% headroom. Copy needs the same bitrate condition plus a non-leading
-HLS_COPY, and on web a MIME string `MediaSource.isTypeSupported` accepts.
-Otherwise transcode.
+REMUX, and no fixed rung chosen; for Auto it also needs a bitrate that fits
+remembered throughput with 30% headroom. Copy needs a non-leading HLS_COPY,
+the same bitrate condition for Auto, and on web a MIME string
+`MediaSource.isTypeSupported` accepts. Otherwise transcode.
 
 A shape known to fail here (the failure memory below) also blocks direct play
 and copy for Auto; picking Original in the quality menu tries it anyway,
 whether that choice was just tapped, seeded from storage, or carried over
-from the previous episode. The bandwidth check has no such carve-out: it
-applies to every choice, Auto and Original alike.
+from the previous episode. Remembered throughput has the same carve-out:
+Original plays the file's own bytes on any link, and buffers if the link
+cannot keep up.
 
 The stored `default_quality` key: `auto` reads back as Auto, `original` as
 Original. Before the Auto rung existed, Original was the default and was
@@ -133,11 +134,12 @@ changes nothing about what is on screen. That case does not reopen the
 source; it only updates which choice is selected, and logs
 `[PlayerScreen] Quality change: <plan> (already playing)` instead.
 
-A fallback (see "Verification" above) always lands the session on Auto for
-the rest of the playback, in memory only: the stored default is the viewer's
-own preference, and one file failing to decode here says nothing about the
-next, so a fallback never writes it. Auto does not change rung again on its
-own mid-session; that needs a server-side rendition switch, not built yet.
+A fallback (see "Verification" above) keeps the viewer's choice. Under Auto
+it lands on `fallbackPlan`'s stepped-down adaptive rung and stays Auto. Under
+Original it lands on a transcode at the source resolution with no caps, still
+labelled Original. Neither writes the stored default: one file failing here
+says nothing about the next. Auto does not change rung again on its own
+mid-session; that needs a server-side rendition switch, not built yet.
 
 ## Compatibility
 

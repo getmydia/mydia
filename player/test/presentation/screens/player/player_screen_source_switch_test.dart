@@ -240,6 +240,21 @@ void main() {
 
       expect(decoder.opened, hasLength(2));
       expect(decoder.opened.last.uri, contains('/hls/'));
+      final fallbackStart = link.requests
+          .lastWhere((r) => r.variables.containsKey('strategy'))
+          .variables;
+      expect(fallbackStart.containsKey('maxHeight'), isFalse,
+          reason: 'Original falls back to a transcode at the source '
+              'resolution, not a stepped-down adaptive rung');
+      expect(fallbackStart.containsKey('maxBitrate'), isFalse);
+      await tester.pump();
+      expect(
+        tester
+            .widget<PlaybackChrome>(find.byType(PlaybackChrome))
+            .selectedQualityLabel,
+        'Original',
+        reason: 'the fallback keeps the viewer on Original, not Auto',
+      );
       expect(playersCreated, 1);
       expect(decoder.disposed, isFalse);
       expect(find.byType(PlaybackChrome), findsOneWidget);
@@ -257,7 +272,7 @@ void main() {
             const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080)),
       );
       expect(settings.defaultQuality, 'original',
-          reason: 'a fallback turns this playback to Auto in memory only');
+          reason: 'a fallback never writes the stored default');
       expect(settings.setDefaultQualityCalls, 0);
 
       decoder.advance(const Duration(seconds: 1));
