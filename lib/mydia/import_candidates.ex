@@ -1656,7 +1656,11 @@ defmodule Mydia.ImportCandidates do
   recognised as the same place.
 
   A file that could not be removed gets its candidate row back, under its own
-  id, with the reason in `queue_error`.
+  id, with the reason in `queue_error`. If the worker dies after a claim commits
+  and before the unlink, the request is lost but the file is not: it stays on
+  disk and the next scan lists it again. Keeping a row through the unlink
+  instead would leave it for a promotion to take, which is the race the claim
+  exists to close.
 
   `:after_claim` is a zero-arity function run between the claim and the unlink,
   for tests that need to act inside that window.

@@ -1108,25 +1108,29 @@ defmodule Mydia.Library do
   this takes the path itself.
   """
   @spec delete_path_from_disk(String.t()) :: :ok | {:error, term()}
+  # `File.rm/1` is called directly rather than behind a `File.exists?/1` check,
+  # so a file removed by someone else between the two is still an absent file
+  # (`:enoent`) and not a failure. The sidecar is left alone in that case: this
+  # call removed nothing, and a same-named `.nfo` can belong to another copy of
+  # the episode (`Episode.mp4` beside a vanished `Episode.mkv`).
   def delete_path_from_disk(absolute_path) when is_binary(absolute_path) do
-    if File.exists?(absolute_path) do
-      case File.rm(absolute_path) do
-        :ok ->
-          Logger.info("Deleted media file from disk", path: absolute_path)
-          Mydia.Metadata.NfoWriter.delete_nfo_for_file(absolute_path)
-          :ok
+    case File.rm(absolute_path) do
+      :ok ->
+        Logger.info("Deleted media file from disk", path: absolute_path)
+        Mydia.Metadata.NfoWriter.delete_nfo_for_file(absolute_path)
+        :ok
 
-        {:error, reason} ->
-          Logger.error("Failed to delete media file from disk",
-            path: absolute_path,
-            reason: inspect(reason)
-          )
+      {:error, :enoent} ->
+        Logger.debug("Media file already doesn't exist on disk", path: absolute_path)
+        :ok
 
-          {:error, reason}
-      end
-    else
-      Logger.debug("Media file already doesn't exist on disk", path: absolute_path)
-      :ok
+      {:error, reason} ->
+        Logger.error("Failed to delete media file from disk",
+          path: absolute_path,
+          reason: inspect(reason)
+        )
+
+        {:error, reason}
     end
   end
 

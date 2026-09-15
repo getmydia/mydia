@@ -1443,6 +1443,25 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       assert has_element?(view, "#band-queued", "1")
     end
 
+    test "a member row queued for another operation offers no delete button", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [rematching, pending] = seed_group(lp, "quillmere bay", %{file_count: 2, confidence: nil})
+
+      Repo.update_all(from(c in ImportCandidate, where: c.id == ^rematching.id),
+        set: [queued_op: "rematch"]
+      )
+
+      group = fetch_group(lp, "quillmere bay")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#group-toggle-#{ImportCandidateGroup.dom_id(group)}") |> render_click()
+
+      refute has_element?(view, "#delete-member-#{rematching.id}")
+      refute has_element?(view, "#member-deleting-#{rematching.id}")
+      assert has_element?(view, "#delete-member-#{pending.id}")
+    end
+
     test "a stale click on a file that is already queued says so", %{conn: conn} do
       lp = library_path_fixture(%{type: "series"})
       [candidate, _sibling] = seed_group(lp, "quillmere bay", %{file_count: 2})

@@ -501,7 +501,10 @@ defmodule MydiaWeb.ImportMediaLive.Components do
                   </div>
                 </form>
 
+                <%!-- A row queued for accept or re-match cannot be queued for delete
+                too (`queue_delete_candidate/1` refuses it), so it gets no button. --%>
                 <button
+                  :if={is_nil(candidate.queued_op)}
                   type="button"
                   id={"delete-member-#{candidate.id}"}
                   class="btn btn-xs btn-ghost btn-square text-error/70 hover:text-error hover:bg-error/10 transition-colors"
