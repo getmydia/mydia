@@ -48,8 +48,10 @@ defmodule Mydia.Jobs.UpgradeSweep do
     queue: :search,
     max_attempts: 3,
     # :args is part of uniqueness so a run scoped to one item never collides
-    # with the daily run, whose args are empty.
-    unique: [period: 3600, fields: [:worker, :args]]
+    # with the daily run, whose args are empty. Only in-flight runs count
+    # (`states: :incomplete`), so a finished scoped run never blocks the
+    # follow-up to a later change.
+    unique: [period: 3600, fields: [:worker, :args], states: :incomplete]
 
   require Logger
 
