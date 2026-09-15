@@ -592,19 +592,39 @@ defmodule Mydia.Upgrades do
     policy = upgrade_policy(media_item)
     old_languages = FileLanguages.detect(old_file)
     new_languages = new_file_languages(new_file, policy)
-    verdict = FileLanguages.compare(policy, old_languages, new_languages)
+    verdict = compare_new_file_languages(policy, old_languages, new_languages)
 
     {verdict,
      %{
        reason: if(verdict == :equal, do: :quality, else: :language),
        old_audio_languages: FileLanguages.to_list(old_languages),
-       new_audio_languages: FileLanguages.to_list(new_languages)
+       new_audio_languages: audio_language_list(new_languages)
      }}
   end
 
+  # A guessed title (ReleaseLanguages `assumed?: true`) is the same weaker
+  # evidence Comparator.language_win?/4 already discounts at grab time: it
+  # counts in the new file's favour only when the old file carries none of
+  # the policy's languages, and never against it. Anywhere else an assumed
+  # detection ranks as a tie, leaving the quality margin to decide, so
+  # finalize never rejects or blacklists a file on a guess.
+  defp compare_new_file_languages(policy, old_languages, {:assumed, languages}) do
+    case FileLanguages.compare(policy, old_languages, {:known, languages}) do
+      :better ->
+        if FileLanguages.none_preferred?(policy, old_languages), do: :better, else: :equal
+
+      _ ->
+        :equal
+    end
+  end
+
+  defp compare_new_file_languages(policy, old_languages, new_languages),
+    do: FileLanguages.compare(policy, old_languages, new_languages)
+
   # ffprobe is the authority for the new file. When it tagged no audio
-  # language, the title of the release the file came from is the best evidence
-  # left, and it is the same detection that let the grab through.
+  # language, the title of the release the file came from is the best
+  # evidence left. A guessed title only counts here where grab time would
+  # also have trusted it (see compare_new_file_languages/3).
   defp new_file_languages(new_file, policy) do
     case FileLanguages.detect(new_file) do
       {:known, _languages} = known -> known
@@ -615,11 +635,17 @@ defmodule Mydia.Upgrades do
   defp title_languages(new_file, policy) do
     with download_id when is_binary(download_id) <- download_id_for(new_file),
          %Download{title: title} when is_binary(title) <- Repo.get(Download, download_id) do
-      {:known, ReleaseLanguages.detect(title, policy.original_language).languages}
+      case ReleaseLanguages.detect(title, policy.original_language) do
+        %ReleaseLanguages{assumed?: true, languages: languages} -> {:assumed, languages}
+        %ReleaseLanguages{languages: languages} -> {:known, languages}
+      end
     else
       _ -> :unknown
     end
   end
+
+  defp audio_language_list({:assumed, languages}), do: languages
+  defp audio_language_list(languages), do: FileLanguages.to_list(languages)
 
   # Task 10 review finding 3: the triggering conditions here (a quality
   # profile that got deleted or blanked out between grab and finalize, or a

@@ -187,6 +187,7 @@ defmodule Mydia.Jobs.UpgradeFinalizeLanguageTest do
 
     assert {:ok, :rejected} = finalize(new)
     refute Repo.reload!(old).trashed_at
+    assert event("media_file.upgrade_rejected", new).metadata["reason"] == "quality"
   end
 
   test "a new file with untagged audio is judged by its release title" do
@@ -202,7 +203,58 @@ defmodule Mydia.Jobs.UpgradeFinalizeLanguageTest do
 
     assert {:ok, :upgraded} = finalize(new)
     assert Repo.reload!(old).trashed_at
-    assert event("media_file.upgraded", new).metadata["new_audio_languages"] == ["en"]
+    event = event("media_file.upgraded", new)
+    assert event.metadata["new_audio_languages"] == ["en"]
+    assert event.metadata["reason"] == "language"
+  end
+
+  # The fixture's default release title ("Kaiju.Garden.S01E01.WEB-DL.x264-GRP")
+  # names no audio token, so ReleaseLanguages.detect/2 falls back to
+  # `assumed?: true` and guesses the original language, "ja". These three
+  # cover the guess-discounting ruling: a guess counts in the new file's
+  # favour only when the old file carries none of the policy's languages, and
+  # never gets to reject or blacklist a file on its own.
+  test "a guessed title never rejects a new file" do
+    {old, new, _download} =
+      language_pair(
+        override: "en",
+        old_resolution: "720p",
+        old_audio: ["eng"],
+        new_resolution: "4K",
+        new_audio: [nil]
+      )
+
+    assert {:ok, :upgraded} = finalize(new)
+    assert Repo.reload!(old).trashed_at
+    assert event("media_file.upgraded", new).metadata["reason"] == "quality"
+  end
+
+  test "a guessed title does not skip the margin over a file with a preferred language" do
+    {old, new, _download} =
+      language_pair(
+        old_resolution: "4K",
+        old_audio: ["eng"],
+        new_resolution: "720p",
+        new_audio: [nil]
+      )
+
+    assert {:ok, :rejected} = finalize(new)
+    refute Repo.reload!(old).trashed_at
+    assert event("media_file.upgrade_rejected", new).metadata["reason"] == "quality"
+  end
+
+  test "a guessed title still replaces a file with none of the preferred languages" do
+    {old, new, _download} =
+      language_pair(
+        old_resolution: "4K",
+        old_audio: ["rus"],
+        new_resolution: "720p",
+        new_audio: [nil]
+      )
+
+    assert {:ok, :upgraded} = finalize(new)
+    assert Repo.reload!(old).trashed_at
+    assert event("media_file.upgraded", new).metadata["reason"] == "language"
   end
 
   test "a language rejection from a season pack does not blacklist the pack" do
