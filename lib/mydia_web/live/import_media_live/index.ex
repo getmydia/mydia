@@ -450,6 +450,32 @@ defmodule MydiaWeb.ImportMediaLive.Index do
     end
   end
 
+  # One file straight from its member row. The button's `data-confirm` is the
+  # confirmation; the unlink runs in `Jobs.DeleteImportCandidates`, so this only
+  # stamps the marker and the row reads "Deleting…" straight away. Deleting
+  # bytes is gated on the delete permission, not the import one the rest of
+  # this page uses.
+  def handle_event("delete_member", %{"candidate_id" => id}, socket) do
+    with :ok <- Authorization.authorize_delete_media(socket) do
+      case ImportCandidates.queue_delete_candidate(id) do
+        {:ok, candidate} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Deleting #{Path.basename(candidate.relative_path)}.")
+           |> refresh_expanded_members()
+           |> refresh_counts()}
+
+        {:error, :not_found} ->
+          {:noreply, put_flash(socket, :info, "That file is no longer pending.")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not queue the delete: #{inspect(reason)}")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
   # `expanded_ids` tracks which groups are visually open (the chevron).
   # Expanding a group populates `@streams.members` with its candidates and
   # collapses any previously open group so that only the active group shows

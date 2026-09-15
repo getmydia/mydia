@@ -1415,4 +1415,56 @@ defmodule MydiaWeb.ImportMediaReviewTest do
              )
     end
   end
+
+  describe "deleting files" do
+    test "a member row's delete button queues that file and shows it as deleting",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [first, second] = seed_group(lp, "quillmere bay", %{file_count: 2, confidence: nil})
+      group = fetch_group(lp, "quillmere bay")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#group-toggle-#{ImportCandidateGroup.dom_id(group)}") |> render_click()
+
+      assert has_element?(
+               view,
+               ~s(#delete-member-#{first.id}[data-confirm="Permanently delete #{Path.basename(first.relative_path)} from disk? This cannot be undone."])
+             )
+
+      view |> element("#delete-member-#{first.id}") |> render_click()
+
+      assert Repo.reload!(first).queued_op == "delete"
+      assert is_nil(Repo.reload!(second).queued_op)
+      assert has_element?(view, "#member-deleting-#{first.id}")
+      refute has_element?(view, "#delete-member-#{first.id}")
+      refute has_element?(view, "#member-form-#{first.id}")
+      assert has_element?(view, "#delete-member-#{second.id}")
+      assert has_element?(view, "#band-queued", "1")
+    end
+
+    test "a stale click on a file that is already queued says so", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [candidate, _sibling] = seed_group(lp, "quillmere bay", %{file_count: 2})
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+      {:ok, _} = ImportCandidates.queue_delete_candidate(candidate.id)
+
+      render_click(view, "delete_member", %{"candidate_id" => candidate.id})
+
+      assert has_element?(view, "#flash-info", "no longer pending")
+    end
+
+    test "readonly users cannot delete a member file", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [candidate] = seed_group(lp, "readonly-member-delete")
+
+      readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+      {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+      render_click(view, "delete_member", %{"candidate_id" => candidate.id})
+
+      assert is_nil(Repo.reload!(candidate).queued_op)
+    end
+  end
 end

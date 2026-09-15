@@ -434,47 +434,71 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               </div>
             </div>
 
-            <form
-              :if={@group.media_type != "movie"}
-              id={"member-form-#{candidate.id}"}
-              phx-change="update_member_episode"
-              phx-submit="update_member_episode"
-              class="flex items-center gap-1.5 shrink-0 self-end sm:self-center"
-            >
-              <input type="hidden" name="candidate_id" value={candidate.id} />
-              <div class="join items-center bg-base-100 rounded-lg border border-base-300 shadow-xs">
-                <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
-                  S
-                </span>
-                <.input
-                  type="number"
-                  name="season"
-                  value={member_season(candidate)}
-                  placeholder="--"
-                  min="0"
-                  max="999"
-                  phx-debounce="400"
-                  class="join-item input input-xs w-12 text-center font-mono border-0 focus:outline-none"
-                  container_class="contents"
-                  aria-label={"Season for #{member_filename(candidate)}"}
-                />
-                <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
-                  E
-                </span>
-                <.input
-                  type="number"
-                  name="episode"
-                  value={member_episode(candidate)}
-                  placeholder="--"
-                  min="0"
-                  max="9999"
-                  phx-debounce="400"
-                  class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none"
-                  container_class="contents"
-                  aria-label={"Episode for #{member_filename(candidate)}"}
-                />
+            <%= if candidate.queued_op == "delete" do %>
+              <span
+                id={"member-deleting-#{candidate.id}"}
+                class="badge badge-xs badge-error badge-outline gap-1 shrink-0 self-end sm:self-center"
+              >
+                <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> Deleting…
+              </span>
+            <% else %>
+              <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                <form
+                  :if={@group.media_type != "movie"}
+                  id={"member-form-#{candidate.id}"}
+                  phx-change="update_member_episode"
+                  phx-submit="update_member_episode"
+                  class="flex items-center gap-1.5"
+                >
+                  <input type="hidden" name="candidate_id" value={candidate.id} />
+                  <div class="join items-center bg-base-100 rounded-lg border border-base-300 shadow-xs">
+                    <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
+                      S
+                    </span>
+                    <.input
+                      type="number"
+                      name="season"
+                      value={member_season(candidate)}
+                      placeholder="--"
+                      min="0"
+                      max="999"
+                      phx-debounce="400"
+                      class="join-item input input-xs w-12 text-center font-mono border-0 focus:outline-none"
+                      container_class="contents"
+                      aria-label={"Season for #{member_filename(candidate)}"}
+                    />
+                    <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
+                      E
+                    </span>
+                    <.input
+                      type="number"
+                      name="episode"
+                      value={member_episode(candidate)}
+                      placeholder="--"
+                      min="0"
+                      max="9999"
+                      phx-debounce="400"
+                      class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none"
+                      container_class="contents"
+                      aria-label={"Episode for #{member_filename(candidate)}"}
+                    />
+                  </div>
+                </form>
+
+                <button
+                  type="button"
+                  id={"delete-member-#{candidate.id}"}
+                  class="btn btn-xs btn-ghost btn-square text-error/70 hover:text-error hover:bg-error/10 transition-colors"
+                  title="Delete from disk"
+                  aria-label={"Delete #{member_filename(candidate)}"}
+                  phx-click="delete_member"
+                  phx-value-candidate_id={candidate.id}
+                  data-confirm={"Permanently delete #{member_filename(candidate)} from disk? This cannot be undone."}
+                >
+                  <.icon name="hero-trash" class="w-3.5 h-3.5" />
+                </button>
               </div>
-            </form>
+            <% end %>
           </li>
         </ul>
       </div>
