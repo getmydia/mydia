@@ -230,14 +230,16 @@ defmodule Mydia.Library.FileOrganizerTest do
         |> MediaItem.category_changeset(:anime_series)
         |> Repo.update()
 
-      {:ok, media_file} =
-        %MediaFile{}
-        |> MediaFile.scan_changeset(%{
+      # Attached straight to the show, with no episode: a legacy shape
+      # `MediaFile.changeset/2` now refuses, but `preview_destination/1` must
+      # still be able to organize such rows.
+      media_file =
+        %MediaFile{
           relative_path: "Naruto/Season 01/episode.mkv",
           library_path_id: library_path.id,
           media_item_id: media_item.id
-        })
-        |> Repo.insert()
+        }
+        |> Repo.insert!()
 
       %{media_file: media_file, base_path: base_path}
     end

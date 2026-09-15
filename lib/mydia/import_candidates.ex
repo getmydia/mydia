@@ -23,6 +23,7 @@ defmodule Mydia.ImportCandidates do
     ImportRun,
     MediaFile,
     PathAnchor,
+    ReleaseParser,
     SelectionScope
   }
 
@@ -278,27 +279,11 @@ defmodule Mydia.ImportCandidates do
       episode = Repo.preload(episode, [:media_item, media_files: :library_path])
 
       Enum.each(episode.media_files, fn file ->
-        library_path = file.library_path
-
-        anchor =
-          PathAnchor.anchor_for(
-            Path.join(library_path.path, file.relative_path),
-            library_path.path
-          )
-
-        {provider_type, provider_id} = provider_identity(episode.media_item)
-
-        case upsert(%{
-               library_path_id: file.library_path_id,
+        case stage_show_file(episode.media_item, file.library_path, %{
                relative_path: file.relative_path,
-               anchor_key: anchor.cluster_key,
                size: file.size,
                discovered_at: file.inserted_at,
-               provider_type: provider_type,
-               provider_id: provider_id,
-               media_type: "tv_show",
                parsed_info: %{
-                 "type" => "tv_show",
                  "season" => episode.season_number,
                  "episodes" => [episode.episode_number]
                }
@@ -312,6 +297,50 @@ defmodule Mydia.ImportCandidates do
 
       :ok
     end)
+  end
+
+  @doc """
+  Stages a TV file that belongs to `show` but to none of its episodes.
+
+  The candidate carries the show's provider identity, so `/import` offers the
+  right show, and `media_type: "tv_show"`. A TV file is never a `media_files`
+  row attached to the show itself: `Mydia.Library.MediaFile.changeset/2`
+  refuses that shape, and this is where such a file goes instead.
+
+  `attrs` needs `:relative_path`, `:size` and `:discovered_at`. `:parsed_info`
+  (string keys) is optional and is derived from the filename when absent.
+  """
+  @spec stage_show_file(Media.MediaItem.t(), LibraryPath.t(), map()) ::
+          {:ok, ImportCandidate.t()} | {:error, Ecto.Changeset.t()}
+  def stage_show_file(%Media.MediaItem{} = show, %LibraryPath{} = library_path, attrs) do
+    relative_path = Map.fetch!(attrs, :relative_path)
+
+    anchor =
+      PathAnchor.anchor_for(Path.join(library_path.path, relative_path), library_path.path)
+
+    {provider_type, provider_id} = provider_identity(show)
+
+    parsed_info =
+      attrs
+      |> Map.get_lazy(:parsed_info, fn -> filename_parsed_info(relative_path) end)
+      |> Map.put("type", "tv_show")
+
+    upsert(%{
+      library_path_id: library_path.id,
+      relative_path: relative_path,
+      anchor_key: anchor.cluster_key,
+      size: Map.fetch!(attrs, :size),
+      discovered_at: Map.fetch!(attrs, :discovered_at),
+      provider_type: provider_type,
+      provider_id: provider_id,
+      media_type: "tv_show",
+      parsed_info: parsed_info
+    })
+  end
+
+  defp filename_parsed_info(relative_path) do
+    parsed = ReleaseParser.parse(Path.basename(relative_path))
+    %{"season" => parsed.season, "episodes" => parsed.episodes || []}
   end
 
   # --- Grouped read model -------------------------------------------------

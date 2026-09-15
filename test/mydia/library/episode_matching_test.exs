@@ -7,19 +7,17 @@ defmodule Mydia.Library.EpisodeMatchingTest do
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
 
+  # A legacy row attached straight to the show: the shape MediaFile.changeset/2
+  # now refuses and match_files_to_episodes/1 exists to repair, so it is
+  # inserted as a bare struct.
   defp media_file_for(show, library_path, relative_path) do
-    {:ok, file} =
-      %MediaFile{}
-      |> MediaFile.changeset(%{
-        media_item_id: show.id,
-        library_path_id: library_path.id,
-        relative_path: relative_path,
-        path: "/series/#{relative_path}",
-        size: 1_000_000
-      })
-      |> Repo.insert()
-
-    file
+    Repo.insert!(%MediaFile{
+      media_item_id: show.id,
+      library_path_id: library_path.id,
+      relative_path: relative_path,
+      path: "/series/#{relative_path}",
+      size: 1_000_000
+    })
   end
 
   describe "match_files_to_episodes/1 title guard" do

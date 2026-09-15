@@ -55,8 +55,10 @@ defmodule Mydia.Library.EpisodeLinkInvariantTest do
       library_path: library_path,
       show: show
     } do
-      {:ok, file} =
-        Library.create_media_file(%{
+      # A legacy row attached straight to the show; the changeset refuses to
+      # create one, so it is inserted as a bare struct.
+      file =
+        Repo.insert!(%MediaFile{
           media_item_id: show.id,
           library_path_id: library_path.id,
           relative_path: "Fathom Rift S02E03 unmatched.mkv",

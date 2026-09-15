@@ -351,15 +351,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
           imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
+      # Each imported file lands straight on the show, with no episode link:
+      # the multi-file-pack shape Library.create_media_file/1 now refuses.
       for episode <- 1..2 do
-        {:ok, _file} =
-          Library.create_media_file(%{
-            relative_path: "Some Show/S01E0#{episode}.mkv",
-            library_path_id: library.id,
-            media_item_id: show.id,
-            size: 100,
-            metadata: %{"imported_from_download_id" => download.id}
-          })
+        legacy_show_media_file_fixture(%{
+          relative_path: "Some Show/S01E0#{episode}.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          size: 100,
+          metadata: %{"imported_from_download_id" => download.id}
+        })
       end
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
@@ -844,14 +845,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
           imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
-      {:ok, _file} =
-        Library.create_media_file(%{
-          relative_path: "Old Show/Season 01/S01E01.mkv",
-          library_path_id: library.id,
-          media_item_id: old_show.id,
-          size: 100,
-          metadata: %{"imported_from_download_id" => download.id}
-        })
+      # Imported straight onto the show, with no episode: the shape this
+      # describe block is about, and one Library.create_media_file/1 now
+      # refuses.
+      legacy_show_media_file_fixture(%{
+        relative_path: "Old Show/Season 01/S01E01.mkv",
+        library_path_id: library.id,
+        media_item_id: old_show.id,
+        size: 100,
+        metadata: %{"imported_from_download_id" => download.id}
+      })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
       render_click(view, "switch_tab", %{"tab" => "completed"})
@@ -875,14 +878,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
           imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
-      {:ok, _file} =
-        Library.create_media_file(%{
-          relative_path: "Imported Show/Season 01/S01E01.mkv",
-          library_path_id: library.id,
-          media_item_id: show.id,
-          size: 100,
-          metadata: %{"imported_from_download_id" => download.id}
-        })
+      # Imported straight onto the show, with no episode: the shape this
+      # describe block is about, and one Library.create_media_file/1 now
+      # refuses.
+      legacy_show_media_file_fixture(%{
+        relative_path: "Imported Show/Season 01/S01E01.mkv",
+        library_path_id: library.id,
+        media_item_id: show.id,
+        size: 100,
+        metadata: %{"imported_from_download_id" => download.id}
+      })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
       render_click(view, "switch_tab", %{"tab" => "completed"})
@@ -903,14 +908,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
           imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
-      {:ok, _file} =
-        Library.create_media_file(%{
-          relative_path: "Old Show/Season 01/S01E01.mkv",
-          library_path_id: library.id,
-          media_item_id: old_show.id,
-          size: 100,
-          metadata: %{"imported_from_download_id" => download.id}
-        })
+      # Imported straight onto the show, with no episode: the shape this
+      # describe block is about, and one Library.create_media_file/1 now
+      # refuses.
+      legacy_show_media_file_fixture(%{
+        relative_path: "Old Show/Season 01/S01E01.mkv",
+        library_path_id: library.id,
+        media_item_id: old_show.id,
+        size: 100,
+        metadata: %{"imported_from_download_id" => download.id}
+      })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
       render_click(view, "switch_tab", %{"tab" => "completed"})
@@ -949,14 +956,16 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
           imported_at: DateTime.utc_now() |> DateTime.truncate(:second)
         })
 
-      {:ok, _file} =
-        Library.create_media_file(%{
-          relative_path: "Old Show/Season 01/S01E01.mkv",
-          library_path_id: library.id,
-          media_item_id: old_show.id,
-          size: 100,
-          metadata: %{"imported_from_download_id" => download.id}
-        })
+      # Imported straight onto the show, with no episode: the shape this
+      # describe block is about, and one Library.create_media_file/1 now
+      # refuses.
+      legacy_show_media_file_fixture(%{
+        relative_path: "Old Show/Season 01/S01E01.mkv",
+        library_path_id: library.id,
+        media_item_id: old_show.id,
+        size: 100,
+        metadata: %{"imported_from_download_id" => download.id}
+      })
 
       {:ok, view, _html} = live(conn, ~p"/downloads")
       render_click(view, "switch_tab", %{"tab" => "completed"})

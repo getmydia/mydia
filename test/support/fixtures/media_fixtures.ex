@@ -174,6 +174,48 @@ defmodule Mydia.MediaFixtures do
     %{media_file | inserted_at: at}
   end
 
+  @doc """
+  Inserts a TV file attached straight to its show, with no episode.
+
+  `MediaFile.changeset/2` refuses this shape, so it is inserted as a bare
+  struct. Only rows written before that guard (and not yet cleared by
+  `Mydia.Jobs.ShowFileRepair`) look like this; use it for tests about how
+  such legacy rows are read. Takes the same defaults as `media_file_fixture/1`.
+  `:media_item_id` is required.
+  """
+  def legacy_show_media_file_fixture(attrs) do
+    attrs = Map.new(attrs)
+    _ = Map.fetch!(attrs, :media_item_id)
+
+    library_path_id =
+      Map.get_lazy(attrs, :library_path_id, fn -> library_path_fixture(%{type: "series"}).id end)
+
+    library_path = Mydia.Repo.get!(Mydia.Settings.LibraryPath, library_path_id)
+
+    relative_path =
+      Map.get(attrs, :relative_path, "test/file-#{System.unique_integer([:positive])}.mp4")
+
+    metadata =
+      Map.get_lazy(attrs, :metadata, fn ->
+        Mydia.Library.Structs.FileMetadata.from_map(%{"container" => "mp4", "duration" => 120.5})
+      end)
+
+    defaults = %{
+      library_path_id: library_path_id,
+      relative_path: relative_path,
+      path: Path.join(library_path.path, relative_path),
+      size: 1_000_000_000,
+      resolution: "1080p",
+      codec: "h264",
+      audio_codec: "aac",
+      analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+      metadata: metadata
+    }
+
+    struct!(Mydia.Library.MediaFile, Map.merge(defaults, attrs))
+    |> Mydia.Repo.insert!()
+  end
+
   @doc "Generate a durable import candidate."
   def import_candidate_fixture(attrs \\ %{}) do
     attrs = Map.new(attrs)

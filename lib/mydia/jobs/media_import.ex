@@ -218,6 +218,12 @@ defmodule Mydia.Jobs.MediaImport do
   # no less unfixable for it.
   defp terminal_failure?(:partial_import, attempt) when attempt >= 3, do: true
   defp terminal_failure?({:partial_import, _reason}, attempt) when attempt >= 3, do: true
+  # Every file resolved to no episode, and the download is flagged
+  # unresolved_files for an operator to assign. A few retries let a
+  # metadata refresh add a missing episode; past that, re-walking the same
+  # files every day changes nothing, and a pending retry keeps the download
+  # occupying its target. Stop and leave it in the issues queue.
+  defp terminal_failure?(:all_files_unresolved, attempt) when attempt >= 3, do: true
   # Too many distinct files claiming one destination filename. Retrying tries
   # the same exhausted suffixes; the parse or the download contents need
   # looking at.
@@ -1416,10 +1422,33 @@ defmodule Mydia.Jobs.MediaImport do
           {download.episode, dest_dir}
       end
 
+    tv_show? = match?(%{media_item: %{type: "tv_show"}}, download)
+
     # Handle unresolved files (season pack files where episode wasn't found)
     case {episode, dest_dir} do
       {:unresolved, file_info} ->
         {:unresolved, file_info}
+
+      # A TV file that resolved to no episode, with no download episode to fall
+      # back on. Importing it would attach it to the show itself, which the
+      # media file changeset refuses: route it to the issues queue instead,
+      # the same as a season-pack file whose episode is missing.
+      {nil, _dest_dir} when tv_show? ->
+        Logger.warning("TV file resolved to no episode; leaving it unresolved",
+          download_id: download.id,
+          file: file.name,
+          season: parsed.season,
+          episode: List.first(parsed.episodes || [])
+        )
+
+        {:unresolved,
+         %{
+           path: file.path,
+           name: file.name,
+           size: file.size,
+           parsed_season: parsed.season,
+           parsed_episode: List.first(parsed.episodes || [])
+         }}
 
       {episode, dest_dir} ->
         if skip_already_filed_episode?(episode, download) do

@@ -97,9 +97,19 @@ defmodule Mydia.Jobs.ExtraClassificationTest do
 
   test "ignores files attached to a tv show", %{library_path: lp} do
     # media_item_id IS NOT NULL is not a movie filter. On galactica 123 of 477
-    # such rows hang off a show that has no episode link yet.
+    # such rows hang off a show that has no episode link yet. `file/4` goes
+    # through MediaFile.changeset/2, which now refuses this shape, so this
+    # legacy row is built directly instead.
     show = media_item_fixture(%{type: "tv_show", metadata: %{runtime: 45}})
-    orphan = file(show, lp, 3 * 60)
+
+    orphan =
+      legacy_show_media_file_fixture(%{
+        media_item_id: show.id,
+        library_path_id: lp.id,
+        relative_path: "#{show.title}/#{System.unique_integer([:positive])}.mkv",
+        analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        metadata: %{duration: 3 * 60}
+      })
 
     assert :ok = run()
 

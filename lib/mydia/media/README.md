@@ -25,6 +25,19 @@ fixture passes either way, which is why both bugs shipped green. The same split
 applies to `Mydia.Playback.Progress` rows (`validate_one_parent/1`) and to
 `Streaming.progress_content_id/1`.
 
+The show itself never owns a version. `MediaFile.changeset/2` and
+`scan_changeset/2` refuse a row whose `media_item_id` is a `tv_show` and whose
+`episode_id` is NULL, unless `extra_kind` is set. Such a row rendered as a loose
+file on the show page and no episode could reach it; download import, the
+show-page re-scan and re-match all used to write it. A TV file with no
+resolvable episode is an import candidate (`ImportCandidates.stage_show_file/3`)
+or, during download import, an `unresolved_files` entry on the download.
+`Mydia.Jobs.ShowFileRepair` clears rows written before the guard. The check runs
+on every insert, and on an update whenever a parent column or `extra_kind` is
+written, so a test that needs a legacy row inserts `%MediaFile{}` directly with
+`Repo.insert!/1`, bypassing the changeset entirely rather than casting onto a new
+struct.
+
 ## One file can cover several episodes, and episode.media_files is many_to_many
 
 A release such as `S01E09E10` is a single file holding two episodes. Because

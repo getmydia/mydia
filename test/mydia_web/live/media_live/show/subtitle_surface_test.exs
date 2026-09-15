@@ -91,7 +91,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleSurfaceTest do
       user = user_fixture()
       show = media_item_fixture(%{type: "tv_show"})
       # `file` is a reserved ExUnit context key, hence `media_file` here.
-      media_file = media_file_fixture(%{media_item_id: show.id})
+      media_file = legacy_show_media_file_fixture(%{media_item_id: show.id})
 
       {:ok, user: user, show: show, media_file: media_file}
     end

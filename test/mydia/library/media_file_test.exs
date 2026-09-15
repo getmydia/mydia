@@ -333,23 +333,22 @@ defmodule Mydia.Library.MediaFileTest do
       assert hd(errors) =~ "cannot add movies to a library path configured for TV series only"
     end
 
-    test "handles TV show type correctly in :movies library", %{movies_library: movies_library} do
-      # Create a TV show media item
+    test "rejects a TV show attached directly, even in a :movies library", %{
+      movies_library: movies_library
+    } do
       tv_show = insert(:tv_show)
 
-      # Try to add the TV show media item directly (not an episode) to movies library
       changeset =
         %MediaFile{}
         |> MediaFile.changeset(%{
-          relative_path: "Breaking Bad/series.mkv",
+          relative_path: "Lantern Coast/series.mkv",
           library_path_id: movies_library.id,
           media_item_id: tv_show.id,
           size: 1_000_000_000
         })
 
-      # This should be allowed because media_item_id can point to TV shows
-      # The validation only prevents episodes in :movies libraries
-      assert changeset.valid?
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
     end
 
     test "validates library_path_id exists via foreign key", %{series_library: series_library} do
@@ -366,6 +365,153 @@ defmodule Mydia.Library.MediaFileTest do
 
       # Should be valid but type mismatch should fail
       refute changeset.valid?
+    end
+  end
+
+  describe "a TV file must belong to an episode" do
+    setup do
+      {:ok, library} =
+        %LibraryPath{}
+        |> LibraryPath.changeset(%{path: "/test/tv-guard-mixed", type: :mixed, monitored: true})
+        |> Repo.insert()
+
+      %{library: library, show: insert(:tv_show)}
+    end
+
+    test "changeset/2 rejects a file attached straight to a show", %{library: library, show: show} do
+      changeset =
+        MediaFile.changeset(%MediaFile{}, %{
+          relative_path: "Lantern Coast/loose.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          size: 1_000
+        })
+
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
+    end
+
+    test "scan_changeset/2 rejects it too", %{library: library, show: show} do
+      changeset =
+        MediaFile.scan_changeset(%MediaFile{}, %{
+          relative_path: "Lantern Coast/loose.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          size: 1_000
+        })
+
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
+    end
+
+    test "changeset/2 rejects a new struct whose parent was set before cast", %{
+      library: library,
+      show: show
+    } do
+      changeset =
+        MediaFile.changeset(%MediaFile{media_item_id: show.id}, %{
+          relative_path: "Lantern Coast/loose.mkv",
+          library_path_id: library.id,
+          size: 1_000
+        })
+
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
+    end
+
+    test "scan_changeset/2 rejects a new struct whose parent was set before cast", %{
+      library: library,
+      show: show
+    } do
+      changeset =
+        MediaFile.scan_changeset(%MediaFile{media_item_id: show.id}, %{
+          relative_path: "Lantern Coast/loose.mkv",
+          library_path_id: library.id,
+          size: 1_000
+        })
+
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
+    end
+
+    test "allows an extra on the show", %{library: library, show: show} do
+      changeset =
+        MediaFile.changeset(%MediaFile{}, %{
+          relative_path: "Lantern Coast/Featurettes/making-of.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          extra_kind: :other,
+          size: 1_000
+        })
+
+      assert changeset.valid?
+    end
+
+    test "allows a movie file", %{library: library} do
+      movie = insert(:media_item, type: "movie")
+
+      changeset =
+        MediaFile.changeset(%MediaFile{}, %{
+          relative_path: "Harbor Lights (2020)/Harbor.Lights.2020.mkv",
+          library_path_id: library.id,
+          media_item_id: movie.id,
+          size: 1_000
+        })
+
+      assert changeset.valid?
+    end
+
+    test "does not fire on an update that leaves the parent alone", %{
+      library: library,
+      show: show
+    } do
+      legacy =
+        Repo.insert!(%MediaFile{
+          relative_path: "Lantern Coast/legacy.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          size: 1_000
+        })
+
+      changeset =
+        MediaFile.changeset(legacy, %{
+          trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      assert changeset.valid?
+    end
+
+    test "rejects clearing extra_kind on an extra attached to a show", %{
+      library: library,
+      show: show
+    } do
+      extra =
+        Repo.insert!(%MediaFile{
+          relative_path: "Lantern Coast/Featurettes/making-of.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          extra_kind: :other,
+          size: 1_000
+        })
+
+      changeset = MediaFile.changeset(extra, %{extra_kind: nil, extra_source: :operator})
+
+      refute changeset.valid?
+      assert "a TV show's file must belong to an episode" in errors_on(changeset).episode_id
+    end
+
+    test "allows marking a show-level file as an extra", %{library: library, show: show} do
+      legacy =
+        Repo.insert!(%MediaFile{
+          relative_path: "Lantern Coast/loose-extra.mkv",
+          library_path_id: library.id,
+          media_item_id: show.id,
+          size: 1_000
+        })
+
+      changeset = MediaFile.changeset(legacy, %{extra_kind: :other, extra_source: :operator})
+
+      assert changeset.valid?
     end
   end
 

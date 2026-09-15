@@ -605,6 +605,162 @@ defmodule Mydia.Jobs.MediaImportTest do
     end
 
     @tag :tmp_dir
+    test "TV file naming an episode the show lacks is unresolved, not attached to the show", %{
+      tmp_dir: tmp_dir
+    } do
+      # With no download episode to fall back on, this file used to be
+      # imported with media_item_id set to the show and no episode: a loose
+      # file on the show page that no episode could reach.
+      library_path = create_test_library_path(tmp_dir, :series)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      video_file = Path.join(download_dir, "Quiet.Harbor.S02E05.1080p.WEB.mkv")
+      File.write!(video_file, "fake video content")
+
+      media_item = media_item_fixture(%{type: "tv_show", title: "Quiet Harbor"})
+      episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 1})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "MissingEpisodeClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "MissingEpisodeClient",
+          download_client_id: "missingep123"
+        })
+
+      assert {:error, :all_files_unresolved} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      updated = Mydia.Downloads.get_download!(download.id)
+      assert updated.match_status == "unresolved_files"
+      assert [unresolved] = updated.metadata["unresolved_files"]
+      assert unresolved["name"] == "Quiet.Harbor.S02E05.1080p.WEB.mkv"
+      assert unresolved["parsed_season"] == 2
+      assert unresolved["parsed_episode"] == 5
+
+      assert Library.list_media_files(library_path_id: library_path.id) == []
+      assert File.exists?(video_file)
+    end
+
+    @tag :tmp_dir
+    test "cancels an all-unresolved import after the third attempt and clears retry metadata",
+         %{tmp_dir: tmp_dir} do
+      # Every file resolved to no episode (same shape as the test above), but
+      # this asserts the retry cap: attempt 3 must go terminal instead of
+      # retrying up to max_attempts: 1000 forever.
+      _library_path = create_test_library_path(tmp_dir, :series)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      video_file = Path.join(download_dir, "Quiet.Harbor.S02E05.1080p.WEB.mkv")
+      File.write!(video_file, "fake video content")
+
+      media_item = media_item_fixture(%{type: "tv_show", title: "Quiet Harbor"})
+      episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 1})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "MissingEpisodeTerminalClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "MissingEpisodeTerminalClient",
+          download_client_id: "missingep-terminal-123"
+        })
+
+      assert {:cancel, :all_files_unresolved} =
+               perform_job(
+                 MediaImport,
+                 %{
+                   "download_id" => download.id,
+                   "save_path" => download_dir
+                 },
+                 attempt: 3
+               )
+
+      updated = Mydia.Downloads.get_download!(download.id)
+      assert updated.match_status == "unresolved_files"
+      assert is_nil(updated.import_next_retry_at)
+    end
+
+    @tag :tmp_dir
+    test "TV file with no episode markers is unresolved, not attached to the show", %{
+      tmp_dir: tmp_dir
+    } do
+      library_path = create_test_library_path(tmp_dir, :series)
+
+      download_dir = Path.join(tmp_dir, "downloads")
+      File.mkdir_p!(download_dir)
+      video_file = Path.join(download_dir, "Quiet.Harbor.1080p.WEB.mkv")
+      File.write!(video_file, "fake video content")
+
+      media_item = media_item_fixture(%{type: "tv_show", title: "Quiet Harbor"})
+      episode_fixture(%{media_item_id: media_item.id, season_number: 1, episode_number: 1})
+
+      {:ok, _} =
+        Settings.create_download_client_config(%{
+          name: "NoMarkersClient",
+          type: :qbittorrent,
+          host: "nonexistent.invalid",
+          port: 9999,
+          username: "test",
+          password: "test",
+          enabled: true,
+          priority: 1
+        })
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          status: "completed",
+          completed_at: DateTime.utc_now(),
+          download_client: "NoMarkersClient",
+          download_client_id: "nomarkers123"
+        })
+
+      assert {:error, :all_files_unresolved} =
+               perform_job(MediaImport, %{
+                 "download_id" => download.id,
+                 "save_path" => download_dir
+               })
+
+      updated = Mydia.Downloads.get_download!(download.id)
+      assert updated.match_status == "unresolved_files"
+      assert [unresolved] = updated.metadata["unresolved_files"]
+      assert unresolved["name"] == "Quiet.Harbor.1080p.WEB.mkv"
+
+      assert Library.list_media_files(library_path_id: library_path.id) == []
+    end
+
+    @tag :tmp_dir
     test "classifies a path with no visible parent as a mapping mismatch and goes terminal",
          %{tmp_dir: _tmp_dir} do
       media_item =

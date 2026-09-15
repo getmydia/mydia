@@ -1791,7 +1791,7 @@ defmodule Mydia.MediaTest do
     test "returns the provider of a directly-linked file's series library" do
       item = media_item_fixture(%{type: "tv_show", title: "Show A"})
       lib = library_path_fixture(%{type: "series", tv_metadata_source: :tvdb})
-      media_file_fixture(%{media_item_id: item.id, library_path_id: lib.id})
+      legacy_show_media_file_fixture(%{media_item_id: item.id, library_path_id: lib.id})
 
       assert Mydia.Media.ProviderSwitch.resolve_library_provider(item) == {:ok, :tvdb}
     end
@@ -1809,7 +1809,7 @@ defmodule Mydia.MediaTest do
       item = media_item_fixture(%{type: "tv_show", title: "Show C"})
       tvdb_lib = library_path_fixture(%{type: "series", tv_metadata_source: :tvdb})
       tmdb_lib = library_path_fixture(%{type: "mixed", tv_metadata_source: :tmdb})
-      media_file_fixture(%{media_item_id: item.id, library_path_id: tvdb_lib.id})
+      legacy_show_media_file_fixture(%{media_item_id: item.id, library_path_id: tvdb_lib.id})
       episode = episode_fixture(%{media_item_id: item.id, season_number: 1, episode_number: 1})
       media_file_fixture(%{episode_id: episode.id, library_path_id: tmdb_lib.id})
 
@@ -1840,7 +1840,7 @@ defmodule Mydia.MediaTest do
       item = media_item_fixture(%{type: "tv_show", title: "Amb", metadata_source: :tvdb})
       a = library_path_fixture(%{type: "series", tv_metadata_source: :tvdb})
       b = library_path_fixture(%{type: "series", tv_metadata_source: :tmdb})
-      media_file_fixture(%{media_item_id: item.id, library_path_id: a.id})
+      legacy_show_media_file_fixture(%{media_item_id: item.id, library_path_id: a.id})
       ep = episode_fixture(%{media_item_id: item.id, season_number: 1, episode_number: 1})
       media_file_fixture(%{episode_id: ep.id, library_path_id: b.id})
 
@@ -1866,7 +1866,7 @@ defmodule Mydia.MediaTest do
         })
 
       lib = library_path_fixture(%{type: "series", tv_metadata_source: lib_provider})
-      media_file_fixture(%{media_item_id: item.id, library_path_id: lib.id})
+      legacy_show_media_file_fixture(%{media_item_id: item.id, library_path_id: lib.id})
       item
     end
   end
