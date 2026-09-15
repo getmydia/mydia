@@ -1503,6 +1503,115 @@ defmodule Mydia.ImportCandidates do
   @delete_page_size 250
 
   @doc """
+  Queues every file in a selection for permanent deletion from disk.
+
+  Same shape as `queue_accept/2` and `queue_rematch/1`: one `UPDATE` stamps
+  `queued_op: "delete"` and `Mydia.Jobs.DeleteImportCandidates` drains it, so
+  the work outlives the page and the rows read as queued the moment the
+  operator confirms.
+
+  Two differences. The rows are narrowed to the status the operator is looking
+  at (see `deletable_query/1`), and `dismissed_at` is cleared in the same
+  statement, so a delete from the Ignored view keeps the rule that a queued row
+  is never dismissed.
+
+  Returns a file count, not a group count: the confirm dialog promised files.
+  """
+  @spec queue_delete(SelectionScope.t()) :: {:ok, %{files: non_neg_integer()}} | {:error, term()}
+  def queue_delete(%SelectionScope{} = scope) do
+    scope
+    |> deletable_query()
+    |> mark_for_delete(scope.library_path_id)
+  end
+
+  @doc """
+  Queues one candidate for permanent deletion from disk.
+
+  Returns the candidate as it was before marking, or `{:error, :not_found}` when
+  it is gone or already queued for anything, which a stale click from another
+  tab produces routinely.
+  """
+  @spec queue_delete_candidate(binary()) ::
+          {:ok, ImportCandidate.t()} | {:error, :not_found} | {:error, term()}
+  def queue_delete_candidate(candidate_id) do
+    case Repo.get(ImportCandidate, candidate_id) do
+      %ImportCandidate{queued_op: nil} = candidate ->
+        ImportCandidate
+        |> where([c], c.id == ^candidate.id and is_nil(c.queued_op))
+        |> mark_for_delete(candidate.library_path_id)
+        |> case do
+          {:ok, %{files: 1}} -> {:ok, candidate}
+          {:ok, %{files: 0}} -> {:error, :not_found}
+          {:error, reason} -> {:error, reason}
+        end
+
+      _ ->
+        {:error, :not_found}
+    end
+  end
+
+  @doc "How many files `queue_delete/1` would queue for `scope` right now."
+  @spec count_files(SelectionScope.t()) :: non_neg_integer()
+  def count_files(%SelectionScope{} = scope) do
+    scope |> deletable_query() |> Repo.aggregate(:count)
+  end
+
+  # The rows a delete of `scope` takes: the selected anchors' candidates in the
+  # status being viewed, and nothing already queued. `candidate_query/1` alone
+  # selects every row in those anchors whatever its status, so without
+  # `filter_status/2` a delete from Ignored would also take a pending file a
+  # later scan added to the same folder. `count_files/1` counts this same query,
+  # so the confirm dialog and the delete cannot disagree.
+  defp deletable_query(%SelectionScope{} = scope) do
+    scope
+    |> candidate_query()
+    |> filter_status(scope.status)
+    |> where([c], is_nil(c.queued_op))
+  end
+
+  # The UPDATE and the job insert commit together. A job insert failing after
+  # the rows were marked would leave them queued with nothing to drain them,
+  # the same reason `detach_to_review/4` enqueues inside its transaction.
+  defp mark_for_delete(query, library_path_id) do
+    now = now()
+
+    Repo.transaction(fn ->
+      {files, _} =
+        Repo.update_all(query,
+          set: [
+            queued_op: "delete",
+            queued_at: now,
+            queue_error: nil,
+            dismissed_at: nil,
+            updated_at: now
+          ]
+        )
+
+      enqueue_delete_job(files, library_path_id)
+      files
+    end)
+    |> case do
+      {:ok, files} ->
+        if files > 0, do: broadcast(library_path_id)
+        {:ok, %{files: files}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # Nothing marked means nothing to drain, so no job. Called inside
+  # `mark_for_delete/2`'s transaction, which `Repo.rollback/1` aborts.
+  defp enqueue_delete_job(0, _library_path_id), do: :ok
+
+  defp enqueue_delete_job(_files, library_path_id) do
+    case enqueue(Mydia.Jobs.DeleteImportCandidates, library_path_id) do
+      {:ok, _job} -> :ok
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  @doc """
   Permanently deletes every file queued for delete on one library path, then
   its candidate row.
 

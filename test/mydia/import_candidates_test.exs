@@ -1307,4 +1307,131 @@ defmodule Mydia.ImportCandidatesTest do
       assert Repo.reload!(rematching).queued_op == "rematch"
     end
   end
+
+  describe "queue_delete/1, queue_delete_candidate/1 and count_files/1" do
+    defp page_scope(lp, anchor_key, status \\ "pending") do
+      lp.id |> SelectionScope.new(status) |> SelectionScope.select_page([anchor_key])
+    end
+
+    defp set_queued_op(candidate, op) do
+      Repo.update_all(from(c in ImportCandidate, where: c.id == ^candidate.id),
+        set: [queued_op: op]
+      )
+    end
+
+    defp truncated_now, do: DateTime.utc_now() |> DateTime.truncate(:second)
+
+    test "marks every pending file in the selection and enqueues the delete worker" do
+      lp = library_path_fixture(%{type: "series"})
+      candidates = seed_group(lp, "quillmere bay", 2)
+      scope = page_scope(lp, "quillmere bay")
+
+      assert ImportCandidates.count_files(scope) == 2
+      assert {:ok, %{files: 2}} = ImportCandidates.queue_delete(scope)
+
+      for candidate <- candidates do
+        stored = Repo.reload!(candidate)
+        assert stored.queued_op == "delete"
+        assert %DateTime{} = stored.queued_at
+      end
+
+      assert_enqueued(
+        worker: Mydia.Jobs.DeleteImportCandidates,
+        args: %{"library_path_id" => lp.id}
+      )
+    end
+
+    test "leaves rows already queued for accept or re-match alone" do
+      lp = library_path_fixture(%{type: "series"})
+      [accepting, rematching, pending] = seed_group(lp, "quillmere bay", 3)
+      set_queued_op(accepting, "accept")
+      set_queued_op(rematching, "rematch")
+
+      assert {:ok, %{files: 1}} = ImportCandidates.queue_delete(page_scope(lp, "quillmere bay"))
+      assert Repo.reload!(accepting).queued_op == "accept"
+      assert Repo.reload!(rematching).queued_op == "rematch"
+      assert Repo.reload!(pending).queued_op == "delete"
+    end
+
+    test "an Ignored-view delete takes the dismissed rows and clears dismissed_at" do
+      lp = library_path_fixture(%{type: "series"})
+      [dismissed] = seed_group(lp, "quillmere bay", 1, %{dismissed_at: truncated_now()})
+      scope = page_scope(lp, "quillmere bay", "ignored")
+
+      assert ImportCandidates.count_files(scope) == 1
+      assert {:ok, %{files: 1}} = ImportCandidates.queue_delete(scope)
+
+      stored = Repo.reload!(dismissed)
+      assert stored.queued_op == "delete"
+      assert is_nil(stored.dismissed_at)
+    end
+
+    test "a pending-view delete of a mixed folder leaves its dismissed rows alone" do
+      lp = library_path_fixture(%{type: "series"})
+      [dismissed] = seed_group(lp, "quillmere bay", 1, %{dismissed_at: truncated_now()})
+
+      pending =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "quillmere bay",
+          relative_path: "quillmere bay/new-arrival.mkv"
+        })
+
+      scope = page_scope(lp, "quillmere bay")
+
+      assert ImportCandidates.count_files(scope) == 1
+      assert {:ok, %{files: 1}} = ImportCandidates.queue_delete(scope)
+      assert Repo.reload!(pending).queued_op == "delete"
+      assert is_nil(Repo.reload!(dismissed).queued_op)
+      assert Repo.reload!(dismissed).dismissed_at
+    end
+
+    test "an Ignored-view delete of a mixed folder leaves its pending rows alone" do
+      lp = library_path_fixture(%{type: "series"})
+      [dismissed] = seed_group(lp, "quillmere bay", 1, %{dismissed_at: truncated_now()})
+
+      pending =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "quillmere bay",
+          relative_path: "quillmere bay/new-arrival.mkv"
+        })
+
+      assert {:ok, %{files: 1}} =
+               ImportCandidates.queue_delete(page_scope(lp, "quillmere bay", "ignored"))
+
+      assert Repo.reload!(dismissed).queued_op == "delete"
+      assert is_nil(Repo.reload!(pending).queued_op)
+    end
+
+    test "an empty selection queues nothing and enqueues no job" do
+      lp = library_path_fixture(%{type: "series"})
+      seed_group(lp, "quillmere bay", 1)
+      scope = SelectionScope.new(lp.id)
+
+      assert ImportCandidates.count_files(scope) == 0
+      assert {:ok, %{files: 0}} = ImportCandidates.queue_delete(scope)
+      refute_enqueued(worker: Mydia.Jobs.DeleteImportCandidates)
+    end
+
+    test "queue_delete_candidate/1 marks one row and refuses a missing or queued id" do
+      lp = library_path_fixture(%{type: "series"})
+      [candidate, sibling] = seed_group(lp, "quillmere bay", 2)
+
+      assert {:ok, %ImportCandidate{id: id}} =
+               ImportCandidates.queue_delete_candidate(candidate.id)
+
+      assert id == candidate.id
+      assert Repo.reload!(candidate).queued_op == "delete"
+      assert is_nil(Repo.reload!(sibling).queued_op)
+
+      assert_enqueued(
+        worker: Mydia.Jobs.DeleteImportCandidates,
+        args: %{"library_path_id" => lp.id}
+      )
+
+      assert {:error, :not_found} = ImportCandidates.queue_delete_candidate(candidate.id)
+      assert {:error, :not_found} = ImportCandidates.queue_delete_candidate(Ecto.UUID.generate())
+    end
+  end
 end
