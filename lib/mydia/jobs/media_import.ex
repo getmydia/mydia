@@ -1424,8 +1424,8 @@ defmodule Mydia.Jobs.MediaImport do
         {:unresolved, file_info}
 
       # A TV file that resolved to no episode, with no download episode to fall
-      # back on. Importing it would attach it to the show itself, which
-      # MediaFile.changeset/2 refuses: route it to the issues queue instead,
+      # back on. Importing it would attach it to the show itself, which the
+      # media file changeset refuses: route it to the issues queue instead,
       # the same as a season-pack file whose episode is missing.
       {nil, _dest_dir} when tv_show? ->
         Logger.warning("TV file resolved to no episode; leaving it unresolved",
