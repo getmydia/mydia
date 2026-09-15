@@ -1770,6 +1770,92 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  Re-reads only the named seasons of a TV show from its provider.
+
+  Narrower than `refresh_episodes_for_tv_show/2` on purpose, because
+  `Mydia.Jobs.AiringEpisodeRefresh` calls it several times a day:
+
+    * It never fetches the show. Each season's `tvdb_season_id` comes from the
+      seasons stored in `media_item.metadata`, and a season missing there is
+      skipped.
+    * It never attempts title recovery. A show without a provider id returns
+      `{:error, :missing_provider_id}` and is left to the weekly pass.
+    * It does not update the media item row, stamp `seasons_refreshed_at`, or
+      consult the season throttle.
+
+  When an episode title changed it records one
+  `media_item.episode_titles_updated` event and rewrites exported NFOs.
+
+  ## Options
+    - `:config` - Metadata relay config. Defaults to `Metadata.default_relay_config/0`.
+    - `:actor_type` / `:actor_id` - Recorded on the title-change event.
+      Default `:system` / `"media_context"`.
+
+  ## Returns
+    - `{:ok, title_changes}` - every named season refreshed or was skipped
+    - `{:error, {:failed_seasons, count}}` - at least one season failed; title
+      changes from the seasons that succeeded are still recorded
+    - `{:error, :missing_provider_id}`
+  """
+  @spec refresh_seasons(MediaItem.t(), [non_neg_integer()], keyword()) ::
+          {:ok, [map()]} | {:error, term()}
+  def refresh_seasons(media_item, season_numbers, opts \\ [])
+
+  def refresh_seasons(%MediaItem{type: "tv_show"} = media_item, season_numbers, opts) do
+    config = Keyword.get(opts, :config) || Mydia.Metadata.default_relay_config()
+
+    case Mydia.Media.Refresh.resolve_provider(media_item) do
+      {nil, _source} ->
+        {:error, :missing_provider_id}
+
+      {provider_id, _source} ->
+        stored_seasons = stored_seasons_by_number(media_item)
+
+        {title_changes, failed} =
+          Enum.reduce(season_numbers, {[], 0}, fn season_number, {changes, failed} ->
+            case Map.fetch(stored_seasons, season_number) do
+              {:ok, season} ->
+                invalidate_season_cache(media_item, to_string(provider_id), season)
+
+                case create_episodes_for_season(media_item, season, config) do
+                  {:ok, _count, season_changes} ->
+                    {changes ++ season_changes, failed}
+
+                  {:error, reason} ->
+                    Logger.warning("Season refresh failed",
+                      media_item_id: media_item.id,
+                      season_number: season_number,
+                      reason: inspect(reason)
+                    )
+
+                    {changes, failed + 1}
+                end
+
+              :error ->
+                Logger.warning("Season missing from stored metadata, skipping refresh",
+                  media_item_id: media_item.id,
+                  season_number: season_number
+                )
+
+                {changes, failed}
+            end
+          end)
+
+        record_title_changes(media_item, title_changes, opts)
+
+        if title_changes != [] do
+          Mydia.Metadata.NfoWriter.maybe_write_nfos(media_item)
+        end
+
+        if failed > 0, do: {:error, {:failed_seasons, failed}}, else: {:ok, title_changes}
+    end
+  end
+
+  def refresh_seasons(%MediaItem{type: type}, _season_numbers, _opts) do
+    {:error, {:invalid_type, "Expected tv_show, got #{type}"}}
+  end
+
+  @doc """
   Records that a show's seasons were successfully refreshed.
 
   Writes straight to the column rather than through `changeset/2`, matching
@@ -1815,6 +1901,15 @@ defmodule Mydia.Media do
       Keyword.get(opts, :actor_id, "media_context")
     )
   end
+
+  defp stored_seasons_by_number(%MediaItem{
+         metadata: %Mydia.Metadata.Structs.MediaMetadata{seasons: seasons}
+       })
+       when is_list(seasons) do
+    Map.new(seasons, &{&1.season_number, &1})
+  end
+
+  defp stored_seasons_by_number(%MediaItem{}), do: %{}
 
   ## Calendar
 
