@@ -1132,5 +1132,320 @@ defmodule Mydia.ImportCandidatesTest do
       assert stored.parsed_info["episodes"] == [7]
       assert stored.parsed_info["type"] == "tv_show"
     end
+
+    test "carries the show's title and year so the review row can name it" do
+      lp = library_path_fixture(%{type: "series"})
+
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Lantern Coast",
+          year: 2019,
+          tvdb_id: 900_005
+        })
+
+      assert {:ok, candidate} =
+               ImportCandidates.stage_show_file(show, lp, %{
+                 relative_path: "Lantern Coast/Season 01/extended-cut.mkv",
+                 size: 42,
+                 discovered_at: ~U[2026-09-01 12:00:00Z]
+               })
+
+      assert {candidate.title, candidate.year} == {"Lantern Coast", 2019}
+
+      assert ImportCandidates.get_group(lp.id, candidate.anchor_key).suggested_title ==
+               "Lantern Coast"
+    end
+  end
+
+  describe "drain_delete/2" do
+    setup do
+      root =
+        Path.join(System.tmp_dir!(), "mydia_import_delete_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(Path.join(root, "Quillmere Bay"))
+      on_exit(fn -> File.rm_rf(root) end)
+      %{lp: library_path_fixture(%{type: "series", path: root})}
+    end
+
+    defp queued_for_delete(lp, relative_path) do
+      candidate =
+        import_candidate_fixture(%{library_path_id: lp.id, relative_path: relative_path})
+
+      {1, _} =
+        Repo.update_all(from(c in ImportCandidate, where: c.id == ^candidate.id),
+          set: [queued_op: "delete"]
+        )
+
+      Repo.reload!(candidate)
+    end
+
+    test "removes the file, its NFO sidecar and the row", %{lp: lp} do
+      rel = "Quillmere Bay/Quillmere.Bay.S01E02.mkv"
+      nfo = Path.join(lp.path, "Quillmere Bay/Quillmere.Bay.S01E02.nfo")
+      File.write!(Path.join(lp.path, rel), "data")
+      File.write!(nfo, "<episodedetails/>")
+      candidate = queued_for_delete(lp, rel)
+
+      assert {:ok, %{deleted: 1, failed: 0, skipped: 0}} = ImportCandidates.drain_delete(lp.id)
+      refute File.exists?(Path.join(lp.path, rel))
+      refute File.exists?(nfo)
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "a file already gone from disk still loses its row", %{lp: lp} do
+      candidate = queued_for_delete(lp, "Quillmere Bay/already-gone.mkv")
+
+      assert {:ok, %{deleted: 1}} = ImportCandidates.drain_delete(lp.id)
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "a file that cannot be removed keeps its row, records why, and leaves the queue",
+         %{lp: lp} do
+      # A directory where the file should be makes File.rm fail even as root.
+      rel = "Quillmere Bay/as-dir.mkv"
+      File.mkdir_p!(Path.join(lp.path, rel))
+      candidate = queued_for_delete(lp, rel)
+
+      assert {:ok, %{deleted: 0, failed: 1}} = ImportCandidates.drain_delete(lp.id)
+
+      stored = Repo.reload!(candidate)
+      assert is_nil(stored.queued_op)
+      assert is_nil(stored.queued_at)
+      assert stored.queue_error =~ "Could not delete from disk"
+      assert File.dir?(Path.join(lp.path, rel))
+    end
+
+    test "never unlinks a path a media_files row references", %{lp: lp} do
+      rel = "Quillmere Bay/Quillmere.Bay.S01E03.mkv"
+      File.write!(Path.join(lp.path, rel), "data")
+      candidate = queued_for_delete(lp, rel)
+
+      show = media_item_fixture(%{type: "tv_show", title: "Quillmere Bay"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 3})
+      media_file_fixture(%{library_path_id: lp.id, episode_id: episode.id, relative_path: rel})
+
+      assert {:ok, %{deleted: 0, skipped: 1}} = ImportCandidates.drain_delete(lp.id)
+      assert File.exists?(Path.join(lp.path, rel))
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "never unlinks a file another library path owns through a nested root", %{lp: lp} do
+      # Nothing forbids one library path inside another, and a scan only asks
+      # whether its own library path owns a file, so the outer library can
+      # list the inner library's owned file as a candidate.
+      inner = library_path_fixture(%{type: "series", path: Path.join(lp.path, "Quillmere Bay")})
+      File.write!(Path.join(inner.path, "Quillmere.Bay.S01E04.mkv"), "data")
+      candidate = queued_for_delete(lp, "Quillmere Bay/Quillmere.Bay.S01E04.mkv")
+
+      show = media_item_fixture(%{type: "tv_show", title: "Quillmere Bay"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 4})
+
+      media_file_fixture(%{
+        library_path_id: inner.id,
+        episode_id: episode.id,
+        relative_path: "Quillmere.Bay.S01E04.mkv"
+      })
+
+      assert {:ok, %{deleted: 0, skipped: 1}} = ImportCandidates.drain_delete(lp.id)
+      assert File.exists?(Path.join(inner.path, "Quillmere.Bay.S01E04.mkv"))
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "claims the row before touching the disk, so no promotion can take the file mid-delete",
+         %{lp: lp} do
+      rel = "Quillmere Bay/Quillmere.Bay.S01E05.mkv"
+      path = Path.join(lp.path, rel)
+      File.write!(path, "data")
+      candidate = queued_for_delete(lp, rel)
+      test_pid = self()
+
+      after_claim = fn ->
+        send(test_pid, {:at_unlink, Repo.get(ImportCandidate, candidate.id), File.exists?(path)})
+      end
+
+      assert {:ok, %{deleted: 1}} = ImportCandidates.drain_delete(lp.id, after_claim: after_claim)
+      assert_received {:at_unlink, nil, true}
+      refute File.exists?(path)
+    end
+
+    test "a failed delete writes its reason onto a row a scan re-created mid-delete", %{lp: lp} do
+      rel = "Quillmere Bay/as-dir-rescanned.mkv"
+      File.mkdir_p!(Path.join(lp.path, rel))
+      candidate = queued_for_delete(lp, rel)
+
+      rescan = fn -> import_candidate_fixture(%{library_path_id: lp.id, relative_path: rel}) end
+
+      assert {:ok, %{failed: 1}} = ImportCandidates.drain_delete(lp.id, after_claim: rescan)
+
+      assert [row] =
+               Repo.all(
+                 from(c in ImportCandidate,
+                   where: c.library_path_id == ^lp.id and c.relative_path == ^rel
+                 )
+               )
+
+      assert row.id != candidate.id
+      assert is_nil(row.queued_op)
+      assert row.queue_error =~ "Could not delete from disk"
+    end
+
+    test "drains more rows than one page holds and leaves other ops queued", %{lp: lp} do
+      for n <- 1..3, do: queued_for_delete(lp, "Quillmere Bay/gone-#{n}.mkv")
+
+      rematching =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Quillmere Bay/keep.mkv"
+        })
+
+      Repo.update_all(from(c in ImportCandidate, where: c.id == ^rematching.id),
+        set: [queued_op: "rematch"]
+      )
+
+      assert {:ok, %{deleted: 3}} = ImportCandidates.drain_delete(lp.id, page_size: 2)
+      assert Repo.reload!(rematching).queued_op == "rematch"
+    end
+  end
+
+  describe "queue_delete/1, queue_delete_candidate/1 and count_files/1" do
+    defp page_scope(lp, anchor_key, status \\ "pending") do
+      lp.id |> SelectionScope.new(status) |> SelectionScope.select_page([anchor_key])
+    end
+
+    defp set_queued_op(candidate, op) do
+      Repo.update_all(from(c in ImportCandidate, where: c.id == ^candidate.id),
+        set: [queued_op: op]
+      )
+    end
+
+    defp truncated_now, do: DateTime.utc_now() |> DateTime.truncate(:second)
+
+    test "marks every pending file in the selection and enqueues the delete worker" do
+      lp = library_path_fixture(%{type: "series"})
+      candidates = seed_group(lp, "quillmere bay", 2)
+      scope = page_scope(lp, "quillmere bay")
+
+      assert ImportCandidates.count_files(scope) == 2
+      assert {:ok, %{files: 2}} = ImportCandidates.queue_delete(scope)
+
+      for candidate <- candidates do
+        stored = Repo.reload!(candidate)
+        assert stored.queued_op == "delete"
+        assert %DateTime{} = stored.queued_at
+      end
+
+      assert_enqueued(
+        worker: Mydia.Jobs.DeleteImportCandidates,
+        args: %{"library_path_id" => lp.id}
+      )
+    end
+
+    test "leaves rows already queued for accept or re-match alone" do
+      lp = library_path_fixture(%{type: "series"})
+      [accepting, rematching, pending] = seed_group(lp, "quillmere bay", 3)
+      set_queued_op(accepting, "accept")
+      set_queued_op(rematching, "rematch")
+
+      assert {:ok, %{files: 1}} = ImportCandidates.queue_delete(page_scope(lp, "quillmere bay"))
+      assert Repo.reload!(accepting).queued_op == "accept"
+      assert Repo.reload!(rematching).queued_op == "rematch"
+      assert Repo.reload!(pending).queued_op == "delete"
+    end
+
+    test "an Ignored-view delete takes the dismissed rows and clears dismissed_at" do
+      lp = library_path_fixture(%{type: "series"})
+      [dismissed] = seed_group(lp, "quillmere bay", 1, %{dismissed_at: truncated_now()})
+      scope = page_scope(lp, "quillmere bay", "ignored")
+
+      assert ImportCandidates.count_files(scope) == 1
+      assert {:ok, %{files: 1}} = ImportCandidates.queue_delete(scope)
+
+      stored = Repo.reload!(dismissed)
+      assert stored.queued_op == "delete"
+      assert is_nil(stored.dismissed_at)
+    end
+
+    test "a pending-view delete of a mixed folder leaves its dismissed rows alone" do
+      lp = library_path_fixture(%{type: "series"})
+      [dismissed] = seed_group(lp, "quillmere bay", 1, %{dismissed_at: truncated_now()})
+
+      pending =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "quillmere bay",
+          relative_path: "quillmere bay/new-arrival.mkv"
+        })
+
+      scope = page_scope(lp, "quillmere bay")
+
+      assert ImportCandidates.count_files(scope) == 1
+      assert {:ok, %{files: 1}} = ImportCandidates.queue_delete(scope)
+      assert Repo.reload!(pending).queued_op == "delete"
+      assert is_nil(Repo.reload!(dismissed).queued_op)
+      assert Repo.reload!(dismissed).dismissed_at
+    end
+
+    test "an Ignored-view delete of a mixed folder leaves its pending rows alone" do
+      lp = library_path_fixture(%{type: "series"})
+      [dismissed] = seed_group(lp, "quillmere bay", 1, %{dismissed_at: truncated_now()})
+
+      pending =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "quillmere bay",
+          relative_path: "quillmere bay/new-arrival.mkv"
+        })
+
+      assert {:ok, %{files: 1}} =
+               ImportCandidates.queue_delete(page_scope(lp, "quillmere bay", "ignored"))
+
+      assert Repo.reload!(dismissed).queued_op == "delete"
+      assert is_nil(Repo.reload!(pending).queued_op)
+    end
+
+    test "expected_files refuses the whole delete when the selection no longer matches" do
+      lp = library_path_fixture(%{type: "series"})
+      candidates = seed_group(lp, "quillmere bay", 3)
+      scope = page_scope(lp, "quillmere bay")
+
+      assert {:error, {:count_changed, 3}} =
+               ImportCandidates.queue_delete(scope, expected_files: 2)
+
+      assert Enum.all?(candidates, &is_nil(Repo.reload!(&1).queued_op))
+      refute_enqueued(worker: Mydia.Jobs.DeleteImportCandidates)
+
+      assert {:ok, %{files: 3}} = ImportCandidates.queue_delete(scope, expected_files: 3)
+    end
+
+    test "an empty selection queues nothing and enqueues no job" do
+      lp = library_path_fixture(%{type: "series"})
+      seed_group(lp, "quillmere bay", 1)
+      scope = SelectionScope.new(lp.id)
+
+      assert ImportCandidates.count_files(scope) == 0
+      assert {:ok, %{files: 0}} = ImportCandidates.queue_delete(scope)
+      refute_enqueued(worker: Mydia.Jobs.DeleteImportCandidates)
+    end
+
+    test "queue_delete_candidate/1 marks one row and refuses a missing or queued id" do
+      lp = library_path_fixture(%{type: "series"})
+      [candidate, sibling] = seed_group(lp, "quillmere bay", 2)
+
+      assert {:ok, %ImportCandidate{id: id}} =
+               ImportCandidates.queue_delete_candidate(candidate.id)
+
+      assert id == candidate.id
+      assert Repo.reload!(candidate).queued_op == "delete"
+      assert is_nil(Repo.reload!(sibling).queued_op)
+
+      assert_enqueued(
+        worker: Mydia.Jobs.DeleteImportCandidates,
+        args: %{"library_path_id" => lp.id}
+      )
+
+      assert {:error, :not_found} = ImportCandidates.queue_delete_candidate(candidate.id)
+      assert {:error, :not_found} = ImportCandidates.queue_delete_candidate(Ecto.UUID.generate())
+    end
   end
 end

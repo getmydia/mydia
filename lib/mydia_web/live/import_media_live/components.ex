@@ -225,11 +225,19 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             >
               <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> Restore {@count}
             </button>
+            <button
+              id="delete-selected"
+              class="btn btn-sm btn-ghost text-error"
+              disabled={@count == 0}
+              phx-click="confirm_delete_selected"
+            >
+              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete files
+            </button>
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
               Clear
             </button>
             <%!-- The Queued view's groups are already mid-import: Accept, Re-match,
-            Dismiss, and Restore all no-op there (their queries all require either
+            Dismiss, Restore and Delete all no-op there (their queries all require either
             no queued_op or a dismissed_at that a queued group never has), so none
             of them are offered here -- same reasoning as the Ignored view's own
             omission of Accept/Re-match/Dismiss above. --%>
@@ -261,6 +269,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               phx-click="dismiss_selected"
             >
               Dismiss
+            </button>
+            <button
+              id="delete-selected"
+              class="btn btn-sm btn-ghost text-error"
+              disabled={@count == 0}
+              phx-click="confirm_delete_selected"
+            >
+              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete files
             </button>
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
               Clear
@@ -348,7 +364,10 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
       <div class="pl-7 sm:pl-9 flex items-center justify-between gap-3 flex-wrap">
         <div class="flex items-center gap-2 flex-wrap min-w-0 text-xs text-base-content/70">
-          <span class="font-medium text-base-content/90 truncate max-w-md">
+          <span
+            id={"group-suggestion-#{@dom_key}"}
+            class="font-medium text-base-content/90 truncate max-w-md"
+          >
             {suggestion_line(@group)}
           </span>
           <span
@@ -431,47 +450,74 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               </div>
             </div>
 
-            <form
-              :if={@group.media_type != "movie"}
-              id={"member-form-#{candidate.id}"}
-              phx-change="update_member_episode"
-              phx-submit="update_member_episode"
-              class="flex items-center gap-1.5 shrink-0 self-end sm:self-center"
-            >
-              <input type="hidden" name="candidate_id" value={candidate.id} />
-              <div class="join items-center bg-base-100 rounded-lg border border-base-300 shadow-xs">
-                <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
-                  S
-                </span>
-                <.input
-                  type="number"
-                  name="season"
-                  value={member_season(candidate)}
-                  placeholder="--"
-                  min="0"
-                  max="999"
-                  phx-debounce="400"
-                  class="join-item input input-xs w-12 text-center font-mono border-0 focus:outline-none"
-                  container_class="contents"
-                  aria-label={"Season for #{member_filename(candidate)}"}
-                />
-                <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
-                  E
-                </span>
-                <.input
-                  type="number"
-                  name="episode"
-                  value={member_episode(candidate)}
-                  placeholder="--"
-                  min="0"
-                  max="9999"
-                  phx-debounce="400"
-                  class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none"
-                  container_class="contents"
-                  aria-label={"Episode for #{member_filename(candidate)}"}
-                />
+            <%= if candidate.queued_op == "delete" do %>
+              <span
+                id={"member-deleting-#{candidate.id}"}
+                class="badge badge-xs badge-error badge-outline gap-1 shrink-0 self-end sm:self-center"
+              >
+                <.icon name="hero-arrow-path" class="w-3 h-3 animate-spin" /> Deleting…
+              </span>
+            <% else %>
+              <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                <form
+                  :if={@group.media_type != "movie"}
+                  id={"member-form-#{candidate.id}"}
+                  phx-change="update_member_episode"
+                  phx-submit="update_member_episode"
+                  class="flex items-center gap-1.5"
+                >
+                  <input type="hidden" name="candidate_id" value={candidate.id} />
+                  <div class="join items-center bg-base-100 rounded-lg border border-base-300 shadow-xs">
+                    <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
+                      S
+                    </span>
+                    <.input
+                      type="number"
+                      name="season"
+                      value={member_season(candidate)}
+                      placeholder="--"
+                      min="0"
+                      max="999"
+                      phx-debounce="400"
+                      class="join-item input input-xs w-12 text-center font-mono border-0 focus:outline-none"
+                      container_class="contents"
+                      aria-label={"Season for #{member_filename(candidate)}"}
+                    />
+                    <span class="join-item px-1.5 text-[11px] text-base-content/60 font-mono font-bold">
+                      E
+                    </span>
+                    <.input
+                      type="number"
+                      name="episode"
+                      value={member_episode(candidate)}
+                      placeholder="--"
+                      min="0"
+                      max="9999"
+                      phx-debounce="400"
+                      class="join-item input input-xs w-14 text-center font-mono border-0 focus:outline-none"
+                      container_class="contents"
+                      aria-label={"Episode for #{member_filename(candidate)}"}
+                    />
+                  </div>
+                </form>
+
+                <%!-- A row queued for accept or re-match cannot be queued for delete
+                too (`queue_delete_candidate/1` refuses it), so it gets no button. --%>
+                <button
+                  :if={is_nil(candidate.queued_op)}
+                  type="button"
+                  id={"delete-member-#{candidate.id}"}
+                  class="btn btn-xs btn-ghost btn-square text-error/70 hover:text-error hover:bg-error/10 transition-colors"
+                  title="Delete from disk"
+                  aria-label={"Delete #{member_filename(candidate)}"}
+                  phx-click="delete_member"
+                  phx-value-candidate_id={candidate.id}
+                  data-confirm={"Permanently delete #{member_filename(candidate)} from disk? This cannot be undone."}
+                >
+                  <.icon name="hero-trash" class="w-3.5 h-3.5" />
+                </button>
               </div>
-            </form>
+            <% end %>
           </li>
         </ul>
       </div>
@@ -628,6 +674,49 @@ defmodule MydiaWeb.ImportMediaLive.Components do
     """
   end
 
+  @doc """
+  Confirms a permanent delete of every file in the selection.
+
+  `state` is `ImportMediaLive.Index`'s `@delete_confirm` assign: nil when
+  closed, otherwise `%{scope:, files:, groups:}`. A modal rather than the
+  `data-confirm` the per-file button uses, because "Select all N matching" can
+  put far more files behind a selection than its group count suggests, and the
+  exact number has to be on screen before anything is deleted.
+  """
+  attr :state, :any, default: nil
+
+  def delete_files_modal(assigns) do
+    ~H"""
+    <.modal id="delete-files-modal" show={not is_nil(@state)} on_cancel="cancel_delete_selected">
+      <:title>
+        <div class="flex items-center gap-2">
+          <.icon name="hero-trash" class="w-5 h-5 text-error" />
+          <span>Delete files from disk</span>
+        </div>
+      </:title>
+
+      <p :if={@state} id="delete-files-summary" class="text-sm">
+        Permanently delete {plural(@state.files, "file")} in {plural(@state.groups, "group")} from disk? This cannot be undone.
+      </p>
+
+      <:actions>
+        <button class="btn btn-ghost" phx-click="cancel_delete_selected">Cancel</button>
+        <button
+          id="confirm-delete-files"
+          class="btn btn-error"
+          phx-click="delete_selected"
+          phx-disable-with="Deleting…"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" /> Delete files
+        </button>
+      </:actions>
+    </.modal>
+    """
+  end
+
+  defp plural(1, word), do: "1 #{word}"
+  defp plural(count, word), do: "#{count} #{word}s"
+
   defp media_type_label(:tv_show), do: "TV Show"
   defp media_type_label(:movie), do: "Movie"
   defp media_type_label(_), do: "Unknown"
@@ -642,10 +731,24 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   defp suggestion_line(%{provider_id: nil}), do: "No provider match"
 
+  # A provider id with no title: rows staged before `stage_show_file/3` wrote
+  # the show's title, and the leftovers `create_local_show/2` stamps local.
+  # Both used to render an arrow pointing at nothing.
+  defp suggestion_line(%{provider_type: "local", suggested_title: title})
+       when title in [nil, ""],
+       do: "→ Local show"
+
+  defp suggestion_line(%{suggested_title: title} = group) when title in [nil, ""],
+    do: "→ #{provider_label(group.provider_type)} #{group.provider_id}"
+
   defp suggestion_line(group) do
     year = if group.suggested_year, do: " (#{group.suggested_year})", else: ""
     "→ #{group.suggested_title}#{year}"
   end
+
+  defp provider_label("tvdb"), do: "TVDB"
+  defp provider_label("tmdb"), do: "TMDB"
+  defp provider_label(_), do: "Provider"
 
   # `ImportCandidateGroup` carries no persisted evidence trail (unlike the old
   # `ImportGroup.evidence` column) -- `provider_count` is the one disagreement

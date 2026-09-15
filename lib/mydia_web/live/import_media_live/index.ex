@@ -133,6 +133,10 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       # flight by the time it does, so the token is the actual guard.
       |> assign(:match_search, nil)
       |> assign(:match_search_token, 0)
+      # The bulk delete confirmation, nil when closed, otherwise
+      # `%{scope:, files:, groups:}`: the selection as it was counted when the
+      # operator clicked Delete files, which is the one `delete_selected` deletes.
+      |> assign(:delete_confirm, nil)
       |> stream_configure(:groups,
         dom_id: fn group -> "group-#{ImportCandidateGroup.dom_id(group)}" end
       )
@@ -447,6 +451,60 @@ defmodule MydiaWeb.ImportMediaLive.Index do
        |> refresh_counts()}
     else
       {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # One file straight from its member row. The button's `data-confirm` is the
+  # confirmation; the unlink runs in `Jobs.DeleteImportCandidates`, so this only
+  # stamps the marker and the row reads "Deleting…" straight away. Deleting
+  # bytes is gated on the delete permission, not the import one the rest of
+  # this page uses.
+  def handle_event("delete_member", %{"candidate_id" => id}, socket) do
+    with :ok <- Authorization.authorize_delete_media(socket) do
+      case ImportCandidates.queue_delete_candidate(id) do
+        {:ok, candidate} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Deleting #{Path.basename(candidate.relative_path)}.")
+           |> refresh_expanded_members()
+           |> refresh_counts()}
+
+        {:error, :not_found} ->
+          {:noreply, put_flash(socket, :info, "That file is no longer pending.")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not queue the delete: #{inspect(reason)}")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # Opens the confirmation with the exact file count, counted on click rather
+  # than in `load_groups/1`: it is one aggregate the page only needs when
+  # someone is about to delete.
+  def handle_event("confirm_delete_selected", _params, socket) do
+    with :ok <- Authorization.authorize_delete_media(socket) do
+      {:noreply, open_delete_confirm(socket, socket.assigns.selection)}
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("cancel_delete_selected", _params, socket) do
+    {:noreply, assign(socket, :delete_confirm, nil)}
+  end
+
+  # Only ever acts on an open confirmation. An event sent without one (a stale
+  # tab, a crafted message) queues nothing, because the count the operator saw
+  # is what makes this delete safe to run.
+  def handle_event("delete_selected", _params, socket) do
+    with %{} = confirm <- socket.assigns.delete_confirm,
+         :ok <- Authorization.authorize_delete_media(socket) do
+      {:noreply, queue_confirmed_delete(socket, confirm)}
+    else
+      nil -> {:noreply, socket}
+      {:unauthorized, socket} -> {:noreply, assign(socket, :delete_confirm, nil)}
     end
   end
 
@@ -1055,6 +1113,53 @@ defmodule MydiaWeb.ImportMediaLive.Index do
         socket
         |> stream(:members, ImportCandidates.members(library_path_id, anchor_key), reset: true)
         |> refresh_group_row(anchor_key)
+    end
+  end
+
+  # The confirmation keeps the selection it counted, not just the numbers, and
+  # `delete_selected` deletes that scope: a selection changed behind the dialog
+  # is never what gets deleted.
+  defp open_delete_confirm(socket, scope) do
+    case ImportCandidates.count_files(scope) do
+      0 ->
+        socket
+        |> assign(:delete_confirm, nil)
+        |> put_flash(:info, "Nothing in the selection can be deleted.")
+
+      files ->
+        assign(socket, :delete_confirm, %{
+          scope: scope,
+          files: files,
+          groups: SelectionScope.count(scope)
+        })
+    end
+  end
+
+  # `expected_files` makes the delete all-or-nothing against the count the
+  # operator confirmed. When files joined or left the selection behind the
+  # dialog, nothing is queued and the dialog reopens with the new count.
+  defp queue_confirmed_delete(socket, %{scope: scope, files: files}) do
+    case ImportCandidates.queue_delete(scope, expected_files: files) do
+      {:ok, %{files: queued}} ->
+        socket
+        |> assign(:delete_confirm, nil)
+        |> put_flash(:info, "Deleting #{queued} file(s) in the background.")
+        |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+        |> load_groups()
+        |> refresh_counts()
+
+      {:error, {:count_changed, _current}} ->
+        socket
+        |> put_flash(
+          :error,
+          "The selection changed since you confirmed. Check the new count before deleting."
+        )
+        |> open_delete_confirm(scope)
+
+      {:error, reason} ->
+        socket
+        |> assign(:delete_confirm, nil)
+        |> put_flash(:error, "Could not queue the delete: #{inspect(reason)}")
     end
   end
 

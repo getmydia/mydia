@@ -82,6 +82,41 @@ defmodule Mydia.LibraryTest do
     end
   end
 
+  describe "delete_path_from_disk/1" do
+    setup do
+      tmp =
+        Path.join(System.tmp_dir!(), "mydia_path_del_test_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf(tmp) end)
+      %{tmp: tmp}
+    end
+
+    test "removes the file and its NFO sidecar", %{tmp: tmp} do
+      path = Path.join(tmp, "Quillmere.Bay.S01E02.mkv")
+      nfo = Path.join(tmp, "Quillmere.Bay.S01E02.nfo")
+      File.write!(path, "data")
+      File.write!(nfo, "<episodedetails/>")
+
+      assert :ok = Library.delete_path_from_disk(path)
+      refute File.exists?(path)
+      refute File.exists?(nfo)
+    end
+
+    test "treats an absent file as success", %{tmp: tmp} do
+      assert :ok = Library.delete_path_from_disk(Path.join(tmp, "gone.mkv"))
+    end
+
+    test "returns the error when a present path cannot be removed", %{tmp: tmp} do
+      # A directory where the file should be makes File.rm fail even as root.
+      path = Path.join(tmp, "as_dir.mkv")
+      File.mkdir_p!(path)
+
+      assert {:error, _reason} = Library.delete_path_from_disk(path)
+      assert File.dir?(path)
+    end
+  end
+
   describe "list_media_files/1 with library_path_type filter" do
     test "filters media files by library path type" do
       # Create library paths of different types
