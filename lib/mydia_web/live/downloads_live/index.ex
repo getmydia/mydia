@@ -1695,16 +1695,16 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
+  # A removal is in flight for this row. Mydia.Jobs.RemoveDownload deletes the
+  # row when it finishes, so until then the row only has to say so.
+  defp removing?(download), do: not is_nil(download.removal_requested_at)
+
   # A recoverable soft-stall: `stalled_since` set but not yet escalated to a
   # terminal `import_failed_at` failure. Gated on the live "downloading" status
   # so a download that pauses, completes, or goes client-unreachable after a
   # soft-stall does not keep rendering a stale warning — `stalled_since` is only
   # cleared while the download is observed downloading, so it can linger on a row
   # that has since moved on.
-  # A removal is in flight for this row. Mydia.Jobs.RemoveDownload deletes the
-  # row when it finishes, so until then the row only has to say so.
-  defp removing?(download), do: not is_nil(download.removal_requested_at)
-
   defp soft_stalled?(download) do
     download.status == "downloading" and
       not is_nil(download.stalled_since) and is_nil(download.import_failed_at)
