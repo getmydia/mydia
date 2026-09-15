@@ -116,4 +116,82 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
       assert Settings.get_config_setting_by_key("metadata.language") == nil
     end
   end
+
+  describe "playback audio" do
+    test "writes Preferred then Fallback as one list", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"playback_audio" => %{"preferred" => "en", "fallback" => "original"}})
+
+      setting = Settings.get_config_setting_by_key("streaming.audio_language")
+      assert setting.value == "en,original"
+      assert setting.category == :streaming
+      assert Mydia.Config.get().streaming.audio_language == ["en", "original"]
+    end
+
+    test "a Fallback of None, or equal to Preferred, writes one language", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"playback_audio" => %{"preferred" => "ja", "fallback" => ""}})
+      assert Settings.get_config_setting_by_key("streaming.audio_language").value == "ja"
+
+      change(view, %{"playback_audio" => %{"preferred" => "de", "fallback" => "de"}})
+      assert Settings.get_config_setting_by_key("streaming.audio_language").value == "de"
+    end
+
+    test "a Fallback change saves the whole pair", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{
+        "_target" => ["playback_audio", "fallback"],
+        "playback_audio" => %{"preferred" => "ja", "fallback" => "en"}
+      })
+
+      assert Settings.get_config_setting_by_key("streaming.audio_language").value == "ja,en"
+    end
+
+    test "does not touch download audio", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"playback_audio" => %{"preferred" => "en", "fallback" => "original"}})
+
+      assert Mydia.Config.get().downloads.audio_language == "original"
+      assert Settings.get_config_setting_by_key("downloads.audio_language") == nil
+    end
+
+    test "warns when a longer configured list would be cut to two", %{conn: conn} do
+      {:ok, _} =
+        Settings.upsert_config_setting(%{
+          key: "streaming.audio_language",
+          value: "original,en,fr",
+          category: :streaming
+        })
+
+      {:ok, _} = Mydia.Config.Loader.reload()
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(view, "#language-playback-truncation")
+    end
+
+    test "the default-track toggle saves", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"prefer_default_audio_track" => "true"})
+
+      assert Settings.get_config_setting_by_key("streaming.prefer_default_audio_track").value ==
+               "true"
+
+      assert Mydia.Config.get().streaming.prefer_default_audio_track == true
+    end
+
+    test "both playback rows are hidden when the player is disabled", %{conn: conn} do
+      disable_player()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      refute has_element?(view, "#language-row-playback-audio")
+      refute has_element?(view, "#language-row-default-track")
+      assert has_element?(view, "#language-row-download-audio")
+    end
+  end
 end

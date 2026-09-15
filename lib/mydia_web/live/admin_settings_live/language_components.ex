@@ -30,6 +30,28 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           </.language_row>
 
           <.language_row
+            :if={@player_enabled?}
+            id="language-row-playback-audio"
+            label="Playback audio"
+            key="streaming.audio_language"
+            source={@settings["streaming.audio_language"].source}
+            description="Which audio track plays. Tries Preferred, then Fallback, then the track the file marks as default."
+          >
+            <.playback_audio_control setting={@settings["streaming.audio_language"]} />
+          </.language_row>
+
+          <.language_row
+            :if={@player_enabled?}
+            id="language-row-default-track"
+            label="Use the file's default track"
+            key="streaming.prefer_default_audio_track"
+            source={@settings["streaming.prefer_default_audio_track"].source}
+            description="Ignore the playback languages above and play the track the file marks as default."
+          >
+            <.default_track_control setting={@settings["streaming.prefer_default_audio_track"]} />
+          </.language_row>
+
+          <.language_row
             id="language-row-metadata"
             label="Metadata language"
             key="metadata.language"
@@ -103,6 +125,86 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
         {label}
       </option>
     </select>
+    """
+  end
+
+  attr :setting, :map, required: true
+
+  defp playback_audio_control(assigns) do
+    languages = assigns.setting.value
+    shown = Enum.take(languages, 2)
+
+    assigns =
+      assigns
+      |> assign(:preferred, Enum.at(shown, 0))
+      |> assign(:fallback, Enum.at(shown, 1))
+      |> assign(:hidden_count, length(languages) - length(shown))
+      |> assign(:options, [
+        {"original", "Original language"} | LanguageSettings.language_options(shown)
+      ])
+      |> assign(:locked?, assigns.setting.source == :env)
+
+    ~H"""
+    <div class="flex flex-col gap-1">
+      <div class="flex flex-col sm:flex-row gap-2">
+        <label class="flex flex-col gap-1">
+          <span class="text-xs opacity-60">Preferred</span>
+          <select
+            id="language-playback-preferred"
+            name="playback_audio[preferred]"
+            class="select select-sm select-bordered w-full sm:w-44"
+            disabled={@locked?}
+          >
+            <option :if={is_nil(@preferred)} value="" selected>No preference</option>
+            <option :for={{value, label} <- @options} value={value} selected={value == @preferred}>
+              {label}
+            </option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs opacity-60">Fallback</span>
+          <select
+            id="language-playback-fallback"
+            name="playback_audio[fallback]"
+            class="select select-sm select-bordered w-full sm:w-44"
+            disabled={@locked?}
+          >
+            <option value="" selected={is_nil(@fallback)}>None</option>
+            <option :for={{value, label} <- @options} value={value} selected={value == @fallback}>
+              {label}
+            </option>
+          </select>
+        </label>
+      </div>
+      <p :if={@hidden_count > 0} id="language-playback-truncation" class="text-xs text-warning">
+        {@hidden_count} more configured {if @hidden_count == 1, do: "language", else: "languages"}.
+        Saving here keeps only these two.
+      </p>
+    </div>
+    """
+  end
+
+  attr :setting, :map, required: true
+
+  defp default_track_control(assigns) do
+    ~H"""
+    <label class="label cursor-pointer gap-2">
+      <input
+        type="hidden"
+        name="prefer_default_audio_track"
+        value="false"
+        disabled={@setting.source == :env}
+      />
+      <input
+        id="language-prefer-default-track"
+        type="checkbox"
+        name="prefer_default_audio_track"
+        value="true"
+        class="toggle toggle-primary toggle-sm"
+        checked={@setting.value}
+        disabled={@setting.source == :env}
+      />
+    </label>
     """
   end
 

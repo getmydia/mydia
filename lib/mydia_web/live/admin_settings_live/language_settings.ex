@@ -146,6 +146,19 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       else: [{"metadata.language", :invalid}]
   end
 
+  defp parse({"playback_audio", %{"preferred" => preferred} = pair}, _params)
+       when is_binary(preferred) and preferred != "" do
+    fallback = Map.get(pair, "fallback", "")
+    languages = if fallback in ["", preferred], do: [preferred], else: [preferred, fallback]
+
+    if Enum.all?(languages, &audio_choice?/1),
+      do: [{"streaming.audio_language", languages}],
+      else: [{"streaming.audio_language", :invalid}]
+  end
+
+  defp parse({"prefer_default_audio_track", flag}, _params) when flag in ["true", "false"],
+    do: [{"streaming.prefer_default_audio_track", flag == "true"}]
+
   defp parse(_field, _params), do: []
 
   defp audio_choice?(code), do: code == "original" or LanguageCode.known?(code)
