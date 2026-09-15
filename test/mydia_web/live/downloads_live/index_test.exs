@@ -16,6 +16,8 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
   alias Mydia.Downloads
   alias Mydia.Library
+  alias Mydia.Downloads.Download
+  alias Mydia.Repo
 
   # The match dialog's search/2 reaches the metadata relay for provider
   # results. Swapping in the stub provider (like MatchDialogTest itself does)
@@ -208,9 +210,10 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
 
       html = view |> element("#clear-completed-form") |> render_submit(%{})
 
-      assert html =~ "completed download(s) cleared"
-      refute html =~ "files deleted from disk"
+      assert html =~ "Clearing 1 completed download(s)"
+      refute html =~ "deleting their files"
       assert Downloads.count_completed() == 0
+      assert_enqueued(worker: Mydia.Jobs.RemoveDownload)
     end
 
     test "submitting with the box checked reports files deleted", %{conn: conn} do
@@ -222,7 +225,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       html =
         view |> element("#clear-completed-form") |> render_submit(%{"delete_files" => "true"})
 
-      assert html =~ "cleared and files deleted from disk"
+      assert html =~ "and deleting their files from disk"
       assert Downloads.count_completed() == 0
     end
 
@@ -647,6 +650,67 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
   # rendered — by an import that finished, by DownloadMonitor's reject path, or
   # from another tab — took down the LiveView process instead of saying so. The
   # row is deleted in setup, which is exactly the state a stale browser is in.
+  describe "removing a download" do
+    test "cancel keeps the row on the queue, marked as removing, and enqueues the job", %{
+      conn: conn
+    } do
+      media_item = media_item_fixture(%{title: "Fictional Harbor Lights"})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          download_client: nil,
+          download_client_id: nil
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      cancel_button = "button[phx-click='cancel_download'][phx-value-id='#{download.id}']"
+      assert has_element?(view, cancel_button)
+
+      render_click(view, "cancel_download", %{"id" => download.id})
+
+      assert has_element?(view, "#removing-#{download.id}")
+      refute has_element?(view, cancel_button)
+      assert_enqueued(worker: Mydia.Jobs.RemoveDownload, args: %{"download_id" => download.id})
+    end
+
+    test "clearing a completed row marks it as removing", %{conn: conn} do
+      download = completed_download("Fictional Quiet Orchard")
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      view |> element("#downloads-tab-completed") |> render_click()
+
+      render_click(view, "clear_single_completed", %{"id" => download.id})
+
+      assert has_element?(view, "#removing-#{download.id}")
+      assert Repo.get!(Download, download.id).removal_kind == "clear"
+    end
+
+    test "a removal that gave up shows under Other Issues and can be retried", %{conn: conn} do
+      download =
+        completed_download("Fictional Paper Comet", %{
+          removal_kind: "clear",
+          removal_delete_files: true,
+          removal_error: "Failed to remove torrent"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+      view |> element("#downloads-tab-issues") |> render_click()
+
+      assert has_element?(view, "#other-issues", "Failed to remove torrent")
+      assert has_element?(view, "#retry-removal-#{download.id}")
+
+      view |> element("#retry-removal-#{download.id}") |> render_click()
+
+      row = Repo.get!(Download, download.id)
+      assert %DateTime{} = row.removal_requested_at
+      assert row.removal_delete_files
+      assert is_nil(row.removal_error)
+      assert_enqueued(worker: Mydia.Jobs.RemoveDownload, args: %{"download_id" => download.id})
+    end
+  end
+
   describe "acting on a download that no longer exists" do
     setup do
       media_item = media_item_fixture()
@@ -681,7 +745,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       render_click(view, "toggle_select", %{"id" => stale_id})
 
       # The operator asked for it removed and it is removed, so it counts.
-      assert render_click(view, "batch_delete", %{}) =~ "1 download(s) removed"
+      assert render_click(view, "batch_delete", %{}) =~ "Removing 1 download(s)"
     end
 
     test "batch_retry does not count an already-deleted row", %{conn: conn, stale_id: stale_id} do

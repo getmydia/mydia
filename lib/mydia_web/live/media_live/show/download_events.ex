@@ -44,10 +44,14 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
 
   def show_download_cancel_confirm(%{"download-id" => download_id}, socket) do
     with_download(socket, download_id, fn download ->
+      download_to_cancel =
+        Enum.find(socket.assigns.downloads_with_status, &(&1.id == download.id)) ||
+          download
+
       {:noreply,
        socket
        |> assign(:show_download_cancel_confirm, true)
-       |> assign(:download_to_cancel, download)}
+       |> assign(:download_to_cancel, download_to_cancel)}
     end)
   end
 
@@ -59,23 +63,28 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   def cancel_download(_params, socket) do
-    download = socket.assigns.download_to_cancel
+    # download_to_cancel may be the enriched row shown in the confirm modal.
+    # Removal.request/3 matches %Download{}, so reload the schema row.
+    with_download(socket, socket.assigns.download_to_cancel.id, fn download ->
+      # The client call runs in Mydia.Jobs.RemoveDownload. A client deleting data
+      # can take many seconds to answer, and this page froze for all of them.
+      case Downloads.request_removal(download, "cancel", delete_files: false) do
+        {:ok, _pending} ->
+          {:noreply,
+           socket
+           |> assign(:show_download_cancel_confirm, false)
+           |> assign(:download_to_cancel, nil)
+           |> put_flash(:info, "Cancelling the download")
+           |> refresh_downloads()}
 
-    case Downloads.cancel_download(download) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:show_download_cancel_confirm, false)
-         |> assign(:download_to_cancel, nil)
-         |> put_flash(:info, "Download cancelled")}
-
-      {:error, _changeset} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Failed to cancel download")
-         |> assign(:show_download_cancel_confirm, false)
-         |> assign(:download_to_cancel, nil)}
-    end
+        {:error, _changeset} ->
+          {:noreply,
+           socket
+           |> put_flash(:error, "Failed to cancel download")
+           |> assign(:show_download_cancel_confirm, false)
+           |> assign(:download_to_cancel, nil)}
+      end
+    end)
   end
 
   def show_download_delete_confirm(%{"download-id" => download_id}, socket) do

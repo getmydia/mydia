@@ -466,6 +466,59 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
     end
   end
 
+  describe "downloads with a removal in flight" do
+    defp removing(attrs) do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      download_fixture(Map.merge(%{removal_requested_at: now, removal_kind: "cancel"}, attrs))
+    end
+
+    test "a pending row whose client is gone is not marked missing" do
+      setup_runtime_config([])
+      media_item = media_item_fixture()
+
+      download =
+        removing(%{
+          media_item_id: media_item.id,
+          download_client: "test-client",
+          download_client_id: "removing-1"
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert is_nil(Downloads.get_download!(download.id).error_message)
+    end
+
+    test "a pending client-less grab is not timed out" do
+      setup_runtime_config([])
+
+      download =
+        removing(%{download_client: nil, download_client_id: nil})
+        |> backdate(Downloads.grab_timeout_minutes() + 1)
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert is_nil(Downloads.get_download!(download.id).error_message)
+    end
+
+    test "a pending row that completed long ago is not flagged as stuck" do
+      setup_runtime_config([])
+      media_item = media_item_fixture()
+
+      download =
+        removing(%{
+          media_item_id: media_item.id,
+          download_client: "test-client",
+          download_client_id: "removing-2",
+          completed_at: DateTime.add(DateTime.utc_now(), -2, :hour)
+        })
+
+      assert :ok = perform_job(DownloadMonitor, %{})
+
+      assert is_nil(Downloads.get_download!(download.id).import_failed_at)
+    end
+  end
+
   describe "stuck download detection" do
     test "detects and flags downloads that completed but never imported" do
       setup_runtime_config([])

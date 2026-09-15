@@ -160,6 +160,9 @@ defmodule Mydia.Application do
         # does not manage. init/1 only creates the table (no I/O), so unlike
         # ClientHealth this is safe to start in every environment.
         Mydia.Downloads.ExternalTorrents,
+        # Last status each download client answered with, read when a page's
+        # bounded poll times out. Table-only init, safe in every environment.
+        Mydia.Downloads.ClientStatusCache,
         Mydia.Indexers.Adapter.Registry,
         Mydia.Indexers.RateLimiter,
         # Passive circuit breaker for subtitle providers. In-memory only, no DB,

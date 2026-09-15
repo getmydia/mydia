@@ -175,6 +175,21 @@ defmodule Mydia.Downloads.ClientRemovalTest do
     refute unresolved.id in ids
   end
 
+  test "list_pending_removals excludes downloads with an operator removal in flight" do
+    client = client!(type: :qbittorrent, remove_completed: true)
+    removing = download!(client, imported: true)
+
+    {:ok, _} =
+      Downloads.update_download(removing, %{
+        removal_requested_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        removal_kind: "clear"
+      })
+
+    ids = ClientRemoval.list_pending_removals() |> Enum.map(& &1.id)
+
+    refute removing.id in ids
+  end
+
   test "finish_pending_removal removes non-seed-aware client immediately while seeding" do
     previous = Registry.lookup(:rqbit)
     Registry.register(:rqbit, StubAdapter)

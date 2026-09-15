@@ -102,8 +102,13 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Allow tests to inject a deterministic clock via job args (`"now" => iso8601`).
     now = resolve_now(args)
 
-    # Get all downloads with their real-time status from clients
-    downloads = Downloads.list_downloads_with_status(filter: :all)
+    # Get all downloads with their real-time status from clients. A download the
+    # operator asked to remove belongs to Mydia.Jobs.RemoveDownload until it is
+    # gone: acting on it here raced that job, saw the torrent vanish
+    # mid-removal, and flagged the row missing.
+    downloads =
+      Downloads.list_downloads_with_status(filter: :all)
+      |> Enum.reject(& &1.removal_requested_at)
 
     # Re-adopt downloads whose client was renamed, deleted, or disabled but
     # whose torrent is still sitting in exactly one other configured client.
@@ -204,7 +209,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
     |> Enum.each(&reject_junk/1)
 
     # Self-heal abandoned grabs (persist the timeout so occupancy is released)
-    Enum.each(stale_grabs, &handle_stale_grab/1)
+    # Through with_download/4, which re-reads the row: a removal requested
+    # after the query ran must not have "Grab timed out" written onto it.
+    Enum.each(stale_grabs, fn grab ->
+      with_download(grab, :stale_grab, [], &handle_stale_grab/1)
+    end)
 
     # Track progress / flag stalled downloads. Grace minutes are read from each
     # download's configured client (DB or runtime config) — cached per poll.
@@ -225,7 +234,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Detect stuck downloads (completed but never imported for >1 hour)
     stuck = Downloads.list_stuck_downloads(preload: [:media_item])
     Logger.info("Found #{length(stuck)} stuck downloads")
-    Enum.each(stuck, &handle_stuck/1)
+    # Re-read for the same reason as the stale grabs above, and so a row whose
+    # removal started mid-poll does not get a MediaImport queued.
+    Enum.each(stuck, fn download ->
+      with_download(download, :stuck, [preload: [:media_item]], &handle_stuck/1)
+    end)
 
     {removal_configs, pending_removals} = ClientRemoval.finish_pending_removals()
 
@@ -342,6 +355,16 @@ defmodule Mydia.Jobs.DownloadMonitor do
     case Downloads.get_download(download_map.id, opts) do
       nil ->
         Logger.debug("Download disappeared mid-poll; skipping #{label}",
+          download_id: download_map.id
+        )
+
+        :ok
+
+      # The operator asked to remove it inside that same window. perform/1
+      # already dropped rows that were pending when the poll started; this
+      # catches the ones that became pending while it ran.
+      %Download{removal_requested_at: %DateTime{}} ->
+        Logger.debug("Removal requested mid-poll; skipping #{label}",
           download_id: download_map.id
         )
 

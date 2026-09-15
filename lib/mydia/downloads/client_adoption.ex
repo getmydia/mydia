@@ -42,7 +42,9 @@ defmodule Mydia.Downloads.ClientAdoption do
   @legacy_orphan_message_prefix "Removed from download client"
 
   @typedoc "Poll results, exactly as `History.fetch_all_client_statuses/2` returns them."
-  @type client_statuses :: %{String.t() => {:reachable, map()} | :unreachable}
+  @type client_statuses :: %{
+          String.t() => {:reachable, map()} | {:stale, map(), DateTime.t()} | :unreachable
+        }
 
   @typedoc "Client name to its configured adapter type."
   @type client_types :: %{String.t() => atom()}

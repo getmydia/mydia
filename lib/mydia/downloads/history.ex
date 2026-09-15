@@ -13,6 +13,7 @@ defmodule Mydia.Downloads.History do
 
   alias Mydia.Repo
   alias Mydia.Downloads.ClientAdoption
+  alias Mydia.Downloads.ClientStatusCache
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
   alias Mydia.Downloads.Seedbox
@@ -69,6 +70,7 @@ defmodule Mydia.Downloads.History do
     |> where([d], is_nil(d.completed_at))
     |> where([d], is_nil(d.imported_at))
     |> where([d], d.inserted_at < ^cutoff)
+    |> where([d], is_nil(d.removal_requested_at))
     |> Repo.all()
   end
 
@@ -102,7 +104,7 @@ defmodule Mydia.Downloads.History do
   """
   def count_completed do
     Download
-    |> where([d], not is_nil(d.imported_at))
+    |> where([d], not is_nil(d.imported_at) and is_nil(d.removal_requested_at))
     |> Repo.aggregate(:count)
   end
 
@@ -190,7 +192,10 @@ defmodule Mydia.Downloads.History do
       # Filtering applies here too: a client-less install is exactly where a caller
       # asking for :active must not be handed completed rows.
       Enum.map(downloads, fn download ->
-        enriched = enrich_download_with_empty_status(download)
+        enriched =
+          download
+          |> enrich_download_with_empty_status()
+          |> with_removal_state(download)
 
         if is_nil(download.download_client) do
           enriched
@@ -201,13 +206,16 @@ defmodule Mydia.Downloads.History do
       |> apply_status_filters(opts[:filter] || :all)
     else
       # Get status from all clients
-      client_statuses = fetch_all_client_statuses(clients, downloads)
+      client_statuses =
+        fetch_all_client_statuses(clients, downloads, Keyword.get(opts, :bounded, false))
 
       # Enrich downloads with client status
       downloads
-      |> Enum.map(
-        &enrich_download_with_status(&1, client_statuses, client_types, configured_names)
-      )
+      |> Enum.map(fn download ->
+        download
+        |> enrich_download_with_status(client_statuses, client_types, configured_names)
+        |> with_removal_state(download)
+      end)
       |> apply_status_filters(opts[:filter] || :all)
     end
   end
@@ -366,6 +374,7 @@ defmodule Mydia.Downloads.History do
     |> where([d], is_nil(d.imported_at))
     |> where([d], is_nil(d.import_failed_at))
     |> where([d], d.completed_at < ^threshold_time)
+    |> where([d], is_nil(d.removal_requested_at))
     |> maybe_preload(opts[:preload])
     |> Repo.all()
   end
@@ -376,12 +385,15 @@ defmodule Mydia.Downloads.History do
 
   ## Private Functions - Client Status Fetching
 
-  defp fetch_all_client_statuses(clients, downloads) do
+  defp fetch_all_client_statuses(clients, downloads, bounded?) do
     # Fetch torrents from all clients concurrently. We deliberately distinguish
-    # between two outcomes that previously collapsed into "empty list":
+    # between outcomes that previously collapsed into "empty list":
     #
     #   - {:reachable, torrents_map} — the client answered, here are its torrents
-    #   - :unreachable                — the client errored; we don't know its state
+    #   - {:stale, torrents_map, at} — a bounded poll timed out; this is the
+    #                                  client's last answer, taken at `at`
+    #   - :unreachable                — the client errored, or timed out with no
+    #                                  earlier answer; we don't know its state
     #
     # The downstream classifier MUST NOT mark a download "missing" just because
     # its client was unreachable, otherwise a brief client restart flags every
@@ -396,67 +408,91 @@ defmodule Mydia.Downloads.History do
     downloads_by_client = group_downloads_by_client(downloads)
 
     clients
-    |> Task.async_stream(
-      fn client_config ->
-        adapter = Client.Registry.lookup(client_config.type)
-        config = config_to_map(client_config)
-        client_downloads = Map.get(downloads_by_client, client_config.name, %{})
+    |> Task.async_stream(&fetch_client_status(&1, downloads_by_client), stream_opts(bounded?))
+    # async_stream keeps input order, so each result lines up with its client.
+    # A task killed at the deadline reports `{:exit, :timeout}`, which carries
+    # no client name of its own.
+    |> Enum.zip(clients)
+    |> Map.new(fn
+      {{:ok, {client_name, result}}, _client_config} ->
+        {client_name, result}
 
-        try do
-          case Client.list_torrents(adapter, config, downloads: client_downloads) do
-            {:ok, torrents} ->
-              torrents =
-                Seedbox.maybe_apply_remote_fetch(client_config, torrents, client_downloads)
-
-              torrents_map =
-                torrents
-                |> Enum.map(fn torrent -> {torrent.id, torrent} end)
-                |> Map.new()
-
-              {client_config.name, {:reachable, torrents_map}}
-
-            {:error, error} ->
-              Logger.warning(
-                "Failed to fetch torrents from #{client_config.name}: #{inspect(error)}"
-              )
-
-              {client_config.name, :unreachable}
-          end
-        rescue
-          # A buggy or mis-registered adapter (e.g. a module that doesn't
-          # implement list_torrents/2) must not crash the caller — that would
-          # take down the whole Downloads LiveView for every other client too.
-          # Degrade to :unreachable, same as an explicit {:error, _}.
-          exception ->
-            Logger.error(
-              "Adapter #{inspect(adapter)} for client #{client_config.name} " <>
-                "(type=#{client_config.type}) raised: #{Exception.message(exception)}"
-            )
-
-            {client_config.name, :unreachable}
-        catch
-          # `rescue` only catches raised exceptions. A pool checkout timeout
-          # or a GenServer.call timeout inside the adapter terminates via
-          # `exit/1`, not `raise/1` — uncaught, that unwinds this task and,
-          # since Task.async_stream links tasks to the caller, takes down
-          # the entire list_downloads_with_status/1 call (and whatever
-          # LiveView or job called it) over one misbehaving client.
-          kind, reason ->
-            Logger.error(
-              "Adapter #{inspect(adapter)} for client #{client_config.name} " <>
-                "(type=#{client_config.type}) raised via #{kind}: #{inspect(reason)}"
-            )
-
-            {client_config.name, :unreachable}
-        end
-      end,
-      timeout: :infinity,
-      max_concurrency: 10
-    )
-    |> Enum.reduce(%{}, fn
-      {:ok, {client_name, result}}, acc -> Map.put(acc, client_name, result)
-      _, acc -> acc
+      {{:exit, _reason}, client_config} ->
+        {client_config.name, last_known_status(client_config.name)}
     end)
+  end
+
+  defp fetch_client_status(client_config, downloads_by_client) do
+    adapter = Client.Registry.lookup(client_config.type)
+    config = config_to_map(client_config)
+    client_downloads = Map.get(downloads_by_client, client_config.name, %{})
+
+    try do
+      case Client.list_torrents(adapter, config, downloads: client_downloads) do
+        {:ok, torrents} ->
+          torrents = Seedbox.maybe_apply_remote_fetch(client_config, torrents, client_downloads)
+
+          torrents_map =
+            torrents
+            |> Enum.map(fn torrent -> {torrent.id, torrent} end)
+            |> Map.new()
+
+          ClientStatusCache.put(client_config.name, torrents_map)
+
+          {client_config.name, {:reachable, torrents_map}}
+
+        {:error, error} ->
+          Logger.warning("Failed to fetch torrents from #{client_config.name}: #{inspect(error)}")
+
+          {client_config.name, :unreachable}
+      end
+    rescue
+      # A buggy or mis-registered adapter (e.g. a module that doesn't
+      # implement list_torrents/2) must not crash the caller — that would
+      # take down the whole Downloads LiveView for every other client too.
+      # Degrade to :unreachable, same as an explicit {:error, _}.
+      exception ->
+        Logger.error(
+          "Adapter #{inspect(adapter)} for client #{client_config.name} " <>
+            "(type=#{client_config.type}) raised: #{Exception.message(exception)}"
+        )
+
+        {client_config.name, :unreachable}
+    catch
+      # `rescue` only catches raised exceptions. A pool checkout timeout
+      # or a GenServer.call timeout inside the adapter terminates via
+      # `exit/1`, not `raise/1` — uncaught, that unwinds this task and,
+      # since Task.async_stream links tasks to the caller, takes down
+      # the entire list_downloads_with_status/1 call (and whatever
+      # LiveView or job called it) over one misbehaving client.
+      kind, reason ->
+        Logger.error(
+          "Adapter #{inspect(adapter)} for client #{client_config.name} " <>
+            "(type=#{client_config.type}) raised via #{kind}: #{inspect(reason)}"
+        )
+
+        {client_config.name, :unreachable}
+    end
+  end
+
+  # A bounded read serves a page. It waits at most `client_status_wait_ms` per
+  # client, then falls back to that client's last answer. Transmission answers
+  # nothing while it deletes a large torrent's data, and a page that waited on
+  # it froze for as long as the delete took.
+  defp stream_opts(true),
+    do: [timeout: status_wait_ms(), on_timeout: :kill_task, max_concurrency: 10]
+
+  defp stream_opts(false), do: [timeout: :infinity, max_concurrency: 10]
+
+  defp status_wait_ms, do: Application.get_env(:mydia, :client_status_wait_ms, 2_000)
+
+  defp last_known_status(client_name) do
+    Logger.debug("Download client #{client_name} did not answer in time")
+
+    case ClientStatusCache.get(client_name) do
+      {torrents_map, fetched_at} -> {:stale, torrents_map, fetched_at}
+      nil -> :unreachable
+    end
   end
 
   defp group_downloads_by_client(downloads) do
@@ -493,6 +529,23 @@ defmodule Mydia.Downloads.History do
             |> heal_own_client()
         end
 
+      {:stale, torrents_map, fetched_at} ->
+        # The client did not answer a bounded poll in time. A torrent in its last
+        # answer shows that status, dated. One absent from it may simply be newer
+        # than the answer, so it is unknown and never "missing".
+        case Map.get(torrents_map, download.download_client_id) do
+          nil ->
+            download
+            |> enrich_download_with_unknown_status()
+            |> with_client_state(:present)
+
+          torrent_status ->
+            download
+            |> enrich_download_with_torrent_status(torrent_status)
+            |> with_client_state(:present)
+            |> with_status_as_of(fetched_at)
+        end
+
       :unreachable ->
         # Client is misbehaving (down, restarting, network blip). We can't tell
         # whether the torrent is there — DO NOT mark missing. Surface status as
@@ -519,6 +572,7 @@ defmodule Mydia.Downloads.History do
   defp classify_client(client_name, client_statuses, configured_names) do
     case Map.get(client_statuses, client_name) do
       {:reachable, _torrents} = reachable -> reachable
+      {:stale, _torrents, _fetched_at} = stale -> stale
       :unreachable -> :unreachable
       nil -> if MapSet.member?(configured_names, client_name), do: :disabled, else: :removed
     end
@@ -553,6 +607,20 @@ defmodule Mydia.Downloads.History do
 
   defp with_adoptable_client(%EnrichedDownload{} = enriched, claimant) do
     %{enriched | adoptable_client: claimant}
+  end
+
+  defp with_status_as_of(%EnrichedDownload{} = enriched, fetched_at) do
+    %{enriched | status_as_of: fetched_at}
+  end
+
+  defp with_removal_state(%EnrichedDownload{} = enriched, %Download{} = download) do
+    %{
+      enriched
+      | removal_requested_at: download.removal_requested_at,
+        removal_kind: download.removal_kind,
+        removal_delete_files: download.removal_delete_files,
+        removal_error: download.removal_error
+    }
   end
 
   # The download's own client answered and still holds the torrent, so whatever

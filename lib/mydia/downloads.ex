@@ -102,6 +102,9 @@ defmodule Mydia.Downloads do
     - `:filter` - Filter by status (:active, :completed, :failed, :all) - default :all
     - `:media_item_id` - Filter by media item
     - `:episode_id` - Filter by episode
+    - `:bounded` - wait at most `:client_status_wait_ms` (default 2000) per
+      client, then use its last answer from `Mydia.Downloads.ClientStatusCache`.
+      For pages. Jobs that act on status must not pass it. Default `false`.
   """
   @spec list_downloads_with_status(keyword()) :: [EnrichedDownload.t()]
   defdelegate list_downloads_with_status(opts \\ []), to: Mydia.Downloads.History
@@ -452,6 +455,30 @@ defmodule Mydia.Downloads do
   """
   @spec reject_release(Download.t(), keyword()) :: {:ok, :rejected} | {:error, term()}
   defdelegate reject_release(download, opts \\ []), to: Mydia.Downloads.Queue
+
+  @doc """
+  Records that a download should be removed and enqueues `Mydia.Jobs.RemoveDownload`.
+  See `Mydia.Downloads.Removal.request/3`.
+  """
+  @spec request_removal(Download.t(), String.t(), keyword()) ::
+          {:ok, Download.t()} | {:ok, :already_pending} | {:error, term()}
+  defdelegate request_removal(download, kind, opts \\ []),
+    to: Mydia.Downloads.Removal,
+    as: :request
+
+  @doc """
+  Blacklists the release now and requests a `"reject"` removal.
+  See `Mydia.Downloads.Removal.request_reject/2`.
+  """
+  @spec request_reject(Download.t(), keyword()) ::
+          {:ok, Download.t()} | {:ok, :already_pending} | {:error, term()}
+  defdelegate request_reject(download, opts \\ []), to: Mydia.Downloads.Removal
+
+  @doc """
+  Requests a `"clear"` removal for every imported download not already pending.
+  """
+  @spec request_clear_all_completed(keyword()) :: {:ok, non_neg_integer()}
+  defdelegate request_clear_all_completed(opts \\ []), to: Mydia.Downloads.Removal
 
   @doc """
   Re-matches an already-imported download to a corrected movie or episode,

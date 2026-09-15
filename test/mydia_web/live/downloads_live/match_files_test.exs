@@ -348,7 +348,21 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     )
   end
 
-  test "rejecting blacklists the release and removes the download", %{
+  # The client call and the row delete run in Mydia.Jobs.RemoveDownload, so a
+  # reject leaves the row pending with the job queued.
+  defp assert_reject_queued(download) do
+    row = Mydia.Repo.get!(Mydia.Downloads.Download, download.id)
+    assert %DateTime{} = row.removal_requested_at
+    assert row.removal_kind == "reject"
+    assert row.removal_delete_files
+
+    assert_enqueued(
+      worker: Mydia.Jobs.RemoveDownload,
+      args: %{"download_id" => download.id}
+    )
+  end
+
+  test "rejecting blacklists the release and queues the download's removal", %{
     conn: conn,
     tmp_dir: tmp_dir
   } do
@@ -361,10 +375,11 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     view |> element("#match-files-reject") |> render_click()
 
     assert Mydia.Downloads.Blacklists.blacklisted?("1337x", "abc")
-    refute Mydia.Repo.get(Mydia.Downloads.Download, download.id)
+    assert_reject_queued(download)
+    refute has_element?(view, "#match-files-modal")
   end
 
-  test "rejecting without a guid still removes the download but does not blacklist", %{
+  test "rejecting without a guid still queues the removal but does not blacklist", %{
     conn: conn,
     tmp_dir: tmp_dir
   } do
@@ -412,7 +427,7 @@ defmodule MydiaWeb.DownloadsLive.MatchFilesTest do
     view |> element("#match-files-reject") |> render_click()
 
     refute Mydia.Downloads.Blacklists.blacklisted?("1337x", "missing-guid")
-    refute Mydia.Repo.get(Mydia.Downloads.Download, download.id)
+    assert_reject_queued(download)
   end
 
   test "unresolved-file downloads open the same modal", %{conn: conn, tmp_dir: tmp_dir} do
