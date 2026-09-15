@@ -45,6 +45,7 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades
+  alias Mydia.Upgrades.Reasons
   alias Phoenix.PubSub
 
   defmodule Args do
@@ -56,7 +57,8 @@ defmodule Mydia.Jobs.MovieSearch do
       :min_seeders,
       :size_range,
       :blocked_tags,
-      :preferred_tags
+      :preferred_tags,
+      :reasons
     ]
 
     @type t :: %__MODULE__{
@@ -66,7 +68,8 @@ defmodule Mydia.Jobs.MovieSearch do
             min_seeders: integer() | nil,
             size_range: term() | nil,
             blocked_tags: [String.t()] | nil,
-            preferred_tags: [String.t()] | nil
+            preferred_tags: [String.t()] | nil,
+            reasons: [:quality | :language] | nil
           }
 
     def parse(%{"mode" => "all_monitored"} = raw) do
@@ -104,7 +107,8 @@ defmodule Mydia.Jobs.MovieSearch do
         min_seeders: Map.get(raw, "min_seeders"),
         size_range: Map.get(raw, "size_range"),
         blocked_tags: Map.get(raw, "blocked_tags"),
-        preferred_tags: Map.get(raw, "preferred_tags")
+        preferred_tags: Map.get(raw, "preferred_tags"),
+        reasons: Mydia.Upgrades.Reasons.decode(Map.get(raw, "reasons"))
       }
     end
   end
@@ -504,11 +508,14 @@ defmodule Mydia.Jobs.MovieSearch do
   #   * `:candidate_filter` - `(results -> results)`, applied after blacklist
   #     rejection and before ranking. Used by the upgrade path to keep only
   #     candidates Comparator.upgrade?/5 confirms are a real upgrade.
-  #   * `:grab_opts` / `:after_grab` - passed through to initiate_download/3.
-  #   * `:backoff_resource_type` - the SearchBackoff resource_type to record
-  #     against (default `"movie"`). The upgrade path uses `"movie_upgrade"`
-  #     so a stale missing-file backoff can never suppress an upgrade search
-  #     for the same movie, or vice versa - see Mydia.Upgrades.eligible_movies/1.
+  #   * `:grab_opts` / `:after_grab` - passed through to initiate_download/3;
+  #     `:after_grab` is called as `after_grab.(download, result)`.
+  #   * `:backoff_resource_types` - the SearchBackoff buckets to record against
+  #     (default `["movie"]`). The upgrade path passes
+  #     `Reasons.buckets(:movie, reasons)`, so a stale missing-file backoff can
+  #     never suppress an upgrade search, and a quality miss never suppresses a
+  #     language search or the other way round - see
+  #     Mydia.Upgrades.eligible_movies/1 and language_eligible_movies/2.
   defp search_movie(%MediaItem{} = movie, args, opts \\ []) do
     query = build_search_query(movie)
 
@@ -520,7 +527,7 @@ defmodule Mydia.Jobs.MovieSearch do
     )
 
     min_seeders = get_min_seeders()
-    resource_type = Keyword.get(opts, :backoff_resource_type, "movie")
+    resource_types = Keyword.get(opts, :backoff_resource_types, ["movie"])
 
     case Indexers.search_all(
            query,
@@ -543,7 +550,7 @@ defmodule Mydia.Jobs.MovieSearch do
         )
 
         # Record backoff for no results
-        record_movie_backoff(movie, "no_results", resource_type)
+        record_movie_backoff(movie, "no_results", resource_types)
 
         # Log search event for no results
         Events.search_no_results(movie, %{
@@ -595,7 +602,7 @@ defmodule Mydia.Jobs.MovieSearch do
       end
 
     ranking_opts = build_ranking_options(movie, args)
-    resource_type = Keyword.get(opts, :backoff_resource_type, "movie")
+    resource_types = Keyword.get(opts, :backoff_resource_types, ["movie"])
 
     case ReleaseRanker.select_best_result(candidates, ranking_opts) do
       nil ->
@@ -606,7 +613,7 @@ defmodule Mydia.Jobs.MovieSearch do
         )
 
         # Record backoff for all results filtered out
-        record_movie_backoff(movie, "all_filtered", resource_type)
+        record_movie_backoff(movie, "all_filtered", resource_types)
 
         # Log search event for all results filtered out
         Events.search_filtered_out(movie, %{
@@ -644,7 +651,7 @@ defmodule Mydia.Jobs.MovieSearch do
         case initiate_download(movie, best_result, opts) do
           :ok ->
             # Reset backoff on successful download initiation
-            reset_movie_backoff(movie, resource_type)
+            reset_movie_backoff(movie, resource_types)
             :ok
 
           {:error, reason} ->
@@ -685,11 +692,11 @@ defmodule Mydia.Jobs.MovieSearch do
   # See search_movie/3's doc comment for what `opts` carries.
   defp initiate_download(movie, result, opts \\ []) do
     grab_opts = Keyword.get(opts, :grab_opts, [])
-    after_grab = Keyword.get(opts, :after_grab, fn download -> {:ok, download} end)
+    after_grab = Keyword.get(opts, :after_grab, fn download, _result -> {:ok, download} end)
 
     with {:ok, download} <-
            Downloads.initiate_download(result, [media_item_id: movie.id] ++ grab_opts),
-         {:ok, _updated} <- after_grab.(download) do
+         {:ok, _updated} <- after_grab.(download, result) do
       Logger.info("Successfully initiated download for movie",
         media_item_id: movie.id,
         title: movie.title,
@@ -734,16 +741,24 @@ defmodule Mydia.Jobs.MovieSearch do
   # the metadata patch linking the grab back to the file it targets, and a
   # backoff resource_type namespaced apart from the ordinary "movie" bucket
   # (see Mydia.Upgrades.eligible_movies/1 for why that namespacing matters).
+  # The candidate filter and the grab tag both judge audio language first
+  # (Comparator.upgrade?/6), under the movie's AudioLanguagePolicy and the
+  # reasons the sweep enqueued it for.
   defp search_movie_upgrade(%MediaItem{} = movie, %MediaFile{} = file, %Args{} = args) do
     case QualityProfileResolver.resolve(movie) do
       %QualityProfile{} = profile ->
+        upgrade_opts = [audio_policy: AudioLanguagePolicy.effective(movie), reasons: args.reasons]
+
         opts = [
           candidate_filter: fn results ->
-            Upgrades.filter_candidates(results, file, profile, :movie)
+            Upgrades.filter_candidates(results, file, profile, :movie, upgrade_opts)
           end,
           grab_opts: [manual: true],
-          after_grab: fn download -> attach_upgrade_target(download, file) end,
-          backoff_resource_type: "movie_upgrade"
+          after_grab: fn download, result ->
+            reason = Upgrades.upgrade_reason(result, file, profile, :movie, upgrade_opts)
+            attach_upgrade_target(download, file, reason)
+          end,
+          backoff_resource_types: Reasons.buckets(:movie, args.reasons)
         ]
 
         search_movie(movie, args, opts)
@@ -763,9 +778,14 @@ defmodule Mydia.Jobs.MovieSearch do
   # one it supersedes. There is no generic metadata passthrough on
   # initiate_download/3, so this is stamped on afterward - the same pattern
   # Queue.refresh_match_suggestions/1 uses to patch match_suggestions onto
-  # an existing download.
-  defp attach_upgrade_target(%Download{} = download, %MediaFile{} = file) do
-    metadata = Map.put(download.metadata || %{}, "upgrade_target_media_file_id", file.id)
+  # an existing download. "upgrade_reason" records why the grab happened
+  # (quality or language), which Activity and operators read alongside it.
+  defp attach_upgrade_target(%Download{} = download, %MediaFile{} = file, reason) do
+    metadata =
+      Map.merge(download.metadata || %{}, %{
+        "upgrade_target_media_file_id" => file.id,
+        "upgrade_reason" => Atom.to_string(reason)
+      })
 
     case Downloads.update_download(download, %{metadata: metadata}) do
       {:error, changeset} ->
@@ -803,55 +823,57 @@ defmodule Mydia.Jobs.MovieSearch do
 
   ## Private Functions - Backoff Helpers
 
-  # `resource_type` is "movie" for the missing-file search path, or
-  # "movie_upgrade" for the upgrade path - a separate namespace so a backoff
-  # recorded by one search path can never suppress the other for a movie
-  # whose file-presence state has since changed. See
-  # Mydia.Upgrades.eligible_movies/1. Both call sites below always resolve
-  # and pass this explicitly, so it has no default of its own.
-  defp record_movie_backoff(%MediaItem{} = movie, reason, resource_type) do
-    case Search.record_failure(resource_type, movie.id, reason) do
-      {:ok, backoff} ->
-        Logger.info("Applied search backoff for movie",
-          media_item_id: movie.id,
-          title: movie.title,
-          failure_count: backoff.failure_count,
-          next_eligible_at: backoff.next_eligible_at,
-          reason: reason
-        )
+  # `resource_types` holds one SearchBackoff bucket per reason the search ran
+  # for: ["movie"] on the missing-file path, Reasons.buckets(:movie, reasons)
+  # on the upgrade path. Every bucket records the miss so each reason backs
+  # off on its own schedule; Activity gets one event per search, carrying the
+  # first bucket's schedule.
+  defp record_movie_backoff(%MediaItem{} = movie, reason, [primary | _] = resource_types) do
+    Enum.each(resource_types, fn resource_type ->
+      case Search.record_failure(resource_type, movie.id, reason) do
+        {:ok, backoff} ->
+          Logger.info("Applied search backoff for movie",
+            media_item_id: movie.id,
+            title: movie.title,
+            resource_type: resource_type,
+            failure_count: backoff.failure_count,
+            next_eligible_at: backoff.next_eligible_at,
+            reason: reason
+          )
 
-        # Emit backoff event
-        Events.search_backoff_applied(
-          movie,
-          reason,
-          Search.get_backoff_info(resource_type, movie.id)
-        )
+        {:error, changeset} ->
+          Logger.error("Failed to record search backoff for movie",
+            media_item_id: movie.id,
+            resource_type: resource_type,
+            errors: inspect(changeset.errors)
+          )
+      end
+    end)
 
-      {:error, changeset} ->
-        Logger.error("Failed to record search backoff for movie",
-          media_item_id: movie.id,
-          errors: inspect(changeset.errors)
-        )
+    case Search.get_backoff_info(primary, movie.id) do
+      nil -> :ok
+      info -> Events.search_backoff_applied(movie, reason, info)
     end
   end
 
-  defp reset_movie_backoff(%MediaItem{} = movie, resource_type) do
-    case Search.get_backoff(resource_type, movie.id) do
-      nil ->
-        :ok
-
-      backoff ->
-        previous_count = backoff.failure_count
+  defp reset_movie_backoff(%MediaItem{} = movie, resource_types) do
+    previous_counts =
+      for resource_type <- resource_types,
+          %{failure_count: count} <- [Search.get_backoff(resource_type, movie.id)] do
         Search.reset_backoff(resource_type, movie.id)
+        count
+      end
 
-        Logger.info("Reset search backoff for movie",
-          media_item_id: movie.id,
-          title: movie.title,
-          previous_failure_count: previous_count
-        )
+    if previous_counts != [] do
+      previous_count = Enum.max(previous_counts)
 
-        # Emit backoff reset event
-        Events.search_backoff_reset(movie, previous_count)
+      Logger.info("Reset search backoff for movie",
+        media_item_id: movie.id,
+        title: movie.title,
+        previous_failure_count: previous_count
+      )
+
+      Events.search_backoff_reset(movie, previous_count)
     end
   end
 
