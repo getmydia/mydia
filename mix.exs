@@ -220,6 +220,7 @@ defmodule Mydia.MixProject do
       {:file_system, "~> 1.0", only: [:dev, :test]},
 
       # Telemetry & Monitoring
+      {:peep, "~> 5.0"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:error_tracker, "~> 0.5"},

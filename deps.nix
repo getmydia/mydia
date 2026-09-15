@@ -775,6 +775,19 @@ let
       beamDeps = [];
     };
 
+    peep = buildMix rec {
+      name = "peep";
+      version = "5.0.1";
+
+      src = fetchHex {
+        pkg = "peep";
+        version = "${version}";
+        sha256 = "21969af7920b0ad7f17a8532489768c87cc26b759de964e6f7538ff886e95331";
+      };
+
+      beamDeps = [ nimble_options plug telemetry telemetry_metrics ];
+    };
+
     phoenix = buildMix rec {
       name = "phoenix";
       version = "1.8.13";
