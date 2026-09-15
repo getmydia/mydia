@@ -352,6 +352,16 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
         :ok
 
+      # The operator asked to remove it inside that same window. perform/1
+      # already dropped rows that were pending when the poll started; this
+      # catches the ones that became pending while it ran.
+      %Download{removal_requested_at: %DateTime{}} ->
+        Logger.debug("Removal requested mid-poll; skipping #{label}",
+          download_id: download_map.id
+        )
+
+        :ok
+
       %Download{} = download ->
         fun.(download)
         :ok

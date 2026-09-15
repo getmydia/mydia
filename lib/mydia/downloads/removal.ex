@@ -205,9 +205,18 @@ defmodule Mydia.Downloads.Removal do
 
     Repo.transaction(fn -> delete_and_enqueue(download, search) end)
     |> case do
-      {:ok, :deleted} -> announce(download)
-      {:ok, :already_deleted} -> :ok
-      {:error, reason} -> {:error, reason}
+      {:ok, :deleted} ->
+        # History.delete_download/1 broadcast from inside the transaction, where
+        # a page reloading on that message could still read the row and keep
+        # showing it as removing. Say it again now the delete is committed.
+        History.broadcast_download_update(download.id)
+        announce(download)
+
+      {:ok, :already_deleted} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   rescue
     exception -> {:error, exception}
