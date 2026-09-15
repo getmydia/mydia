@@ -99,6 +99,9 @@ defmodule Mydia.Perf.FlusherTest do
     assert :ok = Flusher.flush(pid)
 
     set_clock(clock, ~U[2026-09-15 11:00:00Z])
+    # This flush stands in for the tick the flusher schedules at the hour
+    # boundary. Peep records no event timestamps, so work happening between
+    # the boundary and that tick running would count toward 10:00.
     assert :ok = Flusher.flush(pid)
     work()
     assert :ok = Flusher.flush(pid)
@@ -162,6 +165,45 @@ defmodule Mydia.Perf.FlusherTest do
     assert :ok = Flusher.flush(pid)
 
     assert [%Rollup{count: 2}] = rows()
+  end
+
+  test "a failed write that closes an hour keeps it pending and starts the new hour clean",
+       %{clock: clock} do
+    start_peep()
+    pid = start_flusher(clock)
+    work()
+    work()
+
+    set_clock(clock, ~U[2026-09-15 11:00:00Z])
+    Repo.query!("ALTER TABLE perf_rollups RENAME TO perf_rollups_away")
+    log = capture_log(fn -> assert {:error, _reason} = Flusher.flush(pid) end)
+    assert log =~ "Performance metrics flush failed"
+    Repo.query!("ALTER TABLE perf_rollups_away RENAME TO perf_rollups")
+
+    work()
+    assert :ok = Flusher.flush(pid)
+
+    assert [
+             %Rollup{hour: ~U[2026-09-15 10:00:00Z], count: 2},
+             %Rollup{hour: ~U[2026-09-15 11:00:00Z], count: 1}
+           ] = rows()
+  end
+
+  test "stopping writes a pending closed hour", %{clock: clock} do
+    start_peep()
+    pid = start_flusher(clock)
+    work()
+    work()
+
+    set_clock(clock, ~U[2026-09-15 11:00:00Z])
+    Repo.query!("ALTER TABLE perf_rollups RENAME TO perf_rollups_away")
+    log = capture_log(fn -> assert {:error, _reason} = Flusher.flush(pid) end)
+    assert log =~ "Performance metrics flush failed"
+    Repo.query!("ALTER TABLE perf_rollups_away RENAME TO perf_rollups")
+
+    stop_supervised!(:flusher)
+
+    assert [%Rollup{hour: ~U[2026-09-15 10:00:00Z], count: 2}] = rows()
   end
 
   test "flushes nothing when Peep is not running", %{clock: clock} do

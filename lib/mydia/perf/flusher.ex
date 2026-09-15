@@ -6,16 +6,22 @@ defmodule Mydia.Perf.Flusher do
   snapshot, subtracts the snapshot from the start of the current hour, and
   upserts the result as that hour's rows, replacing what the previous flush
   wrote. The first flush in a new hour closes the old hour, re-bases, and
-  deletes rows older than `retention_days`. Events between the last flush of an
-  hour and the boundary count toward the old hour.
+  deletes rows older than `retention_days`. Peep keeps no event timestamps, so
+  a delta lands in the hour of the flush that closes it; the tick scheduled at
+  the boundary closes the old hour, so work recorded between the boundary and
+  that tick running (normally milliseconds) counts toward the old hour.
 
   Rows carry this boot's `boot_id`, so a restart writes new rows for the hour
   instead of overwriting or double-counting the previous boot's. `terminate/2`
   flushes once more, so a deploy loses nothing and a crash loses at most one
   interval.
 
-  A failed write logs a warning and changes no state. Peep's values are
-  cumulative, so the next successful flush writes correct totals.
+  A failed write within an hour logs a warning and changes no state; Peep's
+  values are cumulative, so the next successful flush writes full totals for
+  that hour. A failed write that closes an hour still advances to the new
+  hour, since the clock does not wait, and keeps the closed hour's unwritten
+  rows in `pending`, retried alongside every later flush's upsert until one
+  succeeds.
   """
 
   use GenServer
@@ -64,6 +70,7 @@ defmodule Mydia.Perf.Flusher do
       boot_id: Ecto.UUID.generate(),
       hour: Rollup.hour_of(clock.()),
       baseline: %{},
+      pending: %{},
       interval_ms:
         Keyword.get(opts, :interval_ms, Keyword.get(config, :flush_interval_ms, 300_000)),
       retention_days:
@@ -90,18 +97,48 @@ defmodule Mydia.Perf.Flusher do
 
   @impl true
   def terminate(_reason, state) do
-    write(state, snapshot(state))
+    entries = build_entries(state, snapshot(state))
+    upsert(Map.values(state.pending) ++ entries)
     :ok
   end
 
   defp flush_and_roll_over(state) do
     current = snapshot(state)
+    hour = Rollup.hour_of(state.clock.())
+    entries = build_entries(state, current)
 
-    case write(state, current) do
-      :ok -> {:ok, roll_over(state, current)}
+    if DateTime.compare(hour, state.hour) == :eq do
+      flush_same_hour(state, entries)
+    else
+      flush_new_hour(state, hour, current, entries)
+    end
+  end
+
+  defp flush_same_hour(state, entries) do
+    case upsert(Map.values(state.pending) ++ entries) do
+      :ok -> {:ok, %{state | pending: %{}}}
       {:error, _reason} = error -> {error, state}
     end
   end
+
+  defp flush_new_hour(state, hour, current, entries) do
+    prune(state, hour)
+    new_state = %{state | hour: hour, baseline: current}
+
+    case upsert(Map.values(state.pending) ++ entries) do
+      :ok ->
+        {:ok, %{new_state | pending: %{}}}
+
+      {:error, _reason} = error ->
+        {error, %{new_state | pending: merge_pending(state.pending, entries)}}
+    end
+  end
+
+  defp merge_pending(pending, entries) do
+    Map.merge(pending, Map.new(entries, &{pending_key(&1), &1}))
+  end
+
+  defp pending_key(entry), do: {entry.hour, entry.metric, entry.tags}
 
   # A Peep killed without running terminate/2 leaves its persistent term
   # pointing at a deleted ETS table. The supervisor restarts this process with
@@ -112,26 +149,23 @@ defmodule Mydia.Perf.Flusher do
     ArgumentError -> %{}
   end
 
-  defp write(state, current) do
+  defp build_entries(state, current) do
     now = DateTime.truncate(state.clock.(), :second)
 
-    entries =
-      for delta <- Snapshot.deltas(current, state.baseline) do
-        %{
-          id: Ecto.UUID.generate(),
-          hour: state.hour,
-          boot_id: state.boot_id,
-          metric: delta.metric,
-          tags: delta.tags,
-          count: delta.count,
-          sum_us: delta.sum_us,
-          buckets: Jason.encode!(delta.buckets),
-          inserted_at: now,
-          updated_at: now
-        }
-      end
-
-    upsert(entries)
+    for delta <- Snapshot.deltas(current, state.baseline) do
+      %{
+        id: Ecto.UUID.generate(),
+        hour: state.hour,
+        boot_id: state.boot_id,
+        metric: delta.metric,
+        tags: delta.tags,
+        count: delta.count,
+        sum_us: delta.sum_us,
+        buckets: Jason.encode!(delta.buckets),
+        inserted_at: now,
+        updated_at: now
+      }
+    end
   end
 
   defp upsert([]), do: :ok
@@ -155,17 +189,6 @@ defmodule Mydia.Perf.Flusher do
     end
   rescue
     exception -> warn(exception)
-  end
-
-  defp roll_over(state, current) do
-    hour = Rollup.hour_of(state.clock.())
-
-    if DateTime.compare(hour, state.hour) == :eq do
-      state
-    else
-      prune(state, hour)
-      %{state | hour: hour, baseline: current}
-    end
   end
 
   defp prune(state, hour) do

@@ -39,8 +39,11 @@ config :mydia,
        )
 
 # Performance metrics are on by default. Read at the top level so the switch
-# works in every environment.
-if System.get_env("MYDIA_PERF_METRICS") in ~w(false 0 no off) do
+# works in every environment, and so the production Repo blocks below can key
+# their stacktrace capture off the same boolean.
+perf_metrics_enabled? = System.get_env("MYDIA_PERF_METRICS") not in ~w(false 0 no off)
+
+if not perf_metrics_enabled? do
   config :mydia, Mydia.Perf, enabled: false
 end
 
@@ -97,8 +100,9 @@ if config_env() == :prod do
                pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
                # Increased timeout to handle long-running library scans (60 seconds)
                timeout: 60_000,
-               # Mydia.Perf keys query timings by the calling function.
-               stacktrace: true
+               # Mydia.Perf keys query timings by the calling function; the
+               # stacktrace capture follows the metrics switch above.
+               stacktrace: perf_metrics_enabled?
              ] ++ ssl_opt
 
     Ecto.Adapters.SQLite3 ->
@@ -121,8 +125,9 @@ if config_env() == :prod do
         busy_timeout: 30_000,
         # BEGIN IMMEDIATE rather than BEGIN DEFERRED. See #283.
         default_transaction_mode: :immediate,
-        # Mydia.Perf keys query timings by the calling function.
-        stacktrace: true
+        # Mydia.Perf keys query timings by the calling function; the
+        # stacktrace capture follows the metrics switch above.
+        stacktrace: perf_metrics_enabled?
   end
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
