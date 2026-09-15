@@ -18,6 +18,22 @@ defmodule Mydia.Perf do
   @self_caller "caller=Mydia.Perf."
 
   @doc """
+  Whether this node records metrics: the `Mydia.Perf` `:enabled` config, and not
+  a `mydia-cli` invocation.
+  """
+  @spec enabled?() :: boolean()
+  def enabled? do
+    enabled?(
+      Application.get_env(:mydia, __MODULE__, []),
+      System.get_env("MYDIA_CLI_MODE") == "true"
+    )
+  end
+
+  @doc false
+  @spec enabled?(keyword(), boolean()) :: boolean()
+  def enabled?(config, cli_mode?), do: Keyword.get(config, :enabled, false) and not cli_mode?
+
+  @doc """
   Ranks recorded metrics.
 
   Options: `:since` and `:until` (`DateTime` or `Date`, a `Date` meaning 00:00

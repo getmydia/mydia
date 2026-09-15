@@ -145,6 +145,11 @@ defmodule Mydia.Application do
         # its terminate/2 has a chance to flush what is still buffered (best
         # effort, not a guarantee; see the writer's moduledoc).
         Mydia.Events.Writer,
+        # Performance metrics. After the repo and the migrator for the same
+        # reason as the events writer: its flusher writes a final batch in
+        # terminate/2, so it must stop before the repo does. Returns :ignore
+        # when disabled.
+        Mydia.Perf.Supervisor,
         Mydia.Downloads.Client.Registry,
         # Owns the ETS table holding the derived set of client torrents Mydia
         # does not manage. init/1 only creates the table (no I/O), so unlike

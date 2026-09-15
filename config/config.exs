@@ -502,6 +502,13 @@ config :tower,
   log_level: :none,
   logger_metadata: [:request_id]
 
+# Persisted performance metrics. See Mydia.Perf. MYDIA_PERF_METRICS=false in
+# runtime.exs turns recording off.
+config :mydia, Mydia.Perf,
+  enabled: true,
+  flush_interval_ms: 300_000,
+  retention_days: 14
+
 # Configure downloads and transcoding
 config :mydia, :downloads,
   transcode_cache_dir: "priv/data/transcodes",
