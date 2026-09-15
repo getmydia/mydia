@@ -75,7 +75,8 @@ defmodule Mydia.Indexers.RankingOptions do
           optional(:blocked_tags) => [String.t()] | nil,
           optional(:preferred_tags) => [String.t()] | nil,
           optional(:custom_formats) => [map()] | nil,
-          optional(:audio_policy) => AudioLanguagePolicy.t() | nil
+          optional(:audio_policy) => AudioLanguagePolicy.t() | nil,
+          optional(:episode_count) => pos_integer() | nil
         }
 
   @doc """
@@ -119,6 +120,7 @@ defmodule Mydia.Indexers.RankingOptions do
     |> maybe_add_option(:preferred_tags, Map.get(input, :preferred_tags))
     |> maybe_add_option(:custom_formats, Map.get(input, :custom_formats))
     |> maybe_put(:audio_policy, Map.get(input, :audio_policy))
+    |> maybe_put(:episode_count, Map.get(input, :episode_count))
   end
 
   @doc """

@@ -134,4 +134,42 @@ defmodule Mydia.Indexers.ReleaseRankerLanguageTest do
     assert first["audio_assumed"] == false
     assert "en" in first["audio_languages"]
   end
+
+  describe "season pack size" do
+    defp size_opts(extra) do
+      Keyword.merge(
+        [media_type: :episode, quality_profile: hd_profile(), size_range: {1024, 7680}],
+        extra
+      )
+    end
+
+    test "a pack within bounds per episode takes no size penalty" do
+      pack = result(@varyg, 16, 35_000)
+
+      assert ReleaseRanker.calculate_score_breakdown(pack, size_opts(episode_count: 24)).size_penalty ==
+               0.0
+
+      assert ReleaseRanker.calculate_score_breakdown(pack, size_opts([])).size_penalty < 0.0
+    end
+
+    test "a single episode is never divided, even in a season search" do
+      episode = result("Kaiju.Garden.S02E01.1080p.CR.WEB-DL.AAC2.0.H.264-VARYG", 16, 35_000)
+
+      assert ReleaseRanker.calculate_score_breakdown(episode, size_opts(episode_count: 24)).size_penalty <
+               0.0
+    end
+
+    test "RankingOptions passes the episode count through" do
+      opts =
+        RankingOptions.build(%{
+          media_type: :episode,
+          quality_profile: hd_profile(),
+          custom_formats: [],
+          audio_policy: nil,
+          episode_count: 24
+        })
+
+      assert Keyword.get(opts, :episode_count) == 24
+    end
+  end
 end

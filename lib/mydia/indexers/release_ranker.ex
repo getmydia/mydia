@@ -57,6 +57,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
     release's language rank is the outermost sort key, ahead of resolution preference, so a
     release in a preferred language beats one without it among everything the hard removals
     keep. `nil` ranks every release equally. (default: `nil`)
+  - `:episode_count` - episodes a season pack for the searched season should hold. A result
+    that `ReleaseParser` reads as a season pack is sized and scored per episode
+    (`size / episode_count`), so a normal pack is not judged against per-episode size bounds.
+    Single-episode results are never divided. (default: `nil`, no division)
   """
 
   require Logger
@@ -92,7 +96,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
           apply_source_exclusion: boolean() | nil,
           apply_resolution_floor: boolean() | nil,
           custom_formats: [map()],
-          audio_policy: AudioLanguagePolicy.t() | nil
+          audio_policy: AudioLanguagePolicy.t() | nil,
+          episode_count: pos_integer() | nil
         ]
 
   @default_min_seeders 0
@@ -460,7 +465,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
       search_query: search_query
     ]
 
-    score_result = SearchScorer.score_result_with_breakdown(result, scorer_opts)
+    # Size math sees a season pack per episode; everything else (display, grab)
+    # keeps the real result.
+    sized_result = per_episode_sized(result, Keyword.get(opts, :episode_count))
+    score_result = SearchScorer.score_result_with_breakdown(sized_result, scorer_opts)
 
     # Extract individual components for the breakdown struct
     breakdown = score_result.breakdown
@@ -484,7 +492,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
     # Soft penalties derived per-result from the ranking options. Each helper
     # returns a value <= 0.0 that is layered onto the base score. They stay at
     # 0.0 when the relevant option is absent or the result is within bounds.
-    size_penalty = size_penalty(result, Keyword.get(opts, :size_range))
+    size_penalty = size_penalty(sized_result, Keyword.get(opts, :size_range))
     seeder_penalty = seeder_penalty(result, opts)
     identity_penalty = identity_penalty(result, opts)
     audio = audio_fields(result, opts)
@@ -1122,6 +1130,27 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
     # 10 points per matching tag
     matching_tags * 10.0
+  end
+
+  # A season pack's size is the sum of its episodes, while a profile's episode
+  # size bounds describe one episode. Without this division every normal pack
+  # took the full size penalty and lost file-size quality points, so the
+  # smallest packs won regardless of what they contained.
+  defp per_episode_sized(%SearchResult{size: size} = result, count)
+       when is_integer(size) and is_integer(count) and count > 1 do
+    if season_pack?(result), do: %{result | size: div(size, count)}, else: result
+  end
+
+  defp per_episode_sized(result, _count), do: result
+
+  defp season_pack?(%SearchResult{title: title}) do
+    case ReleaseParser.parse(title) do
+      %ParsedFileInfo{season: season, episodes: episodes} when is_integer(season) ->
+        episodes in [nil, []]
+
+      _ ->
+        false
+    end
   end
 
   # Detected audio languages and their rank against the search's policy. Runs

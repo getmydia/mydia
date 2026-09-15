@@ -1102,6 +1102,28 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  How many episodes a season pack for `season_number` can be expected to hold:
+  the episodes that have aired, or every episode in the season when none have
+  aired or none carry an air date. Never below 1, so it is always safe to
+  divide by.
+
+  Used to size a season pack per episode when ranking it; see the
+  `:episode_count` option of `Mydia.Indexers.ReleaseRanker`.
+  """
+  @spec season_pack_episode_count(binary(), integer()) :: pos_integer()
+  def season_pack_episode_count(media_item_id, season_number) do
+    episodes = list_episodes(media_item_id, season: season_number)
+    today = Date.utc_today()
+
+    aired =
+      Enum.count(episodes, fn episode ->
+        episode.air_date != nil and Date.compare(episode.air_date, today) != :gt
+      end)
+
+    max(if(aired > 0, do: aired, else: length(episodes)), 1)
+  end
+
+  @doc """
   Gets a single episode.
 
   ## Options
