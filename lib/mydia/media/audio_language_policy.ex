@@ -3,13 +3,16 @@ defmodule Mydia.Media.AudioLanguagePolicy do
   The ordered audio languages a media item's releases are ranked against, and
   where that list came from.
 
-  A show may carry its own list in `media_items.audio_languages`. Without one,
-  the operator's `streaming.audio_language` applies, the same setting playback
-  reads. The sentinel `"original"` resolves to the item's original language,
-  which is what keeps a Japanese show Japanese-first under the default
-  `["original", "en"]` while an English-first override still prefers a dub.
+  A media item's releases are ranked by its download audio choice: the show's
+  own `media_items.download_audio_language` when set, otherwise the operator's
+  `downloads.audio_language`. That choice is one value, `"original"` or a
+  language code, and `expand/1` turns it into the ordered list ranking uses. It
+  is a different setting from `streaming.audio_language`, which picks the track
+  that plays, and nothing here reads that one. The sentinel `"original"`
+  resolves to the item's original language, which keeps a Japanese show
+  Japanese-first under the default while an English choice still prefers a dub.
 
-  `new/3`, `rank/2`, `matches/2` and `event_fields/1` are pure.
+  `new/3`, `expand/1`, `rank/2`, `matches/2` and `event_fields/1` are pure.
 
   ## Rank
 
@@ -54,35 +57,45 @@ defmodule Mydia.Media.AudioLanguagePolicy do
   end
 
   @doc """
-  The policy that governs `media_item`: its own override when set, otherwise the
-  server list. Pass `server_languages:` to avoid reading the runtime config
-  (tests, or a caller that already holds it).
+  The policy that governs `media_item`: its own download audio choice when set,
+  otherwise the server's. Pass `server_language:` to avoid reading the runtime
+  config (tests, or a caller that already holds it).
   """
   @spec effective(MediaItem.t(), keyword()) :: t()
   def effective(%MediaItem{} = media_item, opts \\ []) do
     original = LanguageCode.original_language_from(media_item.metadata)
 
-    case media_item.audio_languages do
-      [_ | _] = languages ->
-        new(languages, :show, original)
+    case media_item.download_audio_language do
+      choice when is_binary(choice) ->
+        new(expand(choice), :show, original)
 
       _ ->
-        languages = Keyword.get_lazy(opts, :server_languages, &server_languages/0)
-        new(languages, :server, original)
+        choice = Keyword.get_lazy(opts, :server_language, &server_language/0)
+        new(expand(choice), :server, original)
     end
   end
 
   @doc """
-  `streaming.audio_language` from the layered runtime config, the list playback
-  already honours. Read through `Mydia.Config.get/0` rather than a flat
-  application env key, for the reason `Mydia.Streaming.AudioTrackSelector.configured/0`
-  documents.
+  The ordered list one download audio choice stands for. `"original"` is just
+  the original. A language prefers that dub and falls back to the original,
+  which is also what lets a dual-audio release beat a dub-only one. `nil` is no
+  preference.
   """
-  @spec server_languages() :: [String.t()]
-  def server_languages do
+  @spec expand(String.t() | nil) :: [String.t()]
+  def expand(nil), do: []
+  def expand(@original), do: [@original]
+  def expand(choice) when is_binary(choice), do: [choice, @original]
+
+  @doc """
+  `downloads.audio_language` from the layered runtime config. Read through
+  `Mydia.Config.get/0` rather than a flat application env key, for the reason
+  `Mydia.Streaming.AudioTrackSelector.configured/0` documents.
+  """
+  @spec server_language() :: String.t() | nil
+  def server_language do
     case Mydia.Config.get() do
-      %{streaming: %{audio_language: languages}} -> List.wrap(languages)
-      _ -> []
+      %{downloads: %{audio_language: choice}} -> choice
+      _ -> nil
     end
   end
 

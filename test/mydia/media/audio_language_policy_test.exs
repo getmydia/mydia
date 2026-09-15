@@ -2,6 +2,7 @@ defmodule Mydia.Media.AudioLanguagePolicyTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Media.AudioLanguagePolicy
+  alias Mydia.Media.MediaItem
 
   describe "new/3" do
     test "resolves the original sentinel and keeps order" do
@@ -80,6 +81,67 @@ defmodule Mydia.Media.AudioLanguagePolicyTest do
 
     test "is empty without a policy" do
       assert AudioLanguagePolicy.event_fields(nil) == %{}
+    end
+  end
+
+  describe "expand/1" do
+    test "original stands alone" do
+      assert AudioLanguagePolicy.expand("original") == ["original"]
+    end
+
+    test "a language prefers that dub, then the original" do
+      assert AudioLanguagePolicy.expand("en") == ["en", "original"]
+    end
+
+    test "no choice is no preference" do
+      assert AudioLanguagePolicy.expand(nil) == []
+    end
+  end
+
+  # Mydia.Metadata.Structs.MediaMetadata enforces :provider_id, :provider and
+  # :media_type via @enforce_keys, so a fresh struct here must supply them.
+  defp metadata(original_language) do
+    %Mydia.Metadata.Structs.MediaMetadata{
+      provider_id: "1",
+      provider: :metadata_relay,
+      media_type: :tv_show,
+      original_language: original_language
+    }
+  end
+
+  describe "effective/2" do
+    test "a show's choice beats the server's" do
+      item = %MediaItem{download_audio_language: "en", metadata: metadata("jpn")}
+
+      policy = AudioLanguagePolicy.effective(item, server_language: "original")
+
+      assert policy.source == :show
+      assert policy.languages == ["en", "ja"]
+      assert policy.original_language == "ja"
+    end
+
+    test "falls back to the server choice, resolving original from metadata" do
+      item = %MediaItem{download_audio_language: nil, metadata: metadata("jpn")}
+
+      policy = AudioLanguagePolicy.effective(item, server_language: "original")
+
+      assert policy.source == :server
+      assert policy.languages == ["ja"]
+    end
+
+    test "a dub in the show's own language collapses to one entry" do
+      item = %MediaItem{download_audio_language: "en", metadata: metadata("en")}
+
+      assert AudioLanguagePolicy.effective(item, server_language: "original").languages == ["en"]
+    end
+
+    test "no server choice ranks every release equally" do
+      item = %MediaItem{download_audio_language: nil, metadata: metadata("ja")}
+
+      policy = AudioLanguagePolicy.effective(item, server_language: nil)
+
+      assert policy.languages == []
+      assert AudioLanguagePolicy.rank(policy, ["it"]) == 0
     end
   end
 end

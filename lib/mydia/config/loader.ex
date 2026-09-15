@@ -292,6 +292,7 @@ defmodule Mydia.Config.Loader do
       System.get_env("AUTO_SEARCH_MIN_SEEDERS"),
       &parse_integer/1
     )
+    |> put_if_present(:audio_language, System.get_env("DOWNLOAD_AUDIO_LANGUAGE"))
   end
 
   defp load_upgrades_env do

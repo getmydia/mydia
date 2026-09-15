@@ -195,6 +195,35 @@ downloads:
   # seeder count, which looks a lot like an indexer that stopped working.
   min_seeders: 0
 
+  # Audio a release should carry for search to prefer it.
+  # Environment variable: DOWNLOAD_AUDIO_LANGUAGE
+  #
+  # "original" prefers the show or film's own language. A language code such
+  # as "en" prefers that dub and falls back to the original, so a dual-audio
+  # release beats a dub-only one. Each show can override this from its page.
+  # This does not choose the track that plays; see streaming.audio_language.
+  audio_language: original
+
+# Streaming Configuration
+# -----------------------
+streaming:
+  # Audio track that plays, most preferred first. "original" is the show or
+  # film's own language. When no listed language matches, the track the file
+  # marks as default plays.
+  # Environment variable: AUDIO_LANGUAGE (comma-separated)
+  audio_language:
+    - original
+    - en
+
+  # Play the track the file marks as default, ignoring audio_language.
+  # Environment variable: PREFER_DEFAULT_AUDIO_TRACK
+  prefer_default_audio_track: false
+
+  # Subtitle languages to fetch, most preferred first.
+  # Environment variable: SUBTITLE_LANGUAGE (comma-separated)
+  subtitle_language:
+    - en
+
 # FlareSolverr Configuration
 # ---------------------------
 # FlareSolverr is a proxy server to bypass Cloudflare and DDoS-GUARD protection.

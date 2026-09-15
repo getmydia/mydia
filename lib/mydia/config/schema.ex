@@ -144,6 +144,14 @@ defmodule Mydia.Config.Schema do
       # without a parsed seeder count, which can look like an indexer that
       # stopped working.
       field :min_seeders, :integer, default: 0
+
+      # Which audio a release should carry for search and upgrades to prefer:
+      # "original", the item's own language, or a language code, which prefers
+      # that dub and falls back to the original. nil means no preference. A show
+      # can override it with media_items.download_audio_language. This is not
+      # streaming.audio_language, which picks the track that plays; see
+      # Mydia.Media.AudioLanguagePolicy.
+      field :audio_language, :string, default: "original"
     end
 
     embeds_one :upgrades, Upgrades, on_replace: :update, primary_key: false do
@@ -498,7 +506,8 @@ defmodule Mydia.Config.Schema do
       :monitor_interval_minutes,
       :release_blacklist_default_ttl_days,
       :auto_reject_limit,
-      :min_seeders
+      :min_seeders,
+      :audio_language
     ])
     |> validate_number(:monitor_interval_minutes, greater_than: 0)
     |> validate_number(:release_blacklist_default_ttl_days, greater_than: 0)
@@ -507,6 +516,19 @@ defmodule Mydia.Config.Schema do
     # A negative floor is meaningless, so it is rejected at config time
     # rather than silently behaving like 0.
     |> validate_number(:min_seeders, greater_than_or_equal_to: 0)
+    |> validate_download_audio_language()
+  end
+
+  # "original" or a language Mydia.Metadata.LanguageCode recognizes. nil passes
+  # because validate_change/3 skips it, and it means no preference.
+  defp validate_download_audio_language(changeset) do
+    validate_change(changeset, :audio_language, fn :audio_language, choice ->
+      if choice == "original" or Mydia.Metadata.LanguageCode.known?(choice) do
+        []
+      else
+        [audio_language: "must be \"original\" or a known language code"]
+      end
+    end)
   end
 
   defp upgrades_changeset(schema, attrs) do

@@ -11,6 +11,7 @@ defmodule Mydia.Config.Schema.PathsTest do
       assert "auth.oidc_enabled" in keys
       assert "media.movies_path" in keys
       assert "streaming.audio_language" in keys
+      assert "downloads.audio_language" in keys
     end
 
     test "excludes embeds_many sections, which have their own tables" do
@@ -63,6 +64,11 @@ defmodule Mydia.Config.Schema.PathsTest do
     test "splits a comma-separated list into an array field" do
       assert {:ok, [:streaming, :audio_language], ["en", "fr"]} =
                Paths.cast_overlay("streaming.audio_language", "en, fr")
+    end
+
+    test "casts the download audio choice as a single string" do
+      assert {:ok, [:downloads, :audio_language], "ja"} =
+               Paths.cast_overlay("downloads.audio_language", "ja")
     end
 
     test "treats an empty or nil value as unset" do

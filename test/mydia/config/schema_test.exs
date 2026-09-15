@@ -504,6 +504,33 @@ defmodule Mydia.Config.SchemaTest do
     end
   end
 
+  describe "downloads audio_language (DOWNLOAD_AUDIO_LANGUAGE)" do
+    test "defaults to original" do
+      assert Schema.defaults().downloads.audio_language == "original"
+    end
+
+    test "accepts original and a known language code" do
+      for choice <- ["original", "ja", "jpn"] do
+        changeset = Schema.changeset(%Schema{}, %{downloads: %{audio_language: choice}})
+        assert changeset.valid?, "expected #{choice} to be accepted"
+      end
+    end
+
+    test "accepts nil, meaning no preference" do
+      changeset = Schema.changeset(%Schema{}, %{downloads: %{audio_language: nil}})
+
+      assert changeset.valid?
+    end
+
+    test "rejects an unknown code" do
+      changeset = Schema.changeset(%Schema{}, %{downloads: %{audio_language: "xx"}})
+
+      refute changeset.valid?
+
+      assert "must be \"original\" or a known language code" in errors_on(changeset).downloads.audio_language
+    end
+  end
+
   describe "plugins override_dir (PLUGINS_OVERRIDE_DIR)" do
     test "round-trips a configured override directory" do
       changeset = Schema.changeset(%Schema{}, %{plugins: %{override_dir: "/data/plugins"}})
