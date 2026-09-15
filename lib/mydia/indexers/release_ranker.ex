@@ -53,15 +53,20 @@ defmodule Mydia.Indexers.ReleaseRanker do
     list is grabbed regardless. A release with no resolution token counts as
     `QualityParser.assumed_resolution/0`. Manual search passes `false`, for the same R8 reason as
     `:apply_source_exclusion`.
+  - `:audio_policy` - `Mydia.Media.AudioLanguagePolicy` the results are ranked against. A
+    release's language rank is the outermost sort key, ahead of resolution preference, so a
+    release in a preferred language beats one without it among everything the hard removals
+    keep. `nil` ranks every release equally. (default: `nil`)
   """
 
   require Logger
 
   alias Mydia.Downloads.ReleaseValidator
-  alias Mydia.Indexers.{QualityParser, SearchResult, SearchScorer}
+  alias Mydia.Indexers.{QualityParser, ReleaseLanguages, SearchResult, SearchScorer}
   alias Mydia.Indexers.Structs.{RankedResult, ScoreBreakdown}
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.ParsedFileInfo
+  alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Quality.Sources
   alias Mydia.Settings.CustomFormats.Matcher
   alias Mydia.Settings.QualityProfile
@@ -86,7 +91,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
           now: DateTime.t() | nil,
           apply_source_exclusion: boolean() | nil,
           apply_resolution_floor: boolean() | nil,
-          custom_formats: [map()]
+          custom_formats: [map()],
+          audio_policy: AudioLanguagePolicy.t() | nil
         ]
 
   @default_min_seeders 0
@@ -481,6 +487,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
     size_penalty = size_penalty(result, Keyword.get(opts, :size_range))
     seeder_penalty = seeder_penalty(result, opts)
     identity_penalty = identity_penalty(result, opts)
+    audio = audio_fields(result, opts)
 
     size_mb = bytes_to_mb(result.size)
     seeders = result.seeders || 0
@@ -521,7 +528,11 @@ defmodule Mydia.Indexers.ReleaseRanker do
       total: round_score(total_score),
       size_penalty: round_score(size_penalty),
       seeder_penalty: round_score(seeder_penalty),
-      identity_penalty: round_score(identity_penalty)
+      identity_penalty: round_score(identity_penalty),
+      language_rank: audio.language_rank,
+      language_matches: audio.language_matches,
+      audio_languages: audio.audio_languages,
+      audio_assumed: audio.audio_assumed
     })
   end
 
@@ -658,21 +669,20 @@ defmodule Mydia.Indexers.ReleaseRanker do
   ## Private Functions - Sorting
 
   # Sort keys, outermost first:
-  #   1. resolution preference index, so a profile's resolution choice is never
+  #   1. language rank, so a release in a preferred audio language beats one
+  #      without it among everything the hard removals kept
+  #   2. resolution preference index, so a profile's resolution choice is never
   #      overridden by a format score
-  #   2. custom format score, so within a tier a preferred-language release
-  #      beats a better-seeded one
-  #   3. the base composite score
-  defp sort_by_score_and_preferences(ranked_results, nil) do
-    Enum.sort_by(ranked_results, fn %{score: score, breakdown: breakdown} ->
-      {-breakdown.custom_format_score, -score}
-    end)
-  end
-
+  #   3. language matches, so dual audio beats a single matching language
+  #   4. custom format score, so within a tier a preferred format beats a
+  #      better-seeded release
+  #   5. the base composite score
+  # With no audio policy the first and third keys are 0 for every release, which
+  # reproduces the order from before languages were ranked.
   defp sort_by_score_and_preferences(ranked_results, preferred_qualities) do
     Enum.sort_by(ranked_results, fn %{result: result, score: score, breakdown: breakdown} ->
-      {quality_preference_index(result, preferred_qualities), -breakdown.custom_format_score,
-       -score}
+      {breakdown.language_rank, quality_preference_index(result, preferred_qualities),
+       -breakdown.language_matches, -breakdown.custom_format_score, -score}
     end)
   end
 
@@ -737,12 +747,16 @@ defmodule Mydia.Indexers.ReleaseRanker do
       size_mb = bytes_to_mb(result.size)
       resolution = if result.quality, do: result.quality.resolution, else: nil
 
-      base_info = %{
-        title: result.title,
-        seeders: result.seeders,
-        size_mb: Float.round(size_mb, 1),
-        resolution: resolution
-      }
+      base_info =
+        Map.merge(
+          %{
+            title: result.title,
+            seeders: result.seeders,
+            size_mb: Float.round(size_mb, 1),
+            resolution: resolution
+          },
+          audio_fields(result, opts)
+        )
 
       # Only hard removals are reported as rejections now; size/seeders/ratio
       # shortcomings are penalties on accepted results (mirrors filter_acceptable
@@ -789,7 +803,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
           })
       end
     end)
-    |> Enum.sort_by(&{-&1.custom_format_score, -&1.score})
+    |> Enum.sort_by(&{&1.language_rank, -&1.custom_format_score, -&1.score})
   end
 
   @doc """
@@ -836,7 +850,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
       "seeders" => r.seeders,
       "size_mb" => r.size_mb,
       "resolution" => r.resolution,
-      "status" => to_string(r.status)
+      "status" => to_string(r.status),
+      "audio_languages" => r.audio_languages,
+      "audio_assumed" => r.audio_assumed,
+      "language_rank" => r.language_rank
     }
 
     base
@@ -1105,6 +1122,23 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
     # 10 points per matching tag
     matching_tags * 10.0
+  end
+
+  # Detected audio languages and their rank against the search's policy. Runs
+  # for rejected rows too, so Activity can show what a dropped release carried.
+  defp audio_fields(%SearchResult{title: title}, opts) do
+    policy = Keyword.get(opts, :audio_policy)
+    original = policy && policy.original_language
+
+    %ReleaseLanguages{languages: languages, assumed?: assumed?} =
+      ReleaseLanguages.detect(title, original)
+
+    %{
+      audio_languages: languages,
+      audio_assumed: assumed?,
+      language_rank: AudioLanguagePolicy.rank(policy, languages),
+      language_matches: AudioLanguagePolicy.matches(policy, languages)
+    }
   end
 
   defp bytes_to_mb(bytes) when is_integer(bytes) do

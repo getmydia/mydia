@@ -47,8 +47,16 @@ defmodule Mydia.Indexers.RankingOptions do
   `Mydia.Settings.CustomFormats.resolve_for_profile/1`. Resolution stays
   outside this module so it remains database-free; call sites pass the
   resolved list in the input map and this builder threads it through.
+
+  ## Audio policy (resolved upstream)
+
+  `:audio_policy` arrives already resolved by
+  `Mydia.Media.AudioLanguagePolicy.effective/1`, for the same reason custom
+  formats do: resolving it reads the item and the runtime config, and this
+  builder stays free of both. An explicit `nil` means "no item, no preference".
   """
 
+  alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Settings.QualityProfile
 
   require Logger
@@ -66,7 +74,8 @@ defmodule Mydia.Indexers.RankingOptions do
           optional(:expected_episode) => non_neg_integer() | nil,
           optional(:blocked_tags) => [String.t()] | nil,
           optional(:preferred_tags) => [String.t()] | nil,
-          optional(:custom_formats) => [map()] | nil
+          optional(:custom_formats) => [map()] | nil,
+          optional(:audio_policy) => AudioLanguagePolicy.t() | nil
         }
 
   @doc """
@@ -95,7 +104,7 @@ defmodule Mydia.Indexers.RankingOptions do
     opts_with_quality =
       case quality_profile do
         %QualityProfile{} = profile ->
-          warn_on_missing_custom_formats(input)
+          warn_on_missing_resolved_inputs(input)
 
           base_opts
           |> Keyword.put(:quality_profile, profile)
@@ -109,17 +118,35 @@ defmodule Mydia.Indexers.RankingOptions do
     |> maybe_add_option(:blocked_tags, Map.get(input, :blocked_tags))
     |> maybe_add_option(:preferred_tags, Map.get(input, :preferred_tags))
     |> maybe_add_option(:custom_formats, Map.get(input, :custom_formats))
+    |> maybe_put(:audio_policy, Map.get(input, :audio_policy))
+  end
+
+  @doc """
+  The audio-preference fields a search event records, read from built ranking
+  options. Empty when the search had no policy.
+  """
+  @spec audio_event_fields(keyword()) :: map()
+  def audio_event_fields(opts) when is_list(opts) do
+    opts |> Keyword.get(:audio_policy) |> AudioLanguagePolicy.event_fields()
   end
 
   # Six call sites build ranking options, and a forgotten one would silently
-  # ignore every custom format for that search path. That is exactly the drift
-  # this module's moduledoc exists to prevent, so an absent key is loud. An
-  # explicitly empty list is silent: it means "resolved, nothing scored".
-  defp warn_on_missing_custom_formats(input) do
+  # ignore every custom format, or every audio language preference, for that
+  # search path. That is exactly the drift this module's moduledoc exists to
+  # prevent, so an absent key is loud. An explicit empty list or nil is silent:
+  # it means "resolved, nothing applies".
+  defp warn_on_missing_resolved_inputs(input) do
     unless Map.has_key?(input, :custom_formats) do
       Logger.warning(
         "[RankingOptions] built with a quality profile but no :custom_formats key; " <>
           "custom formats will be ignored for this search"
+      )
+    end
+
+    unless Map.has_key?(input, :audio_policy) do
+      Logger.warning(
+        "[RankingOptions] built with a quality profile but no :audio_policy key; " <>
+          "audio language preference will be ignored for this search"
       )
     end
   end

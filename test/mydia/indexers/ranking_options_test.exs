@@ -273,4 +273,56 @@ defmodule Mydia.Indexers.RankingOptionsTest do
       refute log =~ "custom formats will be ignored"
     end
   end
+
+  describe "audio policy" do
+    test "passes :audio_policy through and records it for events" do
+      policy = Mydia.Media.AudioLanguagePolicy.new(["en"], :show, "ja")
+
+      opts =
+        RankingOptions.build(%{
+          media_type: :episode,
+          quality_profile: quality_profile_fixture(),
+          custom_formats: [],
+          audio_policy: policy
+        })
+
+      assert Keyword.get(opts, :audio_policy) == policy
+
+      assert RankingOptions.audio_event_fields(opts) == %{
+               "audio_preference" => ["en"],
+               "audio_preference_source" => "show"
+             }
+    end
+
+    test "omits an explicit nil policy silently" do
+      log =
+        capture_log(fn ->
+          opts =
+            RankingOptions.build(%{
+              media_type: :movie,
+              quality_profile: quality_profile_fixture(),
+              custom_formats: [],
+              audio_policy: nil
+            })
+
+          refute Keyword.has_key?(opts, :audio_policy)
+          assert RankingOptions.audio_event_fields(opts) == %{}
+        end)
+
+      refute log =~ "audio language preference will be ignored"
+    end
+
+    test "warns when a profile is given but the :audio_policy key is absent" do
+      log =
+        capture_log(fn ->
+          RankingOptions.build(%{
+            media_type: :movie,
+            quality_profile: quality_profile_fixture(),
+            custom_formats: []
+          })
+        end)
+
+      assert log =~ "audio language preference will be ignored"
+    end
+  end
 end

@@ -23,6 +23,13 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
   - `:size_penalty` - Penalty for being outside the configured size range
   - `:seeder_penalty` - Penalty for low seeders / poor ratio
   - `:identity_penalty` - Penalty for episode/season identity mismatch or absence
+
+  Language fields (defaults in brackets), filled from the release title against
+  the search's `Mydia.Media.AudioLanguagePolicy`:
+  - `:language_rank` (0) - position of the best preferred language, lower is better
+  - `:language_matches` (0) - how many preferred languages the title carries
+  - `:audio_languages` ([]) - detected audio languages, canonical codes
+  - `:audio_assumed` (false) - true when the title named no audio language
   """
 
   @enforce_keys [
@@ -46,7 +53,11 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
     :total,
     size_penalty: 0.0,
     seeder_penalty: 0.0,
-    identity_penalty: 0.0
+    identity_penalty: 0.0,
+    language_rank: 0,
+    language_matches: 0,
+    audio_languages: [],
+    audio_assumed: false
   ]
 
   @type t :: %__MODULE__{
@@ -60,7 +71,11 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
           total: float(),
           size_penalty: float(),
           seeder_penalty: float(),
-          identity_penalty: float()
+          identity_penalty: float(),
+          language_rank: non_neg_integer(),
+          language_matches: non_neg_integer(),
+          audio_languages: [String.t()],
+          audio_assumed: boolean()
         }
 
   @doc """
