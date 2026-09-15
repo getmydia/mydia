@@ -1069,7 +1069,7 @@ defmodule Mydia.Jobs.TVShowSearch do
   #
   #   * `:candidate_filter` - `(results -> results)`, applied after
   #     blacklist rejection and before ranking. Used by the season upgrade
-  #     path to keep only candidates Comparator.upgrade?/5 confirms are a
+  #     path to keep only candidates Comparator.upgrade?/6 confirms are a
   #     real upgrade over the target file.
   #   * `:grab_opts` / `:after_grab` - passed through to
   #     initiate_season_pack_download/5; `:after_grab` is called as
@@ -1284,7 +1284,7 @@ defmodule Mydia.Jobs.TVShowSearch do
   #
   #   * `:candidate_filter` - `(results -> results)`, applied after
   #     blacklist rejection and before ranking. Used to keep only candidates
-  #     Comparator.upgrade?/5 confirms are a real upgrade.
+  #     Comparator.upgrade?/6 confirms are a real upgrade.
   #   * `:grab_opts` / `:after_grab` - passed through to
   #     initiate_episode_download/3; `:after_grab` is called as
   #     `after_grab.(download, result)`.
@@ -1618,12 +1618,15 @@ defmodule Mydia.Jobs.TVShowSearch do
   # file and has aired.
   #
   # Threads the three things that make this an upgrade search rather than a
-  # missing-file search: a candidate filter (Upgrades.filter_candidates/4,
+  # missing-file search: a candidate filter (Upgrades.filter_candidates/5,
   # shared with the movie upgrade path), a manual grab that bypasses the
   # "already has a file" duplicate check plus the metadata patch linking the
   # grab back to the file it targets, and a backoff resource_type
   # namespaced apart from the ordinary "episode" bucket (see
   # Mydia.Upgrades.eligible_episodes/1 for why that namespacing matters).
+  # The candidate filter and the grab tag both judge audio language first
+  # (Comparator.upgrade?/6), under the show's upgrade policy
+  # (Upgrades.upgrade_policy/2) and the reasons the sweep enqueued it for.
   defp search_episode_upgrade(%Episode{} = episode, %MediaFile{} = file, %Args{} = args) do
     case QualityProfileResolver.resolve(episode.media_item) do
       %QualityProfile{} = profile ->
@@ -1753,7 +1756,7 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
   end
 
-  # Comparator.upgrade?/5 (via Upgrades.filter_candidates/4) scores a
+  # Comparator.upgrade?/6 (via Upgrades.filter_candidates/5) scores a
   # candidate's `.size` against the profile's `episode_min_size_mb` /
   # `episode_max_size_mb` (see Mydia.Upgrades.Attrs.from_quality/3) - correct
   # for a single-episode candidate, wrong for a season pack: `result.size`

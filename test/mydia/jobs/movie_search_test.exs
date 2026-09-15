@@ -711,8 +711,9 @@ defmodule Mydia.Jobs.MovieSearchTest do
     alias Mydia.Library.Structs.{FileMetadata, StreamInfo}
     alias Mydia.Metadata.Structs.MediaMetadata
 
-    # Relies on the default streaming.audio_language, ["original", "en"], so a
-    # Japanese film's Italian-only file carries none of the preferred languages.
+    # Relies on the default downloads.audio_language, "original", plus the
+    # English floor Mydia.Upgrades.upgrade_policy/2 adds, so a Japanese
+    # film's Italian-only file carries none of the acceptable languages.
     defp language_movie_target(library_path, languages, opts \\ []) do
       profile =
         quality_profile_fixture(%{

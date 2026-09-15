@@ -507,7 +507,7 @@ defmodule Mydia.Jobs.MovieSearch do
   #
   #   * `:candidate_filter` - `(results -> results)`, applied after blacklist
   #     rejection and before ranking. Used by the upgrade path to keep only
-  #     candidates Comparator.upgrade?/5 confirms are a real upgrade.
+  #     candidates Comparator.upgrade?/6 confirms are a real upgrade.
   #   * `:grab_opts` / `:after_grab` - passed through to initiate_download/3;
   #     `:after_grab` is called as `after_grab.(download, result)`.
   #   * `:backoff_resource_types` - the SearchBackoff buckets to record against
@@ -736,14 +736,14 @@ defmodule Mydia.Jobs.MovieSearch do
   # Resolves the profile, then delegates to the same search_movie/3 the
   # all_monitored path uses, carrying the three things that make it an
   # upgrade search rather than a missing-file search: a candidate filter
-  # (Upgrades.filter_candidates/4, shared with the TV upgrade path), a
+  # (Upgrades.filter_candidates/5, shared with the TV upgrade path), a
   # manual grab that bypasses the "already has a file" duplicate check plus
   # the metadata patch linking the grab back to the file it targets, and a
   # backoff resource_type namespaced apart from the ordinary "movie" bucket
   # (see Mydia.Upgrades.eligible_movies/1 for why that namespacing matters).
   # The candidate filter and the grab tag both judge audio language first
-  # (Comparator.upgrade?/6), under the movie's AudioLanguagePolicy and the
-  # reasons the sweep enqueued it for.
+  # (Comparator.upgrade?/6), under the movie's upgrade policy
+  # (Upgrades.upgrade_policy/2) and the reasons the sweep enqueued it for.
   defp search_movie_upgrade(%MediaItem{} = movie, %MediaFile{} = file, %Args{} = args) do
     case QualityProfileResolver.resolve(movie) do
       %QualityProfile{} = profile ->

@@ -1565,7 +1565,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert reloaded.title =~ "1080p"
     end
 
-    # Comparator.upgrade?/5 scores a candidate's `.size` against
+    # Comparator.upgrade?/6 scores a candidate's `.size` against
     # episode_min_size_mb/episode_max_size_mb - correct for a single
     # episode, wrong for a season pack whose `.size` is the sum of every
     # episode in it. Without normalizing to a per-episode estimate before

@@ -767,7 +767,7 @@ defmodule Mydia.Upgrades do
   end
 
   # Per-profile-dimension delta (new - old), rounded the same way
-  # Comparator.upgrade?/5 rounds its overall delta. Read by the activity
+  # Comparator.upgrade?/6 rounds its overall delta. Read by the activity
   # feed to answer *why* a replacement decision was made, not just report
   # the aggregate score change.
   defp breakdown_delta(old_breakdown, new_breakdown) do
