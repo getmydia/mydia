@@ -1089,4 +1089,48 @@ defmodule Mydia.ImportCandidatesTest do
       assert Repo.get!(ImportCandidate, returned.id).queued_op == "accept"
     end
   end
+
+  describe "stage_show_file/3" do
+    test "stages a file under its show's provider identity, parsing the filename" do
+      lp = library_path_fixture(%{type: "series"})
+      show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast", tvdb_id: 900_003})
+      relative = "Lantern Coast/Season 02/Lantern.Coast.S02E04.1080p.mkv"
+
+      assert {:ok, candidate} =
+               ImportCandidates.stage_show_file(show, lp, %{
+                 relative_path: relative,
+                 size: 42,
+                 discovered_at: ~U[2026-09-01 12:00:00Z]
+               })
+
+      assert candidate.library_path_id == lp.id
+      assert candidate.relative_path == relative
+      assert candidate.media_type == "tv_show"
+      assert {candidate.provider_type, candidate.provider_id} == {"tvdb", "900003"}
+
+      stored = ImportCandidates.get_by_path(lp.id, relative)
+      assert stored.parsed_info["type"] == "tv_show"
+      assert stored.parsed_info["season"] == 2
+      assert stored.parsed_info["episodes"] == [4]
+    end
+
+    test "keeps a caller-supplied parsed_info" do
+      lp = library_path_fixture(%{type: "series"})
+      show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast", tvdb_id: 900_004})
+      relative = "Lantern Coast/Season 03/unnamed.mkv"
+
+      assert {:ok, _candidate} =
+               ImportCandidates.stage_show_file(show, lp, %{
+                 relative_path: relative,
+                 size: 42,
+                 discovered_at: ~U[2026-09-01 12:00:00Z],
+                 parsed_info: %{"season" => 3, "episodes" => [7]}
+               })
+
+      stored = ImportCandidates.get_by_path(lp.id, relative)
+      assert stored.parsed_info["season"] == 3
+      assert stored.parsed_info["episodes"] == [7]
+      assert stored.parsed_info["type"] == "tv_show"
+    end
+  end
 end
