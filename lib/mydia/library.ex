@@ -1092,27 +1092,41 @@ defmodule Mydia.Library do
         {:error, :path_not_resolved}
 
       absolute_path ->
-        if File.exists?(absolute_path) do
-          case File.rm(absolute_path) do
-            :ok ->
-              Logger.info("Deleted media file from disk", path: absolute_path)
-              # Also remove the associated NFO file if it exists
-              Mydia.Metadata.NfoWriter.delete_nfo_for_file(absolute_path)
-              :ok
+        delete_path_from_disk(absolute_path)
+    end
+  end
 
-            {:error, reason} ->
-              Logger.error("Failed to delete media file from disk",
-                path: absolute_path,
-                reason: inspect(reason)
-              )
+  @doc """
+  Deletes one file and its NFO sidecar from disk by absolute path.
 
-              {:error, reason}
-          end
-        else
-          # File doesn't exist, consider it a success
-          Logger.debug("Media file already doesn't exist on disk", path: absolute_path)
+  Returns `:ok` when the file was removed or was already absent, and
+  `{:error, reason}` when a file that is present could not be removed. A
+  sidecar that cannot be removed is logged by
+  `Mydia.Metadata.NfoWriter.delete_nfo_for_file/1` and does not fail the call.
+
+  Import candidates have no `MediaFile` to resolve a path from, which is why
+  this takes the path itself.
+  """
+  @spec delete_path_from_disk(String.t()) :: :ok | {:error, term()}
+  def delete_path_from_disk(absolute_path) when is_binary(absolute_path) do
+    if File.exists?(absolute_path) do
+      case File.rm(absolute_path) do
+        :ok ->
+          Logger.info("Deleted media file from disk", path: absolute_path)
+          Mydia.Metadata.NfoWriter.delete_nfo_for_file(absolute_path)
           :ok
-        end
+
+        {:error, reason} ->
+          Logger.error("Failed to delete media file from disk",
+            path: absolute_path,
+            reason: inspect(reason)
+          )
+
+          {:error, reason}
+      end
+    else
+      Logger.debug("Media file already doesn't exist on disk", path: absolute_path)
+      :ok
     end
   end
 
