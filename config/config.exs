@@ -279,7 +279,10 @@ config :mydia, Oban,
     # rather than sharing :segments so a season of intro detection cannot delay
     # a re-sync a user just requested by clicking a button, and rather than
     # sharing :analysis so heavy decoding cannot starve file analysis.
-    subsync: 1
+    subsync: 1,
+    # Mydia.Jobs.RemoveDownload. One slot: Transmission answers one RPC at a
+    # time and stops answering entirely while it deletes a torrent's data.
+    client_removals: 1
   ],
   plugins: [
     # Keep completed jobs for 7 days

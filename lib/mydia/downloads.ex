@@ -454,6 +454,30 @@ defmodule Mydia.Downloads do
   defdelegate reject_release(download, opts \\ []), to: Mydia.Downloads.Queue
 
   @doc """
+  Records that a download should be removed and enqueues `Mydia.Jobs.RemoveDownload`.
+  See `Mydia.Downloads.Removal.request/3`.
+  """
+  @spec request_removal(Download.t(), String.t(), keyword()) ::
+          {:ok, Download.t()} | {:ok, :already_pending} | {:error, term()}
+  defdelegate request_removal(download, kind, opts \\ []),
+    to: Mydia.Downloads.Removal,
+    as: :request
+
+  @doc """
+  Blacklists the release now and requests a `"reject"` removal.
+  See `Mydia.Downloads.Removal.request_reject/2`.
+  """
+  @spec request_reject(Download.t(), keyword()) ::
+          {:ok, Download.t()} | {:ok, :already_pending} | {:error, term()}
+  defdelegate request_reject(download, opts \\ []), to: Mydia.Downloads.Removal
+
+  @doc """
+  Requests a `"clear"` removal for every imported download not already pending.
+  """
+  @spec request_clear_all_completed(keyword()) :: {:ok, non_neg_integer()}
+  defdelegate request_clear_all_completed(opts \\ []), to: Mydia.Downloads.Removal
+
+  @doc """
   Re-matches an already-imported download to a corrected movie or episode,
   enqueuing a MediaRematch job to move + relink the file. See
   `Mydia.Downloads.Queue.rematch_imported_download/3` for return values.

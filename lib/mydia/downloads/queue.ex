@@ -163,7 +163,10 @@ defmodule Mydia.Downloads.Queue do
   # fails is still a dead download: clearing it matters more than recording
   # why. Leaving the torrent running because the bookkeeping failed is the
   # exact bug this path exists to fix.
-  defp blacklist_release(%Download{} = download, opts) do
+  @doc false
+  # Public for Mydia.Downloads.Removal.request_reject/2, which blacklists at
+  # click time and leaves the client call to a job.
+  def blacklist_release(%Download{} = download, opts) do
     with {:ok, indexer, guid} <- Blacklists.extract_key(download),
          {:ok, _row} <-
            Blacklists.add(
@@ -901,12 +904,15 @@ defmodule Mydia.Downloads.Queue do
   # for. `Media` exposes only the raising `get_media_item!/1`, so this reads the
   # association instead: a deleted media item yields nil rather than raising in
   # the middle of a cleanup path.
-  defp replacement_search(%Download{episode_id: episode_id}) when is_binary(episode_id) do
+  @doc false
+  # Public for Mydia.Jobs.RemoveDownload, which queues the search once a
+  # rejected download's row is gone.
+  def replacement_search(%Download{episode_id: episode_id}) when is_binary(episode_id) do
     Mydia.Jobs.TVShowSearch.new(%{"mode" => "specific", "episode_id" => episode_id})
   end
 
-  defp replacement_search(%Download{media_item_id: media_item_id} = download)
-       when is_binary(media_item_id) do
+  def replacement_search(%Download{media_item_id: media_item_id} = download)
+      when is_binary(media_item_id) do
     case Repo.preload(download, :media_item).media_item do
       %{type: "movie", id: id} ->
         Mydia.Jobs.MovieSearch.new(%{"mode" => "specific", "media_item_id" => id})
@@ -919,10 +925,11 @@ defmodule Mydia.Downloads.Queue do
     end
   end
 
-  defp replacement_search(_download), do: nil
+  def replacement_search(_download), do: nil
 
-  defp enqueue_search(nil), do: :ok
-  defp enqueue_search(changeset), do: insert_job(changeset)
+  @doc false
+  def enqueue_search(nil), do: :ok
+  def enqueue_search(changeset), do: insert_job(changeset)
 
   ## Private Functions - Download Initiation
 
@@ -1312,6 +1319,20 @@ defmodule Mydia.Downloads.Queue do
     Download
     |> where([d], d.download_client == ^client_name and d.download_client_id == ^client_id)
     |> Repo.one()
+  end
+
+  @doc false
+  # The adapter and connection map for an enabled client, by name. Shared with
+  # Mydia.Downloads.Removal so the removal job talks to the client exactly as
+  # cancel_download/2 does.
+  @spec client_for(String.t()) :: {:ok, module(), map()} | {:error, :no_client}
+  def client_for(client_name) do
+    with {:ok, client_config} <- find_client_config(client_name),
+         {:ok, adapter} <- get_adapter_for_client(client_config) do
+      {:ok, adapter, config_to_map(client_config)}
+    else
+      _no_client -> {:error, :no_client}
+    end
   end
 
   defp find_client_config(client_name) do
