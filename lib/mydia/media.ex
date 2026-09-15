@@ -499,28 +499,37 @@ defmodule Mydia.Media do
     end
   end
 
+  # :monitored and :monitor_new_seasons are operator settings, not metadata.
+  # They are here so that a write of either lands in the item's history with
+  # its old and new value, whichever caller made it. Without that, the
+  # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
+  # from an ordinary "Metadata enriched" update for three weeks.
+  #
+  # Every field here must render in the activity feed; presentation_test.exs
+  # enforces it, because an audited field the feed cannot show reads as a
+  # refresh that changed nothing.
+  @audited_media_item_fields [
+    :title,
+    :original_title,
+    :year,
+    :monitored,
+    :monitor_new_seasons,
+    :category,
+    :category_override,
+    :tmdb_id,
+    :tvdb_id
+  ]
+
+  @doc false
+  def audited_media_item_fields, do: @audited_media_item_fields
+
   @doc false
   defp extract_meaningful_changes(changeset, original) do
     changes = changeset.changes
 
     simple_changes =
       changes
-      # :monitored and :monitor_new_seasons are operator settings, not metadata.
-      # They are here so that a write of either lands in the item's history with
-      # its old and new value, whichever caller made it. Without that, the
-      # enricher's silent re-enable in getmydia/mydia#653 was indistinguishable
-      # from an ordinary "Metadata enriched" update for three weeks.
-      |> Map.take([
-        :title,
-        :original_title,
-        :year,
-        :monitored,
-        :monitor_new_seasons,
-        :category,
-        :category_override,
-        :tmdb_id,
-        :tvdb_id
-      ])
+      |> Map.take(@audited_media_item_fields)
       |> Enum.map(fn {field, new_value} ->
         old_value = Map.get(original, field)
         {field, %{old: old_value, new: new_value}}
@@ -558,7 +567,7 @@ defmodule Mydia.Media do
         old_val = MetadataAccess.get(old_metadata, field)
         new_val = MetadataAccess.get(new_metadata, field)
 
-        if values_differ?(old_val, new_val) do
+        if metadata_value_changed?(field, old_val, new_val) do
           [{label, format_metadata_change(field, old_val, new_val)} | acc]
         else
           acc
@@ -575,6 +584,14 @@ defmodule Mydia.Media do
       %{metadata_fields: Enum.reverse(changes)}
     end
   end
+
+  # A rating is shown to one decimal, so it only counts as changed at that
+  # precision. Comparing raw floats recorded provider vote drift (7.81 to 7.84)
+  # as "Rating 7.8 → 7.8" on every weekly refresh.
+  defp metadata_value_changed?(:vote_average, old, new),
+    do: format_rating(old) != format_rating(new)
+
+  defp metadata_value_changed?(_field, old, new), do: values_differ?(old, new)
 
   defp values_differ?(nil, nil), do: false
   defp values_differ?(nil, ""), do: false

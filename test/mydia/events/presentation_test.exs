@@ -298,6 +298,45 @@ defmodule Mydia.Events.PresentationTest do
       assert is_binary(detail)
       assert detail =~ "Arrival"
     end
+
+    test "every field update_media_item/3 audits renders in the summary with a label" do
+      for field <- Mydia.Media.audited_media_item_fields() do
+        name = Atom.to_string(field)
+
+        assert name in Presentation.simple_change_fields(),
+               "#{name} is audited but never rendered"
+
+        detail =
+          Presentation.detail(
+            event(
+              type: "media_item.updated",
+              metadata: %{
+                "title" => "Lantern Bay",
+                "reason" => "Metadata refreshed",
+                "changes" => %{name => %{"old" => 1, "new" => 2}}
+              }
+            )
+          )
+
+        assert detail == "Lantern Bay, metadata refreshed (#{Presentation.field_label(name)})"
+      end
+    end
+
+    test "updated labels a back-filled provider id" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.updated",
+            metadata: %{
+              "title" => "Lantern Bay",
+              "reason" => "Metadata refreshed",
+              "changes" => %{"tvdb_id" => %{"old" => nil, "new" => 424_242}}
+            }
+          )
+        )
+
+      assert detail == "Lantern Bay, metadata refreshed (TVDB ID)"
+    end
   end
 
   describe "field_label/1" do

@@ -609,6 +609,16 @@ defmodule Mydia.Events.Presentation do
 
   defp resolution_of(metadata, prefix), do: metadata["#{prefix}_resolution"] || "unknown"
 
+  # The top-level (non-metadata) fields a media_item.updated changeset can
+  # carry. Shared by changes_summary/1 and
+  # MydiaWeb.ActivityLive.Index.format_change_details/1 so the one-line summary
+  # and the expanded breakdown always render the same fields.
+  @simple_change_fields ~w(title original_title year monitored monitor_new_seasons category category_override tmdb_id tvdb_id)
+
+  @doc "Top-level media_item.updated change fields the feed renders."
+  @spec simple_change_fields() :: [String.t()]
+  def simple_change_fields, do: @simple_change_fields
+
   # Short summary of a media_item.updated changeset, for the one-line label.
   # The expandable per-field breakdown stays in the LiveView.
   defp changes_summary(nil), do: nil
@@ -623,7 +633,7 @@ defmodule Mydia.Events.Presentation do
 
     simple_fields =
       changes
-      |> Map.take(["title", "original_title", "year", "monitored", "monitor_new_seasons"])
+      |> Map.take(@simple_change_fields)
       |> Map.keys()
       |> Enum.map(&field_label/1)
 
@@ -660,6 +670,10 @@ defmodule Mydia.Events.Presentation do
     "year" => "Year",
     "monitored" => "Monitoring",
     "monitor_new_seasons" => "New season monitoring",
+    "category" => "Category",
+    "category_override" => "Category override",
+    "tmdb_id" => "TMDB ID",
+    "tvdb_id" => "TVDB ID",
     "overview" => "Description",
     "poster" => "Poster",
     "backdrop" => "Backdrop",
