@@ -148,4 +148,30 @@ describe("TMDB routes", () => {
 
     expect(seenPath.startsWith("/3/movie/550%3F")).toBe(true);
   });
+
+  it("caches a TMDB season with an upcoming episode for 6 hours instead of 14 days", async () => {
+    fetchMock
+      .get("https://api.themoviedb.org")
+      .intercept({ method: "GET", path: (p) => p.startsWith("/3/tv/9001/season/2") })
+      .reply(200, {
+        episodes: [{ episode_number: 8, air_date: "2099-01-01", name: "Episode 8" }],
+      });
+
+    const res = await SELF.fetch("https://relay.mydia.dev/tmdb/tv/shows/9001/2");
+
+    expect(res.headers.get("cache-control")).toContain("s-maxage=21600");
+  });
+
+  it("keeps the season TTL once every episode has settled", async () => {
+    fetchMock
+      .get("https://api.themoviedb.org")
+      .intercept({ method: "GET", path: (p) => p.startsWith("/3/tv/9002/season/1") })
+      .reply(200, {
+        episodes: [{ episode_number: 1, air_date: "2001-01-01", name: "Quiet Tide" }],
+      });
+
+    const res = await SELF.fetch("https://relay.mydia.dev/tmdb/tv/shows/9002/1");
+
+    expect(res.headers.get("cache-control")).toContain("s-maxage=1209600");
+  });
 });

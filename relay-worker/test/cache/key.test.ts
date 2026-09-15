@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   buildKey,
   ttlSecondsFor,
+  settlingTtlSeconds,
+  ttlSecondsForResponse,
   canonicalize,
   bodyFingerprint,
   subtitleSearchCacheKey,
@@ -116,5 +118,82 @@ describe("subtitleSearchCacheKey", () => {
     expect(subtitleSearchCacheKey("abc", 2)).not.toBe(
       subtitleSearchCacheKey("abc", 1),
     );
+  });
+});
+
+// Mirrors metadata-relay/test/metadata_relay/cache/settling_test.exs case for case.
+describe("settlingTtlSeconds", () => {
+  const today = new Date("2026-09-14T12:00:00Z");
+  const tvdbSeasonKey = "GET:/tvdb/seasons/2247557/extended:meta=translations";
+  const tvdbEpisodeKey = "GET:/tvdb/episodes/11767188/extended:meta=translations";
+  const tmdbSeasonKey = "GET:/tmdb/tv/shows/97546/4:";
+  const tvdbSeason = (episodes: unknown[]) =>
+    JSON.stringify({ data: { id: 1, episodes } });
+
+  it("gives a TVDB season with an upcoming placeholder episode 6 hours", () => {
+    const body = tvdbSeason([{ aired: "2026-09-23", name: "TBA " }]);
+    expect(settlingTtlSeconds(tvdbSeasonKey, body, today)).toBe(21600);
+  });
+
+  it("still counts an episode aired 14 days ago", () => {
+    const body = tvdbSeason([{ aired: "2026-08-31", name: "Harbor Lights" }]);
+    expect(settlingTtlSeconds(tvdbSeasonKey, body, today)).toBe(21600);
+  });
+
+  it("returns null once every episode aired more than 14 days ago", () => {
+    const body = tvdbSeason([{ aired: "2026-08-30", name: "Harbor Lights" }]);
+    expect(settlingTtlSeconds(tvdbSeasonKey, body, today)).toBeNull();
+  });
+
+  it("treats an undated placeholder episode as settling", () => {
+    const body = tvdbSeason([{ aired: null, name: "TBA" }]);
+    expect(settlingTtlSeconds(tvdbSeasonKey, body, today)).toBe(21600);
+  });
+
+  it("does not treat an undated special with a real name as settling", () => {
+    const body = tvdbSeason([{ aired: null, name: "Behind the Lighthouse" }]);
+    expect(settlingTtlSeconds(tvdbSeasonKey, body, today)).toBeNull();
+  });
+
+  it("applies to a single TVDB episode", () => {
+    const upcoming = JSON.stringify({ data: { aired: "2026-09-23", name: "TBA " } });
+    const old = JSON.stringify({ data: { aired: "2019-03-01", name: "Quiet Tide" } });
+    expect(settlingTtlSeconds(tvdbEpisodeKey, upcoming, today)).toBe(21600);
+    expect(settlingTtlSeconds(tvdbEpisodeKey, old, today)).toBeNull();
+  });
+
+  it("applies to a TMDB season", () => {
+    const upcoming = JSON.stringify({
+      episodes: [{ air_date: "2026-09-22", name: "Episode 8" }],
+    });
+    const finished = JSON.stringify({
+      episodes: [{ air_date: "2019-03-01", name: "Quiet Tide" }],
+    });
+    expect(settlingTtlSeconds(tmdbSeasonKey, upcoming, today)).toBe(21600);
+    expect(settlingTtlSeconds(tmdbSeasonKey, finished, today)).toBeNull();
+  });
+
+  it("ignores other paths even with an upcoming episode in the body", () => {
+    const body = tvdbSeason([{ aired: "2026-09-23", name: "TBA" }]);
+    expect(settlingTtlSeconds("GET:/tvdb/series/1/extended:", body, today)).toBeNull();
+    expect(settlingTtlSeconds("GET:/tmdb/tv/shows/97546:", body, today)).toBeNull();
+    expect(settlingTtlSeconds("GET:/tmdb/tv/shows/97546/images:", body, today)).toBeNull();
+  });
+
+  it("ignores an undecodable or unexpected body", () => {
+    expect(settlingTtlSeconds(tvdbSeasonKey, "not json", today)).toBeNull();
+    expect(settlingTtlSeconds(tvdbSeasonKey, "[1,2]", today)).toBeNull();
+    expect(
+      settlingTtlSeconds(tvdbSeasonKey, JSON.stringify({ data: { episodes: "nope" } }), today),
+    ).toBeNull();
+  });
+});
+
+describe("ttlSecondsForResponse", () => {
+  it("falls back to the path TTL when the body has settled", () => {
+    const body = JSON.stringify({ episodes: [{ air_date: "2001-01-01", name: "Quiet Tide" }] });
+    expect(
+      ttlSecondsForResponse("GET:/tmdb/tv/shows/97546/4:", body, new Date("2026-09-14T00:00:00Z")),
+    ).toBe(1209600);
   });
 });

@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import { cacheGet, cachePut } from "../cache/store";
-import { ttlSecondsFor } from "../cache/key";
+import { ttlSecondsForResponse } from "../cache/key";
 
 // No allowlist, deliberately. TMDB handlers forward caller params straight
 // through, which is the only reason append_to_response works for credits,
@@ -60,6 +60,10 @@ export async function proxyJson(
   const body = await upstream.text();
   const ok = upstream.status >= 200 && upstream.status < 300;
 
+  // Decided from the body as well as the path: episode data still being
+  // filled in is cached for hours instead of weeks. See settlingTtlSeconds.
+  const ttl = ttlSecondsForResponse(cacheKey, body);
+
   const res = new Response(body, {
     status: upstream.status,
     headers: {
@@ -69,13 +73,13 @@ export async function proxyJson(
       // "max-age=0, private, must-revalidate", which is why Cloudflare
       // reported cf-cache-status: DYNAMIC on every route and nothing was
       // ever cached at the edge.
-      "cache-control": cacheableHeader(cacheKey, ok),
+      "cache-control": cacheableHeader(ttl, ok),
     },
   });
 
   // Only successful responses are cached, matching plug/cache.ex.
   if (ok) {
-    await cachePut(env, cacheKey, res.clone());
+    await cachePut(env, cacheKey, res.clone(), { ttlSeconds: ttl });
   }
 
   res.headers.set("x-relay-cache", "MISS");
@@ -95,8 +99,7 @@ export async function proxyJson(
 // `no-store` rather than `no-cache`: `no-cache` still permits storing the
 // response and revalidating, which is a distinction no client here needs and
 // leaves the error body sitting in intermediary caches.
-function cacheableHeader(cacheKey: string, ok: boolean): string {
+function cacheableHeader(ttl: number, ok: boolean): string {
   if (!ok) return "no-store";
-  const ttl = ttlSecondsFor(cacheKey);
   return `public, s-maxage=${ttl}, stale-while-revalidate=86400, stale-if-error=604800`;
 }
