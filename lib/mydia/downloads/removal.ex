@@ -40,7 +40,9 @@ defmodule Mydia.Downloads.Removal do
   Records that `download` should be removed and enqueues the job that does it.
 
   Returns `{:ok, :already_pending}` without writing when a removal is already in
-  flight, and `{:error, :not_found}` when the row is gone.
+  flight, `{:error, :not_found}` when the row is gone, and
+  `{:error, :removal_in_progress}` when the job for an earlier request has given
+  up but not yet finished.
 
   ## Options
     - `:delete_files` - passed to the adapter; defaults to `false`
@@ -124,6 +126,8 @@ defmodule Mydia.Downloads.Removal do
              :ok <- finish(download) do
           :ok
         else
+          # Retrying cannot bring a client back, so record it now.
+          {:error, :no_client} -> give_up(download, :no_client)
           {:error, reason} when last_attempt? -> give_up(download, reason)
           {:error, _reason} = error -> error
         end
@@ -143,9 +147,14 @@ defmodule Mydia.Downloads.Removal do
     }
 
     with {:ok, updated} <- download |> Download.changeset(attrs) |> Repo.update(),
-         {:ok, _job} <- insert_job(RemoveDownload.new(%{"download_id" => updated.id})) do
+         {:ok, %Oban.Job{conflict?: false}} <-
+           insert_job(RemoveDownload.new(%{"download_id" => updated.id})) do
       updated
     else
+      # The previous job for this row gave up moments ago and has not returned
+      # yet. Its uniqueness still holds, so no new job would be inserted and
+      # nothing would ever act on this request.
+      {:ok, %Oban.Job{conflict?: true}} -> Repo.rollback(:removal_in_progress)
       {:error, reason} -> Repo.rollback(reason)
     end
   end
@@ -164,9 +173,15 @@ defmodule Mydia.Downloads.Removal do
         )
         |> removed?()
 
-      # A client that is gone or switched off holds nothing Mydia can reach.
-      # Clearing the row anyway is what clear_completed/2 and reject_release/2
-      # have always done here.
+      # A cancel asks for the torrent to stop, and with its client switched off
+      # or gone Mydia cannot stop it. Deleting the row would also let a
+      # re-enabled client's torrent be adopted straight back, so keep the row.
+      {:error, :no_client} when download.removal_kind == "cancel" ->
+        {:error, :no_client}
+
+      # For a clear or a reject the row is what the operator wants gone.
+      # Clearing it without the client is what clear_completed/2 and
+      # reject_release/2 have always done here.
       {:error, :no_client} ->
         Logger.info("Removing a download whose client is not configured or is disabled",
           download_id: download.id,
@@ -267,6 +282,7 @@ defmodule Mydia.Downloads.Removal do
     end
   end
 
+  defp describe(:no_client), do: "the client is disabled or no longer configured in Mydia"
   defp describe(%Mydia.Downloads.Client.Error{message: message}), do: message
   defp describe(%{__exception__: true} = exception), do: Exception.message(exception)
   defp describe(reason) when is_binary(reason), do: reason

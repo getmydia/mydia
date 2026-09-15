@@ -209,7 +209,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
     |> Enum.each(&reject_junk/1)
 
     # Self-heal abandoned grabs (persist the timeout so occupancy is released)
-    Enum.each(stale_grabs, &handle_stale_grab/1)
+    # Through with_download/4, which re-reads the row: a removal requested
+    # after the query ran must not have "Grab timed out" written onto it.
+    Enum.each(stale_grabs, fn grab ->
+      with_download(grab, :stale_grab, [], &handle_stale_grab/1)
+    end)
 
     # Track progress / flag stalled downloads. Grace minutes are read from each
     # download's configured client (DB or runtime config) — cached per poll.
@@ -230,7 +234,11 @@ defmodule Mydia.Jobs.DownloadMonitor do
     # Detect stuck downloads (completed but never imported for >1 hour)
     stuck = Downloads.list_stuck_downloads(preload: [:media_item])
     Logger.info("Found #{length(stuck)} stuck downloads")
-    Enum.each(stuck, &handle_stuck/1)
+    # Re-read for the same reason as the stale grabs above, and so a row whose
+    # removal started mid-poll does not get a MediaImport queued.
+    Enum.each(stuck, fn download ->
+      with_download(download, :stuck, [preload: [:media_item]], &handle_stuck/1)
+    end)
 
     {removal_configs, pending_removals} = ClientRemoval.finish_pending_removals()
 

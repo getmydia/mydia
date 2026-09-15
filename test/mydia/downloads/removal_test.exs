@@ -148,6 +148,36 @@ defmodule Mydia.Downloads.RemovalTest do
       end
     end
 
+    # The job for an earlier request gave up and cleared the pending flag, but
+    # it is still incomplete, so Oban's uniqueness would refuse a new job and
+    # the row would sit pending with nothing to process it.
+    test "refuses a request while the previous job is still incomplete" do
+      # Oban's engine is off in test, and uniqueness lives in the engine. Start
+      # a real one under the default name, the one Removal inserts through, the
+      # same way file_analysis_unique_test.exs does.
+      engine =
+        case Repo.__adapter__() do
+          Ecto.Adapters.Postgres -> Oban.Engines.Basic
+          _ -> Oban.Engines.Lite
+        end
+
+      start_supervised!(
+        {Oban, repo: Repo, engine: engine, testing: :manual, queues: false, plugins: false}
+      )
+
+      download =
+        download_fixture(%{removal_kind: "cancel", removal_error: "Failed to remove torrent"})
+
+      {:ok, %Oban.Job{conflict?: false}} =
+        %{"download_id" => download.id} |> RemoveDownload.new() |> Oban.insert()
+
+      assert {:error, :removal_in_progress} = Downloads.request_removal(download, "cancel")
+
+      row = Repo.get!(Download, download.id)
+      assert is_nil(row.removal_requested_at)
+      assert row.removal_error == "Failed to remove torrent"
+    end
+
     test "returns :not_found for a row that is already gone" do
       download = download_fixture()
       {:ok, _} = Downloads.delete_download(download)

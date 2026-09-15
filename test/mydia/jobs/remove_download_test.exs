@@ -130,11 +130,33 @@ defmodule Mydia.Jobs.RemoveDownloadTest do
     refute Repo.get(Download, download.id)
   end
 
-  test "a download whose client is not configured is deleted without a client call" do
-    download = pending(%{download_client: "fictional-missing-client", download_client_id: "x"})
+  test "a clear whose client is not configured deletes the row without a client call" do
+    download =
+      pending(%{
+        download_client: "fictional-missing-client",
+        download_client_id: "x",
+        removal_kind: "clear"
+      })
 
     assert :ok = perform_job(RemoveDownload, %{"download_id" => download.id})
     refute Repo.get(Download, download.id)
+  end
+
+  # Deleting the row would leave the torrent running in the client, and a
+  # re-enabled client's torrent would be adopted straight back.
+  test "a cancel whose client is not configured keeps the row and gives up at once" do
+    download =
+      pending(%{
+        download_client: "fictional-missing-client",
+        download_client_id: "x",
+        removal_kind: "cancel"
+      })
+
+    assert :ok = perform_job(RemoveDownload, %{"download_id" => download.id}, attempt: 1)
+
+    row = Repo.get!(Download, download.id)
+    assert is_nil(row.removal_requested_at)
+    assert row.removal_error == "the client is disabled or no longer configured in Mydia"
   end
 
   test "a reject queues the replacement search once the row is gone" do

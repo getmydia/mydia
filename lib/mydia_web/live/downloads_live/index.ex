@@ -359,8 +359,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
     end
   end
 
+  # A "clear", not a "cancel": deleting has always removed the row even when the
+  # download's client is disabled or gone, which a cancel no longer does.
   def handle_event("delete_download", %{"id" => id}, socket) do
-    start_removal(socket, id, fn _download -> {"cancel", [delete_files: true]} end)
+    start_removal(socket, id, fn _download -> {"clear", [delete_files: true]} end)
   end
 
   def handle_event("retry_removal", %{"id" => id}, socket) do
@@ -417,8 +419,10 @@ defmodule MydiaWeb.DownloadsLive.Index do
               nil ->
                 {:ok, :already_removed}
 
+              # A "clear" for the same reason as delete_download: batch delete
+              # is how orphans of a deleted client get cleaned up.
               download ->
-                Downloads.request_removal(download, "cancel", delete_files: true)
+                Downloads.request_removal(download, "clear", delete_files: true)
             end
           rescue
             _ -> {:error, :failed}
@@ -1136,6 +1140,15 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
           {:error, :not_found} ->
             {:noreply, download_vanished(socket)}
+
+          {:error, :removal_in_progress} ->
+            {:noreply,
+             socket
+             |> put_flash(
+               :info,
+               "The last removal attempt is still finishing. Try again shortly."
+             )
+             |> load_downloads()}
 
           {:error, _reason} ->
             {:noreply,
