@@ -19,7 +19,8 @@ defmodule Mydia.Jobs.MetadataRefresh do
     max_attempts: 3
 
   require Logger
-  alias Mydia.{Events, Media}
+  alias Mydia.Jobs.PassFailures
+  alias Mydia.Media
   alias Mydia.Media.Refresh
 
   defmodule Args do
@@ -52,9 +53,6 @@ defmodule Mydia.Jobs.MetadataRefresh do
       %__MODULE__{refresh_all: true, skip_delay: true}
     end
   end
-
-  # Cap on how many individual failures are attached to the reported event.
-  @max_failure_samples 10
 
   # Random jitter range for scheduled refresh_all runs (0-30 minutes, in seconds).
   @max_startup_delay_seconds 30 * 60
@@ -116,7 +114,7 @@ defmodule Mydia.Jobs.MetadataRefresh do
       failed: length(failures)
     )
 
-    report_failures(failures, total, succeeded)
+    PassFailures.report("metadata_refresh", "media items", failures, total)
 
     :ok
   end
@@ -204,33 +202,5 @@ defmodule Mydia.Jobs.MetadataRefresh do
       )
 
       {media_item, {:error, {:exception, Exception.message(error)}}}
-  end
-
-  defp report_failures([], _total, _succeeded), do: :ok
-
-  defp report_failures(failures, total, succeeded) do
-    failed = length(failures)
-
-    samples =
-      failures
-      |> Enum.take(@max_failure_samples)
-      |> Enum.map(fn {item, reason} ->
-        %{
-          "media_item_id" => item.id,
-          "title" => item.title,
-          "reason" => inspect(reason)
-        }
-      end)
-
-    message =
-      "#{failed} of #{total} media items failed to refresh " <>
-        "(showing #{length(samples)} of #{failed})"
-
-    Events.job_failed("metadata_refresh", message, %{
-      "total" => total,
-      "succeeded" => succeeded,
-      "failed" => failed,
-      "sample_failures" => samples
-    })
   end
 end
