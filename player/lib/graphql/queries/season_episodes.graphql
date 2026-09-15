@@ -1,6 +1,11 @@
 #import '../fragments/progress_fragment.graphql'
-#import '../fragments/media_file_fragment.graphql'
 
+# Files carry only their id. The player screen uses this query for next
+# episode, previous episode and Up Next, which need nothing more, and it used to
+# select the whole MediaFileFragment, subtitles included. A season with many
+# subtitle tracks then came to 254 KB, past what a p2p response could carry, so
+# the query failed on exactly the seasons people binge. The playing file's own
+# subtitles come from EpisodeDetail.
 query SeasonEpisodes($showId: ID!, $seasonNumber: Int!) {
   seasonEpisodes(showId: $showId, seasonNumber: $seasonNumber) {
     id
@@ -17,7 +22,7 @@ query SeasonEpisodes($showId: ID!, $seasonNumber: Int!) {
       ...ProgressFragment
     }
     files {
-      ...MediaFileFragment
+      id
     }
   }
 }

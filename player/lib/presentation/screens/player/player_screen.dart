@@ -3177,8 +3177,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             seasonNumber: episode.seasonNumber,
             episodeNumber: episode.episodeNumber,
             title: episode.title ?? 'Episode ${episode.episodeNumber}',
-            fileIds: (episode.files ?? const <Fragment$MediaFileFragment?>[])
-                .whereType<Fragment$MediaFileFragment>()
+            fileIds: (episode.files ??
+                    const <Query$SeasonEpisodes$seasonEpisodes$files?>[])
+                .whereType<Query$SeasonEpisodes$seasonEpisodes$files>()
                 .map((file) => file.id)
                 .toList(),
             thumbnailUrl: episode.thumbnailUrl,

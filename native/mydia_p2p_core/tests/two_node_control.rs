@@ -102,6 +102,57 @@ async fn two_hosts_exchange_a_request_body() {
     let _responder = responder_handle.await.unwrap();
 }
 
+/// A response larger than 64 KiB must reach the dialer. GraphQL answers travel
+/// back through `send_request`, and a season with many subtitle tracks came to
+/// 254 KB on a real library; with the old 64 KiB read cap every such request
+/// failed with "Failed to read response: stream too long".
+#[tokio::test]
+async fn a_response_larger_than_64_kib_reaches_the_dialer() {
+    tokio::time::timeout(TEST_TIMEOUT, large_response_body())
+        .await
+        .expect("large response exchange timed out after 60s");
+}
+
+async fn large_response_body() {
+    const SIZE: usize = 256 * 1024;
+
+    let (responder, responder_id) = Host::new(test_config());
+    let (dialer, _dialer_id) = Host::new(test_config());
+    let responder_addr = wait_for_ready(&responder).await;
+
+    // See two_hosts_exchange_a_request_body for why the responder is handed
+    // back out rather than dropped inside the task.
+    let responder_handle = tokio::spawn(async move {
+        {
+            let mut rx = responder.event_rx.lock().await;
+            while let Some(event) = rx.recv().await {
+                if let Event::RequestReceived { request_id, .. } = event {
+                    responder
+                        .send_response(request_id, MydiaResponse::Custom(vec![0xAB; SIZE]))
+                        .await
+                        .expect("send_response failed");
+                    break;
+                }
+            }
+        }
+        responder
+    });
+
+    dialer.dial(responder_addr).await.expect("dial failed");
+
+    let response = dialer
+        .send_request(responder_id, MydiaRequest::Custom(vec![1]))
+        .await
+        .expect("send_request failed");
+
+    match response {
+        MydiaResponse::Custom(bytes) => assert_eq!(bytes.len(), SIZE),
+        other => panic!("expected the large Custom response, got {other:?}"),
+    }
+
+    let _responder = responder_handle.await.unwrap();
+}
+
 async fn wait_for_ready(host: &Host) -> String {
     let mut rx = host.event_rx.lock().await;
     while let Some(event) = rx.recv().await {
