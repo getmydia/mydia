@@ -105,6 +105,35 @@ defmodule Mydia.Indexers.ReleaseRankerLanguageTest do
              Enum.find_index(titles, &(&1 == @english_dub))
   end
 
+  test "identity match is the outermost sort key, ahead of language" do
+    correct_episode = "Kaiju.Garden.S03E12.1080p.CR.WEB-DL.JPN.AAC2.0.H.264-VARYG"
+    wrong_episode_dual = "Kaiju.Garden.S03E11.1080p.CR.WEB-DL.DUAL.AAC2.0.H.264-VARYG"
+    season_pack_dual = "[BlackRabbit] Kaiju Garden (2021) - S03 [Bluray-1080p][Dual Audio][AV1]"
+
+    candidates = [
+      result(correct_episode, 10, 1_400),
+      result(wrong_episode_dual, 50, 1_400),
+      result(season_pack_dual, 50, 33_600)
+    ]
+
+    opts =
+      RankingOptions.build(%{
+        media_type: :episode,
+        quality_profile: hd_profile(),
+        custom_formats: [],
+        audio_policy: AudioLanguagePolicy.new(["en"], :show, "ja"),
+        expected_season: 3,
+        expected_episode: 12
+      })
+
+    best = ReleaseRanker.select_best_result(candidates, opts)
+    assert best.result.title == correct_episode
+
+    stats = ReleaseRanker.build_filter_stats(candidates, opts)
+    assert [first | _] = stats["results"]
+    assert first["title"] == correct_episode
+  end
+
   test "without a policy every release ranks 0 and no language is counted" do
     opts = [media_type: :episode, quality_profile: hd_profile()]
 

@@ -29,7 +29,7 @@
     %{patterns: ["italian", "ita"], languages: ["it"]},
     %{patterns: ["spanish", "latino", "castellano", "esp"], languages: ["es"]},
     %{patterns: ["truefrench", "french", "vff", "vfq", "vf2", "vfi"], languages: ["fr"]},
-    %{patterns: ["german"], languages: ["de"]},
+    %{patterns: ["german", "ger", "deu"], languages: ["de"]},
     %{patterns: ["russian", "rus"], languages: ["ru"]},
     %{patterns: ["korean", "kor"], languages: ["ko"]},
     %{patterns: ["chinese", "chi"], languages: ["zh"]},

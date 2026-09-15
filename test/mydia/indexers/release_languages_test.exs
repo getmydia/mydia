@@ -35,7 +35,10 @@ defmodule Mydia.Indexers.ReleaseLanguagesTest do
     # Codec names in a bracket combo are not languages.
     {"Paper.Lantern.Club.2024.1080p.BluRay.[DTS+AAC].x264", "en", ["en"], true},
     # A group name that merely contains DUAL is not a dual-audio tag.
-    {"Paper.Lantern.Club.2024.1080p.WEB.x264-DUALiTY", "en", ["en"], true}
+    {"Paper.Lantern.Club.2024.1080p.WEB.x264-DUALiTY", "en", ["en"], true},
+    # German abbreviations, not just the full word.
+    {"Paper.Lantern.Club.2024.GER.DL.1080p.BluRay.x264", "en", ["de"], false},
+    {"Paper.Lantern.Club.2024.DEU.1080p.WEB.x264", "en", ["de"], false}
   ]
 
   for {{title, original, languages, assumed?}, index} <- Enum.with_index(@cases) do

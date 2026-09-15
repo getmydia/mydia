@@ -677,22 +677,33 @@ defmodule Mydia.Indexers.ReleaseRanker do
   ## Private Functions - Sorting
 
   # Sort keys, outermost first:
-  #   1. language rank, so a release in a preferred audio language beats one
+  #   1. identity tier, so a release whose parsed season/episode does not match
+  #      the search never outranks one that does, regardless of language,
+  #      resolution, or format
+  #   2. language rank, so a release in a preferred audio language beats one
   #      without it among everything the hard removals kept
-  #   2. resolution preference index, so a profile's resolution choice is never
+  #   3. resolution preference index, so a profile's resolution choice is never
   #      overridden by a format score
-  #   3. language matches, so dual audio beats a single matching language
-  #   4. custom format score, so within a tier a preferred format beats a
+  #   4. language matches, so dual audio beats a single matching language
+  #   5. custom format score, so within a tier a preferred format beats a
   #      better-seeded release
-  #   5. the base composite score
-  # With no audio policy the first and third keys are 0 for every release, which
-  # reproduces the order from before languages were ranked.
+  #   6. the base composite score
+  # With no audio policy the second and fourth keys are 0 for every release,
+  # which reproduces the order from before languages were ranked.
   defp sort_by_score_and_preferences(ranked_results, preferred_qualities) do
     Enum.sort_by(ranked_results, fn %{result: result, score: score, breakdown: breakdown} ->
-      {breakdown.language_rank, quality_preference_index(result, preferred_qualities),
-       -breakdown.language_matches, -breakdown.custom_format_score, -score}
+      {identity_tier(breakdown), breakdown.language_rank,
+       quality_preference_index(result, preferred_qualities), -breakdown.language_matches,
+       -breakdown.custom_format_score, -score}
     end)
   end
+
+  # Identity is the outermost sort tier so an identity mismatch never wins on
+  # language, resolution, or formats. Rejected rows (score_all_with_reasons/2)
+  # carry breakdown: nil and sort into tier 0 with everything else that has no
+  # penalty.
+  defp identity_tier(%{identity_penalty: penalty}) when penalty < 0.0, do: 1
+  defp identity_tier(_), do: 0
 
   defp quality_preference_index(_result, nil) do
     # No preferred qualities set, return 0 so all results sort by score only
@@ -811,7 +822,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
           })
       end
     end)
-    |> Enum.sort_by(&{&1.language_rank, -&1.language_matches, -&1.custom_format_score, -&1.score})
+    |> Enum.sort_by(
+      &{identity_tier(&1.breakdown), &1.language_rank, -&1.language_matches,
+       -&1.custom_format_score, -&1.score}
+    )
   end
 
   @doc """

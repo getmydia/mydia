@@ -27,7 +27,12 @@ defmodule MydiaWeb.MediaLive.Show.AudioLanguageEvents do
     persist(socket, languages, "Audio language updated")
   end
 
-  def save_audio_languages(_params, socket), do: persist(socket, nil, "Audio language updated")
+  # A malformed event (no "audio_languages" map) is not a request to reset the
+  # override - reset_audio_languages/2 owns that. Persisting nil here would
+  # silently clear a saved override while reporting success.
+  def save_audio_languages(_params, socket) do
+    {:noreply, put_flash(socket, :error, "Could not save the audio language")}
+  end
 
   def reset_audio_languages(_params, socket) do
     persist(socket, nil, "Audio language now follows the server default")

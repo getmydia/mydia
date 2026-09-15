@@ -52,6 +52,18 @@ defmodule MydiaWeb.MediaLive.Show.AudioLanguageTest do
     assert has_element?(view, "#audio-language-row", "Server default")
   end
 
+  test "a malformed save event leaves the existing override untouched", %{
+    conn: conn,
+    show: show
+  } do
+    {:ok, _} = Mydia.Media.update_media_item(show, %{audio_languages: ["en"]})
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+
+    render_hook(view, "save_audio_languages", %{})
+
+    assert Mydia.Repo.get!(MediaItem, show.id).audio_languages == ["en"]
+  end
+
   test "Cancel closes the modal without saving", %{conn: conn, show: show} do
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
 
