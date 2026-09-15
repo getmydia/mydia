@@ -747,7 +747,7 @@ defmodule Mydia.Jobs.MovieSearch do
   defp search_movie_upgrade(%MediaItem{} = movie, %MediaFile{} = file, %Args{} = args) do
     case QualityProfileResolver.resolve(movie) do
       %QualityProfile{} = profile ->
-        upgrade_opts = [audio_policy: AudioLanguagePolicy.effective(movie), reasons: args.reasons]
+        upgrade_opts = [audio_policy: Upgrades.upgrade_policy(movie), reasons: args.reasons]
 
         opts = [
           candidate_filter: fn results ->

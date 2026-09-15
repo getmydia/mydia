@@ -27,7 +27,7 @@ defmodule Mydia.Jobs.UpgradeSweepLanguageTest do
     Application.put_env(:mydia, :runtime_config, %{
       defaults
       | upgrades: struct(defaults.upgrades, sweep_enabled: true, sweep_batch_size: batch_size),
-        streaming: %{defaults.streaming | audio_language: ["original", "en"]}
+        downloads: %{defaults.downloads | audio_language: "original"}
     })
   end
 
@@ -93,7 +93,7 @@ defmodule Mydia.Jobs.UpgradeSweepLanguageTest do
       insert(:tv_show,
         title: "Kaiju Garden",
         monitored: true,
-        audio_languages: override,
+        download_audio_language: override,
         quality_profile: profile(false),
         metadata: metadata(:tv_show)
       )
@@ -159,7 +159,7 @@ defmodule Mydia.Jobs.UpgradeSweepLanguageTest do
   end
 
   test "a season of episodes missing the show's language becomes one pack search" do
-    show = show_with_episodes(["en"], 8, 10)
+    show = show_with_episodes("en", 8, 10)
 
     assert {:ok, %{searches: 1}} =
              UpgradeSweep.perform(%Oban.Job{args: %{"lead" => "episodes"}})
@@ -171,7 +171,7 @@ defmodule Mydia.Jobs.UpgradeSweepLanguageTest do
   end
 
   test "a season backing off in the language bucket falls back to episode searches" do
-    show = show_with_episodes(["en"], 8, 10)
+    show = show_with_episodes("en", 8, 10)
 
     {:ok, _} =
       Mydia.Search.record_failure("season_language_upgrade", show.id, "all_filtered",

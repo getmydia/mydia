@@ -112,12 +112,34 @@ defmodule Mydia.Upgrades do
   end
 
   @doc """
+  The audio language policy the upgrade pipeline judges `media_item` by.
+
+  It is `AudioLanguagePolicy.effective/2` (same options), with one addition for
+  the server default: English is always acceptable there, ranked after the
+  configured download languages. So under the default `"original"` an
+  English-only copy of a Japanese show is not replaced for language, and a
+  release in a third language can never replace it. A show's own choice is a
+  request and is used as is. Ranking of new grabs does not use this; it reads
+  `AudioLanguagePolicy.effective/2` directly.
+  """
+  @spec upgrade_policy(MediaItem.t(), keyword()) :: AudioLanguagePolicy.t()
+  def upgrade_policy(%MediaItem{} = media_item, opts \\ []) do
+    case AudioLanguagePolicy.effective(media_item, opts) do
+      %AudioLanguagePolicy{source: :server, languages: [_ | _] = languages} = policy ->
+        %{policy | languages: Enum.uniq(languages ++ ["en"])}
+
+      policy ->
+        policy
+    end
+  end
+
+  @doc """
   Returns up to `limit` movies whose current file misses the preferred audio
   language, ordered by `last_language_check_at`.
 
   "Current file" is the one the quality path upgrades, the best-scoring
   analyzed file, so a search carrying both reasons targets one file. A gap is
-  `FileLanguages.gap?/2` under the movie's `AudioLanguagePolicy`.
+  `FileLanguages.gap?/2` under `upgrade_policy/2`.
 
   Reads a page of `limit * #{@overfetch}` movies and stamps every one without a
   gap, so the scan walks the library instead of re-reading the same stale page
@@ -824,7 +846,7 @@ defmodule Mydia.Upgrades do
   defp language_gap(%MediaItem{} = media_item, files, media_type) do
     with profile when not is_nil(profile) <- QualityProfileResolver.resolve(media_item),
          {file, score} <- best_file(files, profile, media_type),
-         policy = AudioLanguagePolicy.effective(media_item),
+         policy = upgrade_policy(media_item),
          true <- FileLanguages.gap?(policy, FileLanguages.detect(file)) do
       {:gap, file, profile, score}
     else

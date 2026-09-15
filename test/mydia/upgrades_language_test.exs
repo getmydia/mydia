@@ -17,7 +17,7 @@ defmodule Mydia.UpgradesLanguageTest do
 
     Application.put_env(:mydia, :runtime_config, %{
       defaults
-      | streaming: %{defaults.streaming | audio_language: ["original", "en"]}
+      | downloads: %{defaults.downloads | audio_language: "original"}
     })
 
     on_exit(fn ->
@@ -198,7 +198,7 @@ defmodule Mydia.UpgradesLanguageTest do
 
   describe "language_eligible_episodes/2" do
     test "a show override flags every episode without its first language" do
-      show = show_with(audio_languages: ["en"])
+      show = show_with(download_audio_language: "en")
       {missing, _} = episode_with_audio(show, 1, ["jpn"])
       {_dual, _} = episode_with_audio(show, 2, ["jpn", "eng"])
 
@@ -213,6 +213,13 @@ defmodule Mydia.UpgradesLanguageTest do
 
       assert [%{episode: found}] = Upgrades.language_eligible_episodes(10)
       assert found.id == russian.id
+    end
+
+    test "under the server default an English-only episode is acceptable" do
+      show = show_with()
+      {_english, _} = episode_with_audio(show, 1, ["eng"])
+
+      assert Upgrades.language_eligible_episodes(10) == []
     end
   end
 
