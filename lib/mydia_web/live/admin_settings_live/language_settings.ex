@@ -45,37 +45,71 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
   end
 
   @doc """
-  Writes the settings a form change actually changed.
+  Writes the setting(s) a form change actually changed.
 
-  `params` is the Language form's change payload. A key is written only when it
-  is present, is not locked by an environment variable, and differs from its
-  resolved value: a write that only repeats the value on screen would pin a
-  YAML or default value into the database layer. A value that fails to parse
-  stops the save before anything after it is written. Returns the keys written,
-  empty when nothing changed.
+  `params` is the Language form's change payload. A browser reports which
+  field fired the change as `params["_target"]`, and serializes the whole
+  form alongside it, debounced fields included, so only that field is parsed;
+  otherwise changing one field could write another field's uncommitted,
+  in-flight text. When `_target` is absent (a direct `render_hook` or
+  `render_change` call with no browser event behind it), every present field
+  is parsed, as before.
+
+  A key is written only when it is not locked by an environment variable and
+  differs from its resolved value: a write that only repeats the value on
+  screen would pin a YAML or default value into the database layer. All the
+  writes from one call happen inside a single transaction: a value that
+  fails to parse, or a write that fails, rolls back everything else this
+  call would have written rather than leaving a partial save. Returns the
+  keys written, empty when nothing changed.
   """
   @spec save(map(), binary() | nil) :: {:ok, [String.t()]} | {:error, String.t(), term()}
   def save(params, user_id) do
     settings = current()
 
-    params
-    |> Enum.flat_map(&parse(&1, params))
-    |> Enum.reject(fn {key, value} ->
-      settings[key].source == :env or settings[key].value == value
-    end)
-    |> Enum.reduce_while({:ok, []}, fn
-      {key, :invalid}, _acc ->
-        {:halt, {:error, key, :invalid}}
+    changes =
+      params
+      |> submitted_fields()
+      |> Enum.flat_map(fn field -> parse({field, Map.get(params, field)}, params) end)
+      |> Enum.reject(fn {key, value} ->
+        settings[key].source == :env or settings[key].value == value
+      end)
 
-      {key, value}, {:ok, written} ->
-        attrs = %{key: key, value: encode(value), category: category(key), updated_by_id: user_id}
+    fn ->
+      Enum.reduce(changes, [], fn
+        {key, :invalid}, _written ->
+          Mydia.Repo.rollback({key, :invalid})
 
-        case Settings.upsert_config_setting(attrs) do
-          {:ok, _setting} -> {:cont, {:ok, [key | written]}}
-          {:error, reason} -> {:halt, {:error, key, reason}}
-        end
-    end)
+        {key, value}, written ->
+          attrs = %{
+            key: key,
+            value: encode(value),
+            category: category(key),
+            updated_by_id: user_id
+          }
+
+          case Settings.upsert_config_setting(attrs) do
+            {:ok, _setting} -> [key | written]
+            {:error, reason} -> Mydia.Repo.rollback({key, reason})
+          end
+      end)
+    end
+    |> Mydia.Repo.transaction()
+    |> case do
+      {:ok, written} -> {:ok, written}
+      {:error, {key, reason}} -> {:error, key, reason}
+    end
   end
+
+  # The field(s) a form change actually names. `_target`, when the browser
+  # supplies it, is the changed field's name path (e.g. `["playback_audio",
+  # "preferred"]` for a nested input named `playback_audio[preferred]`); its
+  # first segment is the field this change is about, and every other field in
+  # `params` is that same form's current (possibly uncommitted) state, not
+  # this change. Without `_target`, every present field is used, matching the
+  # behaviour before per-field targeting existed.
+  defp submitted_fields(%{"_target" => [field | _]}) when is_binary(field), do: [field]
+  defp submitted_fields(params), do: params |> Map.delete("_target") |> Map.keys()
 
   @doc """
   The languages a picker offers: `MydiaWeb.Languages.all/0`, plus any current

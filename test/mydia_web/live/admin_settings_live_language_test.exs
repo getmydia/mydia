@@ -66,6 +66,29 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
 
       assert has_element?(view, "#language-download-audio[disabled]")
     end
+
+    test "a change only saves the field that fired it", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{
+        "_target" => ["download_audio_language"],
+        "download_audio_language" => "ja",
+        "metadata_language" => "de"
+      })
+
+      assert Settings.get_config_setting_by_key("downloads.audio_language").value == "ja"
+      assert Settings.get_config_setting_by_key("metadata.language") == nil
+    end
+
+    test "a save that fails writes nothing", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      html = change(view, %{"download_audio_language" => "ja", "metadata_language" => "d"})
+
+      assert Settings.get_config_setting_by_key("downloads.audio_language") == nil
+      assert Settings.get_config_setting_by_key("metadata.language") == nil
+      assert html =~ "Invalid value for metadata.language"
+    end
   end
 
   describe "metadata language" do
