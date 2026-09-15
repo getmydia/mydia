@@ -17,6 +17,7 @@ defmodule Mydia.Upgrades do
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseLanguages
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Jobs.UpgradeSweep
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
@@ -262,6 +263,42 @@ defmodule Mydia.Upgrades do
     |> Repo.update_all(
       set: [last_language_check_at: DateTime.utc_now() |> DateTime.truncate(:second)]
     )
+  end
+
+  @doc """
+  Follows a change to a media item's audio language override, saved or
+  cleared.
+
+  Forgets the item's language checks and language backoff, including its
+  episodes and seasons, so the new preference is judged at once instead of
+  after the old one's backoff and give-up clock run out, then enqueues a
+  language sweep scoped to the item. Quality stamps and quality backoff stay:
+  the override says nothing about quality.
+  """
+  @spec audio_preference_changed(MediaItem.t()) :: :ok
+  def audio_preference_changed(%MediaItem{id: media_item_id}) do
+    episode_ids = from(e in Episode, where: e.media_item_id == ^media_item_id, select: e.id)
+
+    MediaItem
+    |> where([m], m.id == ^media_item_id)
+    |> Repo.update_all(set: [last_language_check_at: nil])
+
+    Episode
+    |> where([e], e.media_item_id == ^media_item_id)
+    |> Repo.update_all(set: [last_language_check_at: nil])
+
+    item_buckets = [Reasons.bucket(:movie, :language), Reasons.bucket(:season, :language)]
+
+    SearchBackoff
+    |> where([b], b.resource_type in ^item_buckets and b.resource_id == ^media_item_id)
+    |> Repo.delete_all()
+
+    SearchBackoff
+    |> where([b], b.resource_type == ^Reasons.bucket(:episode, :language))
+    |> where([b], b.resource_id in subquery(episode_ids))
+    |> Repo.delete_all()
+
+    UpgradeSweep.enqueue_for_item(media_item_id)
   end
 
   @doc """

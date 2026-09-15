@@ -90,4 +90,28 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioTest do
     refute has_element?(view, "#download-audio-modal")
     assert Mydia.Repo.get!(MediaItem, show.id).download_audio_language == nil
   end
+
+  defp scoped_sweeps do
+    Enum.filter(Mydia.Repo.all(Oban.Job), &(&1.worker == "Mydia.Jobs.UpgradeSweep"))
+  end
+
+  test "choosing a new download audio queues a language sweep for the show", %{
+    conn: conn,
+    show: show
+  } do
+    view = open_modal(conn, show)
+    view |> element("#download-audio-option-en") |> render_click()
+
+    assert [job] = scoped_sweeps()
+    assert job.args == %{"media_item_id" => show.id}
+  end
+
+  test "choosing the language the show already has queues nothing", %{conn: conn, show: show} do
+    {:ok, _} = Mydia.Media.update_media_item(show, %{download_audio_language: "en"})
+
+    view = open_modal(conn, show)
+    view |> element("#download-audio-option-en") |> render_click()
+
+    assert scoped_sweeps() == []
+  end
 end

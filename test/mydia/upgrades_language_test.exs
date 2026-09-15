@@ -235,4 +235,50 @@ defmodule Mydia.UpgradesLanguageTest do
       assert Enum.find(merged, &(&1.id == "q1")).reasons == [:quality]
     end
   end
+
+  describe "audio_preference_changed/1" do
+    alias Mydia.Media.{Episode, MediaItem}
+
+    defp sweep_jobs,
+      do: Enum.filter(Repo.all(Oban.Job), &(&1.worker == "Mydia.Jobs.UpgradeSweep"))
+
+    test "forgets a show's language checks and language backoff and queues a scoped sweep" do
+      show = show_with(download_audio_language: "en")
+      {episode, _} = episode_with_audio(show, 1, ["jpn"])
+
+      Repo.update_all(from(m in MediaItem, where: m.id == ^show.id),
+        set: [last_language_check_at: now()]
+      )
+
+      Repo.update_all(from(e in Episode, where: e.id == ^episode.id),
+        set: [last_language_check_at: now()]
+      )
+
+      {:ok, _} = Search.record_failure("episode_language_upgrade", episode.id, "no_results")
+
+      {:ok, _} =
+        Search.record_failure("season_language_upgrade", show.id, "no_results", season_number: 1)
+
+      {:ok, _} = Search.record_failure("episode_upgrade", episode.id, "no_results")
+
+      assert :ok = Upgrades.audio_preference_changed(show)
+
+      refute Repo.get!(MediaItem, show.id).last_language_check_at
+      refute Repo.get!(Episode, episode.id).last_language_check_at
+      assert Search.get_backoff("episode_language_upgrade", episode.id) == nil
+      assert Search.get_backoff("season_language_upgrade", show.id, season_number: 1) == nil
+      assert Search.get_backoff("episode_upgrade", episode.id)
+
+      assert [job] = sweep_jobs()
+      assert job.args == %{"media_item_id" => show.id}
+    end
+
+    test "forgets a movie's language backoff" do
+      {movie, _} = movie_with_audio(["ita"])
+      {:ok, _} = Search.record_failure("movie_language_upgrade", movie.id, "no_results")
+
+      assert :ok = Upgrades.audio_preference_changed(movie)
+      assert Search.get_backoff("movie_language_upgrade", movie.id) == nil
+    end
+  end
 end
