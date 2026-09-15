@@ -3,7 +3,8 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Accounts
   alias Mydia.Media
   alias Mydia.Media.AvailabilityStatus
-  alias Mydia.Metadata.Structs.MediaMetadata
+  alias Mydia.Media.LibraryListing
+  alias Mydia.Media.LibraryRow
   alias Mydia.Settings
   alias Mydia.Collections
   alias Mydia.Collections.Collection
@@ -12,7 +13,6 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Search
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
-  alias MydiaWeb.MediaLive.Show.Helpers, as: MediaFileHelpers
 
   import MydiaWeb.GridDensityComponents
   import MydiaWeb.MediaLive.Index.SectionComponents
@@ -250,17 +250,7 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("select_all", _params, socket) do
-    # Get all visible item IDs from the current stream
-    # Note: We need to collect all currently loaded items
-    query_opts = build_query_opts(socket.assigns)
-    items = Media.list_media_items(query_opts)
-    items = apply_search_filter(items, socket.assigns.search_query)
-    items = apply_quality_filter(items, socket.assigns.filter_quality)
-    items = apply_progress_filter(items, socket.assigns.filter_progress)
-
-    all_ids = MapSet.new(items, & &1.id)
-
-    {:noreply, assign(socket, :selected_ids, all_ids)}
+    {:noreply, select_all_visible(socket)}
   end
 
   def handle_event("clear_selection", _params, socket) do
@@ -307,15 +297,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   def handle_event("keydown", %{"key" => "a", "ctrlKey" => true}, socket) do
     # Ctrl+A - select all (note: UI sync happens via JS.dispatch from button, not from keyboard)
-    query_opts = build_query_opts(socket.assigns)
-    items = Media.list_media_items(query_opts)
-    items = apply_search_filter(items, socket.assigns.search_query)
-    items = apply_quality_filter(items, socket.assigns.filter_quality)
-    items = apply_progress_filter(items, socket.assigns.filter_progress)
-
-    all_ids = MapSet.new(items, & &1.id)
-
-    {:noreply, assign(socket, :selected_ids, all_ids)}
+    {:noreply, select_all_visible(socket)}
   end
 
   def handle_event("keydown", _params, socket) do
@@ -365,25 +347,15 @@ defmodule MydiaWeb.MediaLive.Index do
            reason: if(new_monitored_status, do: "Monitoring enabled", else: "Monitoring disabled")
          ) do
       {:ok, _updated_item} ->
-        # Refetch with proper preloads to match the stream items (exclude
-        # trashed and extra files — feeds Media.get_media_status/1, which
-        # would otherwise light up the Downloaded badge for an extras-only
-        # movie).
-        active_files_query = Mydia.Library.MediaFile.versions()
-
-        updated_item_with_preloads =
-          Media.get_media_item!(id,
-            preload: [
-              :downloads,
-              media_files: active_files_query,
-              episodes: [media_files: active_files_query, downloads: []]
-            ]
-          )
+        socket =
+          case LibraryListing.row(id, socket.assigns.current_user.id) do
+            nil -> socket
+            row -> stream_insert(socket, :media_items, row)
+          end
 
         {:noreply,
-         socket
-         |> stream_insert(:media_items, updated_item_with_preloads)
-         |> put_flash(
+         put_flash(
+           socket,
            :info,
            "Monitoring #{if new_monitored_status, do: "enabled", else: "disabled"}"
          )}
@@ -871,67 +843,25 @@ defmodule MydiaWeb.MediaLive.Index do
     offset = if page == 0, do: 0, else: @items_per_page + (page - 1) * @items_per_scroll
     limit = if page == 0, do: @items_per_page, else: @items_per_scroll
 
-    query_opts = build_query_opts(socket.assigns)
-    all_items = Media.list_media_items(query_opts)
+    listing = LibraryListing.page(listing_opts(socket.assigns, offset: offset, limit: limit))
 
-    Logger.debug("load_media_items: total items from DB=#{length(all_items)}")
-
-    # Apply search filtering (client-side for now)
-    items = apply_search_filter(all_items, socket.assigns.search_query)
-    Logger.debug("load_media_items: after search filter=#{length(items)}")
-
-    # Apply quality filtering (client-side for now)
-    items = apply_quality_filter(items, socket.assigns.filter_quality)
-    Logger.debug("load_media_items: after quality filter=#{length(items)}")
-
-    # Apply progress filtering (client-side for now)
-    items = apply_progress_filter(items, socket.assigns.filter_progress)
-    Logger.debug("load_media_items: after progress filter=#{length(items)}")
-
-    # Apply sorting. The added-* sorts need content arrival times, which are
-    # one aggregate rather than a per-item lookup.
-    items =
-      apply_sorting(items, socket.assigns.sort_by, added_at_map(items, socket.assigns.sort_by))
-
-    # Apply pagination
-    paginated_items = items |> Enum.drop(offset) |> Enum.take(limit)
-    has_more = length(items) > offset + limit
-
-    Logger.debug(
-      "load_media_items: paginated=#{length(paginated_items)}, reset=#{reset?}, titles=#{inspect(Enum.map(paginated_items, & &1.title))}, ids=#{inspect(Enum.map(paginated_items, & &1.id))}"
-    )
-
-    # Track all visible item IDs for "Select All" functionality
-    all_visible_ids = MapSet.new(items, & &1.id)
-
-    socket =
-      socket
-      |> assign(:has_more, has_more)
-      |> assign(:media_items_empty?, reset? and items == [])
-      |> assign(:all_visible_ids, all_visible_ids)
-
-    # Use reset: true when filtering/searching to properly clear and repopulate the stream
-    socket =
-      if reset? do
-        stream(socket, :media_items, paginated_items, reset: true)
-      else
-        stream(socket, :media_items, paginated_items)
-      end
-
-    Logger.debug("stream updated, reset=#{reset?}, count=#{length(paginated_items)}")
     socket
+    |> assign(:has_more, listing.has_more?)
+    |> assign(:media_items_empty?, reset? and listing.empty?)
+    # Every matching id, not only the page, for "Select All".
+    |> assign(:all_visible_ids, listing.visible_ids)
+    |> stream(:media_items, listing.rows, reset: reset?)
   end
 
-  defp build_query_opts(assigns) do
-    user_id = assigns.current_user.id
+  # Selects everything the current filters match, including items past the
+  # rendered page. limit: 0 skips loading progress for rows nobody renders.
+  defp select_all_visible(socket) do
+    %{visible_ids: ids} = LibraryListing.page(listing_opts(socket.assigns, offset: 0, limit: 0))
 
-    # Build preload queries filtered by current user / active (non-trashed,
-    # non-extra) files. media_files feeds Media.get_media_status/1, which
-    # would otherwise light up the Downloaded badge for an extras-only movie.
-    import Ecto.Query
-    progress_query = from p in Mydia.Playback.Progress, where: p.user_id == ^user_id
-    active_files_query = Mydia.Library.MediaFile.versions()
+    assign(socket, :selected_ids, ids)
+  end
 
+  defp listing_opts(assigns, page_opts) do
     []
     |> maybe_add_filter(:base_query, assigns[:section_query])
     # A section's own base_query already selects its claimed categories, so
@@ -944,248 +874,33 @@ defmodule MydiaWeb.MediaLive.Index do
     )
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
-    |> Keyword.put(:preload, [
-      :downloads,
-      media_files: active_files_query,
-      playback_progress: progress_query,
-      episodes: [media_files: active_files_query, downloads: []]
-    ])
+    |> Keyword.merge(
+      user_id: assigns.current_user.id,
+      search: assigns.search_query,
+      quality: assigns.filter_quality,
+      progress: assigns.filter_progress,
+      sort_by: assigns.sort_by
+    )
+    |> Keyword.merge(page_opts)
   end
 
   defp maybe_add_filter(opts, _key, []), do: opts
   defp maybe_add_filter(opts, _key, nil), do: opts
   defp maybe_add_filter(opts, key, value), do: Keyword.put(opts, key, value)
 
-  defp apply_search_filter(items, ""), do: items
-
-  defp apply_search_filter(items, query) do
-    query_lower = String.downcase(query)
-
-    filtered =
-      Enum.filter(items, fn item ->
-        title_match?(item.title, query_lower) or
-          title_match?(item.original_title, query_lower) or
-          year_match?(item.year, query_lower) or
-          match_metadata_overview?(item.metadata, query_lower)
-      end)
-
-    Logger.debug(
-      "Search filter: query=#{inspect(query)}, input_count=#{length(items)}, output_count=#{length(filtered)}"
-    )
-
-    filtered
-  end
-
-  defp title_match?(nil, _query), do: false
-
-  defp title_match?(title, query) do
-    String.contains?(String.downcase(title), query)
-  end
-
-  defp year_match?(nil, _query), do: false
-
-  defp year_match?(year, query) do
-    String.contains?(to_string(year), query)
-  end
-
-  defp match_metadata_overview?(nil, _query), do: false
-
-  defp match_metadata_overview?(metadata, query) do
-    case metadata do
-      %MediaMetadata{overview: overview} when is_binary(overview) ->
-        String.contains?(String.downcase(overview), query)
-
-      _ ->
-        false
-    end
-  end
-
-  defp apply_quality_filter(items, nil), do: items
-
-  defp apply_quality_filter(items, quality) do
-    # A MediaFile belongs to either media_item_id (movies) or episode_id (TV
-    # episodes), never both, so item.media_files alone is always empty for a
-    # TV show; filtering on it dropped every TV show from a quality-filtered
-    # result regardless of its episodes' actual resolutions.
-    Enum.filter(items, fn item ->
-      item
-      |> MediaFileHelpers.all_media_files()
-      |> Enum.any?(fn file -> file.resolution == quality end)
-    end)
-  end
-
-  defp apply_progress_filter(items, nil), do: items
-
-  # Reuses `Media.get_media_status/1` — the same classifier that renders each item's
-  # status badge — so the filter can never disagree with what the badge says. Monitoring
-  # is a separate axis now, so unmonitored items match on their real availability; narrow
-  # with the monitored select to get monitored-only results.
-  defp apply_progress_filter(items, progress) do
-    Enum.filter(items, fn item ->
-      Media.get_media_status(item).state == progress
-    end)
-  end
-
-  # Only the added-* sorts need it, and the aggregate is not free, so skip it
-  # for every other sort.
-  defp added_at_map(items, sort_by) when sort_by in ["added_asc", "added_desc"] do
-    Mydia.Media.RecentlyAdded.added_at_map(ids: Enum.map(items, & &1.id))
-  end
-
-  defp added_at_map(_items, _sort_by), do: %{}
-
-  defp apply_sorting(items, sort_by, added_at) do
-    Logger.debug("Applying sort: #{inspect(sort_by)} to #{length(items)} items")
-
-    case sort_by do
-      "title_asc" ->
-        Enum.sort_by(items, &String.downcase(&1.title || ""), :asc)
-
-      "title_desc" ->
-        Enum.sort_by(items, &String.downcase(&1.title || ""), :desc)
-
-      "year_asc" ->
-        Enum.sort_by(items, &(&1.year || 0), :asc)
-
-      "year_desc" ->
-        Enum.sort_by(items, &(&1.year || 0), :desc)
-
-      "added_asc" ->
-        Enum.sort_by(items, &effective_added_at(&1, added_at), {:asc, DateTime})
-
-      "added_desc" ->
-        Enum.sort_by(items, &effective_added_at(&1, added_at), {:desc, DateTime})
-
-      "rating_asc" ->
-        Enum.sort_by(items, &get_rating(&1), :asc)
-
-      "rating_desc" ->
-        Enum.sort_by(items, &get_rating(&1), :desc)
-
-      "last_aired_asc" ->
-        Enum.sort_by(items, &get_last_aired_date(&1), {:asc, Date})
-
-      "last_aired_desc" ->
-        Enum.sort_by(items, &get_last_aired_date(&1), {:desc, Date})
-
-      "next_aired_asc" ->
-        Enum.sort_by(items, &get_next_aired_date(&1), {:asc, Date})
-
-      "next_aired_desc" ->
-        Enum.sort_by(items, &get_next_aired_date(&1), {:desc, Date})
-
-      "episode_count_asc" ->
-        Enum.sort_by(items, &get_episode_count(&1), :asc)
-
-      "episode_count_desc" ->
-        Enum.sort_by(items, &get_episode_count(&1), :desc)
-
-      _ ->
-        # Default to title ascending
-        Enum.sort_by(items, &String.downcase(&1.title || ""), :asc)
-    end
-  end
-
-  # A wanted item with no files has no content arrival time. Its own
-  # inserted_at is then the only meaningful answer for "when was this added",
-  # and it keeps the sort total.
-  defp effective_added_at(item, added_at) do
-    Map.get(added_at, item.id) || item.inserted_at
-  end
-
-  defp get_rating(media_item) do
-    case media_item.metadata do
-      %MediaMetadata{vote_average: rating} when is_number(rating) -> rating
-      _ -> 0
-    end
-  end
-
-  # Episode `air_date` is a Date, so these sentinels and comparisons stay in Date
-  # terms: sorting them as NaiveDateTime raises, since a Date has no time fields.
-  @never_aired ~D[1970-01-01]
-  @no_upcoming_airing ~D[2999-12-31]
-
-  defp get_last_aired_date(media_item) do
-    if media_item.type == "tv_show" && Ecto.assoc_loaded?(media_item.episodes) do
-      media_item.episodes
-      |> Enum.map(& &1.air_date)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.sort({:desc, Date})
-      |> List.first()
-      |> case do
-        nil -> @never_aired
-        date -> date
-      end
-    else
-      @never_aired
-    end
-  end
-
-  defp get_next_aired_date(media_item) do
-    if media_item.type == "tv_show" && Ecto.assoc_loaded?(media_item.episodes) do
-      today = Date.utc_today()
-
-      media_item.episodes
-      |> Enum.map(& &1.air_date)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.filter(&(Date.compare(&1, today) == :gt))
-      |> Enum.sort({:asc, Date})
-      |> List.first()
-      |> case do
-        nil -> @no_upcoming_airing
-        date -> date
-      end
-    else
-      @no_upcoming_airing
-    end
-  end
-
-  defp get_episode_count(media_item) do
-    if media_item.type == "tv_show" && Ecto.assoc_loaded?(media_item.episodes) do
-      length(media_item.episodes)
-    else
-      0
-    end
-  end
-
   defp get_poster_url(media_item),
     do: MydiaWeb.Live.Helpers.MediaImages.poster_url(media_item)
 
-  defp get_progress(media_item) do
-    # Since playback_progress is has_many but filtered by user_id,
-    # there should only be one (or zero) progress records
-    if Ecto.assoc_loaded?(media_item.playback_progress) do
-      case media_item.playback_progress do
-        [progress | _] -> progress
-        [] -> nil
-        _ -> nil
-      end
-    else
-      nil
-    end
-  end
+  defp get_progress(%LibraryRow{progress: progress}), do: progress
 
   defp format_year(nil), do: "N/A"
   defp format_year(year), do: year
 
-  defp get_quality_badge(media_item) do
-    # A MediaFile belongs to either media_item_id (movies) or episode_id (TV
-    # episodes), never both, so media_item.media_files alone is always empty
-    # for a TV show and the badge was silently blank on every show card.
-    case MediaFileHelpers.all_media_files(media_item) do
-      [] ->
-        nil
-
-      files ->
-        # Rank by parsed height rather than lexically. Enum.sort(:desc) on the
-        # raw strings puts "720p" ahead of "2160p", and a show's episodes
-        # routinely mix resolutions, so that is easy to hit now that TV shows
-        # reach this function at all.
-        files
-        |> Enum.map(& &1.resolution)
-        |> Enum.reject(&is_nil/1)
-        |> Enum.max_by(&DownloadService.parse_resolution_height/1, fn -> nil end)
-    end
+  # Ranked by parsed height rather than lexically: comparing the raw strings
+  # puts "720p" ahead of "2160p", and a show's episodes routinely mix
+  # resolutions.
+  defp get_quality_badge(%LibraryRow{resolutions: resolutions}) do
+    Enum.max_by(resolutions, &DownloadService.parse_resolution_height/1, fn -> nil end)
   end
 
   defp format_file_size(nil), do: "N/A"
@@ -1200,16 +915,7 @@ defmodule MydiaWeb.MediaLive.Index do
     end
   end
 
-  defp total_file_size(media_item) do
-    # Same split as get_quality_badge/1 above: media_item.media_files alone is
-    # always empty for a TV show, so every show reported "0 B" in the list
-    # view's Size column regardless of what was actually on disk.
-    media_item
-    |> MediaFileHelpers.all_media_files()
-    |> Enum.map(& &1.size)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.sum()
-  end
+  defp total_file_size(%LibraryRow{total_size: total_size}), do: total_size
 
   defp pluralize_items(1), do: "item"
   defp pluralize_items(_), do: "items"
@@ -1248,10 +954,7 @@ defmodule MydiaWeb.MediaLive.Index do
     Map.put(attrs, key, value)
   end
 
-  # Media status helpers
-  defp get_media_item_status(media_item) do
-    Media.get_media_status(media_item)
-  end
+  defp get_media_item_status(%LibraryRow{status: status}), do: status
 
   defp media_status_color(status), do: AvailabilityStatus.color(status)
 

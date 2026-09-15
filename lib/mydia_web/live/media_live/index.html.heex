@@ -371,10 +371,11 @@
       ]}
     >
       <div
-        :for={{id, item} <- @streams.media_items}
+        :for={{id, row} <- @streams.media_items}
         id={id}
         class={@view_mode == :list && "contents"}
       >
+        <% item = row.item %>
         <%= if @view_mode == :grid do %>
           <%!-- Grid Card View --%>
           <div
@@ -413,7 +414,7 @@
                    cannot sit inside the link, so both live beside it. --%>
               <div class="relative">
                 <.link navigate={~p"/media/#{item.id}"}>
-                  <% progress = get_progress(item) %>
+                  <% progress = get_progress(row) %>
                   <.poster_figure src={get_poster_url(item)} alt={item.title}>
                     <:overlay>
                       <.progress_bar :if={progress} progress={progress} class="hide-on-select" />
@@ -421,7 +422,7 @@
                       <.poster_badges
                         id={"poster-badges-#{item.id}"}
                         progress={progress}
-                        quality={get_quality_badge(item)}
+                        quality={get_quality_badge(row)}
                         class="hide-on-select"
                       />
                     </:overlay>
@@ -449,7 +450,7 @@
                   </div>
                 </div>
               </div>
-              <% status = get_media_item_status(item) %>
+              <% status = get_media_item_status(row) %>
               <.poster_card_body title={item.title}>
                 <:meta>
                   <%!-- Status badge and year --%>
@@ -569,7 +570,7 @@
                   />
                 <% end %>
                 <%!-- Progress indicator for list view --%>
-                <% progress = get_progress(item) %>
+                <% progress = get_progress(row) %>
                 <%= if progress do %>
                   <%= if progress.watched do %>
                     <span class="badge badge-success badge-sm gap-1 flex-shrink-0">
@@ -589,7 +590,7 @@
             </div>
             <%!-- Status column --%>
             <div class="w-28 hidden lg:block flex-shrink-0">
-              <% status = get_media_item_status(item) %>
+              <% status = get_media_item_status(row) %>
               <div class="flex flex-col gap-0.5">
                 <div class="flex items-center gap-1">
                   <div class="tooltip tooltip-left" data-tip={media_status_label(status)}>
@@ -605,7 +606,7 @@
             </div>
             <%!-- Quality column --%>
             <div class="w-20 hidden lg:block text-center flex-shrink-0">
-              <%= if quality = get_quality_badge(item) do %>
+              <%= if quality = get_quality_badge(row) do %>
                 <span class="badge badge-primary badge-sm">{quality}</span>
               <% else %>
                 <span class="text-base-content/40">—</span>
@@ -613,7 +614,7 @@
             </div>
             <%!-- Size column --%>
             <div class="w-24 hidden xl:block text-right text-base-content/70 text-sm flex-shrink-0">
-              {format_file_size(total_file_size(item))}
+              {format_file_size(total_file_size(row))}
             </div>
           </div>
         <% end %>

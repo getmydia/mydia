@@ -151,7 +151,7 @@ bonus content reads as owned:
 
 Less catastrophically affected: `Media.get_media_status/1` (the movie clause is
 literally `has_files = media_item.media_files != []`, so the Downloaded badge
-lies), `owned_media_item_ids/1`, `media_live/index.ex`'s two preloads,
+lies), `owned_media_item_ids/1`, `Mydia.Media.LibraryListing`'s file and episode queries,
 `Playback.OnDeck.load_movie_files/1` and `load_episodes_with_files/1`,
 `Upgrades.analyzed_files_query/0` and its `analyzed_movie_ids/0` /
 `analyzed_episode_ids/0`, `TvShowSearch`'s three episode joins,

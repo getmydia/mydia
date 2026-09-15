@@ -1293,4 +1293,37 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert has_element?(view, "#list-item-#{show.id}", "1.0 GB")
     end
   end
+
+  describe "listing rows" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "toggling monitored rebuilds the card from a fresh row", %{conn: conn} do
+      movie = media_item_fixture(%{title: "Ember Causeway", type: "movie", monitored: true})
+      media_file_fixture(%{media_item_id: movie.id, resolution: "2160p"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#grid-item-#{movie.id} button[phx-click='toggle_item_monitored']")
+      |> render_click()
+
+      assert has_element?(view, "#grid-item-#{movie.id} button[title='Monitor']")
+      # The quality badge needs the item's files, so it survives only if the
+      # card was rebuilt from a complete row.
+      assert has_element?(view, "#poster-badges-#{movie.id} .badge-neutral", "2160p")
+    end
+
+    test "Ctrl+A selects every matching item, not only the rendered page", %{conn: conn} do
+      for n <- 1..51, do: insert(:media_item, type: "movie", title: "Ledger Volume #{n}")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_keydown(view, "keydown", %{"key" => "a", "ctrlKey" => true})
+
+      assert has_element?(view, "label span.tabular-nums", "51")
+    end
+  end
 end
