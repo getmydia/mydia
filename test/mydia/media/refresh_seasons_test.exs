@@ -125,6 +125,63 @@ defmodule Mydia.Media.RefreshSeasonsTest do
              Media.refresh_seasons(item, [1], config: ctx.config)
   end
 
+  describe "a TMDB-sourced show" do
+    setup do
+      bypass = Bypass.open()
+
+      config = %{
+        type: :metadata_relay,
+        base_url: "http://localhost:#{bypass.port}",
+        options: %{language: "en-US", include_adult: false}
+      }
+
+      tmdb_id = System.unique_integer([:positive])
+
+      item =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Signal Cove",
+          year: 2025,
+          tmdb_id: tmdb_id,
+          metadata_source: :tmdb,
+          metadata: %{
+            seasons: [%{season_number: 1}]
+          }
+        })
+
+      %{bypass: bypass, config: config, item: item, tmdb_id: tmdb_id}
+    end
+
+    test "re-reads a TMDB season and replaces a placeholder title", ctx do
+      episode_fixture(%{
+        media_item_id: ctx.item.id,
+        season_number: 1,
+        episode_number: 8,
+        title: "Episode 8"
+      })
+
+      Bypass.stub(ctx.bypass, "GET", "/tmdb/tv/shows/#{ctx.tmdb_id}/1", fn conn ->
+        json(conn, %{
+          "season_number" => 1,
+          "episodes" => [
+            %{
+              "season_number" => 1,
+              "episode_number" => 8,
+              "name" => "Harbor Lights",
+              "air_date" => "2026-09-23"
+            }
+          ]
+        })
+      end)
+
+      assert {:ok, [%{season: 1, episode: 8, old: "Episode 8", new: "Harbor Lights"}]} =
+               Media.refresh_seasons(ctx.item, [1], config: ctx.config)
+
+      assert Media.get_episode_by_number(ctx.item.id, 1, 8).title == "Harbor Lights"
+      assert [_event] = events(ctx.item, "media_item.episode_titles_updated")
+    end
+  end
+
   defp stub_second_season(ctx, respond) do
     %{bypass: bypass, hits: hits, second_season: season_id} = ctx
 
