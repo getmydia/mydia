@@ -1157,4 +1157,94 @@ defmodule Mydia.ImportCandidatesTest do
                "Lantern Coast"
     end
   end
+
+  describe "drain_delete/2" do
+    setup do
+      root =
+        Path.join(System.tmp_dir!(), "mydia_import_delete_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(Path.join(root, "Quillmere Bay"))
+      on_exit(fn -> File.rm_rf(root) end)
+      %{lp: library_path_fixture(%{type: "series", path: root})}
+    end
+
+    defp queued_for_delete(lp, relative_path) do
+      candidate =
+        import_candidate_fixture(%{library_path_id: lp.id, relative_path: relative_path})
+
+      {1, _} =
+        Repo.update_all(from(c in ImportCandidate, where: c.id == ^candidate.id),
+          set: [queued_op: "delete"]
+        )
+
+      Repo.reload!(candidate)
+    end
+
+    test "removes the file, its NFO sidecar and the row", %{lp: lp} do
+      rel = "Quillmere Bay/Quillmere.Bay.S01E02.mkv"
+      nfo = Path.join(lp.path, "Quillmere Bay/Quillmere.Bay.S01E02.nfo")
+      File.write!(Path.join(lp.path, rel), "data")
+      File.write!(nfo, "<episodedetails/>")
+      candidate = queued_for_delete(lp, rel)
+
+      assert {:ok, %{deleted: 1, failed: 0, skipped: 0}} = ImportCandidates.drain_delete(lp.id)
+      refute File.exists?(Path.join(lp.path, rel))
+      refute File.exists?(nfo)
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "a file already gone from disk still loses its row", %{lp: lp} do
+      candidate = queued_for_delete(lp, "Quillmere Bay/already-gone.mkv")
+
+      assert {:ok, %{deleted: 1}} = ImportCandidates.drain_delete(lp.id)
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "a file that cannot be removed keeps its row, records why, and leaves the queue",
+         %{lp: lp} do
+      # A directory where the file should be makes File.rm fail even as root.
+      rel = "Quillmere Bay/as-dir.mkv"
+      File.mkdir_p!(Path.join(lp.path, rel))
+      candidate = queued_for_delete(lp, rel)
+
+      assert {:ok, %{deleted: 0, failed: 1}} = ImportCandidates.drain_delete(lp.id)
+
+      stored = Repo.reload!(candidate)
+      assert is_nil(stored.queued_op)
+      assert is_nil(stored.queued_at)
+      assert stored.queue_error =~ "Could not delete from disk"
+      assert File.dir?(Path.join(lp.path, rel))
+    end
+
+    test "never unlinks a path a media_files row references", %{lp: lp} do
+      rel = "Quillmere Bay/Quillmere.Bay.S01E03.mkv"
+      File.write!(Path.join(lp.path, rel), "data")
+      candidate = queued_for_delete(lp, rel)
+
+      show = media_item_fixture(%{type: "tv_show", title: "Quillmere Bay"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 3})
+      media_file_fixture(%{library_path_id: lp.id, episode_id: episode.id, relative_path: rel})
+
+      assert {:ok, %{deleted: 0, skipped: 1}} = ImportCandidates.drain_delete(lp.id)
+      assert File.exists?(Path.join(lp.path, rel))
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "drains more rows than one page holds and leaves other ops queued", %{lp: lp} do
+      for n <- 1..3, do: queued_for_delete(lp, "Quillmere Bay/gone-#{n}.mkv")
+
+      rematching =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          relative_path: "Quillmere Bay/keep.mkv"
+        })
+
+      Repo.update_all(from(c in ImportCandidate, where: c.id == ^rematching.id),
+        set: [queued_op: "rematch"]
+      )
+
+      assert {:ok, %{deleted: 3}} = ImportCandidates.drain_delete(lp.id, page_size: 2)
+      assert Repo.reload!(rematching).queued_op == "rematch"
+    end
+  end
 end

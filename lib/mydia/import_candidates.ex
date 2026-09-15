@@ -1497,6 +1497,129 @@ defmodule Mydia.ImportCandidates do
 
   defp ingest_stat({:error, _reason}), do: :error
   defp ingest_stat(_result), do: :ok
+  # --- Deleting from disk --------------------------------------------------
+
+  @delete_page_size 250
+
+  @doc """
+  Permanently deletes every file queued for delete on one library path, then
+  its candidate row.
+
+  Pages `queued_query(library_path_id, "delete")` in id order until nothing is
+  left. Every row in a page leaves the queue: its row is deleted, or its marker
+  is cleared with `queue_error` set, so the loop always makes progress and a
+  file that cannot be removed is never retried forever. The operator sees the
+  reason on the group instead.
+
+  A path any `media_files` row references, trashed or not, is never unlinked.
+  An import can promote the path between the click and the drain, and from
+  then on those bytes are the library's. That candidate row is dropped, the
+  file stays, and it counts as `skipped`.
+  """
+  @spec drain_delete(binary(), keyword()) ::
+          {:ok,
+           %{
+             deleted: non_neg_integer(),
+             failed: non_neg_integer(),
+             skipped: non_neg_integer()
+           }}
+  def drain_delete(library_path_id, opts \\ []) do
+    page_size = Keyword.get(opts, :page_size, @delete_page_size)
+
+    result =
+      drain_delete_pages(library_path_id, page_size, %{deleted: 0, failed: 0, skipped: 0})
+
+    broadcast(library_path_id)
+    result
+  end
+
+  defp drain_delete_pages(library_path_id, page_size, acc) do
+    rows =
+      library_path_id
+      |> queued_query("delete")
+      |> order_by([c], asc: c.id)
+      |> limit(^page_size)
+      |> preload(:library_path)
+      |> Repo.all()
+
+    if rows == [] do
+      {:ok, acc}
+    else
+      acc = Enum.reduce(rows, acc, &delete_queued_candidate/2)
+
+      # One broadcast per page so the page watching this library drains visibly.
+      broadcast(library_path_id)
+
+      drain_delete_pages(library_path_id, page_size, acc)
+    end
+  end
+
+  defp delete_queued_candidate(%ImportCandidate{} = candidate, acc) do
+    if library_owns_path?(candidate) do
+      drop_candidate(candidate)
+      %{acc | skipped: acc.skipped + 1}
+    else
+      unlink_queued_candidate(candidate, acc)
+    end
+  end
+
+  defp unlink_queued_candidate(candidate, acc) do
+    case unlink_candidate(candidate) do
+      :ok ->
+        drop_candidate(candidate)
+        %{acc | deleted: acc.deleted + 1}
+
+      {:error, reason} ->
+        record_delete_failure(candidate, reason)
+        %{acc | failed: acc.failed + 1}
+    end
+  end
+
+  defp library_owns_path?(%ImportCandidate{library_path_id: lp_id, relative_path: rel}) do
+    MediaFile
+    |> where([f], f.library_path_id == ^lp_id and f.relative_path == ^rel)
+    |> Repo.exists?()
+  end
+
+  defp unlink_candidate(candidate) do
+    case ImportCandidate.absolute_path(candidate) do
+      nil -> {:error, :path_not_resolved}
+      path -> Mydia.Library.delete_path_from_disk(path)
+    end
+  end
+
+  # `delete_all/1` by id rather than `Repo.delete/1`: a row that
+  # `clear_for_library/1` or `delete_missing/3` removed mid-drain would make
+  # `Repo.delete/1` raise `Ecto.StaleEntryError`, and there is nothing left to do
+  # for it anyway.
+  defp drop_candidate(%ImportCandidate{id: id}) do
+    ImportCandidate |> where([c], c.id == ^id) |> Repo.delete_all()
+  end
+
+  # Conditional on the op, like `clear_rematch_markers/1`: only a row still
+  # queued for delete has the failure written onto it.
+  defp record_delete_failure(%ImportCandidate{id: id}, reason) do
+    now = now()
+
+    ImportCandidate
+    |> where([c], c.id == ^id and c.queued_op == "delete")
+    |> Repo.update_all(
+      set: [
+        queued_op: nil,
+        queued_at: nil,
+        queue_error: delete_error_message(reason),
+        updated_at: now
+      ]
+    )
+  end
+
+  defp delete_error_message(:path_not_resolved),
+    do: "Could not delete from disk: the library path could not be resolved."
+
+  defp delete_error_message(reason) when is_atom(reason),
+    do: "Could not delete from disk: #{:file.format_error(reason)}."
+
+  defp delete_error_message(reason), do: "Could not delete from disk: #{inspect(reason)}."
 
   @doc """
   Clears the derived scan state for one library path: every undismissed
