@@ -133,6 +133,9 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       # flight by the time it does, so the token is the actual guard.
       |> assign(:match_search, nil)
       |> assign(:match_search_token, 0)
+      # The bulk delete confirmation, nil when closed, otherwise
+      # `%{files:, groups:}` counted when the operator clicked Delete files.
+      |> assign(:delete_confirm, nil)
       |> stream_configure(:groups,
         dom_id: fn group -> "group-#{ImportCandidateGroup.dom_id(group)}" end
       )
@@ -467,6 +470,54 @@ defmodule MydiaWeb.ImportMediaLive.Index do
 
         {:error, :not_found} ->
           {:noreply, put_flash(socket, :info, "That file is no longer pending.")}
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Could not queue the delete: #{inspect(reason)}")}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  # Opens the confirmation with the exact file count, counted on click rather
+  # than in `load_groups/1`: it is one aggregate the page only needs when
+  # someone is about to delete.
+  def handle_event("confirm_delete_selected", _params, socket) do
+    with :ok <- Authorization.authorize_delete_media(socket) do
+      selection = socket.assigns.selection
+
+      case ImportCandidates.count_files(selection) do
+        0 ->
+          {:noreply, put_flash(socket, :info, "Nothing in the selection can be deleted.")}
+
+        files ->
+          {:noreply,
+           assign(socket, :delete_confirm, %{
+             files: files,
+             groups: SelectionScope.count(selection)
+           })}
+      end
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("cancel_delete_selected", _params, socket) do
+    {:noreply, assign(socket, :delete_confirm, nil)}
+  end
+
+  def handle_event("delete_selected", _params, socket) do
+    socket = assign(socket, :delete_confirm, nil)
+
+    with :ok <- Authorization.authorize_delete_media(socket) do
+      case ImportCandidates.queue_delete(socket.assigns.selection) do
+        {:ok, %{files: files}} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Deleting #{files} file(s) in the background.")
+           |> assign(:selection, SelectionScope.clear(socket.assigns.selection))
+           |> load_groups()
+           |> refresh_counts()}
 
         {:error, reason} ->
           {:noreply, put_flash(socket, :error, "Could not queue the delete: #{inspect(reason)}")}

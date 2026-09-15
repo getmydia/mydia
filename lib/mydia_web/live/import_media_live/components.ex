@@ -225,11 +225,19 @@ defmodule MydiaWeb.ImportMediaLive.Components do
             >
               <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-1" /> Restore {@count}
             </button>
+            <button
+              id="delete-selected"
+              class="btn btn-sm btn-ghost text-error"
+              disabled={@count == 0}
+              phx-click="confirm_delete_selected"
+            >
+              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete files
+            </button>
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
               Clear
             </button>
             <%!-- The Queued view's groups are already mid-import: Accept, Re-match,
-            Dismiss, and Restore all no-op there (their queries all require either
+            Dismiss, Restore and Delete all no-op there (their queries all require either
             no queued_op or a dismissed_at that a queued group never has), so none
             of them are offered here -- same reasoning as the Ignored view's own
             omission of Accept/Re-match/Dismiss above. --%>
@@ -261,6 +269,14 @@ defmodule MydiaWeb.ImportMediaLive.Components do
               phx-click="dismiss_selected"
             >
               Dismiss
+            </button>
+            <button
+              id="delete-selected"
+              class="btn btn-sm btn-ghost text-error"
+              disabled={@count == 0}
+              phx-click="confirm_delete_selected"
+            >
+              <.icon name="hero-trash" class="w-4 h-4 mr-1" /> Delete files
             </button>
             <button id="clear-selection" class="btn btn-sm btn-ghost" phx-click="clear_selection">
               Clear
@@ -654,6 +670,49 @@ defmodule MydiaWeb.ImportMediaLive.Components do
     </.modal>
     """
   end
+
+  @doc """
+  Confirms a permanent delete of every file in the selection.
+
+  `state` is `ImportMediaLive.Index`'s `@delete_confirm` assign: nil when
+  closed, otherwise `%{files:, groups:}`. A modal rather than the
+  `data-confirm` the per-file button uses, because "Select all N matching" can
+  put far more files behind a selection than its group count suggests, and the
+  exact number has to be on screen before anything is deleted.
+  """
+  attr :state, :any, default: nil
+
+  def delete_files_modal(assigns) do
+    ~H"""
+    <.modal id="delete-files-modal" show={not is_nil(@state)} on_cancel="cancel_delete_selected">
+      <:title>
+        <div class="flex items-center gap-2">
+          <.icon name="hero-trash" class="w-5 h-5 text-error" />
+          <span>Delete files from disk</span>
+        </div>
+      </:title>
+
+      <p :if={@state} id="delete-files-summary" class="text-sm">
+        Permanently delete {plural(@state.files, "file")} in {plural(@state.groups, "group")} from disk? This cannot be undone.
+      </p>
+
+      <:actions>
+        <button class="btn btn-ghost" phx-click="cancel_delete_selected">Cancel</button>
+        <button
+          id="confirm-delete-files"
+          class="btn btn-error"
+          phx-click="delete_selected"
+          phx-disable-with="Deleting…"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" /> Delete files
+        </button>
+      </:actions>
+    </.modal>
+    """
+  end
+
+  defp plural(1, word), do: "1 #{word}"
+  defp plural(count, word), do: "#{count} #{word}s"
 
   defp media_type_label(:tv_show), do: "TV Show"
   defp media_type_label(:movie), do: "Movie"

@@ -65,13 +65,23 @@ Below the scan controls, results are grouped by folder and filtered into
 chip for anything you have dismissed. Dismissing a result is durable: it
 survives later scans of the same library, and survives **Clear** too.
 
-**Queued** holds the groups with work already under way, whether that is an
-import you accepted or a re-match you asked for. Neither happens on the spot:
-both hand the work to a background job, so you can close the page and it carries
+**Queued** holds the groups with work already under way: an import you
+accepted, a re-match you asked for, or files you chose to delete. None of these
+happens on the spot:
+each hands the work to a background job, so you can close the page and it carries
 on without you. Groups leave Queued as they finish. A group whose work could not
 be completed returns to the main list with a short note explaining why, most
 often because its files match more than one title or because no provider
 recognised them.
+
+**Delete files** removes files from disk for good. Expand a group and use the
+trash button on a single file, or select groups and choose **Delete files** to
+remove everything in them; the confirmation shows how many files that is before
+anything happens. This is useful for files that land here because the episode
+they belonged to was removed. There is no trash and no undo. A file the library
+has picked up in the meantime is left alone, and a file that could not be
+removed, on a read-only share for example, returns to the list with a note
+saying why.
 
 **Clear** removes unresolved scan results and finished scan history for the
 selected library so the next scan starts fresh, but it never removes a result

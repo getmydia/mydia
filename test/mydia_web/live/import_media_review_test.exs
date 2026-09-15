@@ -1466,5 +1466,81 @@ defmodule MydiaWeb.ImportMediaReviewTest do
 
       assert is_nil(Repo.reload!(candidate).queued_op)
     end
+
+    test "Delete files confirms with the file count, then queues every file in the selection",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      seed_group(lp, "quillmere bay", %{file_count: 3})
+      seed_group(lp, "lantern coast", %{file_count: 2})
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "toggle_group", %{"id" => "quillmere bay"})
+      render_click(view, "toggle_group", %{"id" => "lantern coast"})
+      view |> element("#delete-selected") |> render_click()
+
+      assert has_element?(view, "#delete-files-summary", "5 files in 2 groups")
+
+      view |> element("#confirm-delete-files") |> render_click()
+
+      queued =
+        Repo.aggregate(
+          from(c in ImportCandidate,
+            where: c.library_path_id == ^lp.id and c.queued_op == "delete"
+          ),
+          :count
+        )
+
+      assert queued == 5
+      assert has_element?(view, "#flash-info", "Deleting 5 file(s)")
+      refute has_element?(view, "#delete-files-summary")
+    end
+
+    test "cancelling the confirmation queues nothing", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [candidate] = seed_group(lp, "quillmere bay")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "toggle_group", %{"id" => "quillmere bay"})
+      view |> element("#delete-selected") |> render_click()
+      render_click(view, "cancel_delete_selected", %{})
+
+      refute has_element?(view, "#delete-files-summary")
+      assert is_nil(Repo.reload!(candidate).queued_op)
+    end
+
+    test "Delete files is offered from Ignored and not from Queued", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      [dismissed] = seed_group(lp, "ignored-junk", %{dismissed_at: now})
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      view |> element("#band-ignored") |> render_click()
+      render_click(view, "toggle_group", %{"id" => "ignored-junk"})
+      view |> element("#delete-selected") |> render_click()
+      view |> element("#confirm-delete-files") |> render_click()
+
+      assert Repo.reload!(dismissed).queued_op == "delete"
+
+      view |> element("#band-queued") |> render_click()
+      refute has_element?(view, "#delete-selected")
+    end
+
+    test "readonly users cannot delete selected files", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [candidate] = seed_group(lp, "readonly-bulk-delete")
+
+      readonly_conn = log_in_user(conn, user_fixture(%{role: "readonly"}))
+      {:ok, view, _html} = live(readonly_conn, ~p"/import")
+
+      render_click(view, "toggle_group", %{"id" => "readonly-bulk-delete"})
+      render_click(view, "confirm_delete_selected", %{})
+      refute has_element?(view, "#delete-files-summary")
+
+      render_click(view, "delete_selected", %{})
+      assert is_nil(Repo.reload!(candidate).queued_op)
+    end
   end
 end
