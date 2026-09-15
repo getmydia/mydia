@@ -413,22 +413,24 @@ defmodule Mydia.Upgrades do
   `Comparator.score_file_with_breakdown/3`, then picks exactly one of five
   outcomes:
 
-    * `{:ok, :upgraded}` — the new file cleared `min_upgrade_margin` (via
-      `Comparator.clears_margin?/2`, which treats an exact tie as *not* an
-      upgrade even at margin 0). The old file is trashed
-      (`Library.trash_media_file/1` — never a hard delete, so a wrong call
-      stays recoverable for the trash retention window; the file itself
-      moves off the library path into the trash directory, see
-      `Mydia.Library.TrashStore`), `Events.file_upgraded/4` records both
-      scores and the per-dimension breakdown delta, and the pointer is
-      cleared.
-    * `{:ok, :rejected}` — it didn't clear the margin. The *new* file is
-      trashed instead. Unless it came from a season pack, its originating
-      release is also blacklisted (`Downloads.Blacklists`) so the next sweep
-      doesn't grab the same lying release tomorrow; a season pack is left
-      grabbable, because an above-cutoff episode inside a pack is *designed*
-      to fail this gate and blacklisting would burn a release that
-      legitimately upgraded the rest of the season.
+    * `{:ok, :upgraded}` — the new file's on-disk audio ranks better under
+      `upgrade_policy/2`, or the ranks tie, the profile allows upgrades and
+      it cleared `min_upgrade_margin` (via `Comparator.clears_margin?/2`,
+      which treats an exact tie as *not* an upgrade even at margin 0). The
+      old file is trashed (`Library.trash_media_file/1` — never a hard
+      delete, so a wrong call stays recoverable for the trash retention
+      window; the file itself moves off the library path into the trash
+      directory, see `Mydia.Library.TrashStore`), `Events.file_upgraded/4`
+      records both scores and the per-dimension breakdown delta, and the
+      pointer is cleared.
+    * `{:ok, :rejected}` — its audio ranks worse, or the ranks tie and it did
+      not clear the margin (or the profile no longer allows upgrades). The
+      *new* file is trashed instead. Unless it came from a season pack, its
+      originating release is also blacklisted (`Downloads.Blacklists`) so the
+      next sweep doesn't grab the same lying release tomorrow; a season pack
+      is left grabbable, because an above-cutoff episode inside a pack is
+      *designed* to fail this gate and blacklisting would burn a release
+      that legitimately upgraded the rest of the season.
       `Events.upgrade_rejected/5` records the trail (including whether the
       release was blacklisted), and the pointer is cleared.
     * `{:ok, :orphaned}` — the file the new one claims to supersede is gone:
@@ -453,6 +455,10 @@ defmodule Mydia.Upgrades do
       forever with both files left active. The pointer is cleared, an
       operator-visible `Events.job_failed/3` event is recorded, and both
       files are left as ordinary imports.
+
+  A new file with untagged audio is ranked by the languages its release title
+  names. Events carry `"reason": "language"` when the ranks differed,
+  `"quality"` otherwise.
 
   Every terminal branch clears the pointer — that, not the worker's
   `unique` constraint, is what makes re-running this on an already-processed
@@ -540,21 +546,22 @@ defmodule Mydia.Upgrades do
       {{:ok, %{score: old_score, breakdown: old_breakdown}},
        {:ok, %{score: new_score, breakdown: new_breakdown}}} ->
         delta = Float.round(new_score - old_score, 1)
+        {language, language_fields} = language_comparison(new_file, old_file, media_item)
 
-        comparison = %{
-          old_score: old_score,
-          new_score: new_score,
-          delta: delta,
-          old_breakdown: old_breakdown,
-          new_breakdown: new_breakdown,
-          breakdown_delta: breakdown_delta(old_breakdown, new_breakdown)
-        }
+        comparison =
+          Map.merge(
+            %{
+              old_score: old_score,
+              new_score: new_score,
+              delta: delta,
+              old_breakdown: old_breakdown,
+              new_breakdown: new_breakdown,
+              breakdown_delta: breakdown_delta(old_breakdown, new_breakdown)
+            },
+            language_fields
+          )
 
-        # Comparator.clears_margin?/2 is the single authority on the margin,
-        # shared with upgrade?/5 so the gate that picks a candidate and the
-        # gate that accepts the imported file cannot disagree - in particular
-        # about whether an exact tie counts (it does not).
-        if Comparator.clears_margin?(delta, profile) do
+        if keep_new_file?(language, delta, profile) do
           apply_upgrade(new_file, old_file, media_item, comparison)
         else
           apply_rejection(new_file, old_file, media_item, comparison)
@@ -565,6 +572,52 @@ defmodule Mydia.Upgrades do
 
       {_, {:error, :unscorable}} ->
         handle_unscorable(new_file, old_file, media_item, :new_file_unscorable)
+    end
+  end
+
+  # Audio language decides first, under the preference in force now rather than
+  # at grab time. A better rank keeps the new file and a worse one rejects it,
+  # whatever the scores. Only a tie falls to the quality margin, and only while
+  # the profile still allows quality upgrades. Comparator.clears_margin?/2 stays
+  # the single authority on the margin, shared with Comparator.upgrade?/6 so
+  # the gate that picks a candidate and the gate that accepts the imported file
+  # cannot disagree about whether an exact tie counts (it does not).
+  defp keep_new_file?(:better, _delta, _profile), do: true
+  defp keep_new_file?(:worse, _delta, _profile), do: false
+
+  defp keep_new_file?(:equal, delta, %QualityProfile{upgrades_allowed: allowed} = profile),
+    do: allowed != false and Comparator.clears_margin?(delta, profile)
+
+  defp language_comparison(new_file, old_file, media_item) do
+    policy = upgrade_policy(media_item)
+    old_languages = FileLanguages.detect(old_file)
+    new_languages = new_file_languages(new_file, policy)
+    verdict = FileLanguages.compare(policy, old_languages, new_languages)
+
+    {verdict,
+     %{
+       reason: if(verdict == :equal, do: :quality, else: :language),
+       old_audio_languages: FileLanguages.to_list(old_languages),
+       new_audio_languages: FileLanguages.to_list(new_languages)
+     }}
+  end
+
+  # ffprobe is the authority for the new file. When it tagged no audio
+  # language, the title of the release the file came from is the best evidence
+  # left, and it is the same detection that let the grab through.
+  defp new_file_languages(new_file, policy) do
+    case FileLanguages.detect(new_file) do
+      {:known, _languages} = known -> known
+      :unknown -> title_languages(new_file, policy)
+    end
+  end
+
+  defp title_languages(new_file, policy) do
+    with download_id when is_binary(download_id) <- download_id_for(new_file),
+         %Download{title: title} when is_binary(title) <- Repo.get(Download, download_id) do
+      {:known, ReleaseLanguages.detect(title, policy.original_language).languages}
+    else
+      _ -> :unknown
     end
   end
 
