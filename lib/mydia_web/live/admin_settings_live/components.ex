@@ -2,10 +2,14 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias MydiaWeb.AdminSettingsLive.LanguageComponents
+
   attr :config_settings_with_sources, :map, required: true
   attr :crash_report_stats, :map, required: true
   attr :invalid_config_settings, :list, default: []
   attr :hwaccel, Mydia.Streaming.HardwareAccel.Capabilities, required: true
+  attr :language_settings, :map, required: true
+  attr :player_enabled?, :boolean, required: true
 
   def general_settings_tab(assigns) do
     ~H"""
@@ -43,6 +47,12 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
           </ul>
         </div>
       </div>
+
+      <LanguageComponents.language_section
+        settings={@language_settings}
+        player_enabled?={@player_enabled?}
+      />
+
       <%!-- Settings Categories --%>
       <%= for {category, settings} <- @config_settings_with_sources do %>
         <div class="space-y-2">
@@ -265,7 +275,6 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
   defp category_icon("Database"), do: "hero-circle-stack"
   defp category_icon("Authentication"), do: "hero-finger-print"
   defp category_icon("Media"), do: "hero-film"
-  defp category_icon("Metadata"), do: "hero-language"
   defp category_icon("Downloads"), do: "hero-arrow-down-tray"
   defp category_icon("Streaming"), do: "hero-play-circle"
   defp category_icon("Crash Reporting"), do: "hero-bug-ant"

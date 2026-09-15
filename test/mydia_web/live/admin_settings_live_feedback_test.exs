@@ -7,6 +7,16 @@ defmodule MydiaWeb.AdminSettingsLiveFeedbackTest do
   alias Mydia.{Accounts, Settings}
 
   setup %{conn: conn} do
+    original_config = Application.get_env(:mydia, :runtime_config)
+
+    on_exit(fn ->
+      if original_config do
+        Application.put_env(:mydia, :runtime_config, original_config)
+      else
+        Application.delete_env(:mydia, :runtime_config)
+      end
+    end)
+
     unique_id = System.unique_integer([:positive])
 
     {:ok, admin} =

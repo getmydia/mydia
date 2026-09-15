@@ -782,6 +782,9 @@ defmodule Mydia.Settings do
   @spec list_config_settings(keyword()) :: [ConfigSetting.t()]
   defdelegate list_config_settings(opts \\ []), to: Mydia.Settings.RuntimeConfig
 
+  @spec applied_config_settings_by_key() :: %{String.t() => ConfigSetting.t()}
+  defdelegate applied_config_settings_by_key(), to: Mydia.Settings.RuntimeConfig
+
   @doc """
   Gets a configuration setting from the database by key.
   """
