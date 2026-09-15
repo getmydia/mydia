@@ -1649,6 +1649,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#language" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Language
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#flaresolverr" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3343,6 +3354,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#language" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Language
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#flaresolverr" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4086,6 +4108,39 @@ before raising it. Also settable under <strong>Admin &gt; System &gt; Settings &
 <td>URL for the metadata relay service</td>
 <td><code>https://relay.mydia.dev</code></td>
 </tr>
+</tbody>
+</table>
+<p>The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See <a href="../../../contributing/architecture/">Architecture</a> for details.</p>
+<h2 id="language">Language</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DOWNLOAD_AUDIO_LANGUAGE</code></td>
+<td>Audio that automatic and manual search prefer when choosing a release: <code>original</code> for the show or film's own language, or a language code such as <code>en</code>, which prefers that dub and falls back to the original. Each show can override it from its page</td>
+<td><code>original</code></td>
+</tr>
+<tr>
+<td><code>AUDIO_LANGUAGE</code></td>
+<td>Audio track that plays, as a comma-separated list tried in order, for example <code>original,en</code>. When none matches, the track the file marks as default plays</td>
+<td><code>original,en</code></td>
+</tr>
+<tr>
+<td><code>PREFER_DEFAULT_AUDIO_TRACK</code></td>
+<td>Play the track the file marks as default and ignore <code>AUDIO_LANGUAGE</code></td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>SUBTITLE_LANGUAGE</code></td>
+<td>Subtitle languages to fetch, comma-separated, for example <code>en,es</code></td>
+<td><code>en</code></td>
+</tr>
 <tr>
 <td><code>METADATA_LANGUAGE</code></td>
 <td>Language sent to TMDB/TVDB for titles, descriptions, and posters. Accepts ISO 639-1 codes (<code>de</code>) or BCP 47 tags (<code>de-DE</code>, <code>pt-BR</code>).</td>
@@ -4093,7 +4148,7 @@ before raising it. Also settable under <strong>Admin &gt; System &gt; Settings &
 </tr>
 </tbody>
 </table>
-<p>The metadata relay proxies requests to TVDB/TMDB and handles remote access relay connections. See <a href="../../../contributing/architecture/">Architecture</a> for details.</p>
+<p>Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays.</p>
 <p><code>METADATA_LANGUAGE</code> can also be set per-instance from <strong>Admin &gt; System &gt; Settings</strong>, under <strong>Metadata</strong>, in the admin UI; the env var overrides the database value when both are set.</p>
 <h2 id="flaresolverr">FlareSolverr</h2>
 <p>FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer sites. Used by Cardigann indexers that require browser-based challenge solving.</p>
