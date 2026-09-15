@@ -20,6 +20,7 @@ defmodule Mydia.Media.AudioLanguagePolicy do
   which leaves ranking exactly as it was before languages were considered.
   """
 
+  alias Mydia.Media.MediaItem
   alias Mydia.Metadata.LanguageCode
 
   @original "original"
@@ -50,6 +51,39 @@ defmodule Mydia.Media.AudioLanguagePolicy do
       |> Enum.uniq()
 
     %__MODULE__{languages: resolved, source: source, original_language: original}
+  end
+
+  @doc """
+  The policy that governs `media_item`: its own override when set, otherwise the
+  server list. Pass `server_languages:` to avoid reading the runtime config
+  (tests, or a caller that already holds it).
+  """
+  @spec effective(MediaItem.t(), keyword()) :: t()
+  def effective(%MediaItem{} = media_item, opts \\ []) do
+    original = LanguageCode.original_language_from(media_item.metadata)
+
+    case media_item.audio_languages do
+      [_ | _] = languages ->
+        new(languages, :show, original)
+
+      _ ->
+        languages = Keyword.get_lazy(opts, :server_languages, &server_languages/0)
+        new(languages, :server, original)
+    end
+  end
+
+  @doc """
+  `streaming.audio_language` from the layered runtime config, the list playback
+  already honours. Read through `Mydia.Config.get/0` rather than a flat
+  application env key, for the reason `Mydia.Streaming.AudioTrackSelector.configured/0`
+  documents.
+  """
+  @spec server_languages() :: [String.t()]
+  def server_languages do
+    case Mydia.Config.get() do
+      %{streaming: %{audio_language: languages}} -> List.wrap(languages)
+      _ -> []
+    end
   end
 
   @doc "Position of the best preferred language in `languages`. Lower is better."
