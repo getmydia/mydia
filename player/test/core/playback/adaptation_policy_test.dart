@@ -472,6 +472,183 @@ void main() {
         policy.observe(s.next(playing: false, fault: true)), isA<NoAction>());
   });
 
+  group('reactsToBandwidth: false', () {
+    AdaptationPolicy original(SourceKind source) =>
+        AdaptationPolicy(source: source, reactsToBandwidth: false);
+
+    test('two stalls during verification do nothing', () {
+      final policy = original(SourceKind.direct);
+      final s = _Script();
+      final samples = [
+        s.next(),
+        s.next(buffering: true),
+        s.next(),
+        s.next(buffering: true),
+        s.next(),
+      ];
+      expect(_drive(policy, samples), isA<NoAction>());
+      expect(policy.done, isFalse);
+    });
+
+    test('a draining buffer does nothing', () {
+      final policy = original(SourceKind.direct);
+      final s = _Script();
+      policy.observe(s.next(aheadMs: 9000));
+      // 8.5 s down to 1.3 s in 400 ms steps: 19 consecutive decreases.
+      final draining =
+          List.generate(19, (i) => s.next(aheadMs: 8500 - 400 * i));
+      expect(_drive(policy, draining), isA<NoAction>());
+    });
+
+    test('three stalls after verification do nothing', () {
+      final policy = original(SourceKind.direct);
+      final s = _Script();
+      _drive(policy, List.generate(20, (_) => s.next()));
+      final samples = [
+        s.next(buffering: true),
+        ...List.generate(30, (_) => s.next()),
+        s.next(buffering: true),
+        ...List.generate(30, (_) => s.next()),
+        s.next(buffering: true),
+      ];
+      expect(_drive(policy, samples), isA<NoAction>());
+    });
+
+    test('a fault before the first frame still falls back', () {
+      final policy = original(SourceKind.direct);
+      final s = _Script();
+      final action = policy.observe(s.next(playing: false, fault: true));
+      expect(action, isA<FallbackToTranscode>());
+      expect(
+        (action as FallbackToTranscode).reason,
+        FailureReason.decodeFailed,
+      );
+    });
+
+    test('dropped frames during verification still fall back', () {
+      final policy = original(SourceKind.direct);
+      final s = _Script();
+      _drive(policy, List.generate(10, (_) => s.next(dropped: 1)));
+      final action = policy.observe(s.next(dropped: 2));
+      expect(action, isA<FallbackToTranscode>());
+      expect(
+        (action as FallbackToTranscode).reason,
+        FailureReason.decodeTooSlow,
+      );
+    });
+
+    test('sustained drops after verification still fall back', () {
+      final policy = original(SourceKind.copy);
+      final s = _Script();
+      _drive(policy, List.generate(20, (_) => s.next()));
+      final action =
+          _drive(policy, List.generate(30, (_) => s.next(dropped: 2)));
+      expect(action, isA<FallbackToTranscode>());
+      expect(
+        (action as FallbackToTranscode).reason,
+        FailureReason.decodeTooSlow,
+      );
+    });
+  });
+
+  group('detail names the rule and what it saw', () {
+    test('a fault before the first frame', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      final action = policy.observe(s.next(playing: false, fault: true))
+          as FallbackToTranscode;
+      expect(action.detail, 'decodeFailed: fault before first frame');
+    });
+
+    test('drops over the limit during verification', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      // Ten seconds at exactly 1 drop/s, then one second with 2: the last
+      // 10 s hold 9 + 2 = 11 drops against a limit of 10.
+      _drive(policy, List.generate(10, (_) => s.next(dropped: 1)));
+      final action = policy.observe(s.next(dropped: 2)) as FallbackToTranscode;
+      expect(action.detail, 'decodeTooSlow: 11 drops in last 10s (limit 10)');
+    });
+
+    test('sustained drops after verification', () {
+      final policy = AdaptationPolicy(source: SourceKind.copy);
+      final s = _Script();
+      _drive(policy, List.generate(20, (_) => s.next()));
+      final action =
+          _drive(policy, List.generate(30, (_) => s.next(dropped: 2)))
+              as FallbackToTranscode;
+      expect(action.detail, 'decodeTooSlow: sustained drops over 3 windows');
+    });
+
+    test('stalls during verification with no interruption', () {
+      final policy = AdaptationPolicy(source: SourceKind.copy);
+      final s = _Script();
+      final action = _drive(policy, [
+        s.next(),
+        s.next(buffering: true),
+        s.next(),
+        s.next(buffering: true),
+      ]) as FallbackToTranscode;
+      expect(
+        action.detail,
+        'bandwidth: 2 stalls at 2s, 4s; last interruption none',
+      );
+    });
+
+    test('stalls during verification name the last interruption', () {
+      final policy = AdaptationPolicy(
+        source: SourceKind.direct,
+        thresholds: const AdaptationThresholds(
+          interruptionGrace: Duration(seconds: 3),
+        ),
+      );
+      final s = _Script();
+      final action = _drive(policy, [
+        s.next(),
+        s.next(buffering: true),
+        s.next(interrupted: true),
+        s.next(),
+        s.next(),
+        s.next(),
+        s.next(buffering: true),
+      ]) as FallbackToTranscode;
+      expect(
+        action.detail,
+        'bandwidth: 2 stalls at 2s, 7s; last interruption 3s',
+      );
+    });
+
+    test('stalls after verification', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      _drive(policy, List.generate(20, (_) => s.next()));
+      final action = _drive(policy, [
+        s.next(buffering: true),
+        ...List.generate(30, (_) => s.next()),
+        s.next(buffering: true),
+        ...List.generate(30, (_) => s.next()),
+        s.next(buffering: true),
+      ]) as FallbackToTranscode;
+      expect(
+        action.detail,
+        'bandwidth: 3 stalls at 21s, 52s, 83s; last interruption none',
+      );
+    });
+
+    test('a draining buffer', () {
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      policy.observe(s.next(aheadMs: 9000));
+      _drive(
+        policy,
+        List.generate(14, (i) => s.next(aheadMs: 8500 - 500 * i)),
+      );
+      final action =
+          policy.observe(s.next(aheadMs: 1000)) as FallbackToTranscode;
+      expect(action.detail, 'bandwidth: buffer drained for 15 samples');
+    });
+  });
+
   test('thresholds are injectable', () {
     final policy = AdaptationPolicy(
       source: SourceKind.direct,

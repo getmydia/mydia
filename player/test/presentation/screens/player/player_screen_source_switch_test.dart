@@ -142,6 +142,11 @@ Future<void> _mount(
   await tester.pump();
 }
 
+/// One monitor tick. `PlaybackMonitor` samples once a second, so each call
+/// lets exactly one sample see the decoder's current state.
+Future<void> _tick(WidgetTester tester) =>
+    tester.pump(const Duration(seconds: 1));
+
 void main() {
   testWidgets('casting stops verification of the local source', (tester) async {
     final decoder = _Decoder();
@@ -450,6 +455,87 @@ void main() {
           reason: 'the switch landed after the fault; the error page must '
               'not be left over a working video');
       expect(find.byType(PlaybackChrome), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('under Auto, two stalls replace a direct play source',
+      (tester) async {
+    final decoder = _Decoder();
+    final container = buildPlayerScreenContainer(
+      link: _server(directPlay: true),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(tester, () => decoder.state.playing, maxTries: 500);
+
+      await _tick(tester); // playback has run once
+      decoder.buffering(true);
+      await _tick(tester); // stall 1
+      decoder.buffering(false);
+      await _tick(tester);
+      decoder.buffering(true);
+      await _tick(tester); // stall 2
+
+      await pumpUntil(tester, () => decoder.opened.length == 2);
+      expect(decoder.opened, hasLength(2));
+      expect(decoder.opened.last.uri, contains('/hls/'));
+      expect(
+        find.text('Switched to transcoding for your connection'),
+        findsOneWidget,
+      );
+
+      decoder.buffering(false);
+      decoder.advance(const Duration(seconds: 1));
+      await tester.pump();
+      decoder.advance(const Duration(seconds: 2));
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('under Original, stalls never replace a direct play source',
+      (tester) async {
+    final decoder = _Decoder();
+    final link = _server(directPlay: true);
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      settingsService: FakeSettingsService(defaultQuality: 'original'),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(tester, () => decoder.state.playing, maxTries: 500);
+
+      await _tick(tester); // playback has run once
+      decoder.buffering(true);
+      await _tick(tester); // stall 1
+      decoder.buffering(false);
+      await _tick(tester);
+      decoder.buffering(true);
+      await _tick(tester); // stall 2
+      decoder.buffering(false);
+      // Bounded, not polled: nothing should happen, and a fallback would
+      // land well inside this window (the Auto test above reaches its second
+      // open within pumpUntil's 2 s budget).
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(decoder.opened, hasLength(1));
+      expect(link.requests.where((r) => r.variables.containsKey('strategy')),
+          isEmpty);
+      expect(find.textContaining('Switched to transcoding'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump();

@@ -71,6 +71,12 @@ seconds ahead replace it with a transcode at the same position, on the same
 looser: three stalls in two minutes, or three consecutive 10-second windows
 each over the drop limit. The numbers live in `AdaptationThresholds`.
 
+The stall and drain rules act only when Auto is the choice
+(`AdaptationPolicy.reactsToBandwidth`). Under Original only the fault and
+dropped-frame rules can replace the source: the viewer asked for the file's
+own bytes, and a slow link buffers rather than being swapped for a
+transcode. Throughput is still measured either way.
+
 A stall only counts once playback has run. media_kit reports buffering from
 mpv's `start-file` until the file loads, and `play()` has been called by then,
 so the open's own loading looks exactly like a stall; a 4K MKV with 38 MB of
@@ -82,22 +88,25 @@ seeks from `seekToReal`. Before both rules, opening such a file and picking
 its English subtitles was two stalls, and a fallback for "your connection".
 
 This kind of switch logs its own line, not the `Plan:` line above:
-`[PlayerScreen] Falling back to <plan>: <reason> at <n>s`. `<plan>` is the
-fallback's own `describe()` (always ends `(fallbackFromFailure)`, since
-`fallbackPlan` only ever builds that reason); `<reason>` is the
-`FailureReason` that triggered it (`decodeFailed`, `decodeTooSlow` or
-`bandwidth`); `<n>s` is the position it switched at.
+`[PlayerScreen] Falling back to <plan>: <reason> at <n>s (<detail>)`.
+`<plan>` is the fallback's own `describe()` (always ends
+`(fallbackFromFailure)`, since `fallbackPlan` only ever builds that reason);
+`<reason>` is the `FailureReason` that triggered it (`decodeFailed`,
+`decodeTooSlow` or `bandwidth`); `<n>s` is the position it switched at;
+`<detail>` names the rule and what it saw, such as
+`bandwidth: 2 stalls at 3s, 9s; last interruption 9s`. Times inside
+`<detail>` are monitor time since verification started, not positions.
 
 A decode fallback always records the file's shape (RFC 6381 video codec plus
 height bucket) against the server, regardless of the quality choice in play.
 Whether that record is later consulted follows the same rule as "The
 decision": a remembered shape skips direct play and copy for Auto on the next
 play, and Original bypasses it regardless of where that choice came from. A
-bandwidth fallback lowers the remembered throughput, and that check applies
-unconditionally, so a slow link is remembered on the very next attempt
-regardless of choice. There is no control to clear the box: a remembered
-shape expires after 14 days, Original skips it before then, and remembered
-throughput keeps updating from what playback measures.
+bandwidth fallback, which only Auto can trigger, lowers the remembered
+throughput, and Auto consults it on the very next attempt; Original ignores
+it. There is no control to clear the box: a remembered shape expires after
+14 days, Original skips it before then, and remembered throughput keeps
+updating from what playback measures.
 
 ## The switch
 

@@ -1675,7 +1675,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       signals: PlayerSignals.of(player),
       sampler: frameStatsSamplerFor(player),
     );
-    final policy = AdaptationPolicy(source: kind);
+    final policy = AdaptationPolicy(
+      source: kind,
+      // Original asks for the file's own bytes: a slow link buffers rather
+      // than being swapped for a transcode.
+      reactsToBandwidth: !_selectedQuality.isOriginal,
+    );
     _monitor = monitor;
     _policy = policy;
     _throughputSamples = 0;
@@ -1735,7 +1740,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       throughputKbps: throughput,
     );
     debugPrint('[PlayerScreen] Falling back to ${plan.describe()}: '
-        '${action.reason.name} at ${position.inSeconds}s');
+        '${action.reason.name} at ${position.inSeconds}s (${action.detail})');
 
     final memory = _memory;
     final serverKey = _serverKey;
