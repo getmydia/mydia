@@ -71,6 +71,11 @@ defmodule MetadataRelay.Cache.Settling do
 
   defp episodes(_shape, _decoded), do: []
 
+  # A placeholder name counts as settling only when the episode has no air
+  # date. An episode that aired more than @lookback_days ago and still reads
+  # "TBA" or "Episode 8" is almost always named that way permanently (daily
+  # and long-running shows on TMDB carry thousands of numbered names), and
+  # Mydia's airing refresh stops asking about it 14 days after air anyway.
   defp settling?({air_date, name}, today) do
     case parse_date(air_date) do
       %Date{} = date -> Date.compare(date, Date.add(today, -@lookback_days)) != :lt

@@ -162,6 +162,11 @@ describe("settlingTtlSeconds", () => {
     expect(settlingTtlSeconds(tvdbSeasonKey, numbered, today)).toBe(21600);
   });
 
+  it("keeps the path TTL for an old TVDB episode still named TBA", () => {
+    const body = tvdbSeason([{ aired: "2019-03-01", name: "TBA" }]);
+    expect(settlingTtlSeconds(tvdbSeasonKey, body, today)).toBeNull();
+  });
+
   it("applies to a single TVDB episode", () => {
     const upcoming = JSON.stringify({ data: { aired: "2026-09-23", name: "TBA " } });
     const old = JSON.stringify({ data: { aired: "2019-03-01", name: "Quiet Tide" } });
@@ -178,6 +183,13 @@ describe("settlingTtlSeconds", () => {
     });
     expect(settlingTtlSeconds(tmdbSeasonKey, upcoming, today)).toBe(21600);
     expect(settlingTtlSeconds(tmdbSeasonKey, finished, today)).toBeNull();
+  });
+
+  it("keeps the path TTL for an old TMDB episode still named Episode 8", () => {
+    const body = JSON.stringify({
+      episodes: [{ air_date: "2019-03-01", name: "Episode 8" }],
+    });
+    expect(settlingTtlSeconds(tmdbSeasonKey, body, today)).toBeNull();
   });
 
   it("ignores other paths even with an upcoming episode in the body", () => {

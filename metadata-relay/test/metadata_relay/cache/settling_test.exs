@@ -46,6 +46,11 @@ defmodule MetadataRelay.Cache.SettlingTest do
       assert Settling.ttl(@tvdb_season_key, blank, @today) == @six_hours
       assert Settling.ttl(@tvdb_season_key, numbered, @today) == @six_hours
     end
+
+    test "an old episode still named TBA keeps the path TTL" do
+      body = tvdb_season([%{"aired" => "2019-03-01", "name" => "TBA"}])
+      assert Settling.ttl(@tvdb_season_key, body, @today) == nil
+    end
   end
 
   describe "TVDB episode" do
@@ -68,6 +73,13 @@ defmodule MetadataRelay.Cache.SettlingTest do
 
       assert Settling.ttl(@tmdb_season_key, upcoming, @today) == @six_hours
       assert Settling.ttl(@tmdb_season_key, finished, @today) == nil
+    end
+
+    test "an old episode still named Episode 8 keeps the path TTL" do
+      body =
+        Jason.encode!(%{"episodes" => [%{"air_date" => "2019-03-01", "name" => "Episode 8"}]})
+
+      assert Settling.ttl(@tmdb_season_key, body, @today) == nil
     end
   end
 

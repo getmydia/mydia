@@ -149,6 +149,12 @@ export function settlingTtlSeconds(
     .toISOString()
     .slice(0, 10);
 
+  // A placeholder name counts as settling only when the episode has no air
+  // date. An episode that aired more than SETTLING_LOOKBACK_DAYS ago and
+  // still reads "TBA" or "Episode 8" is almost always named that way
+  // permanently (daily and long-running shows on TMDB carry thousands of
+  // numbered names), and Mydia's airing refresh stops asking about it 14 days
+  // after air anyway.
   const settling = episodesOf(key, decoded).some(({ airDate, name }) =>
     typeof airDate === "string" && ISO_DATE.test(airDate)
       ? airDate >= cutoff
