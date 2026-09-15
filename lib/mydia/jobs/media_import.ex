@@ -1416,10 +1416,33 @@ defmodule Mydia.Jobs.MediaImport do
           {download.episode, dest_dir}
       end
 
+    tv_show? = match?(%{media_item: %{type: "tv_show"}}, download)
+
     # Handle unresolved files (season pack files where episode wasn't found)
     case {episode, dest_dir} do
       {:unresolved, file_info} ->
         {:unresolved, file_info}
+
+      # A TV file that resolved to no episode, with no download episode to fall
+      # back on. Importing it would attach it to the show itself, which
+      # MediaFile.changeset/2 refuses: route it to the issues queue instead,
+      # the same as a season-pack file whose episode is missing.
+      {nil, _dest_dir} when tv_show? ->
+        Logger.warning("TV file resolved to no episode; leaving it unresolved",
+          download_id: download.id,
+          file: file.name,
+          season: parsed.season,
+          episode: List.first(parsed.episodes || [])
+        )
+
+        {:unresolved,
+         %{
+           path: file.path,
+           name: file.name,
+           size: file.size,
+           parsed_season: parsed.season,
+           parsed_episode: List.first(parsed.episodes || [])
+         }}
 
       {episode, dest_dir} ->
         if skip_already_filed_episode?(episode, download) do
