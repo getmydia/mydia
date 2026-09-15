@@ -595,4 +595,56 @@ void main() {
       await tester.pump();
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
   });
+
+  testWidgets(
+      'picking Original over a direct play Auto source stops stalls replacing '
+      'it, though nothing reopens', (tester) async {
+    final decoder = _Decoder();
+    final container = buildPlayerScreenContainer(
+      link: _server(directPlay: true),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(tester, () => decoder.state.playing, maxTries: 500);
+
+      // Auto and Original both direct play this file, so the pick changes
+      // the choice without reopening, and the policy already watching the
+      // source is the one that has to change its mind.
+      final chrome = tester.widget<PlaybackChrome>(find.byType(PlaybackChrome));
+      chrome.onQualityTap!();
+      const originalRow = Key('quality-rung-Original');
+      await pumpUntil(
+          tester, () => find.byKey(originalRow).evaluate().isNotEmpty);
+      await tester.tap(find.byKey(originalRow));
+      await pumpUntil(
+        tester,
+        () =>
+            tester
+                .widget<PlaybackChrome>(find.byType(PlaybackChrome))
+                .selectedQualityLabel ==
+            'Original',
+      );
+
+      await _tick(tester); // playback has run once
+      decoder.buffering(true);
+      await _tick(tester); // stall 1
+      decoder.buffering(false);
+      await _tick(tester);
+      decoder.buffering(true);
+      await _tick(tester); // stall 2
+      decoder.buffering(false);
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(decoder.opened, hasLength(1));
+      expect(find.textContaining('Switched to transcoding'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
 }

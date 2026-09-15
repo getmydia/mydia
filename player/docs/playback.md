@@ -6,7 +6,7 @@ Everything after that is the player's, in `lib/core/playback/`:
 | Unit | Job |
 | --- | --- |
 | `planPlayback` (`playback_planner.dart`) | candidates plus memory in, `PlaybackPlan` out. A top-level function, not a class. Pure. |
-| `fallbackPlan` (`playback_planner.dart`) | the adaptive transcode a fallback lands on: source height and remembered throughput in, an `HlsPlan` out. Also a function. Pure. |
+| `fallbackPlan` (`playback_planner.dart`) | the transcode a fallback lands on: quality choice, source height and remembered throughput in, an `HlsPlan` out (adaptive under Auto, source resolution under Original). Also a function. Pure. |
 | `PlaybackMemory` | per server: file shapes that failed to decode here (14 days), and an EWMA of throughput. An abstract class; `HivePlaybackMemory` backs the app, `InMemoryPlaybackMemory` backs tests. |
 | `PlaybackMonitor` | one `HealthSample` a second from media_kit's streams and the engine's frame counters (mpv's properties on native, the video element's on web) |
 | `AdaptationPolicy` | the sample window in, `FallbackToTranscode` out. Pure state machine. |
@@ -75,7 +75,11 @@ The stall and drain rules act only when Auto is the choice
 (`AdaptationPolicy.reactsToBandwidth`). Under Original only the fault and
 dropped-frame rules can replace the source: the viewer asked for the file's
 own bytes, and a slow link buffers rather than being swapped for a
-transcode. Throughput is still measured either way.
+transcode. Throughput is still measured either way. A quality pick that
+delivers the same bytes reopens nothing and keeps the running policy, so the
+pick flips that flag on it rather than starting a new one: media_kit's
+streams do not replay, and a monitor created mid-playback would never see
+playback as started.
 
 A stall only counts once playback has run. media_kit reports buffering from
 mpv's `start-file` until the file loads, and `play()` has been called by then,

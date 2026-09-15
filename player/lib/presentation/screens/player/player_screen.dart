@@ -4059,6 +4059,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // below reads the rung from — [_resolveQualityForFile] carries
         // `_settledQuality` forward rather than re-reading storage.
         _settledQuality = rung;
+        // A pick that delivers the same bytes reopens nothing, so the policy
+        // already watching the source has to follow the choice. Starting a
+        // fresh one would not: media_kit's streams do not replay, and a
+        // monitor created mid-playback never sees playback as started.
+        _policy?.reactsToBandwidth = !rung.isOriginal;
         if (mounted) setState(() {});
       },
       remember: (rung) =>

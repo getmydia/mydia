@@ -549,6 +549,40 @@ void main() {
         FailureReason.decodeTooSlow,
       );
     });
+
+    test('turning it on mid-run acts on the stalls already seen', () {
+      // A pick from Original to Auto that keeps the same source keeps this
+      // policy, so the stalls Original sat through count for Auto at once.
+      final policy = original(SourceKind.direct);
+      final s = _Script();
+      final samples = [
+        s.next(),
+        s.next(buffering: true),
+        s.next(),
+        s.next(buffering: true),
+        s.next(),
+      ];
+      expect(_drive(policy, samples), isA<NoAction>());
+
+      policy.reactsToBandwidth = true;
+      final action = policy.observe(s.next());
+      expect(action, isA<FallbackToTranscode>());
+      expect((action as FallbackToTranscode).reason, FailureReason.bandwidth);
+    });
+
+    test('turning it off mid-run stops a bandwidth fallback', () {
+      // A pick from Auto to Original that keeps the same source.
+      final policy = AdaptationPolicy(source: SourceKind.direct);
+      final s = _Script();
+      expect(
+        _drive(policy, [s.next(), s.next(buffering: true), s.next()]),
+        isA<NoAction>(),
+      );
+
+      policy.reactsToBandwidth = false;
+      expect(policy.observe(s.next(buffering: true)), isA<NoAction>());
+      expect(policy.done, isFalse);
+    });
   });
 
   group('detail names the rule and what it saw', () {

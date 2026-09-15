@@ -51,7 +51,11 @@ class AdaptationPolicy {
   /// the viewer chose Original: they asked for the file's own bytes, and a
   /// slow link buffers rather than being swapped for a transcode. A decode
   /// fault or dropped frames replace the source either way.
-  final bool reactsToBandwidth;
+  ///
+  /// Mutable because a quality pick that keeps the same source keeps this
+  /// policy. Stalls and drain are recorded either way, so turning it on acts
+  /// on the ones already seen.
+  bool reactsToBandwidth;
 
   Duration _playingTime = Duration.zero;
   bool _advanced = false;
