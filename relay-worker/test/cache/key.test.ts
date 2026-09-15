@@ -155,6 +155,13 @@ describe("settlingTtlSeconds", () => {
     expect(settlingTtlSeconds(tvdbSeasonKey, body, today)).toBeNull();
   });
 
+  it("treats an undated episode with a blank or numbered placeholder name as settling", () => {
+    const blank = tvdbSeason([{ aired: null, name: "" }]);
+    const numbered = tvdbSeason([{ aired: null, name: "Episode #8" }]);
+    expect(settlingTtlSeconds(tvdbSeasonKey, blank, today)).toBe(21600);
+    expect(settlingTtlSeconds(tvdbSeasonKey, numbered, today)).toBe(21600);
+  });
+
   it("applies to a single TVDB episode", () => {
     const upcoming = JSON.stringify({ data: { aired: "2026-09-23", name: "TBA " } });
     const old = JSON.stringify({ data: { aired: "2019-03-01", name: "Quiet Tide" } });

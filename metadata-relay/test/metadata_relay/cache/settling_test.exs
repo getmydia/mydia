@@ -38,6 +38,14 @@ defmodule MetadataRelay.Cache.SettlingTest do
       body = tvdb_season([%{"aired" => nil, "name" => "Behind the Lighthouse"}])
       assert Settling.ttl(@tvdb_season_key, body, @today) == nil
     end
+
+    test "an undated episode with a blank or numbered placeholder name is settling" do
+      blank = tvdb_season([%{"aired" => nil, "name" => ""}])
+      numbered = tvdb_season([%{"aired" => nil, "name" => "Episode #8"}])
+
+      assert Settling.ttl(@tvdb_season_key, blank, @today) == @six_hours
+      assert Settling.ttl(@tvdb_season_key, numbered, @today) == @six_hours
+    end
   end
 
   describe "TVDB episode" do
