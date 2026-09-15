@@ -1565,7 +1565,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
       assert reloaded.title =~ "1080p"
     end
 
-    # Comparator.upgrade?/5 scores a candidate's `.size` against
+    # Comparator.upgrade?/6 scores a candidate's `.size` against
     # episode_min_size_mb/episode_max_size_mb - correct for a single
     # episode, wrong for a season pack whose `.size` is the sum of every
     # episode in it. Without normalizing to a per-episode estimate before
@@ -1795,6 +1795,167 @@ defmodule Mydia.Jobs.TVShowSearchTest do
                })
 
       assert Mydia.Downloads.list_downloads() == []
+    end
+  end
+
+  describe "perform/1 - upgrade modes with audio language reasons" do
+    alias Mydia.Library.Structs.{FileMetadata, StreamInfo}
+    alias Mydia.Metadata.Structs.MediaMetadata
+
+    # "Kaiju Garden" is Japanese and set to English, so its Japanese-only
+    # episode file is missing the show's first language. The margin is
+    # unreachable, so nothing here can pass as a quality upgrade.
+    defp language_episode_target(library_path) do
+      profile =
+        quality_profile_fixture(%{
+          name: "Episode language upgrade #{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p"]},
+          min_upgrade_margin: 100
+        })
+
+      show =
+        %{type: "tv_show", title: "Kaiju Garden", quality_profile_id: profile.id}
+        |> media_item_fixture()
+        |> Ecto.Changeset.change(
+          download_audio_language: "en",
+          metadata: %MediaMetadata{
+            provider_id: "1",
+            provider: :metadata_relay,
+            media_type: :tv_show,
+            original_language: "ja"
+          }
+        )
+        |> Mydia.Repo.update!()
+
+      episode =
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2021-04-01]
+        })
+
+      {:ok, media_file} =
+        Library.create_media_file(%{
+          episode_id: episode.id,
+          path: "/test/library/kaiju-garden-s01e01.mkv",
+          relative_path: "kaiju-garden-s01e01.mkv",
+          library_path_id: library_path.id,
+          size: 1_500_000_000,
+          resolution: "1080p",
+          codec: "h264",
+          metadata: %FileMetadata{streams: [%StreamInfo{index: 1, type: :audio, language: "jpn"}]},
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {show, episode, media_file}
+    end
+
+    test "Args.parse reads reasons for both upgrade modes and defaults to quality" do
+      episode_args = %{"mode" => "upgrade_episode", "episode_id" => "e", "media_file_id" => "f"}
+
+      season_args = %{
+        "mode" => "upgrade_season",
+        "media_item_id" => "s",
+        "season_number" => 1,
+        "media_file_id" => "f"
+      }
+
+      assert TVShowSearch.Args.parse(Map.put(episode_args, "reasons", ["language"])).reasons ==
+               [:language]
+
+      assert TVShowSearch.Args.parse(Map.put(season_args, "reasons", ["quality", "language"])).reasons ==
+               [:quality, :language]
+
+      assert TVShowSearch.Args.parse(episode_args).reasons == [:quality]
+    end
+
+    test "an episode language search grabs the dub and tags the reason", %{
+      bypass: bypass,
+      library_path: library_path
+    } do
+      {_show, episode, media_file} = language_episode_target(library_path)
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          %{
+            title: "Kaiju.Garden.S01E01.1080p.WEB-DL.x264.JPN-GRP",
+            size: 1_500_000_000,
+            seeders: 200
+          },
+          %{
+            title: "Kaiju.Garden.S01E01.1080p.WEB-DL.x264.English.Dub-GRP",
+            size: 1_500_000_000,
+            seeders: 20
+          }
+        ]
+      )
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_episode",
+                 "episode_id" => episode.id,
+                 "media_file_id" => media_file.id,
+                 "reasons" => ["language"]
+               })
+
+      assert [download] = Mydia.Downloads.list_downloads()
+      reloaded = Mydia.Repo.get!(Mydia.Downloads.Download, download.id)
+      assert reloaded.title =~ "English.Dub"
+      assert reloaded.metadata["upgrade_target_media_file_id"] == media_file.id
+      assert reloaded.metadata["upgrade_reason"] == "language"
+    end
+
+    test "an episode search carrying both reasons records its miss in both buckets", %{
+      bypass: bypass,
+      library_path: library_path
+    } do
+      {_show, episode, media_file} = language_episode_target(library_path)
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          %{
+            title: "Kaiju.Garden.S01E01.1080p.WEB-DL.x264.JPN-GRP",
+            size: 1_500_000_000,
+            seeders: 200
+          }
+        ]
+      )
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_episode",
+                 "episode_id" => episode.id,
+                 "media_file_id" => media_file.id,
+                 "reasons" => ["quality", "language"]
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+      assert Search.get_backoff("episode_upgrade", episode.id).failure_count == 1
+      assert Search.get_backoff("episode_language_upgrade", episode.id).failure_count == 1
+    end
+
+    test "a season language search with no packs backs off in the season language bucket only", %{
+      library_path: library_path
+    } do
+      # Nothing in the suite's default mock is an English release, so whether
+      # the pack search finds no pack or a pack the language filter refuses,
+      # it records a miss.
+      {show, _episode, media_file} = language_episode_target(library_path)
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_season",
+                 "media_item_id" => show.id,
+                 "season_number" => 1,
+                 "media_file_id" => media_file.id,
+                 "reasons" => ["language"]
+               })
+
+      assert Search.get_backoff("season_language_upgrade", show.id, season_number: 1).failure_count ==
+               1
+
+      assert Search.get_backoff("season_upgrade", show.id, season_number: 1) == nil
     end
   end
 

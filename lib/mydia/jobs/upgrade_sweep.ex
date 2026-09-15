@@ -1,6 +1,8 @@
 defmodule Mydia.Jobs.UpgradeSweep do
   @moduledoc """
-  Daily bounded sweep that looks for quality upgrades to already-present files.
+  Daily bounded sweep that looks for replacements for files already on disk:
+  quality upgrades for files below their profile's cutoff, and audio language
+  replacements for files missing the preferred language.
 
   The existing hourly `MovieSearch` and 30 minute `TVShowSearch` crons only
   consider items with **no** file, a small and shrinking set. Upgrade-eligible
@@ -20,6 +22,20 @@ defmodule Mydia.Jobs.UpgradeSweep do
   the eligible set (a below-cutoff movie stays below cutoff until an actual
   upgrade file is imported).
 
+  ## Reasons
+
+  `Mydia.Upgrades.eligible_movies/1` and `eligible_episodes/1` find quality
+  candidates; `language_eligible_movies/2` and `language_eligible_episodes/2`
+  find language candidates. `Mydia.Upgrades.merge_candidates/3` folds them
+  into one entry per movie or episode carrying `reasons`, so one search serves
+  both, and the job args carry the reasons so the search backs off in each
+  reason's own bucket. Quality stamps `last_upgrade_check_at` and language
+  stamps `last_language_check_at`, each only for candidates it searched.
+
+  A run with a `"media_item_id"` arg is scoped to that item and runs the
+  language scan alone: an audio language change cannot move any file across
+  its quality cutoff. `enqueue_for_item/1` enqueues one.
+
   Episodes are not searched one-by-one: they are grouped by `{show, season}`
   and routed through `TVShowSearch.should_prefer_season_pack?/3` (the same
   70% threshold the missing-episode search path uses), so a season where
@@ -31,27 +47,57 @@ defmodule Mydia.Jobs.UpgradeSweep do
   use Oban.Worker,
     queue: :search,
     max_attempts: 3,
-    unique: [period: 3600, fields: [:worker]]
+    # :args is part of uniqueness so a run scoped to one item never collides
+    # with the daily run, whose args are empty. Only in-flight runs count
+    # (`states: :incomplete`), so a finished scoped run never blocks the
+    # follow-up to a later change.
+    unique: [period: 3600, fields: [:worker, :args], states: :incomplete]
 
   require Logger
 
   alias Mydia.Jobs.MovieSearch
   alias Mydia.Jobs.TVShowSearch
   alias Mydia.Repo
-  alias Mydia.Search
   alias Mydia.Upgrades
+  alias Mydia.Upgrades.Reasons
 
   @default_batch_size 50
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: args}) do
     if enabled?() do
-      run(batch_size(), lead(args))
+      run(batch_size(), lead(args), scope(args))
     else
       Logger.debug("Upgrade sweep disabled, skipping")
       {:ok, :disabled}
     end
   end
+
+  @doc """
+  Enqueues a language-only sweep for one media item, the follow-up to a change
+  in its audio language override. A failed enqueue is logged and swallowed:
+  the daily run still reaches the item.
+  """
+  @spec enqueue_for_item(binary()) :: :ok
+  def enqueue_for_item(media_item_id) when is_binary(media_item_id) do
+    case %{"media_item_id" => media_item_id} |> new() |> insert_job() do
+      {:ok, _job} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to enqueue scoped upgrade sweep",
+          media_item_id: media_item_id,
+          reason: inspect(reason)
+        )
+
+        :ok
+    end
+  end
+
+  defp scope(%{"media_item_id" => media_item_id}) when is_binary(media_item_id),
+    do: media_item_id
+
+  defp scope(_args), do: nil
 
   # Explicit for tests (and any future manual trigger); otherwise derived
   # from the calendar day so alternation is deterministic across runs on the
@@ -67,17 +113,20 @@ defmodule Mydia.Jobs.UpgradeSweep do
     end
   end
 
-  defp run(budget, lead) do
+  defp run(budget, lead, scope) do
     {searches, movie_candidates} =
       case lead do
         :movies ->
-          {movie_searches, movie_candidates} = sweep_movies(budget)
-          episode_searches = sweep_episodes(max(budget - movie_searches, 0))
+          {movie_searches, movie_candidates} = sweep_movies(budget, scope)
+          episode_searches = sweep_episodes(max(budget - movie_searches, 0), scope)
           {movie_searches + episode_searches, movie_candidates}
 
         :episodes ->
-          episode_searches = sweep_episodes(budget)
-          {movie_searches, movie_candidates} = sweep_movies(max(budget - episode_searches, 0))
+          episode_searches = sweep_episodes(budget, scope)
+
+          {movie_searches, movie_candidates} =
+            sweep_movies(max(budget - episode_searches, 0), scope)
+
           {movie_searches + episode_searches, movie_candidates}
       end
 
@@ -85,25 +134,57 @@ defmodule Mydia.Jobs.UpgradeSweep do
       candidates: movie_candidates,
       searches: searches,
       budget: budget,
-      lead: lead
+      lead: lead,
+      media_item_id: scope
     )
 
     {:ok, %{searches: searches, candidates: movie_candidates}}
   end
 
-  defp sweep_movies(0), do: {0, 0}
+  defp sweep_movies(0, _scope), do: {0, 0}
 
-  defp sweep_movies(budget) do
-    movies = Upgrades.eligible_movies(budget)
+  defp sweep_movies(budget, scope) do
+    candidates =
+      budget
+      |> quality_movies(scope)
+      |> Upgrades.merge_candidates(
+        Upgrades.language_eligible_movies(budget, scope_opts(scope)),
+        & &1.media_item.id
+      )
+      |> Enum.take(budget)
 
     searches =
-      movies
+      candidates
       |> Enum.map(&enqueue_movie/1)
       |> Enum.count(& &1)
 
-    Upgrades.stamp_checked(:movie, Enum.map(movies, & &1.media_item.id))
+    Upgrades.stamp_checked(:movie, ids_for(candidates, :quality, & &1.media_item.id))
+    Upgrades.stamp_language_checked(:movie, ids_for(candidates, :language, & &1.media_item.id))
 
-    {searches, length(movies)}
+    {searches, length(candidates)}
+  end
+
+  defp quality_movies(budget, nil), do: Upgrades.eligible_movies(budget)
+  defp quality_movies(_budget, _media_item_id), do: []
+
+  defp quality_episodes(budget, nil), do: Upgrades.eligible_episodes(budget)
+  defp quality_episodes(_budget, _media_item_id), do: []
+
+  defp scope_opts(nil), do: []
+  defp scope_opts(media_item_id), do: [media_item_id: media_item_id]
+
+  defp ids_for(candidates, reason, id_fun) do
+    for candidate <- candidates, reason in candidate.reasons, do: id_fun.(candidate)
+  end
+
+  # Like ids_for/3, but reads the reasons actually searched for each
+  # candidate rather than the candidate's own full `.reasons` - see
+  # plan_group/3, which narrows a season pack's per-candidate reasons to the
+  # ones the pack itself carried.
+  defp ids_for_searched(attempted, reason, id_fun) do
+    for {candidate, searched_reasons} <- attempted,
+        reason in searched_reasons,
+        do: id_fun.(candidate)
   end
 
   # Episodes are not swept one at a time. A season where most episodes are
@@ -139,20 +220,24 @@ defmodule Mydia.Jobs.UpgradeSweep do
   # camp at the front of the staleness order forever) — that rule is about
   # not letting failed attempts dodge the stamp, not about stamping work
   # that was never attempted at all.
-  defp sweep_episodes(0), do: 0
+  defp sweep_episodes(0, _scope), do: 0
 
-  defp sweep_episodes(budget) do
-    candidates = Upgrades.eligible_episodes(budget)
+  defp sweep_episodes(budget, scope) do
+    candidates =
+      budget
+      |> quality_episodes(scope)
+      |> Upgrades.merge_candidates(
+        Upgrades.language_eligible_episodes(budget, scope_opts(scope)),
+        & &1.episode.id
+      )
 
     groups =
       candidates
       |> Enum.group_by(fn c -> {c.episode.media_item_id, c.episode.season_number} end)
-      |> Enum.map(fn {{item_id, season}, group} ->
-        {group, plan_group(item_id, season, group)}
-      end)
+      |> Enum.map(fn {{item_id, season}, group} -> plan_group(item_id, season, group) end)
 
-    {searches, attempted_episode_ids} =
-      Enum.reduce_while(groups, {0, []}, fn {group, plan}, {spent, attempted} ->
+    {searches, attempted} =
+      Enum.reduce_while(groups, {0, []}, fn {plan, searched}, {spent, attempted} ->
         remaining = budget - spent
         cost = length(plan)
 
@@ -165,22 +250,33 @@ defmodule Mydia.Jobs.UpgradeSweep do
 
           true ->
             enqueued = Enum.count(plan, &(enqueue(&1) == 1))
-            ids = Enum.map(group, & &1.episode.id)
-            {:cont, {spent + enqueued, [ids | attempted]}}
+            {:cont, {spent + enqueued, [searched | attempted]}}
         end
       end)
 
-    Upgrades.stamp_checked(:episode, List.flatten(attempted_episode_ids))
+    attempted = List.flatten(attempted)
+    Upgrades.stamp_checked(:episode, ids_for_searched(attempted, :quality, & &1.episode.id))
+
+    Upgrades.stamp_language_checked(
+      :episode,
+      ids_for_searched(attempted, :language, & &1.episode.id)
+    )
+
     searches
   end
 
-  # Decides pack-vs-individual and returns the list of TVShowSearch args
-  # this group would need, without enqueuing anything. The list's length is
-  # the group's search cost — always 1 for a pack regardless of how many
-  # episodes it covers, or one entry per episode otherwise — letting the
-  # caller check whether it fits the remaining budget before committing to
-  # it. Not pure (it reads season_pack_upgrade_eligible?/2's backoff row),
-  # but idempotent and side-effect-free otherwise.
+  # Decides pack-vs-individual and returns {plan, searched}, without
+  # enqueuing anything. `plan` is the list of TVShowSearch args this group
+  # would need; its length is the group's search cost, always 1 for a pack
+  # regardless of how many episodes it covers, or one entry per episode
+  # otherwise, letting the caller check whether it fits the remaining
+  # budget before committing to it. `searched` is a {candidate,
+  # searched_reasons} pair per candidate in the group, for stamping: a
+  # season pack narrows its reasons to the ones whose season bucket is open
+  # (see below), so a candidate must only be stamped for the intersection
+  # of its own reasons with what the pack actually carried, not its full
+  # `.reasons`. Not pure (it reads season_pack_upgrade_eligible?/2's backoff
+  # row), but idempotent and side-effect-free otherwise.
   #
   # Reuses TVShowSearch's existing 70% missing-episode threshold unchanged;
   # only the input set changes, from "episodes missing" to "episodes below
@@ -198,35 +294,55 @@ defmodule Mydia.Jobs.UpgradeSweep do
   # backoff (a different, per-episode bucket) still gates it independently,
   # so this is a genuinely different, still-useful search, not a retry of
   # the suppressed one.
+  #
+  # A pack search carries only the reasons whose season bucket is open
+  # (Upgrades.bucket_open?/4, which for language also honours the 90-day
+  # give-up). When none is open the group falls through to individual
+  # searches, each carrying its own episode's reasons.
   defp plan_group(item_id, season, group) do
     media_item = hd(group).episode.media_item
     episodes = Enum.map(group, & &1.episode)
 
-    if TVShowSearch.should_prefer_season_pack?(episodes, media_item, season) and
-         season_pack_upgrade_eligible?(item_id, season) do
-      target = Enum.max_by(group, & &1.score)
+    pack_reasons =
+      if TVShowSearch.should_prefer_season_pack?(episodes, media_item, season) do
+        group
+        |> Enum.flat_map(& &1.reasons)
+        |> Enum.uniq()
+        |> Enum.filter(&Upgrades.bucket_open?(:season, &1, item_id, season_number: season))
+      else
+        []
+      end
 
-      [
-        %{
-          "mode" => "upgrade_season",
-          "media_item_id" => item_id,
-          "season_number" => season,
-          "media_file_id" => target.media_file.id
-        }
-      ]
-    else
-      Enum.map(group, fn c ->
-        %{
-          "mode" => "upgrade_episode",
-          "episode_id" => c.episode.id,
-          "media_file_id" => c.media_file.id
-        }
-      end)
+    case pack_reasons do
+      [] ->
+        plan =
+          Enum.map(group, fn c ->
+            %{
+              "mode" => "upgrade_episode",
+              "episode_id" => c.episode.id,
+              "media_file_id" => c.media_file.id,
+              "reasons" => Reasons.encode(c.reasons)
+            }
+          end)
+
+        {plan, Enum.map(group, &{&1, &1.reasons})}
+
+      _ ->
+        target = Enum.max_by(group, & &1.score)
+
+        plan = [
+          %{
+            "mode" => "upgrade_season",
+            "media_item_id" => item_id,
+            "season_number" => season,
+            "media_file_id" => target.media_file.id,
+            "reasons" => Reasons.encode(pack_reasons)
+          }
+        ]
+
+        searched = Enum.map(group, &{&1, Enum.filter(&1.reasons, fn r -> r in pack_reasons end)})
+        {plan, searched}
     end
-  end
-
-  defp season_pack_upgrade_eligible?(item_id, season) do
-    Search.eligible?("season_upgrade", item_id, season_number: season)
   end
 
   # Returns the search cost incurred: 1 on a successful enqueue, 0 on
@@ -258,11 +374,12 @@ defmodule Mydia.Jobs.UpgradeSweep do
   # can influence), and this project has no mocking library wired up to stub
   # Repo.insert/1. See test/mydia/jobs/upgrade_sweep_test.exs for the
   # evidence trail.
-  defp enqueue_movie(%{media_item: item, media_file: file}) do
+  defp enqueue_movie(%{media_item: item, media_file: file, reasons: reasons}) do
     args = %{
       "mode" => "upgrade",
       "media_item_id" => item.id,
-      "media_file_id" => file.id
+      "media_file_id" => file.id,
+      "reasons" => Reasons.encode(reasons)
     }
 
     case args |> MovieSearch.new() |> insert_job() do

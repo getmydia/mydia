@@ -31,6 +31,11 @@ defmodule Mydia.Search.SearchBackoff do
     split isn't about file-presence races) so `Mydia.Jobs.UpgradeSweep` can suppress repeat
     season-pack upgrade searches for a season that keeps finding no qualifying pack, without
     also touching the ordinary missing-episode `"season"` bucket.
+  - `"movie_language_upgrade"`, `"episode_language_upgrade"`, `"season_language_upgrade"` - The
+    audio-language counterparts of the three `_upgrade` buckets above, with the same resource
+    ids. Kept apart so a show whose dub has not been released yet backs off, and after 90 days
+    gives up, without suppressing its quality upgrades, and the other way round. See
+    `Mydia.Upgrades.Reasons`.
   """
 
   use Ecto.Schema
@@ -84,6 +89,9 @@ defmodule Mydia.Search.SearchBackoff do
       "movie_upgrade",
       "episode_upgrade",
       "season_upgrade",
+      "movie_language_upgrade",
+      "episode_language_upgrade",
+      "season_language_upgrade",
       # Consecutive DownloadMonitor auto-rejections for one media item
       # (see Mydia.Jobs.DownloadMonitor).
       "auto_reject"

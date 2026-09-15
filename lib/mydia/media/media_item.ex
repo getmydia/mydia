@@ -29,6 +29,7 @@ defmodule Mydia.Media.MediaItem do
           download_audio_language: String.t() | nil,
           seasons_refreshed_at: DateTime.t() | nil,
           last_upgrade_check_at: DateTime.t() | nil,
+          last_language_check_at: DateTime.t() | nil,
           quality_profile: Mydia.Settings.QualityProfile.t() | Ecto.Association.NotLoaded.t(),
           library_path: Mydia.Settings.LibraryPath.t() | nil | Ecto.Association.NotLoaded.t(),
           library_path_id: binary() | nil,
@@ -84,6 +85,9 @@ defmodule Mydia.Media.MediaItem do
     field :seasons_refreshed_at, :utc_datetime
     # Set programmatically by the upgrade sweep; never cast from user input.
     field :last_upgrade_check_at, :utc_datetime
+    # Set programmatically by the audio-language scan in Mydia.Upgrades; never
+    # cast from user input.
+    field :last_language_check_at, :utc_datetime
 
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
     belongs_to :library_path, Mydia.Settings.LibraryPath

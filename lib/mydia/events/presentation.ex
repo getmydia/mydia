@@ -99,7 +99,7 @@ defmodule Mydia.Events.Presentation do
       type: "media_file.upgraded",
       icon: "hero-arrow-up-circle",
       color: "text-success",
-      title: "Quality upgraded"
+      title: "File upgraded"
     },
     %{
       type: "media_file.upgrade_rejected",
@@ -401,6 +401,10 @@ defmodule Mydia.Events.Presentation do
     end
   end
 
+  def detail(%Event{type: "media_file.upgraded", metadata: %{"reason" => "language"} = metadata}) do
+    "#{title_of(metadata)}, audio #{audio_of(metadata, "old")} to #{audio_of(metadata, "new")}"
+  end
+
   def detail(%Event{type: "media_file.upgraded", metadata: metadata}) do
     base =
       "#{title_of(metadata)}, #{resolution_of(metadata, "old")} to #{resolution_of(metadata, "new")}"
@@ -409,6 +413,16 @@ defmodule Mydia.Events.Presentation do
       nil -> base
       delta -> "#{base} (score +#{delta})"
     end
+  end
+
+  def detail(%Event{
+        type: "media_file.upgrade_rejected",
+        metadata: %{"reason" => "language"} = metadata
+      }) do
+    base =
+      "#{title_of(metadata)}, kept audio #{audio_of(metadata, "old")} over #{audio_of(metadata, "new")}"
+
+    if metadata["blacklisted"], do: "#{base}, release blacklisted", else: base
   end
 
   def detail(%Event{type: "media_file.upgrade_rejected", metadata: metadata}) do
@@ -608,6 +622,13 @@ defmodule Mydia.Events.Presentation do
   defp media_type_label(_), do: nil
 
   defp resolution_of(metadata, prefix), do: metadata["#{prefix}_resolution"] || "unknown"
+
+  defp audio_of(metadata, prefix) do
+    case metadata["#{prefix}_audio_languages"] do
+      [_ | _] = languages -> Enum.map_join(languages, "+", &String.upcase/1)
+      _ -> "untagged"
+    end
+  end
 
   # The top-level (non-metadata) fields a media_item.updated changeset can
   # carry. Shared by changes_summary/1 and

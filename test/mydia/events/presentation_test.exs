@@ -433,6 +433,35 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Severance, kept 2160p over 1080p"
     end
 
+    test "a language upgrade names the audio on both files" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.upgraded",
+                 metadata: %{
+                   "title" => "Kaiju Garden",
+                   "reason" => "language",
+                   "old_audio_languages" => ["ja"],
+                   "new_audio_languages" => ["en", "ja"]
+                 }
+               )
+             ) == "Kaiju Garden, audio JA to EN+JA"
+    end
+
+    test "a language rejection names the audio it kept and says when audio was untagged" do
+      assert Presentation.detail(
+               event(
+                 type: "media_file.upgrade_rejected",
+                 metadata: %{
+                   "title" => "Kaiju Garden",
+                   "reason" => "language",
+                   "old_audio_languages" => ["ja"],
+                   "new_audio_languages" => [],
+                   "blacklisted" => true
+                 }
+               )
+             ) == "Kaiju Garden, kept audio JA over untagged, release blacklisted"
+    end
+
     test "pruned reports how many files were trashed and the bytes reclaimed" do
       assert Presentation.detail(
                event(

@@ -1,13 +1,9 @@
 defmodule Mydia.Upgrades do
   @moduledoc """
-  Eligibility and pacing for automatic quality upgrades.
-
-  Scoring cannot be expressed in SQL, so selection is two-phase: a query
-  narrows to plausible rows ordered by staleness, then `Comparator` filters
-  by score in Elixir. `eligible_movies/1` truncates that filtered result to
-  the caller's `limit` — one movie is exactly one search, so item count and
-  search-cost budget are the same number. `eligible_episodes/1` does not:
-  see its own doc for why.
+  Eligibility and pacing for automatic upgrades: quality upgrades for files
+  below their profile's cutoff, and audio language replacements for files
+  missing the preferred language (`language_eligible_movies/2`,
+  `language_eligible_episodes/2`).
   """
 
   import Ecto.Query, warn: false
@@ -19,20 +15,28 @@ defmodule Mydia.Upgrades do
   alias Mydia.Downloads.Queue
   alias Mydia.Events
   alias Mydia.Indexers.QualityProfileResolver
+  alias Mydia.Indexers.ReleaseLanguages
   alias Mydia.Indexers.SearchResult
+  alias Mydia.Jobs.UpgradeSweep
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.Quality
-  alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Media.{AudioLanguagePolicy, Episode, MediaItem}
   alias Mydia.Repo
+  alias Mydia.Search
   alias Mydia.Search.SearchBackoff
   alias Mydia.Settings.QualityProfile
-  alias Mydia.Upgrades.Comparator
+  alias Mydia.Upgrades.{Comparator, FileLanguages, Reasons}
 
   # Over-fetch factor. Most candidate rows will already be above cutoff, so
   # fetching exactly `limit` rows would routinely return a near-empty batch.
   @overfetch 5
+
+  # A resource whose language search has failed for this long stops being
+  # searched. A dub that has not appeared in three months is not arriving on
+  # the next daily sweep, and every search for it costs an indexer query.
+  @language_give_up_days 90
 
   @doc """
   Returns up to `limit` below-cutoff movies, ordered by staleness.
@@ -109,34 +113,265 @@ defmodule Mydia.Upgrades do
   end
 
   @doc """
-  Filters candidate search results down to the ones that are a genuine
-  upgrade over `file`, per `Comparator.upgrade?/5` - the sole authority on
-  that question. Shared between `MovieSearch` and the TV upgrade search path:
-  only `media_type` (`:movie` or `:episode`) differs between callers, so this
-  is called once with each rather than duplicated per media type.
+  The audio language policy the upgrade pipeline judges `media_item` by.
+
+  It is `AudioLanguagePolicy.effective/2` (same options), with one addition for
+  the server default: English is always acceptable there, ranked after the
+  configured download languages. So under the default `"original"` an
+  English-only copy of a Japanese show is not replaced for language, and a
+  release in a third language can never replace it. A show's own choice is a
+  request and is used as is. Ranking of new grabs does not use this; it reads
+  `AudioLanguagePolicy.effective/2` directly.
+  """
+  @spec upgrade_policy(MediaItem.t(), keyword()) :: AudioLanguagePolicy.t()
+  def upgrade_policy(%MediaItem{} = media_item, opts \\ []) do
+    case AudioLanguagePolicy.effective(media_item, opts) do
+      %AudioLanguagePolicy{source: :server, languages: [_ | _] = languages} = policy ->
+        %{policy | languages: Enum.uniq(languages ++ ["en"])}
+
+      policy ->
+        policy
+    end
+  end
+
+  @doc """
+  Returns up to `limit` movies whose current file misses the preferred audio
+  language, ordered by `last_language_check_at`.
+
+  "Current file" is the one the quality path upgrades, the best-scoring
+  analyzed file, so a search carrying both reasons targets one file. A gap is
+  `FileLanguages.gap?/2` under `upgrade_policy/2`.
+
+  Reads a page of `limit * #{@overfetch}` movies and stamps every one without a
+  gap, so the scan walks the library instead of re-reading the same stale page
+  each day. Candidates are left unstamped for `Mydia.Jobs.UpgradeSweep`, which
+  stamps the ones it searches.
+
+  Independent of `upgrades_allowed` and the cutoff: a file can be good enough
+  on quality and still be in the wrong language. It still needs a resolvable
+  quality profile, because picking the current file scores against one.
+  Excluded while `"movie_language_upgrade"` is backing off, and for good once
+  that bucket's first failure is #{@language_give_up_days} days old.
+
+  ## Options
+
+    * `:media_item_id` - scan only this item
+  """
+  @spec language_eligible_movies(pos_integer(), keyword()) :: [map()]
+  def language_eligible_movies(limit, opts \\ []) when is_integer(limit) and limit > 0 do
+    bucket = Reasons.bucket(:movie, :language)
+
+    MediaItem
+    |> where([m], m.type == "movie" and m.monitored == true)
+    |> where([m], m.id in subquery(analyzed_movie_ids()))
+    |> where([m], m.id not in subquery(occupying_media_item_ids()))
+    |> where([m], m.id not in subquery(backed_off_ids(bucket)))
+    |> where([m], m.id not in subquery(given_up_ids(bucket)))
+    |> scope_movies(Keyword.get(opts, :media_item_id))
+    |> order_by([m], asc_nulls_first: m.last_language_check_at)
+    |> limit(^(limit * @overfetch))
+    |> preload([:quality_profile, media_files: ^analyzed_files_query()])
+    |> Repo.all()
+    |> split_language_gaps(&movie_language_candidate/1, :movie)
+    |> Enum.take(limit)
+  end
+
+  @doc """
+  Returns episodes whose current file misses the preferred audio language,
+  ordered by `last_language_check_at`.
+
+  Like `eligible_episodes/1`, `limit` only sizes the over-fetch page and the
+  result is not truncated, so a season's episodes stay together for the
+  season-pack decision in `Mydia.Jobs.UpgradeSweep`. Stamping, give-up and
+  options follow `language_eligible_movies/2`, with the
+  `"episode_language_upgrade"` bucket. Episodes inside an active season-pack
+  download are dropped, for the reason `eligible_episodes/1` gives.
+  """
+  @spec language_eligible_episodes(pos_integer(), keyword()) :: [map()]
+  def language_eligible_episodes(limit, opts \\ []) when is_integer(limit) and limit > 0 do
+    bucket = Reasons.bucket(:episode, :language)
+
+    Episode
+    |> join(:inner, [e], m in assoc(e, :media_item))
+    |> where([e, m], e.monitored == true and m.monitored == true)
+    |> where([e, _m], e.id in subquery(analyzed_episode_ids()))
+    |> where([e, _m], e.id not in subquery(occupying_episode_ids()))
+    |> where([e, _m], e.id not in subquery(backed_off_ids(bucket)))
+    |> where([e, _m], e.id not in subquery(given_up_ids(bucket)))
+    |> scope_episodes(Keyword.get(opts, :media_item_id))
+    |> order_by([e, _m], asc_nulls_first: e.last_language_check_at)
+    |> limit(^(limit * @overfetch))
+    |> preload([_e, _m], media_item: :quality_profile, media_files: ^analyzed_files_query())
+    |> Repo.all()
+    |> Queue.reject_episodes_in_active_season_packs()
+    |> split_language_gaps(&episode_language_candidate/1, :episode)
+  end
+
+  @doc """
+  Merges quality and language candidates into one list with one entry per
+  `key_fun` value, whose `:reasons` holds every reason that found it.
+
+  The lists are interleaved before merging, so when both outgrow a caller's
+  budget, `Enum.take/2` gives each reason about half of it and a library full
+  of below-cutoff files cannot starve the language scan. Entries without
+  `:reasons` count as quality candidates.
+  """
+  @spec merge_candidates([map()], [map()], (map() -> term())) :: [map()]
+  def merge_candidates(quality, language, key_fun) do
+    {keys, by_key} =
+      quality
+      |> Enum.map(&Map.put_new(&1, :reasons, [:quality]))
+      |> interleave(language)
+      |> Enum.reduce({[], %{}}, fn candidate, {keys, by_key} ->
+        key = key_fun.(candidate)
+
+        case by_key do
+          %{^key => existing} ->
+            reasons = Enum.uniq(existing.reasons ++ candidate.reasons)
+            {keys, Map.put(by_key, key, %{existing | reasons: reasons})}
+
+          _ ->
+            {[key | keys], Map.put(by_key, key, candidate)}
+        end
+      end)
+
+    keys |> Enum.reverse() |> Enum.map(&Map.fetch!(by_key, &1))
+  end
+
+  @doc """
+  Whether `reason`'s backoff bucket for `kind` lets `resource_id` be searched
+  now: not backing off and, for `:language`, not given up. Pass
+  `season_number:` for `:season`.
+  """
+  @spec bucket_open?(Reasons.kind(), Reasons.reason(), binary(), keyword()) :: boolean()
+  def bucket_open?(kind, reason, resource_id, opts \\ []) do
+    bucket = Reasons.bucket(kind, reason)
+
+    Search.eligible?(bucket, resource_id, opts) and
+      not (reason == :language and given_up?(bucket, resource_id, opts))
+  end
+
+  @doc "Stamps `last_language_check_at` on the given movies or episodes."
+  @spec stamp_language_checked(:movie | :episode, [binary()]) :: {non_neg_integer(), nil}
+  def stamp_language_checked(_type, []), do: {0, nil}
+
+  def stamp_language_checked(type, ids) when type in [:movie, :episode] and is_list(ids) do
+    schema = if type == :movie, do: MediaItem, else: Episode
+
+    schema
+    |> where([row], row.id in ^ids)
+    |> Repo.update_all(
+      set: [last_language_check_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+    )
+  end
+
+  @doc """
+  Follows a change to a media item's audio language override, saved or
+  cleared.
+
+  Forgets the item's language checks and language backoff, including its
+  episodes and seasons, so the new preference is judged at once instead of
+  after the old one's backoff and give-up clock run out, then enqueues a
+  language sweep scoped to the item. Quality stamps and quality backoff stay:
+  the override says nothing about quality.
+  """
+  @spec audio_preference_changed(MediaItem.t()) :: :ok
+  def audio_preference_changed(%MediaItem{id: media_item_id}) do
+    episode_ids = from(e in Episode, where: e.media_item_id == ^media_item_id, select: e.id)
+
+    MediaItem
+    |> where([m], m.id == ^media_item_id)
+    |> Repo.update_all(set: [last_language_check_at: nil])
+
+    Episode
+    |> where([e], e.media_item_id == ^media_item_id)
+    |> Repo.update_all(set: [last_language_check_at: nil])
+
+    item_buckets = [Reasons.bucket(:movie, :language), Reasons.bucket(:season, :language)]
+
+    SearchBackoff
+    |> where([b], b.resource_type in ^item_buckets and b.resource_id == ^media_item_id)
+    |> Repo.delete_all()
+
+    SearchBackoff
+    |> where([b], b.resource_type == ^Reasons.bucket(:episode, :language))
+    |> where([b], b.resource_id in subquery(episode_ids))
+    |> Repo.delete_all()
+
+    UpgradeSweep.enqueue_for_item(media_item_id)
+  end
+
+  @doc """
+  Filters candidate search results down to the ones `Comparator.upgrade?/6`
+  accepts as a replacement for `file`, the sole authority on that question.
+  Shared between `MovieSearch` and the TV upgrade search paths: only
+  `media_type` (`:movie` or `:episode`) differs between callers.
+
+  `opts` carries `:audio_policy` and `:reasons` through to the Comparator, and
+  each result's audio languages are detected from its title against the
+  policy's original language. With no opts this is the quality filter alone.
 
   A candidate whose release title never parsed into a `%Quality{}` struct
   (e.g. `result.quality` is `nil`) is dropped defensively rather than passed
-  to `Comparator.upgrade?/5`, which requires one.
+  to the Comparator, which requires one.
   """
   @spec filter_candidates(
           [SearchResult.t()],
           MediaFile.t(),
           QualityProfile.t(),
-          :movie | :episode
+          :movie | :episode,
+          keyword()
         ) :: [SearchResult.t()]
-  def filter_candidates(results, %MediaFile{} = file, %QualityProfile{} = profile, media_type)
+  def filter_candidates(
+        results,
+        %MediaFile{} = file,
+        %QualityProfile{} = profile,
+        media_type,
+        opts \\ []
+      )
       when is_list(results) and media_type in [:movie, :episode] do
-    Enum.filter(results, fn result ->
-      case result.quality do
-        %Quality{} = quality ->
-          match?({:ok, _}, Comparator.upgrade?(file, quality, result.size, profile, media_type))
-
-        _ ->
-          false
-      end
-    end)
+    Enum.filter(results, &match?({:ok, _}, evaluate(&1, file, profile, media_type, opts)))
   end
+
+  @doc """
+  Why `result` qualifies as a replacement for `file`: `:language` when it wins
+  on audio language, `:quality` otherwise. Recorded on the grab as
+  `"upgrade_reason"`. Takes the same `opts` as `filter_candidates/5`.
+  """
+  @spec upgrade_reason(
+          SearchResult.t(),
+          MediaFile.t(),
+          QualityProfile.t(),
+          :movie | :episode,
+          keyword()
+        ) :: :language | :quality
+  def upgrade_reason(
+        result,
+        %MediaFile{} = file,
+        %QualityProfile{} = profile,
+        media_type,
+        opts \\ []
+      ) do
+    case evaluate(result, file, profile, media_type, opts) do
+      {:ok, %{reason: :language}} -> :language
+      _ -> :quality
+    end
+  end
+
+  defp evaluate(%{quality: %Quality{} = quality} = result, file, profile, media_type, opts) do
+    policy = Keyword.get(opts, :audio_policy)
+
+    comparator_opts = [
+      audio_policy: policy,
+      candidate_languages:
+        policy && ReleaseLanguages.detect(result.title, policy.original_language),
+      reasons: Keyword.get(opts, :reasons, [:quality])
+    ]
+
+    Comparator.upgrade?(file, quality, result.size, profile, media_type, comparator_opts)
+  end
+
+  defp evaluate(_result, _file, _profile, _media_type, _opts), do: {:error, :unparsed}
 
   @doc """
   Returns the id of the current best analyzed, untrashed file for a movie
@@ -215,22 +450,24 @@ defmodule Mydia.Upgrades do
   `Comparator.score_file_with_breakdown/3`, then picks exactly one of five
   outcomes:
 
-    * `{:ok, :upgraded}` — the new file cleared `min_upgrade_margin` (via
-      `Comparator.clears_margin?/2`, which treats an exact tie as *not* an
-      upgrade even at margin 0). The old file is trashed
-      (`Library.trash_media_file/1` — never a hard delete, so a wrong call
-      stays recoverable for the trash retention window; the file itself
-      moves off the library path into the trash directory, see
-      `Mydia.Library.TrashStore`), `Events.file_upgraded/4` records both
-      scores and the per-dimension breakdown delta, and the pointer is
-      cleared.
-    * `{:ok, :rejected}` — it didn't clear the margin. The *new* file is
-      trashed instead. Unless it came from a season pack, its originating
-      release is also blacklisted (`Downloads.Blacklists`) so the next sweep
-      doesn't grab the same lying release tomorrow; a season pack is left
-      grabbable, because an above-cutoff episode inside a pack is *designed*
-      to fail this gate and blacklisting would burn a release that
-      legitimately upgraded the rest of the season.
+    * `{:ok, :upgraded}` — the new file's on-disk audio ranks better under
+      `upgrade_policy/2`, or the ranks tie, the profile allows upgrades and
+      it cleared `min_upgrade_margin` (via `Comparator.clears_margin?/2`,
+      which treats an exact tie as *not* an upgrade even at margin 0). The
+      old file is trashed (`Library.trash_media_file/1` — never a hard
+      delete, so a wrong call stays recoverable for the trash retention
+      window; the file itself moves off the library path into the trash
+      directory, see `Mydia.Library.TrashStore`), `Events.file_upgraded/4`
+      records both scores and the per-dimension breakdown delta, and the
+      pointer is cleared.
+    * `{:ok, :rejected}` — its audio ranks worse, or the ranks tie and it did
+      not clear the margin (or the profile no longer allows upgrades). The
+      *new* file is trashed instead. Unless it came from a season pack, its
+      originating release is also blacklisted (`Downloads.Blacklists`) so the
+      next sweep doesn't grab the same lying release tomorrow; a season pack
+      is left grabbable, because an above-cutoff episode inside a pack is
+      *designed* to fail this gate and blacklisting would burn a release
+      that legitimately upgraded the rest of the season.
       `Events.upgrade_rejected/5` records the trail (including whether the
       release was blacklisted), and the pointer is cleared.
     * `{:ok, :orphaned}` — the file the new one claims to supersede is gone:
@@ -255,6 +492,10 @@ defmodule Mydia.Upgrades do
       forever with both files left active. The pointer is cleared, an
       operator-visible `Events.job_failed/3` event is recorded, and both
       files are left as ordinary imports.
+
+  A new file with untagged audio is ranked by the languages its release title
+  names. Events carry `"reason": "language"` when the ranks differed,
+  `"quality"` otherwise.
 
   Every terminal branch clears the pointer — that, not the worker's
   `unique` constraint, is what makes re-running this on an already-processed
@@ -342,21 +583,22 @@ defmodule Mydia.Upgrades do
       {{:ok, %{score: old_score, breakdown: old_breakdown}},
        {:ok, %{score: new_score, breakdown: new_breakdown}}} ->
         delta = Float.round(new_score - old_score, 1)
+        {language, language_fields} = language_comparison(new_file, old_file, media_item)
 
-        comparison = %{
-          old_score: old_score,
-          new_score: new_score,
-          delta: delta,
-          old_breakdown: old_breakdown,
-          new_breakdown: new_breakdown,
-          breakdown_delta: breakdown_delta(old_breakdown, new_breakdown)
-        }
+        comparison =
+          Map.merge(
+            %{
+              old_score: old_score,
+              new_score: new_score,
+              delta: delta,
+              old_breakdown: old_breakdown,
+              new_breakdown: new_breakdown,
+              breakdown_delta: breakdown_delta(old_breakdown, new_breakdown)
+            },
+            language_fields
+          )
 
-        # Comparator.clears_margin?/2 is the single authority on the margin,
-        # shared with upgrade?/5 so the gate that picks a candidate and the
-        # gate that accepts the imported file cannot disagree - in particular
-        # about whether an exact tie counts (it does not).
-        if Comparator.clears_margin?(delta, profile) do
+        if keep_new_file?(language, delta, profile) do
           apply_upgrade(new_file, old_file, media_item, comparison)
         else
           apply_rejection(new_file, old_file, media_item, comparison)
@@ -369,6 +611,78 @@ defmodule Mydia.Upgrades do
         handle_unscorable(new_file, old_file, media_item, :new_file_unscorable)
     end
   end
+
+  # Audio language decides first, under the preference in force now rather than
+  # at grab time. A better rank keeps the new file and a worse one rejects it,
+  # whatever the scores. Only a tie falls to the quality margin, and only while
+  # the profile still allows quality upgrades. Comparator.clears_margin?/2 stays
+  # the single authority on the margin, shared with Comparator.upgrade?/6 so
+  # the gate that picks a candidate and the gate that accepts the imported file
+  # cannot disagree about whether an exact tie counts (it does not).
+  defp keep_new_file?(:better, _delta, _profile), do: true
+  defp keep_new_file?(:worse, _delta, _profile), do: false
+
+  defp keep_new_file?(:equal, delta, %QualityProfile{upgrades_allowed: allowed} = profile),
+    do: allowed != false and Comparator.clears_margin?(delta, profile)
+
+  defp language_comparison(new_file, old_file, media_item) do
+    policy = upgrade_policy(media_item)
+    old_languages = FileLanguages.detect(old_file)
+    new_languages = new_file_languages(new_file, policy)
+    verdict = compare_new_file_languages(policy, old_languages, new_languages)
+
+    {verdict,
+     %{
+       reason: if(verdict == :equal, do: :quality, else: :language),
+       old_audio_languages: FileLanguages.to_list(old_languages),
+       new_audio_languages: audio_language_list(new_languages)
+     }}
+  end
+
+  # A guessed title (ReleaseLanguages `assumed?: true`) is the same weaker
+  # evidence Comparator.language_win?/4 already discounts at grab time: it
+  # counts in the new file's favour only when the old file carries none of
+  # the policy's languages, and never against it. Anywhere else an assumed
+  # detection ranks as a tie, leaving the quality margin to decide, so
+  # finalize never rejects or blacklists a file on a guess.
+  defp compare_new_file_languages(policy, old_languages, {:assumed, languages}) do
+    case FileLanguages.compare(policy, old_languages, {:known, languages}) do
+      :better ->
+        if FileLanguages.none_preferred?(policy, old_languages), do: :better, else: :equal
+
+      _ ->
+        :equal
+    end
+  end
+
+  defp compare_new_file_languages(policy, old_languages, new_languages),
+    do: FileLanguages.compare(policy, old_languages, new_languages)
+
+  # ffprobe is the authority for the new file. When it tagged no audio
+  # language, the title of the release the file came from is the best
+  # evidence left. A guessed title only counts here where grab time would
+  # also have trusted it (see compare_new_file_languages/3).
+  defp new_file_languages(new_file, policy) do
+    case FileLanguages.detect(new_file) do
+      {:known, _languages} = known -> known
+      :unknown -> title_languages(new_file, policy)
+    end
+  end
+
+  defp title_languages(new_file, policy) do
+    with download_id when is_binary(download_id) <- download_id_for(new_file),
+         %Download{title: title} when is_binary(title) <- Repo.get(Download, download_id) do
+      case ReleaseLanguages.detect(title, policy.original_language) do
+        %ReleaseLanguages{assumed?: true, languages: languages} -> {:assumed, languages}
+        %ReleaseLanguages{languages: languages} -> {:known, languages}
+      end
+    else
+      _ -> :unknown
+    end
+  end
+
+  defp audio_language_list({:assumed, languages}), do: languages
+  defp audio_language_list(languages), do: FileLanguages.to_list(languages)
 
   # Task 10 review finding 3: the triggering conditions here (a quality
   # profile that got deleted or blanked out between grab and finalize, or a
@@ -453,7 +767,7 @@ defmodule Mydia.Upgrades do
   end
 
   # Per-profile-dimension delta (new - old), rounded the same way
-  # Comparator.upgrade?/5 rounds its overall delta. Read by the activity
+  # Comparator.upgrade?/6 rounds its overall delta. Read by the activity
   # feed to answer *why* a replacement decision was made, not just report
   # the aggregate score change.
   defp breakdown_delta(old_breakdown, new_breakdown) do
@@ -594,6 +908,93 @@ defmodule Mydia.Upgrades do
     end
   end
 
+  # Candidates keep their place at the front of the staleness order; every
+  # other scanned row is stamped so the next run reads further in.
+  defp split_language_gaps(rows, candidate_fun, type) do
+    {candidates, clean_ids} =
+      Enum.reduce(rows, {[], []}, fn row, {candidates, clean_ids} ->
+        case candidate_fun.(row) do
+          [candidate] -> {[candidate | candidates], clean_ids}
+          [] -> {candidates, [row.id | clean_ids]}
+        end
+      end)
+
+    stamp_language_checked(type, clean_ids)
+    Enum.reverse(candidates)
+  end
+
+  defp movie_language_candidate(%MediaItem{} = item) do
+    case language_gap(item, item.media_files, :movie) do
+      {:gap, file, profile, score} ->
+        [
+          %{
+            media_item: item,
+            media_file: file,
+            profile: profile,
+            score: score,
+            reasons: [:language]
+          }
+        ]
+
+      :none ->
+        []
+    end
+  end
+
+  defp episode_language_candidate(%Episode{} = episode) do
+    case language_gap(episode.media_item, episode.media_files, :episode) do
+      {:gap, file, profile, score} ->
+        [
+          %{
+            episode: episode,
+            media_file: file,
+            profile: profile,
+            score: score,
+            reasons: [:language]
+          }
+        ]
+
+      :none ->
+        []
+    end
+  end
+
+  defp language_gap(%MediaItem{} = media_item, files, media_type) do
+    with profile when not is_nil(profile) <- QualityProfileResolver.resolve(media_item),
+         {file, score} <- best_file(files, profile, media_type),
+         policy = upgrade_policy(media_item),
+         true <- FileLanguages.gap?(policy, FileLanguages.detect(file)) do
+      {:gap, file, profile, score}
+    else
+      _ -> :none
+    end
+  end
+
+  defp scope_movies(query, nil), do: query
+  defp scope_movies(query, media_item_id), do: where(query, [m], m.id == ^media_item_id)
+
+  defp scope_episodes(query, nil), do: query
+
+  defp scope_episodes(query, media_item_id),
+    do: where(query, [e, _m], e.media_item_id == ^media_item_id)
+
+  defp interleave([], rest), do: rest
+  defp interleave(rest, []), do: rest
+
+  defp interleave([first | firsts], [second | seconds]),
+    do: [first, second | interleave(firsts, seconds)]
+
+  defp given_up?(bucket, resource_id, opts) do
+    case Search.get_backoff(bucket, resource_id, opts) do
+      %SearchBackoff{first_failed_at: %DateTime{} = first_failed_at} ->
+        DateTime.diff(DateTime.utc_now(), first_failed_at, :second) >
+          @language_give_up_days * 86_400
+
+      _ ->
+        false
+    end
+  end
+
   # "The current file" for the whole feature: the highest-scoring analyzed
   # untrashed file. Unanalyzed files are filtered out by the preload query
   # before scoring, never scored and discarded. The winning score is
@@ -683,6 +1084,18 @@ defmodule Mydia.Upgrades do
     SearchBackoff
     |> where([b], b.resource_type == ^resource_type)
     |> where([b], not is_nil(b.next_eligible_at) and b.next_eligible_at > ^now)
+    |> select([b], b.resource_id)
+  end
+
+  defp given_up_ids(resource_type) do
+    cutoff =
+      DateTime.utc_now()
+      |> DateTime.truncate(:second)
+      |> DateTime.add(-@language_give_up_days * 86_400, :second)
+
+    SearchBackoff
+    |> where([b], b.resource_type == ^resource_type)
+    |> where([b], not is_nil(b.first_failed_at) and b.first_failed_at < ^cutoff)
     |> select([b], b.resource_id)
   end
 end

@@ -577,8 +577,8 @@ defmodule Mydia.Events do
     - `media_item` - The top-level `MediaItem` both files were scored
       against (the movie itself, or the show for an episode).
     - `comparison` - `%{old_score:, new_score:, delta:, old_breakdown:,
-      new_breakdown:, breakdown_delta:}`, as built by
-      `Mydia.Upgrades.finalize_upgrade/1`.
+      new_breakdown:, breakdown_delta:, reason:, old_audio_languages:,
+      new_audio_languages:}`, as built by `Mydia.Upgrades.finalize_upgrade/1`.
 
   ## Examples
 
@@ -769,7 +769,10 @@ defmodule Mydia.Events do
       "delta" => comparison.delta,
       "old_breakdown" => stringify_breakdown(comparison.old_breakdown),
       "new_breakdown" => stringify_breakdown(comparison.new_breakdown),
-      "breakdown_delta" => stringify_breakdown(comparison.breakdown_delta)
+      "breakdown_delta" => stringify_breakdown(comparison.breakdown_delta),
+      "reason" => comparison |> Map.get(:reason, :quality) |> to_string(),
+      "old_audio_languages" => Map.get(comparison, :old_audio_languages, []),
+      "new_audio_languages" => Map.get(comparison, :new_audio_languages, [])
     }
   end
 

@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioEvents do
   import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Mydia.Media
+  alias Mydia.Upgrades
   alias MydiaWeb.Live.Authorization
 
   def show_download_audio_modal(_params, socket) do
@@ -41,6 +42,10 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioEvents do
              reason: "Download audio updated"
            ) do
         {:ok, updated} ->
+          if updated.download_audio_language != media_item.download_audio_language do
+            Upgrades.audio_preference_changed(updated)
+          end
+
           {:noreply,
            socket
            |> assign(:media_item, %{

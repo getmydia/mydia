@@ -707,6 +707,146 @@ defmodule Mydia.Jobs.MovieSearchTest do
     end
   end
 
+  describe "perform/1 - upgrade mode with audio language reasons" do
+    alias Mydia.Library.Structs.{FileMetadata, StreamInfo}
+    alias Mydia.Metadata.Structs.MediaMetadata
+
+    # Relies on the default downloads.audio_language, "original", plus the
+    # English floor Mydia.Upgrades.upgrade_policy/2 adds, so a Japanese
+    # film's Italian-only file carries none of the acceptable languages.
+    defp language_movie_target(library_path, languages, opts \\ []) do
+      profile =
+        quality_profile_fixture(%{
+          name: "Language upgrade #{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p"]},
+          min_upgrade_margin: Keyword.get(opts, :margin, 100)
+        })
+
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Paper Lantern Club",
+          year: 2021,
+          quality_profile_id: profile.id
+        })
+
+      movie =
+        movie
+        |> Ecto.Changeset.change(
+          metadata: %MediaMetadata{
+            provider_id: "1",
+            provider: :metadata_relay,
+            media_type: :movie,
+            original_language: "ja"
+          }
+        )
+        |> Repo.update!()
+
+      streams =
+        languages
+        |> Enum.with_index(1)
+        |> Enum.map(fn {language, index} ->
+          %StreamInfo{index: index, type: :audio, language: language}
+        end)
+
+      {:ok, media_file} =
+        Library.create_media_file(%{
+          media_item_id: movie.id,
+          path: "/test/library/paper-lantern-club.mkv",
+          relative_path: "paper-lantern-club.mkv",
+          library_path_id: library_path.id,
+          size: 4_000_000_000,
+          resolution: Keyword.get(opts, :resolution, "1080p"),
+          codec: "h264",
+          metadata: %FileMetadata{streams: streams},
+          analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+
+      {movie, media_file}
+    end
+
+    defp mock_movie_releases(bypass, titles) do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: Enum.map(titles, &%{title: &1, size: 4_000_000_000, seeders: 50})
+      )
+    end
+
+    defp run_movie_upgrade(movie, media_file, reasons) do
+      perform_job(MovieSearch, %{
+        "mode" => "upgrade",
+        "media_item_id" => movie.id,
+        "media_file_id" => media_file.id,
+        "reasons" => reasons
+      })
+    end
+
+    test "Args.parse reads reasons and defaults to quality" do
+      base = %{"mode" => "upgrade", "media_item_id" => "item", "media_file_id" => "file"}
+
+      assert MovieSearch.Args.parse(Map.put(base, "reasons", ["language"])).reasons == [:language]
+      assert MovieSearch.Args.parse(base).reasons == [:quality]
+    end
+
+    test "a language search grabs the release in a preferred language and tags the reason", %{
+      bypass: bypass,
+      library_path: library_path
+    } do
+      {movie, media_file} = language_movie_target(library_path, ["ita"])
+
+      mock_movie_releases(bypass, [
+        "Paper.Lantern.Club.2021.1080p.BluRay.x264.iTALiAN-GRP",
+        "Paper.Lantern.Club.2021.1080p.BluRay.x264.DUAL-GRP"
+      ])
+
+      assert :ok = run_movie_upgrade(movie, media_file, ["language"])
+
+      assert [download] = Mydia.Downloads.list_downloads()
+      assert download.title =~ "DUAL"
+      assert download.metadata["upgrade_target_media_file_id"] == media_file.id
+      assert download.metadata["upgrade_reason"] == "language"
+    end
+
+    test "a language search that finds nothing better backs off in the language bucket only", %{
+      bypass: bypass,
+      library_path: library_path
+    } do
+      {movie, media_file} = language_movie_target(library_path, ["ita"])
+      mock_movie_releases(bypass, ["Paper.Lantern.Club.2021.1080p.BluRay.x264.iTALiAN-GRP"])
+
+      assert :ok = run_movie_upgrade(movie, media_file, ["language"])
+
+      assert Mydia.Downloads.list_downloads() == []
+      assert Search.get_backoff("movie_language_upgrade", movie.id).failure_count == 1
+      assert Search.get_backoff("movie_upgrade", movie.id) == nil
+    end
+
+    test "a search carrying both reasons records its miss in both buckets", %{
+      bypass: bypass,
+      library_path: library_path
+    } do
+      {movie, media_file} = language_movie_target(library_path, ["ita"])
+      mock_movie_releases(bypass, ["Paper.Lantern.Club.2021.1080p.BluRay.x264.iTALiAN-GRP"])
+
+      assert :ok = run_movie_upgrade(movie, media_file, ["quality", "language"])
+
+      assert Search.get_backoff("movie_upgrade", movie.id).failure_count == 1
+      assert Search.get_backoff("movie_language_upgrade", movie.id).failure_count == 1
+    end
+
+    test "a quality upgrade that would drop the file's language is refused", %{
+      bypass: bypass,
+      library_path: library_path
+    } do
+      {movie, media_file} =
+        language_movie_target(library_path, ["jpn"], resolution: "720p", margin: 0)
+
+      mock_movie_releases(bypass, ["Paper.Lantern.Club.2021.1080p.BluRay.x264.iTALiAN-GRP"])
+
+      assert :ok = run_movie_upgrade(movie, media_file, ["quality"])
+      assert Mydia.Downloads.list_downloads() == []
+    end
+  end
+
   # The seeder floor for automatic searches is a layered runtime setting
   # (downloads.min_seeders / AUTO_SEARCH_MIN_SEEDERS / the admin settings UI),
   # not the flat compile-time `config :mydia, :auto_search` key it used to be.

@@ -52,7 +52,42 @@ Two more fields on that same tab control how aggressive the upgrades are:
   what you already have is never an upgrade, at any margin.
 
 Only movies and episodes that use a profile with automatic upgrades enabled
-are ever considered by the sweep.
+are considered for quality upgrades. Replacing a file in the wrong audio
+language does not depend on this checkbox; see the next section.
+
+## Replacing files in the wrong audio language
+
+The same daily sweep also looks for files whose audio misses the language you
+download in. That language comes from the **Download Audio** row on the show or
+movie page, or from the server's `downloads.audio_language` setting
+(`DOWNLOAD_AUDIO_LANGUAGE`, the original language by default) while the row is
+left on the server default. The playback audio setting plays no part in this.
+
+The two are read differently on purpose:
+
+- **A language chosen on the page** is a request. A file without that language
+  is replaced, so a show set to English swaps a Japanese-only episode for a
+  dual-audio or dubbed release once one exists.
+- **The server default** is a floor, and English always counts as acceptable
+  there. A file is replaced only when it carries neither the configured
+  language nor English, such as a Russian-only copy of an English sitcom or an
+  Italian-only copy of a Japanese show.
+
+Mydia reads a file's languages from its analyzed audio tracks. A file whose
+tracks carry no language tag is never replaced for language.
+
+Language replacement ignores **Allow automatic quality upgrades** and the
+cutoff score, because a file can be good enough on quality and still be in the
+wrong language. It shares the sweep's search budget with quality upgrades. A
+search that finds nothing backs off on its own schedule, and after 90 days
+without success Mydia stops searching that file for language. Choosing a
+different download audio on the page clears that history and checks the item
+straight away.
+
+When the replacement arrives, Mydia compares the audio on both files before it
+looks at quality. A new file with a better language wins even if it scores
+lower, and one that lost the language is trashed even if it scores higher.
+Activity records which of the two decided.
 
 ## Pacing the sweep
 

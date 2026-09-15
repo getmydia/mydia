@@ -18,10 +18,12 @@ defmodule Mydia.Upgrades.Comparator do
   and a different scale.
   """
 
+  alias Mydia.Indexers.ReleaseLanguages
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.Quality
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades.Attrs
+  alias Mydia.Upgrades.FileLanguages
 
   @neutralizable ~w(resolution video_codec audio_codec audio_channels source hdr_tokens file_size_mb)a
 
@@ -97,34 +99,118 @@ defmodule Mydia.Upgrades.Comparator do
   end
 
   @doc """
-  Whether a candidate release beats the file on disk by at least the profile's
-  margin.
+  Whether a candidate release should replace the file on disk.
 
-  Returns `{:ok, %{current:, candidate:, delta:}}` on success, or `{:error,
-  :unscorable}` / `{:error, :below_margin}`.
+  Audio language is judged first, when `opts` carry a policy and the
+  candidate's detected languages:
+
+    1. A candidate ranking strictly better than the file is a language
+       upgrade, and the quality margin does not apply. It counts only when
+       `:language` is among the reasons, and an assumed detection counts only
+       when the file carries none of the preferred languages: a guess may
+       replace an unwatchable file, never a watchable one.
+    2. A candidate ranking worse is `{:error, :drops_language}` whatever the
+       reasons. A quality upgrade must not trade away the viewer's language.
+    3. Otherwise the ranks tie, or cannot be compared, and the quality
+       comparison decides, but only when `:quality` is among the reasons. A
+       language-only search gets `{:error, :same_language}`.
+
+  An assumed detection naming no language at all is ignored outright, tying
+  rather than losing, since it carries no evidence either way.
+
+  A language upgrade returns `{:ok, %{reason: :language}}`. The quality
+  comparison returns `{:ok, %{reason: :quality, current:, candidate:, delta:}}`,
+  or `{:error, :unscorable}` / `{:error, :below_margin}`.
+
+  ## Options
+
+    * `:audio_policy` - the item's `Mydia.Media.AudioLanguagePolicy`, or nil
+    * `:candidate_languages` - `ReleaseLanguages.detect/2` of the release title
+    * `:reasons` - why the search runs (default `[:quality]`)
+
+  With no options this is the quality comparison alone, as it was before
+  languages were considered.
   """
   @spec upgrade?(
           MediaFile.t(),
           Quality.t(),
           non_neg_integer() | nil,
           QualityProfile.t(),
-          :movie | :episode
-        ) :: {:ok, map()} | {:error, :unscorable | :below_margin}
-  def upgrade?(%MediaFile{} = file, %Quality{} = quality, size_bytes, profile, media_type) do
-    with {:ok, current} <- score_file(file, profile, media_type) do
-      file_attrs = Attrs.from_media_file(file, media_type)
-      candidate_attrs = Attrs.from_quality(quality, size_bytes, media_type)
-      merged = reconcile(file_attrs, candidate_attrs)
+          :movie | :episode,
+          keyword()
+        ) ::
+          {:ok, map()}
+          | {:error, :unscorable | :below_margin | :drops_language | :same_language}
+  def upgrade?(
+        %MediaFile{} = file,
+        %Quality{} = quality,
+        size_bytes,
+        profile,
+        media_type,
+        opts \\ []
+      ) do
+    reasons = Keyword.get(opts, :reasons, [:quality])
 
-      %{score: candidate} = QualityProfile.score_media_file(profile, compact(merged))
-      delta = Float.round(candidate - current, 1)
-
-      if clears_margin?(delta, profile) do
-        {:ok, %{current: current, candidate: candidate, delta: delta}}
-      else
-        {:error, :below_margin}
-      end
+    case language_verdict(file, opts, reasons) do
+      :better -> {:ok, %{reason: :language}}
+      :worse -> {:error, :drops_language}
+      :equal -> quality_upgrade(file, quality, size_bytes, profile, media_type, reasons)
     end
+  end
+
+  defp quality_upgrade(file, quality, size_bytes, profile, media_type, reasons) do
+    if :quality in reasons do
+      with {:ok, current} <- score_file(file, profile, media_type) do
+        file_attrs = Attrs.from_media_file(file, media_type)
+        candidate_attrs = Attrs.from_quality(quality, size_bytes, media_type)
+        merged = reconcile(file_attrs, candidate_attrs)
+
+        %{score: candidate} = QualityProfile.score_media_file(profile, compact(merged))
+        delta = Float.round(candidate - current, 1)
+
+        if clears_margin?(delta, profile) do
+          {:ok, %{reason: :quality, current: current, candidate: candidate, delta: delta}}
+        else
+          {:error, :below_margin}
+        end
+      end
+    else
+      {:error, :same_language}
+    end
+  end
+
+  defp language_verdict(file, opts, reasons) do
+    case Keyword.get(opts, :candidate_languages) do
+      %ReleaseLanguages{} = candidate ->
+        judge_language(file, candidate, Keyword.get(opts, :audio_policy), reasons)
+
+      _ ->
+        :equal
+    end
+  end
+
+  # An assumed detection naming no language at all is no evidence either way
+  # (see ReleaseLanguages.detect/2: the only language it ever assumes is the
+  # item's original, and only when one is known), so it skips the language
+  # rules entirely rather than ranking last and refusing every marker-free
+  # quality upgrade.
+  defp judge_language(_file, %ReleaseLanguages{assumed?: true, languages: []}, _policy, _reasons),
+    do: :equal
+
+  defp judge_language(file, %ReleaseLanguages{} = candidate, policy, reasons) do
+    current = FileLanguages.detect(file)
+
+    case FileLanguages.compare(policy, current, {:known, candidate.languages}) do
+      :better ->
+        if language_win?(policy, current, candidate, reasons), do: :better, else: :equal
+
+      verdict ->
+        verdict
+    end
+  end
+
+  defp language_win?(policy, current, %ReleaseLanguages{assumed?: assumed?}, reasons) do
+    :language in reasons and (not assumed? or FileLanguages.none_preferred?(policy, current))
   end
 
   @doc """
