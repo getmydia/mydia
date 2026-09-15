@@ -31,6 +31,16 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
 
+      original_config = Application.get_env(:mydia, :runtime_config)
+
+      on_exit(fn ->
+        if original_config do
+          Application.put_env(:mydia, :runtime_config, original_config)
+        else
+          Application.delete_env(:mydia, :runtime_config)
+        end
+      end)
+
       conn =
         conn
         |> init_test_session(%{})
@@ -42,6 +52,13 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
     end
 
     test "toggles authentication settings without :atom.cast/1 error", %{view: view} do
+      # auth.local_enabled and auth.oidc_enabled are cross-validated: turning
+      # local auth off with OIDC left disabled makes the merged config
+      # invalid, and Loader.reload/0 correctly leaves it applying after a
+      # restart instead. Seed a valid OIDC config first so this test keeps
+      # exercising the toggle itself, not that unrelated validation rule.
+      seed_valid_oidc_config()
+
       html =
         view
         |> element("input[type='checkbox'][phx-value-key='auth.local_enabled']")
@@ -191,6 +208,48 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
 
       assert Settings.get_config_setting_by_key("server.host").value == "127.0.0.1"
     end
+
+    test "a saved setting takes effect without a restart", %{view: view} do
+      # Every reader goes through Mydia.Config.get/0, which only changes when
+      # Loader.reload/0 runs. Saving the row alone left the old value live
+      # until the next boot.
+      view
+      |> element("input[phx-value-key='streaming.max_transcode_height']")
+      |> render_blur(%{"value" => "720"})
+
+      assert Mydia.Config.get().streaming.max_transcode_height == 720
+    end
+
+    test "a toggle takes effect without a restart", %{view: view} do
+      # Same cross-validation as above: seed a valid OIDC config so turning
+      # local auth off still merges into a valid config and actually reloads.
+      seed_valid_oidc_config()
+
+      before = Mydia.Config.get().auth.local_enabled
+
+      view
+      |> element("input[type='checkbox'][phx-value-key='auth.local_enabled']")
+      |> render_click()
+
+      assert Mydia.Config.get().auth.local_enabled == !before
+    end
+
+    test "a save whose merged config is invalid says it applies after a restart", %{view: view} do
+      {:ok, _} =
+        Settings.upsert_config_setting(%{
+          key: "server.url_scheme",
+          value: "ftp",
+          category: :server
+        })
+
+      html =
+        view
+        |> element("input[phx-value-key='server.host']")
+        |> render_blur(%{"value" => "127.0.0.1"})
+
+      assert html =~ "could not be reloaded"
+      assert Settings.get_config_setting_by_key("server.host").value == "127.0.0.1"
+    end
   end
 
   describe "Crash report widget" do
@@ -223,6 +282,22 @@ defmodule MydiaWeb.AdminSettingsLiveTest do
     test "no longer renders the 'Sent' tile", %{view: view} do
       refute has_element?(view, ".stat-title", "Sent")
       refute has_element?(view, ".stat-desc", "Successfully reported")
+    end
+  end
+
+  # auth.local_enabled and auth.oidc_enabled are cross-validated by
+  # Mydia.Config.Schema: turning local auth off is only a valid merged config
+  # when OIDC is enabled and fully configured. Seeds that so a test can flip
+  # local_enabled off without tripping the unrelated "at least one auth
+  # method must be enabled" rule.
+  defp seed_valid_oidc_config do
+    for {key, value} <- [
+          {"auth.oidc_enabled", "true"},
+          {"auth.oidc_client_id", "test-client"},
+          {"auth.oidc_client_secret", "test-secret"},
+          {"auth.oidc_issuer", "https://issuer.example.test"}
+        ] do
+      {:ok, _} = Settings.upsert_config_setting(%{key: key, value: value, category: :auth})
     end
   end
 end

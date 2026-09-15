@@ -69,10 +69,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       end)
 
     if Enum.all?(results, fn result -> match?({:ok, _}, result) end) do
-      {:noreply,
-       socket
-       |> put_flash(:info, "Settings updated successfully")
-       |> load_data()}
+      {:noreply, after_config_write(socket, "Settings updated successfully")}
     else
       failed_results =
         results
@@ -138,10 +135,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
       case Settings.upsert_config_setting(validated_data_with_user) do
         {:ok, _setting} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Setting updated successfully")
-           |> load_data()}
+          {:noreply, after_config_write(socket, "Setting updated successfully")}
 
         {:error, changeset} ->
           MydiaLogger.log_error(:liveview, "Failed to toggle setting",
@@ -190,10 +184,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
       case Settings.upsert_config_setting(validated_data_with_user) do
         {:ok, _setting} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Setting updated successfully")
-           |> load_data()}
+          {:noreply, after_config_write(socket, "Setting updated successfully")}
 
         {:error, _changeset} ->
           {:noreply,
@@ -235,6 +226,36 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
   ## Private Helpers
 
+  # A saved row changes nothing until the cached runtime config is rebuilt:
+  # every reader goes through Mydia.Config.get/0, which returns what
+  # Loader.reload/0 last stored. When the merged config fails validation the
+  # row is still saved, so say it will not apply yet rather than claim success.
+  defp after_config_write(socket, success_message) do
+    case Mydia.Config.Loader.reload() do
+      {:ok, _config} ->
+        socket
+        |> put_flash(:info, success_message)
+        |> load_data()
+
+      {:error, reason} ->
+        MydiaLogger.log_error(:liveview, "Failed to reload runtime config after a settings save",
+          error: reason,
+          error_details: inspect(reason, pretty: true),
+          operation: :reload_runtime_config,
+          user_id: socket.assigns.current_user.id
+        )
+
+        socket
+        |> put_flash(
+          :error,
+          "Setting saved, but the runtime config could not be reloaded because the merged " <>
+            "configuration is invalid. The change will take effect once the configuration " <>
+            "is valid. Check the logs for the validation error."
+        )
+        |> load_data()
+    end
+  end
+
   # Mydia.Repo only wraps insert/update/insert_or_update (see its module doc),
   # so this delete runs through stock Ecto. A row that is already gone by the
   # time the delete reaches the database (an operator double-clicking Remove,
@@ -265,9 +286,10 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       {:noreply, socket |> load_data() |> put_flash(:info, "Removed #{setting.key}")}
   end
 
-  # Validates, persists, and reloads a single key. Shared by the typed-input
-  # path above; the toggle and select paths predate it and still inline the
-  # same steps.
+  # Validates and persists a single key, then reloads the runtime config.
+  # Shared by the typed-input path above; the toggle and select paths predate
+  # it and inline the validation, but reload through the same
+  # after_config_write/2.
   defp save_setting(socket, key, category, value) do
     changeset =
       validate_config_setting(%{
@@ -322,10 +344,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
     case Settings.upsert_config_setting(attrs) do
       {:ok, _setting} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Setting updated successfully")
-         |> load_data()}
+        {:noreply, after_config_write(socket, "Setting updated successfully")}
 
       {:error, error} ->
         MydiaLogger.log_error(:liveview, "Failed to update setting",
