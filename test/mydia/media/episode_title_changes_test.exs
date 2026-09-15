@@ -75,6 +75,37 @@ defmodule Mydia.Media.EpisodeTitleChangesTest do
       assert Media.get_episode_by_number(ctx.item.id, 1, 3).title == "Quiet Tide"
       assert title_events(ctx.item) == []
     end
+
+    test "a title changed before a later episode fails is still recorded", ctx do
+      stored_episode(ctx.item, 8, "TBA ")
+
+      episode_fixture(%{
+        media_item_id: ctx.item.id,
+        season_number: 1,
+        episode_number: 9,
+        title: "Quiet Tide",
+        provider_episode_id: "999999"
+      })
+
+      # 9 arrives with an id that is not "999999", so it cannot adopt the row
+      # already tagged at those coordinates and falls through to create,
+      # colliding with the unique index (stub_show/2 ids as
+      # season_id * 100 + number, never "999999" here).
+      stub_show(ctx, [{8, "Harbor Lights"}, {9, "Quiet Tide"}])
+
+      assert {:ok, _count} = Media.refresh_episodes_for_tv_show(ctx.item, config: ctx.config)
+
+      assert Media.get_episode_by_number(ctx.item.id, 1, 8).title == "Harbor Lights"
+
+      assert [event] = title_events(ctx.item)
+      assert event.metadata["count"] == 1
+
+      assert event.metadata["changes"] == [
+               %{"season" => 1, "episode" => 8, "old" => "TBA ", "new" => "Harbor Lights"}
+             ]
+
+      assert Media.get_media_item!(ctx.item.id).seasons_refreshed_at == nil
+    end
   end
 
   defp stored_episode(item, number, title) do

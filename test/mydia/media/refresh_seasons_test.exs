@@ -118,6 +118,33 @@ defmodule Mydia.Media.RefreshSeasonsTest do
              Media.refresh_seasons(ctx.item, [2], config: ctx.config)
   end
 
+  test "a title changed before a later episode fails is still recorded", ctx do
+    episode_fixture(%{
+      media_item_id: ctx.item.id,
+      season_number: 2,
+      episode_number: 8,
+      title: "TBA "
+    })
+
+    episode_fixture(%{
+      media_item_id: ctx.item.id,
+      season_number: 2,
+      episode_number: 9,
+      title: "Quiet Tide",
+      provider_episode_id: "999999"
+    })
+
+    stub_second_season_two_episodes(ctx)
+
+    assert {:error, {:failed_seasons, 1}} =
+             Media.refresh_seasons(ctx.item, [2], config: ctx.config)
+
+    assert Media.get_episode_by_number(ctx.item.id, 2, 8).title == "Harbor Lights"
+
+    assert [event] = events(ctx.item, "media_item.episode_titles_updated")
+    assert event.metadata["count"] == 1
+  end
+
   test "a show without a provider id is left to the weekly pass", ctx do
     item = media_item_fixture(%{type: "tv_show", title: "Nameless Harbor", year: 2025})
 
@@ -188,6 +215,41 @@ defmodule Mydia.Media.RefreshSeasonsTest do
     Bypass.stub(bypass, "GET", "/tvdb/seasons/#{season_id}/extended", fn conn ->
       :counters.add(hits, 3, 1)
       respond.(conn)
+    end)
+  end
+
+  # Two-episode body for the "title change survives a later collision"
+  # scenario: episode 9 arrives with an id that does not match the row
+  # already tagged at those coordinates, so it falls through to create and
+  # collides with the unique index instead of being adopted.
+  defp stub_second_season_two_episodes(ctx) do
+    %{bypass: bypass, hits: hits, second_season: season_id} = ctx
+
+    Bypass.stub(bypass, "GET", "/tvdb/seasons/#{season_id}/extended", fn conn ->
+      :counters.add(hits, 3, 1)
+
+      json(conn, %{
+        "data" => %{
+          "id" => season_id,
+          "number" => 2,
+          "episodes" => [
+            %{
+              "id" => season_id + 8,
+              "seasonNumber" => 2,
+              "number" => 8,
+              "name" => "Harbor Lights",
+              "aired" => "2026-09-23"
+            },
+            %{
+              "id" => season_id + 9,
+              "seasonNumber" => 2,
+              "number" => 9,
+              "name" => "Quiet Tide",
+              "aired" => "2026-09-23"
+            }
+          ]
+        }
+      })
     end)
   end
 

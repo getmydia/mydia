@@ -1743,7 +1743,7 @@ defmodule Mydia.Media do
                   # is what leaves `seasons_refreshed_at` unstamped, which is
                   # what makes the next refresh re-fetch against the show as
                   # it actually is now.
-                  {:error, :refresh_target_changed} ->
+                  {:error, :refresh_target_changed, _season_changes} ->
                     Logger.warning(
                       "Aborting season refresh: show changed mid-refresh",
                       media_item_id: media_item.id
@@ -1751,12 +1751,12 @@ defmodule Mydia.Media do
 
                     {:halt, {count, failed + 1, changes}}
 
-                  {:error, reason} ->
+                  {:error, reason, season_changes} ->
                     Logger.error(
                       "Failed to create episodes for season #{season.season_number}: #{inspect(reason)}"
                     )
 
-                    {:cont, {count, failed + 1, changes}}
+                    {:cont, {count, failed + 1, changes ++ season_changes}}
                 end
               end)
 
@@ -1838,14 +1838,14 @@ defmodule Mydia.Media do
                   {:ok, _count, season_changes} ->
                     {changes ++ season_changes, failed}
 
-                  {:error, reason} ->
+                  {:error, reason, season_changes} ->
                     Logger.warning("Season refresh failed",
                       media_item_id: media_item.id,
                       season_number: season_number,
                       reason: inspect(reason)
                     )
 
-                    {changes, failed + 1}
+                    {changes ++ season_changes, failed + 1}
                 end
 
               :error ->
@@ -2268,11 +2268,11 @@ defmodule Mydia.Media do
         if refresh_target_unchanged?(media_item) do
           upsert_season(media_item, season, season_data)
         else
-          {:error, :refresh_target_changed}
+          {:error, :refresh_target_changed, []}
         end
 
       {:error, reason} ->
-        {:error, reason}
+        {:error, reason, []}
     end
   end
 
@@ -2291,8 +2291,13 @@ defmodule Mydia.Media do
     monitor_new? = should_monitor_new_episode?(media_item, season.season_number)
 
     case upsert_season_episodes(media_item, season_data, monitor_new?) do
-      {count, _title_changes} when count < expected ->
-        {:error, {:incomplete_episode_upsert, expected, count}}
+      {count, title_changes} when count < expected ->
+        # The episodes upserted before the count fell short are already
+        # written, so any title change among them already landed in the
+        # database. Report it rather than dropping it: the caller still
+        # treats this as a failed season (so seasons_refreshed_at stays
+        # unstamped), but the title changes it already collected are not lost.
+        {:error, {:incomplete_episode_upsert, expected, count}, title_changes}
 
       {count, title_changes} ->
         {:ok, count, title_changes}
