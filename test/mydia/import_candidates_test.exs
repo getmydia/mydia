@@ -1404,6 +1404,20 @@ defmodule Mydia.ImportCandidatesTest do
       assert is_nil(Repo.reload!(pending).queued_op)
     end
 
+    test "expected_files refuses the whole delete when the selection no longer matches" do
+      lp = library_path_fixture(%{type: "series"})
+      candidates = seed_group(lp, "quillmere bay", 3)
+      scope = page_scope(lp, "quillmere bay")
+
+      assert {:error, {:count_changed, 3}} =
+               ImportCandidates.queue_delete(scope, expected_files: 2)
+
+      assert Enum.all?(candidates, &is_nil(Repo.reload!(&1).queued_op))
+      refute_enqueued(worker: Mydia.Jobs.DeleteImportCandidates)
+
+      assert {:ok, %{files: 3}} = ImportCandidates.queue_delete(scope, expected_files: 3)
+    end
+
     test "an empty selection queues nothing and enqueues no job" do
       lp = library_path_fixture(%{type: "series"})
       seed_group(lp, "quillmere bay", 1)

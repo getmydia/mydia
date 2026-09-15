@@ -1496,6 +1496,73 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       refute has_element?(view, "#delete-files-summary")
     end
 
+    test "a delete_selected event with no open confirmation queues nothing", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [candidate] = seed_group(lp, "quillmere bay")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "toggle_group", %{"id" => "quillmere bay"})
+      render_click(view, "delete_selected", %{})
+
+      assert is_nil(Repo.reload!(candidate).queued_op)
+    end
+
+    test "the delete takes the selection that was confirmed, not one changed afterwards",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      [confirmed] = seed_group(lp, "quillmere bay")
+      [added_later] = seed_group(lp, "lantern coast")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "toggle_group", %{"id" => "quillmere bay"})
+      view |> element("#delete-selected") |> render_click()
+      render_click(view, "toggle_group", %{"id" => "lantern coast"})
+      view |> element("#confirm-delete-files") |> render_click()
+
+      assert Repo.reload!(confirmed).queued_op == "delete"
+      assert is_nil(Repo.reload!(added_later).queued_op)
+    end
+
+    test "a file that joins the selection after confirming stops the delete and recounts",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+      seed_group(lp, "quillmere bay", %{file_count: 2})
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      render_click(view, "toggle_group", %{"id" => "quillmere bay"})
+      view |> element("#delete-selected") |> render_click()
+      assert has_element?(view, "#delete-files-summary", "2 files in 1 group")
+
+      # A scan lands a new file in the same folder while the dialog is open.
+      late =
+        import_candidate_fixture(%{
+          library_path_id: lp.id,
+          anchor_key: "quillmere bay",
+          relative_path: "quillmere bay/late-arrival.mkv",
+          provider_id: "1",
+          provider_type: "tvdb",
+          confidence: 1.0
+        })
+
+      view |> element("#confirm-delete-files") |> render_click()
+
+      queued =
+        Repo.aggregate(
+          from(c in ImportCandidate,
+            where: c.library_path_id == ^lp.id and c.queued_op == "delete"
+          ),
+          :count
+        )
+
+      assert queued == 0
+      assert is_nil(Repo.reload!(late).queued_op)
+      assert has_element?(view, "#flash-error", "selection changed")
+      assert has_element?(view, "#delete-files-summary", "3 files in 1 group")
+    end
+
     test "cancelling the confirmation queues nothing", %{conn: conn} do
       lp = library_path_fixture(%{type: "series"})
       [candidate] = seed_group(lp, "quillmere bay")

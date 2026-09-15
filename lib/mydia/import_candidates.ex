@@ -1516,12 +1516,21 @@ defmodule Mydia.ImportCandidates do
   is never dismissed.
 
   Returns a file count, not a group count: the confirm dialog promised files.
+
+  Pass `expected_files:` with the count the operator confirmed. When the
+  selection no longer covers exactly that many files (a scan added some,
+  another session queued or dismissed some), nothing is marked and this returns
+  `{:error, {:count_changed, current}}`, so a delete never reaches files the
+  operator did not see counted.
   """
-  @spec queue_delete(SelectionScope.t()) :: {:ok, %{files: non_neg_integer()}} | {:error, term()}
-  def queue_delete(%SelectionScope{} = scope) do
+  @spec queue_delete(SelectionScope.t(), keyword()) ::
+          {:ok, %{files: non_neg_integer()}}
+          | {:error, {:count_changed, non_neg_integer()}}
+          | {:error, term()}
+  def queue_delete(%SelectionScope{} = scope, opts \\ []) do
     scope
     |> deletable_query()
-    |> mark_for_delete(scope.library_path_id)
+    |> mark_for_delete(scope.library_path_id, Keyword.get(opts, :expected_files))
   end
 
   @doc """
@@ -1572,7 +1581,7 @@ defmodule Mydia.ImportCandidates do
   # The UPDATE and the job insert commit together. A job insert failing after
   # the rows were marked would leave them queued with nothing to drain them,
   # the same reason `detach_to_review/4` enqueues inside its transaction.
-  defp mark_for_delete(query, library_path_id) do
+  defp mark_for_delete(query, library_path_id, expected_files \\ nil) do
     now = now()
 
     Repo.transaction(fn ->
@@ -1587,6 +1596,7 @@ defmodule Mydia.ImportCandidates do
           ]
         )
 
+      check_expected_files(files, expected_files)
       enqueue_delete_job(files, library_path_id)
       files
     end)
@@ -1600,8 +1610,14 @@ defmodule Mydia.ImportCandidates do
     end
   end
 
+  # The count comes from the UPDATE itself, inside the transaction, so nothing
+  # can join the selection between this check and the marking it rolls back.
+  defp check_expected_files(_files, nil), do: :ok
+  defp check_expected_files(files, files), do: :ok
+  defp check_expected_files(files, _expected), do: Repo.rollback({:count_changed, files})
+
   # Nothing marked means nothing to drain, so no job. Called inside
-  # `mark_for_delete/2`'s transaction, which `Repo.rollback/1` aborts.
+  # `mark_for_delete/3`'s transaction, which `Repo.rollback/1` aborts.
   defp enqueue_delete_job(0, _library_path_id), do: :ok
 
   defp enqueue_delete_job(_files, library_path_id) do

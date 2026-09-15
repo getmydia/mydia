@@ -675,7 +675,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   Confirms a permanent delete of every file in the selection.
 
   `state` is `ImportMediaLive.Index`'s `@delete_confirm` assign: nil when
-  closed, otherwise `%{files:, groups:}`. A modal rather than the
+  closed, otherwise `%{scope:, files:, groups:}`. A modal rather than the
   `data-confirm` the per-file button uses, because "Select all N matching" can
   put far more files behind a selection than its group count suggests, and the
   exact number has to be on screen before anything is deleted.
