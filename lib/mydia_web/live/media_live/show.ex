@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.MediaItemEvents
   alias MydiaWeb.MediaLive.Show.LibraryEvents
   alias MydiaWeb.MediaLive.Show.CategoryEvents
+  alias MydiaWeb.MediaLive.Show.AudioLanguageEvents
   alias MydiaWeb.MediaLive.Show.CollectionEvents
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
@@ -216,6 +217,8 @@ defmodule MydiaWeb.MediaLive.Show do
      # `overflow-y-auto` (see Components.hero_section/1), and an anchored
      # `.dropdown-content` gets clipped by that ancestor's overflow box.
      |> assign(:show_quality_profile_modal, false)
+     # Audio language picker modal state, same page-level-modal reasoning.
+     |> assign(:show_audio_language_modal, false)
      # Target library picker modal state, same reasoning as above.
      |> assign(:show_target_library_modal, false)
      # Trailer modal state
@@ -511,6 +514,18 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("update_quality_profile", params, socket),
     do: CategoryEvents.update_quality_profile(params, socket)
+
+  def handle_event("show_audio_language_modal", params, socket),
+    do: AudioLanguageEvents.show_audio_language_modal(params, socket)
+
+  def handle_event("hide_audio_language_modal", params, socket),
+    do: AudioLanguageEvents.hide_audio_language_modal(params, socket)
+
+  def handle_event("save_audio_languages", params, socket),
+    do: AudioLanguageEvents.save_audio_languages(params, socket)
+
+  def handle_event("reset_audio_languages", params, socket),
+    do: AudioLanguageEvents.reset_audio_languages(params, socket)
 
   def handle_event("show_target_library_modal", params, socket),
     do: LibraryEvents.show_target_library_modal(params, socket)
