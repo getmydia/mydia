@@ -9,7 +9,14 @@ defmodule Mydia.RemoteAccess do
   require Logger
 
   alias Mydia.Repo
-  alias Mydia.RemoteAccess.{ClaimRateLimiter, Config, PairingClaim, RemoteDevice}
+
+  alias Mydia.RemoteAccess.{
+    ClaimRateLimiter,
+    Config,
+    LivenessThrottle,
+    PairingClaim,
+    RemoteDevice
+  }
 
   # Config management
 
@@ -248,13 +255,40 @@ defmodule Mydia.RemoteAccess do
   so without this a player streaming over p2p right now still reads as never
   connected. Claims without a `"device_id"` (a plain user login rather than a
   paired device) are ignored.
+
+  The callers are the p2p request handlers, every HLS segment request among
+  them, so this never makes them wait on the database. `LivenessThrottle` lets
+  one request per device per throttle window through, and that one writes in a
+  supervised task. Under the SQL sandbox the write runs inline instead, as in
+  `Mydia.Plugins.Logs.create_async/1`, because a task would outlive the test's
+  connection ownership.
   """
   def touch_device_from_claims(%{"device_id" => device_id}) when is_binary(device_id) do
-    touch_device_if_stale(device_id)
+    if LivenessThrottle.claim(device_id, :timer.seconds(@touch_throttle_seconds)) do
+      write_off_request_path(fn -> record_liveness(device_id) end)
+    end
+
     :ok
   end
 
   def touch_device_from_claims(_claims), do: :ok
+
+  # A busy database or an exhausted pool is no reason to crash the task and file
+  # a crash report: the device is simply recorded in a later window.
+  defp record_liveness(device_id) do
+    touch_device_if_stale(device_id)
+  rescue
+    error in [Exqlite.Error, DBConnection.ConnectionError] ->
+      Logger.debug("Device liveness write skipped: #{Exception.message(error)}")
+  end
+
+  defp write_off_request_path(write) do
+    if Repo.config()[:pool] == Ecto.Adapters.SQL.Sandbox do
+      write.()
+    else
+      Task.Supervisor.start_child(Mydia.TaskSupervisor, write)
+    end
+  end
 
   @doc """
   Extracts the paired device id from a verified token's claims, or `nil`.

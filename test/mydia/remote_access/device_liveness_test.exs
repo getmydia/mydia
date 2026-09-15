@@ -87,6 +87,42 @@ defmodule Mydia.RemoteAccess.DeviceLivenessTest do
 
       assert is_nil(Repo.reload!(device).last_seen_at)
     end
+
+    test "leaves the database alone while the device was recorded within the window", %{
+      device: device
+    } do
+      # Every HLS segment request carries the token. Even an UPDATE that matches
+      # no row takes SQLite's write lock, so each segment used to queue behind
+      # any write in flight. Once a device is recorded, requests inside the
+      # window must not reach the database at all, whatever the row says.
+      claims = %{"device_id" => device.id}
+      assert :ok = RemoteAccess.touch_device_from_claims(claims)
+
+      stale = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
+      device = device |> Ecto.Changeset.change(last_seen_at: stale) |> Repo.update!()
+
+      assert :ok = RemoteAccess.touch_device_from_claims(claims)
+
+      assert DateTime.compare(Repo.reload!(device).last_seen_at, stale) == :eq
+    end
+  end
+
+  describe "LivenessThrottle.claim/3" do
+    alias Mydia.RemoteAccess.LivenessThrottle
+
+    test "grants the first claim and refuses repeats until the window passes" do
+      device_id = Ecto.UUID.generate()
+
+      assert LivenessThrottle.claim(device_id, 1_000, 5_000)
+      refute LivenessThrottle.claim(device_id, 1_000, 5_999)
+      assert LivenessThrottle.claim(device_id, 1_000, 6_000)
+      refute LivenessThrottle.claim(device_id, 1_000, 6_500)
+    end
+
+    test "tracks each device separately" do
+      assert LivenessThrottle.claim(Ecto.UUID.generate(), 1_000, 5_000)
+      assert LivenessThrottle.claim(Ecto.UUID.generate(), 1_000, 5_000)
+    end
   end
 
   describe "device_id_from_claims/1" do

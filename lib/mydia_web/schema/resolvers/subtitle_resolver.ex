@@ -13,8 +13,40 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleResolver do
   Lists all available subtitle tracks for a media file.
 
   Returns both embedded subtitles (from the media file) and external subtitle files.
+  Under `seasonEpisodes` it returns an empty list; see the COMPAT note below.
   """
-  def list_subtitles(%{id: media_file_id} = media_file, _args, _info) do
+  def list_subtitles(media_file, args, info) do
+    if under_season_episodes?(info) do
+      {:ok, []}
+    else
+      list_file_subtitles(media_file, args, info)
+    end
+  end
+
+  # COMPAT: `seasonEpisodes` resolves every file's `subtitles` to an empty list.
+  #
+  # Accepts: `seasonEpisodes { files { subtitles { ... } } }`, which players
+  # send through the shared MediaFileFragment
+  # (player/lib/graphql/queries/season_episodes.graphql) even though the player
+  # screen never reads those subtitles; the playing file's tracks come from
+  # EpisodeDetail.
+  #
+  # Source: installed players reach the server over p2p, where the client reads
+  # at most 64 KiB of a GraphQL response
+  # (native/mydia_p2p_core/src/lib.rs, `read_to_end(64 * 1024)`). On a real
+  # library, 27 of 223 seasons exceeded that, up to 254 KB, with subtitle
+  # entries 76-91% of every oversized response.
+  #
+  # Removing it would: fail SeasonEpisodes on large seasons for every player
+  # released before the one that drops subtitles from that query and raises
+  # the response cap, breaking next episode and Up Next on those seasons.
+  defp under_season_episodes?(%{path: path}) do
+    Enum.any?(path, &match?(%{schema_node: %{identifier: :season_episodes}}, &1))
+  end
+
+  defp under_season_episodes?(_info), do: false
+
+  defp list_file_subtitles(%{id: media_file_id} = media_file, _args, _info) do
     # Ensure library_path is preloaded
     media_file =
       if Ecto.assoc_loaded?(media_file.library_path) do
