@@ -69,6 +69,20 @@ defmodule Mydia.Settings.RuntimeConfig do
   end
 
   @doc """
+  The `config_settings` rows the config merge actually applies, keyed by `key`.
+
+  A row the merge skips (an unknown key, or a value that will not cast to its
+  field's type) is left out, so it is never reported as the source of a value
+  it did not supply. Direct-lookup rows cast to `:direct`, not an error, so
+  they are kept.
+  """
+  def applied_config_settings_by_key do
+    list_config_settings()
+    |> Enum.reject(&match?({:error, _}, Paths.cast_overlay(&1.key, &1.value)))
+    |> Map.new(&{&1.key, &1})
+  end
+
+  @doc """
   Whether an environment variable actually controls a config value.
 
   `Mydia.Config.Loader`'s `put_if_present/4` skips an empty value, so an empty

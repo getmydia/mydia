@@ -345,7 +345,7 @@ The metadata relay proxies requests to TVDB/TMDB and handles remote access relay
 
 Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays.
 
-`METADATA_LANGUAGE` can also be set per-instance from **Admin > System > Settings**, under **Metadata**, in the admin UI; the env var overrides the database value when both are set.
+Every variable in this section can also be set from **Admin > System > Settings**, under **Language**. An environment variable overrides the database value and locks the field there. Playback audio and the default-track option appear only when the player is enabled.
 
 ## FlareSolverr
 

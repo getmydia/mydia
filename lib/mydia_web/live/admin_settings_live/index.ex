@@ -1,9 +1,9 @@
 defmodule MydiaWeb.AdminSettingsLive.Index do
   use MydiaWeb, :live_view
 
-  alias Mydia.Config.Schema.Paths
   alias Mydia.Settings
   alias MydiaWeb.AdminSettingsLive.Components
+  alias MydiaWeb.AdminSettingsLive.LanguageSettings
 
   require Logger
   alias Mydia.Logger, as: MydiaLogger
@@ -199,6 +199,32 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   end
 
   @impl true
+  def handle_event("save_language_settings", params, socket) do
+    case LanguageSettings.save(params, socket.assigns.current_user.id) do
+      {:ok, []} ->
+        {:noreply, socket}
+
+      {:ok, _written} ->
+        {:noreply, after_config_write(socket, "Setting updated successfully")}
+
+      {:error, key, :invalid} ->
+        {:noreply, put_flash(socket, :error, "Invalid value for #{key}")}
+
+      {:error, key, reason} ->
+        MydiaLogger.log_error(:liveview, "Failed to update language setting",
+          error: reason,
+          error_details: inspect(reason, pretty: true),
+          operation: :update_setting,
+          setting_key: key,
+          user_id: socket.assigns.current_user.id
+        )
+
+        {:noreply,
+         put_flash(socket, :error, MydiaLogger.user_error_message(:update_setting, reason))}
+    end
+  end
+
+  @impl true
   def handle_event("clear_crash_queue", _params, socket) do
     Mydia.CrashReporter.clear_queue()
 
@@ -370,6 +396,8 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     |> assign(:crash_report_stats, Mydia.CrashReporter.stats())
     |> assign(:invalid_config_settings, Settings.invalid_config_settings())
     |> assign(:hwaccel, Mydia.Streaming.HardwareAccel.capabilities())
+    |> assign(:language_settings, LanguageSettings.current())
+    |> assign(:player_enabled?, Mydia.Player.enabled?())
   end
 
   # The Streaming category, and the hardware-acceleration card the template
@@ -388,19 +416,9 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         Mydia.Config.Schema.defaults()
       end
 
-    metadata = config.metadata || %Mydia.Config.Schema.Metadata{}
     streaming = config.streaming || %Mydia.Config.Schema.Streaming{}
 
-    # Fetch all DB settings in one query to avoid N+1 per-key lookups. A row
-    # the merge skips (unknown key, or a value that will not cast to the
-    # field's type) must not be reported as the source of a value it did not
-    # supply, or the source badge and the invalid-settings alert above would
-    # contradict each other for the same key. Direct-lookup rows resolve to
-    # `:direct`, not `{:error, _}`, so they are kept.
-    all_db_settings =
-      Settings.list_config_settings()
-      |> Enum.reject(&match?({:error, _}, Paths.cast_overlay(&1.key, &1.value)))
-      |> Map.new(&{&1.key, &1})
+    all_db_settings = Settings.applied_config_settings_by_key()
 
     %{
       "Server" => [
@@ -487,19 +505,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           type: :string,
           value: config.media.tv_path,
           source: Settings.config_source("TV_PATH", "media.tv_path", all_db_settings)
-        }
-      ],
-      "Metadata" => [
-        %{
-          key: "metadata.language",
-          label: "Language",
-          description:
-            "Locale sent to TMDB/TVDB through the metadata relay (ISO 639-1 like \"de\" or BCP 47 like \"de-DE\"). Affects displayed titles, descriptions, and posters.",
-          type: :string,
-          value: metadata.language,
-          placeholder: "en-US",
-          source:
-            Settings.config_source("METADATA_LANGUAGE", "metadata.language", all_db_settings)
         }
       ],
       "Downloads" => [
@@ -708,7 +713,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
       "Database" -> :general
       "Authentication" -> :auth
       "Media" -> :media
-      "Metadata" -> :metadata
       "Downloads" -> :downloads
       "Streaming" -> :streaming
       "Crash Reporting" -> :crash_reporting
