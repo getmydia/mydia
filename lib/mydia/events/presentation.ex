@@ -76,6 +76,12 @@ defmodule Mydia.Events.Presentation do
       title: "Episodes refreshed"
     },
     %{
+      type: "media_item.episode_titles_updated",
+      icon: "hero-pencil-square",
+      color: "text-info",
+      title: "Episode titles updated"
+    },
+    %{
       type: "media_item.duplicate_provider_id",
       icon: "hero-exclamation-triangle",
       color: "text-warning",
@@ -369,6 +375,20 @@ defmodule Mydia.Events.Presentation do
     count = metadata["episode_count"] || 0
     suffix = if count == 1, do: "episode", else: "episodes"
     "#{title_of(metadata)}, #{count} #{suffix}"
+  end
+
+  def detail(%Event{type: "media_item.episode_titles_updated", metadata: metadata}) do
+    case {metadata["count"], metadata["changes"]} do
+      {1, [%{} = change]} ->
+        "#{title_of(metadata)}, S#{pad(change["season"])}E#{pad(change["episode"])} " <>
+          "\"#{episode_title_label(change["old"])}\" → \"#{episode_title_label(change["new"])}\""
+
+      {count, _changes} when is_integer(count) and count > 1 ->
+        "#{title_of(metadata)}, #{count} episode titles updated"
+
+      _ ->
+        title_of(metadata)
+    end
   end
 
   def detail(%Event{type: "media_file.imported", metadata: metadata}) do
@@ -698,6 +718,16 @@ defmodule Mydia.Events.Presentation do
   end
 
   defp pad(number), do: String.pad_leading("#{number}", 2, "0")
+
+  # The UI renders a missing episode title as "TBA", so the feed does too.
+  defp episode_title_label(title) when is_binary(title) do
+    case String.trim(title) do
+      "" -> "TBA"
+      trimmed -> trimmed
+    end
+  end
+
+  defp episode_title_label(_title), do: "TBA"
 
   defp humanize_bytes(bytes) when bytes >= 1_073_741_824,
     do: "#{Float.round(bytes / 1_073_741_824, 1)} GB"

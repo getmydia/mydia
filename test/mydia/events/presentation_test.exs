@@ -229,6 +229,52 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Severance, 9 episodes"
     end
 
+    test "episode_titles_updated names the episode for a single change" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.episode_titles_updated",
+            metadata: %{
+              "title" => "Lantern Bay",
+              "count" => 1,
+              "changes" => [
+                %{"season" => 4, "episode" => 8, "old" => "TBA ", "new" => "Harbor Lights"}
+              ]
+            }
+          )
+        )
+
+      assert detail == ~s(Lantern Bay, S04E08 "TBA" → "Harbor Lights")
+    end
+
+    test "episode_titles_updated renders a missing old title as TBA" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.episode_titles_updated",
+            metadata: %{
+              "title" => "Lantern Bay",
+              "count" => 1,
+              "changes" => [%{"season" => 1, "episode" => 2, "old" => nil, "new" => "Quiet Tide"}]
+            }
+          )
+        )
+
+      assert detail == ~s(Lantern Bay, S01E02 "TBA" → "Quiet Tide")
+    end
+
+    test "episode_titles_updated counts several changes" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "media_item.episode_titles_updated",
+            metadata: %{"title" => "Lantern Bay", "count" => 3, "changes" => []}
+          )
+        )
+
+      assert detail == "Lantern Bay, 3 episode titles updated"
+    end
+
     test "updated does not raise on a metadata_fields entry with a malformed field name" do
       # A hand-edited or legacy row could carry anything under "field". This
       # must render, not crash the whole Activity Feed over one bad event.
