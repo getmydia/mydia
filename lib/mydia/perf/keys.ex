@@ -14,6 +14,14 @@ defmodule Mydia.Perf.Keys do
   apply. Ecto captures the stacktrace with `:erlang.process_info/2`, which keeps
   eight frames by default. And a function that ends in a tail call to the Repo
   leaves no frame of its own, so the key names whoever called it.
+
+  Some queries have no application frame at all, such as Oban's own
+  bookkeeping (job fetching, `BEGIN`/`COMMIT`). Rather than collapse all of
+  these into one unactionable `"unknown"` key, `caller/1` falls back to the
+  first frame belonging to a library (any Elixir module other than `Ecto`,
+  `DBConnection`, or `Mydia.Repo`), so `oban_jobs` queries key by the Oban
+  function that issued them instead of by nothing at all. Application frames
+  still take priority over library frames wherever both appear.
   """
 
   alias Phoenix.LiveView.Socket
@@ -110,17 +118,39 @@ defmodule Mydia.Perf.Keys do
 
   @doc """
   The first frame under `Mydia.` or `MydiaWeb.` other than `Mydia.Repo`, as
-  `Module.fun/arity`, or `"unknown"`.
+  `Module.fun/arity`.
+
+  When no such application frame exists, falls back to the first frame
+  belonging to any other Elixir module, excluding `Ecto`, `DBConnection`, and
+  `Mydia.Repo`, formatted the same way. Erlang modules (`:gen_server`,
+  `:proc_lib`, and the like) are never used. Returns `"unknown"` only when
+  neither kind of frame is present. A single pass over the stacktrace finds
+  the application frame while remembering the first library candidate, since
+  this runs on every query.
   """
   @spec caller(term()) :: String.t()
   def caller(stacktrace) when is_list(stacktrace) do
-    Enum.find_value(stacktrace, @unknown, fn
-      {module, fun, arity, _location} when is_atom(module) and is_atom(fun) ->
-        if application_module?(module), do: format_frame(module, fun, arity)
+    stacktrace
+    |> Enum.reduce_while(nil, fn
+      {module, fun, arity, _location}, library_candidate when is_atom(module) and is_atom(fun) ->
+        cond do
+          application_module?(module) ->
+            {:halt, format_frame(module, fun, arity)}
 
-      _other ->
-        nil
+          is_nil(library_candidate) and library_module?(module) ->
+            {:cont, format_frame(module, fun, arity)}
+
+          true ->
+            {:cont, library_candidate}
+        end
+
+      _other, library_candidate ->
+        {:cont, library_candidate}
     end)
+    |> case do
+      nil -> @unknown
+      frame -> frame
+    end
   end
 
   def caller(_stacktrace), do: @unknown
@@ -155,6 +185,19 @@ defmodule Mydia.Perf.Keys do
   defp application_module?(module) do
     name = Atom.to_string(module)
     String.starts_with?(name, "Elixir.Mydia.") or String.starts_with?(name, "Elixir.MydiaWeb.")
+  end
+
+  defp library_module?(Mydia.Repo), do: false
+
+  defp library_module?(module) do
+    name = Atom.to_string(module)
+
+    String.starts_with?(name, "Elixir.") and not under_namespace?(name, "Ecto") and
+      not under_namespace?(name, "DBConnection")
+  end
+
+  defp under_namespace?(name, namespace) do
+    name == "Elixir.#{namespace}" or String.starts_with?(name, "Elixir.#{namespace}.")
   end
 
   defp format_frame(module, fun, arity) do

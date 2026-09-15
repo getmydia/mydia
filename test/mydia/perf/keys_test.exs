@@ -115,6 +115,46 @@ defmodule Mydia.Perf.KeysTest do
     test "raw SQL with no stacktrace" do
       assert Keys.query(%{stacktrace: nil, source: nil}) == %{caller: "unknown", source: "none"}
     end
+
+    test "only library frames falls back to the first one outside Ecto and DBConnection" do
+      stacktrace = [
+        {Ecto.Repo.Supervisor, :tuplet, 2, []},
+        {Mydia.Repo, :all, 2, []},
+        {DBConnection, :run, 3, []},
+        {Oban.Engines.Basic, :fetch_jobs, 3, []},
+        {:gen_server, :handle_msg, 6, []}
+      ]
+
+      assert Keys.caller(stacktrace) == "Oban.Engines.Basic.fetch_jobs/3"
+    end
+
+    test "an application frame after a library frame still wins" do
+      stacktrace = [
+        {Ecto.Repo.Supervisor, :tuplet, 2, []},
+        {Oban.Repo, :all, 3, []},
+        {Mydia.Jobs.ExampleWorker, :perform, 1, []}
+      ]
+
+      assert Keys.caller(stacktrace) == "Mydia.Jobs.ExampleWorker.perform/1"
+    end
+
+    test "only Ecto, DBConnection, Mydia.Repo and Erlang frames returns unknown" do
+      stacktrace = [
+        {Ecto.Repo.Supervisor, :tuplet, 2, []},
+        {Mydia.Repo, :all, 2, []},
+        {DBConnection, :run, 3, []},
+        {:gen_server, :handle_msg, 6, []},
+        {:proc_lib, :init_p_do_apply, 3, []}
+      ]
+
+      assert Keys.caller(stacktrace) == "unknown"
+    end
+
+    test "an anonymous library frame is keyed by its enclosing function" do
+      stacktrace = [{Oban.Queue.Producer, :"-dispatch/1-fun-0-", 0, []}]
+
+      assert Keys.caller(stacktrace) == "Oban.Queue.Producer.dispatch/1"
+    end
   end
 
   describe "route, Oban and p2p keys" do
