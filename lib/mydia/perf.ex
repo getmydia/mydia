@@ -34,6 +34,17 @@ defmodule Mydia.Perf do
   def enabled?(config, cli_mode?), do: Keyword.get(config, :enabled, false) and not cli_mode?
 
   @doc """
+  Runs `fun` inside a `[:mydia, :p2p, :request]` span tagged with `kind` and
+  returns its result. p2p requests never pass through the HTTP endpoint, so
+  this span is their only timing.
+  """
+  @spec p2p_span(String.t(), (-> result)) :: result when result: var
+  def p2p_span(kind, fun) do
+    metadata = %{kind: kind}
+    :telemetry.span([:mydia, :p2p, :request], metadata, fn -> {fun.(), metadata} end)
+  end
+
+  @doc """
   Ranks recorded metrics.
 
   Options: `:since` and `:until` (`DateTime` or `Date`, a `Date` meaning 00:00
