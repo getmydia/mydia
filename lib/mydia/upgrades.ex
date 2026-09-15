@@ -19,6 +19,7 @@ defmodule Mydia.Upgrades do
   alias Mydia.Downloads.Queue
   alias Mydia.Events
   alias Mydia.Indexers.QualityProfileResolver
+  alias Mydia.Indexers.ReleaseLanguages
   alias Mydia.Indexers.SearchResult
   alias Mydia.Library
   alias Mydia.Library.MediaFile
@@ -109,34 +110,76 @@ defmodule Mydia.Upgrades do
   end
 
   @doc """
-  Filters candidate search results down to the ones that are a genuine
-  upgrade over `file`, per `Comparator.upgrade?/5` - the sole authority on
-  that question. Shared between `MovieSearch` and the TV upgrade search path:
-  only `media_type` (`:movie` or `:episode`) differs between callers, so this
-  is called once with each rather than duplicated per media type.
+  Filters candidate search results down to the ones `Comparator.upgrade?/6`
+  accepts as a replacement for `file`, the sole authority on that question.
+  Shared between `MovieSearch` and the TV upgrade search paths: only
+  `media_type` (`:movie` or `:episode`) differs between callers.
+
+  `opts` carries `:audio_policy` and `:reasons` through to the Comparator, and
+  each result's audio languages are detected from its title against the
+  policy's original language. With no opts this is the quality filter alone.
 
   A candidate whose release title never parsed into a `%Quality{}` struct
   (e.g. `result.quality` is `nil`) is dropped defensively rather than passed
-  to `Comparator.upgrade?/5`, which requires one.
+  to the Comparator, which requires one.
   """
   @spec filter_candidates(
           [SearchResult.t()],
           MediaFile.t(),
           QualityProfile.t(),
-          :movie | :episode
+          :movie | :episode,
+          keyword()
         ) :: [SearchResult.t()]
-  def filter_candidates(results, %MediaFile{} = file, %QualityProfile{} = profile, media_type)
+  def filter_candidates(
+        results,
+        %MediaFile{} = file,
+        %QualityProfile{} = profile,
+        media_type,
+        opts \\ []
+      )
       when is_list(results) and media_type in [:movie, :episode] do
-    Enum.filter(results, fn result ->
-      case result.quality do
-        %Quality{} = quality ->
-          match?({:ok, _}, Comparator.upgrade?(file, quality, result.size, profile, media_type))
-
-        _ ->
-          false
-      end
-    end)
+    Enum.filter(results, &match?({:ok, _}, evaluate(&1, file, profile, media_type, opts)))
   end
+
+  @doc """
+  Why `result` qualifies as a replacement for `file`: `:language` when it wins
+  on audio language, `:quality` otherwise. Recorded on the grab as
+  `"upgrade_reason"`. Takes the same `opts` as `filter_candidates/5`.
+  """
+  @spec upgrade_reason(
+          SearchResult.t(),
+          MediaFile.t(),
+          QualityProfile.t(),
+          :movie | :episode,
+          keyword()
+        ) :: :language | :quality
+  def upgrade_reason(
+        result,
+        %MediaFile{} = file,
+        %QualityProfile{} = profile,
+        media_type,
+        opts \\ []
+      ) do
+    case evaluate(result, file, profile, media_type, opts) do
+      {:ok, %{reason: :language}} -> :language
+      _ -> :quality
+    end
+  end
+
+  defp evaluate(%{quality: %Quality{} = quality} = result, file, profile, media_type, opts) do
+    policy = Keyword.get(opts, :audio_policy)
+
+    comparator_opts = [
+      audio_policy: policy,
+      candidate_languages:
+        policy && ReleaseLanguages.detect(result.title, policy.original_language),
+      reasons: Keyword.get(opts, :reasons, [:quality])
+    ]
+
+    Comparator.upgrade?(file, quality, result.size, profile, media_type, comparator_opts)
+  end
+
+  defp evaluate(_result, _file, _profile, _media_type, _opts), do: {:error, :unparsed}
 
   @doc """
   Returns the id of the current best analyzed, untrashed file for a movie
