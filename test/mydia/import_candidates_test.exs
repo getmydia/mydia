@@ -1132,5 +1132,29 @@ defmodule Mydia.ImportCandidatesTest do
       assert stored.parsed_info["episodes"] == [7]
       assert stored.parsed_info["type"] == "tv_show"
     end
+
+    test "carries the show's title and year so the review row can name it" do
+      lp = library_path_fixture(%{type: "series"})
+
+      show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Lantern Coast",
+          year: 2019,
+          tvdb_id: 900_005
+        })
+
+      assert {:ok, candidate} =
+               ImportCandidates.stage_show_file(show, lp, %{
+                 relative_path: "Lantern Coast/Season 01/extended-cut.mkv",
+                 size: 42,
+                 discovered_at: ~U[2026-09-01 12:00:00Z]
+               })
+
+      assert {candidate.title, candidate.year} == {"Lantern Coast", 2019}
+
+      assert ImportCandidates.get_group(lp.id, candidate.anchor_key).suggested_title ==
+               "Lantern Coast"
+    end
   end
 end

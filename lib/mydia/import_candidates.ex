@@ -306,6 +306,9 @@ defmodule Mydia.ImportCandidates do
   right show, and `media_type: "tv_show"`. A TV file is never a `media_files`
   row attached to the show itself: `Mydia.Library.MediaFile.changeset/2`
   refuses that shape, and this is where such a file goes instead.
+  It also carries the show's title and year. Without them the group has a
+  provider id and no title, and the review row renders an arrow pointing at
+  nothing.
 
   `attrs` needs `:relative_path`, `:size` and `:discovered_at`. `:parsed_info`
   (string keys) is optional and is derived from the filename when absent.
@@ -333,6 +336,8 @@ defmodule Mydia.ImportCandidates do
       discovered_at: Map.fetch!(attrs, :discovered_at),
       provider_type: provider_type,
       provider_id: provider_id,
+      title: show.title,
+      year: show.year,
       media_type: "tv_show",
       parsed_info: parsed_info
     })

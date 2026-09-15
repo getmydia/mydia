@@ -1370,4 +1370,49 @@ defmodule MydiaWeb.ImportMediaReviewTest do
       assert Repo.reload!(candidate).queued_op == "rematch"
     end
   end
+
+  describe "the suggestion line" do
+    test "a matched group with no title names the provider instead of a bare arrow",
+         %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+
+      seed_group(lp, "lantern coast", %{
+        provider_type: "tvdb",
+        provider_id: "81189",
+        confidence: nil,
+        title: nil
+      })
+
+      group = fetch_group(lp, "lantern coast")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      assert has_element?(
+               view,
+               "#group-suggestion-#{ImportCandidateGroup.dom_id(group)}",
+               "→ TVDB 81189"
+             )
+    end
+
+    test "a local-marked group with no title reads Local show", %{conn: conn} do
+      lp = library_path_fixture(%{type: "series"})
+
+      seed_group(lp, "quillmere bay", %{
+        provider_type: "local",
+        provider_id: Ecto.UUID.generate(),
+        confidence: nil,
+        title: nil
+      })
+
+      group = fetch_group(lp, "quillmere bay")
+
+      {:ok, view, _html} = live(conn, ~p"/import")
+
+      assert has_element?(
+               view,
+               "#group-suggestion-#{ImportCandidateGroup.dom_id(group)}",
+               "→ Local show"
+             )
+    end
+  end
 end
