@@ -67,9 +67,8 @@ survives later scans of the same library, and survives **Clear** too.
 
 **Queued** holds the groups with work already under way: an import you
 accepted, a re-match you asked for, or files you chose to delete. None of these
-happens on the spot:
-each hands the work to a background job, so you can close the page and it carries
-on without you. Groups leave Queued as they finish. A group whose work could not
+happens on the spot: each hands the work to a background job, so you can close
+the page and it carries on without you. Groups leave Queued as they finish. A group whose work could not
 be completed returns to the main list with a short note explaining why, most
 often because its files match more than one title or because no provider
 recognised them.
