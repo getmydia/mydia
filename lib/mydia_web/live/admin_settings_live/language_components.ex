@@ -57,6 +57,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
             key="streaming.subtitle_language"
             source={@settings["streaming.subtitle_language"].source}
             description="Subtitles fetched for your files, and the languages subtitle search starts with."
+            stacked
           >
             <.subtitle_languages_control setting={@settings["streaming.subtitle_language"]} />
           </.language_row>
@@ -84,12 +85,19 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
   attr :key, :string, required: true
   attr :source, :atom, required: true
   attr :description, :string, required: true
+  attr :stacked, :boolean, default: false
   slot :inner_block, required: true
 
   defp language_row(assigns) do
     ~H"""
     <div id={@id} class="p-3 sm:p-4">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+      <div class={[
+        "flex",
+        if(@stacked,
+          do: "flex-col gap-3",
+          else: "flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"
+        )
+      ]}>
         <div class="flex-1 min-w-0">
           <div class="font-medium flex items-center gap-2 flex-wrap">
             {@label}
@@ -98,7 +106,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           <div class="text-xs opacity-50 font-mono truncate">{@key}</div>
           <div class="text-xs opacity-60 mt-1">{@description}</div>
         </div>
-        <div class="sm:ml-auto">
+        <div class={if(@stacked, do: "", else: "sm:ml-auto")}>
           {render_slot(@inner_block)}
         </div>
       </div>
@@ -248,7 +256,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
       |> assign(:locked?, assigns.setting.source == :env)
 
     ~H"""
-    <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+    <div class="flex flex-wrap items-center gap-2 justify-start">
       <div class="filter" role="group" aria-label="Subtitle languages">
         <%= for {code, label} <- @chips do %>
           <input

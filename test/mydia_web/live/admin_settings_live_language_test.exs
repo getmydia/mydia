@@ -178,8 +178,9 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
 
       change(view, %{"prefer_default_audio_track" => "true"})
 
-      assert Settings.get_config_setting_by_key("streaming.prefer_default_audio_track").value ==
-               "true"
+      setting = Settings.get_config_setting_by_key("streaming.prefer_default_audio_track")
+      assert setting.value == "true"
+      assert setting.category == :streaming
 
       assert Mydia.Config.get().streaming.prefer_default_audio_track == true
     end
@@ -265,6 +266,15 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
       change(view, %{"_target" => ["subtitle_language"], "subtitle_language" => ["es"]})
 
       assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "es"
+    end
+
+    test "an unknown code is rejected without a write", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      html = change(view, %{"subtitle_language" => ["en", "xx"]})
+
+      assert html =~ "Invalid value for streaming.subtitle_language"
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language") == nil
     end
   end
 end
