@@ -45,7 +45,9 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:filter_quality, nil)
      |> assign(:sort_by, "title_asc")
      |> assign(:page, 0)
-     |> assign(:has_more, true)
+     |> assign(:has_more, false)
+     |> assign(:loading?, true)
+     |> assign(:media_items_empty?, false)
      |> assign(:selection_mode, false)
      |> assign(:selected_ids, MapSet.new())
      |> assign(:show_delete_modal, false)
@@ -81,7 +83,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
-    |> load_media_items(reset: true)
+    |> load_media_items_when_connected()
   end
 
   defp apply_action(socket, :tv_shows, _params) do
@@ -89,7 +91,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
-    |> load_media_items(reset: true)
+    |> load_media_items_when_connected()
   end
 
   defp apply_action(socket, :section, %{"id" => id}) do
@@ -118,7 +120,7 @@ defmodule MydiaWeb.MediaLive.Index do
         socket
         |> assign(:section_query, query)
         |> assign(:section_error, false)
-        |> load_media_items(reset: true)
+        |> load_media_items_when_connected()
 
       {:error, reason} ->
         Logger.warning("Section #{collection.id} has unusable rules: #{inspect(reason)}")
@@ -126,6 +128,7 @@ defmodule MydiaWeb.MediaLive.Index do
         socket
         |> assign(:section_query, nil)
         |> assign(:section_error, true)
+        |> assign(:loading?, false)
         |> assign(:media_items_empty?, true)
         |> assign(:all_visible_ids, MapSet.new())
         |> assign(:has_more, false)
@@ -837,6 +840,13 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp toggle_selected_id(socket, :error), do: socket
 
+  # The HTTP render paints a skeleton and loads nothing. The connected mount
+  # runs handle_params again moments later, so loading here doubled the cost
+  # of every full page load.
+  defp load_media_items_when_connected(socket) do
+    if connected?(socket), do: load_media_items(socket, reset: true), else: socket
+  end
+
   defp load_media_items(socket, opts) do
     reset? = Keyword.get(opts, :reset, false)
     page = if reset?, do: 0, else: socket.assigns.page
@@ -847,6 +857,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
     socket
     |> assign(:has_more, listing.has_more?)
+    |> assign(:loading?, false)
     |> assign(:media_items_empty?, reset? and listing.empty?)
     # Every matching id, not only the page, for "Select All".
     |> assign(:all_visible_ids, listing.visible_ids)

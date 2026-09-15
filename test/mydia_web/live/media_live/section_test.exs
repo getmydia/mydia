@@ -139,6 +139,22 @@ defmodule MydiaWeb.MediaLive.SectionTest do
       {:ok, view, _html} = live(conn, ~p"/sections/#{section.id}")
 
       assert has_element?(view, "#section-rules-error")
+      refute has_element?(view, "#media-items-skeleton")
+    end
+
+    test "the HTTP render of a section shows a skeleton and no cards", %{
+      conn: conn,
+      section: section,
+      anime: anime
+    } do
+      html = conn |> get(~p"/sections/#{section.id}") |> html_response(200)
+      document = LazyHTML.from_document(html)
+
+      assert document |> LazyHTML.query("#media-items-skeleton") |> LazyHTML.attribute("id") ==
+               ["media-items-skeleton"]
+
+      assert document |> LazyHTML.query("#grid-item-#{anime.id}") |> LazyHTML.attribute("id") ==
+               []
     end
 
     test "a library scan broadcast does not crash section mode", %{

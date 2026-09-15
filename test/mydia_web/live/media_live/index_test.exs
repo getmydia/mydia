@@ -1326,4 +1326,34 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert has_element?(view, "label span.tabular-nums", "51")
     end
   end
+
+  describe "first paint" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "the HTTP render shows a skeleton and no cards", %{conn: conn} do
+      show = media_item_fixture(%{title: "Northwind Relay", type: "tv_show"})
+
+      html = conn |> get(~p"/tv") |> html_response(200)
+      document = LazyHTML.from_document(html)
+
+      assert document |> LazyHTML.query("#media-items-skeleton") |> LazyHTML.attribute("id") ==
+               ["media-items-skeleton"]
+
+      assert document |> LazyHTML.query("#grid-item-#{show.id}") |> LazyHTML.attribute("id") ==
+               []
+
+      refute html =~ "No media found"
+    end
+
+    test "the connected render replaces the skeleton with cards", %{conn: conn} do
+      show = media_item_fixture(%{title: "Northwind Relay", type: "tv_show"})
+
+      {:ok, view, _html} = live(conn, ~p"/tv")
+
+      refute has_element?(view, "#media-items-skeleton")
+      assert has_element?(view, "#grid-item-#{show.id}")
+    end
+  end
 end

@@ -260,6 +260,15 @@
       </div>
     </div>
 
+    <%!-- First paint. The HTTP render loads nothing, so this holds the grid's
+         place until the connected mount streams the cards in. --%>
+    <.poster_card_grid_skeleton
+      :if={@loading?}
+      id="media-items-skeleton"
+      columns={grid_columns_class(@grid_density)}
+      gap="gap-3 md:gap-4"
+    />
+
     <%!-- Empty state (shown when no items) --%>
     <%= if @media_items_empty? do %>
       <div class="flex flex-col items-center justify-center py-16">
