@@ -38,7 +38,7 @@ defmodule Mydia.Indexers.AudioPolicyCallSitesTest do
       episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: number})
     end
 
-    {:ok, show} = Mydia.Media.update_media_item(show, %{audio_languages: ["en"]})
+    {:ok, show} = Mydia.Media.update_media_item(show, %{download_audio_language: "en"})
 
     opts =
       SearchHelpers.build_manual_ranking_opts(%{
@@ -47,7 +47,7 @@ defmodule Mydia.Indexers.AudioPolicyCallSitesTest do
         manual_search_query: "Kaiju Garden S02"
       })
 
-    assert %AudioLanguagePolicy{source: :show, languages: ["en"]} =
+    assert %AudioLanguagePolicy{source: :show, languages: ["en" | _]} =
              Keyword.get(opts, :audio_policy)
 
     assert Keyword.get(opts, :episode_count) == 3

@@ -443,8 +443,8 @@
       default_quality_profile_name={@default_quality_profile_name}
     />
   <% end %>
-  <%= if @show_audio_language_modal do %>
-    <MydiaWeb.MediaLive.Show.AudioLanguageComponents.audio_language_modal media_item={@media_item} />
+  <%= if @show_download_audio_modal do %>
+    <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_modal media_item={@media_item} />
   <% end %>
   <%= if @show_target_library_modal do %>
     <Modals.target_library_modal media_item={@media_item} libraries={@target_library_candidates} />
