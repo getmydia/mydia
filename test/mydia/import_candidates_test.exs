@@ -1230,6 +1230,66 @@ defmodule Mydia.ImportCandidatesTest do
       refute Repo.get(ImportCandidate, candidate.id)
     end
 
+    test "never unlinks a file another library path owns through a nested root", %{lp: lp} do
+      # Nothing forbids one library path inside another, and a scan only asks
+      # whether its own library path owns a file, so the outer library can
+      # list the inner library's owned file as a candidate.
+      inner = library_path_fixture(%{type: "series", path: Path.join(lp.path, "Quillmere Bay")})
+      File.write!(Path.join(inner.path, "Quillmere.Bay.S01E04.mkv"), "data")
+      candidate = queued_for_delete(lp, "Quillmere Bay/Quillmere.Bay.S01E04.mkv")
+
+      show = media_item_fixture(%{type: "tv_show", title: "Quillmere Bay"})
+      episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 4})
+
+      media_file_fixture(%{
+        library_path_id: inner.id,
+        episode_id: episode.id,
+        relative_path: "Quillmere.Bay.S01E04.mkv"
+      })
+
+      assert {:ok, %{deleted: 0, skipped: 1}} = ImportCandidates.drain_delete(lp.id)
+      assert File.exists?(Path.join(inner.path, "Quillmere.Bay.S01E04.mkv"))
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "claims the row before touching the disk, so no promotion can take the file mid-delete",
+         %{lp: lp} do
+      rel = "Quillmere Bay/Quillmere.Bay.S01E05.mkv"
+      path = Path.join(lp.path, rel)
+      File.write!(path, "data")
+      candidate = queued_for_delete(lp, rel)
+      test_pid = self()
+
+      after_claim = fn ->
+        send(test_pid, {:at_unlink, Repo.get(ImportCandidate, candidate.id), File.exists?(path)})
+      end
+
+      assert {:ok, %{deleted: 1}} = ImportCandidates.drain_delete(lp.id, after_claim: after_claim)
+      assert_received {:at_unlink, nil, true}
+      refute File.exists?(path)
+    end
+
+    test "a failed delete writes its reason onto a row a scan re-created mid-delete", %{lp: lp} do
+      rel = "Quillmere Bay/as-dir-rescanned.mkv"
+      File.mkdir_p!(Path.join(lp.path, rel))
+      candidate = queued_for_delete(lp, rel)
+
+      rescan = fn -> import_candidate_fixture(%{library_path_id: lp.id, relative_path: rel}) end
+
+      assert {:ok, %{failed: 1}} = ImportCandidates.drain_delete(lp.id, after_claim: rescan)
+
+      assert [row] =
+               Repo.all(
+                 from(c in ImportCandidate,
+                   where: c.library_path_id == ^lp.id and c.relative_path == ^rel
+                 )
+               )
+
+      assert row.id != candidate.id
+      assert is_nil(row.queued_op)
+      assert row.queue_error =~ "Could not delete from disk"
+    end
+
     test "drains more rows than one page holds and leaves other ops queued", %{lp: lp} do
       for n <- 1..3, do: queued_for_delete(lp, "Quillmere Bay/gone-#{n}.mkv")
 

@@ -1497,6 +1497,7 @@ defmodule Mydia.ImportCandidates do
 
   defp ingest_stat({:error, _reason}), do: :error
   defp ingest_stat(_result), do: :ok
+
   # --- Deleting from disk --------------------------------------------------
 
   @delete_page_size 250
@@ -1511,10 +1512,29 @@ defmodule Mydia.ImportCandidates do
   file that cannot be removed is never retried forever. The operator sees the
   reason on the group instead.
 
-  A path any `media_files` row references, trashed or not, is never unlinked.
-  An import can promote the path between the click and the drain, and from
-  then on those bytes are the library's. That candidate row is dropped, the
-  file stays, and it counts as `skipped`.
+  Each file is claimed before its bytes are touched. One transaction, under the
+  same lock `Mydia.Library.CandidatePromotion` takes (SQLite's writer lock, the
+  library path row on PostgreSQL), deletes the candidate row if it is still
+  queued for delete and checks whether any library already owns the file. Only
+  after that commits is the file unlinked. A promotion that got there first has
+  already deleted the row or created the owning `media_files` row, and one that
+  comes later finds its candidate missing and refuses, so an import can never
+  promote a file this is about to delete.
+
+  Ownership is decided by where the file is on disk, across every library path,
+  not by the candidate's own `(library_path_id, relative_path)`. Library paths
+  can nest, and a scan only asks whether its own library path owns a file, so
+  an outer library can list an inner library's owned file as a candidate. A
+  file some library owns, trashed or not, is never unlinked: its candidate row
+  is dropped, the file stays, and it counts as `skipped`. Two library paths
+  that reach the same directory through a symlink or a second mount are not
+  recognised as the same place.
+
+  A file that could not be removed gets its candidate row back, under its own
+  id, with the reason in `queue_error`.
+
+  `:after_claim` is a zero-arity function run between the claim and the unlink,
+  for tests that need to act inside that window.
   """
   @spec drain_delete(binary(), keyword()) ::
           {:ok,
@@ -1527,13 +1547,13 @@ defmodule Mydia.ImportCandidates do
     page_size = Keyword.get(opts, :page_size, @delete_page_size)
 
     result =
-      drain_delete_pages(library_path_id, page_size, %{deleted: 0, failed: 0, skipped: 0})
+      drain_delete_pages(library_path_id, page_size, opts, %{deleted: 0, failed: 0, skipped: 0})
 
     broadcast(library_path_id)
     result
   end
 
-  defp drain_delete_pages(library_path_id, page_size, acc) do
+  defp drain_delete_pages(library_path_id, page_size, opts, acc) do
     rows =
       library_path_id
       |> queued_query("delete")
@@ -1545,29 +1565,38 @@ defmodule Mydia.ImportCandidates do
     if rows == [] do
       {:ok, acc}
     else
-      acc = Enum.reduce(rows, acc, &delete_queued_candidate/2)
+      acc = Enum.reduce(rows, acc, &delete_queued_candidate(&1, opts, &2))
 
       # One broadcast per page so the page watching this library drains visibly.
       broadcast(library_path_id)
 
-      drain_delete_pages(library_path_id, page_size, acc)
+      drain_delete_pages(library_path_id, page_size, opts, acc)
     end
   end
 
-  defp delete_queued_candidate(%ImportCandidate{} = candidate, acc) do
-    if library_owns_path?(candidate) do
-      drop_candidate(candidate)
-      %{acc | skipped: acc.skipped + 1}
-    else
-      unlink_queued_candidate(candidate, acc)
+  # Every outcome takes the row out of the queue (deleted, or its marker
+  # cleared), which is what keeps `drain_delete_pages/4` from fetching it again.
+  defp delete_queued_candidate(%ImportCandidate{} = candidate, opts, acc) do
+    case ImportCandidate.absolute_path(candidate) do
+      nil ->
+        record_delete_failure(candidate, :path_not_resolved)
+        %{acc | failed: acc.failed + 1}
+
+      path ->
+        claim_and_delete(candidate, Path.expand(path), opts, acc)
     end
   end
 
-  defp unlink_queued_candidate(candidate, acc) do
-    case unlink_candidate(candidate) do
-      :ok ->
-        drop_candidate(candidate)
-        %{acc | deleted: acc.deleted + 1}
+  defp claim_and_delete(candidate, path, opts, acc) do
+    case claim_for_delete(candidate, path) do
+      {:ok, :claimed} ->
+        run_after_claim(opts)
+        unlink_claimed(candidate, path, acc)
+
+      # Owned by a library, or no longer queued for delete by the time the lock
+      # was held (promoted, cleared, or reaped). Either way nothing is unlinked.
+      {:ok, _owned_or_gone} ->
+        %{acc | skipped: acc.skipped + 1}
 
       {:error, reason} ->
         record_delete_failure(candidate, reason)
@@ -1575,25 +1604,107 @@ defmodule Mydia.ImportCandidates do
     end
   end
 
-  defp library_owns_path?(%ImportCandidate{library_path_id: lp_id, relative_path: rel}) do
-    MediaFile
-    |> where([f], f.library_path_id == ^lp_id and f.relative_path == ^rel)
-    |> Repo.exists?()
+  defp claim_for_delete(%ImportCandidate{id: id, library_path_id: library_path_id}, path) do
+    transaction_opts = if Mydia.DB.sqlite?(), do: [mode: :immediate], else: []
+
+    Repo.transaction(
+      fn ->
+        lock_library_path(library_path_id)
+
+        case ImportCandidate
+             |> where([c], c.id == ^id and c.queued_op == "delete")
+             |> Repo.delete_all() do
+          {0, _} -> :gone
+          {_claimed, _} -> if library_owns_file?(path), do: :owned, else: :claimed
+        end
+      end,
+      transaction_opts
+    )
   end
 
-  defp unlink_candidate(candidate) do
-    case ImportCandidate.absolute_path(candidate) do
-      nil -> {:error, :path_not_resolved}
-      path -> Mydia.Library.delete_path_from_disk(path)
+  # The same serialization `CandidatePromotion.lock_group/1` starts with:
+  # PostgreSQL takes the library path row, SQLite already holds its single
+  # writer lock from `mode: :immediate`.
+  defp lock_library_path(library_path_id) do
+    if Mydia.DB.postgres?() do
+      LibraryPath
+      |> where([lp], lp.id == ^library_path_id)
+      |> lock("FOR UPDATE")
+      |> select([lp], lp.id)
+      |> Repo.one()
     end
   end
 
-  # `delete_all/1` by id rather than `Repo.delete/1`: a row that
-  # `clear_for_library/1` or `delete_missing/3` removed mid-drain would make
-  # `Repo.delete/1` raise `Ecto.StaleEntryError`, and there is nothing left to do
-  # for it anyway.
-  defp drop_candidate(%ImportCandidate{id: id}) do
-    ImportCandidate |> where([c], c.id == ^id) |> Repo.delete_all()
+  defp library_owns_file?(path) do
+    LibraryPath
+    |> select([lp], {lp.id, lp.path})
+    |> Repo.all()
+    |> Enum.flat_map(&path_under_root(path, &1))
+    |> Enum.any?(fn {library_path_id, relative_path} ->
+      MediaFile
+      |> where([f], f.library_path_id == ^library_path_id and f.relative_path == ^relative_path)
+      |> Repo.exists?()
+    end)
+  end
+
+  defp path_under_root(path, {library_path_id, root}) when is_binary(root) do
+    prefix = (root |> Path.expand() |> String.trim_trailing("/")) <> "/"
+
+    if String.starts_with?(path, prefix),
+      do: [{library_path_id, String.replace_prefix(path, prefix, "")}],
+      else: []
+  end
+
+  defp path_under_root(_path, _library_path), do: []
+
+  defp run_after_claim(opts) do
+    case Keyword.get(opts, :after_claim) do
+      callback when is_function(callback, 0) -> callback.()
+      _ -> :ok
+    end
+  end
+
+  defp unlink_claimed(candidate, path, acc) do
+    case Mydia.Library.delete_path_from_disk(path) do
+      :ok ->
+        %{acc | deleted: acc.deleted + 1}
+
+      {:error, reason} ->
+        restore_failed_candidate(candidate, reason)
+        %{acc | failed: acc.failed + 1}
+    end
+  end
+
+  # The claim deleted the row, so a file that could not be removed puts it back
+  # with the reason, under its own id so an open member list keeps its place.
+  # A scan can have rediscovered the path in the meantime; the conflict clause
+  # writes the reason onto that row instead.
+  defp restore_failed_candidate(%ImportCandidate{} = candidate, reason) do
+    now = now()
+
+    row =
+      struct(ImportCandidate, %{
+        Map.take(candidate, ImportCandidate.__schema__(:fields))
+        | queued_op: nil,
+          queued_at: nil,
+          queue_error: delete_error_message(reason),
+          updated_at: now
+      })
+
+    case Repo.insert(row,
+           on_conflict: {:replace, [:queued_op, :queued_at, :queue_error, :updated_at]},
+           conflict_target: [:library_path_id, :relative_path]
+         ) do
+      {:ok, _row} ->
+        :ok
+
+      {:error, changeset} ->
+        Logger.error("Could not restore an import candidate whose file failed to delete",
+          candidate_id: candidate.id,
+          relative_path: candidate.relative_path,
+          errors: inspect(changeset.errors)
+        )
+    end
   end
 
   # Conditional on the op, like `clear_rematch_markers/1`: only a row still
