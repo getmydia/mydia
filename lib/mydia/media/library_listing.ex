@@ -22,6 +22,9 @@ defmodule Mydia.Media.LibraryListing do
   alias Mydia.Downloads.Download
   alias Mydia.Library.MediaFile
   alias Mydia.Library.MediaFileEpisode
+  alias Mydia.Media
+  alias Mydia.Media.RecentlyAdded
+  alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Media.AvailabilityStatus
   alias Mydia.Media.Episode
   alias Mydia.Media.LibraryRow
@@ -37,6 +40,59 @@ defmodule Mydia.Media.LibraryListing do
     next_air_date: nil
   }
   @no_files %{file_count: 0, resolutions: [], total_size: 0}
+
+  # The options that filter the items query itself. Everything else is applied
+  # in memory, and :search in particular must stay out: Media's own :search
+  # filter matches titles only, while the listing also matches original title,
+  # year and overview.
+  @filter_keys [:base_query, :exclude_categories, :type, :monitored]
+
+  # Sort sentinels. Air dates are Dates, so these stay Dates: sorting a mix of
+  # Date and NaiveDateTime raises.
+  @never_aired ~D[1970-01-01]
+  @no_upcoming_airing ~D[2999-12-31]
+
+  @type page :: %{
+          rows: [LibraryRow.t()],
+          has_more?: boolean(),
+          visible_ids: MapSet.t(binary()),
+          empty?: boolean()
+        }
+
+  @doc """
+  One page of a listing.
+
+  `rows` is the page, with `user_id`'s playback progress. `visible_ids` covers
+  every row the search and filters match, not only the page, so select-all can
+  use it. `limit: 0` skips the progress query when only `visible_ids` is needed.
+
+  Filter options go to `Mydia.Media.media_items_query/1`: `:base_query`,
+  `:exclude_categories`, `:type`, `:monitored`. Applied in memory: `:search`,
+  `:quality`, `:progress`, `:sort_by`, then `:offset` (default 0) and `:limit`.
+  """
+  @spec page(keyword()) :: page()
+  def page(opts) do
+    user_id = Keyword.fetch!(opts, :user_id)
+    limit = Keyword.fetch!(opts, :limit)
+    offset = Keyword.get(opts, :offset, 0)
+
+    rows =
+      opts
+      |> Keyword.take(@filter_keys)
+      |> Media.media_items_query()
+      |> build_rows()
+      |> search(Keyword.get(opts, :search) || "")
+      |> filter_quality(Keyword.get(opts, :quality))
+      |> filter_progress(Keyword.get(opts, :progress))
+      |> sort(Keyword.get(opts, :sort_by))
+
+    %{
+      rows: rows |> Enum.drop(offset) |> Enum.take(limit) |> put_progress(user_id),
+      has_more?: length(rows) > offset + limit,
+      visible_ids: MapSet.new(rows, & &1.id),
+      empty?: rows == []
+    }
+  end
 
   @doc """
   The row for one item, with `user_id`'s playback progress, or nil if the item
@@ -243,5 +299,76 @@ defmodule Mydia.Media.LibraryListing do
         nil -> row
       end
     end)
+  end
+
+  defp search(rows, ""), do: rows
+
+  defp search(rows, query) do
+    query = String.downcase(query)
+
+    Enum.filter(rows, fn %LibraryRow{item: item} ->
+      contains?(item.title, query) or contains?(item.original_title, query) or
+        contains?(item.year && to_string(item.year), query) or
+        contains?(overview(item.metadata), query)
+    end)
+  end
+
+  defp contains?(nil, _query), do: false
+  defp contains?(text, query), do: String.contains?(String.downcase(text), query)
+
+  defp overview(%MediaMetadata{overview: overview}) when is_binary(overview), do: overview
+  defp overview(_metadata), do: nil
+
+  defp filter_quality(rows, nil), do: rows
+  defp filter_quality(rows, quality), do: Enum.filter(rows, &(quality in &1.resolutions))
+
+  defp filter_progress(rows, nil), do: rows
+  defp filter_progress(rows, state), do: Enum.filter(rows, &(&1.status.state == state))
+
+  defp sort(rows, "title_desc"), do: Enum.sort_by(rows, &title_key/1, :desc)
+  defp sort(rows, "year_asc"), do: Enum.sort_by(rows, &(&1.item.year || 0), :asc)
+  defp sort(rows, "year_desc"), do: Enum.sort_by(rows, &(&1.item.year || 0), :desc)
+  defp sort(rows, "added_asc"), do: sort_by_added(rows, :asc)
+  defp sort(rows, "added_desc"), do: sort_by_added(rows, :desc)
+  defp sort(rows, "rating_asc"), do: Enum.sort_by(rows, &rating/1, :asc)
+  defp sort(rows, "rating_desc"), do: Enum.sort_by(rows, &rating/1, :desc)
+
+  defp sort(rows, "last_aired_asc"),
+    do: Enum.sort_by(rows, &(&1.last_air_date || @never_aired), {:asc, Date})
+
+  defp sort(rows, "last_aired_desc"),
+    do: Enum.sort_by(rows, &(&1.last_air_date || @never_aired), {:desc, Date})
+
+  defp sort(rows, "next_aired_asc"),
+    do: Enum.sort_by(rows, &(&1.next_air_date || @no_upcoming_airing), {:asc, Date})
+
+  defp sort(rows, "next_aired_desc"),
+    do: Enum.sort_by(rows, &(&1.next_air_date || @no_upcoming_airing), {:desc, Date})
+
+  defp sort(rows, "episode_count_asc"), do: Enum.sort_by(rows, & &1.episode_count, :asc)
+  defp sort(rows, "episode_count_desc"), do: Enum.sort_by(rows, & &1.episode_count, :desc)
+
+  # "title_asc", and anything unrecognised.
+  defp sort(rows, _sort_by), do: Enum.sort_by(rows, &title_key/1, :asc)
+
+  defp title_key(%LibraryRow{item: item}), do: String.downcase(item.title || "")
+
+  defp rating(%LibraryRow{item: %MediaItem{metadata: %MediaMetadata{vote_average: rating}}})
+       when is_number(rating),
+       do: rating
+
+  defp rating(_row), do: 0
+
+  # A wanted item with no files has no content arrival time. Its own
+  # inserted_at is then the only meaningful answer for "when was this added",
+  # and it keeps the sort total.
+  defp sort_by_added(rows, direction) do
+    added_at = RecentlyAdded.added_at_map(ids: Enum.map(rows, & &1.id))
+
+    Enum.sort_by(
+      rows,
+      &(Map.get(added_at, &1.id) || &1.item.inserted_at),
+      {direction, DateTime}
+    )
   end
 end

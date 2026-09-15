@@ -10,6 +10,7 @@ defmodule Mydia.Media.LibraryListingTest do
   alias Mydia.Media
   alias Mydia.Media.LibraryListing
   alias Mydia.Media.LibraryRow
+  alias Mydia.Media.MediaItem
 
   setup do
     %{user: user_fixture()}
@@ -183,6 +184,157 @@ defmodule Mydia.Media.LibraryListingTest do
     end
   end
 
+  describe "page/1" do
+    test "search matches title, original title, year and overview, ignoring case", %{
+      user: user
+    } do
+      media_item_fixture(%{
+        title: "Keeper's Ledger",
+        year: 1994,
+        metadata: %{"overview" => "A lighthouse keeper counts ships"}
+      })
+
+      media_item_fixture(%{title: "Glass Orchard", original_title: "Verger de Verre", year: 2011})
+
+      assert titles(page(user, search: "KEEPER")) == ["Keeper's Ledger"]
+      assert titles(page(user, search: "verger")) == ["Glass Orchard"]
+      assert titles(page(user, search: "2011")) == ["Glass Orchard"]
+      # The overview only exists in memory: this proves :search never reaches
+      # Media.media_items_query/1, whose own :search filter matches titles only.
+      assert titles(page(user, search: "lighthouse")) == ["Keeper's Ledger"]
+      assert titles(page(user, search: nil)) |> length() == 2
+    end
+
+    test "the quality filter matches a show on any episode's resolution", %{user: user} do
+      show = media_item_fixture(%{type: "tv_show", title: "Sharp Coastline"})
+      first = episode_fixture(%{media_item_id: show.id})
+      second = episode_fixture(%{media_item_id: show.id})
+      media_file_fixture(%{episode_id: first.id, resolution: "720p"})
+      media_file_fixture(%{episode_id: second.id, resolution: "2160p"})
+      media_item_fixture(%{type: "tv_show", title: "Blurry Inlet"})
+
+      assert titles(page(user, type: "tv_show", quality: "2160p")) == ["Sharp Coastline"]
+      assert titles(page(user, type: "tv_show", quality: "1080p")) == []
+    end
+
+    test "the progress filter matches the row's status", %{user: user} do
+      owned = media_item_fixture(%{title: "Filed Away"})
+      media_file_fixture(%{media_item_id: owned.id})
+      media_item_fixture(%{title: "Still Wanted"})
+
+      assert titles(page(user, progress: :downloaded)) == ["Filed Away"]
+      assert titles(page(user, progress: :missing)) == ["Still Wanted"]
+    end
+
+    test "title, year and rating sorts", %{user: user} do
+      media_item_fixture(%{title: "beta Signal", year: 2010, metadata: %{"vote_average" => 6.1}})
+      media_item_fixture(%{title: "Alder Road", year: 1999, metadata: %{"vote_average" => 8.4}})
+      media_item_fixture(%{title: "Cobalt Ferry", year: 2004, metadata: %{"vote_average" => 7.0}})
+
+      by_title = ["Alder Road", "beta Signal", "Cobalt Ferry"]
+      by_year = ["Alder Road", "Cobalt Ferry", "beta Signal"]
+      by_rating = ["beta Signal", "Cobalt Ferry", "Alder Road"]
+
+      assert titles(page(user, sort_by: "title_asc")) == by_title
+      assert titles(page(user, sort_by: "title_desc")) == Enum.reverse(by_title)
+      assert titles(page(user, sort_by: "year_asc")) == by_year
+      assert titles(page(user, sort_by: "year_desc")) == Enum.reverse(by_year)
+      assert titles(page(user, sort_by: "rating_asc")) == by_rating
+      assert titles(page(user, sort_by: "rating_desc")) == Enum.reverse(by_rating)
+      assert titles(page(user, sort_by: "not_a_sort")) == by_title
+    end
+
+    test "air date and episode count sorts", %{user: user} do
+      today = Date.utc_today()
+      media_item_fixture(%{type: "tv_show", title: "Quiet Meridian"})
+
+      old = media_item_fixture(%{type: "tv_show", title: "Old Lantern"})
+      episode_fixture(%{media_item_id: old.id, air_date: ~D[2019-03-01]})
+      episode_fixture(%{media_item_id: old.id, air_date: Date.add(today, 100)})
+
+      fresh = media_item_fixture(%{type: "tv_show", title: "Fresh Tideline"})
+      episode_fixture(%{media_item_id: fresh.id, air_date: Date.add(today, -3)})
+      episode_fixture(%{media_item_id: fresh.id, air_date: Date.add(today, 10)})
+      episode_fixture(%{media_item_id: fresh.id, air_date: Date.add(today, 40)})
+
+      sorted = fn sort_by -> titles(page(user, type: "tv_show", sort_by: sort_by)) end
+
+      # Preserved quirk: "last aired" includes future episodes, so Old Lantern's
+      # episode 100 days out outranks Fresh Tideline's 40 days out.
+      assert sorted.("last_aired_desc") == ["Old Lantern", "Fresh Tideline", "Quiet Meridian"]
+      assert sorted.("last_aired_asc") == ["Quiet Meridian", "Fresh Tideline", "Old Lantern"]
+      assert sorted.("next_aired_asc") == ["Fresh Tideline", "Old Lantern", "Quiet Meridian"]
+      assert sorted.("next_aired_desc") == ["Quiet Meridian", "Old Lantern", "Fresh Tideline"]
+      assert sorted.("episode_count_asc") == ["Quiet Meridian", "Old Lantern", "Fresh Tideline"]
+      assert sorted.("episode_count_desc") == ["Fresh Tideline", "Old Lantern", "Quiet Meridian"]
+    end
+
+    test "added sorts use when content arrived", %{user: user} do
+      early = media_item_fixture(%{title: "Early Almanac"})
+
+      %{media_item_id: early.id}
+      |> media_file_fixture()
+      |> backdate_media_file(~U[2024-01-01 00:00:00Z])
+
+      late = media_item_fixture(%{title: "Late Almanac"})
+
+      %{media_item_id: late.id}
+      |> media_file_fixture()
+      |> backdate_media_file(~U[2025-06-01 00:00:00Z])
+
+      assert titles(page(user, sort_by: "added_desc")) == ["Late Almanac", "Early Almanac"]
+      assert titles(page(user, sort_by: "added_asc")) == ["Early Almanac", "Late Almanac"]
+    end
+
+    test "offset, limit, has_more?, visible_ids and empty?", %{user: user} do
+      items = for n <- 1..5, do: media_item_fixture(%{title: "Almanac #{n}"})
+
+      first = page(user, sort_by: "title_asc", offset: 0, limit: 3)
+      assert titles(first) == ["Almanac 1", "Almanac 2", "Almanac 3"]
+      assert first.has_more?
+      assert first.visible_ids == MapSet.new(items, & &1.id)
+      refute first.empty?
+
+      rest = page(user, sort_by: "title_asc", offset: 3, limit: 3)
+      assert titles(rest) == ["Almanac 4", "Almanac 5"]
+      refute rest.has_more?
+
+      nothing = page(user, search: "matches no title at all")
+      assert nothing.empty?
+      assert nothing.visible_ids == MapSet.new()
+    end
+
+    test "exclude_categories drops claimed items and keeps unclassified ones", %{user: user} do
+      categorized_media_item_fixture(%{title: "Claimed Comet", type: "tv_show"}, :anime_series)
+      categorized_media_item_fixture(%{title: "Unsorted Drift", type: "tv_show"}, nil)
+
+      assert titles(page(user, type: "tv_show", exclude_categories: [:anime_series])) == [
+               "Unsorted Drift"
+             ]
+    end
+
+    test "base_query scopes the listing", %{user: user} do
+      media_item_fixture(%{title: "Kept Year", year: 2001})
+      media_item_fixture(%{title: "Other Year", year: 2002})
+
+      base_query = from(m in MediaItem, where: m.year == 2001)
+
+      assert titles(page(user, base_query: base_query)) == ["Kept Year"]
+    end
+
+    test "issues the same number of queries however large the library is", %{user: user} do
+      show = media_item_fixture(%{type: "tv_show", title: "Growing Archive"})
+      add_episodes(show, 2)
+      small = count_queries(fn -> page(user, type: "tv_show") end)
+
+      add_episodes(show, 38)
+      media_item_fixture(%{type: "tv_show", title: "Second Archive"})
+      large = count_queries(fn -> page(user, type: "tv_show") end)
+
+      assert small == large
+    end
+  end
+
   # What the listing computed before LibraryListing existed: a fully preloaded
   # item run through get_media_status/1 and the old MediaLive.Index helpers,
   # with files gathered the way MediaFileHelpers.all_media_files/1 does.
@@ -219,6 +371,12 @@ defmodule Mydia.Media.LibraryListingTest do
         )
     }
   end
+
+  defp page(user, opts) do
+    LibraryListing.page(Keyword.merge([user_id: user.id, limit: 50], opts))
+  end
+
+  defp titles(%{rows: rows}), do: Enum.map(rows, & &1.item.title)
 
   defp actual(%LibraryRow{} = row) do
     %{
