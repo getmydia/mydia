@@ -86,13 +86,25 @@ QualityRung startingRung(List<QualityRung> ladder, int? throughputKbps) {
 
 /// The transcode plan a failed direct play or copy source falls back to.
 ///
-/// Always adaptive, whatever the viewer had chosen: a choice that could not
-/// be honoured becomes Auto for the rest of the session. With throughput
-/// unknown the rung is one below the top, or the top of a one-rung ladder.
+/// Keeps the viewer's choice. Original lands on a transcode at the source
+/// resolution with no caps, the closest this device can get to the file's
+/// own bytes. Auto steps down the adaptive ladder: with throughput unknown
+/// the rung is one below the top, or the top of a one-rung ladder. A fixed
+/// rung always transcodes and is never verified, so it never reaches here,
+/// and is treated like Auto.
 HlsPlan fallbackPlan({
+  required QualityChoice choice,
   required int? sourceHeight,
   required int? throughputKbps,
 }) {
+  if (choice.kind == QualityChoiceKind.original) {
+    return const HlsPlan(
+      strategy: HlsStrategy.transcode,
+      rung: QualityRung.original,
+      adaptive: false,
+      reason: PlanReason.fallbackFromFailure,
+    );
+  }
   final ladder = deriveAdaptiveLadder(sourceHeight: sourceHeight);
   final QualityRung rung;
   if (ladder.isEmpty) {
@@ -144,14 +156,17 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   }
 
   final failureKey = FailureKey.fromShape(inputs.shape);
-  // Auto respects the memory. Original is the viewer overriding it, and a
-  // fixed rung returned above.
-  final knownToFail = choice.kind == QualityChoiceKind.auto &&
-      inputs.knownFailures.contains(failureKey);
-  final fits = bitrateFits(
-    fileBitrateKbps: inputs.fileBitrateKbps,
-    throughputKbps: inputs.knownThroughputKbps,
-  );
+  // Auto respects the memory: remembered decode failures and remembered
+  // throughput. Original is the viewer overriding both, since they asked for
+  // the file's own bytes and a slow link buffers rather than being swapped
+  // for a transcode. A fixed rung returned above.
+  final isAuto = choice.kind == QualityChoiceKind.auto;
+  final knownToFail = isAuto && inputs.knownFailures.contains(failureKey);
+  final fits = !isAuto ||
+      bitrateFits(
+        fileBitrateKbps: inputs.fileBitrateKbps,
+        throughputKbps: inputs.knownThroughputKbps,
+      );
 
   // Rule 1: direct play.
   final PlanReason blocker;
@@ -168,7 +183,8 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   }
 
   // Rule 2: copy. The same decoder sees the same codec, and the same link
-  // carries the same bytes, so a decode or bandwidth blocker holds here.
+  // carries the same bytes, so a decode or bandwidth blocker (Auto only)
+  // holds here.
   var reason = blocker;
   final copy = _nonLeadingCopy(inputs.candidates);
   if (knownToFail) {
@@ -192,7 +208,7 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   // carry the file: a remembered throughput its bitrate does not fit. Knowing
   // nothing is not evidence, so a first play, and every web play (web never
   // measures throughput), transcodes at the source resolution like Original.
-  final adaptive = choice.kind == QualityChoiceKind.auto;
+  final adaptive = isAuto;
   final rung = adaptive && !fits
       ? startingRung(
           deriveAdaptiveLadder(sourceHeight: inputs.sourceHeight),

@@ -1675,7 +1675,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       signals: PlayerSignals.of(player),
       sampler: frameStatsSamplerFor(player),
     );
-    final policy = AdaptationPolicy(source: kind);
+    final policy = AdaptationPolicy(
+      source: kind,
+      // Original asks for the file's own bytes: a slow link buffers rather
+      // than being swapped for a transcode.
+      reactsToBandwidth: !_selectedQuality.isOriginal,
+    );
     _monitor = monitor;
     _policy = policy;
     _throughputSamples = 0;
@@ -1730,11 +1735,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final position = _timeline.toReal(player.state.position);
     final throughput = action.throughputKbps ?? inputs.knownThroughputKbps;
     final plan = fallbackPlan(
+      choice: QualityChoice.fromRung(_selectedQuality),
       sourceHeight: inputs.sourceHeight,
       throughputKbps: throughput,
     );
     debugPrint('[PlayerScreen] Falling back to ${plan.describe()}: '
-        '${action.reason.name} at ${position.inSeconds}s');
+        '${action.reason.name} at ${position.inSeconds}s (${action.detail})');
 
     final memory = _memory;
     final serverKey = _serverKey;
@@ -1761,10 +1767,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
-    // A choice that could not be honoured becomes Auto for the rest of this
-    // playback. Only in memory: the stored default is the viewer's, and one
-    // file failing here says nothing about the next.
-    if (mounted) setState(() => _settledQuality = QualityRung.auto);
+    // The choice stays the viewer's: `fallbackPlan` already honours it as
+    // closely as this device allows. The stored default is never written
+    // here either, since one file failing says nothing about the next.
     _showPlaybackSnackBar(fallbackMessage(action.reason));
     try {
       await _switchSource(plan, at: position);
@@ -3322,6 +3327,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await player.seek(seekTarget);
   }
 
+  /// Switches the audio track, noting the switch with the monitor first.
+  ///
+  /// mpv rebuffers after a track switch, which is no evidence about the link.
+  /// Noting it before the call, as [seekToReal] does for seeks, puts the
+  /// switch on record ahead of the stall it causes, however late media_kit's
+  /// own `stream.track` event arrives.
+  Future<void> _setAudioTrack(Player player, AudioTrack track) {
+    _monitor?.noteInterruption();
+    return player.setAudioTrack(track);
+  }
+
+  /// Switches the subtitle track, noting the switch first; see
+  /// [_setAudioTrack].
+  Future<void> _setSubtitleTrack(Player player, SubtitleTrack track) {
+    _monitor?.noteInterruption();
+    return player.setSubtitleTrack(track);
+  }
+
   /// Refreshes everything that reflects watched state. Deliberately not called
   /// from the 10-second progress sync: that would refetch Home hundreds of
   /// times per movie over what may be a p2p relay.
@@ -3491,7 +3514,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       if (selected == null) {
         // "Off" - disable subtitles
-        await player.setSubtitleTrack(SubtitleTrack.no());
+        await _setSubtitleTrack(player, SubtitleTrack.no());
         if (!_canApplySubtitleSelection(generation)) {
           _resetPendingSubtitleSelection(generation);
           return;
@@ -3605,7 +3628,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return;
       }
 
-      await currentPlayer.setSubtitleTrack(mkTrack);
+      await _setSubtitleTrack(currentPlayer, mkTrack);
 
       // Re-checked again, not only before this await: dispose() or
       // _restartLocalPlayback landing during *this specific* call is exactly
@@ -3925,7 +3948,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       final mkTrack = _mediaKitAudioTrackMap[selected.id];
       if (mkTrack != null) {
-        await player.setAudioTrack(mkTrack);
+        await _setAudioTrack(player, mkTrack);
         debugPrint('[PlayerScreen] Set audio track: ${selected.displayName}');
       } else {
         debugPrint(
@@ -4036,6 +4059,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // below reads the rung from — [_resolveQualityForFile] carries
         // `_settledQuality` forward rather than re-reading storage.
         _settledQuality = rung;
+        // A pick that delivers the same bytes reopens nothing, so the policy
+        // already watching the source has to follow the choice. Starting a
+        // fresh one would not: media_kit's streams do not replay, and a
+        // monitor created mid-playback never sees playback as started.
+        _policy?.reactsToBandwidth = !rung.isOriginal;
         if (mounted) setState(() {});
       },
       remember: (rung) =>
@@ -4485,14 +4513,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         final mkTrack = _mediaKitAudioTrackMap[id];
         final player = _player;
         if (track == null || mkTrack == null || player == null) return;
-        await player.setAudioTrack(mkTrack);
+        await _setAudioTrack(player, mkTrack);
         if (mounted) setState(() => _selectedAudioTrack = track);
 
       case TrackKind.subtitle:
         if (id == null) {
           final player = _player;
           if (player == null) return;
-          await player.setSubtitleTrack(SubtitleTrack.no());
+          await _setSubtitleTrack(player, SubtitleTrack.no());
           if (mounted) {
             setState(() => _selectedSubtitleTrack = null);
             await _onSubtitleTrackChanged();
@@ -4509,7 +4537,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // `setSubtitleTrack` call.
         final player = _player;
         if (player == null) return;
-        await player.setSubtitleTrack(mkTrack);
+        await _setSubtitleTrack(player, mkTrack);
         if (mounted) {
           setState(() => _selectedSubtitleTrack = track);
           await _onSubtitleTrackChanged();

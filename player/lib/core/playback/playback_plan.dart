@@ -13,8 +13,9 @@ enum QualityChoiceKind { auto, original, fixed }
 
 /// The viewer's quality choice as the planner sees it.
 ///
-/// Auto is the default and respects remembered decode failures. Original is
-/// always the viewer's own pick, which overrides them. A fixed rung pins caps.
+/// Auto is the default and respects remembered decode failures and remembered
+/// throughput. Original is always the viewer's own pick, which overrides both.
+/// A fixed rung pins caps.
 class QualityChoice {
   const QualityChoice._(this.kind, this.rung);
 

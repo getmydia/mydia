@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
+import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -78,6 +79,16 @@ class _Decoder extends PlatformPlayer {
     bufferingController.add(value);
   }
 
+  int subtitleTrackCalls = 0;
+
+  /// Accepts the switch and emits nothing on `trackController`. That is how
+  /// a switch looks to the monitor when media_kit's own track event arrives
+  /// after mpv has already started rebuffering.
+  @override
+  Future<void> setSubtitleTrack(SubtitleTrack track) async {
+    subtitleTrackCalls++;
+  }
+
   /// `errorController` is `@protected` on `PlatformPlayer`: only reachable
   /// from an instance member of a subclass, which this wrapper is and a test
   /// body is not.
@@ -141,6 +152,11 @@ Future<void> _mount(
   ));
   await tester.pump();
 }
+
+/// One monitor tick. `PlaybackMonitor` samples once a second, so each call
+/// lets exactly one sample see the decoder's current state.
+Future<void> _tick(WidgetTester tester) =>
+    tester.pump(const Duration(seconds: 1));
 
 void main() {
   testWidgets('casting stops verification of the local source', (tester) async {
@@ -240,6 +256,21 @@ void main() {
 
       expect(decoder.opened, hasLength(2));
       expect(decoder.opened.last.uri, contains('/hls/'));
+      final fallbackStart = link.requests
+          .lastWhere((r) => r.variables.containsKey('strategy'))
+          .variables;
+      expect(fallbackStart.containsKey('maxHeight'), isFalse,
+          reason: 'Original falls back to a transcode at the source '
+              'resolution, not a stepped-down adaptive rung');
+      expect(fallbackStart.containsKey('maxBitrate'), isFalse);
+      await tester.pump();
+      expect(
+        tester
+            .widget<PlaybackChrome>(find.byType(PlaybackChrome))
+            .selectedQualityLabel,
+        'Original',
+        reason: 'the fallback keeps the viewer on Original, not Auto',
+      );
       expect(playersCreated, 1);
       expect(decoder.disposed, isFalse);
       expect(find.byType(PlaybackChrome), findsOneWidget);
@@ -257,7 +288,7 @@ void main() {
             const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080)),
       );
       expect(settings.defaultQuality, 'original',
-          reason: 'a fallback turns this playback to Auto in memory only');
+          reason: 'a fallback never writes the stored default');
       expect(settings.setDefaultQualityCalls, 0);
 
       decoder.advance(const Duration(seconds: 1));
@@ -435,6 +466,182 @@ void main() {
           reason: 'the switch landed after the fault; the error page must '
               'not be left over a working video');
       expect(find.byType(PlaybackChrome), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('under Auto, two stalls replace a direct play source',
+      (tester) async {
+    final decoder = _Decoder();
+    final container = buildPlayerScreenContainer(
+      link: _server(directPlay: true),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(tester, () => decoder.state.playing, maxTries: 500);
+
+      await _tick(tester); // playback has run once
+      decoder.buffering(true);
+      await _tick(tester); // stall 1
+      decoder.buffering(false);
+      await _tick(tester);
+      decoder.buffering(true);
+      await _tick(tester); // stall 2
+
+      await pumpUntil(tester, () => decoder.opened.length == 2);
+      expect(decoder.opened, hasLength(2));
+      expect(decoder.opened.last.uri, contains('/hls/'));
+      expect(
+        find.text('Switched to transcoding for your connection'),
+        findsOneWidget,
+      );
+
+      decoder.buffering(false);
+      decoder.advance(const Duration(seconds: 1));
+      await tester.pump();
+      decoder.advance(const Duration(seconds: 2));
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets('under Original, stalls never replace a direct play source',
+      (tester) async {
+    final decoder = _Decoder();
+    final link = _server(directPlay: true);
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+      settingsService: FakeSettingsService(defaultQuality: 'original'),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(tester, () => decoder.state.playing, maxTries: 500);
+
+      await _tick(tester); // playback has run once
+      decoder.buffering(true);
+      await _tick(tester); // stall 1
+      decoder.buffering(false);
+      await _tick(tester);
+      decoder.buffering(true);
+      await _tick(tester); // stall 2
+      decoder.buffering(false);
+      // Bounded, not polled: nothing should happen, and a fallback would
+      // land well inside this window (the Auto test above reaches its second
+      // open within pumpUntil's 2 s budget).
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(decoder.opened, hasLength(1));
+      expect(link.requests.where((r) => r.variables.containsKey('strategy')),
+          isEmpty);
+      expect(find.textContaining('Switched to transcoding'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets(
+      'a rebuffer right after a subtitle switch is not a stall, however late '
+      'media_kit reports the switch', (tester) async {
+    final decoder = _Decoder();
+    final container = buildPlayerScreenContainer(
+      link: _server(directPlay: true),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(tester, () => decoder.state.playing, maxTries: 500);
+      final binding =
+          tester.state(find.byType(PlayerScreen)) as RemotePlayerBinding;
+
+      await _tick(tester); // playback has run once
+      decoder.buffering(true);
+      await _tick(tester); // stall 1
+      decoder.buffering(false);
+      await _tick(tester);
+
+      // `_Decoder.setSubtitleTrack` emits no track event, so only the
+      // screen's own note can explain the rebuffer that follows. Auto, so a
+      // second counted stall would fall back.
+      final callsBefore = decoder.subtitleTrackCalls;
+      await binding.selectTrack(TrackKind.subtitle, null);
+      expect(decoder.subtitleTrackCalls, callsBefore + 1);
+      decoder.buffering(true);
+      await _tick(tester); // would be stall 2 without the note
+      decoder.buffering(false);
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(decoder.opened, hasLength(1));
+      expect(find.textContaining('Switched to transcoding'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  testWidgets(
+      'picking Original over a direct play Auto source stops stalls replacing '
+      'it, though nothing reopens', (tester) async {
+    final decoder = _Decoder();
+    final container = buildPlayerScreenContainer(
+      link: _server(directPlay: true),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(tester, () => decoder.state.playing, maxTries: 500);
+
+      // Auto and Original both direct play this file, so the pick changes
+      // the choice without reopening, and the policy already watching the
+      // source is the one that has to change its mind.
+      final chrome = tester.widget<PlaybackChrome>(find.byType(PlaybackChrome));
+      chrome.onQualityTap!();
+      const originalRow = Key('quality-rung-Original');
+      await pumpUntil(
+          tester, () => find.byKey(originalRow).evaluate().isNotEmpty);
+      await tester.tap(find.byKey(originalRow));
+      await pumpUntil(
+        tester,
+        () =>
+            tester
+                .widget<PlaybackChrome>(find.byType(PlaybackChrome))
+                .selectedQualityLabel ==
+            'Original',
+      );
+
+      await _tick(tester); // playback has run once
+      decoder.buffering(true);
+      await _tick(tester); // stall 1
+      decoder.buffering(false);
+      await _tick(tester);
+      decoder.buffering(true);
+      await _tick(tester); // stall 2
+      decoder.buffering(false);
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(decoder.opened, hasLength(1));
+      expect(find.textContaining('Switched to transcoding'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump();

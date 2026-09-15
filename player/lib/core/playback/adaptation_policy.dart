@@ -20,9 +20,18 @@ class NoAction extends AdaptationAction {
 }
 
 class FallbackToTranscode extends AdaptationAction {
-  const FallbackToTranscode({required this.reason, this.throughputKbps});
+  const FallbackToTranscode({
+    required this.reason,
+    required this.detail,
+    this.throughputKbps,
+  });
 
   final FailureReason reason;
+
+  /// Which rule fired and what it saw, for the fallback log line. Times are
+  /// the samples' `at`, monitor time since verification started, not
+  /// positions.
+  final String detail;
 
   /// The last throughput the monitor measured, for choosing the fallback rung.
   final int? throughputKbps;
@@ -32,10 +41,21 @@ class AdaptationPolicy {
   AdaptationPolicy({
     required this.source,
     this.thresholds = const AdaptationThresholds(),
+    this.reactsToBandwidth = true,
   });
 
   final SourceKind source;
   final AdaptationThresholds thresholds;
+
+  /// Whether stalls and a draining buffer may replace the source. False when
+  /// the viewer chose Original: they asked for the file's own bytes, and a
+  /// slow link buffers rather than being swapped for a transcode. A decode
+  /// fault or dropped frames replace the source either way.
+  ///
+  /// Mutable because a quality pick that keeps the same source keeps this
+  /// policy. Stalls and drain are recorded either way, so turning it on acts
+  /// on the ones already seen.
+  bool reactsToBandwidth;
 
   Duration _playingTime = Duration.zero;
   bool _advanced = false;
@@ -181,36 +201,65 @@ class AdaptationPolicy {
         at - interruption <= thresholds.interruptionGrace;
   }
 
-  int _stallsWithin(Duration window, Duration now) =>
-      _stalls.where((at) => now - at <= window).length;
+  List<Duration> _stallsWithin(Duration window, Duration now) =>
+      _stalls.where((at) => now - at <= window).toList();
 
-  AdaptationAction _fallback(FailureReason reason) =>
-      FallbackToTranscode(reason: reason, throughputKbps: _lastThroughput);
+  AdaptationAction _fallback(FailureReason reason, String detail) =>
+      FallbackToTranscode(
+        reason: reason,
+        detail: detail,
+        throughputKbps: _lastThroughput,
+      );
+
+  String _stallDetail(List<Duration> stalls) {
+    final times = stalls.map((at) => '${at.inSeconds}s').join(', ');
+    final interruption = _lastInterruption;
+    final last = interruption == null ? 'none' : '${interruption.inSeconds}s';
+    return 'bandwidth: ${stalls.length} stalls at $times; '
+        'last interruption $last';
+  }
+
+  String _drainDetail() => 'bandwidth: buffer drained for $_drainRun samples';
 
   AdaptationAction _verify(HealthSample sample) {
     if (sample.fault && !_advanced) {
-      return _fallback(FailureReason.decodeFailed);
+      return _fallback(
+        FailureReason.decodeFailed,
+        'decodeFailed: fault before first frame',
+      );
     }
     if (_hasCompleteDropWindow() && _lastWindowDrops() > _dropLimit()) {
-      return _fallback(FailureReason.decodeTooSlow);
+      return _fallback(
+        FailureReason.decodeTooSlow,
+        'decodeTooSlow: ${_lastWindowDrops().round()} drops in last '
+        '${thresholds.dropWindow.inSeconds}s (limit ${_dropLimit()})',
+      );
     }
+    if (!reactsToBandwidth) return const NoAction();
     if (_stalls.length >= thresholds.verificationStalls) {
-      return _fallback(FailureReason.bandwidth);
+      return _fallback(FailureReason.bandwidth, _stallDetail(_stalls));
     }
     if (_drainRun >= thresholds.drainSamples) {
-      return _fallback(FailureReason.bandwidth);
+      return _fallback(FailureReason.bandwidth, _drainDetail());
     }
     return const NoAction();
   }
 
   AdaptationAction _later(HealthSample sample) {
-    if (_sustainedDrops()) return _fallback(FailureReason.decodeTooSlow);
-    if (_stallsWithin(thresholds.laterStallWindow, sample.at) >=
-        thresholds.laterStalls) {
-      return _fallback(FailureReason.bandwidth);
+    if (_sustainedDrops()) {
+      return _fallback(
+        FailureReason.decodeTooSlow,
+        'decodeTooSlow: sustained drops over '
+        '${thresholds.sustainedDropWindows} windows',
+      );
+    }
+    if (!reactsToBandwidth) return const NoAction();
+    final recent = _stallsWithin(thresholds.laterStallWindow, sample.at);
+    if (recent.length >= thresholds.laterStalls) {
+      return _fallback(FailureReason.bandwidth, _stallDetail(recent));
     }
     if (_drainRun >= thresholds.drainSamples) {
-      return _fallback(FailureReason.bandwidth);
+      return _fallback(FailureReason.bandwidth, _drainDetail());
     }
     return const NoAction();
   }

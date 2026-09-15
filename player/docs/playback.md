@@ -6,7 +6,7 @@ Everything after that is the player's, in `lib/core/playback/`:
 | Unit | Job |
 | --- | --- |
 | `planPlayback` (`playback_planner.dart`) | candidates plus memory in, `PlaybackPlan` out. A top-level function, not a class. Pure. |
-| `fallbackPlan` (`playback_planner.dart`) | the adaptive transcode a fallback lands on: source height and remembered throughput in, an `HlsPlan` out. Also a function. Pure. |
+| `fallbackPlan` (`playback_planner.dart`) | the transcode a fallback lands on: quality choice, source height and remembered throughput in, an `HlsPlan` out (adaptive under Auto, source resolution under Original). Also a function. Pure. |
 | `PlaybackMemory` | per server: file shapes that failed to decode here (14 days), and an EWMA of throughput. An abstract class; `HivePlaybackMemory` backs the app, `InMemoryPlaybackMemory` backs tests. |
 | `PlaybackMonitor` | one `HealthSample` a second from media_kit's streams and the engine's frame counters (mpv's properties on native, the video element's on web) |
 | `AdaptationPolicy` | the sample window in, `FallbackToTranscode` out. Pure state machine. |
@@ -33,24 +33,25 @@ throughput says the file will not fit, in which case it asks for the highest
 adaptive rung that does. Knowing nothing about the connection is not evidence
 against it, so a first play, and every web play (web never measures
 throughput), transcodes uncapped. A fallback after a playback failure is a
-different case: it steps down deliberately rather than waiting for evidence
-(`fallbackPlan`; see "Verification" below). Original is the viewer's
-override: it bypasses remembered decode failures, wherever that choice came
-from. A fixed rung pins its own caps and always transcodes, skipping both
-checks below.
+different case: under Auto it steps down deliberately rather than waiting for
+evidence (`fallbackPlan`; see "Verification" below). Original is the viewer's
+override: it bypasses remembered decode failures and remembered throughput,
+wherever that choice came from. A fixed rung pins its own caps and always
+transcodes, skipping both checks below.
 
 Three rules, in order, decide between direct play, copy and transcode for
 Auto and Original alike. Direct play needs native, a leading DIRECT_PLAY or
-REMUX, no fixed rung chosen, and a bitrate that fits remembered throughput
-with 30% headroom. Copy needs the same bitrate condition plus a non-leading
-HLS_COPY, and on web a MIME string `MediaSource.isTypeSupported` accepts.
-Otherwise transcode.
+REMUX, and no fixed rung chosen; for Auto it also needs a bitrate that fits
+remembered throughput with 30% headroom. Copy needs a non-leading HLS_COPY,
+the same bitrate condition for Auto, and on web a MIME string
+`MediaSource.isTypeSupported` accepts. Otherwise transcode.
 
 A shape known to fail here (the failure memory below) also blocks direct play
 and copy for Auto; picking Original in the quality menu tries it anyway,
 whether that choice was just tapped, seeded from storage, or carried over
-from the previous episode. The bandwidth check has no such carve-out: it
-applies to every choice, Auto and Original alike.
+from the previous episode. Remembered throughput has the same carve-out:
+Original plays the file's own bytes on any link, and buffers if the link
+cannot keep up.
 
 The stored `default_quality` key: `auto` reads back as Auto, `original` as
 Original. Before the Auto rung existed, Original was the default and was
@@ -70,33 +71,49 @@ seconds ahead replace it with a transcode at the same position, on the same
 looser: three stalls in two minutes, or three consecutive 10-second windows
 each over the drop limit. The numbers live in `AdaptationThresholds`.
 
+The stall and drain rules act only when Auto is the choice
+(`AdaptationPolicy.reactsToBandwidth`). Under Original only the fault and
+dropped-frame rules can replace the source: the viewer asked for the file's
+own bytes, and a slow link buffers rather than being swapped for a
+transcode. Throughput is still measured either way. A quality pick that
+delivers the same bytes reopens nothing and keeps the running policy, so the
+pick flips that flag on it rather than starting a new one: media_kit's
+streams do not replay, and a monitor created mid-playback would never see
+playback as started.
+
 A stall only counts once playback has run. media_kit reports buffering from
 mpv's `start-file` until the file loads, and `play()` has been called by then,
 so the open's own loading looks exactly like a stall; a 4K MKV with 38 MB of
 embedded fonts spends seconds there. Nor does a stall that starts within 10
 seconds of a track switch or seek: switching subtitle track makes mpv reopen
 the byte range from the first cluster and pause for cache while it catches
-up. The monitor learns of track switches from `player.stream.track` and of
-seeks from `seekToReal`. Before both rules, opening such a file and picking
-its English subtitles was two stalls, and a fallback for "your connection".
+up. The screen notes a track switch with the monitor just before asking
+media_kit for it (`_setAudioTrack`, `_setSubtitleTrack`), as `seekToReal`
+does for seeks, so the switch is on record before the rebuffer it causes;
+`player.stream.track` still catches a switch the screen did not start.
+Before both rules, opening such a file and picking its English subtitles was
+two stalls, and a fallback for "your connection".
 
 This kind of switch logs its own line, not the `Plan:` line above:
-`[PlayerScreen] Falling back to <plan>: <reason> at <n>s`. `<plan>` is the
-fallback's own `describe()` (always ends `(fallbackFromFailure)`, since
-`fallbackPlan` only ever builds that reason); `<reason>` is the
-`FailureReason` that triggered it (`decodeFailed`, `decodeTooSlow` or
-`bandwidth`); `<n>s` is the position it switched at.
+`[PlayerScreen] Falling back to <plan>: <reason> at <n>s (<detail>)`.
+`<plan>` is the fallback's own `describe()` (always ends
+`(fallbackFromFailure)`, since `fallbackPlan` only ever builds that reason);
+`<reason>` is the `FailureReason` that triggered it (`decodeFailed`,
+`decodeTooSlow` or `bandwidth`); `<n>s` is the position it switched at;
+`<detail>` names the rule and what it saw, such as
+`bandwidth: 2 stalls at 3s, 9s; last interruption 9s`. Times inside
+`<detail>` are monitor time since verification started, not positions.
 
 A decode fallback always records the file's shape (RFC 6381 video codec plus
 height bucket) against the server, regardless of the quality choice in play.
 Whether that record is later consulted follows the same rule as "The
 decision": a remembered shape skips direct play and copy for Auto on the next
 play, and Original bypasses it regardless of where that choice came from. A
-bandwidth fallback lowers the remembered throughput, and that check applies
-unconditionally, so a slow link is remembered on the very next attempt
-regardless of choice. There is no control to clear the box: a remembered
-shape expires after 14 days, Original skips it before then, and remembered
-throughput keeps updating from what playback measures.
+bandwidth fallback, which only Auto can trigger, lowers the remembered
+throughput, and Auto consults it on the very next attempt; Original ignores
+it. There is no control to clear the box: a remembered shape expires after
+14 days, Original skips it before then, and remembered throughput keeps
+updating from what playback measures.
 
 ## The switch
 
@@ -133,11 +150,12 @@ changes nothing about what is on screen. That case does not reopen the
 source; it only updates which choice is selected, and logs
 `[PlayerScreen] Quality change: <plan> (already playing)` instead.
 
-A fallback (see "Verification" above) always lands the session on Auto for
-the rest of the playback, in memory only: the stored default is the viewer's
-own preference, and one file failing to decode here says nothing about the
-next, so a fallback never writes it. Auto does not change rung again on its
-own mid-session; that needs a server-side rendition switch, not built yet.
+A fallback (see "Verification" above) keeps the viewer's choice. Under Auto
+it lands on `fallbackPlan`'s stepped-down adaptive rung and stays Auto. Under
+Original it lands on a transcode at the source resolution with no caps, still
+labelled Original. Neither writes the stored default: one file failing here
+says nothing about the next. Auto does not change rung again on its own
+mid-session; that needs a server-side rendition switch, not built yet.
 
 ## Compatibility
 
