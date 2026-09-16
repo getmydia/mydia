@@ -494,6 +494,18 @@ fn endpoint_addr_from_json(json: &str) -> Result<EndpointAddr, String> {
     serde_json::from_str(json).map_err(|e| format!("Invalid EndpointAddr JSON: {}", e))
 }
 
+/// Extract actual node ID from either a bare node ID string or an EndpointAddr JSON.
+fn resolve_node_id(node_id: &str) -> String {
+    if node_id.starts_with('{') {
+        match endpoint_addr_from_json(node_id) {
+            Ok(addr) => addr.id.to_string(),
+            Err(_) => node_id.to_string(),
+        }
+    } else {
+        node_id.to_string()
+    }
+}
+
 /// The core Host struct that manages the iroh Endpoint
 pub struct Host {
     pub(crate) cmd_tx: mpsc::Sender<Command>,
@@ -510,7 +522,7 @@ impl Host {
         let node_id = secret_key.public().to_string();
         let node_id_str = node_id.clone();
 
-        let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(32);
+        let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(256);
         let (event_tx, event_rx) = mpsc::channel::<Event>(100);
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
@@ -1428,8 +1440,19 @@ async fn handle_command(
             request,
             reply,
         } => {
-            let result = handle_send_request(connected_peers, &node_id, request).await;
-            let _ = reply.send(result);
+            let actual_node_id = resolve_node_id(&node_id);
+            match current_connection(connected_peers, &actual_node_id) {
+                Some(conn) => {
+                    let conn = conn.clone();
+                    runtime::spawn(async move {
+                        let result = do_send_request(conn, request).await;
+                        let _ = reply.send(result);
+                    });
+                }
+                None => {
+                    let _ = reply.send(Err(format!("Not connected to peer: {}", actual_node_id)));
+                }
+            }
         }
         Command::SendResponse {
             request_id,
@@ -1637,8 +1660,19 @@ async fn handle_command(
             request,
             reply,
         } => {
-            let result = handle_send_hls_request(connected_peers, &node_id, request).await;
-            let _ = reply.send(result);
+            let actual_node_id = resolve_node_id(&node_id);
+            match current_connection(connected_peers, &actual_node_id) {
+                Some(conn) => {
+                    let conn = conn.clone();
+                    runtime::spawn(async move {
+                        let result = do_send_hls_request(conn, request).await;
+                        let _ = reply.send(result);
+                    });
+                }
+                None => {
+                    let _ = reply.send(Err(format!("Not connected to peer: {}", actual_node_id)));
+                }
+            }
         }
     }
 }
@@ -2109,7 +2143,7 @@ async fn handle_connection(
     }
 }
 
-/// The most `handle_send_request` reads back from a peer. Requests stay capped
+/// The most `do_send_request` reads back from a peer. Requests stay capped
 /// at 64 KiB in `handle_connection`, but responses carry whole GraphQL
 /// documents: a season with many subtitle tracks came to 254 KB on a real
 /// library, and the old 64 KiB cap failed every such request with "stream too
@@ -2117,28 +2151,10 @@ async fn handle_connection(
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
 /// Send a request to a connected peer
-async fn handle_send_request(
-    connected_peers: &HashMap<String, PeerConnections>,
-    node_id: &str,
+async fn do_send_request(
+    conn: Connection,
     request: MydiaRequest,
 ) -> Result<MydiaResponse, String> {
-    // The node_id parameter might be either:
-    // 1. A bare node ID string (e.g., "09ecb63dd2...")
-    // 2. A full EndpointAddr JSON (e.g., {"id":"09ecb63dd2...", ...})
-    // We need to extract the actual node ID in both cases.
-    let actual_node_id = if node_id.starts_with('{') {
-        // Try to parse as EndpointAddr JSON
-        match endpoint_addr_from_json(node_id) {
-            Ok(addr) => addr.id.to_string(),
-            Err(_) => node_id.to_string(),
-        }
-    } else {
-        node_id.to_string()
-    };
-
-    let conn = current_connection(connected_peers, &actual_node_id)
-        .ok_or_else(|| format!("Not connected to peer: {}", actual_node_id))?;
-
     // Open a bidirectional stream
     let (mut send, mut recv) = conn
         .open_bi()
@@ -2170,9 +2186,8 @@ async fn handle_send_request(
 
 /// Send an HLS streaming request to a connected peer (client-side).
 /// Returns a streaming response with header and channel for chunks.
-async fn handle_send_hls_request(
-    connected_peers: &HashMap<String, PeerConnections>,
-    node_id: &str,
+async fn do_send_hls_request(
+    conn: Connection,
     request: HlsRequest,
 ) -> Result<HlsStreamResponse, String> {
     use crate::runtime::time::Instant;
@@ -2181,20 +2196,7 @@ async fn handle_send_hls_request(
     let session_id = request.session_id.clone();
     let path = request.path.clone();
 
-    // Handle both bare node ID and full EndpointAddr JSON
-    let actual_node_id = if node_id.starts_with('{') {
-        match endpoint_addr_from_json(node_id) {
-            Ok(addr) => addr.id.to_string(),
-            Err(_) => node_id.to_string(),
-        }
-    } else {
-        node_id.to_string()
-    };
-
-    let conn = current_connection(connected_peers, &actual_node_id)
-        .ok_or_else(|| format!("Not connected to peer: {}", actual_node_id))?;
-
-    let connection_type = PeerConnectionType::from_connection(conn);
+    let connection_type = PeerConnectionType::from_connection(&conn);
 
     // Open a bidirectional stream
     let (mut send, mut recv) = conn
