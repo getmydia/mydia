@@ -273,5 +273,36 @@ void main() {
       expect(response.status, 206);
       expect(stale.existsSync(), isFalse);
     });
+
+    test('cancels a source still opening when the proxy shuts down', () async {
+      final probing = Completer<void>();
+      final release = Completer<void>();
+      final opening = LocalProxyService(
+        p2p,
+        spool: RangeSpoolSettings(
+          rootDirectory: () async => tempRoot,
+          diskSpace: (_) async {
+            if (!probing.isCompleted) probing.complete();
+            await release.future;
+            return diskSpace;
+          },
+        ),
+      );
+      await opening.start(owner: owner, targetPeer: 'peer-1');
+      addTearDown(opening.shutdown);
+      final upstream = endless(pace: const Duration(milliseconds: 2));
+      final client = await RawRangeClient.open(
+        opening.port,
+        '/direct/file-1/stream',
+      );
+
+      await probing.future.timeout(const Duration(seconds: 5));
+      await opening.shutdown();
+      release.complete();
+
+      await upstream.cancelled.timeout(const Duration(seconds: 5));
+      await waitUntil(() => spoolFiles().isEmpty);
+      client.hangUp();
+    });
   });
 }
