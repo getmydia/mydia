@@ -52,6 +52,7 @@ class StubLink extends Link {
 GraphQLClient stubClient(Link link, {GraphQLCache? cache}) => GraphQLClient(
       link: link,
       cache: cache ?? GraphQLCache(store: InMemoryStore()),
+      queryRequestTimeout: null,
     );
 
 /// A GraphQL-level failure response (the shape a server error takes).

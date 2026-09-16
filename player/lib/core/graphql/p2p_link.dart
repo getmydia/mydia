@@ -12,8 +12,8 @@ import '../player/device_profile.dart';
 /// Max number of retry attempts for transient connection errors.
 const _maxRetries = 3;
 
-/// Base backoff duration (doubles each retry: 1s, 2s, 4s).
-const _baseBackoff = Duration(seconds: 1);
+/// Default base backoff duration (doubles each retry: 1s, 2s, 4s).
+const _defaultBaseBackoff = Duration(seconds: 1);
 
 /// A GraphQL Link that sends operations over P2P.
 ///
@@ -35,16 +35,19 @@ class P2pGraphQLLink extends Link {
   final String _serverNodeId;
   final Future<String?> Function() _getAuthToken;
   final Future<String?> Function()? _refreshAuthToken;
+  final Duration _baseBackoff;
 
   P2pGraphQLLink({
     required P2pService p2pService,
     required String serverNodeId,
     required Future<String?> Function() getAuthToken,
     Future<String?> Function()? refreshAuthToken,
+    Duration baseBackoff = _defaultBaseBackoff,
   })  : _p2pService = p2pService,
         _serverNodeId = serverNodeId,
         _getAuthToken = getAuthToken,
-        _refreshAuthToken = refreshAuthToken;
+        _refreshAuthToken = refreshAuthToken,
+        _baseBackoff = baseBackoff;
 
   @override
   Stream<Response> request(Request request, [NextLink? forward]) async* {
@@ -236,21 +239,27 @@ class P2pGraphQLLink extends Link {
 /// [getAuthToken] - A function that returns the current auth token
 /// [refreshAuthToken] - Mints a fresh access token when the server rejects the
 /// current one, returning null if the device has to pair again
+/// [baseBackoff] - Base backoff duration for retries (defaults to 1 second)
+/// [cache] - Optional cache instance (defaults to HiveStore)
 GraphQLClient createP2pGraphQLClient({
   required P2pService p2pService,
   required String serverNodeId,
   required Future<String?> Function() getAuthToken,
   Future<String?> Function()? refreshAuthToken,
+  Duration baseBackoff = _defaultBaseBackoff,
+  GraphQLCache? cache,
 }) {
   final link = P2pGraphQLLink(
     p2pService: p2pService,
     serverNodeId: serverNodeId,
     getAuthToken: getAuthToken,
     refreshAuthToken: refreshAuthToken,
+    baseBackoff: baseBackoff,
   );
 
   return GraphQLClient(
     link: link,
-    cache: GraphQLCache(store: HiveStore()),
+    cache: cache ?? GraphQLCache(store: HiveStore()),
+    queryRequestTimeout: null,
   );
 }

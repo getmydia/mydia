@@ -131,6 +131,7 @@ GraphQLClient createGraphQLClient(
   return GraphQLClient(
     link: link,
     cache: GraphQLCache(store: HiveStore()),
+    queryRequestTimeout: null,
   );
 }
 
@@ -234,5 +235,6 @@ GraphQLClient createGraphQLClientWithSubscriptions(
   return GraphQLClient(
     link: link,
     cache: GraphQLCache(store: HiveStore()),
+    queryRequestTimeout: null,
   );
 }

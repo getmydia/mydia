@@ -9,10 +9,10 @@ import '../../../graphql/queries/subtitle_content.graphql.dart';
 ///
 /// An embedded track has no body until the server extracts it with ffmpeg,
 /// which reads through the whole container: 7.5 s and 10.7 s for two 2.4 GB
-/// 4K episodes. graphql's own default gives up after 5 s, so every such pick
-/// failed while the server went on to finish and cache the body. Over p2p the
-/// transport ends its own wait at 30 s with an error, so this never outlasts
-/// the server there.
+/// 4K episodes. graphql's original default gave up after 5 s, but [GraphQLClient]
+/// now defaults to `queryRequestTimeout: null` so requests are bounded by
+/// transport-level timeouts instead of graphql's default 5 s abort. Over p2p the
+/// transport ends its own wait at 30 s with an error.
 const kSubtitleContentTimeout = Duration(seconds: 60);
 
 QueryOptions<Object?> subtitleContentQueryOptions({
@@ -25,5 +25,4 @@ QueryOptions<Object?> subtitleContentQueryOptions({
         mediaFileId: mediaFileId,
         trackId: trackId,
       ).toJson(),
-      queryRequestTimeout: kSubtitleContentTimeout,
     );

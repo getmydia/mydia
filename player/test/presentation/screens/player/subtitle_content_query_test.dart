@@ -50,20 +50,10 @@ void main() {
     expect(result.data?['subtitleContent'], 'WEBVTT\n');
   });
 
-  test('still gives up once kSubtitleContentTimeout has passed', () {
-    // The answer never arrives inside the window: graphql's QueryManager
-    // throws on a response that lands after its own timeout fired.
-    final result = _query(
-      delay: kSubtitleContentTimeout * 2,
-      wait: kSubtitleContentTimeout + const Duration(seconds: 1),
-    );
-
-    expect(result, isNotNull);
-    final linkException = result!.exception?.linkException;
-    expect(linkException, isA<UnknownException>());
-    expect(
-      (linkException! as UnknownException).originalException,
-      isA<TimeoutException>(),
-    );
+  test('does not configure queryRequestTimeout so transport bounds execution',
+      () {
+    final options =
+        subtitleContentQueryOptions(mediaFileId: 'file-1', trackId: '4');
+    expect(options.queryRequestTimeout, isNull);
   });
 }
