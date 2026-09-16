@@ -91,3 +91,31 @@ same reason production access does.
 Player E2E tests live in `player/integration_test/`, with streaming helpers in
 `player/integration_test/helpers/streaming_helpers.dart`. The compose file is
 `compose.player-e2e.yml`.
+
+### A failure named `simple` is usually not from `simple`
+
+CI runs every file through `all_tests.dart` in one isolate. The engine's frame
+callbacks bind to the zone of the first test that schedules a frame, which is
+`simple`. From then on, anything that runs from a frame callback reports against
+`simple`: `debugPrint` output, and any error thrown after its own test finished.
+The reporter shows these as `simple App boots with the native bridge initialized`
+failing "after it had already completed", interleaved with progress lines from
+whichever test is actually running. Read the stack trace, not the label. On
+2026-09-16 that line was a `PlayerScreen` teardown inside `remote_control`.
+
+To reproduce one file on its own, where attribution is exact:
+
+```bash
+./dev player e2e --target integration_test/remote_control_test.dart
+```
+
+The test container runs as root and bind-mounts the checkout, so a local run
+leaves root-owned build output and generated files under `player/`, and the
+next `./dev player setup` fails with `Permission denied` on
+`.dart_tool/package_config.json`. Give them back without sudo:
+
+```bash
+docker run --rm -v "$PWD/player:/p" --entrypoint find \
+  ghcr.io/getmydia/mydia/player-e2e-toolbox:master \
+  /p -user root -exec chown -h "$(id -u):$(id -g)" {} +
+```

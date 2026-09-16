@@ -64,14 +64,15 @@ Also note `cancel-in-progress: true` in that workflow's concurrency group: pushi
 a new commit cancels the in-flight run, so a `gh pr checks --watch` started on the
 old head exits with a truncated view. Re-watch after each push.
 
-## Eight checks are required, and most are still advisory
+## Nine checks are required, and most are still advisory
 
 The Master ruleset (`gh api repos/getmydia/mydia/rulesets/9740184`) requires
-eight status checks:
+nine status checks:
 
 ```text
 Test, Test / PostgreSQL, Test / E2E Browser, Site build,
-Load lanes (ios), Load lanes (android), Build / Web, Test / Player
+Load lanes (ios), Load lanes (android), Build / Web, Test / Player,
+Test / Player E2E
 ```
 
 Everything else is still advisory, including `Build / Android`, `Build / Linux`,
@@ -82,6 +83,13 @@ and the lockfile scanners. A break visible only to those still merges.
 catalogued hang and network-block modes -- `Build / Linux` and `Flatpak / Build`
 -- were deliberately left out. Requiring either would trade a merge hole for a
 merge deadlock.
+
+`Test / Player E2E` was promoted 2026-09-16. It had been green on 63 of 63 master
+pushes before PR #832 merged it red, and it stayed red for a day because nothing
+blocked on it. It reports on every PR for the same reason `ci-player.yml` does:
+`ci-player-e2e.yml` has no workflow-level `paths:` filter, and its
+`dorny/paths-filter` result gates steps, never the job, so a PR with nothing
+relevant concludes green in seconds. Keep it that way.
 
 ### Why the list was short, and what changed
 

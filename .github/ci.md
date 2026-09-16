@@ -191,8 +191,9 @@ run unevaluated. Do not remove those guards.
 ## Dependabot: a stale base blocks a green PR forever
 
 The Master ruleset requires `Load lanes (ios)`, `Load lanes (android)`,
-`Site build`, `Test`, `Test / PostgreSQL`, `Test / E2E Browser`, and -- since
-2026-08-31 -- `Build / Web` and `Test / Player`. Several of those workflows were
+`Site build`, `Test`, `Test / PostgreSQL`, `Test / E2E Browser`, `Build / Web`
+and `Test / Player` (both since 2026-08-31), and `Test / Player E2E` (since
+2026-09-16). Several of those workflows were
 originally `paths:`-filtered, and `20f0db5e2` (2026-08-26) removed the filters
 precisely so they report on every PR. `ci-player.yml` got the same treatment
 differently: its filter moved into a `changes` job, so its jobs always report.
