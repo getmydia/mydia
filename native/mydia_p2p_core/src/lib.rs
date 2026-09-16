@@ -10,9 +10,10 @@ use futures::StreamExt;
 #[cfg(feature = "host")]
 use iroh::endpoint::{Incoming, SendStream};
 use iroh::{
+    address_lookup::memory::MemoryLookup,
     defaults::prod as default_relays,
     endpoint::{presets, Connection, PathEvent},
-    Endpoint, EndpointAddr, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
+    Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
 };
 // A browser has no DNS resolver to configure: iroh resolves peers over HTTPS
 // pkarr there and gates the whole type out. Not a role split, a platform one.
@@ -144,6 +145,18 @@ enum Command {
     Dial {
         endpoint_addr_json: String,
         reply: oneshot::Sender<Result<(), String>>,
+    },
+    /// Seed an address for a peer we were told about out of band, so a later
+    /// dial by bare node ID resolves without a discovery lookup.
+    AddAddressHint {
+        endpoint_addr_json: String,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    /// How many on-demand dials this host has started. Test-only
+    /// introspection.
+    #[cfg(feature = "test-introspection")]
+    DebugDialCount {
+        reply: oneshot::Sender<u64>,
     },
     SendRequest {
         node_id: String,
@@ -568,6 +581,38 @@ impl Host {
         rx.await.map_err(|_| "recv_failed".to_string())?
     }
 
+    /// Seed a peer's address so a later dial by bare node ID resolves locally.
+    ///
+    /// Additive: the hint sits alongside pkarr resolution rather than
+    /// replacing it, and a peer with no hint still resolves through discovery.
+    pub async fn add_address_hint(&self, endpoint_addr_json: String) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.cmd_tx
+            .send(Command::AddAddressHint {
+                endpoint_addr_json,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| "send_failed".to_string())?;
+        rx.await.map_err(|_| "recv_failed".to_string())?
+    }
+
+    /// How many on-demand dials this host has started. Test-only
+    /// introspection, behind the `test-introspection` feature.
+    #[cfg(feature = "test-introspection")]
+    pub async fn debug_dial_count(&self) -> u64 {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .cmd_tx
+            .send(Command::DebugDialCount { reply: tx })
+            .await
+            .is_err()
+        {
+            return 0;
+        }
+        rx.await.unwrap_or(0)
+    }
+
     /// Get this node's address as JSON for sharing
     pub async fn get_node_addr(&self) -> String {
         let (tx, rx) = oneshot::channel();
@@ -945,6 +990,61 @@ enum InternalMessage {
         conn: Connection,
         reply: oneshot::Sender<Result<(), String>>,
     },
+    /// A dial started because a request had no route to its peer. Unlike
+    /// `DialSucceeded` it reports failure too, since the requests waiting on
+    /// it have to be answered either way.
+    RequestDialFinished {
+        node_id: String,
+        result: Result<Connection, String>,
+    },
+}
+
+/// Requests waiting on an in-flight on-demand dial, keyed by peer.
+type PendingRequests =
+    HashMap<String, Vec<(MydiaRequest, oneshot::Sender<Result<MydiaResponse, String>>)>>;
+
+/// How long an on-demand dial may run before it is abandoned.
+///
+/// Bounds the core only. A controller's probe keeps its own, shorter budget
+/// and lists a device as offline well before this expires. iroh's own connect
+/// timeout is 30 seconds, which this deliberately shortens.
+const ON_DEMAND_DIAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Dial a peer by bare node ID on behalf of queued requests.
+///
+/// Resolution is whatever the endpoint's address lookup can answer: a pkarr
+/// record, or an address seeded through `Host::add_address_hint`.
+fn spawn_on_demand_dial(
+    endpoint: &Endpoint,
+    node_id: String,
+    internal_tx: mpsc::Sender<InternalMessage>,
+) {
+    let endpoint = endpoint.clone();
+    runtime::spawn(async move {
+        let result = match node_id.parse::<EndpointId>() {
+            Ok(id) => {
+                tracing::info!("Dialing {} on demand for a queued request", node_id);
+                match runtime::time::timeout(
+                    ON_DEMAND_DIAL_TIMEOUT,
+                    endpoint.connect(EndpointAddr::new(id), ALPN),
+                )
+                .await
+                {
+                    Ok(Ok(conn)) => Ok(conn),
+                    Ok(Err(e)) => Err(format!("{}", e)),
+                    Err(_) => Err(format!(
+                        "dial timed out after {}s",
+                        ON_DEMAND_DIAL_TIMEOUT.as_secs()
+                    )),
+                }
+            }
+            Err(e) => Err(format!("invalid node ID: {}", e)),
+        };
+
+        let _ = internal_tx
+            .send(InternalMessage::RequestDialFinished { node_id, result })
+            .await;
+    });
 }
 
 /// Main event loop that runs in a background thread
@@ -963,6 +1063,13 @@ async fn run_event_loop(
     let mut builder = Endpoint::builder(presets::N0)
         .secret_key(secret_key)
         .alpns(vec![ALPN.to_vec()]);
+
+    // Out-of-band addresses, seeded by `Host::add_address_hint`. The N0 preset
+    // already resolves over pkarr; this is additive and answers first for a
+    // peer we were handed directly, which is what lets a caller dial by node
+    // ID with no discovery lookup at all.
+    let address_hints = MemoryLookup::new();
+    builder = builder.address_lookup(address_hints.clone());
 
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -1025,6 +1132,15 @@ async fn run_event_loop(
     // reconnection under the same peer_id that raced ahead of it.
     let (disconnect_tx, mut disconnect_rx) = mpsc::channel::<(String, ConnectionId)>(64);
     let (internal_tx, mut internal_rx) = mpsc::channel::<InternalMessage>(64);
+
+    // Requests that arrived with no route to their peer, waiting on the dial
+    // this loop started for them.
+    let mut pending_requests: PendingRequests = HashMap::new();
+
+    // How many on-demand dials have been started. Read back by
+    // `debug_dial_count` to prove concurrent requests to one peer share a
+    // single dial rather than opening a connection each.
+    let mut on_demand_dials: u64 = 0;
 
     // Wait for the endpoint to come online (relay connected + local IP
     // available), bounded by a timeout so an unreachable relay cannot block
@@ -1093,6 +1209,9 @@ async fn run_event_loop(
                     cmd,
                     &endpoint,
                     &mut connected_peers,
+                    &mut pending_requests,
+                    &mut on_demand_dials,
+                    &address_hints,
                     &shared_state,
                     relay_connected,
                     &internal_tx,
@@ -1160,6 +1279,9 @@ async fn run_event_loop(
                                         cmd,
                                         &endpoint,
                                         &mut connected_peers,
+                                        &mut pending_requests,
+                                        &mut on_demand_dials,
+                                        &address_hints,
                                         &shared_state,
                                         relay_connected,
                                         &internal_tx,
@@ -1202,6 +1324,22 @@ async fn run_event_loop(
                                 )
                                 .await
                             }
+                            InternalMessage::RequestDialFinished { node_id, result } => {
+                                unless_shutdown(
+                                    &mut shutdown_rx,
+                                    handle_request_dial_finished(
+                                        node_id,
+                                        result,
+                                        &mut connected_peers,
+                                        &mut pending_requests,
+                                        &event_tx,
+                                        &shared_state,
+                                        &disconnect_tx,
+                                        &hls_registry,
+                                    ),
+                                )
+                                .await
+                            }
                         }
                     }
                 };
@@ -1225,6 +1363,9 @@ async fn run_event_loop(
                                         cmd,
                                         &endpoint,
                                         &mut connected_peers,
+                                        &mut pending_requests,
+                                        &mut on_demand_dials,
+                                        &address_hints,
                                         &shared_state,
                                         relay_connected,
                                         &internal_tx,
@@ -1262,6 +1403,21 @@ async fn run_event_loop(
                                         .await;
                                         let _ = reply.send(Ok(()));
                                     },
+                                )
+                                .await
+                            }
+                            InternalMessage::RequestDialFinished { node_id, result } => {
+                                unless_shutdown(
+                                    &mut shutdown_rx,
+                                    handle_request_dial_finished(
+                                        node_id,
+                                        result,
+                                        &mut connected_peers,
+                                        &mut pending_requests,
+                                        &event_tx,
+                                        &shared_state,
+                                        &disconnect_tx,
+                                    ),
                                 )
                                 .await
                             }
@@ -1420,6 +1576,52 @@ async fn prune_disconnected_peer(
 }
 
 /// Record a newly established connection, announce its arrival, and spawn its stream handler and type monitor.
+/// Register a connection an on-demand dial produced, then dispatch every
+/// request that was waiting on it. A dial that did not land fails them all
+/// with a `dial_failed:` prefix, which is how a controller tells an
+/// unreachable target from one that refused it.
+async fn handle_request_dial_finished(
+    node_id: String,
+    result: Result<Connection, String>,
+    connected_peers: &mut HashMap<String, PeerConnections>,
+    pending_requests: &mut PendingRequests,
+    event_tx: &mpsc::Sender<Event>,
+    shared_state: &Arc<Mutex<SharedState>>,
+    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
+    #[cfg(feature = "host")] hls_registry: &HlsStreamRegistry,
+) {
+    let waiting = pending_requests.remove(&node_id).unwrap_or_default();
+
+    match result {
+        Ok(conn) => {
+            register_connection(
+                conn.clone(),
+                node_id,
+                connected_peers,
+                event_tx,
+                shared_state,
+                disconnect_tx,
+                #[cfg(feature = "host")]
+                hls_registry,
+            )
+            .await;
+
+            for (request, reply) in waiting {
+                let conn = conn.clone();
+                runtime::spawn(async move {
+                    let _ = reply.send(do_send_request(conn, request).await);
+                });
+            }
+        }
+        Err(e) => {
+            tracing::warn!("On-demand dial to {} failed: {}", node_id, e);
+            for (_, reply) in waiting {
+                let _ = reply.send(Err(format!("dial_failed: {}", e)));
+            }
+        }
+    }
+}
+
 async fn register_connection(
     conn: Connection,
     peer_id: String,
@@ -1567,6 +1769,9 @@ async fn handle_command(
     cmd: Command,
     endpoint: &Endpoint,
     connected_peers: &mut HashMap<String, PeerConnections>,
+    pending_requests: &mut PendingRequests,
+    on_demand_dials: &mut u64,
+    address_hints: &MemoryLookup,
     shared_state: &Arc<Mutex<SharedState>>,
     relay_connected: bool,
     internal_tx: &mpsc::Sender<InternalMessage>,
@@ -1608,6 +1813,19 @@ async fn handle_command(
                 }
             });
         }
+        Command::AddAddressHint {
+            endpoint_addr_json,
+            reply,
+        } => {
+            let result = endpoint_addr_from_json(&endpoint_addr_json).map(|addr| {
+                address_hints.add_endpoint_info(addr);
+            });
+            let _ = reply.send(result);
+        }
+        #[cfg(feature = "test-introspection")]
+        Command::DebugDialCount { reply } => {
+            let _ = reply.send(*on_demand_dials);
+        }
         Command::SendRequest {
             node_id,
             request,
@@ -1623,7 +1841,24 @@ async fn handle_command(
                     });
                 }
                 None => {
-                    let _ = reply.send(Err(format!("Not connected to peer: {}", actual_node_id)));
+                    // No route yet, so dial one. This is what remote control
+                    // needs: a controller probes a target by sending `Hello`
+                    // to a bare node ID out of the roster, and nothing else in
+                    // the player ever dials a peer. Answering "not connected"
+                    // here is why no target could ever appear in a picker.
+                    //
+                    // One dial per peer however many requests are waiting: the
+                    // queue being non-empty is itself the "already dialing"
+                    // flag.
+                    let waiters = pending_requests
+                        .entry(actual_node_id.clone())
+                        .or_default();
+                    let already_dialing = !waiters.is_empty();
+                    waiters.push((request, reply));
+                    if !already_dialing {
+                        *on_demand_dials += 1;
+                        spawn_on_demand_dial(endpoint, actual_node_id, internal_tx.clone());
+                    }
                 }
             }
         }

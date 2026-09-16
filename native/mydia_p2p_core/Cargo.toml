@@ -13,6 +13,10 @@ default = ["host"]
 # role rather than by target because a browser has no business doing it, not
 # because the compiler objects.
 host = []
+# Introspection that only tests need, reachable from tests/ (which cfg(test)
+# is not, since an integration test links the crate as an ordinary
+# dependency). Off in every real build.
+test-introspection = []
 
 [dependencies]
 # Iroh for p2p networking (QUIC-based, simpler than libp2p).
