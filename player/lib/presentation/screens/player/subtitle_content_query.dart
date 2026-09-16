@@ -5,16 +5,13 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../../graphql/queries/subtitle_content.graphql.dart';
 
-/// How long a subtitle body may take to arrive.
+/// Options for fetching one subtitle track's body.
 ///
 /// An embedded track has no body until the server extracts it with ffmpeg,
 /// which reads through the whole container: 7.5 s and 10.7 s for two 2.4 GB
-/// 4K episodes. graphql's original default gave up after 5 s, but [GraphQLClient]
-/// now defaults to `queryRequestTimeout: null` so requests are bounded by
-/// transport-level timeouts instead of graphql's default 5 s abort. Over p2p the
-/// transport ends its own wait at 30 s with an error.
-const kSubtitleContentTimeout = Duration(seconds: 60);
-
+/// 4K episodes. So this sets no `queryRequestTimeout` of its own and relies
+/// on the client's, which is null. Over p2p the server stops waiting at 30 s
+/// and answers with an error.
 QueryOptions<Object?> subtitleContentQueryOptions({
   required String mediaFileId,
   required String trackId,

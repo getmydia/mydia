@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show AnyhowException;
+// ignore: depend_on_referenced_packages
+import 'package:gql/ast.dart' show OperationDefinitionNode;
 import 'package:gql/language.dart' show printNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 
@@ -57,7 +59,15 @@ class P2pGraphQLLink extends Link {
 
       // Convert the request document to a query string using gql's built-in printer
       final query = printNode(request.operation.document);
-      final operationName = request.operation.operationName;
+      // Generated documents leave operationName null, so take it from the
+      // document. Every player document holds one operation, so naming it
+      // is always valid for the server too.
+      final operationName = request.operation.operationName ??
+          request.operation.document.definitions
+              .whereType<OperationDefinitionNode>()
+              .firstOrNull
+              ?.name
+              ?.value;
       final variables = request.variables;
 
       debugPrint('[P2pGraphQLLink] Sending request: $operationName');
