@@ -144,10 +144,11 @@ class RangeSpool implements RangeSource {
         _sinceCheck += chunk.length;
         _wake(_dataWaiter);
       }
-    } on FileSystemException catch (e) {
-      // The reader still serves what reached the disk; the response then
-      // ends short and the player reconnects.
-      debugPrint('[RangeSpool] Write failed for ${file.path}: $e');
+    } catch (e) {
+      // A failed write, a failed disk probe or a failed pull all end the
+      // download the same way: the reader still serves what reached the
+      // disk, and the response then ends short and the player reconnects.
+      debugPrint('[RangeSpool] Spooling stopped for ${file.path}: $e');
       _upstream.cancel();
     } finally {
       _upstreamDone = true;
@@ -197,8 +198,10 @@ class RangeSpool implements RangeSource {
   }
 
   /// One read at the served position. Returns null when the spool was
-  /// cancelled during the read, and finishes the cleanup the cancel had to
-  /// leave: closing a handle while a read is pending throws.
+  /// cancelled during the read. The reader handle close and file delete
+  /// that a concurrent [cancel] could not do while the read was pending run
+  /// here instead, in a `finally` clause, so they still happen if the read
+  /// itself throws.
   Future<Uint8List?> _read(int length) async {
     _readerBusy = true;
     final Uint8List chunk;
@@ -207,13 +210,9 @@ class RangeSpool implements RangeSource {
       chunk = await _reader.read(length);
     } finally {
       _readerBusy = false;
+      if (_cancelled) await _closeReaderAndDelete();
     }
-
-    if (_cancelled) {
-      await _closeReaderAndDelete();
-      return null;
-    }
-    return chunk;
+    return _cancelled ? null : chunk;
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/disk_space.dart';
@@ -9,6 +10,28 @@ import 'fake_range_stream.dart';
 
 const _plenty = DiskSpace(free: 1 << 40, total: 1 << 41);
 const _smallPieces = RangeSpoolPolicy(readChunkBytes: 4096);
+
+/// A [FakeRangeStream] that throws instead of returning a chunk once
+/// [failAfterBytes] have been pulled, standing in for a bridge call that
+/// fails partway through a download.
+class _FailingRangeStream extends FakeRangeStream {
+  _FailingRangeStream(int totalBytes, {required this.failAfterBytes})
+      : super(
+          header: fakeRangeHeader(contentLength: totalBytes),
+          totalBytes: totalBytes,
+          chunkBytes: 4096,
+        );
+
+  final int failAfterBytes;
+
+  @override
+  Future<Uint8List?> nextChunk() async {
+    if (pulledBytes >= failAfterBytes) {
+      throw StateError('bridge failed');
+    }
+    return super.nextChunk();
+  }
+}
 
 void main() {
   late Directory dir;
@@ -92,6 +115,18 @@ void main() {
     expect(await readAll(spool.bytes()), fakeBytes(0, 40 * 1024));
   });
 
+  test('cleans up when the upstream throws', () async {
+    const failAfter = 32 * 1024;
+    final upstream = _FailingRangeStream(1 << 20, failAfterBytes: failAfter);
+    final spool = await openSpool(upstream);
+
+    expect(await readAll(spool.bytes()), fakeBytes(0, failAfter));
+    expect(upstream.isCancelled, isTrue);
+
+    await spool.cancel();
+    expect(spool.file.existsSync(), isFalse);
+  });
+
   group('cancel', () {
     test('cancels the upstream and deletes the file', () async {
       final upstream = upstreamOf(1 << 30, stallAfterBytes: 64 * 1024);
@@ -139,7 +174,10 @@ void main() {
       await spool.cancel();
 
       expect(spool.file.existsSync(), isFalse);
-      expect(await reader.moveNext(), isFalse);
+      expect(
+        await reader.moveNext().timeout(const Duration(seconds: 2)),
+        isFalse,
+      );
     });
 
     test('twice is harmless', () async {
