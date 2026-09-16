@@ -867,14 +867,31 @@ impl Host {
 /// Shared state for pending responses
 struct SharedState {
     pending_responses: HashMap<String, oneshot::Sender<MydiaResponse>>,
-    /// Active HLS streaming connections - stores the send half of the stream.
-    ///
-    /// Host role only. Every command that drains this map is behind the same
-    /// feature, so a client build that could fill it would leak a `SendStream`
-    /// per request with nothing able to remove it.
-    #[cfg(feature = "host")]
-    hls_streams: HashMap<String, SendStream>,
 }
+
+#[cfg(feature = "host")]
+enum StreamCmd {
+    Header {
+        header: HlsResponseHeader,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    Chunk {
+        data: Vec<u8>,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    StreamFileRange {
+        file_path: String,
+        offset: u64,
+        length: u64,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    Finish {
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+}
+
+#[cfg(feature = "host")]
+type HlsStreamRegistry = Arc<Mutex<HashMap<String, mpsc::Sender<StreamCmd>>>>;
 
 /// Create a DNS resolver using the system default.
 #[cfg(not(target_arch = "wasm32"))]
@@ -991,9 +1008,9 @@ async fn run_event_loop(
     let mut connected_peers: HashMap<String, PeerConnections> = HashMap::new();
     let shared_state = Arc::new(Mutex::new(SharedState {
         pending_responses: HashMap::new(),
-        #[cfg(feature = "host")]
-        hls_streams: HashMap::new(),
     }));
+    #[cfg(feature = "host")]
+    let hls_registry: HlsStreamRegistry = Arc::new(Mutex::new(HashMap::new()));
     let mut relay_connected = false;
 
     // Set by a `Command::Shutdown` and answered after the endpoint closes.
@@ -1079,6 +1096,8 @@ async fn run_event_loop(
                     &shared_state,
                     relay_connected,
                     &internal_tx,
+                    #[cfg(feature = "host")]
+                    &hls_registry,
                 ),
             )
             .await;
@@ -1116,7 +1135,14 @@ async fn run_event_loop(
                     Some(incoming) = endpoint.accept() => {
                         unless_shutdown(
                             &mut shutdown_rx,
-                            accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state, &disconnect_tx),
+                            accept_inbound(
+                                incoming,
+                                &mut connected_peers,
+                                &event_tx,
+                                &shared_state,
+                                &disconnect_tx,
+                                &hls_registry,
+                            ),
                         )
                         .await
                     }
@@ -1137,6 +1163,7 @@ async fn run_event_loop(
                                         &shared_state,
                                         relay_connected,
                                         &internal_tx,
+                                        &hls_registry,
                                     ),
                                 )
                                 .await
@@ -1167,6 +1194,7 @@ async fn run_event_loop(
                                             &event_tx,
                                             &shared_state,
                                             &disconnect_tx,
+                                            &hls_registry,
                                         )
                                         .await;
                                         let _ = reply.send(Ok(()));
@@ -1399,6 +1427,8 @@ async fn register_connection(
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
     disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
+    #[cfg(feature = "host")]
+    hls_registry: &HlsStreamRegistry,
 ) {
     let connection_type = PeerConnectionType::from_connection(&conn);
     tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
@@ -1418,6 +1448,8 @@ async fn register_connection(
     let shared_state_clone = shared_state.clone();
     let conn_clone = conn.clone();
     let disconnect_tx_clone = disconnect_tx.clone();
+    #[cfg(feature = "host")]
+    let hls_registry_clone = hls_registry.clone();
     runtime::spawn(async move {
         handle_connection(
             conn_clone,
@@ -1426,6 +1458,8 @@ async fn register_connection(
             event_tx_clone,
             shared_state_clone,
             disconnect_tx_clone,
+            #[cfg(feature = "host")]
+            hls_registry_clone,
         )
         .await;
     });
@@ -1448,6 +1482,7 @@ async fn accept_inbound(
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
     disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
+    hls_registry: &HlsStreamRegistry,
 ) {
     let mut accepting = match incoming.accept() {
         Ok(accepting) => accepting,
@@ -1488,8 +1523,43 @@ async fn accept_inbound(
         event_tx,
         shared_state,
         disconnect_tx,
+        hls_registry,
     )
     .await;
+}
+
+#[cfg(feature = "host")]
+async fn dispatch_stream_cmd(
+    hls_registry: &HlsStreamRegistry,
+    stream_id: &str,
+    cmd: StreamCmd,
+) {
+    let stream_tx = {
+        let registry = hls_registry.lock().await;
+        registry.get(stream_id).cloned()
+    };
+    match stream_tx {
+        Some(stream_tx) => {
+            if let Err(mpsc::error::SendError(failed_cmd)) = stream_tx.send(cmd).await {
+                let reply = match failed_cmd {
+                    StreamCmd::Header { reply, .. } => reply,
+                    StreamCmd::Chunk { reply, .. } => reply,
+                    StreamCmd::StreamFileRange { reply, .. } => reply,
+                    StreamCmd::Finish { reply } => reply,
+                };
+                let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
+            }
+        }
+        None => {
+            let reply = match cmd {
+                StreamCmd::Header { reply, .. } => reply,
+                StreamCmd::Chunk { reply, .. } => reply,
+                StreamCmd::StreamFileRange { reply, .. } => reply,
+                StreamCmd::Finish { reply } => reply,
+            };
+            let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
+        }
+    }
 }
 
 /// Dispatch a single command from a `Host` handle.
@@ -1500,6 +1570,8 @@ async fn handle_command(
     shared_state: &Arc<Mutex<SharedState>>,
     relay_connected: bool,
     internal_tx: &mpsc::Sender<InternalMessage>,
+    #[cfg(feature = "host")]
+    hls_registry: &HlsStreamRegistry,
 ) {
     match cmd {
         Command::Dial {
@@ -1658,31 +1730,12 @@ async fn handle_command(
             header,
             reply,
         } => {
-            let result = {
-                let mut state = shared_state.lock().await;
-                if let Some(send) = state.hls_streams.get_mut(&stream_id) {
-                    // First write the HlsHeader response
-                    let header_response = MydiaResponse::HlsHeader(header);
-                    match serde_cbor::to_vec(&header_response) {
-                        Ok(header_data) => {
-                            // Write length prefix (4 bytes) then header
-                            let len = header_data.len() as u32;
-                            let len_bytes = len.to_be_bytes();
-                            if let Err(e) = send.write_all(&len_bytes).await {
-                                Err(format!("Failed to write header length: {}", e))
-                            } else if let Err(e) = send.write_all(&header_data).await {
-                                Err(format!("Failed to write header: {}", e))
-                            } else {
-                                Ok(())
-                            }
-                        }
-                        Err(e) => Err(format!("Failed to encode header: {}", e)),
-                    }
-                } else {
-                    Err(format!("HLS stream not found: {}", stream_id))
-                }
-            };
-            let _ = reply.send(result);
+            dispatch_stream_cmd(
+                hls_registry,
+                &stream_id,
+                StreamCmd::Header { header, reply },
+            )
+            .await;
         }
         #[cfg(feature = "host")]
         Command::SendHlsChunk {
@@ -1690,45 +1743,21 @@ async fn handle_command(
             data,
             reply,
         } => {
-            let result = {
-                let mut state = shared_state.lock().await;
-                if let Some(send) = state.hls_streams.get_mut(&stream_id) {
-                    // Write chunk length (4 bytes) then data
-                    let len = data.len() as u32;
-                    let len_bytes = len.to_be_bytes();
-                    if let Err(e) = send.write_all(&len_bytes).await {
-                        Err(format!("Failed to write chunk length: {}", e))
-                    } else if let Err(e) = send.write_all(&data).await {
-                        Err(format!("Failed to write chunk: {}", e))
-                    } else {
-                        Ok(())
-                    }
-                } else {
-                    Err(format!("HLS stream not found: {}", stream_id))
-                }
-            };
-            let _ = reply.send(result);
+            dispatch_stream_cmd(
+                hls_registry,
+                &stream_id,
+                StreamCmd::Chunk { data, reply },
+            )
+            .await;
         }
         #[cfg(feature = "host")]
         Command::FinishHlsStream { stream_id, reply } => {
-            let result = {
-                let mut state = shared_state.lock().await;
-                if let Some(mut send) = state.hls_streams.remove(&stream_id) {
-                    // Write zero-length terminator
-                    let zero_bytes = [0u8; 4];
-                    if let Err(e) = send.write_all(&zero_bytes).await {
-                        Err(format!("Failed to write terminator: {}", e))
-                    } else if let Err(e) = send.finish() {
-                        Err(format!("Failed to finish stream: {}", e))
-                    } else {
-                        tracing::debug!("HLS stream {} finished", stream_id);
-                        Ok(())
-                    }
-                } else {
-                    Err(format!("HLS stream not found: {}", stream_id))
-                }
-            };
-            let _ = reply.send(result);
+            dispatch_stream_cmd(
+                hls_registry,
+                &stream_id,
+                StreamCmd::Finish { reply },
+            )
+            .await;
         }
         #[cfg(feature = "host")]
         Command::StreamFileRange {
@@ -1738,23 +1767,17 @@ async fn handle_command(
             length,
             reply,
         } => {
-            // Remove the SendStream from hls_streams so we own it exclusively
-            let send_stream = {
-                let mut state = shared_state.lock().await;
-                state.hls_streams.remove(&stream_id)
-            };
-            match send_stream {
-                Some(send) => {
-                    // Spawn a task to stream the file data
-                    runtime::spawn(async move {
-                        let result = stream_file_to_quic(send, &file_path, offset, length).await;
-                        let _ = reply.send(result);
-                    });
-                }
-                None => {
-                    let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
-                }
-            }
+            dispatch_stream_cmd(
+                hls_registry,
+                &stream_id,
+                StreamCmd::StreamFileRange {
+                    file_path,
+                    offset,
+                    length,
+                    reply,
+                },
+            )
+            .await;
         }
         Command::SendHlsRequest {
             node_id,
@@ -1997,6 +2020,86 @@ const RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30)
 #[cfg(test)]
 const RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(300);
 
+#[cfg(feature = "host")]
+async fn run_hls_stream_worker(
+    mut send: SendStream,
+    stream_id: String,
+    mut stream_rx: mpsc::Receiver<StreamCmd>,
+    hls_registry: HlsStreamRegistry,
+) {
+    while let Some(cmd) = stream_rx.recv().await {
+        match cmd {
+            StreamCmd::Header { header, reply } => {
+                let header_response = MydiaResponse::HlsHeader(header);
+                let write_res = match serde_cbor::to_vec(&header_response) {
+                    Ok(header_data) => {
+                        let len = header_data.len() as u32;
+                        let len_bytes = len.to_be_bytes();
+                        if let Err(e) = send.write_all(&len_bytes).await {
+                            Err(format!("Failed to write header length: {}", e))
+                        } else if let Err(e) = send.write_all(&header_data).await {
+                            Err(format!("Failed to write header: {}", e))
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    Err(e) => Err(format!("Failed to encode header: {}", e)),
+                };
+                let is_err = write_res.is_err();
+                let _ = reply.send(write_res);
+                if is_err {
+                    hls_registry.lock().await.remove(&stream_id);
+                    return;
+                }
+            }
+            StreamCmd::Chunk { data, reply } => {
+                let len = data.len() as u32;
+                let len_bytes = len.to_be_bytes();
+                let write_res = if let Err(e) = send.write_all(&len_bytes).await {
+                    Err(format!("Failed to write chunk length: {}", e))
+                } else if let Err(e) = send.write_all(&data).await {
+                    Err(format!("Failed to write chunk: {}", e))
+                } else {
+                    Ok(())
+                };
+                let is_err = write_res.is_err();
+                let _ = reply.send(write_res);
+                if is_err {
+                    hls_registry.lock().await.remove(&stream_id);
+                    return;
+                }
+            }
+            StreamCmd::StreamFileRange {
+                file_path,
+                offset,
+                length,
+                reply,
+            } => {
+                hls_registry.lock().await.remove(&stream_id);
+                let result = stream_file_to_quic(send, &file_path, offset, length).await;
+                let _ = reply.send(result);
+                return;
+            }
+            StreamCmd::Finish { reply } => {
+                hls_registry.lock().await.remove(&stream_id);
+                let zero_bytes = [0u8; 4];
+                let write_res = if let Err(e) = send.write_all(&zero_bytes).await {
+                    Err(format!("Failed to write terminator: {}", e))
+                } else if let Err(e) = send.finish() {
+                    Err(format!("Failed to finish stream: {}", e))
+                } else {
+                    tracing::debug!("HLS stream {} finished", stream_id);
+                    Ok(())
+                };
+                let _ = reply.send(write_res);
+                return;
+            }
+        }
+    }
+
+    hls_registry.lock().await.remove(&stream_id);
+}
+
 /// Handle incoming streams from a peer connection
 async fn handle_connection(
     conn: Connection,
@@ -2005,6 +2108,8 @@ async fn handle_connection(
     event_tx: mpsc::Sender<Event>,
     shared_state: Arc<Mutex<SharedState>>,
     disconnect_tx: mpsc::Sender<(String, ConnectionId)>,
+    #[cfg(feature = "host")]
+    hls_registry: HlsStreamRegistry,
 ) {
     loop {
         match conn.accept_bi().await {
@@ -2068,21 +2173,24 @@ async fn handle_connection(
                     continue;
                 }
 
-                // For HLS streaming requests, store the send stream and emit
-                // event. Host role only: answering an HLS request means
-                // holding the send half open until the four HLS commands
-                // drain it, and those are behind this same feature. A client
-                // build must therefore not accept the request at all, or it
-                // would park a `SendStream` nothing can ever remove.
+                // For HLS streaming requests, create a dedicated per-stream worker task
+                // and register it in the HLS registry.
                 #[cfg(feature = "host")]
                 if let MydiaRequest::HlsStream(hls_request) = request {
                     let stream_id = request_id.clone();
 
-                    // Store the send stream for later use
+                    let (stream_tx, stream_rx) = mpsc::channel::<StreamCmd>(32);
                     {
-                        let mut state = shared_state.lock().await;
-                        state.hls_streams.insert(stream_id.clone(), send);
+                        let mut registry = hls_registry.lock().await;
+                        registry.insert(stream_id.clone(), stream_tx);
                     }
+
+                    runtime::spawn(run_hls_stream_worker(
+                        send,
+                        stream_id.clone(),
+                        stream_rx,
+                        hls_registry.clone(),
+                    ));
 
                     // Emit the HLS stream event
                     let _ = event_tx
