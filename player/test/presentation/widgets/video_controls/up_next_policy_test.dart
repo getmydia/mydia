@@ -282,6 +282,114 @@ void main() {
     });
   });
 
+  group('mayCrossIntoNextSeason', () {
+    test('is true from the last episode of a numbered season', () {
+      expect(
+        mayCrossIntoNextSeason(
+          seasonNumber: 1,
+          currentIndex: 11,
+          episodeCount: 12,
+        ),
+        isTrue,
+      );
+    });
+
+    test('is false while the season has episodes left, filed or not', () {
+      // `resolveInSeasonNext` returns null when the next episode has no file.
+      // Reading that as "season over" used to skip the rest of the season.
+      expect(
+        mayCrossIntoNextSeason(
+          seasonNumber: 1,
+          currentIndex: 10,
+          episodeCount: 12,
+        ),
+        isFalse,
+      );
+    });
+
+    test('is false from specials, whose "next season" is the show start', () {
+      expect(
+        mayCrossIntoNextSeason(
+          seasonNumber: 0,
+          currentIndex: 3,
+          episodeCount: 4,
+        ),
+        isFalse,
+      );
+    });
+
+    test('is false when the current episode is not in the season list', () {
+      expect(
+        mayCrossIntoNextSeason(
+          seasonNumber: 1,
+          currentIndex: -1,
+          episodeCount: 12,
+        ),
+        isFalse,
+      );
+      expect(
+        mayCrossIntoNextSeason(
+          seasonNumber: 1,
+          currentIndex: -1,
+          episodeCount: 0,
+        ),
+        isFalse,
+      );
+    });
+
+    test('is false without a season number', () {
+      expect(
+        mayCrossIntoNextSeason(
+          seasonNumber: null,
+          currentIndex: 11,
+          episodeCount: 12,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('up-next from a special', () {
+    // Specials with gaps on disk: the viewer is on the only one with a file.
+    const specials = [
+      UpNextCandidate(
+        id: 'sp-1',
+        seasonNumber: 0,
+        episodeNumber: 1,
+        title: 'The Lantern Keeper',
+        fileIds: [],
+      ),
+      UpNextCandidate(
+        id: 'sp-2',
+        seasonNumber: 0,
+        episodeNumber: 2,
+        title: 'A Quiet Harbor',
+        fileIds: ['file-sp-2'],
+      ),
+      UpNextCandidate(
+        id: 'sp-3',
+        seasonNumber: 0,
+        episodeNumber: 3,
+        title: 'Moths Over Veldra',
+        fileIds: [],
+      ),
+    ];
+
+    test('offers nothing rather than the season 1 premiere', () {
+      // The reported bug: the next special had no file, so up-next fetched
+      // season 0 + 1 and autoplayed S1E1, restarting the show.
+      expect(resolveInSeasonNext(specials, 1), isNull);
+      expect(
+        mayCrossIntoNextSeason(
+          seasonNumber: 0,
+          currentIndex: 1,
+          episodeCount: specials.length,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('season crossing end to end', () {
     const finale = UpNextCandidate(
       id: 'ep-112',
@@ -301,6 +409,14 @@ void main() {
 
     test('a finale has no in-season next but does have a premiere', () {
       expect(resolveInSeasonNext([finale], 0), isNull);
+      expect(
+        mayCrossIntoNextSeason(
+          seasonNumber: finale.seasonNumber,
+          currentIndex: 0,
+          episodeCount: 1,
+        ),
+        isTrue,
+      );
 
       final crossing = resolveSeasonPremiere([premiere]);
       expect(crossing, isNotNull);

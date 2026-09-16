@@ -3008,6 +3008,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
 
     if (target == null) {
+      if (!mayCrossIntoNextSeason(
+        seasonNumber: widget.seasonNumber,
+        currentIndex: _currentEpisodeIndex!,
+        episodeCount: _seasonEpisodes!.length,
+      )) {
+        return;
+      }
       // End of the season. Offer the next season's premiere, if there is one.
       if (!_nextSeasonResolved) {
         unawaited(_fetchNextSeason());
