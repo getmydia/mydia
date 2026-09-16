@@ -1,0 +1,218 @@
+name: Player / macOS
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit SHA to build
+        type: string
+        required: true
+      version:
+        description: Version string (e.g. 0.14.0 or 0.14.0-dev.1)
+        type: string
+        required: true
+      version_code:
+        description: Monotonically increasing integer build number
+        type: string
+        required: true
+      generate_appcast:
+        description: Whether to sign and generate Sparkle appcast.xml
+        type: boolean
+        required: false
+        default: false
+      dry_run:
+        description: Build without publishing or final notarization submission
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      MACOS_CERTIFICATE:
+        required: false
+      MACOS_CERTIFICATE_PASSWORD:
+        required: false
+      MACOS_SIGNING_IDENTITY:
+        required: false
+      APPLE_ID:
+        required: false
+      APPLE_APP_PASSWORD:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
+      SPARKLE_EDDSA_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  PLAYER_PATH: 'player'
+
+jobs:
+  build:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+          cache: true
+
+      - name: Update version
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION_CODE="${{ inputs.version_code }}"
+          sed -i '' "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run code generation
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub run build_runner build
+
+      - name: Build macOS
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter build macos --release
+
+      - name: Install signing certificate
+        if: env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          echo -n "${{ secrets.MACOS_CERTIFICATE }}" | base64 --decode -o $CERT_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-key-chain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security import $CERT_PATH -P "${{ secrets.MACOS_CERTIFICATE_PASSWORD }}" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      - name: Sign app bundle
+        if: env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          APP="${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.app"
+
+          codesign --deep --force --options runtime \
+            --entitlements "${{ env.PLAYER_PATH }}/macos/Runner/Release.entitlements" \
+            --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" \
+            "$APP"
+
+          ENTITLEMENTS=$(codesign -d --entitlements :- "$APP" 2>/dev/null || true)
+          echo "$ENTITLEMENTS"
+          if ! grep -q "com.apple.security.network.client" <<<"$ENTITLEMENTS"; then
+            echo "::error::Signed app is missing its entitlements — codesign dropped them."
+            exit 1
+          fi
+
+      - name: Notarize app bundle
+        if: ${{ !inputs.dry_run && env.MACOS_CERTIFICATE != '' }}
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: |
+          ditto -c -k --keepParent "Mydia Player.app" "Mydia Player.zip"
+          xcrun notarytool submit "Mydia Player.zip" \
+            --apple-id "${{ secrets.APPLE_ID }}" \
+            --password "${{ secrets.APPLE_APP_PASSWORD }}" \
+            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+            --wait
+          rm "Mydia Player.zip"
+
+      - name: Staple notarization ticket
+        if: ${{ !inputs.dry_run && env.MACOS_CERTIFICATE != '' }}
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: |
+          xcrun stapler staple "${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.app"
+
+      - name: Create DMG
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: |
+          mkdir -p dmg_contents
+          cp -R "Mydia Player.app" dmg_contents/
+          ln -s /Applications dmg_contents/Applications
+          hdiutil create -volname "Mydia Player" -srcfolder dmg_contents -ov -format UDZO "Mydia Player.dmg"
+          rm -rf dmg_contents
+
+      - name: Download Sparkle tools
+        if: ${{ inputs.generate_appcast }}
+        run: |
+          curl -L https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz -o sparkle.tar.xz
+          mkdir -p sparkle-tools
+          tar xf sparkle.tar.xz -C sparkle-tools
+
+      - name: Generate appcast
+        if: ${{ inputs.generate_appcast && env.SPARKLE_EDDSA_KEY != '' }}
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION_CODE="${{ inputs.version_code }}"
+          DMG_FILE="Mydia Player.dmg"
+
+          echo "${{ secrets.SPARKLE_EDDSA_KEY }}" > eddsa_key.priv
+          SIGNATURE=$(../../../../sparkle-tools/bin/sign_update -s "$(cat eddsa_key.priv)" "$DMG_FILE")
+          rm eddsa_key.priv
+
+          FILE_SIZE=$(stat -f%z "$DMG_FILE")
+          PUB_DATE=$(date -R)
+          DMG_URL="https://github.com/getmydia/mydia/releases/download/v${VERSION}/mydia-player-macos-v${VERSION}.dmg"
+
+          cat > appcast.xml << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Mydia Player Changelog</title>
+              <item>
+                <title>Version ${VERSION}</title>
+                <pubDate>${PUB_DATE}</pubDate>
+                <sparkle:version>${VERSION_CODE}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <enclosure
+                  url="${DMG_URL}"
+                  sparkle:edSignature="${SIGNATURE}"
+                  length="${FILE_SIZE}"
+                  type="application/octet-stream" />
+              </item>
+            </channel>
+          </rss>
+          EOF
+
+      - name: "Upload artifact: DMG"
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-macos-dmg
+          path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.dmg
+          retention-days: 30
+
+      - name: "Upload artifact: Appcast"
+        if: ${{ inputs.generate_appcast && env.SPARKLE_EDDSA_KEY != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-macos-appcast
+          path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/appcast.xml
+          retention-days: 30
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
