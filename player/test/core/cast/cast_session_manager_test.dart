@@ -1059,27 +1059,27 @@ void main() {
     });
 
     test('preserves showId when reconnecting a stored Mydia episode', () async {
-      final manager = build();
-      addTearDown(manager.dispose);
-      const mydiaDevice = CastDevice(
-        id: 'tv-node',
-        name: 'Living Room TV',
-        protocol: CastProtocolKind.mydia,
-      );
-      await manager.startCast(
-        device: mydiaDevice,
-        request: const CastLaunchRequest(
+      await store.save(
+        PersistedCastSession(
+          device: const CastDevice(
+            id: 'tv-node',
+            name: 'Living Room TV',
+            protocol: CastProtocolKind.mydia,
+          ),
           fileId: 'file-ep-1',
           mediaId: 'ep-1',
           mediaType: 'episode',
           showId: 'show-42',
           title: 'Silo - S01E01',
+          position: const Duration(seconds: 120),
+          duration: const Duration(minutes: 50),
+          routeKind: CastRouteKind.directServer,
+          savedAt: DateTime.utc(2026, 7, 28, 11),
         ),
       );
-      backend.loadedRequests.clear();
 
-      backend.emitFailure(CastFailureKind.connectionLost);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final manager = build();
+      addTearDown(manager.dispose);
 
       await manager.reconnectStoredSession();
 
