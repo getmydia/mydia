@@ -1,11 +1,30 @@
+import 'dart:io' show FileSystemException;
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
 
 import 'playback_memory.dart';
 
+/// Returns true if [error] indicates an on-disk box corruption rather than a
+/// transient file system error or configuration issue.
+bool isBoxCorruptionError(Object error) {
+  if (error is FileSystemException) return false;
+  final msg = error.toString().toLowerCase();
+  if (msg.contains('already open') || msg.contains('not initialized')) {
+    return false;
+  }
+  return error is HiveError ||
+      error is FormatException ||
+      error is RangeError ||
+      msg.contains('typeid') ||
+      msg.contains('checksum') ||
+      msg.contains('corrupt') ||
+      msg.contains('cannot read');
+}
+
 /// Opens [boxName], deleting the corrupt file and recreating a fresh box if
-/// [Hive.openBox] fails (e.g. from an unknown type ID or truncated file).
+/// [Hive.openBox] fails due to corruption (e.g. from an unknown type ID or truncated file).
 Future<Box<Map>> openPlaybackMemoryBox({
   String boxName = HivePlaybackMemory.boxName,
   String? path,
@@ -13,8 +32,11 @@ Future<Box<Map>> openPlaybackMemoryBox({
   try {
     return await Hive.openBox<Map>(boxName, path: path);
   } catch (e) {
+    if (!isBoxCorruptionError(e)) {
+      rethrow;
+    }
     debugPrint(
-      '[PlaybackMemory] Failed to open box "$boxName" ($e). '
+      '[PlaybackMemory] Failed to open box "$boxName" due to corruption ($e). '
       'Deleting corrupt box and recreating...',
     );
     try {

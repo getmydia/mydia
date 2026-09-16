@@ -192,5 +192,69 @@ void main() {
       final memory = await container.read(playbackMemoryProvider.future);
       expect(memory, isA<HivePlaybackMemory>());
     });
+
+    test('isBoxCorruptionError identifies corruption vs non-corruption errors',
+        () {
+      expect(
+        isBoxCorruptionError(const FileSystemException('Permission denied')),
+        isFalse,
+      );
+      expect(
+        isBoxCorruptionError(HiveError('The box "foo" is already open')),
+        isFalse,
+      );
+      expect(
+        isBoxCorruptionError(HiveError('Hive not initialized')),
+        isFalse,
+      );
+      expect(
+        isBoxCorruptionError(HiveError('unknown typeId: 58')),
+        isTrue,
+      );
+      expect(
+        isBoxCorruptionError(HiveError('Wrong checksum in file')),
+        isTrue,
+      );
+      expect(
+        isBoxCorruptionError(HiveError('Box file is corrupted')),
+        isTrue,
+      );
+      expect(
+        isBoxCorruptionError(const FormatException('Bad frame format')),
+        isTrue,
+      );
+      expect(
+        isBoxCorruptionError(RangeError('Index out of range')),
+        isTrue,
+      );
+    });
+
+    test('rethrows non-corruption open failure without deleting box file',
+        () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('hive_non_corrupt_test_');
+      addTearDown(() async {
+        try {
+          tempDir.deleteSync(recursive: true);
+        } catch (_) {}
+      });
+
+      const boxName = 'non_corrupt_box';
+      final box = await openPlaybackMemoryBox(
+        boxName: boxName,
+        path: tempDir.path,
+      );
+      addTearDown(box.close);
+
+      // Attempting to open the same box with a different type param fails with
+      // "already open and of type ...", which is not a corruption error.
+      expect(
+        () => Hive.openBox<String>(boxName, path: tempDir.path),
+        throwsA(isA<HiveError>()),
+      );
+
+      final boxFile = File('${tempDir.path}/$boxName.hive');
+      expect(boxFile.existsSync(), isTrue);
+    });
   });
 }
