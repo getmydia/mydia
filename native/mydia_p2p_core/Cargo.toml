@@ -103,6 +103,10 @@ android_logger = "0.15"
 # dependency on tokio's test harness explicit rather than borrowed.
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+# For a key with no endpoint behind it. `Host::new` starts a live, published
+# node, so a second host is not a stand-in for an unreachable peer: CI
+# resolved one through pkarr and connected to it over the relay.
+iroh = { version = "1.0.0", default-features = false, features = ["tls-ring"] }
 
 [profile.release]
 lto = "thin"

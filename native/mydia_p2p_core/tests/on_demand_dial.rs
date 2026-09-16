@@ -31,6 +31,18 @@ async fn wait_for_ready(host: &Host) -> String {
     panic!("host never became ready");
 }
 
+/// A valid Ed25519 identity with no endpoint behind it, ever.
+///
+/// Not a second `Host`: `Host::new` starts a live node that binds, joins a
+/// relay and publishes a pkarr record, so it is reachable by node ID within
+/// seconds. CI proved that the hard way, resolving one through discovery and
+/// connecting to it over the relay while this test was asserting it could not
+/// be reached. Fixed bytes keep it deterministic; nothing ever answers for
+/// this key.
+fn unreachable_node_id() -> String {
+    iroh::SecretKey::from_bytes(&[7u8; 32]).public().to_string()
+}
+
 /// The EndpointAddr JSON a roster entry produces: a node ID and nothing else.
 fn node_addr_json_without_addrs(node_id: &str) -> String {
     format!(r#"{{"id":"{node_id}","addrs":[]}}"#)
@@ -95,13 +107,12 @@ async fn an_unreachable_dial_does_not_block_other_commands_body() {
     let (dialer, _dialer_id) = Host::new(test_config());
     let _ = wait_for_ready(&dialer).await;
 
-    // A valid identity nothing is listening on: a second host, constructed
-    // for its key and never used.
-    let (_ghost, ghost_id) = Host::new(test_config());
-
     // TEST-NET-1 (RFC 5737), reserved for documentation. Packets to it are
     // dropped rather than refused, so the handshake runs to its timeout.
-    let blackhole = format!(r#"{{"id":"{ghost_id}","addrs":[{{"Ip":"192.0.2.1:9"}}]}}"#);
+    let blackhole = format!(
+        r#"{{"id":"{}","addrs":[{{"Ip":"192.0.2.1:9"}}]}}"#,
+        unreachable_node_id()
+    );
 
     let dialing = dialer.dial(blackhole);
     let answering = async {
@@ -241,13 +252,11 @@ async fn a_send_to_an_unreachable_peer_reports_the_dial_failure_body() {
     let (sender, _sender_id) = Host::new(test_config());
     let _ = wait_for_ready(&sender).await;
 
-    // A valid identity nothing is listening on, and no hint for it, so the
-    // dial fails however discovery answers. A made-up node ID would not do:
-    // it fails at key parsing with \`Invalid node ID:\` and never dials.
-    let (_ghost, ghost_id) = Host::new(test_config());
-
+    // No hint for it either, so discovery has nothing to answer with and the
+    // dial fails. A made-up node ID would not do: it fails at key parsing
+    // with `invalid node ID:` and never dials at all.
     let error = sender
-        .send_request(ghost_id, MydiaRequest::Custom(b"probe".to_vec()))
+        .send_request(unreachable_node_id(), MydiaRequest::Custom(b"probe".to_vec()))
         .await
         .expect_err("an unreachable peer cannot answer");
 
