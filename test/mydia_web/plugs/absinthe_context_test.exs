@@ -2,6 +2,7 @@ defmodule MydiaWeb.Plugs.AbsintheContextTest do
   use MydiaWeb.ConnCase, async: true
 
   alias Mydia.Auth.Guardian
+  alias Mydia.RemoteAccess
   alias Mydia.Streaming.DeviceProfile
   alias MydiaWeb.Plugs.AbsintheContext
 
@@ -81,6 +82,47 @@ defmodule MydiaWeb.Plugs.AbsintheContextTest do
 
       assert ctx[:current_user].id == user.id
       assert ctx[:media_token_auth] == true
+    end
+  end
+
+  describe "device liveness over HTTP" do
+    # A player on direct HTTP never reaches the p2p handlers, which were the
+    # only place liveness was recorded, so it read as offline while playing.
+    defp paired_device(user) do
+      {:ok, device} =
+        RemoteAccess.create_device(%{
+          device_name: "Hall Screen",
+          platform: "android",
+          token: "tok_" <> Base.encode16(:crypto.strong_rand_bytes(16)),
+          user_id: user.id
+        })
+
+      device
+    end
+
+    test "records liveness for a paired device's access token", %{conn: conn} do
+      user = create_test_user()
+      device = paired_device(user)
+      assert is_nil(device.last_seen_at)
+
+      conn
+      |> Guardian.Plug.put_current_resource(user)
+      |> Guardian.Plug.put_current_claims(%{"sub" => user.id, "device_id" => device.id})
+      |> context()
+
+      assert Mydia.Repo.reload!(device).last_seen_at != nil
+    end
+
+    test "leaves devices alone for a plain login", %{conn: conn} do
+      user = create_test_user()
+      device = paired_device(user)
+
+      conn
+      |> Guardian.Plug.put_current_resource(user)
+      |> Guardian.Plug.put_current_claims(%{"sub" => user.id})
+      |> context()
+
+      assert is_nil(Mydia.Repo.reload!(device).last_seen_at)
     end
   end
 end

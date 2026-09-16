@@ -278,13 +278,13 @@ defmodule Mydia.RemoteAccess do
   @doc """
   Records liveness for the device named in a verified access token's claims.
 
-  The remote access admin page derives "online" entirely from `last_seen_at`,
-  so without this a player streaming over p2p right now still reads as never
-  connected. Claims without a `"device_id"` (a plain user login rather than a
-  paired device) are ignored.
+  `online?/2` derives "online" entirely from `last_seen_at`, so without this a
+  player streaming right now still reads as never connected. Claims without a
+  `"device_id"` (a plain user login rather than a paired device) are ignored.
 
   The callers are the p2p request handlers, every HLS segment request among
-  them, so this never makes them wait on the database. `LivenessThrottle` lets
+  them, and `MydiaWeb.Plugs.AbsintheContext` for GraphQL over HTTP, so this
+  never makes them wait on the database. `LivenessThrottle` lets
   one request per device per throttle window through, and that one writes in a
   supervised task. Under the SQL sandbox the write runs inline instead, as in
   `Mydia.Plugins.Logs.create_async/1`, because a task would outlive the test's

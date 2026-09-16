@@ -1063,9 +1063,10 @@ defmodule Mydia.P2p.Server do
     # Use Guardian to verify the token and get the user
     case Guardian.verify_token_with_claims(auth_token) do
       {:ok, user, claims} ->
-        # Paired players reach the backend over p2p and nowhere else, so this is
-        # the only place device liveness can be observed. The remote access admin
-        # page reads it back as "Online now".
+        # Records liveness for a paired player talking over p2p. GraphQL over
+        # HTTP records it in MydiaWeb.Plugs.AbsintheContext. The Devices page
+        # and the GraphQL online field read it back through
+        # RemoteAccess.online?/2.
         RemoteAccess.touch_device_from_claims(claims)
 
         context =

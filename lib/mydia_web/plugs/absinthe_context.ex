@@ -30,9 +30,17 @@ defmodule MydiaWeb.Plugs.AbsintheContext do
         base
 
       user ->
+        claims = Guardian.Plug.current_claims(conn)
+
+        # A player on direct HTTP never reaches the p2p handlers, so without
+        # this it reads as offline to the Devices page and to other players'
+        # ambient scans while it plays. Throttled per device and written off
+        # the request path; a plain login carries no device_id and is ignored.
+        RemoteAccess.touch_device_from_claims(claims)
+
         base
         |> Map.put(:current_user, user)
-        |> put_device_id(Guardian.Plug.current_claims(conn))
+        |> put_device_id(claims)
     end
   end
 
