@@ -322,8 +322,12 @@ jobs:
           echo "::error::devenv environment failed to materialize after 3 attempts"
           exit 1
 
+      # `test-introspection` is off in every real build and exposes only a
+      # counter. Without it here, `two_sends_to_one_unconnected_peer_share_a_dial`
+      # is compiled out and the guarantee that concurrent requests to one peer
+      # share a single dial goes unchecked.
       - name: Core tests
-        run: devenv shell -- cargo test --manifest-path native/mydia_p2p_core/Cargo.toml
+        run: devenv shell -- cargo test --manifest-path native/mydia_p2p_core/Cargo.toml --features test-introspection
 
       # The browser build. `--no-default-features` drops the `host` feature,
       # which is what makes the server role (inbound accept, HLS responses,
