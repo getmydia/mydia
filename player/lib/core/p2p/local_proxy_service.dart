@@ -52,6 +52,10 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// write to are closed.
   final Set<RangeSource> _activeSources = {};
 
+  /// Counts those cancellations, so a request can tell the server it started
+  /// on was closed while it was still opening its source.
+  var _sourceCancellations = 0;
+
   int get port => _server?.port ?? 0;
 
   @override
@@ -492,6 +496,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     final path = route.path;
     final response = request.response;
     final sw = Stopwatch()..start();
+    final cancellations = _sourceCancellations;
 
     RangeSource? source;
     var bytesServed = 0;
@@ -535,7 +540,21 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       firstHeaderMs = sw.elapsedMilliseconds;
       _applyUpstreamHeaders(response, upstream.header);
 
-      final active = source = await _openSource(upstream, sessionId);
+      // Opening a spool waits on the disk, so the upstream is tracked on its
+      // own until then: a shutdown in that window still has to cancel it.
+      final opening = PassThroughSource(upstream);
+      _activeSources.add(opening);
+      final RangeSource active;
+      try {
+        active = source = await _openSource(upstream, sessionId);
+      } finally {
+        _activeSources.remove(opening);
+        if (source == null) await opening.cancel();
+      }
+
+      // The server was closed while the source was opening, so nothing will
+      // read it. The `finally` below cancels it.
+      if (cancellations != _sourceCancellations) return;
       _activeSources.add(active);
 
       // `done` is the only sign dart:io gives of a client that hung up:
@@ -622,6 +641,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// Cancels every byte-range transfer in flight. Their sockets are about to
   /// close, and the transfers must not outlive them.
   Future<void> _cancelActiveSources() async {
+    _sourceCancellations++;
     final sources = _activeSources.toList();
     _activeSources.clear();
     await Future.wait(sources.map((source) => source.cancel()));

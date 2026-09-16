@@ -290,6 +290,9 @@ void main() {
       );
       await opening.start(owner: owner, targetPeer: 'peer-1');
       addTearDown(opening.shutdown);
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+      });
       final upstream = endless(pace: const Duration(milliseconds: 2));
       final client = await RawRangeClient.open(
         opening.port,
@@ -298,9 +301,13 @@ void main() {
 
       await probing.future.timeout(const Duration(seconds: 5));
       await opening.shutdown();
-      release.complete();
 
+      // The shutdown itself cancels the upstream, while the probe is still
+      // pending.
       await upstream.cancelled.timeout(const Duration(seconds: 5));
+
+      // The spool that finishes opening afterwards is discarded.
+      release.complete();
       await waitUntil(() => spoolFiles().isEmpty);
       client.hangUp();
     });
