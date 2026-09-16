@@ -741,6 +741,15 @@ impl P2pHost {
         }
     }
 
+    /// Seed a peer's address so a later dial by bare node ID resolves without
+    /// a discovery lookup.
+    pub async fn add_address_hint(&self, endpoint_addr_json: String) -> anyhow::Result<()> {
+        self.inner
+            .add_address_hint(endpoint_addr_json)
+            .await
+            .map_err(|e| anyhow::anyhow!("add_address_hint failed: {}", e))
+    }
+
     /// Start streaming events to Flutter.
     ///
     /// Reads from `generic_event_rx`, not `inner.event_rx` directly: a

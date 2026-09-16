@@ -4456,7 +4456,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _progressService?.dispose();
 
     // Dispose player (VideoController is automatically disposed when player is disposed)
-    _player?.dispose();
+    //
+    // Cleared first, the same way `_disposePlayer` does it. An
+    // `_initializePlayer` still in flight when the screen unmounts runs its
+    // own `_disposePlayer` afterwards, and with the field left set that
+    // second call reached the same already-disposed `Player` and tripped
+    // media_kit's own `Assertion failed: "[Player] has been disposed"`.
+    // Clearing it makes the late call a no-op instead.
+    final player = _player;
+    _player = null;
+    _videoController = null;
+    player?.dispose();
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();
     _chromeFocusNode.dispose();

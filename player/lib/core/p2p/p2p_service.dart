@@ -594,6 +594,18 @@ class P2pService {
     await _host!.dial(endpointAddrJson: endpointAddrJson);
   }
 
+  /// Seed a peer's address so a later send to its bare node ID resolves
+  /// without a discovery lookup.
+  ///
+  /// A no-op host (never initialized, or torn down since) drops the hint
+  /// rather than throwing: a hint is advisory, and a caller that has to guard
+  /// an advisory call gets nothing for it.
+  Future<void> addAddressHint(String endpointAddrJson) async {
+    final host = _host;
+    if (host == null) return;
+    await host.addAddressHint(endpointAddrJson: endpointAddrJson);
+  }
+
   /// Extract the node ID from an EndpointAddr JSON string.
   /// Returns null if the JSON is invalid or doesn't contain an id field.
   String? _extractNodeIdFromEndpointAddr(String endpointAddrJson) {

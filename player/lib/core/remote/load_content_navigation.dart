@@ -1,9 +1,38 @@
 import 'package:flutter/foundation.dart' show debugPrint, debugPrintStack;
 import 'package:flutter/widgets.dart' show immutable;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+// `ProviderListenable` is not part of the main entrypoint's exports, the same
+// reason `test_utils` reaches here for `Override`.
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import '../../domain/models/media_file.dart';
 import '../player/best_file.dart';
 import 'remote_control_intent.dart';
+
+/// Awaits an autoDispose provider's first value while holding it open.
+///
+/// `ref.read(provider.future)` on its own starts the load with no listener
+/// attached, so Riverpod disposes the provider before it can emit and the
+/// await throws "was disposed during loading state, yet no value could be
+/// emitted". Both remote-control resolutions hit that: pulling a session
+/// back to this device, and an inbound `LoadContent` from another player,
+/// each resolve a detail controller this way, and each failed at the last
+/// step with nothing on screen to explain it.
+///
+/// The subscription is what keeps it alive; closing it in `finally` returns
+/// the provider to ordinary autoDispose behavior however the read ends.
+Future<T> readDetailKeepingAlive<T>(
+  WidgetRef ref, {
+  required ProviderListenable<AsyncValue<T>> provider,
+  required ProviderListenable<Future<T>> future,
+}) async {
+  final subscription = ref.listenManual(provider, (_, __) {});
+  try {
+    return await ref.read(future);
+  } finally {
+    subscription.close();
+  }
+}
 
 /// Everything `resolveLoadContentRoute` needs beyond the file list itself.
 ///

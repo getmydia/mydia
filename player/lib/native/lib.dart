@@ -13,6 +13,10 @@ part 'lib.freezed.dart';
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>>
 abstract class P2PHost implements RustOpaqueInterface {
+  /// Seed a peer's address so a later dial by bare node ID resolves without
+  /// a discovery lookup.
+  Future<void> addAddressHint({required String endpointAddrJson});
+
   /// Dial a peer using their EndpointAddr JSON.
   Future<void> dial({required String endpointAddrJson});
 
