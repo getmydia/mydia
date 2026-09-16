@@ -160,6 +160,26 @@ UpNextTarget? resolveInSeasonNext(
   return _toTarget(episodes[nextIndex], crossesSeason: false);
 }
 
+/// Whether up-next may offer the next season's premiere, given that
+/// [resolveInSeasonNext] found nothing for the episode at [currentIndex].
+///
+/// Only from the season's real last episode. [resolveInSeasonNext] also
+/// returns null when the next episode has no file, or when the current one is
+/// missing from the list, and treating either as "season over" skipped the
+/// rest of the season.
+///
+/// Never from season 0. Specials are not a season in watch order, and
+/// `0 + 1` sent a viewer finishing a special back to S1E1.
+bool mayCrossIntoNextSeason({
+  required int? seasonNumber,
+  required int currentIndex,
+  required int episodeCount,
+}) =>
+    seasonNumber != null &&
+    seasonNumber >= 1 &&
+    currentIndex >= 0 &&
+    currentIndex == episodeCount - 1;
+
 /// The premiere of [episodes], or null when the season is empty, holds only
 /// specials, or its premiere has no file.
 ///
