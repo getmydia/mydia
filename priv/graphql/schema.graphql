@@ -1118,6 +1118,9 @@ type RemoteDevice {
   "Last time device was active"
   lastSeenAt: DateTime
 
+  "Whether the device was active within the last 15 minutes"
+  online: Boolean!
+
   "Whether device has been revoked"
   isRevoked: Boolean!
 
