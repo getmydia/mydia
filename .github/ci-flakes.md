@@ -678,7 +678,19 @@ Three confirmations now, so treat this signature as flake-first. It and the
 evidence of a real break until you have read both signatures.
 
 **`MydiaWeb.Features.AddConfigFlowTest`**, "submitting the form with a chosen
-library adds the title and closes the dialog", fails alone (1 of 34) with
+library adds the title and closes the dialog". **Fixed 2026-09-16 (PR #840).**
+The entry below guessed at a slow runner or an erroring stub, and said Wallaby
+polls a `refute_has`. It does not. `refute_has` runs the query through the same
+retry as `assert_has`, which stops as soon as the element *is* found, so a
+dialog still open at the first check raises immediately. The assertion ran
+straight after the submit click, and lost whenever the LiveView patch was
+slower than one WebDriver round trip. It failed twice in a row on #840.
+Delaying `submit_add_config` by 500ms reproduced it every time, and
+`assert_has(Query.css(..., count: 0))`, which does retry until the element is
+gone, passed under that same delay. `hover_select_test.exs` documents the same
+trap. Never follow an action with `refute_has`.
+
+It failed alone (1 of 34) with
 `(Wallaby.ExpectationNotMetError) Expected not to find 1 visible element that
 matched the css '#add-config-modal[open]', but 1 visible element was found`, at
 `test/mydia_web/features/add_config_flow_test.exs:306`.
