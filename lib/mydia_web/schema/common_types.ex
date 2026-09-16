@@ -401,6 +401,10 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :device_name, non_null(:string), description: "Human-readable device name"
     field :platform, non_null(:string), description: "Platform (ios, android, web)"
     field :last_seen_at, :datetime, description: "Last time device was active"
+
+    field :online, non_null(:boolean),
+      description: "Whether the device was active within the last 15 minutes"
+
     field :is_revoked, non_null(:boolean), description: "Whether device has been revoked"
     field :created_at, non_null(:datetime), description: "When device was paired"
 

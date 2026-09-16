@@ -1,4 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+// ignore: depend_on_referenced_packages
+import 'package:gql/language.dart' show printNode;
+import 'package:graphql_flutter/graphql_flutter.dart' show Request;
 import 'package:player/core/remote/remote_roster.dart';
 
 import '../../test_utils/stub_graphql_client.dart';
@@ -16,6 +19,7 @@ Map<String, dynamic> device(
   String name,
   String? nodeId, {
   bool isRevoked = false,
+  bool? online,
 }) =>
     {
       '__typename': 'RemoteDevice',
@@ -24,12 +28,16 @@ Map<String, dynamic> device(
       'platform': 'linux',
       'nodeId': nodeId,
       'isRevoked': isRevoked,
+      if (online != null) 'online': online,
     };
 
 RemoteRoster rosterWith(StubLink link, DateTime Function() now) => RemoteRoster(
       client: stubClient(link),
       now: now,
     );
+
+bool asksForOnline(Request request) =>
+    printNode(request.operation.document).contains('online');
 
 void main() {
   final fixedClock = DateTime(2026, 8, 20, 12, 0);
@@ -138,6 +146,119 @@ void main() {
       final roster = rosterWith(link, () => fixedClock);
 
       expect(await roster.allows('b' * 64), isFalse);
+    });
+  });
+
+  group('RemoteRoster.onlineEntries', () {
+    test('keeps only devices the server reports online', () async {
+      final roster = rosterWith(
+        StubLink.responses([
+          devicesResponse([
+            device('d1', 'Hall Screen', 'a' * 64, online: true),
+            device('d2', 'Attic Tablet', 'b' * 64, online: false),
+            device('d3', 'Spare Phone', null, online: true),
+            device('d4', 'Lent Laptop', 'c' * 64,
+                isRevoked: true, online: true),
+          ]),
+        ]),
+        () => fixedClock,
+      );
+
+      final entries = await roster.onlineEntries();
+
+      expect(entries.map((e) => e.id), ['d1']);
+    });
+
+    test('asks the server on every call instead of reusing a cached list',
+        () async {
+      // A screen switched on a moment ago must be probed on the very next
+      // scan, not after the roster's 15 minute TTL.
+      final link = StubLink.responses([
+        devicesResponse([
+          device('d1', 'Hall Screen', 'a' * 64, online: false),
+        ]),
+        devicesResponse([
+          device('d1', 'Hall Screen', 'a' * 64, online: true),
+        ]),
+      ]);
+      final roster = rosterWith(link, () => fixedClock);
+
+      expect(await roster.onlineEntries(), isEmpty);
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+      expect(link.requests.length, 2);
+    });
+
+    test('falls back to every device when the server predates online',
+        () async {
+      final link = StubLink((request, _) => asksForOnline(request)
+          ? graphqlErrorResponse(
+              'Cannot query field "online" on type "RemoteDevice".')
+          : devicesResponse([
+              device('d1', 'Hall Screen', 'a' * 64),
+              device('d2', 'Attic Tablet', 'b' * 64),
+            ]));
+      final roster = rosterWith(link, () => fixedClock);
+
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1', 'd2']);
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1', 'd2']);
+
+      expect(link.requests.where(asksForOnline).length, 1,
+          reason: 'an old server is detected once, not re-asked every scan');
+    });
+
+    test('recognises the unknown-field error when it arrives over p2p',
+        () async {
+      // P2pGraphQLLink wraps the server's message in the Exception's text.
+      final link = StubLink((request, _) => asksForOnline(request)
+          ? graphqlErrorResponse('Exception: Cannot query field "online" '
+              'on type "RemoteDevice".')
+          : devicesResponse([device('d1', 'Hall Screen', 'a' * 64)]));
+      final roster = rosterWith(link, () => fixedClock);
+
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+    });
+
+    test('answers the last list it had when a fetch fails', () async {
+      final link = StubLink.responses([
+        devicesResponse([
+          device('d1', 'Hall Screen', 'a' * 64, online: true),
+        ]),
+        Exception('connection reset'),
+        devicesResponse([
+          device('d1', 'Hall Screen', 'a' * 64, online: false),
+        ]),
+      ]);
+      final roster = rosterWith(link, () => fixedClock);
+
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1'],
+          reason: 'a failed fetch keeps the previous answer');
+      expect(await roster.onlineEntries(), isEmpty,
+          reason: 'a transient failure must not switch to the fallback');
+    });
+
+    test('answers an empty list when the very first fetch fails', () async {
+      final roster = rosterWith(
+        StubLink.responses([Exception('connection reset')]),
+        () => fixedClock,
+      );
+
+      expect(await roster.onlineEntries(), isEmpty);
+    });
+
+    test('leaves the access control list alone', () async {
+      // entries() also backs allows(). An offline device may still drive this
+      // one the moment it wakes up.
+      final roster = rosterWith(
+        StubLink((request, _) => devicesResponse([
+              device('d1', 'Hall Screen', 'a' * 64,
+                  online: asksForOnline(request) ? false : null),
+            ])),
+        () => fixedClock,
+      );
+
+      expect(await roster.onlineEntries(), isEmpty);
+      expect(await roster.allows('a' * 64), isTrue);
     });
   });
 }

@@ -42,6 +42,27 @@ defmodule MydiaWeb.Schema.DeviceTest do
 
       assert returned["nodeId"] == nil
     end
+
+    test "reports a device seen a minute ago as online", %{user: user, device: device} do
+      seen(device, 60)
+
+      assert %{"online" => true} = only_device(user)
+    end
+
+    test "reports a device last seen sixteen minutes ago as offline", %{
+      user: user,
+      device: device
+    } do
+      seen(device, 960)
+
+      assert %{"online" => false} = only_device(user)
+    end
+
+    test "reports a device that was never seen as offline", %{user: user, device: device} do
+      device |> Ecto.Changeset.change(last_seen_at: nil) |> Mydia.Repo.update!()
+
+      assert %{"online" => false} = only_device(user)
+    end
   end
 
   describe "registerDeviceNode mutation" do
@@ -114,5 +135,20 @@ defmodule MydiaWeb.Schema.DeviceTest do
       # The mutation must not have registered the node id either.
       refute RemoteAccess.get_device(revoked.id).node_id
     end
+  end
+
+  defp seen(device, seconds_ago) do
+    at = DateTime.utc_now() |> DateTime.add(-seconds_ago, :second) |> DateTime.truncate(:second)
+
+    device |> Ecto.Changeset.change(last_seen_at: at) |> Mydia.Repo.update!()
+  end
+
+  defp only_device(user) do
+    assert {:ok, %{data: %{"devices" => [returned]}}} =
+             Absinthe.run("query { devices { id online } }", MydiaWeb.Schema,
+               context: %{current_user: user}
+             )
+
+    returned
   end
 end

@@ -94,6 +94,7 @@ defmodule MydiaWeb.Schema.Resolvers.DeviceResolver do
       device_name: device.device_name,
       platform: device.platform,
       last_seen_at: device.last_seen_at,
+      online: RemoteAccess.online?(device.last_seen_at),
       is_revoked: not is_nil(device.revoked_at),
       created_at: device.inserted_at,
       node_id: device.node_id

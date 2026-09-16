@@ -24,6 +24,7 @@ const _expiredToken = 'expired';
 class _FakeP2pService extends P2pService {
   final List<String?> tokensSeen = [];
   final List<String?> deviceProfilesSeen = [];
+  final List<String?> operationNamesSeen = [];
 
   @override
   Future<void> ensureConnected(String endpointAddrJson) async {}
@@ -37,6 +38,7 @@ class _FakeP2pService extends P2pService {
     String? authToken,
     String? deviceProfile,
   }) async {
+    operationNamesSeen.add(operationName);
     tokensSeen.add(authToken);
     deviceProfilesSeen.add(deviceProfile);
 
@@ -286,6 +288,60 @@ void main() {
         contains('P2P connection timed out'),
       );
       expect(service.attempts, 4);
+    });
+  });
+
+  group('P2pGraphQLLink operation names', () {
+    test('names an unnamed request after the operation in its document',
+        () async {
+      // Generated documents leave Operation.operationName null, so every
+      // request logged and travelled as "null".
+      final service = _FakeP2pService();
+      final link = P2pGraphQLLink(
+        p2pService: service,
+        serverNodeId: 'node',
+        getAuthToken: () async => 'valid',
+      );
+
+      await link
+          .request(Request(
+            operation: Operation(
+              document: gql('query SeasonEpisodes { seasonEpisodes { id } }'),
+            ),
+          ))
+          .first;
+
+      expect(service.operationNamesSeen, ['SeasonEpisodes']);
+    });
+
+    test('keeps an explicit operation name', () async {
+      final service = _FakeP2pService();
+      final link = P2pGraphQLLink(
+        p2pService: service,
+        serverNodeId: 'node',
+        getAuthToken: () async => 'valid',
+      );
+
+      await link.request(_request()).first;
+
+      expect(service.operationNamesSeen, ['Movies']);
+    });
+
+    test('sends null for an anonymous operation', () async {
+      final service = _FakeP2pService();
+      final link = P2pGraphQLLink(
+        p2pService: service,
+        serverNodeId: 'node',
+        getAuthToken: () async => 'valid',
+      );
+
+      await link
+          .request(Request(
+            operation: Operation(document: gql('{ movies { id } }')),
+          ))
+          .first;
+
+      expect(service.operationNamesSeen, [null]);
     });
   });
 }

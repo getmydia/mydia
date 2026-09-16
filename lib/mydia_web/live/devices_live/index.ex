@@ -172,7 +172,7 @@ defmodule MydiaWeb.DevicesLive.Index do
     deleted =
       socket.assigns.devices
       |> Enum.reject(fn d ->
-        Components.recent_activity?(d.last_seen_at) && is_nil(d.revoked_at)
+        RemoteAccess.online?(d.last_seen_at) && is_nil(d.revoked_at)
       end)
       |> Enum.count(fn device -> match?({:ok, _}, RemoteAccess.delete_device(device)) end)
 
