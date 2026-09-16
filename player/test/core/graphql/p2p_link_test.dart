@@ -1,6 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart'
-    show Operation, Request, gql;
+    show
+        FetchPolicy,
+        GraphQLCache,
+        InMemoryStore,
+        Operation,
+        QueryOptions,
+        Request,
+        gql;
 import 'package:player/core/graphql/p2p_link.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/player/device_profile.dart';
@@ -15,6 +24,9 @@ const _expiredToken = 'expired';
 class _FakeP2pService extends P2pService {
   final List<String?> tokensSeen = [];
   final List<String?> deviceProfilesSeen = [];
+
+  @override
+  Future<void> ensureConnected(String endpointAddrJson) async {}
 
   @override
   Future<Map<String, dynamic>> sendGraphQLRequest({
@@ -33,6 +45,47 @@ class _FakeP2pService extends P2pService {
     }
 
     return {'movies': <String, dynamic>{}};
+  }
+}
+
+class _RetryP2pService extends P2pService {
+  int attempts = 0;
+  final int succeedOnAttempt;
+  final Object failureError;
+
+  _RetryP2pService({
+    required this.succeedOnAttempt,
+    required this.failureError,
+  });
+
+  @override
+  Future<void> ensureConnected(String endpointAddrJson) async {}
+
+  @override
+  Future<Map<String, dynamic>> sendGraphQLRequest({
+    required String peer,
+    required String query,
+    Map<String, dynamic>? variables,
+    String? operationName,
+    String? authToken,
+    String? deviceProfile,
+  }) async {
+    final currentAttempt = attempts++;
+    if (currentAttempt < succeedOnAttempt) {
+      if (failureError is Exception) {
+        throw failureError;
+      } else if (failureError is Error) {
+        throw failureError;
+      }
+      throw Exception(failureError.toString());
+    }
+    return {
+      '__typename': 'Query',
+      'movies': <String, dynamic>{
+        '__typename': 'Movies',
+        'id': '1',
+      },
+    };
   }
 }
 
@@ -160,6 +213,79 @@ void main() {
       await link.request(_request()).first;
 
       expect(service.deviceProfilesSeen, [profile.toHeaderValue()]);
+    });
+  });
+
+  group('P2pGraphQLLink retry and timeout configuration', () {
+    test('createP2pGraphQLClient configures queryRequestTimeout to null', () {
+      final service = _FakeP2pService();
+      final client = createP2pGraphQLClient(
+        p2pService: service,
+        serverNodeId: 'node',
+        getAuthToken: () async => 'valid',
+        cache: GraphQLCache(store: InMemoryStore()),
+      );
+
+      expect(client.queryManager.requestTimeout, isNull);
+    });
+
+    test(
+        'retries on TimeoutException and resolves without Future already completed error',
+        () async {
+      final service = _RetryP2pService(
+        succeedOnAttempt: 1,
+        failureError: TimeoutException('P2P connection timed out'),
+      );
+
+      final client = createP2pGraphQLClient(
+        p2pService: service,
+        serverNodeId: 'node',
+        getAuthToken: () async => 'valid',
+        baseBackoff: const Duration(milliseconds: 10),
+        cache: GraphQLCache(store: InMemoryStore()),
+      );
+
+      final result = await client.query(
+        QueryOptions(
+          document: gql('query Movies { movies { id } }'),
+          fetchPolicy: FetchPolicy.networkOnly,
+        ),
+      );
+
+      expect(result.hasException, isFalse);
+      expect(result.data?['movies']?['id'], '1');
+      expect(service.attempts, 2);
+    });
+
+    test(
+        'exhausts retries and returns exception without Future already completed error',
+        () async {
+      final service = _RetryP2pService(
+        succeedOnAttempt: 99,
+        failureError: TimeoutException('P2P connection timed out'),
+      );
+
+      final client = createP2pGraphQLClient(
+        p2pService: service,
+        serverNodeId: 'node',
+        getAuthToken: () async => 'valid',
+        baseBackoff: const Duration(milliseconds: 10),
+        cache: GraphQLCache(store: InMemoryStore()),
+      );
+
+      final result = await client.query(
+        QueryOptions(
+          document: gql('query Movies { movies { id } }'),
+          fetchPolicy: FetchPolicy.networkOnly,
+        ),
+      );
+
+      expect(result.hasException, isTrue);
+      expect(
+        result.exception.toString(),
+        contains('P2P connection timed out'),
+      );
+      expect(service.attempts, 4);
     });
   });
 }
