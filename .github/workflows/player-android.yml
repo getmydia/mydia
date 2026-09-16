@@ -1,0 +1,149 @@
+name: Player / Android
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit SHA to build
+        type: string
+        required: true
+      version:
+        description: Version string (e.g. 0.14.0 or 0.14.0-dev.1)
+        type: string
+        required: true
+      version_code:
+        description: Monotonically increasing integer build number
+        type: string
+        required: true
+      upload_to_play_store:
+        description: Whether to upload to Google Play Store
+        type: boolean
+        required: false
+        default: false
+      play_store_track:
+        description: Google Play track (e.g. internal, beta)
+        type: string
+        required: false
+        default: 'internal'
+      dry_run:
+        description: Build without uploading
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+      PLAY_STORE_CREDENTIALS:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  PLAYER_PATH: 'player'
+
+jobs:
+  build:
+    name: Build Android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Update version
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION_CODE="${{ inputs.version_code }}"
+          sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run code generation
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub run build_runner build
+
+      - name: Decode keystore
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+
+      - name: Create key.properties
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: |
+          cat > android/key.properties << EOF
+          storeFile=upload-keystore.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Build APK
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter build apk --release --target-platform android-arm,android-arm64
+
+      - name: Build AAB
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter build appbundle --release --target-platform android-arm,android-arm64
+
+      - name: Check APK ABIs
+        run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Check AAB ABIs
+        run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/bundle/release/app-release.aab
+
+      - name: Setup Ruby for Fastlane
+        if: ${{ inputs.upload_to_play_store && !inputs.dry_run }}
+        env:
+          PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: ${{ env.PLAYER_PATH }}/android
+
+      - name: Upload to Play Store
+        if: ${{ inputs.upload_to_play_store && !inputs.dry_run }}
+        env:
+          PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
+        working-directory: ${{ env.PLAYER_PATH }}/android
+        run: |
+          echo "$PLAY_STORE_CREDENTIALS" | base64 -d > play-store-credentials.json
+          export GOOGLE_PLAY_JSON_KEY_PATH="$(pwd)/play-store-credentials.json"
+          bundle exec fastlane ${{ inputs.play_store_track }}
+          rm play-store-credentials.json
+
+      - name: "Upload artifact: APK"
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-android-apk
+          path: ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30

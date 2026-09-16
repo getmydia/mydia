@@ -37,3 +37,9 @@ def testflight_groups
   groups = ENV["TESTFLIGHT_GROUPS"].to_s.split(",").map(&:strip).reject(&:empty?)
   groups.empty? ? ["Beta"] : groups
 end
+
+# Whether to distribute to external TestFlight groups. When false, uploads for
+# internal testers only and skips waiting for Apple Beta App Review.
+def testflight_distribute_external?
+  ENV.fetch("TESTFLIGHT_DISTRIBUTE_EXTERNAL", "true") == "true"
+end

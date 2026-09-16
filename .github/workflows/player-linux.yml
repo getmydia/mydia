@@ -1,0 +1,84 @@
+name: Player / Linux
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit SHA to build
+        type: string
+        required: true
+      version:
+        description: Version string
+        type: string
+        required: true
+      version_code:
+        description: Integer build number
+        type: string
+        required: true
+      dry_run:
+        description: Build without publishing
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  PLAYER_PATH: 'player'
+
+jobs:
+  build:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            liblzma-dev \
+            libsecret-1-dev \
+            libmpv-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+          cache: true
+
+      - name: Update version
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION_CODE="${{ inputs.version_code }}"
+          sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run code generation
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub run build_runner build
+
+      - name: Build Linux
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter build linux --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-linux-bundle
+          path: ${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle
+          retention-days: 30

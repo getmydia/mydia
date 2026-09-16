@@ -1,0 +1,217 @@
+name: Player / On-Demand Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git branch, commit SHA, or tag to build'
+        required: true
+        default: 'master'
+      build_ios:
+        description: 'Build iOS (TestFlight / IPA)'
+        type: boolean
+        default: true
+      build_android:
+        description: 'Build Android (Play Store / APK)'
+        type: boolean
+        default: true
+      build_macos:
+        description: 'Build macOS (signed & notarized DMG)'
+        type: boolean
+        default: false
+      build_windows:
+        description: 'Build Windows (Inno Setup installer)'
+        type: boolean
+        default: false
+      build_linux:
+        description: 'Build Linux (.tar.gz bundle)'
+        type: boolean
+        default: false
+      upload_to_stores:
+        description: 'Upload iOS build to TestFlight internal testers (Android test builds are distributed as direct APK artifacts)'
+        type: boolean
+        default: true
+      version_override:
+        description: 'Custom version string (e.g. 0.14.0-dev.42). If empty, auto-derived'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Build and sign without uploading to stores'
+        type: boolean
+        default: false
+
+concurrency:
+  group: player-ondemand-${{ inputs.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.setup.outputs.sha }}
+      version: ${{ steps.setup.outputs.version }}
+      version_code: ${{ steps.setup.outputs.version_code }}
+      notes: ${{ steps.setup.outputs.notes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Derive version and build number
+        id: setup
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_VERSION: ${{ inputs.version_override }}
+          INPUT_UPLOAD_TO_STORES: ${{ inputs.upload_to_stores }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+
+          # Validate INPUT_REF: must not be empty, must not start with dash or contain whitespace
+          if [ -z "$INPUT_REF" ] || [[ "$INPUT_REF" =~ [[:space:]] ]] || [[ "$INPUT_REF" =~ ^- ]]; then
+            echo "::error::Invalid ref '$INPUT_REF'. Ref must not be empty, start with a dash, or contain whitespace."
+            exit 1
+          fi
+
+          if ! git rev-parse --verify --quiet "origin/$INPUT_REF^{commit}" >/dev/null 2>&1 && \
+             ! git rev-parse --verify --quiet "$INPUT_REF^{commit}" >/dev/null 2>&1; then
+            echo "::error::Ref '$INPUT_REF' could not be resolved to a commit in this repository."
+            exit 1
+          fi
+
+          SHA=$(git rev-parse --verify "origin/$INPUT_REF^{commit}" 2>/dev/null || git rev-parse --verify "$INPUT_REF^{commit}")
+          echo "Building SHA: $SHA from ref $INPUT_REF"
+
+          # Version code is monotonic and disjoint from releases (10000+) and refreshes (900000+)
+          VERSION_CODE=$(( RUN_NUMBER + 500000 ))
+
+          if [ -n "$INPUT_VERSION" ]; then
+            if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+              echo "::error::Invalid version_override '$INPUT_VERSION'. Must match semver (e.g. 1.2.3 or 1.2.3-beta.1)"
+              exit 1
+            fi
+            VERSION="$INPUT_VERSION"
+          else
+            LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v0.0.0")
+            BASE_VERSION="${LATEST_TAG#v}"
+            MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
+            MINOR=$(echo "$BASE_VERSION" | cut -d. -f2)
+            NEXT_MINOR=$(( MINOR + 1 ))
+            VERSION="${MAJOR}.${NEXT_MINOR}.0-dev.${RUN_NUMBER}"
+          fi
+
+          echo "Derived version: $VERSION (build $VERSION_CODE)"
+
+          # Generate notes from git log
+          LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v0.0.0")
+          NOTES=$(./scripts/testflight-notes.sh "$VERSION" "$SHA" "$LATEST_TAG")
+
+          DELIM="notes-$(openssl rand -hex 16)"
+          {
+            echo "sha=${SHA}"
+            echo "version=${VERSION}"
+            echo "version_code=${VERSION_CODE}"
+            echo "notes<<${DELIM}"
+            echo "$NOTES"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### On-Demand Player Build"
+            echo "- **Target Ref:** \`$INPUT_REF\`"
+            echo "- **Commit:** \`$SHA\`"
+            echo "- **Version:** \`$VERSION\`"
+            echo "- **Version Code:** \`$VERSION_CODE\`"
+            echo "- **Store Upload:** \`$INPUT_UPLOAD_TO_STORES\`"
+            echo "- **Dry Run:** \`$INPUT_DRY_RUN\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  player-ios:
+    name: Player / iOS
+    if: inputs.build_ios
+    needs: prepare
+    uses: ./.github/workflows/player-ios.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      groups: ''
+      notes: ${{ needs.prepare.outputs.notes }}
+      distribute_external: false
+      dry_run: ${{ inputs.dry_run || !inputs.upload_to_stores }}
+    secrets:
+      IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+
+  player-android:
+    name: Player / Android
+    if: inputs.build_android
+    needs: prepare
+    uses: ./.github/workflows/player-android.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      upload_to_play_store: false
+      play_store_track: 'internal'
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
+
+  player-macos:
+    name: Player / macOS
+    if: inputs.build_macos
+    needs: prepare
+    uses: ./.github/workflows/player-macos.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      generate_appcast: false
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+  player-windows:
+    name: Player / Windows
+    if: inputs.build_windows
+    needs: prepare
+    uses: ./.github/workflows/player-windows.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      dry_run: ${{ inputs.dry_run }}
+
+  player-linux:
+    name: Player / Linux
+    if: inputs.build_linux
+    needs: prepare
+    uses: ./.github/workflows/player-linux.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      dry_run: ${{ inputs.dry_run }}

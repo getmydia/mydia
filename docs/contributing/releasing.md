@@ -394,6 +394,64 @@ version it already holds, and the two workflows have independent run counters.
 To force one: `gh workflow run player-ios-refresh.yml -f force=true`. Add
 `-f dry_run=true` to build without uploading or moving the marker tag.
 
+## On-demand player testing builds
+
+When testing changes on master or feature branches before cutting a formal
+release, `.github/workflows/player-ondemand.yml` allows building, signing, and
+distributing player binaries on demand across any combination of supported platforms.
+
+### Dispatching
+
+Trigger the workflow from the GitHub Actions UI ("Player / On-Demand Build") or via the GitHub CLI:
+
+```bash
+# Build default mobile platforms (iOS & Android) from master and upload to internal store tracks
+gh workflow run player-ondemand.yml --repo getmydia/mydia
+
+# Build a specific branch or commit
+gh workflow run player-ondemand.yml --repo getmydia/mydia -f ref=feat/my-feature
+
+# Build all platforms without uploading to stores
+gh workflow run player-ondemand.yml --repo getmydia/mydia \
+  -f build_macos=true -f build_windows=true -f build_linux=true \
+  -f upload_to_stores=false
+
+# Test build and sign pipeline without uploading (dry run)
+gh workflow run player-ondemand.yml --repo getmydia/mydia -f dry_run=true
+```
+
+### Dispatch inputs
+
+| Input | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ref` | string | `master` | Git branch, commit SHA, or tag to build. |
+| `build_ios` | boolean | `true` | Build iOS (TestFlight / IPA). |
+| `build_android` | boolean | `true` | Build Android (Play Store internal track / APK / AAB). |
+| `build_macos` | boolean | `false` | Build macOS (signed & notarized DMG). |
+| `build_windows` | boolean | `false` | Build Windows (Inno Setup installer). |
+| `build_linux` | boolean | `false` | Build Linux (`.tar.gz` bundle). |
+| `upload_to_stores` | boolean | `true` | Upload iOS build to TestFlight (internal testers). |
+| `version_override` | string | `""` | Custom version string (e.g. `0.14.0-dev.42`). If empty, auto-derived. |
+| `dry_run` | boolean | `false` | Build and sign without uploading to TestFlight. |
+
+### Versioning and build numbers
+
+Unless specified via `version_override`, the version string is derived automatically from the latest release tag as `<major>.<next_minor>.0-dev.<run_number>` (for example, `0.14.0-dev.42`).
+
+Build numbers (`version_code`) are calculated as `RUN_NUMBER + 500000`. This range is monotonic and completely disjoint from `release.yml` (`RUN_NUMBER + 10000`) and `player-ios-refresh.yml` (`RUN_NUMBER + 900000`), ensuring that iOS test builds never collide with production or refresh builds in App Store Connect.
+
+Android test builds are distributed directly as release artifacts rather than uploaded to Google Play Console. Because Google Play requires `versionCode` to be strictly increasing across the entire lifetime of the application ID across all tracks, uploading on-demand test builds to Google Play with a separate offset would permanently leapfrog and block subsequent production releases in `release.yml`. Direct APK sideloading completely avoids this restriction while providing instant on-device installation.
+
+### Distribution channels
+
+- **TestFlight Internal Testers:** When `upload_to_stores` is true, iOS builds are uploaded to App Store Connect without associating external tester groups (`distribute_external: false`). Builds are distributed immediately to App Store Connect internal team members, avoiding Apple's external Beta App Review delay.
+- **Workflow Artifacts:** All built binaries are uploaded as GitHub Actions artifacts attached to the workflow run (retained for 30 days):
+  - Android: signed release universal APK (`mydia-player-android-apk`) and Android App Bundle (`.aab`) ready for direct sideloading and testing on Android phones and TVs
+  - macOS: signed and notarized DMG disk image
+  - Windows: signed Inno Setup executable installer
+  - Linux: standalone `.tar.gz` bundle
+  - iOS: zipped `.xcarchive` and IPA artifacts
+
 ## Release notes
 
 Notes are authored into `priv/changelog/<version>.md` and tracked in the

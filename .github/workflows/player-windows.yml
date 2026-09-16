@@ -1,0 +1,86 @@
+name: Player / Windows
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit SHA to build
+        type: string
+        required: true
+      version:
+        description: Version string
+        type: string
+        required: true
+      version_code:
+        description: Integer build number
+        type: string
+        required: true
+      dry_run:
+        description: Build without publishing
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  PLAYER_PATH: 'player'
+
+jobs:
+  build:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+          cache: true
+
+      - name: Update version
+        working-directory: ${{ env.PLAYER_PATH }}
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION_CODE="${{ inputs.version_code }}"
+          sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
+
+      - name: Install dependencies
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run code generation
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub run build_runner build
+
+      - name: Build Windows
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter build windows --release
+
+      # Must run before the installer is packaged: installer.iss globs the same
+      # Release directory, so the DLLs are only in the shipped installer if they
+      # are on disk by now. Without this every clean Windows machine fails to
+      # launch with "msvcp140.dll was not found".
+      - name: Bundle VC++ runtime
+        shell: pwsh
+        run: pwsh ${{ env.PLAYER_PATH }}/tool/bundle_windows_runtime.ps1
+
+      - name: Build installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.9
+        with:
+          path: player/windows/installer.iss
+          options: /DMyAppVersion=${{ inputs.version }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-windows-installer
+          path: ${{ env.PLAYER_PATH }}/build/installer/mydia-player-windows-v${{ inputs.version }}.exe
+          retention-days: 30

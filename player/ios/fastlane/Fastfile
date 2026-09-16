@@ -34,12 +34,15 @@ platform :ios do
     # testers, and the email comes with it. Set to false, every build waits at
     # "Approved" for a manual "Notify Testers" click in App Store Connect, and
     # once the last released build expires the public links refuse new testers
-    # (#746). scripts/check-ios-fastlane-metadata.sh fails if this changes.
+    # (#746). scripts/check-ios-fastlane-metadata.sh asserts this stays wired
+    # to distribute_ext.
+    distribute_ext = testflight_distribute_external?
+
     upload_to_testflight(
-      distribute_external: true,
-      groups: testflight_groups,
+      distribute_external: distribute_ext,
+      groups: distribute_ext ? testflight_groups : nil,
       changelog: testflight_changelog,
-      notify_external_testers: true
+      notify_external_testers: distribute_ext
     )
   end
 
