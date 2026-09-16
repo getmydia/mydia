@@ -432,104 +432,21 @@ jobs:
           push-to-registry: true
 
   player-android:
-    name: Player / Android
     needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
-          cache: true
-
-      - name: Setup Java
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Update version
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          VERSION_CODE="${{ needs.prepare.outputs.version_code }}"
-          sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
-
-      - name: Install dependencies
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run code generation
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build
-
-      - name: Decode keystore
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
-
-      - name: Create key.properties
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          cat > android/key.properties << EOF
-          storeFile=upload-keystore.jks
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          EOF
-
-      - name: Build APK
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build apk --release --target-platform android-arm,android-arm64
-
-      - name: Build AAB
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build appbundle --release --target-platform android-arm,android-arm64
-
-      - name: Check APK ABIs
-        run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Check AAB ABIs
-        run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/bundle/release/app-release.aab
-
-      - name: Setup Ruby for Fastlane
-        if: ${{ !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
-        env:
-          PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-          working-directory: ${{ env.PLAYER_PATH }}/android
-
-      - name: Upload to Play Store
-        if: ${{ !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
-        env:
-          PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
-        working-directory: ${{ env.PLAYER_PATH }}/android
-        run: |
-          echo "${{ secrets.PLAY_STORE_CREDENTIALS }}" | base64 -d > play-store-credentials.json
-          export GOOGLE_PLAY_JSON_KEY_PATH="$(pwd)/play-store-credentials.json"
-          bundle exec fastlane internal
-          rm play-store-credentials.json
-
-      - name: "Upload artifact: APK"
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-android-apk
-          path: ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 30
+    uses: ./.github/workflows/player-android.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      upload_to_play_store: true
+      play_store_track: "internal"
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
 
   player-ios:
     name: Player / iOS
@@ -558,358 +475,40 @@ jobs:
       APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
 
   player-macos:
-    name: Player / macOS
     needs: prepare
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
-          cache: true
-
-      - name: Update version
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          VERSION_CODE="${{ needs.prepare.outputs.version_code }}"
-          sed -i '' "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
-
-      - name: Install dependencies
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run code generation
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build
-
-      - name: Build macOS
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build macos --release
-
-      - name: Install signing certificate
-        if: env.MACOS_CERTIFICATE != ''
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        run: |
-          CERT_PATH=$RUNNER_TEMP/certificate.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
-
-          echo -n "${{ secrets.MACOS_CERTIFICATE }}" | base64 --decode -o $CERT_PATH
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security import $CERT_PATH -P "${{ secrets.MACOS_CERTIFICATE_PASSWORD }}" \
-            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: \
-            -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-      - name: Sign app bundle
-        if: env.MACOS_CERTIFICATE != ''
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        run: |
-          APP="${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.app"
-
-          # --force replaces the signature Xcode produced, and codesign does NOT
-          # carry entitlements forward. Without --entitlements the app ships with
-          # none at all, which breaks keychain access and silently drops the
-          # user's pairing on every launch. Always re-apply them here.
-          codesign --deep --force --options runtime \
-            --entitlements "${{ env.PLAYER_PATH }}/macos/Runner/Release.entitlements" \
-            --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" \
-            "$APP"
-
-          # Fail loudly rather than shipping an entitlement-less bundle again.
-          ENTITLEMENTS=$(codesign -d --entitlements :- "$APP" 2>/dev/null || true)
-          echo "$ENTITLEMENTS"
-          if ! grep -q "com.apple.security.network.client" <<<"$ENTITLEMENTS"; then
-            echo "::error::Signed app is missing its entitlements — codesign dropped them."
-            exit 1
-          fi
-
-      - name: Notarize app bundle
-        if: env.MACOS_CERTIFICATE != ''
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
-        run: |
-          ditto -c -k --keepParent "Mydia Player.app" "Mydia Player.zip"
-          xcrun notarytool submit "Mydia Player.zip" \
-            --apple-id "${{ secrets.APPLE_ID }}" \
-            --password "${{ secrets.APPLE_APP_PASSWORD }}" \
-            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-            --wait
-          rm "Mydia Player.zip"
-
-      - name: Staple notarization ticket
-        if: env.MACOS_CERTIFICATE != ''
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-        run: |
-          xcrun stapler staple "${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.app"
-
-      - name: Create DMG
-        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
-        run: |
-          # Create a temporary directory for DMG contents
-          mkdir -p dmg_contents
-          cp -R "Mydia Player.app" dmg_contents/
-
-          # Create a symlink to Applications folder
-          ln -s /Applications dmg_contents/Applications
-
-          # Create DMG
-          hdiutil create -volname "Mydia Player" -srcfolder dmg_contents -ov -format UDZO "Mydia Player.dmg"
-
-          rm -rf dmg_contents
-
-      - name: Download Sparkle tools
-        run: |
-          curl -L https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz -o sparkle.tar.xz
-          mkdir -p sparkle-tools
-          tar xf sparkle.tar.xz -C sparkle-tools
-
-      - name: Generate appcast
-        if: env.SPARKLE_EDDSA_KEY != ''
-        env:
-          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
-        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          VERSION_CODE="${{ needs.prepare.outputs.version_code }}"
-          DMG_FILE="Mydia Player.dmg"
-          DMG_URL="https://github.com/getmydia/mydia/releases/download/v${VERSION}/mydia-player-macos-v${VERSION}.dmg"
-
-          # sign_update prints a ready-to-paste XML attribute fragment, e.g.
-          #   sparkle:edSignature="…" length="71098585"
-          # It must be embedded in the enclosure verbatim. Do NOT wrap it in
-          # another sparkle:edSignature="…" or add a separate length=, or the
-          # enclosure ends up with a duplicated length attribute and a signature
-          # value that is not valid base64 — which Sparkle rejects.
-          SIGNATURE=$(echo "$SPARKLE_EDDSA_KEY" | $GITHUB_WORKSPACE/sparkle-tools/bin/sign_update "$DMG_FILE" --ed-key-file -)
-
-          # Catch any future sign_update output-format drift before it reaches the
-          # XML (cheap, no dependency).
-          if ! printf '%s' "$SIGNATURE" | grep -Eq '^sparkle:edSignature="[^"]+" length="[0-9]+"$'; then
-            echo "::error::Unexpected sign_update output, refusing to build appcast: $SIGNATURE"
-            exit 1
-          fi
-
-          # The built app's Info.plist has LSMinimumSystemVersion resolved from
-          # MACOSX_DEPLOYMENT_TARGET, so this can never drift from the binary it
-          # describes the way a hardcoded constant in the appcast generator would.
-          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "Mydia Player.app/Contents/Info.plist")
-
-          # sparkle:version must be the integer CFBundleVersion (VERSION_CODE) that
-          # `flutter build macos` writes into the bundle — Sparkle compares
-          # <sparkle:version> against the installed app's CFBundleVersion. The
-          # marketing string stays in <sparkle:shortVersionString> for display only.
-          cat > appcast.xml << EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-            <channel>
-              <title>Mydia Player</title>
-              <item>
-                <title>Version ${VERSION}</title>
-                <sparkle:version>${VERSION_CODE}</sparkle:version>
-                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-                <sparkle:minimumSystemVersion>${MIN_OS}</sparkle:minimumSystemVersion>
-                <pubDate>$(date -R)</pubDate>
-                <enclosure url="${DMG_URL}"
-                           ${SIGNATURE}
-                           type="application/octet-stream" />
-              </item>
-            </channel>
-          </rss>
-          EOF
-
-      - name: Validate appcast
-        if: env.SPARKLE_EDDSA_KEY != ''
-        env:
-          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
-        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
-        run: |
-          # Fail the release here rather than ship an appcast Sparkle can't read.
-          # xmllint is the load-bearing check — it catches the malformed-XML class
-          # (e.g. the historical double-wrapped enclosure with a duplicated length
-          # attribute). Shipped on GitHub macos runners, but don't silently no-op
-          # if it is ever absent.
-          if ! command -v xmllint >/dev/null 2>&1; then
-            echo "::error::xmllint not found on runner; cannot validate appcast"
-            exit 1
-          fi
-
-          xmllint --noout appcast.xml
-
-          # Exactly one signature and one length attribute in the enclosure
-          # (guards against re-nesting / sign_update output drift).
-          ed_count=$(grep -o 'sparkle:edSignature="' appcast.xml | wc -l | tr -d ' ' || true)
-          len_count=$(grep -o 'length="' appcast.xml | wc -l | tr -d ' ' || true)
-          if [ "$ed_count" -ne 1 ] || [ "$len_count" -ne 1 ]; then
-            echo "::error::appcast enclosure malformed: edSignature=$ed_count length=$len_count (expected 1 each)"
-            cat appcast.xml
-            exit 1
-          fi
-
-          # sparkle:version must be the integer build number, not the marketing
-          # string, or Sparkle's newer-than comparison never offers the update.
-          sparkle_version=$(sed -n 's#.*<sparkle:version>\(.*\)</sparkle:version>.*#\1#p' appcast.xml)
-          if ! printf '%s' "$sparkle_version" | grep -Eq '^[0-9]+$'; then
-            echo "::error::sparkle:version must be an integer build number, got '$sparkle_version'"
-            exit 1
-          fi
-
-          # NOTE: a cryptographic self-verify (sign_update --verify) is deliberately
-          # NOT wired here — the 2.x verify invocation and key material (it checks
-          # against a public key; the pipeline holds the private one) are unresolved
-          # on the pinned 2.8.1 toolchain. The guard therefore proves well-formedness
-          # and enclosure shape, not signature validity. See the plan's KTD3 / R4.
-          echo "appcast.xml validated (well-formed, single signature/length, sparkle:version=$sparkle_version)"
-
-      - name: Upload DMG artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-macos-dmg
-          path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.dmg
-          retention-days: 30
-
-      - name: Upload appcast artifact
-        if: env.SPARKLE_EDDSA_KEY != ''
-        env:
-          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-macos-appcast
-          path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/appcast.xml
-          retention-days: 30
-
-      - name: Cleanup keychain
-        if: always()
-        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
+    uses: ./.github/workflows/player-macos.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      generate_appcast: true
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
 
   player-windows:
-    name: Player / Windows
     needs: prepare
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
-          cache: true
-
-      - name: Update version
-        working-directory: ${{ env.PLAYER_PATH }}
-        shell: bash
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          VERSION_CODE="${{ needs.prepare.outputs.version_code }}"
-          sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
-
-      - name: Install dependencies
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run code generation
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build
-
-      - name: Build Windows
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build windows --release
-
-      # Must run before the installer is packaged: installer.iss globs the same
-      # Release directory, so the DLLs are only in the shipped installer if they
-      # are on disk by now. Without this every clean Windows machine fails to
-      # launch with "msvcp140.dll was not found".
-      - name: Bundle VC++ runtime
-        shell: pwsh
-        run: pwsh ${{ env.PLAYER_PATH }}/tool/bundle_windows_runtime.ps1
-
-      - name: Build installer
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.9
-        with:
-          path: player/windows/installer.iss
-          options: /DMyAppVersion=${{ needs.prepare.outputs.version }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-windows-installer
-          path: ${{ env.PLAYER_PATH }}/build/installer/mydia-player-windows-v${{ needs.prepare.outputs.version }}.exe
-          retention-days: 30
+    uses: ./.github/workflows/player-windows.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      dry_run: ${{ inputs.dry_run }}
 
   player-linux:
-    name: Player / Linux
     needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libgtk-3-dev \
-            liblzma-dev \
-            libsecret-1-dev \
-            libmpv-dev
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: player/.fvmrc
-          channel: 'stable'
-          cache: true
-
-      - name: Update version
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          VERSION_CODE="${{ needs.prepare.outputs.version_code }}"
-          sed -i "s/^version: .*/version: ${VERSION}+${VERSION_CODE}/" pubspec.yaml
-
-      - name: Install dependencies
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run code generation
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter pub run build_runner build
-
-      - name: Build Linux
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build linux --release
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-linux-bundle
-          path: ${{ env.PLAYER_PATH }}/build/linux/x64/release/bundle
-          retention-days: 30
+    uses: ./.github/workflows/player-linux.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      dry_run: ${{ inputs.dry_run }}
 
   player-flatpak:
     name: Player / Flatpak
