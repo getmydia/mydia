@@ -3001,6 +3001,67 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#on-demand-player-testing-builds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        On-demand player testing builds
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="On-demand player testing builds">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dispatching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dispatching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dispatch-inputs_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dispatch inputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#versioning-and-build-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Versioning and build numbers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#distribution-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distribution channels
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#release-notes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3247,6 +3308,67 @@
     <span class="md-ellipsis">
       
         The refresh cron
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#on-demand-player-testing-builds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        On-demand player testing builds
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="On-demand player testing builds">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dispatching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dispatching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dispatch-inputs_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dispatch inputs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#versioning-and-build-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Versioning and build numbers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#distribution-channels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distribution channels
       
     </span>
   </a>
@@ -3693,6 +3815,107 @@ is exercisable from a pull request.</p>
 version it already holds, and the two workflows have independent run counters.</p>
 <p>To force one: <code>gh workflow run player-ios-refresh.yml -f force=true</code>. Add
 <code>-f dry_run=true</code> to build without uploading or moving the marker tag.</p>
+<h2 id="on-demand-player-testing-builds">On-demand player testing builds</h2>
+<p>When testing changes on master or feature branches before cutting a formal
+release, <code>.github/workflows/player-ondemand.yml</code> allows building, signing, and
+distributing player binaries on demand across any combination of supported platforms.</p>
+<h3 id="dispatching">Dispatching</h3>
+<p>Trigger the workflow from the GitHub Actions UI ("Player / On-Demand Build") or via the GitHub CLI:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Build default mobile platforms (iOS &amp; Android) from master and upload to internal store tracks</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Build a specific branch or commit</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">ref</span><span class="o">=</span>feat/my-feature
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># Build all platforms without uploading to stores</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_macos</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_windows</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_linux</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">upload_to_stores</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="c1"># Test build and sign pipeline without uploading (dry run)</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
+</code></pre></div>
+<h3 id="dispatch-inputs_1">Dispatch inputs</h3>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ref</code></td>
+<td>string</td>
+<td><code>master</code></td>
+<td>Git branch, commit SHA, or tag to build.</td>
+</tr>
+<tr>
+<td><code>build_ios</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>Build iOS (TestFlight / IPA).</td>
+</tr>
+<tr>
+<td><code>build_android</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>Build Android (Play Store internal track / APK / AAB).</td>
+</tr>
+<tr>
+<td><code>build_macos</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>Build macOS (signed &amp; notarized DMG).</td>
+</tr>
+<tr>
+<td><code>build_windows</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>Build Windows (Inno Setup installer).</td>
+</tr>
+<tr>
+<td><code>build_linux</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>Build Linux (<code>.tar.gz</code> bundle).</td>
+</tr>
+<tr>
+<td><code>upload_to_stores</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>Upload iOS build to TestFlight (internal testers).</td>
+</tr>
+<tr>
+<td><code>version_override</code></td>
+<td>string</td>
+<td><code>""</code></td>
+<td>Custom version string (e.g. <code>0.14.0-dev.42</code>). If empty, auto-derived.</td>
+</tr>
+<tr>
+<td><code>dry_run</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>Build and sign without uploading to TestFlight.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="versioning-and-build-numbers">Versioning and build numbers</h3>
+<p>Unless specified via <code>version_override</code>, the version string is derived automatically from the latest release tag as <code>&lt;major&gt;.&lt;next_minor&gt;.0-dev.&lt;run_number&gt;</code> (for example, <code>0.14.0-dev.42</code>).</p>
+<p>Build numbers (<code>version_code</code>) are calculated as <code>RUN_NUMBER + 500000</code>. This range is monotonic and completely disjoint from <code>release.yml</code> (<code>RUN_NUMBER + 10000</code>) and <code>player-ios-refresh.yml</code> (<code>RUN_NUMBER + 900000</code>), ensuring that iOS test builds never collide with production or refresh builds in App Store Connect.</p>
+<p>Android test builds are distributed directly as release artifacts rather than uploaded to Google Play Console. Because Google Play requires <code>versionCode</code> to be strictly increasing across the entire lifetime of the application ID across all tracks, uploading on-demand test builds to Google Play with a separate offset would permanently leapfrog and block subsequent production releases in <code>release.yml</code>. Direct APK sideloading completely avoids this restriction while providing instant on-device installation.</p>
+<h3 id="distribution-channels">Distribution channels</h3>
+<ul>
+<li><strong>TestFlight Internal Testers:</strong> When <code>upload_to_stores</code> is true, iOS builds are uploaded to App Store Connect without associating external tester groups (<code>distribute_external: false</code>). Builds are distributed immediately to App Store Connect internal team members, avoiding Apple's external Beta App Review delay.</li>
+<li><strong>Workflow Artifacts:</strong> All built binaries are uploaded as GitHub Actions artifacts attached to the workflow run (retained for 30 days):</li>
+<li>Android: signed release universal APK (<code>mydia-player-android-apk</code>) and Android App Bundle (<code>.aab</code>) ready for direct sideloading and testing on Android phones and TVs</li>
+<li>macOS: signed and notarized DMG disk image</li>
+<li>Windows: signed Inno Setup executable installer</li>
+<li>Linux: standalone <code>.tar.gz</code> bundle</li>
+<li>iOS: zipped <code>.xcarchive</code> and IPA artifacts</li>
+</ul>
 <h2 id="release-notes">Release notes</h2>
 <p>Notes are authored into <code>priv/changelog/&lt;version&gt;.md</code> and tracked in the
 repository. The app compiles that file into the image, and the draft's
@@ -3713,8 +3936,8 @@ itself for anyone who skipped one.</p>
 <h2 id="metadata-relay">Metadata relay</h2>
 <p>The relay releases on a pushed tag rather than a dispatched draft.
 <code>deploy-relay.yml</code> triggers on tags matching <code>metadata-relay-v*</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">"Metadata Relay v0.12.0"</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>metadata-relay-v0.12.0<span class="w"> </span>-m<span class="w"> </span><span class="s2">"Metadata Relay v0.12.0"</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>metadata-relay-v0.12.0
 </code></pre></div>
 <p>The relay lives in this repository at <code>metadata-relay/</code> but deploys entirely
 separately, so its version is independent of mydia's.</p>
