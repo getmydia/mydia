@@ -663,6 +663,19 @@ class P2pService {
     _autoReconnectAttempts = 0;
   }
 
+  /// The host, waiting for startup first when a request arrives before it.
+  ///
+  /// `MyApp` starts [initialize] in a microtask, and the first requests go
+  /// out while it is still resolving relays. [initialize] is idempotent and
+  /// joins an attempt already in flight, so this costs nothing once the host
+  /// is up.
+  Future<P2PHost> _requireHost() async {
+    if (_host == null) await initialize();
+    final host = _host;
+    if (host == null) throw Exception('P2P host initialization failed');
+    return host;
+  }
+
   /// Get this node's EndpointAddr as JSON for sharing.
   Future<String?> getNodeAddr() async {
     if (_host == null) return null;
@@ -677,7 +690,7 @@ class P2pService {
     required String deviceName,
     required String deviceType,
   }) async {
-    if (_host == null) throw Exception("P2P host not initialized");
+    final host = await _requireHost();
 
     final normalized = await _normalizePeerForRequest(peer);
     debugPrint('[P2P] Sending pairing request to ${normalized.nodeId}');
@@ -690,7 +703,7 @@ class P2pService {
     );
 
     final res =
-        await _host!.sendPairingRequest(peer: normalized.nodeId, req: req);
+        await host.sendPairingRequest(peer: normalized.nodeId, req: req);
 
     if (res.success) {
       return {
@@ -725,7 +738,7 @@ class P2pService {
     String? authToken,
     String? deviceProfile,
   }) async {
-    if (_host == null) throw Exception("P2P host not initialized");
+    final host = await _requireHost();
 
     final normalized = await _normalizePeerForRequest(peer);
 
@@ -746,7 +759,7 @@ class P2pService {
     );
 
     final res =
-        await _host!.sendGraphqlRequest(peer: normalized.nodeId, req: req);
+        await host.sendGraphqlRequest(peer: normalized.nodeId, req: req);
 
     // Parse the response
     if (res.errors != null) {
@@ -796,7 +809,7 @@ class P2pService {
     int? rangeEnd,
     String? authToken,
   }) async {
-    if (_host == null) throw Exception("P2P host not initialized");
+    final host = await _requireHost();
 
     final sw = Stopwatch()..start();
     final normalized = await _normalizePeerForRequest(peer);
@@ -810,8 +823,7 @@ class P2pService {
       authToken: authToken,
     );
 
-    final result =
-        await _host!.sendHlsRequest(peer: normalized.nodeId, req: req);
+    final result = await host.sendHlsRequest(peer: normalized.nodeId, req: req);
     final totalMs = sw.elapsedMilliseconds;
     final ffiMs = totalMs - normalizeMs;
 
@@ -832,7 +844,7 @@ class P2pService {
     int? rangeEnd,
     String? authToken,
   }) async* {
-    if (_host == null) throw Exception("P2P host not initialized");
+    final host = await _requireHost();
 
     final sw = Stopwatch()..start();
     final normalized = await _normalizePeerForRequest(peer);
@@ -850,7 +862,7 @@ class P2pService {
       authToken: authToken,
     );
 
-    yield* _host!.sendHlsRequestStreaming(peer: normalized.nodeId, req: req);
+    yield* host.sendHlsRequestStreaming(peer: normalized.nodeId, req: req);
   }
 
   /// Reset the P2P host for re-initialization.
