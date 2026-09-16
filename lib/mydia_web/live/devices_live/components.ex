@@ -26,7 +26,7 @@ defmodule MydiaWeb.DevicesLive.Components do
 
         inactive_devices =
           Enum.reject(@devices, fn d ->
-            recent_activity?(d.last_seen_at) && is_nil(d.revoked_at)
+            RemoteAccess.online?(d.last_seen_at) && is_nil(d.revoked_at)
           end)
 
         inactive_count = length(inactive_devices) %>
@@ -78,7 +78,7 @@ defmodule MydiaWeb.DevicesLive.Components do
                       "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
                       cond do
                         RemoteAccess.RemoteDevice.revoked?(device) -> "bg-error/10 text-error"
-                        recent_activity?(device.last_seen_at) -> "bg-success/10 text-success"
+                        RemoteAccess.online?(device.last_seen_at) -> "bg-success/10 text-success"
                         true -> "bg-base-300 text-base-content/50"
                       end
                     ]}>
@@ -92,7 +92,7 @@ defmodule MydiaWeb.DevicesLive.Components do
                         <%= if RemoteAccess.RemoteDevice.revoked?(device) do %>
                           <span class="badge badge-error badge-xs">Revoked</span>
                         <% else %>
-                          <%= if recent_activity?(device.last_seen_at) do %>
+                          <%= if RemoteAccess.online?(device.last_seen_at) do %>
                             <span class="w-1.5 h-1.5 rounded-full bg-success animate-pulse shrink-0"></span>
                           <% end %>
                         <% end %>
@@ -101,7 +101,7 @@ defmodule MydiaWeb.DevicesLive.Components do
                         <%= cond do %>
                           <% RemoteAccess.RemoteDevice.revoked?(device) -> %>
                             Access revoked
-                          <% recent_activity?(device.last_seen_at) -> %>
+                          <% RemoteAccess.online?(device.last_seen_at) -> %>
                             Online now
                           <% is_nil(device.last_seen_at) -> %>
                             Never connected
@@ -193,7 +193,7 @@ defmodule MydiaWeb.DevicesLive.Components do
 
       <% inactive_to_clear =
         Enum.reject(@devices, fn d ->
-          recent_activity?(d.last_seen_at) && is_nil(d.revoked_at)
+          RemoteAccess.online?(d.last_seen_at) && is_nil(d.revoked_at)
         end) %>
       <.modal
         id="clear-inactive-modal"
@@ -303,23 +303,6 @@ defmodule MydiaWeb.DevicesLive.Components do
       </div>
     </div>
     """
-  end
-
-  # Consider a device "active" (online now) if seen within the last 10 minutes.
-  @active_threshold_seconds 600
-
-  @doc """
-  Whether a device was seen recently enough to count as online.
-
-  Public because `MydiaWeb.DevicesLive.Index` decides which devices the
-  clear-inactive action sweeps, and both sides must agree on "inactive".
-  """
-  @spec recent_activity?(DateTime.t() | nil) :: boolean()
-  def recent_activity?(nil), do: false
-
-  def recent_activity?(last_seen) do
-    threshold = DateTime.utc_now() |> DateTime.add(-@active_threshold_seconds, :second)
-    DateTime.compare(last_seen, threshold) == :gt
   end
 
   @doc """

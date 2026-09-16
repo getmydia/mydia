@@ -141,6 +141,33 @@ defmodule Mydia.RemoteAccess.DeviceLivenessTest do
     end
   end
 
+  describe "online?/2" do
+    test "a device that was never seen is offline" do
+      refute RemoteAccess.online?(nil, ~U[2026-09-16 12:00:00Z])
+    end
+
+    test "a device seen a minute ago is online" do
+      now = ~U[2026-09-16 12:00:00Z]
+
+      assert RemoteAccess.online?(DateTime.add(now, -60, :second), now)
+    end
+
+    test "a device seen sixteen minutes ago is offline" do
+      now = ~U[2026-09-16 12:00:00Z]
+
+      refute RemoteAccess.online?(DateTime.add(now, -960, :second), now)
+    end
+
+    test "the window is fifteen minutes and excludes its own edge" do
+      # An active device's last_seen_at can be almost twice the 300 s write
+      # throttle old, so the window has to be wider than 600 s.
+      now = ~U[2026-09-16 12:00:00Z]
+
+      assert RemoteAccess.online?(DateTime.add(now, -899, :second), now)
+      refute RemoteAccess.online?(DateTime.add(now, -900, :second), now)
+    end
+  end
+
   describe "access token claims" do
     test "a device access token carries its device id through verification", %{
       user: user,

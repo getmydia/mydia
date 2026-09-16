@@ -162,6 +162,27 @@ defmodule MydiaWeb.DevicesLiveTest do
       assert html =~ "Online now"
     end
 
+    test "a device seen twelve minutes ago still renders as online", %{
+      conn: conn,
+      device: device
+    } do
+      # A playing device can go nearly ten minutes between liveness writes, so
+      # a ten minute window flickered it offline.
+      touch(device, seconds_ago: 720)
+
+      {:ok, _view, html} = live(conn, ~p"/devices")
+
+      assert html =~ "Online now"
+    end
+
+    test "a device seen sixteen minutes ago is not online", %{conn: conn, device: device} do
+      touch(device, seconds_ago: 960)
+
+      {:ok, _view, html} = live(conn, ~p"/devices")
+
+      refute html =~ "Online now"
+    end
+
     test "a device that comes online after mount is picked up without a manual refresh",
          %{conn: conn, device: device} do
       touch(device, seconds_ago: 86_400)

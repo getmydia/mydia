@@ -248,6 +248,33 @@ defmodule Mydia.RemoteAccess do
   # Throttle interval for device liveness writes (5 minutes)
   @touch_throttle_seconds 300
 
+  # How recently a device must have been seen to count as online. An active
+  # device's last_seen_at can be almost twice @touch_throttle_seconds old:
+  # LivenessThrottle admits one claim per window, and touch_device_if_stale/1
+  # skips the write while the row is younger than the window. A row last written
+  # by a path that takes no claim (token refresh, pairing, or any request before
+  # a restart emptied the ETS table) can be 299 s old at a claim that then
+  # skips, and 599 s old or more by the next one. Three windows leave room for
+  # the gap before the device's next request.
+  @online_window_seconds 3 * @touch_throttle_seconds
+
+  @doc """
+  Whether a device last seen at `last_seen_at` counts as online at `now`.
+
+  The one definition behind the Devices page's "Online now" badge, its
+  clear-inactive action, and the `online` field on the GraphQL
+  `remote_device` type. A device that was never seen is offline.
+  """
+  @spec online?(DateTime.t() | nil, DateTime.t()) :: boolean()
+  def online?(last_seen_at, now \\ DateTime.utc_now())
+
+  def online?(nil, _now), do: false
+
+  def online?(%DateTime{} = last_seen_at, now) do
+    threshold = DateTime.add(now, -@online_window_seconds, :second)
+    DateTime.compare(last_seen_at, threshold) == :gt
+  end
+
   @doc """
   Records liveness for the device named in a verified access token's claims.
 
