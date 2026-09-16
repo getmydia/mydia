@@ -1695,6 +1695,7 @@ class CastSessionManager {
         fileId: stored.fileId,
         mediaId: stored.mediaId,
         mediaType: stored.mediaType,
+        showId: stored.showId,
         title: stored.title,
         startPosition: stored.position,
         duration: stored.duration,
