@@ -161,3 +161,41 @@ async fn cancel_ends_a_stream_the_server_has_stalled() {
     assert!(next.is_none());
     events.abort();
 }
+
+/// Dropping the cancel handle unused is not a cancel: the buffered request
+/// path discards it and reads the whole response.
+#[tokio::test(flavor = "multi_thread")]
+async fn dropping_the_cancel_handle_does_not_cancel() {
+    const LEN: u64 = 4 * 1024 * 1024;
+    let (server, _client, stream_id, response, events) = open_stream().await;
+    let HlsStreamResponse {
+        mut chunk_rx,
+        cancel,
+        ..
+    } = response;
+    drop(cancel);
+
+    let path = sparse_file("hls_stream_cancel_drop", LEN);
+    let streaming = {
+        let server = server.clone();
+        let path = path.to_string_lossy().into_owned();
+        tokio::spawn(async move { server.stream_file_range(stream_id, path, 0, LEN).await })
+    };
+
+    let mut received = 0u64;
+    while let Some(chunk) = tokio::time::timeout(Duration::from_secs(10), chunk_rx.recv())
+        .await
+        .expect("stream stalled")
+    {
+        received += chunk.len() as u64;
+    }
+    let result = tokio::time::timeout(Duration::from_secs(10), streaming)
+        .await
+        .expect("server still streaming")
+        .expect("streaming task panicked");
+    let _ = std::fs::remove_file(&path);
+
+    result.expect("server failed to finish the file");
+    assert_eq!(received, LEN, "the stream ended early");
+    events.abort();
+}
