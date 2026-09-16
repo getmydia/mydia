@@ -121,7 +121,7 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
 /// promotes on its own; see that class's `_refreshHeld` dartdoc) eventually
 /// show up in the banner instead of staying invisible until the app
 /// restarts. Half a minute, not [AmbientTargets]' own 5s poll cadence: this
-/// one dials the whole roster (`AmbientTargets.sweep`'s cost, not
+/// one dials every online device (`AmbientTargets.sweep`'s cost, not
 /// `_refreshHeld`'s), so it stays coarser on purpose.
 const _ambientResweepInterval = Duration(seconds: 30);
 
@@ -161,7 +161,10 @@ final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
   final transport = P2pControlTransport(host);
 
   final targets = AmbientTargets(
-    rosterSource: () async => (await roster.entries())
+    // Only devices the server saw recently. Anything playing is talking to
+    // the server, and each dial to a device that is off costs a 10 second
+    // on-demand timeout on every scan.
+    rosterSource: () async => (await roster.onlineEntries())
         .where(
             (entry) => entry.nodeId.toLowerCase() != selfNodeId.toLowerCase())
         .map((entry) => entry.nodeId)

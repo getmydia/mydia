@@ -45,10 +45,10 @@ typedef AmbientNodeProbe = Future<FlutterPlaybackSnapshot?> Function(
   String nodeId,
 );
 
-/// Lists the roster's node IDs to sweep. Mirrors `RemoteRoster.entries()`
-/// mapped down to bare IDs — kept abstract, like [AmbientNodeProbe], so a
-/// test can script a roster directly instead of standing up a real
-/// `RemoteRoster`.
+/// Lists the node IDs to sweep. In production that is
+/// `RemoteRoster.onlineEntries()` mapped down to bare IDs. It is kept
+/// abstract, like [AmbientNodeProbe], so a test can script a roster directly
+/// instead of standing up a real `RemoteRoster`.
 typedef AmbientRosterSource = Future<List<String>> Function();
 
 /// One peer this app is holding an ambient connection to, because it is

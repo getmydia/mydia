@@ -37,6 +37,8 @@ class RemoteRoster {
   List<RemoteDeviceEntry> _entries = const [];
   DateTime? _fetchedAt;
   DateTime? _lastUnknownPeerFetch;
+  List<RemoteDeviceEntry> _lastOnline = const [];
+  bool _onlineUnsupported = false;
 
   RemoteRoster({
     required GraphQLClient client,
@@ -57,6 +59,25 @@ class RemoteRoster {
     }
   ''';
 
+  static const _onlineQuery = r'''
+    query OnlineDevices {
+      devices {
+        __typename
+        id
+        deviceName
+        platform
+        nodeId
+        isRevoked
+        online
+      }
+    }
+  ''';
+
+  /// What a server that predates `online` answers. Absinthe words it
+  /// `Cannot query field "online" on type "RemoteDevice".`, and over p2p the
+  /// same text arrives inside an `Exception: ...` message.
+  static const _unknownOnlineFieldMarker = 'Cannot query field "online"';
+
   /// Devices that can actually be dialed. A device with no node ID has never
   /// reported one, so it is omitted rather than listed as permanently
   /// offline, and a revoked device is omitted because revoking is documented
@@ -64,6 +85,53 @@ class RemoteRoster {
   Future<List<RemoteDeviceEntry>> entries() async {
     await _ensureFresh();
     return _entries;
+  }
+
+  /// Devices the server saw recently, for the ambient "playing on" scan.
+  ///
+  /// Asked for on every call rather than read from the [entries] cache: a
+  /// screen switched on a moment ago has to be probed on the next scan, not
+  /// after the roster's TTL. Kept apart from [entries] on purpose, because
+  /// that list is also the access control list behind [allows], and whether
+  /// a device is online must never change who may drive this one.
+  ///
+  /// A server that predates the `online` field falls back to [entries] for the
+  /// rest of this roster's life. Any other failure answers the last list that
+  /// arrived, empty before the first, and never throws: the ambient resweep
+  /// timer calls this with nobody to report an error to.
+  Future<List<RemoteDeviceEntry>> onlineEntries() async {
+    if (_onlineUnsupported) return entries();
+
+    try {
+      final result = await _client.query(
+        QueryOptions(
+          document: gql(_onlineQuery),
+          fetchPolicy: FetchPolicy.noCache,
+        ),
+      );
+
+      if (result.hasException) {
+        final error = result.exception.toString();
+        if (error.contains(_unknownOnlineFieldMarker)) {
+          debugPrint(
+            '[RemoteRoster] server has no online field, scanning every device',
+          );
+          _onlineUnsupported = true;
+          return entries();
+        }
+        debugPrint('[RemoteRoster] online fetch failed: $error');
+        return _lastOnline;
+      }
+
+      _lastOnline = _parseDevices(
+        result.data,
+        keep: (device) => device['online'] == true,
+      );
+      return _lastOnline;
+    } catch (error) {
+      debugPrint('[RemoteRoster] online fetch threw: $error');
+      return _lastOnline;
+    }
   }
 
   /// Whether a dialing peer is one of this account's devices.
@@ -126,24 +194,36 @@ class RemoteRoster {
         return;
       }
 
-      final devices = (result.data?['devices'] as List?) ?? const [];
-      _entries = devices
-          .cast<Map<String, dynamic>>()
-          .where((d) => (d['nodeId'] as String?)?.isNotEmpty ?? false)
-          // Revoking is documented as preventing future access, and this list
-          // is the access control list as well as the picker list, so a
-          // revoked device must not be dialable or permitted to dial.
-          .where((d) => d['isRevoked'] != true)
-          .map((d) => RemoteDeviceEntry(
-                id: d['id'] as String,
-                deviceName: d['deviceName'] as String,
-                platform: d['platform'] as String,
-                nodeId: d['nodeId'] as String,
-              ))
-          .toList(growable: false);
+      _entries = _parseDevices(result.data);
       _fetchedAt = _now();
     } catch (error) {
       debugPrint('[RemoteRoster] refresh threw: $error');
     }
+  }
+
+  /// The dialable devices in a `devices` response, narrowed further by
+  /// [keep] when given.
+  ///
+  /// A device with no node ID has never reported one, so it is omitted rather
+  /// than listed as permanently offline. A revoked device is omitted because
+  /// revoking is documented as preventing future access, and [entries] is the
+  /// access control list as well as the picker list.
+  static List<RemoteDeviceEntry> _parseDevices(
+    Map<String, dynamic>? data, {
+    bool Function(Map<String, dynamic> device)? keep,
+  }) {
+    final devices = (data?['devices'] as List?) ?? const [];
+    return devices
+        .cast<Map<String, dynamic>>()
+        .where((d) => (d['nodeId'] as String?)?.isNotEmpty ?? false)
+        .where((d) => d['isRevoked'] != true)
+        .where((d) => keep == null || keep(d))
+        .map((d) => RemoteDeviceEntry(
+              id: d['id'] as String,
+              deviceName: d['deviceName'] as String,
+              platform: d['platform'] as String,
+              nodeId: d['nodeId'] as String,
+            ))
+        .toList(growable: false);
   }
 }

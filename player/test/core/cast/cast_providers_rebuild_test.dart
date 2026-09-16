@@ -54,6 +54,18 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   }
 }
 
+Map<String, dynamic> _device(String id, String nodeId,
+        {required bool online}) =>
+    {
+      '__typename': 'RemoteDevice',
+      'id': id,
+      'deviceName': id,
+      'platform': 'android',
+      'nodeId': nodeId,
+      'isRevoked': false,
+      'online': online,
+    };
+
 void main() {
   group('mydiaCastBackendProvider rebuild on host swap', () {
     test(
@@ -196,6 +208,40 @@ void main() {
         reason: 'the same host and identity must keep the same ambient '
             'targets, or each sweep disposes its own connections',
       );
+    });
+
+    test('scans only the devices the server reports online, never itself',
+        () async {
+      // A device that is playing is talking to the server, so an offline one
+      // cannot be what the banner is looking for, and each dial to it costs a
+      // 10 second on-demand timeout on every 30 second scan.
+      final statusNotifier = _FakeP2pStatusNotifier();
+
+      final container = ProviderContainer(overrides: [
+        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+        graphqlClientProvider.overrideWith(
+          (ref) => stubClient(StubLink.responses([
+            <String, dynamic>{
+              '__typename': 'Query',
+              'devices': [
+                _device('this-device', 'a' * 64, online: true),
+                _device('hall-screen', 'b' * 64, online: true),
+                _device('attic-tablet', 'c' * 64, online: false),
+              ],
+            },
+          ])),
+        ),
+      ]);
+      addTearDown(container.dispose);
+
+      expect(container.read(ambientTargetsProvider), isNull);
+
+      statusNotifier.publish('a' * 64);
+      final targets = container.read(ambientTargetsProvider);
+      expect(targets, isNotNull);
+
+      expect(await targets!.rosterSource(), ['b' * 64]);
     });
   });
 }
