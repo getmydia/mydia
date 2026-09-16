@@ -4,7 +4,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/p2p/disk_space.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/p2p/range_spool.dart';
 
 import 'fake_range_stream.dart';
 import 'proxy_fetch.dart';
@@ -45,11 +47,21 @@ class RawRangeClient {
 void main() {
   late TestP2pService p2p;
   late LocalProxyService proxy;
+  late Directory tempRoot;
+  late DiskSpace diskSpace;
   final owner = Object();
 
   setUp(() async {
+    tempRoot = await Directory.systemTemp.createTemp('proxy_range_test');
+    diskSpace = const DiskSpace(free: 1 << 40, total: 1 << 41);
     p2p = TestP2pService();
-    proxy = LocalProxyService(p2p);
+    proxy = LocalProxyService(
+      p2p,
+      spool: RangeSpoolSettings(
+        rootDirectory: () async => tempRoot,
+        diskSpace: (_) async => diskSpace,
+      ),
+    );
     await proxy.start(
       owner: owner,
       targetPeer: 'peer-1',
@@ -57,7 +69,13 @@ void main() {
     );
   });
 
-  tearDown(() => proxy.shutdown());
+  tearDown(() async {
+    await proxy.shutdown();
+    await tempRoot.delete(recursive: true);
+  });
+
+  List<File> spoolFiles() =>
+      tempRoot.listSync(recursive: true).whereType<File>().toList();
 
   FakeRangeStream serve(FakeRangeStream upstream) {
     p2p.onOpenRangeStream = (_) async => upstream;
@@ -149,6 +167,7 @@ void main() {
       '/direct/file-1/stream',
     );
     await client.waitForBytes(64 * 1024);
+    expect(spoolFiles(), hasLength(1));
 
     client.hangUp();
 
@@ -156,6 +175,7 @@ void main() {
     final pulled = upstream.pulledBytes;
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(upstream.pulledBytes, pulled);
+    await waitUntil(() => spoolFiles().isEmpty);
   });
 
   test('stops pulling a download while the client is not reading', () async {
@@ -174,6 +194,7 @@ void main() {
 
     expect(upstream.pulledBytes, settled);
     expect(settled, lessThan(64 * 1024 * 1024));
+    expect(spoolFiles(), isEmpty, reason: 'downloads are not spooled');
     client.hangUp();
   });
 
@@ -188,6 +209,69 @@ void main() {
     await proxy.shutdown();
 
     await upstream.cancelled.timeout(const Duration(seconds: 5));
+    await waitUntil(() => spoolFiles().isEmpty);
     client.hangUp();
+  });
+
+  group('read-ahead', () {
+    test('keeps downloading a direct stream the client stopped reading',
+        () async {
+      const total = 8 * 1024 * 1024;
+      final upstream = serve(
+        FakeRangeStream(
+          header: fakeRangeHeader(contentLength: total),
+          totalBytes: total,
+        ),
+      );
+      final client = await RawRangeClient.open(
+        proxy.port,
+        '/direct/file-1/stream',
+      );
+      await client.waitForBytes(64 * 1024);
+
+      client.stopReading();
+
+      await waitUntil(
+        () => upstream.pulledBytes == total,
+        timeout: const Duration(seconds: 20),
+      );
+      await waitUntil(() => spoolFiles().single.lengthSync() == total);
+      client.hangUp();
+    });
+
+    test('streams without read-ahead when the disk is nearly full', () async {
+      diskSpace = const DiskSpace(free: 1 << 30, total: 1 << 40);
+      final upstream = endless();
+      final client = await RawRangeClient.open(
+        proxy.port,
+        '/direct/file-1/stream',
+      );
+      await client.waitForBytes(64 * 1024);
+
+      client.stopReading();
+      await Future<void>.delayed(const Duration(seconds: 1));
+      final settled = upstream.pulledBytes;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      expect(upstream.pulledBytes, settled);
+      expect(spoolFiles(), isEmpty);
+      client.hangUp();
+    });
+
+    test('clears spool files an earlier run left behind', () async {
+      final stale = File('${tempRoot.path}/mydia-proxy-spool/stale.part')
+        ..createSync(recursive: true);
+      serve(
+        FakeRangeStream(
+          header: fakeRangeHeader(contentLength: 10),
+          totalBytes: 10,
+        ),
+      );
+
+      final response = await proxyGet(url('/direct/file-1/stream'));
+
+      expect(response.status, 206);
+      expect(stale.existsSync(), isFalse);
+    });
   });
 }

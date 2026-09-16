@@ -8,6 +8,7 @@ import 'package:player/core/p2p/media_route.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/p2p/p2p_range_stream.dart';
 import 'package:player/core/p2p/range_source.dart';
+import 'package:player/core/p2p/range_spool.dart';
 import 'package:player/native/lib.dart' show FlutterHlsResponseHeader;
 
 final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
@@ -87,7 +88,17 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   @override
   String get baseUrl => _urlBase;
 
-  LocalProxyService(this._p2p);
+  LocalProxyService(
+    this._p2p, {
+    RangeSpoolSettings spool = const RangeSpoolSettings.platform(),
+  }) : _spoolSettings = spool;
+
+  final RangeSpoolSettings _spoolSettings;
+
+  /// Where spool files go. Prepared the first time a spool is needed, which
+  /// also clears whatever a crash left behind. Null when there is nowhere
+  /// to spool.
+  Future<Directory?>? _spoolDirectory;
 
   /// Test-only constructor: builds a service with no live P2P dependency.
   /// Requests that reach P2P will fail, which is fine for URL and gating tests.
@@ -524,7 +535,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       firstHeaderMs = sw.elapsedMilliseconds;
       _applyUpstreamHeaders(response, upstream.header);
 
-      final active = source = _openSource(upstream, sessionId);
+      final active = source = await _openSource(upstream, sessionId);
       _activeSources.add(active);
 
       // `done` is the only sign dart:io gives of a client that hung up:
@@ -568,8 +579,45 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   }
 
   /// The source a byte-range response is served from.
-  RangeSource _openSource(P2pRangeStream upstream, String sessionId) =>
-      PassThroughSource(upstream);
+  ///
+  /// Direct playback spools to disk, so a stream that is never seeked
+  /// downloads the whole file ahead of the player. Downloads do not: the
+  /// download job is already writing the bytes to a file of its own.
+  Future<RangeSource> _openSource(
+    P2pRangeStream upstream,
+    String sessionId,
+  ) async {
+    if (!sessionId.startsWith(MediaRoutes.directSessionPrefix)) {
+      return PassThroughSource(upstream);
+    }
+
+    final directory = await (_spoolDirectory ??= _prepareSpoolDirectory());
+    final spool = directory == null
+        ? null
+        : await RangeSpool.open(
+            upstream: upstream,
+            directory: directory,
+            diskSpace: _spoolSettings.diskSpace,
+            policy: _spoolSettings.policy,
+          );
+    if (spool != null) return spool;
+
+    debugPrint(
+        '[LocalProxy] No room to spool $sessionId, streaming without read-ahead');
+    return PassThroughSource(upstream);
+  }
+
+  Future<Directory?> _prepareSpoolDirectory() async {
+    try {
+      final root = await _spoolSettings.rootDirectory();
+      final directory = Directory('${root.path}/mydia-proxy-spool');
+      if (await directory.exists()) await directory.delete(recursive: true);
+      return await directory.create(recursive: true);
+    } catch (e) {
+      debugPrint('[LocalProxy] No spool directory: $e');
+      return null;
+    }
+  }
 
   /// Cancels every byte-range transfer in flight. Their sockets are about to
   /// close, and the transfers must not outlive them.

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:player/core/p2p/disk_space.dart';
 import 'package:player/core/p2p/p2p_range_stream.dart';
 import 'package:player/core/p2p/range_source.dart';
@@ -39,6 +40,26 @@ class RangeSpoolPolicy {
     );
     return space.free > reserve;
   }
+}
+
+/// Where the proxy spools playback ranges, and how much space it may use.
+class RangeSpoolSettings {
+  const RangeSpoolSettings({
+    required this.rootDirectory,
+    required this.diskSpace,
+    this.policy = const RangeSpoolPolicy(),
+  });
+
+  /// The app's temp directory, measured through the Rust bridge.
+  const RangeSpoolSettings.platform()
+      : rootDirectory = getTemporaryDirectory,
+        diskSpace = nativeDiskSpace,
+        policy = const RangeSpoolPolicy();
+
+  /// The directory the spool directory is created in.
+  final Future<Directory> Function() rootDirectory;
+  final DiskSpaceProbe diskSpace;
+  final RangeSpoolPolicy policy;
 }
 
 /// Downloads a byte range to a temp file as fast as the link allows, and
