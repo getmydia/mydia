@@ -12,7 +12,7 @@ use iroh::endpoint::{Incoming, SendStream};
 use iroh::{
     defaults::prod as default_relays,
     endpoint::{presets, Connection, PathEvent},
-    Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
+    Endpoint, EndpointAddr, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
 };
 // A browser has no DNS resolver to configure: iroh resolves peers over HTTPS
 // pkarr there and gates the whole type out. Not a role split, a platform one.
@@ -226,7 +226,9 @@ enum Command {
     /// A command that never finishes, standing in for one waiting on a peer
     /// that has stopped reading. `started` fires once the loop is inside it.
     #[cfg(test)]
-    DebugStall { started: oneshot::Sender<()> },
+    DebugStall {
+        started: oneshot::Sender<()>,
+    },
 }
 
 /// Events emitted by the Host
@@ -919,6 +921,15 @@ fn build_relay_mode(config: &HostConfig) -> Option<RelayMode> {
     Some(RelayMode::Custom(relay_map))
 }
 
+/// Internal messages sent by background workers to the main event loop.
+enum InternalMessage {
+    DialSucceeded {
+        node_id: String,
+        conn: Connection,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+}
+
 /// Main event loop that runs in a background thread
 async fn run_event_loop(
     secret_key: SecretKey,
@@ -996,6 +1007,7 @@ async fn run_event_loop(
     // guards against a stale disconnect signal evicting a *fresh*
     // reconnection under the same peer_id that raced ahead of it.
     let (disconnect_tx, mut disconnect_rx) = mpsc::channel::<(String, ConnectionId)>(64);
+    let (internal_tx, mut internal_rx) = mpsc::channel::<InternalMessage>(64);
 
     // Wait for the endpoint to come online (relay connected + local IP
     // available), bounded by a timeout so an unreachable relay cannot block
@@ -1064,10 +1076,9 @@ async fn run_event_loop(
                     cmd,
                     &endpoint,
                     &mut connected_peers,
-                    &event_tx,
                     &shared_state,
                     relay_connected,
-                    &disconnect_tx,
+                    &internal_tx,
                 ),
             )
             .await;
@@ -1123,10 +1134,9 @@ async fn run_event_loop(
                                         cmd,
                                         &endpoint,
                                         &mut connected_peers,
-                                        &event_tx,
                                         &shared_state,
                                         relay_connected,
-                                        &disconnect_tx,
+                                        &internal_tx,
                                     ),
                                 )
                                 .await
@@ -1138,6 +1148,33 @@ async fn run_event_loop(
                     Some((peer_id, stable_id)) = disconnect_rx.recv() => {
                         prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
                         true
+                    }
+
+                    Some(msg) = internal_rx.recv() => {
+                        match msg {
+                            InternalMessage::DialSucceeded {
+                                node_id,
+                                conn,
+                                reply,
+                            } => {
+                                unless_shutdown(
+                                    &mut shutdown_rx,
+                                    async {
+                                        register_connection(
+                                            conn,
+                                            node_id,
+                                            &mut connected_peers,
+                                            &event_tx,
+                                            &shared_state,
+                                            &disconnect_tx,
+                                        )
+                                        .await;
+                                        let _ = reply.send(Ok(()));
+                                    },
+                                )
+                                .await
+                            }
+                        }
                     }
                 };
             }
@@ -1160,10 +1197,9 @@ async fn run_event_loop(
                                         cmd,
                                         &endpoint,
                                         &mut connected_peers,
-                                        &event_tx,
                                         &shared_state,
                                         relay_connected,
-                                        &disconnect_tx,
+                                        &internal_tx,
                                     ),
                                 )
                                 .await
@@ -1175,6 +1211,33 @@ async fn run_event_loop(
                     Some((peer_id, stable_id)) = disconnect_rx.recv() => {
                         prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
                         true
+                    }
+
+                    Some(msg) = internal_rx.recv() => {
+                        match msg {
+                            InternalMessage::DialSucceeded {
+                                node_id,
+                                conn,
+                                reply,
+                            } => {
+                                unless_shutdown(
+                                    &mut shutdown_rx,
+                                    async {
+                                        register_connection(
+                                            conn,
+                                            node_id,
+                                            &mut connected_peers,
+                                            &event_tx,
+                                            &shared_state,
+                                            &disconnect_tx,
+                                        )
+                                        .await;
+                                        let _ = reply.send(Ok(()));
+                                    },
+                                )
+                                .await
+                            }
+                        }
                     }
                 };
             }
@@ -1328,6 +1391,52 @@ async fn prune_disconnected_peer(
         .await;
 }
 
+/// Record a newly established connection, announce its arrival, and spawn its stream handler and type monitor.
+async fn register_connection(
+    conn: Connection,
+    peer_id: String,
+    connected_peers: &mut HashMap<String, PeerConnections>,
+    event_tx: &mpsc::Sender<Event>,
+    shared_state: &Arc<Mutex<SharedState>>,
+    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
+) {
+    let connection_type = PeerConnectionType::from_connection(&conn);
+    tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
+
+    let conn_id = next_connection_id();
+    insert_connection(connected_peers, &peer_id, conn_id, conn.clone());
+    let _ = event_tx
+        .send(Event::Connected {
+            peer_id: peer_id.clone(),
+            connection_type,
+        })
+        .await;
+
+    // Spawn a task to handle incoming streams from this peer
+    let event_tx_clone = event_tx.clone();
+    let peer_id_clone = peer_id.clone();
+    let shared_state_clone = shared_state.clone();
+    let conn_clone = conn.clone();
+    let disconnect_tx_clone = disconnect_tx.clone();
+    runtime::spawn(async move {
+        handle_connection(
+            conn_clone,
+            peer_id_clone,
+            conn_id,
+            event_tx_clone,
+            shared_state_clone,
+            disconnect_tx_clone,
+        )
+        .await;
+    });
+
+    // Monitor connection type changes (relay -> direct)
+    let monitor_tx = event_tx.clone();
+    runtime::spawn(async move {
+        monitor_connection_type(conn, peer_id, monitor_tx).await;
+    });
+}
+
 /// Accept one inbound connection and start serving it.
 ///
 /// Host role only. A browser endpoint has nothing listening, so a client build
@@ -1372,41 +1481,15 @@ async fn accept_inbound(
     };
 
     let peer_id = conn.remote_id().to_string();
-    let connection_type = PeerConnectionType::from_connection(&conn);
-    tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
-
-    let conn_id = next_connection_id();
-    insert_connection(connected_peers, &peer_id, conn_id, conn.clone());
-    let _ = event_tx
-        .send(Event::Connected {
-            peer_id: peer_id.clone(),
-            connection_type,
-        })
-        .await;
-
-    // Spawn a task to handle incoming streams from this peer
-    let event_tx_clone = event_tx.clone();
-    let peer_id_clone = peer_id.clone();
-    let shared_state_clone = shared_state.clone();
-    let conn_clone = conn.clone();
-    let disconnect_tx_clone = disconnect_tx.clone();
-    runtime::spawn(async move {
-        handle_connection(
-            conn_clone,
-            peer_id_clone,
-            conn_id,
-            event_tx_clone,
-            shared_state_clone,
-            disconnect_tx_clone,
-        )
-        .await;
-    });
-
-    // Monitor connection type changes (relay -> direct)
-    let monitor_tx = event_tx.clone();
-    runtime::spawn(async move {
-        monitor_connection_type(conn, peer_id, monitor_tx).await;
-    });
+    register_connection(
+        conn,
+        peer_id,
+        connected_peers,
+        event_tx,
+        shared_state,
+        disconnect_tx,
+    )
+    .await;
 }
 
 /// Dispatch a single command from a `Host` handle.
@@ -1414,26 +1497,44 @@ async fn handle_command(
     cmd: Command,
     endpoint: &Endpoint,
     connected_peers: &mut HashMap<String, PeerConnections>,
-    event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
     relay_connected: bool,
-    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
+    internal_tx: &mpsc::Sender<InternalMessage>,
 ) {
     match cmd {
         Command::Dial {
             endpoint_addr_json,
             reply,
         } => {
-            let result = handle_dial(
-                endpoint,
-                &endpoint_addr_json,
-                connected_peers,
-                event_tx,
-                shared_state,
-                disconnect_tx,
-            )
-            .await;
-            let _ = reply.send(result);
+            let endpoint_addr = match endpoint_addr_from_json(&endpoint_addr_json) {
+                Ok(addr) => addr,
+                Err(e) => {
+                    let _ = reply.send(Err(e));
+                    return;
+                }
+            };
+
+            let endpoint = endpoint.clone();
+            let internal_tx = internal_tx.clone();
+            let node_id = endpoint_addr.id.to_string();
+
+            tracing::info!("Dialing peer in background: {}", node_id);
+            runtime::spawn(async move {
+                match endpoint.connect(endpoint_addr, ALPN).await {
+                    Ok(conn) => {
+                        let _ = internal_tx
+                            .send(InternalMessage::DialSucceeded {
+                                node_id,
+                                conn,
+                                reply,
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        let _ = reply.send(Err(format!("Failed to connect: {}", e)));
+                    }
+                }
+            });
         }
         Command::SendRequest {
             node_id,
@@ -1675,65 +1776,6 @@ async fn handle_command(
             }
         }
     }
-}
-
-/// Handle dialing a peer
-async fn handle_dial(
-    endpoint: &Endpoint,
-    endpoint_addr_json: &str,
-    connected_peers: &mut HashMap<String, PeerConnections>,
-    event_tx: &mpsc::Sender<Event>,
-    shared_state: &Arc<Mutex<SharedState>>,
-    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
-) -> Result<(), String> {
-    let endpoint_addr = endpoint_addr_from_json(endpoint_addr_json)?;
-    let endpoint_id: EndpointId = endpoint_addr.id;
-    let node_id = endpoint_id.to_string();
-
-    tracing::info!("Dialing peer: {}", node_id);
-
-    let conn = endpoint
-        .connect(endpoint_addr, ALPN)
-        .await
-        .map_err(|e| format!("Failed to connect: {}", e))?;
-
-    let connection_type = PeerConnectionType::from_connection(&conn);
-    tracing::info!("Connected to peer: {} ({:?})", node_id, connection_type);
-
-    let conn_id = next_connection_id();
-    insert_connection(connected_peers, &node_id, conn_id, conn.clone());
-    let _ = event_tx
-        .send(Event::Connected {
-            peer_id: node_id.clone(),
-            connection_type,
-        })
-        .await;
-
-    // Spawn a task to handle incoming streams from this peer
-    let event_tx_clone = event_tx.clone();
-    let shared_state_clone = shared_state.clone();
-    let conn_clone = conn.clone();
-    let node_id_clone = node_id.clone();
-    let disconnect_tx_clone = disconnect_tx.clone();
-    runtime::spawn(async move {
-        handle_connection(
-            conn_clone,
-            node_id_clone,
-            conn_id,
-            event_tx_clone,
-            shared_state_clone,
-            disconnect_tx_clone,
-        )
-        .await;
-    });
-
-    // Monitor connection type changes (relay -> direct)
-    let monitor_tx = event_tx.clone();
-    runtime::spawn(async move {
-        monitor_connection_type(conn, node_id, monitor_tx).await;
-    });
-
-    Ok(())
 }
 
 /// Monitor a peer connection for type changes (e.g. relay -> direct after hole-punching).
@@ -2151,10 +2193,7 @@ async fn handle_connection(
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
 /// Send a request to a connected peer
-async fn do_send_request(
-    conn: Connection,
-    request: MydiaRequest,
-) -> Result<MydiaResponse, String> {
+async fn do_send_request(conn: Connection, request: MydiaRequest) -> Result<MydiaResponse, String> {
     // Open a bidirectional stream
     let (mut send, mut recv) = conn
         .open_bi()

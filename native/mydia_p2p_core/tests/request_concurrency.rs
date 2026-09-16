@@ -85,9 +85,7 @@ async fn twenty_concurrent_requests_execute_quickly() {
     for _ in 0..20 {
         let s_id = server_id.clone();
         let client_clone = &client;
-        futures.push(async move {
-            client_clone.send_request(s_id, MydiaRequest::Ping).await
-        });
+        futures.push(async move { client_clone.send_request(s_id, MydiaRequest::Ping).await });
     }
 
     let results = futures::future::join_all(futures).await;
