@@ -40,6 +40,18 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
       nodeId: nodeId,
     );
   }
+
+  /// A peer connecting, which is what `_emitStatus` broadcasts on every
+  /// `connected:` event. The identity is unchanged: only the peer count and
+  /// the connection type move.
+  void publishPeerConnected(String nodeId) {
+    state = const P2pStatus.initial().copyWith(
+      isInitialized: true,
+      nodeId: nodeId,
+      connectedPeersCount: 1,
+      peerConnectionType: P2pConnectionType.relay,
+    );
+  }
 }
 
 void main() {
@@ -76,6 +88,45 @@ void main() {
             'earlier null',
       );
     });
+
+    test('a peer connecting does not swap the backend out mid-session',
+        () async {
+      // Connecting to a Mydia target is itself a peer connection, so the
+      // status record moves the moment a cast session opens. Rebuilding on
+      // that disposes the very backend that just sent `Hello`: `connect`
+      // returns at its `if (_disposed) return`, polling never starts, and
+      // the adopted session sits at a zero duration forever. Only an
+      // identity change is a real host swap.
+      final statusNotifier = _FakeP2pStatusNotifier();
+
+      final container = ProviderContainer(overrides: [
+        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+        graphqlClientProvider.overrideWith(
+          (ref) => stubClient(StubLink.responses([
+            <String, dynamic>{'__typename': 'Query'},
+          ])),
+        ),
+      ]);
+      addTearDown(container.dispose);
+
+      // Read once before publishing: the notifier has to be mounted before
+      // it can set state, exactly as the test above does.
+      expect(container.read(mydiaCastBackendProvider), isNull);
+
+      statusNotifier.publish('a' * 64);
+      final before = container.read(mydiaCastBackendProvider);
+      expect(before, isNotNull);
+
+      statusNotifier.publishPeerConnected('a' * 64);
+
+      expect(
+        identical(container.read(mydiaCastBackendProvider), before),
+        isTrue,
+        reason: 'the same host and identity must keep the same backend, or '
+            'the live session it is holding is disposed underneath it',
+      );
+    });
   });
 
   group('ambientTargetsProvider rebuild on host swap', () {
@@ -109,6 +160,41 @@ void main() {
         reason: 'the host and the node id are both present now, so the '
             'provider must rebuild rather than keep handing out the '
             'earlier null',
+      );
+    });
+
+    test('a peer connecting does not dispose the held ambient targets',
+        () async {
+      // Ambient awareness holds a live connection per playing target, and
+      // opening one is itself a peer connection. Rebuilding on that disposed
+      // the `AmbientTargets` that had just connected, so every sweep tore
+      // down the connections the previous sweep established.
+      final statusNotifier = _FakeP2pStatusNotifier();
+
+      final container = ProviderContainer(overrides: [
+        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+        graphqlClientProvider.overrideWith(
+          (ref) => stubClient(StubLink.responses([
+            <String, dynamic>{'__typename': 'Query'},
+          ])),
+        ),
+      ]);
+      addTearDown(container.dispose);
+
+      expect(container.read(ambientTargetsProvider), isNull);
+
+      statusNotifier.publish('a' * 64);
+      final before = container.read(ambientTargetsProvider);
+      expect(before, isNotNull);
+
+      statusNotifier.publishPeerConnected('a' * 64);
+
+      expect(
+        identical(container.read(ambientTargetsProvider), before),
+        isTrue,
+        reason: 'the same host and identity must keep the same ambient '
+            'targets, or each sweep disposes its own connections',
       );
     });
   });

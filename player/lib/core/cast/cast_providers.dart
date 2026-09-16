@@ -83,9 +83,19 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
   // `initialize()` or `reset()` swapping the host underneath, and this
   // provider would keep handing out a backend wrapping an abandoned host.
   // The status record is broadcast on both transitions.
-  final p2pStatus = ref.watch(p2pStatusNotifierProvider);
+  //
+  // Selected down to the identity fields rather than watched whole. The
+  // record also carries `connectedPeersCount` and `peerConnectionType`,
+  // which move on every `connected:`, `disconnected:` and relay-to-direct
+  // upgrade. Connecting to a Mydia target *is* a peer connection, so
+  // watching the whole record disposed the backend that had just sent
+  // `Hello`: `connect` returned at its own `if (_disposed) return`, polling
+  // never started, and an adopted session sat at a zero duration forever.
+  final identity = ref.watch(p2pStatusNotifierProvider.select(
+    (status) => (status.isInitialized, status.nodeId, status.nodeAddr),
+  ));
   final host = p2pService.host;
-  final selfNodeId = p2pStatus.nodeId;
+  final selfNodeId = identity.$2;
   final client = ref.watch(graphqlClientProvider);
 
   if (host == null || selfNodeId == null || client == null) return null;
@@ -134,10 +144,15 @@ const _ambientResweepInterval = Duration(seconds: 30);
 /// host yet, no resolved node ID, or no signed-in GraphQL client.
 final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
   final p2pService = ref.watch(p2pServiceProvider);
-  // Same reason as `mydiaCastBackendProvider` above.
-  final p2pStatus = ref.watch(p2pStatusNotifierProvider);
+  // Same reason, and the same narrowing, as `mydiaCastBackendProvider`
+  // above. Narrowing matters more here, if anything: ambient awareness holds
+  // a live connection per target, so each sweep's own connection moved the
+  // full status record and disposed the `AmbientTargets` that opened it.
+  final identity = ref.watch(p2pStatusNotifierProvider.select(
+    (status) => (status.isInitialized, status.nodeId, status.nodeAddr),
+  ));
   final host = p2pService.host;
-  final selfNodeId = p2pStatus.nodeId;
+  final selfNodeId = identity.$2;
   final client = ref.watch(graphqlClientProvider);
 
   if (host == null || selfNodeId == null || client == null) return null;
