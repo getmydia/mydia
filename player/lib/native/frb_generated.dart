@@ -70,7 +70,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1980117687;
+  int get rustContentHash => 1236579695;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -82,6 +82,14 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  void crateHlsStreamHandleCancel({required HlsStreamHandle that});
+
+  FlutterHlsResponseHeader crateHlsStreamHandleHeader(
+      {required HlsStreamHandle that});
+
+  Future<Uint8List?> crateHlsStreamHandleNextChunk(
+      {required HlsStreamHandle that});
+
   Future<void> crateP2PHostAddAddressHint(
       {required P2PHost that, required String endpointAddrJson});
 
@@ -97,6 +105,11 @@ abstract class RustLibApi extends BaseApi {
 
   (P2PHost, String) crateP2PHostInit(
       {required List<String> relayUrls, Uint8List? keypairBytes});
+
+  Future<HlsStreamHandle> crateP2PHostOpenHlsStream(
+      {required P2PHost that,
+      required String peer,
+      required FlutterHlsRequest req});
 
   Stream<FlutterInboundControlRequest> crateP2PHostRemoteControlStream(
       {required P2PHost that});
@@ -116,11 +129,6 @@ abstract class RustLibApi extends BaseApi {
       required String peer,
       required FlutterHlsRequest req});
 
-  Stream<FlutterHlsStreamEvent> crateP2PHostSendHlsRequestStreaming(
-      {required P2PHost that,
-      required String peer,
-      required FlutterHlsRequest req});
-
   Future<FlutterPairingResponse> crateP2PHostSendPairingRequest(
       {required P2PHost that,
       required String peer,
@@ -131,6 +139,8 @@ abstract class RustLibApi extends BaseApi {
       required String peer,
       required FlutterRemoteControlRequest req});
 
+  Future<FlutterDiskSpace> crateAvailableDiskSpace({required String path});
+
   Future<void> crateInitApp();
 
   PairingKeys cratePairingKeysDerive({required String code});
@@ -139,6 +149,15 @@ abstract class RustLibApi extends BaseApi {
 
   Future<ClaimPayload> cratePairingKeysOpen(
       {required PairingKeys that, required String sealed});
+
+  RustArcIncrementStrongCountFnType
+      get rust_arc_increment_strong_count_HlsStreamHandle;
+
+  RustArcDecrementStrongCountFnType
+      get rust_arc_decrement_strong_count_HlsStreamHandle;
+
+  CrossPlatformFinalizerArg
+      get rust_arc_decrement_strong_count_HlsStreamHandlePtr;
 
   RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_P2PHost;
 
@@ -156,6 +175,82 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  void crateHlsStreamHandleCancel({required HlsStreamHandle that}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+            that, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateHlsStreamHandleCancelConstMeta,
+      argValues: [that],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateHlsStreamHandleCancelConstMeta => const TaskConstMeta(
+        debugName: "HlsStreamHandle_cancel",
+        argNames: ["that"],
+      );
+
+  @override
+  FlutterHlsResponseHeader crateHlsStreamHandleHeader(
+      {required HlsStreamHandle that}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+            that, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_flutter_hls_response_header,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateHlsStreamHandleHeaderConstMeta,
+      argValues: [that],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateHlsStreamHandleHeaderConstMeta => const TaskConstMeta(
+        debugName: "HlsStreamHandle_header",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<Uint8List?> crateHlsStreamHandleNextChunk(
+      {required HlsStreamHandle that}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+            that, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 3, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_opt_list_prim_u_8_strict,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateHlsStreamHandleNextChunkConstMeta,
+      argValues: [that],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateHlsStreamHandleNextChunkConstMeta =>
+      const TaskConstMeta(
+        debugName: "HlsStreamHandle_next_chunk",
+        argNames: ["that"],
+      );
+
+  @override
   Future<void> crateP2PHostAddAddressHint(
       {required P2PHost that, required String endpointAddrJson}) {
     return handler.executeNormal(NormalTask(
@@ -165,7 +260,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(endpointAddrJson, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 1, port: port_);
+            funcId: 4, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -192,7 +287,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(endpointAddrJson, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 2, port: port_);
+            funcId: 5, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -219,7 +314,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_StreamSink_String_Sse(sink, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 3, port: port_);
+            funcId: 6, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -246,7 +341,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
             that, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 4, port: port_);
+            funcId: 7, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_network_stats,
@@ -272,7 +367,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
             that, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 5, port: port_);
+            funcId: 8, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -297,7 +392,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_list_String(relayUrls, serializer);
         sse_encode_opt_list_prim_u_8_strict(keypairBytes, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
       },
       codec: SseCodec(
         decodeSuccessData:
@@ -316,6 +411,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<HlsStreamHandle> crateP2PHostOpenHlsStream(
+      {required P2PHost that,
+      required String peer,
+      required FlutterHlsRequest req}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
+            that, serializer);
+        sse_encode_String(peer, serializer);
+        sse_encode_box_autoadd_flutter_hls_request(req, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 10, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData:
+            sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateP2PHostOpenHlsStreamConstMeta,
+      argValues: [that, peer, req],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateP2PHostOpenHlsStreamConstMeta => const TaskConstMeta(
+        debugName: "P2PHost_open_hls_stream",
+        argNames: ["that", "peer", "req"],
+      );
+
+  @override
   Stream<FlutterInboundControlRequest> crateP2PHostRemoteControlStream(
       {required P2PHost that}) {
     final sink = RustStreamSink<FlutterInboundControlRequest>();
@@ -327,7 +453,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_StreamSink_flutter_inbound_control_request_Sse(
             sink, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 7, port: port_);
+            funcId: 11, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -359,7 +485,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(requestId, serializer);
         sse_encode_box_autoadd_flutter_remote_control_response(res, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 8, port: port_);
+            funcId: 12, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -390,7 +516,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(peer, serializer);
         sse_encode_box_autoadd_flutter_graph_ql_request(req, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 9, port: port_);
+            funcId: 13, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_graph_ql_response,
@@ -421,7 +547,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(peer, serializer);
         sse_encode_box_autoadd_flutter_hls_request(req, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 10, port: port_);
+            funcId: 14, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_hls_response,
@@ -439,40 +565,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Stream<FlutterHlsStreamEvent> crateP2PHostSendHlsRequestStreaming(
-      {required P2PHost that,
-      required String peer,
-      required FlutterHlsRequest req}) {
-    final sink = RustStreamSink<FlutterHlsStreamEvent>();
-    unawaited(handler.executeNormal(NormalTask(
-      callFfi: (port_) {
-        final serializer = SseSerializer(generalizedFrbRustBinding);
-        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
-            that, serializer);
-        sse_encode_String(peer, serializer);
-        sse_encode_box_autoadd_flutter_hls_request(req, serializer);
-        sse_encode_StreamSink_flutter_hls_stream_event_Sse(sink, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 11, port: port_);
-      },
-      codec: SseCodec(
-        decodeSuccessData: sse_decode_unit,
-        decodeErrorData: sse_decode_AnyhowException,
-      ),
-      constMeta: kCrateP2PHostSendHlsRequestStreamingConstMeta,
-      argValues: [that, peer, req, sink],
-      apiImpl: this,
-    )));
-    return sink.stream;
-  }
-
-  TaskConstMeta get kCrateP2PHostSendHlsRequestStreamingConstMeta =>
-      const TaskConstMeta(
-        debugName: "P2PHost_send_hls_request_streaming",
-        argNames: ["that", "peer", "req", "sink"],
-      );
-
-  @override
   Future<FlutterPairingResponse> crateP2PHostSendPairingRequest(
       {required P2PHost that,
       required String peer,
@@ -485,7 +577,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(peer, serializer);
         sse_encode_box_autoadd_flutter_pairing_request(req, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 12, port: port_);
+            funcId: 15, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_pairing_response,
@@ -516,7 +608,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(peer, serializer);
         sse_encode_box_autoadd_flutter_remote_control_request(req, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 13, port: port_);
+            funcId: 16, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_remote_control_response,
@@ -535,12 +627,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<FlutterDiskSpace> crateAvailableDiskSpace({required String path}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(path, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 17, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_flutter_disk_space,
+        decodeErrorData: sse_decode_AnyhowException,
+      ),
+      constMeta: kCrateAvailableDiskSpaceConstMeta,
+      argValues: [path],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateAvailableDiskSpaceConstMeta => const TaskConstMeta(
+        debugName: "available_disk_space",
+        argNames: ["path"],
+      );
+
+  @override
   Future<void> crateInitApp() {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 14, port: port_);
+            funcId: 18, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -563,7 +679,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(code, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_pairing_keys,
@@ -587,7 +703,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_pairing_keys(that, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 16, port: port_);
+            funcId: 20, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -613,7 +729,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_box_autoadd_pairing_keys(that, serializer);
         sse_encode_String(sealed, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 17, port: port_);
+            funcId: 21, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_claim_payload,
@@ -631,6 +747,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   RustArcIncrementStrongCountFnType
+      get rust_arc_increment_strong_count_HlsStreamHandle => wire
+          .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle;
+
+  RustArcDecrementStrongCountFnType
+      get rust_arc_decrement_strong_count_HlsStreamHandle => wire
+          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle;
+
+  RustArcIncrementStrongCountFnType
       get rust_arc_increment_strong_count_P2PHost => wire
           .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost;
 
@@ -645,6 +769,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  HlsStreamHandle
+      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return HlsStreamHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
   P2PHost
       dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           dynamic raw) {
@@ -653,11 +785,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  HlsStreamHandle
+      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return HlsStreamHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
   P2PHost
       dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return P2PHostImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  HlsStreamHandle
+      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return HlsStreamHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -670,13 +818,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   RustStreamSink<String> dco_decode_StreamSink_String_Sse(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    throw UnimplementedError();
-  }
-
-  @protected
-  RustStreamSink<FlutterHlsStreamEvent>
-      dco_decode_StreamSink_flutter_hls_stream_event_Sse(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     throw UnimplementedError();
   }
@@ -717,13 +858,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterHlsRequest dco_decode_box_autoadd_flutter_hls_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_flutter_hls_request(raw);
-  }
-
-  @protected
-  FlutterHlsResponseHeader dco_decode_box_autoadd_flutter_hls_response_header(
-      dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_flutter_hls_response_header(raw);
   }
 
   @protected
@@ -805,6 +939,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterDiskSpace dco_decode_flutter_disk_space(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return FlutterDiskSpace(
+      free: dco_decode_u_64(arr[0]),
+      total: dco_decode_u_64(arr[1]),
+    );
+  }
+
+  @protected
   FlutterGraphQLRequest dco_decode_flutter_graph_ql_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -871,29 +1017,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       contentRange: dco_decode_opt_String(arr[3]),
       cacheControl: dco_decode_opt_String(arr[4]),
     );
-  }
-
-  @protected
-  FlutterHlsStreamEvent dco_decode_flutter_hls_stream_event(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    switch (raw[0]) {
-      case 0:
-        return FlutterHlsStreamEvent_Header(
-          dco_decode_box_autoadd_flutter_hls_response_header(raw[1]),
-        );
-      case 1:
-        return FlutterHlsStreamEvent_Chunk(
-          dco_decode_list_prim_u_8_strict(raw[1]),
-        );
-      case 2:
-        return const FlutterHlsStreamEvent_End();
-      case 3:
-        return FlutterHlsStreamEvent_Error(
-          dco_decode_String(raw[1]),
-        );
-      default:
-        throw Exception("unreachable");
-    }
   }
 
   @protected
@@ -1235,6 +1358,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  HlsStreamHandle
+      sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return HlsStreamHandleImpl.frbInternalSseDecode(
+        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+  }
+
+  @protected
   P2PHost
       sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           SseDeserializer deserializer) {
@@ -1244,11 +1376,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  HlsStreamHandle
+      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return HlsStreamHandleImpl.frbInternalSseDecode(
+        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+  }
+
+  @protected
   P2PHost
       sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return P2PHostImpl.frbInternalSseDecode(
+        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+  }
+
+  @protected
+  HlsStreamHandle
+      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return HlsStreamHandleImpl.frbInternalSseDecode(
         sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
   }
 
@@ -1264,14 +1414,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   RustStreamSink<String> sse_decode_StreamSink_String_Sse(
       SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    throw UnimplementedError('Unreachable ()');
-  }
-
-  @protected
-  RustStreamSink<FlutterHlsStreamEvent>
-      sse_decode_StreamSink_flutter_hls_stream_event_Sse(
-          SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     throw UnimplementedError('Unreachable ()');
   }
@@ -1315,13 +1457,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_flutter_hls_request(deserializer));
-  }
-
-  @protected
-  FlutterHlsResponseHeader sse_decode_box_autoadd_flutter_hls_response_header(
-      SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_flutter_hls_response_header(deserializer));
   }
 
   @protected
@@ -1404,6 +1539,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  FlutterDiskSpace sse_decode_flutter_disk_space(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_free = sse_decode_u_64(deserializer);
+    var var_total = sse_decode_u_64(deserializer);
+    return FlutterDiskSpace(free: var_free, total: var_total);
+  }
+
+  @protected
   FlutterGraphQLRequest sse_decode_flutter_graph_ql_request(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -1470,30 +1613,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         contentLength: var_contentLength,
         contentRange: var_contentRange,
         cacheControl: var_cacheControl);
-  }
-
-  @protected
-  FlutterHlsStreamEvent sse_decode_flutter_hls_stream_event(
-      SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var tag_ = sse_decode_i_32(deserializer);
-    switch (tag_) {
-      case 0:
-        var var_field0 =
-            sse_decode_box_autoadd_flutter_hls_response_header(deserializer);
-        return FlutterHlsStreamEvent_Header(var_field0);
-      case 1:
-        var var_field0 = sse_decode_list_prim_u_8_strict(deserializer);
-        return FlutterHlsStreamEvent_Chunk(var_field0);
-      case 2:
-        return const FlutterHlsStreamEvent_End();
-      case 3:
-        var var_field0 = sse_decode_String(deserializer);
-        return FlutterHlsStreamEvent_Error(var_field0);
-      default:
-        throw UnimplementedError('');
-    }
   }
 
   @protected
@@ -1878,6 +1997,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
+      sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          HlsStreamHandle self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+        (self as HlsStreamHandleImpl).frbInternalSseEncode(move: true),
+        serializer);
+  }
+
+  @protected
+  void
       sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           P2PHost self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -1887,11 +2016,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @protected
   void
+      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          HlsStreamHandle self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+        (self as HlsStreamHandleImpl).frbInternalSseEncode(move: false),
+        serializer);
+  }
+
+  @protected
+  void
       sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           P2PHost self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
         (self as P2PHostImpl).frbInternalSseEncode(move: false), serializer);
+  }
+
+  @protected
+  void
+      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          HlsStreamHandle self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+        (self as HlsStreamHandleImpl).frbInternalSseEncode(move: null),
+        serializer);
   }
 
   @protected
@@ -1911,19 +2060,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         self.setupAndSerialize(
             codec: SseCodec(
           decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        )),
-        serializer);
-  }
-
-  @protected
-  void sse_encode_StreamSink_flutter_hls_stream_event_Sse(
-      RustStreamSink<FlutterHlsStreamEvent> self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(
-        self.setupAndSerialize(
-            codec: SseCodec(
-          decodeSuccessData: sse_decode_flutter_hls_stream_event,
           decodeErrorData: sse_decode_AnyhowException,
         )),
         serializer);
@@ -1973,13 +2109,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       FlutterHlsRequest self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_flutter_hls_request(self, serializer);
-  }
-
-  @protected
-  void sse_encode_box_autoadd_flutter_hls_response_header(
-      FlutterHlsResponseHeader self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_flutter_hls_response_header(self, serializer);
   }
 
   @protected
@@ -2058,6 +2187,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_flutter_disk_space(
+      FlutterDiskSpace self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.free, serializer);
+    sse_encode_u_64(self.total, serializer);
+  }
+
+  @protected
   void sse_encode_flutter_graph_ql_request(
       FlutterGraphQLRequest self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -2104,25 +2241,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_64(self.contentLength, serializer);
     sse_encode_opt_String(self.contentRange, serializer);
     sse_encode_opt_String(self.cacheControl, serializer);
-  }
-
-  @protected
-  void sse_encode_flutter_hls_stream_event(
-      FlutterHlsStreamEvent self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    switch (self) {
-      case FlutterHlsStreamEvent_Header(field0: final field0):
-        sse_encode_i_32(0, serializer);
-        sse_encode_box_autoadd_flutter_hls_response_header(field0, serializer);
-      case FlutterHlsStreamEvent_Chunk(field0: final field0):
-        sse_encode_i_32(1, serializer);
-        sse_encode_list_prim_u_8_strict(field0, serializer);
-      case FlutterHlsStreamEvent_End():
-        sse_encode_i_32(2, serializer);
-      case FlutterHlsStreamEvent_Error(field0: final field0):
-        sse_encode_i_32(3, serializer);
-        sse_encode_String(field0, serializer);
-    }
   }
 
   @protected
@@ -2429,6 +2547,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 }
 
 @sealed
+class HlsStreamHandleImpl extends RustOpaque implements HlsStreamHandle {
+  // Not to be used by end users
+  HlsStreamHandleImpl.frbInternalDcoDecode(List<dynamic> wire)
+      : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  HlsStreamHandleImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+      : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_HlsStreamHandle,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_HlsStreamHandle,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_HlsStreamHandlePtr,
+  );
+
+  /// Stops the stream and tells the server to stop sending. Wakes a
+  /// waiting `next_chunk` with `None`. Safe to call more than once.
+  ///
+  /// Takes no lock, so it never waits behind a pending `next_chunk`.
+  void cancel() => RustLib.instance.api.crateHlsStreamHandleCancel(
+        that: this,
+      );
+
+  FlutterHlsResponseHeader header() =>
+      RustLib.instance.api.crateHlsStreamHandleHeader(
+        that: this,
+      );
+
+  /// The next chunk, or `None` once the stream has ended, failed or been
+  /// cancelled.
+  Future<Uint8List?> nextChunk() =>
+      RustLib.instance.api.crateHlsStreamHandleNextChunk(
+        that: this,
+      );
+}
+
+@sealed
 class P2PHostImpl extends RustOpaque implements P2PHost {
   // Not to be used by end users
   P2PHostImpl.frbInternalDcoDecode(List<dynamic> wire)
@@ -2479,13 +2637,21 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
         that: this,
       );
 
+  /// Open an HLS request to a specific peer and return a handle Dart pulls
+  /// the body from. Fails if the stream cannot be opened or the server
+  /// answers with an error.
+  Future<HlsStreamHandle> openHlsStream(
+          {required String peer, required FlutterHlsRequest req}) =>
+      RustLib.instance.api
+          .crateP2PHostOpenHlsStream(that: this, peer: peer, req: req);
+
   /// Stream inbound control requests to Flutter.
   ///
   /// Separate from `event_stream` on purpose: that one is a colon-delimited
   /// string protocol, which cannot carry a structured command. This mirrors
-  /// `send_hls_request_streaming`, which is already typed.
+  /// `open_hls_stream`, which is already typed.
   ///
-  /// Unlike `send_hls_request_streaming`, this does not depend on
+  /// Unlike `open_hls_stream`, this does not depend on
   /// `event_stream` being subscribed to: the `init` dispatcher feeds
   /// `control_rx` independently. Calling only this method, without ever
   /// calling `event_stream()`, is a fully supported way to act as a
@@ -2522,16 +2688,6 @@ class P2PHostImpl extends RustOpaque implements P2PHost {
           {required String peer, required FlutterHlsRequest req}) =>
       RustLib.instance.api
           .crateP2PHostSendHlsRequest(that: this, peer: peer, req: req);
-
-  /// Send an HLS request to a specific peer and stream the response.
-  ///
-  /// Sends Header, Chunk, and End events via a StreamSink. The stream is
-  /// cancelled automatically when the Dart subscription is dropped (sink.add
-  /// returns an error).
-  Stream<FlutterHlsStreamEvent> sendHlsRequestStreaming(
-          {required String peer, required FlutterHlsRequest req}) =>
-      RustLib.instance.api.crateP2PHostSendHlsRequestStreaming(
-          that: this, peer: peer, req: req);
 
   /// Send a pairing request to a specific peer.
   Future<FlutterPairingResponse> sendPairingRequest(

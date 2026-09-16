@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/p2p/p2p_keystore.dart';
+import 'package:player/core/p2p/p2p_range_stream.dart';
 import 'package:player/native/lib.dart';
 
 import 'relay_list.dart';
@@ -815,11 +817,11 @@ class P2pService {
     final normalized = await _normalizePeerForRequest(peer);
     final normalizeMs = sw.elapsedMilliseconds;
 
-    final req = FlutterHlsRequest(
+    final req = _hlsRequest(
       sessionId: sessionId,
       path: path,
-      rangeStart: rangeStart != null ? BigInt.from(rangeStart) : null,
-      rangeEnd: rangeEnd != null ? BigInt.from(rangeEnd) : null,
+      rangeStart: rangeStart,
+      rangeEnd: rangeEnd,
       authToken: authToken,
     );
 
@@ -834,35 +836,54 @@ class P2pService {
     return result;
   }
 
-  /// Send a streaming HLS request to the server over P2P.
-  /// Returns a stream of FlutterHlsStreamEvent (Header, Chunk, End, Error).
-  Stream<FlutterHlsStreamEvent> sendHlsRequestStreaming({
+  /// Open a byte-range stream to the server over P2P. The body is pulled on
+  /// demand; see [P2pRangeStream].
+  Future<P2pRangeStream> openRangeStream({
     required String peer,
     required String sessionId,
     required String path,
     int? rangeStart,
     int? rangeEnd,
     String? authToken,
-  }) async* {
+  }) async {
     final host = await _requireHost();
 
     final sw = Stopwatch()..start();
     final normalized = await _normalizePeerForRequest(peer);
     final normalizeMs = sw.elapsedMilliseconds;
 
-    debugPrint(
-      '[p2p_metrics_dart] sendHlsRequestStreaming normalize_ms=$normalizeMs session=$sessionId path=$path',
+    final handle = await host.openHlsStream(
+      peer: normalized.nodeId,
+      req: _hlsRequest(
+        sessionId: sessionId,
+        path: path,
+        rangeStart: rangeStart,
+        rangeEnd: rangeEnd,
+        authToken: authToken,
+      ),
     );
 
-    final req = FlutterHlsRequest(
+    debugPrint(
+      '[p2p_metrics_dart] openRangeStream normalize_ms=$normalizeMs open_ms=${sw.elapsedMilliseconds - normalizeMs} session=$sessionId path=$path',
+    );
+
+    return _NativeRangeStream(handle);
+  }
+
+  static FlutterHlsRequest _hlsRequest({
+    required String sessionId,
+    required String path,
+    int? rangeStart,
+    int? rangeEnd,
+    String? authToken,
+  }) {
+    return FlutterHlsRequest(
       sessionId: sessionId,
       path: path,
       rangeStart: rangeStart != null ? BigInt.from(rangeStart) : null,
       rangeEnd: rangeEnd != null ? BigInt.from(rangeEnd) : null,
       authToken: authToken,
     );
-
-    yield* host.sendHlsRequestStreaming(peer: normalized.nodeId, req: req);
   }
 
   /// Reset the P2P host for re-initialization.
@@ -960,5 +981,33 @@ class P2pService {
     await _statusController.close();
     await _peerConnectedController.close();
     await _controlRequestController.close();
+  }
+}
+
+/// [P2pRangeStream] over the Rust stream handle.
+class _NativeRangeStream implements P2pRangeStream {
+  _NativeRangeStream(this._handle) : header = _handle.header();
+
+  final HlsStreamHandle _handle;
+  var _cancelled = false;
+
+  @override
+  final FlutterHlsResponseHeader header;
+
+  @override
+  Future<Uint8List?> nextChunk() async {
+    // The handle is disposed on cancel, and a call after that throws.
+    if (_cancelled) return null;
+    return _handle.nextChunk();
+  }
+
+  @override
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    _handle.cancel();
+    // Frees the Rust side now rather than at garbage collection. A
+    // nextChunk already in flight holds its own reference and still returns.
+    _handle.dispose();
   }
 }

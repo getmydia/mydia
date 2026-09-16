@@ -2,9 +2,10 @@ mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be
 use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
 use mydia_p2p_core::{
-    runtime, Event, GraphQLRequest, HlsRequest, HlsRequester, Host, HostConfig, LoadContentRequest,
-    MydiaRequest, MydiaResponse, PairingRequest, PeerConnectionType, PlaybackSnapshot,
-    PlaybackState, RemoteControlRequest, RemoteControlResponse, TargetCapabilities, TrackInfo,
+    runtime, Event, GraphQLRequest, HlsCancel, HlsRequest, HlsRequester, HlsResponseHeader,
+    HlsStreamResponse, Host, HostConfig, LoadContentRequest, MydiaRequest, MydiaResponse,
+    PairingRequest, PeerConnectionType, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
+    RemoteControlResponse, TargetCapabilities, TrackInfo,
 };
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
@@ -177,13 +178,101 @@ pub struct FlutterHlsResponseHeader {
     pub cache_control: Option<String>,
 }
 
-/// HLS stream event (header or chunk)
-#[frb(non_opaque)]
-pub enum FlutterHlsStreamEvent {
-    Header(FlutterHlsResponseHeader),
-    Chunk(Vec<u8>),
-    End,
-    Error(String),
+impl From<FlutterHlsRequest> for HlsRequest {
+    fn from(req: FlutterHlsRequest) -> Self {
+        HlsRequest {
+            session_id: req.session_id,
+            path: req.path,
+            range_start: req.range_start,
+            range_end: req.range_end,
+            auth_token: req.auth_token,
+        }
+    }
+}
+
+impl From<HlsResponseHeader> for FlutterHlsResponseHeader {
+    fn from(header: HlsResponseHeader) -> Self {
+        FlutterHlsResponseHeader {
+            status: header.status,
+            content_type: header.content_type,
+            content_length: header.content_length,
+            content_range: header.content_range,
+            cache_control: header.cache_control,
+        }
+    }
+}
+
+/// An HLS response Dart pulls one chunk at a time.
+///
+/// Pulling is the flow control. While nobody asks, chunks wait in the core's
+/// bounded channel, QUIC flow control holds the server back, and the
+/// server's file reader waits in turn.
+#[frb(opaque)]
+pub struct HlsStreamHandle {
+    header: HlsResponseHeader,
+    chunk_rx: Mutex<mpsc::Receiver<Vec<u8>>>,
+    cancel: HlsCancel,
+}
+
+impl HlsStreamHandle {
+    fn from_response(response: HlsStreamResponse) -> Self {
+        HlsStreamHandle {
+            header: response.header,
+            chunk_rx: Mutex::new(response.chunk_rx),
+            cancel: response.cancel,
+        }
+    }
+
+    #[frb(sync)]
+    pub fn header(&self) -> FlutterHlsResponseHeader {
+        self.header.clone().into()
+    }
+
+    /// The next chunk, or `None` once the stream has ended, failed or been
+    /// cancelled.
+    pub async fn next_chunk(&self) -> Option<Vec<u8>> {
+        self.chunk_rx.lock().await.recv().await
+    }
+
+    /// Stops the stream and tells the server to stop sending. Wakes a
+    /// waiting `next_chunk` with `None`. Safe to call more than once.
+    ///
+    /// Takes no lock, so it never waits behind a pending `next_chunk`.
+    #[frb(sync)]
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+}
+
+impl Drop for HlsStreamHandle {
+    /// A handle the garbage collector frees without a cancel still stops
+    /// the transfer.
+    fn drop(&mut self) {
+        self.cancel.cancel();
+    }
+}
+
+/// Free and total bytes on a volume.
+pub struct FlutterDiskSpace {
+    pub free: u64,
+    pub total: u64,
+}
+
+/// Space on the volume holding `path`, for sizing the playback spool.
+/// Always an error in a browser, which has no filesystem to ask.
+pub fn available_disk_space(path: String) -> anyhow::Result<FlutterDiskSpace> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(FlutterDiskSpace {
+            free: fs4::available_space(&path)?,
+            total: fs4::total_space(&path)?,
+        })
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = path;
+        Err(anyhow::anyhow!("disk space is not available in a browser"))
+    }
 }
 
 /// HLS stream complete response (non-streaming version)
@@ -821,9 +910,9 @@ impl P2pHost {
     ///
     /// Separate from `event_stream` on purpose: that one is a colon-delimited
     /// string protocol, which cannot carry a structured command. This mirrors
-    /// `send_hls_request_streaming`, which is already typed.
+    /// `open_hls_stream`, which is already typed.
     ///
-    /// Unlike `send_hls_request_streaming`, this does not depend on
+    /// Unlike `open_hls_stream`, this does not depend on
     /// `event_stream` being subscribed to: the `init` dispatcher feeds
     /// `control_rx` independently. Calling only this method, without ever
     /// calling `event_stream()`, is a fully supported way to act as a
@@ -992,76 +1081,31 @@ impl P2pHost {
         }
     }
 
-    /// Send an HLS request to a specific peer and stream the response.
-    ///
-    /// Sends Header, Chunk, and End events via a StreamSink. The stream is
-    /// cancelled automatically when the Dart subscription is dropped (sink.add
-    /// returns an error).
-    pub fn send_hls_request_streaming(
+    /// Open an HLS request to a specific peer and return a handle Dart pulls
+    /// the body from. Fails if the stream cannot be opened or the server
+    /// answers with an error.
+    pub async fn open_hls_stream(
         &self,
         peer: String,
         req: FlutterHlsRequest,
-        sink: StreamSink<FlutterHlsStreamEvent>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<HlsStreamHandle> {
         log::info!(
-            "P2pHost::send_hls_request_streaming() called for peer: {}, session: {}, path: {}",
+            "P2pHost::open_hls_stream() called for peer: {}, session: {}, path: {}",
             peer,
             req.session_id,
             req.path
         );
 
-        let core_req = HlsRequest {
-            session_id: req.session_id,
-            path: req.path,
-            range_start: req.range_start,
-            range_end: req.range_end,
-            auth_token: req.auth_token,
-        };
+        let response = self
+            .hls_requester
+            .send_hls_request(peer.clone(), req.into())
+            .await
+            .map_err(|e| {
+                log::error!("HLS stream request failed for peer {}: {}", peer, e);
+                anyhow::anyhow!("HLS request failed: {}", e)
+            })?;
 
-        let requester = self.hls_requester.clone();
-
-        // See `event_stream` for why this enters the core's runtime instead of
-        // spawning a thread with a runtime of its own.
-        let _guard = runtime::enter();
-        runtime::spawn(async move {
-            match requester.send_hls_request(peer.clone(), core_req).await {
-                Ok(stream_response) => {
-                    // Send header event
-                    let header = FlutterHlsResponseHeader {
-                        status: stream_response.header.status,
-                        content_type: stream_response.header.content_type,
-                        content_length: stream_response.header.content_length,
-                        content_range: stream_response.header.content_range,
-                        cache_control: stream_response.header.cache_control,
-                    };
-                    if sink.add(FlutterHlsStreamEvent::Header(header)).is_err() {
-                        log::debug!("HLS stream sink closed on header");
-                        return;
-                    }
-
-                    // Stream chunks
-                    let mut chunk_rx = stream_response.chunk_rx;
-                    while let Some(chunk) = chunk_rx.recv().await {
-                        if sink.add(FlutterHlsStreamEvent::Chunk(chunk)).is_err() {
-                            log::debug!("HLS stream sink closed, stopping chunk read");
-                            return;
-                        }
-                    }
-
-                    // Signal end
-                    let _ = sink.add(FlutterHlsStreamEvent::End);
-                }
-                Err(e) => {
-                    log::error!("HLS streaming request failed for peer {}: {}", peer, e);
-                    let _ = sink.add(FlutterHlsStreamEvent::Error(format!(
-                        "HLS request failed: {}",
-                        e
-                    )));
-                }
-            }
-        });
-
-        Ok(())
+        Ok(HlsStreamHandle::from_response(response))
     }
 
     /// Send an HLS request to a specific peer and collect the complete response.
@@ -1080,28 +1124,19 @@ impl P2pHost {
             req.path
         );
 
-        let core_req = HlsRequest {
-            session_id: req.session_id,
-            path: req.path,
-            range_start: req.range_start,
-            range_end: req.range_end,
-            auth_token: req.auth_token,
-        };
-
         // Call the Host's send_hls_request method
-        match self.inner.send_hls_request(peer.clone(), core_req).await {
+        match self.inner.send_hls_request(peer.clone(), req.into()).await {
             Ok(stream_response) => {
-                let flutter_header = FlutterHlsResponseHeader {
-                    status: stream_response.header.status,
-                    content_type: stream_response.header.content_type,
-                    content_length: stream_response.header.content_length,
-                    content_range: stream_response.header.content_range,
-                    cache_control: stream_response.header.cache_control,
-                };
+                // The cancel handle is dropped unused: this reads to the end,
+                // and dropping it does not cancel.
+                let HlsStreamResponse {
+                    header,
+                    mut chunk_rx,
+                    ..
+                } = stream_response;
 
                 // Collect all chunks into a single buffer
-                let mut data = Vec::with_capacity(stream_response.header.content_length as usize);
-                let mut chunk_rx = stream_response.chunk_rx;
+                let mut data = Vec::with_capacity(header.content_length as usize);
                 while let Some(chunk) = chunk_rx.recv().await {
                     data.extend_from_slice(&chunk);
                 }
@@ -1112,7 +1147,7 @@ impl P2pHost {
                     data.len()
                 );
                 Ok(FlutterHlsResponse {
-                    header: flutter_header,
+                    header: header.into(),
                     data,
                 })
             }
@@ -1166,6 +1201,94 @@ impl PairingKeys {
             node_addr: payload.node_addr,
             instance_id: payload.instance_id,
         })
+    }
+}
+
+#[cfg(test)]
+mod hls_stream_handle_tests {
+    use super::*;
+    use mydia_p2p_core::runtime::time::{sleep, timeout, Duration};
+
+    fn handle_with(chunk_rx: mpsc::Receiver<Vec<u8>>, cancel: HlsCancel) -> HlsStreamHandle {
+        HlsStreamHandle::from_response(HlsStreamResponse {
+            header: HlsResponseHeader {
+                status: 206,
+                content_type: "video/x-matroska".to_string(),
+                content_length: 4,
+                content_range: Some("bytes 0-3/4".to_string()),
+                cache_control: None,
+            },
+            chunk_rx,
+            cancel,
+        })
+    }
+
+    #[test]
+    fn next_chunk_yields_chunks_then_none() {
+        runtime::block_on(async {
+            let (tx, rx) = mpsc::channel(4);
+            let (cancel, _signal) = HlsCancel::new();
+            let handle = handle_with(rx, cancel);
+
+            tx.send(vec![1, 2]).await.unwrap();
+            tx.send(vec![3, 4]).await.unwrap();
+            drop(tx);
+
+            assert_eq!(handle.next_chunk().await, Some(vec![1, 2]));
+            assert_eq!(handle.next_chunk().await, Some(vec![3, 4]));
+            assert_eq!(handle.next_chunk().await, None);
+            assert_eq!(
+                handle.header().content_range.as_deref(),
+                Some("bytes 0-3/4")
+            );
+        });
+    }
+
+    /// `cancel` must reach a `next_chunk` that is already waiting, or a
+    /// stalled stream could never be abandoned.
+    #[test]
+    fn cancel_wakes_a_waiting_next_chunk() {
+        runtime::block_on(async {
+            let (tx, rx) = mpsc::channel::<Vec<u8>>(4);
+            let (cancel, mut signal) = HlsCancel::new();
+            let handle = Arc::new(handle_with(rx, cancel));
+
+            // Stands in for the core's reader, which drops its sender once
+            // cancelled.
+            let _guard = runtime::enter();
+            runtime::spawn(async move {
+                let _ = signal.wait_for(|cancelled| *cancelled).await;
+                drop(tx);
+            });
+
+            let waiter = handle.clone();
+            let pending = runtime::spawn(async move { waiter.next_chunk().await });
+            sleep(Duration::from_millis(50)).await;
+
+            handle.cancel();
+
+            let result = timeout(Duration::from_secs(1), pending)
+                .await
+                .expect("next_chunk never woke")
+                .expect("next_chunk task failed");
+            assert_eq!(result, None);
+        });
+    }
+
+    #[test]
+    fn dropping_the_handle_cancels() {
+        let (_tx, rx) = mpsc::channel::<Vec<u8>>(1);
+        let (cancel, signal) = HlsCancel::new();
+        drop(handle_with(rx, cancel));
+        assert!(*signal.borrow());
+    }
+
+    #[test]
+    fn available_disk_space_reports_the_temp_volume() {
+        let space = available_disk_space(std::env::temp_dir().to_string_lossy().into_owned())
+            .expect("temp dir has a volume");
+        assert!(space.total > 0);
+        assert!(space.free <= space.total);
     }
 }
 

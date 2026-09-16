@@ -8,8 +8,28 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `init_logging`, `run_event_dispatcher`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `from_response`, `init_logging`, `run_event_dispatcher`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+
+/// Space on the volume holding `path`, for sizing the playback spool.
+/// Always an error in a browser, which has no filesystem to ask.
+Future<FlutterDiskSpace> availableDiskSpace({required String path}) =>
+    RustLib.instance.api.crateAvailableDiskSpace(path: path);
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<HlsStreamHandle>>
+abstract class HlsStreamHandle implements RustOpaqueInterface {
+  /// Stops the stream and tells the server to stop sending. Wakes a
+  /// waiting `next_chunk` with `None`. Safe to call more than once.
+  ///
+  /// Takes no lock, so it never waits behind a pending `next_chunk`.
+  void cancel();
+
+  FlutterHlsResponseHeader header();
+
+  /// The next chunk, or `None` once the stream has ended, failed or been
+  /// cancelled.
+  Future<Uint8List?> nextChunk();
+}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<P2pHost>>
 abstract class P2PHost implements RustOpaqueInterface {
@@ -49,13 +69,19 @@ abstract class P2PHost implements RustOpaqueInterface {
       RustLib.instance.api
           .crateP2PHostInit(relayUrls: relayUrls, keypairBytes: keypairBytes);
 
+  /// Open an HLS request to a specific peer and return a handle Dart pulls
+  /// the body from. Fails if the stream cannot be opened or the server
+  /// answers with an error.
+  Future<HlsStreamHandle> openHlsStream(
+      {required String peer, required FlutterHlsRequest req});
+
   /// Stream inbound control requests to Flutter.
   ///
   /// Separate from `event_stream` on purpose: that one is a colon-delimited
   /// string protocol, which cannot carry a structured command. This mirrors
-  /// `send_hls_request_streaming`, which is already typed.
+  /// `open_hls_stream`, which is already typed.
   ///
-  /// Unlike `send_hls_request_streaming`, this does not depend on
+  /// Unlike `open_hls_stream`, this does not depend on
   /// `event_stream` being subscribed to: the `init` dispatcher feeds
   /// `control_rx` independently. Calling only this method, without ever
   /// calling `event_stream()`, is a fully supported way to act as a
@@ -81,14 +107,6 @@ abstract class P2PHost implements RustOpaqueInterface {
   /// This is a non-streaming version that collects all chunks into a single buffer.
   /// For large files, consider using the local proxy service instead.
   Future<FlutterHlsResponse> sendHlsRequest(
-      {required String peer, required FlutterHlsRequest req});
-
-  /// Send an HLS request to a specific peer and stream the response.
-  ///
-  /// Sends Header, Chunk, and End events via a StreamSink. The stream is
-  /// cancelled automatically when the Dart subscription is dropped (sink.add
-  /// returns an error).
-  Stream<FlutterHlsStreamEvent> sendHlsRequestStreaming(
       {required String peer, required FlutterHlsRequest req});
 
   /// Send a pairing request to a specific peer.
@@ -136,6 +154,28 @@ enum FlutterConnectionType {
   /// No active connection
   none,
   ;
+}
+
+/// Free and total bytes on a volume.
+class FlutterDiskSpace {
+  final BigInt free;
+  final BigInt total;
+
+  const FlutterDiskSpace({
+    required this.free,
+    required this.total,
+  });
+
+  @override
+  int get hashCode => free.hashCode ^ total.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterDiskSpace &&
+          runtimeType == other.runtimeType &&
+          free == other.free &&
+          total == other.total;
 }
 
 /// GraphQL request to send over P2P
@@ -292,22 +332,6 @@ class FlutterHlsResponseHeader {
           contentLength == other.contentLength &&
           contentRange == other.contentRange &&
           cacheControl == other.cacheControl;
-}
-
-@freezed
-sealed class FlutterHlsStreamEvent with _$FlutterHlsStreamEvent {
-  const FlutterHlsStreamEvent._();
-
-  const factory FlutterHlsStreamEvent.header(
-    FlutterHlsResponseHeader field0,
-  ) = FlutterHlsStreamEvent_Header;
-  const factory FlutterHlsStreamEvent.chunk(
-    Uint8List field0,
-  ) = FlutterHlsStreamEvent_Chunk;
-  const factory FlutterHlsStreamEvent.end() = FlutterHlsStreamEvent_End;
-  const factory FlutterHlsStreamEvent.error(
-    String field0,
-  ) = FlutterHlsStreamEvent_Error;
 }
 
 /// An inbound command with the identifiers needed to answer it.
