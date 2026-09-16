@@ -92,10 +92,10 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
 
-          echo -n "${{ secrets.MACOS_CERTIFICATE }}" | base64 --decode -o $CERT_PATH
+          echo -n "$MACOS_CERTIFICATE" | base64 --decode -o $CERT_PATH
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-key-chain-settings -lut 21600 $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security import $CERT_PATH -P "${{ secrets.MACOS_CERTIFICATE_PASSWORD }}" \
             -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
@@ -168,34 +168,93 @@ jobs:
           VERSION="${{ inputs.version }}"
           VERSION_CODE="${{ inputs.version_code }}"
           DMG_FILE="Mydia Player.dmg"
-
-          echo "${{ secrets.SPARKLE_EDDSA_KEY }}" > eddsa_key.priv
-          SIGNATURE=$(../../../../sparkle-tools/bin/sign_update -s "$(cat eddsa_key.priv)" "$DMG_FILE")
-          rm eddsa_key.priv
-
-          FILE_SIZE=$(stat -f%z "$DMG_FILE")
-          PUB_DATE=$(date -R)
           DMG_URL="https://github.com/getmydia/mydia/releases/download/v${VERSION}/mydia-player-macos-v${VERSION}.dmg"
 
+          # sign_update prints a ready-to-paste XML attribute fragment, e.g.
+          #   sparkle:edSignature="…" length="71098585"
+          # It must be embedded in the enclosure verbatim. Do NOT wrap it in
+          # another sparkle:edSignature="…" or add a separate length=, or the
+          # enclosure ends up with a duplicated length attribute and a signature
+          # value that is not valid base64 — which Sparkle rejects.
+          SIGNATURE=$(echo "$SPARKLE_EDDSA_KEY" | $GITHUB_WORKSPACE/sparkle-tools/bin/sign_update "$DMG_FILE" --ed-key-file -)
+
+          # Catch any future sign_update output-format drift before it reaches the
+          # XML (cheap, no dependency).
+          if ! printf '%s' "$SIGNATURE" | grep -Eq '^sparkle:edSignature="[^"]+" length="[0-9]+"$'; then
+            echo "::error::Unexpected sign_update output, refusing to build appcast: $SIGNATURE"
+            exit 1
+          fi
+
+          # The built app's Info.plist has LSMinimumSystemVersion resolved from
+          # MACOSX_DEPLOYMENT_TARGET, so this can never drift from the binary it
+          # describes the way a hardcoded constant in the appcast generator would.
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "Mydia Player.app/Contents/Info.plist")
+
+          # sparkle:version must be the integer CFBundleVersion (VERSION_CODE) that
+          # `flutter build macos` writes into the bundle — Sparkle compares
+          # <sparkle:version> against the installed app's CFBundleVersion. The
+          # marketing string stays in <sparkle:shortVersionString> for display only.
           cat > appcast.xml << EOF
           <?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
             <channel>
-              <title>Mydia Player Changelog</title>
+              <title>Mydia Player</title>
               <item>
                 <title>Version ${VERSION}</title>
-                <pubDate>${PUB_DATE}</pubDate>
                 <sparkle:version>${VERSION_CODE}</sparkle:version>
                 <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-                <enclosure
-                  url="${DMG_URL}"
-                  sparkle:edSignature="${SIGNATURE}"
-                  length="${FILE_SIZE}"
-                  type="application/octet-stream" />
+                <sparkle:minimumSystemVersion>${MIN_OS}</sparkle:minimumSystemVersion>
+                <pubDate>$(date -R)</pubDate>
+                <enclosure url="${DMG_URL}"
+                           ${SIGNATURE}
+                           type="application/octet-stream" />
               </item>
             </channel>
           </rss>
           EOF
+
+      - name: Validate appcast
+        if: ${{ inputs.generate_appcast && env.SPARKLE_EDDSA_KEY != '' }}
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: |
+          # Fail the release here rather than ship an appcast Sparkle can't read.
+          # xmllint is the load-bearing check — it catches the malformed-XML class
+          # (e.g. the historical double-wrapped enclosure with a duplicated length
+          # attribute). Shipped on GitHub macos runners, but don't silently no-op
+          # if it is ever absent.
+          if ! command -v xmllint >/dev/null 2>&1; then
+            echo "::error::xmllint not found on runner; cannot validate appcast"
+            exit 1
+          fi
+
+          xmllint --noout appcast.xml
+
+          # Exactly one signature and one length attribute in the enclosure
+          # (guards against re-nesting / sign_update output drift).
+          ed_count=$(grep -o 'sparkle:edSignature="' appcast.xml | wc -l | tr -d ' ' || true)
+          len_count=$(grep -o 'length="' appcast.xml | wc -l | tr -d ' ' || true)
+          if [ "$ed_count" -ne 1 ] || [ "$len_count" -ne 1 ]; then
+            echo "::error::appcast enclosure malformed: edSignature=$ed_count length=$len_count (expected 1 each)"
+            cat appcast.xml
+            exit 1
+          fi
+
+          # sparkle:version must be the integer build number, not the marketing
+          # string, or Sparkle's newer-than comparison never offers the update.
+          sparkle_version=$(sed -n 's#.*<sparkle:version>\(.*\)</sparkle:version>.*#\1#p' appcast.xml)
+          if ! printf '%s' "$sparkle_version" | grep -Eq '^[0-9]+$'; then
+            echo "::error::sparkle:version must be an integer build number, got '$sparkle_version'"
+            exit 1
+          fi
+
+          # NOTE: a cryptographic self-verify (sign_update --verify) is deliberately
+          # NOT wired here — the 2.x verify invocation and key material (it checks
+          # against a public key; the pipeline holds the private one) are unresolved
+          # on the pinned 2.8.1 toolchain. The guard therefore proves well-formedness
+          # and enclosure shape, not signature validity. See the plan's KTD3 / R4.
+          echo "appcast.xml validated (well-formed, single signature/length, sparkle:version=$sparkle_version)"
 
       - name: "Upload artifact: DMG"
         uses: actions/upload-artifact@v7
