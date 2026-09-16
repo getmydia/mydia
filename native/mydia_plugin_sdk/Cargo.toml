@@ -14,5 +14,5 @@ autoexamples = false
 [lib]
 
 [dependencies]
-wit-bindgen = "0.61.1"
+wit-bindgen = "0.62.0"
 mydia-plugin-macros = { version = "0.1.0", path = "../mydia_plugin_macros" }
