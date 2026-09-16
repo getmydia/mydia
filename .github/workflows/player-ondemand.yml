@@ -65,6 +65,8 @@ jobs:
         env:
           INPUT_REF: ${{ inputs.ref }}
           INPUT_VERSION: ${{ inputs.version_override }}
+          INPUT_UPLOAD_TO_STORES: ${{ inputs.upload_to_stores }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
@@ -108,8 +110,8 @@ jobs:
             echo "- **Commit:** \`$SHA\`"
             echo "- **Version:** \`$VERSION\`"
             echo "- **Version Code:** \`$VERSION_CODE\`"
-            echo "- **Store Upload:** \`${{ inputs.upload_to_stores }}\`"
-            echo "- **Dry Run:** \`${{ inputs.dry_run }}\`"
+            echo "- **Store Upload:** \`$INPUT_UPLOAD_TO_STORES\`"
+            echo "- **Dry Run:** \`$INPUT_DRY_RUN\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   player-ios:

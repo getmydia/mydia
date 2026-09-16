@@ -91,7 +91,7 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         working-directory: ${{ env.PLAYER_PATH }}
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
 
       - name: Create key.properties
         if: env.ANDROID_KEYSTORE_BASE64 != ''
@@ -136,7 +136,7 @@ jobs:
           PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
         working-directory: ${{ env.PLAYER_PATH }}/android
         run: |
-          echo "${{ secrets.PLAY_STORE_CREDENTIALS }}" | base64 -d > play-store-credentials.json
+          echo "$PLAY_STORE_CREDENTIALS" | base64 -d > play-store-credentials.json
           export GOOGLE_PLAY_JSON_KEY_PATH="$(pwd)/play-store-credentials.json"
           bundle exec fastlane ${{ inputs.play_store_track }}
           rm play-store-credentials.json
