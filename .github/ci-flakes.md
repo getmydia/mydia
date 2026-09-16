@@ -679,8 +679,8 @@ evidence of a real break until you have read both signatures.
 
 **`MydiaWeb.Features.AddConfigFlowTest`**, "submitting the form with a chosen
 library adds the title and closes the dialog". **Fixed 2026-09-16 (PR #840).**
-The entry below guessed at a slow runner or an erroring stub, and said Wallaby
-polls a `refute_has`. It does not. `refute_has` runs the query through the same
+Earlier notes here said Wallaby polls a `refute_has`, and so ruled out a slow
+runner. It does not. `refute_has` runs the query through the same
 retry as `assert_has`, which stops as soon as the element *is* found, so a
 dialog still open at the first check raises immediately. The assertion ran
 straight after the submit click, and lost whenever the LiveView patch was
@@ -702,13 +702,10 @@ break: the test file is young (`d73dc07fd` wrote it for the merged dialog,
 `4a4b44695` moved it onto `visit_liveview`), so a genuine regression is
 plausible enough to be worth one check rather than an assumption.
 
-The assertion is a bare `refute_has` immediately after the submit click, resting
-on the comment above it that "the dialog closes synchronously on submit". Wallaby
-does poll a `refute_has`, so a slow runner alone should not produce this. Worth
-noting for anyone who sees it a second time: `#689` gave the failure branch a
-reason to keep the dialog open, since a metadata failure now re-renders it with
-the operator's choices instead of closing and flashing. A stubbed fetch that
-errors rather than merely lagging would produce exactly this message.
+If the same message comes back with the `count: 0` assertion in place, the
+dialog stayed open past Wallaby's whole wait window, which no race explains.
+`submit_add_config` keeps it open only when `resolve_add_config_submit` halts
+without clearing it, so start from that function, not from a rerun.
 
 Seen again 2026-09-05 on PR #717, a `grid_density_components.ex`/CSS-only diff
 nowhere near the config-add dialog. Master's most recent run (`fc4003317`,
