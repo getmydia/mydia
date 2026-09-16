@@ -19,6 +19,7 @@ import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
+import 'package:player/core/playback/local_playback_state.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
@@ -87,6 +88,7 @@ CastSession _session({
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
   CastSession? session,
+  List<Override> extraOverrides = const [],
 }) async {
   await tester.pumpWidget(const SizedBox.shrink());
 
@@ -97,6 +99,7 @@ Future<ProviderContainer> _pump(
     asyncGraphqlClientProvider
         .overrideWith((ref) => Completer<GraphQLClient>().future),
     castSessionProvider.overrideWith((ref) => Stream.value(session)),
+    ...extraOverrides,
   ]);
   addTearDown(container.dispose);
 
@@ -1133,6 +1136,73 @@ void main() {
               'metadata, isPlayingMydiaTarget reads it as idle and connectTo '
               'reconnects media-less instead of adopting the session already on '
               'the receiver');
+    });
+
+    testWidgets(
+        'does not show ambient playing bar when local playback is active',
+        (tester) async {
+      final ambientTarget = AmbientTarget(
+        device: const CastDevice(
+          id: 'node-tv',
+          name: 'node-tv',
+          protocol: CastProtocolKind.mydia,
+        ),
+        snapshot: _snapshot(title: 'Arrival', mediaItemId: 'movie-9'),
+      );
+
+      final harness = _buildManagerHarness();
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+        extraOverrides: [
+          localPlaybackActiveProvider
+              .overrideWith(() => LocalPlaybackNotifier(true)),
+          ambientPlayingProvider
+              .overrideWith((ref) => Stream.value([ambientTarget])),
+          remoteDeviceNamesProvider
+              .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+        ],
+      );
+      await tester.pump();
+
+      expect(find.text('Playing on Living Room'), findsNothing);
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
+    });
+
+    testWidgets(
+        'does not show offline target bar when local playback is active',
+        (tester) async {
+      final harness = _buildManagerHarness();
+      final container = await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+        extraOverrides: [
+          localPlaybackActiveProvider
+              .overrideWith(() => LocalPlaybackNotifier(true)),
+        ],
+      );
+      container.read(castTargetProvider.notifier).set(_device);
+      await tester.pump();
+
+      expect(
+          find.textContaining('Cottage Chromecast is offline'), findsNothing);
+    });
+
+    testWidgets(
+        'still shows active cast session even if localPlaybackActiveProvider is true',
+        (tester) async {
+      await _pump(
+        tester,
+        session: _session(duration: const Duration(minutes: 44)),
+        extraOverrides: [
+          localPlaybackActiveProvider
+              .overrideWith(() => LocalPlaybackNotifier(true)),
+        ],
+      );
+
+      expect(find.text('Silo - S02E01'), findsOneWidget);
     });
   });
 }

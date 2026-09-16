@@ -37,6 +37,7 @@ class PersistedCastSession {
   /// subtitles changed. Null means off, which is also what a record written
   /// before this field existed restores as.
   final String? selectedSubtitleTrackId;
+  final String? showId;
 
   const PersistedCastSession({
     required this.device,
@@ -50,6 +51,7 @@ class PersistedCastSession {
     this.mediaUrl = '',
     this.duration = Duration.zero,
     this.selectedSubtitleTrackId,
+    this.showId,
   });
 
   /// Sessions older than this are discarded without a reconnect attempt.
@@ -70,6 +72,7 @@ class PersistedCastSession {
         'mediaUrl': mediaUrl,
         'durationSeconds': duration.inSeconds,
         'selectedSubtitleTrackId': selectedSubtitleTrackId,
+        'showId': showId,
       };
 
   factory PersistedCastSession.fromMap(Map<dynamic, dynamic> map) {
@@ -96,6 +99,7 @@ class PersistedCastSession {
       // Records written before subtitle selection was persisted carry no
       // such key at all; that reads the same as an explicit off.
       selectedSubtitleTrackId: map['selectedSubtitleTrackId'] as String?,
+      showId: map['showId'] as String?,
     );
   }
 
@@ -109,6 +113,7 @@ class PersistedCastSession {
     Duration? duration,
     String? selectedSubtitleTrackId,
     bool clearSelectedSubtitle = false,
+    String? showId,
   }) {
     return PersistedCastSession(
       device: device,
@@ -124,6 +129,7 @@ class PersistedCastSession {
       selectedSubtitleTrackId: clearSelectedSubtitle
           ? null
           : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
+      showId: showId ?? this.showId,
     );
   }
 }

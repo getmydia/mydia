@@ -13,6 +13,8 @@ import '../../core/remote/load_content_navigation.dart';
 import '../../core/remote/remote_control_intent.dart';
 import '../../core/router/navigator_keys.dart';
 import '../../domain/models/cast_device.dart';
+import '../../core/p2p/p2p_service.dart' show p2pStatusNotifierProvider;
+import '../../core/playback/local_playback_state.dart';
 import '../screens/episode/episode_detail_controller.dart';
 import '../screens/movie/movie_detail_controller.dart';
 import 'cast_actions.dart';
@@ -112,9 +114,11 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
     final session = ref.watch(castSessionProvider).value;
     final target = ref.watch(castTargetProvider);
+    final isLocalPlaying = ref.watch(localPlaybackActiveProvider);
 
     final Widget? content;
     if (session == null) {
+      if (isLocalPlaying) return const SizedBox.shrink();
       // A remembered device with no session at all: a connect that failed.
       // With neither, there is nothing of this device's own to show — which
       // is exactly when an ambient banner about a *different* paired player
@@ -251,6 +255,13 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     if (held.isEmpty) return null;
 
     final ambientTarget = held.first;
+    final selfNodeId =
+        ref.watch(p2pStatusNotifierProvider.select((s) => s.nodeId));
+    if (selfNodeId != null &&
+        ambientTarget.device.id.toLowerCase() == selfNodeId.toLowerCase()) {
+      return null;
+    }
+
     // `AmbientTarget.device.name` is the bare node id — the probe this came
     // from carries no display names (see that field's own dartdoc) — so
     // resolve the real one against the paired-device roster before it ever
@@ -650,7 +661,9 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       await manager.reconnectStoredSession();
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      showCastErrorSnackBar(context, e, ref: ref);
+      final target = ref.read(castTargetProvider);
+      showCastErrorSnackBar(context, e,
+          ref: ref, isMydiaTarget: target?.protocol == CastProtocolKind.mydia);
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting cast: $e');
       if (!mounted) return;

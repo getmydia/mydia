@@ -2864,4 +2864,92 @@ void main() {
       expect(pulled?.position, const Duration(minutes: 41));
     });
   });
+
+  group('startCast on Mydia target', () {
+    test('loads media with MydiaContentRef and does not require LAN route',
+        () async {
+      final chromecast = FakeCastBackend();
+      final mydia = FakeCastBackend();
+      final sessions = FakeStreamingSessionService();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: sessions,
+      );
+      addTearDown(manager.dispose);
+
+      const device = CastDevice(
+        id: 'node-remote',
+        name: "Alexandre's MacBook Air",
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-remote'},
+      );
+
+      const request = CastLaunchRequest(
+        fileId: 'file-123',
+        mediaId: 'ep-456',
+        mediaType: 'episode',
+        showId: 'show-789',
+        title: 'Severance - S01E01',
+        startPosition: Duration(seconds: 42),
+        duration: Duration(minutes: 50),
+        selectedSubtitleTrackId: 'sub-1',
+      );
+
+      await manager.startCast(device: device, request: request);
+
+      expect(mydia.loadedRequests, hasLength(1));
+      final loaded = mydia.loadedRequests.first;
+      expect(loaded.title, 'Severance - S01E01');
+      expect(loaded.contentRef, isNotNull);
+      expect(loaded.contentRef?.mediaItemId, 'show-789');
+      expect(loaded.contentRef?.episodeId, 'ep-456');
+      expect(loaded.contentRef?.subtitleTrack, 'sub-1');
+      expect(loaded.startPosition, const Duration(seconds: 42));
+      expect(manager.currentSession?.connectionState,
+          CastConnectionState.connected);
+      expect(manager.currentSession?.mediaInfo?.title, 'Severance - S01E01');
+      expect(manager.persistedSession?.showId, 'show-789');
+      expect(manager.persistedSession?.mediaUrl, 'show-789:ep-456');
+    });
+
+    test(
+        'movie startCast sets mediaItemId and null episodeId in MydiaContentRef',
+        () async {
+      final chromecast = FakeCastBackend();
+      final mydia = FakeCastBackend();
+      final sessions = FakeStreamingSessionService();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        mydia: mydia,
+        sessions: sessions,
+      );
+      addTearDown(manager.dispose);
+
+      const device = CastDevice(
+        id: 'node-remote',
+        name: "Alexandre's MacBook Air",
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-remote'},
+      );
+
+      const request = CastLaunchRequest(
+        fileId: 'file-999',
+        mediaId: 'movie-111',
+        mediaType: 'movie',
+        title: 'Inception',
+        duration: Duration(minutes: 148),
+      );
+
+      await manager.startCast(device: device, request: request);
+
+      expect(mydia.loadedRequests, hasLength(1));
+      final loaded = mydia.loadedRequests.first;
+      expect(loaded.title, 'Inception');
+      expect(loaded.contentRef, isNotNull);
+      expect(loaded.contentRef?.mediaItemId, 'movie-111');
+      expect(loaded.contentRef?.episodeId, isNull);
+      expect(manager.persistedSession?.mediaUrl, 'movie-111');
+    });
+  });
 }

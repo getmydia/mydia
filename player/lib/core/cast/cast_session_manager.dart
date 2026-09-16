@@ -211,6 +211,7 @@ class CastLaunchRequest {
   /// Null means off, which is what local playback does when streaming, so it
   /// is what a cast defaults to.
   final String? selectedSubtitleTrackId;
+  final String? showId;
 
   const CastLaunchRequest({
     required this.fileId,
@@ -223,6 +224,7 @@ class CastLaunchRequest {
     this.subtitles = const [],
     this.duration,
     this.selectedSubtitleTrackId,
+    this.showId,
   });
 
   /// The same request, resumed from somewhere else, or with a new subtitle
@@ -242,6 +244,7 @@ class CastLaunchRequest {
     Duration? startPosition,
     String? selectedSubtitleTrackId,
     bool clearSelectedSubtitle = false,
+    String? showId,
   }) =>
       CastLaunchRequest(
         fileId: fileId,
@@ -256,6 +259,7 @@ class CastLaunchRequest {
         selectedSubtitleTrackId: clearSelectedSubtitle
             ? null
             : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
+        showId: showId ?? this.showId,
       );
 }
 
@@ -474,22 +478,31 @@ class CastSessionManager {
     // call. All but the one actually playing get torn down at the end.
     final startedHlsSessions = <String>[];
 
+    final isMydia = device.protocol == CastProtocolKind.mydia;
     CastRoute? route;
-    try {
-      route =
-          await _resolveRoute(resolver, request, device, startedHlsSessions);
-    } catch (e) {
-      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
-      rethrow;
-    }
-
-    if (route == null) {
-      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
-      throw const CastBackendException(
-        'No usable route to the receiver: the server is unreachable and this '
-        'device has no LAN address to serve from.',
-        CastFailureKind.unreachable,
+    if (isMydia) {
+      route = const CastRoute(
+        mediaUrl: '',
+        kind: CastRouteKind.directServer,
+        mediaKind: CastMediaKind.hls,
       );
+    } else {
+      try {
+        route =
+            await _resolveRoute(resolver, request, device, startedHlsSessions);
+      } catch (e) {
+        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        rethrow;
+      }
+
+      if (route == null) {
+        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        throw const CastBackendException(
+          'No usable route to the receiver: the server is unreachable and this '
+          'device has no LAN address to serve from.',
+          CastFailureKind.unreachable,
+        );
+      }
     }
 
     // Resolved from `device.protocol`, not read off `_backend`: a concurrent
@@ -549,50 +562,68 @@ class CastSessionManager {
     _listenToBackend(request);
 
     final CastRoute loaded;
-    try {
-      loaded = await _loadWithRetries(
-        resolver,
-        backend,
-        route,
-        device,
-        request,
-        startedHlsSessions,
-      );
-    } catch (e) {
-      // Nothing succeeded: leaving the backend connected, the listeners
-      // live, and the LAN proxy exposed would strand the app in a state
-      // with no session but an active connection and (per the Security
-      // requirement) a listener with no cast in progress.
-      //
-      // `_cancelSubscriptions()` and `_publish(null)` below only run when
-      // nothing has superseded this call while `_loadWithRetries` awaited
-      // above — the same `generation == _connectGeneration` ownership check
-      // `connectTo`'s own catch block uses. A concurrent `connectTo` (to a
-      // different device, possibly a different protocol) may already have
-      // published its own session and installed its own listeners by now,
-      // and this call's failure must not tear those down or null out that
-      // unrelated, newer session. `backend.disconnect()` just below is
-      // unconditional regardless: it always targets *this call's own*
-      // resolved backend local from `:415`, never whatever `_backend`
-      // currently points at, so it can never reach a backend this call did
-      // not itself connect (or reuse).
-      if (generation == _connectGeneration) _cancelSubscriptions();
+    if (isMydia) {
       try {
-        await backend.disconnect();
+        await _loadOnRoute(resolver, route, device, request, backend);
+        loaded = route;
       } catch (e) {
-        debugPrint(
-            '[CastSessionManager] Ignoring disconnect error during rollback: $e');
+        if (generation == _connectGeneration) _cancelSubscriptions();
+        try {
+          await backend.disconnect();
+        } catch (e) {
+          debugPrint(
+              '[CastSessionManager] Ignoring disconnect error during rollback: $e');
+        }
+        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        if (generation == _connectGeneration) _publish(null);
+        rethrow;
       }
-      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
-      // The backend has just been disconnected, so leaving a session
-      // published — as `connectTo` may have done before this call, or a
-      // prior `startCast` on this same device — would claim a connection
-      // that no longer exists. That is exactly the stale "connected" state
-      // this project exists to eliminate, so clear it unconditionally here,
-      // not only when the connection was reused — but, as above, only when
-      // this call still owns whatever is currently published.
-      if (generation == _connectGeneration) _publish(null);
-      rethrow;
+    } else {
+      try {
+        loaded = await _loadWithRetries(
+          resolver,
+          backend,
+          route,
+          device,
+          request,
+          startedHlsSessions,
+        );
+      } catch (e) {
+        // Nothing succeeded: leaving the backend connected, the listeners
+        // live, and the LAN proxy exposed would strand the app in a state
+        // with no session but an active connection and (per the Security
+        // requirement) a listener with no cast in progress.
+        //
+        // `_cancelSubscriptions()` and `_publish(null)` below only run when
+        // nothing has superseded this call while `_loadWithRetries` awaited
+        // above — the same `generation == _connectGeneration` ownership check
+        // `connectTo`'s own catch block uses. A concurrent `connectTo` (to a
+        // different device, possibly a different protocol) may already have
+        // published its own session and installed its own listeners by now,
+        // and this call's failure must not tear those down or null out that
+        // unrelated, newer session. `backend.disconnect()` just below is
+        // unconditional regardless: it always targets *this call's own*
+        // resolved backend local from `:415`, never whatever `_backend`
+        // currently points at, so it can never reach a backend this call did
+        // not itself connect (or reuse).
+        if (generation == _connectGeneration) _cancelSubscriptions();
+        try {
+          await backend.disconnect();
+        } catch (e) {
+          debugPrint(
+              '[CastSessionManager] Ignoring disconnect error during rollback: $e');
+        }
+        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        // The backend has just been disconnected, so leaving a session
+        // published — as `connectTo` may have done before this call, or a
+        // prior `startCast` on this same device — would claim a connection
+        // that no longer exists. That is exactly the stale "connected" state
+        // this project exists to eliminate, so clear it unconditionally here,
+        // not only when the connection was reused — but, as above, only when
+        // this call still owns whatever is currently published.
+        if (generation == _connectGeneration) _publish(null);
+        rethrow;
+      }
     }
 
     await _adoptHlsSession(loaded.hlsSessionId, startedHlsSessions);
@@ -1271,13 +1302,26 @@ class CastSessionManager {
     // Reordered with the viewer's choice first: see `orderSubtitlesForLoad`'s
     // dartdoc for why this — and the disable call below — are workarounds for
     // a dart_cast limitation, not design.
+    final isMydia = device.protocol == CastProtocolKind.mydia;
+    final tracks = isMydia ? request.subtitles : route.subtitles;
     final subtitles =
-        orderSubtitlesForLoad(route.subtitles, request.selectedSubtitleTrackId);
+        orderSubtitlesForLoad(tracks, request.selectedSubtitleTrackId);
 
     _useTimeline(StreamTimeline(
       startOffset: route.startOffset,
       totalDuration: request.duration,
     ));
+
+    final contentRef = isMydia
+        ? MydiaContentRef(
+            mediaItemId: request.mediaType == 'episode'
+                ? (request.showId ?? request.mediaId)
+                : request.mediaId,
+            episodeId: request.mediaType == 'episode' ? request.mediaId : null,
+            audioTrack: null,
+            subtitleTrack: request.selectedSubtitleTrackId,
+          )
+        : null;
 
     await backend.loadMedia(CastMediaRequest(
       url: route.mediaUrl,
@@ -1291,6 +1335,7 @@ class CastSessionManager {
       // position, which is a valid byte-range seek.
       startPosition: _timeline.toPlayer(request.startPosition ?? Duration.zero),
       subtitles: subtitles,
+      contentRef: contentRef,
     ));
 
     _subtitles = subtitles;
@@ -1329,6 +1374,12 @@ class CastSessionManager {
       clearSelectedSubtitle: resolvedSubtitleId == null,
     );
 
+    final mediaUrl = isMydia
+        ? (request.mediaType == 'episode'
+            ? '${request.showId ?? request.mediaId}:${request.mediaId}'
+            : request.mediaId)
+        : route.mediaUrl;
+
     _persisted = PersistedCastSession(
       device: device,
       mediaId: request.mediaId,
@@ -1338,9 +1389,10 @@ class CastSessionManager {
       position: request.startPosition ?? Duration.zero,
       routeKind: route.kind,
       savedAt: _clock(),
-      mediaUrl: route.mediaUrl,
+      mediaUrl: mediaUrl,
       duration: request.duration ?? Duration.zero,
       selectedSubtitleTrackId: resolvedSubtitleId,
+      showId: request.showId,
     );
     await _store.save(_persisted!);
 
@@ -1738,6 +1790,7 @@ class CastSessionManager {
       fileId: stored.fileId,
       mediaId: stored.mediaId,
       mediaType: stored.mediaType,
+      showId: stored.showId,
       title: stored.title,
       startPosition: stored.position,
       duration: stored.duration,

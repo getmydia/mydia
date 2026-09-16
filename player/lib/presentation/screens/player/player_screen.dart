@@ -45,6 +45,7 @@ import '../../../core/playback/playback_memory_providers.dart';
 import '../../../core/playback/playback_plan.dart';
 import '../../../core/playback/playback_planner.dart';
 import '../../../core/playback/quality_display.dart';
+import '../../../core/playback/local_playback_state.dart';
 import '../../../core/cast/cast_backend.dart';
 import '../../../core/cast/cast_providers.dart';
 import '../../../core/cast/cast_session_manager.dart';
@@ -803,6 +804,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// what this screen actually owns.
   bool _ownsOrientationLease = false;
 
+  /// Tracks local playback activity so global cast bars are suppressed
+  /// during active on-device playback.
+  LocalPlaybackNotifier? _localPlaybackNotifier;
+  bool _acquiredPlayback = false;
+
   @override
   void initState() {
     super.initState();
@@ -810,6 +816,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _mediaProxy = ref.read(mediaProxyProvider);
     _remoteTargetController = ref.read(remoteTargetControllerProvider);
     _remoteTargetController.attachPlayer(this);
+    final localPlaybackNotifier =
+        ref.read(localPlaybackActiveProvider.notifier);
+    _localPlaybackNotifier = localPlaybackNotifier;
+    Future.microtask(() {
+      if (mounted) {
+        _acquiredPlayback = true;
+        localPlaybackNotifier.acquire();
+      }
+    });
 
     // Seeded here rather than read at each branch: an entry-point that already
     // said "Continue" has answered the resume question, and all three
@@ -979,6 +994,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           fileId: fileId,
           mediaId: widget.mediaId,
           mediaType: widget.mediaType,
+          showId: widget.showId,
           title: widget.title ?? 'Untitled',
           duration: _knownCastDuration(),
           startPosition: plan.position,
@@ -998,7 +1014,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
       if (mounted) {
         if (e is CastBackendException) {
-          showCastErrorSnackBar(context, e, ref: ref);
+          showCastErrorSnackBar(context, e,
+              ref: ref,
+              isMydiaTarget: target.protocol == CastProtocolKind.mydia);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Failed to start casting: $e'),
@@ -4385,6 +4403,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // disposes) is never clobbered by this late detach — see
     // `detachPlayer`'s own dartdoc.
     _remoteTargetController.detachPlayer(this);
+    final playbackNotifier = _localPlaybackNotifier;
+    final acquired = _acquiredPlayback;
+    if (playbackNotifier != null && acquired) {
+      Future.microtask(() {
+        playbackNotifier.release();
+      });
+    }
 
     // Order matters twice over. Stop listening *first*: in `systemUi` mode
     // `exit()` reports the transition synchronously, and the resulting
@@ -5041,6 +5066,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             fileId: widget.fileId,
             mediaId: widget.mediaId,
             mediaType: widget.mediaType,
+            showId: widget.showId,
             title: widget.title ?? 'Untitled',
             startPosition: startPosition,
             // The receiver cannot work this out for itself: Mydia's HLS
@@ -5065,7 +5091,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      showCastErrorSnackBar(context, e, ref: ref);
+      showCastErrorSnackBar(context, e,
+          ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
     } catch (e) {
       // Anything that isn't a CastBackendException: the session manager
       // itself resolving (Hive, GraphQL client), or a non-typed failure from
