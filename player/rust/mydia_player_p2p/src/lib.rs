@@ -1089,10 +1089,11 @@ impl P2pHost {
         peer: String,
         req: FlutterHlsRequest,
     ) -> anyhow::Result<HlsStreamHandle> {
+        // The session id stays out of this log: it identifies the stream, and
+        // the proxy already logs it on the Dart side where it is needed.
         log::info!(
-            "P2pHost::open_hls_stream() called for peer: {}, session: {}, path: {}",
+            "P2pHost::open_hls_stream() called for peer: {}, path: {}",
             peer,
-            req.session_id,
             req.path
         );
 
