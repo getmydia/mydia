@@ -610,13 +610,19 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         intent,
         screenWidth,
         fetchMovieTarget: (id) async {
-          final movie =
-              await ref.read(movieDetailControllerProvider(id).future);
+          final movie = await readDetailKeepingAlive(
+            ref,
+            provider: movieDetailControllerProvider(id),
+            future: movieDetailControllerProvider(id).future,
+          );
           return LoadContentTarget(files: movie.files, title: movie.title);
         },
         fetchEpisodeTarget: (id) async {
-          final episode =
-              await ref.read(episodeDetailControllerProvider(id).future);
+          final episode = await readDetailKeepingAlive(
+            ref,
+            provider: episodeDetailControllerProvider(id),
+            future: episodeDetailControllerProvider(id).future,
+          );
           return LoadContentTarget(
             files: episode.files,
             title: episode.title,
