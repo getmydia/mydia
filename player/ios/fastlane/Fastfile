@@ -36,7 +36,7 @@ platform :ios do
     # once the last released build expires the public links refuse new testers
     # (#746). scripts/check-ios-fastlane-metadata.sh asserts this stays wired
     # to distribute_ext.
-    distribute_ext = ENV.fetch("TESTFLIGHT_DISTRIBUTE_EXTERNAL", "true") == "true"
+    distribute_ext = testflight_distribute_external?
 
     upload_to_testflight(
       distribute_external: distribute_ext,

@@ -67,6 +67,17 @@ real.flush
 ENV["TESTFLIGHT_CHANGELOG_PATH"] = real.path
 check.call("real notes are read and stripped", testflight_changelog, "What changed.")
 
+# External distribution flag defaults to true (releases / refresh cron) and is
+# false only when internal-only builds are requested (on-demand).
+ENV.delete("TESTFLIGHT_DISTRIBUTE_EXTERNAL")
+check.call("unset distribute_external defaults to true", testflight_distribute_external?, true)
+
+ENV["TESTFLIGHT_DISTRIBUTE_EXTERNAL"] = "true"
+check.call("distribute_external true string resolves to true", testflight_distribute_external?, true)
+
+ENV["TESTFLIGHT_DISTRIBUTE_EXTERNAL"] = "false"
+check.call("distribute_external false string resolves to false", testflight_distribute_external?, false)
+
 # The Fastfile only loads under fastlane, so this reads it as text, skipping
 # comments. notify_external_testers is what releases an approved build to
 # external testers. While it was false every build waited at "Approved", and the
@@ -74,6 +85,8 @@ check.call("real notes are read and stripped", testflight_changelog, "What chang
 # wired to distribute_ext (defaulting to true for external distribution).
 fastfile = File.read(File.join(File.dirname(File.expand_path(ARGV[0])), "Fastfile"))
 code = fastfile.lines.reject { |l| l.lstrip.start_with?("#") }.join
+check.call("the Fastfile sets distribute_external",
+           code.scan(/distribute_external:\s*(\w+)/).flatten, ["distribute_ext"])
 check.call("the Fastfile notifies external testers",
            code.scan(/notify_external_testers:\s*(\w+)/).flatten, ["distribute_ext"])
 
