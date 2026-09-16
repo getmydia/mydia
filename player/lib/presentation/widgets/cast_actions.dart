@@ -32,11 +32,16 @@ String castErrorMessage(
   CastBackendException e, {
   WidgetRef? ref,
   bool? isIOS,
+  bool isMydiaTarget = false,
 }) {
   final proxy = ref?.read(localProxyServiceProvider);
 
   switch (e.kind) {
     case CastFailureKind.unreachable:
+      if (isMydiaTarget) {
+        return 'Could not reach the device. Check that both devices are '
+            'online and paired in Mydia.';
+      }
       final port = proxy != null && proxy.isLanAccessible ? proxy.port : null;
       final portHint =
           port == null ? '' : ' Allow incoming connections on port $port.';
@@ -78,6 +83,7 @@ void showCastErrorSnackBar(
   CastBackendException e, {
   WidgetRef? ref,
   bool? canOpenSettings,
+  bool isMydiaTarget = false,
 }) {
   // Both kinds are the same OS permission with the same fix.
   final permissionDenied = e.kind == CastFailureKind.localNetworkDenied ||
@@ -90,7 +96,7 @@ void showCastErrorSnackBar(
       permissionDenied && (canOpenSettings ?? localNetworkSettingsAvailable());
 
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(castErrorMessage(e, ref: ref)),
+    content: Text(castErrorMessage(e, ref: ref, isMydiaTarget: isMydiaTarget)),
     backgroundColor: Colors.red,
     duration: Duration(seconds: permissionDenied ? 8 : 4),
     action: offerSettings
@@ -184,7 +190,8 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     );
   } on CastBackendException catch (e) {
     if (!context.mounted) return;
-    showCastErrorSnackBar(context, e, ref: ref);
+    showCastErrorSnackBar(context, e,
+        ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
   } catch (e) {
     // Anything that isn't a CastBackendException: the session manager itself
     // resolving (Hive, GraphQL client), or a non-typed failure from
@@ -219,7 +226,8 @@ Future<void> _connectToDevice(
     // That matters most here: connecting on select is now the first moment
     // the denial can surface at all, since choosing a device no longer
     // defers contact until playback starts.
-    showCastErrorSnackBar(context, e, ref: ref);
+    showCastErrorSnackBar(context, e,
+        ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
   } catch (e) {
     debugPrint('[cast_actions] Unexpected error connecting to device: $e');
     if (!context.mounted) return;

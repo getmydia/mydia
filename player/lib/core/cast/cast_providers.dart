@@ -162,7 +162,8 @@ final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
 
   final targets = AmbientTargets(
     rosterSource: () async => (await roster.entries())
-        .where((entry) => entry.nodeId != selfNodeId)
+        .where(
+            (entry) => entry.nodeId.toLowerCase() != selfNodeId.toLowerCase())
         .map((entry) => entry.nodeId)
         .toList(growable: false),
     probe: (nodeId) => probeMydiaNodeState(transport, nodeId),

@@ -37,6 +37,18 @@ void main() {
       expect(castErrorMessage(e), isNotEmpty);
     });
 
+    test(
+        'uses a connection-error message for an unreachable Mydia target '
+        'instead of the Chromecast-centric "your media" phrasing', () {
+      const e = CastBackendException('nope', CastFailureKind.unreachable);
+      final message = castErrorMessage(e, isMydiaTarget: true);
+
+      expect(message, isNot(contains('your media')),
+          reason: 'Mydia targets resolve their own content; '
+              '"your media" is Chromecast-only language');
+      expect(message, contains('online and paired'));
+    });
+
     test('explains a denied local network permission', () {
       const e = CastBackendException('denied', CastFailureKind.discoveryDenied);
 
