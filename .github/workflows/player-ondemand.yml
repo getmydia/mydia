@@ -28,7 +28,7 @@ on:
         type: boolean
         default: false
       upload_to_stores:
-        description: 'Upload mobile builds to TestFlight (internal) and Play Store (internal track)'
+        description: 'Upload iOS build to TestFlight internal testers (Android test builds are distributed as direct APK artifacts)'
         type: boolean
         default: true
       version_override:
@@ -44,10 +44,15 @@ concurrency:
   group: player-ondemand-${{ inputs.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   prepare:
     name: Prepare
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       sha: ${{ steps.setup.outputs.sha }}
       version: ${{ steps.setup.outputs.version }}
@@ -59,6 +64,7 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Derive version and build number
         id: setup
@@ -71,6 +77,18 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Validate INPUT_REF: must not be empty, must not start with dash or contain whitespace
+          if [ -z "$INPUT_REF" ] || [[ "$INPUT_REF" =~ [[:space:]] ]] || [[ "$INPUT_REF" =~ ^- ]]; then
+            echo "::error::Invalid ref '$INPUT_REF'. Ref must not be empty, start with a dash, or contain whitespace."
+            exit 1
+          fi
+
+          if ! git rev-parse --verify --quiet "origin/$INPUT_REF^{commit}" >/dev/null 2>&1 && \
+             ! git rev-parse --verify --quiet "$INPUT_REF^{commit}" >/dev/null 2>&1; then
+            echo "::error::Ref '$INPUT_REF' could not be resolved to a commit in this repository."
+            exit 1
+          fi
+
           SHA=$(git rev-parse HEAD)
           echo "Building SHA: $SHA from ref $INPUT_REF"
 
@@ -78,6 +96,10 @@ jobs:
           VERSION_CODE=$(( RUN_NUMBER + 500000 ))
 
           if [ -n "$INPUT_VERSION" ]; then
+            if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+              echo "::error::Invalid version_override '$INPUT_VERSION'. Must match semver (e.g. 1.2.3 or 1.2.3-beta.1)"
+              exit 1
+            fi
             VERSION="$INPUT_VERSION"
           else
             LATEST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || echo "v0.0.0")
@@ -144,7 +166,7 @@ jobs:
       sha: ${{ needs.prepare.outputs.sha }}
       version: ${{ needs.prepare.outputs.version }}
       version_code: ${{ needs.prepare.outputs.version_code }}
-      upload_to_play_store: ${{ inputs.upload_to_stores && !inputs.dry_run }}
+      upload_to_play_store: false
       play_store_track: 'internal'
       dry_run: ${{ inputs.dry_run }}
     secrets:

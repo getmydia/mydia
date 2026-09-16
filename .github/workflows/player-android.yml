@@ -121,7 +121,7 @@ jobs:
         run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/bundle/release/app-release.aab
 
       - name: Setup Ruby for Fastlane
-        if: ${{ inputs.upload_to_play_store && !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
+        if: ${{ inputs.upload_to_play_store && !inputs.dry_run }}
         env:
           PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
         uses: ruby/setup-ruby@v1
@@ -131,7 +131,7 @@ jobs:
           working-directory: ${{ env.PLAYER_PATH }}/android
 
       - name: Upload to Play Store
-        if: ${{ inputs.upload_to_play_store && !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
+        if: ${{ inputs.upload_to_play_store && !inputs.dry_run }}
         env:
           PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
         working-directory: ${{ env.PLAYER_PATH }}/android

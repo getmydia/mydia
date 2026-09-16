@@ -84,7 +84,7 @@ jobs:
         run: flutter build macos --release
 
       - name: Install signing certificate
-        if: env.MACOS_CERTIFICATE != ''
+        if: ${{ !inputs.dry_run }}
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         run: |
@@ -104,7 +104,7 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
       - name: Sign app bundle
-        if: env.MACOS_CERTIFICATE != ''
+        if: ${{ !inputs.dry_run }}
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         run: |
@@ -123,7 +123,7 @@ jobs:
           fi
 
       - name: Notarize app bundle
-        if: ${{ !inputs.dry_run && env.MACOS_CERTIFICATE != '' }}
+        if: ${{ !inputs.dry_run }}
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
@@ -137,7 +137,7 @@ jobs:
           rm "Mydia Player.zip"
 
       - name: Staple notarization ticket
-        if: ${{ !inputs.dry_run && env.MACOS_CERTIFICATE != '' }}
+        if: ${{ !inputs.dry_run }}
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
         run: |
@@ -155,12 +155,13 @@ jobs:
       - name: Download Sparkle tools
         if: ${{ inputs.generate_appcast }}
         run: |
-          curl -L https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz -o sparkle.tar.xz
+          curl -sSL https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz -o sparkle.tar.xz
+          echo "5cddb7695674ef7704268f38eccaee80e3accbf19e61c1689efff5b6116d85be  sparkle.tar.xz" | shasum -a 256 -c -
           mkdir -p sparkle-tools
           tar xf sparkle.tar.xz -C sparkle-tools
 
       - name: Generate appcast
-        if: ${{ inputs.generate_appcast && env.SPARKLE_EDDSA_KEY != '' }}
+        if: ${{ inputs.generate_appcast }}
         env:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
@@ -214,7 +215,7 @@ jobs:
           EOF
 
       - name: Validate appcast
-        if: ${{ inputs.generate_appcast && env.SPARKLE_EDDSA_KEY != '' }}
+        if: ${{ inputs.generate_appcast }}
         env:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
@@ -264,7 +265,7 @@ jobs:
           retention-days: 30
 
       - name: "Upload artifact: Appcast"
-        if: ${{ inputs.generate_appcast && env.SPARKLE_EDDSA_KEY != '' }}
+        if: ${{ inputs.generate_appcast }}
         uses: actions/upload-artifact@v7
         with:
           name: mydia-player-macos-appcast
