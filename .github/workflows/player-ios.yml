@@ -42,6 +42,13 @@ on:
         type: boolean
         required: false
         default: false
+      distribute_external:
+        description: >-
+          Distribute to external TestFlight groups. When false, uploads for
+          internal testers only and skips waiting for Apple Beta App Review.
+        type: boolean
+        required: false
+        default: true
     # Named one by one rather than left to `secrets: inherit` at the call site,
     # for the reason already written down in deploy-web-player.yml: inherit
     # would hand an iOS workflow the Android keystore, the Flatpak GPG key and
@@ -236,6 +243,7 @@ jobs:
           TESTFLIGHT_CHANGELOG_PATH: ${{ runner.temp }}/testflight-notes.txt
           # Group names, matched exactly by App Store Connect.
           TESTFLIGHT_GROUPS: ${{ inputs.groups }}
+          TESTFLIGHT_DISTRIBUTE_EXTERNAL: ${{ inputs.distribute_external }}
         working-directory: ${{ env.PLAYER_PATH }}/ios
         run: |
           bundle exec fastlane testflight
