@@ -1057,6 +1057,37 @@ void main() {
 
       expect((await store.load())?.selectedSubtitleTrackId, '3');
     });
+
+    test('preserves showId when reconnecting a stored Mydia episode', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      const mydiaDevice = CastDevice(
+        id: 'tv-node',
+        name: 'Living Room TV',
+        protocol: CastProtocolKind.mydia,
+      );
+      await manager.startCast(
+        device: mydiaDevice,
+        request: const CastLaunchRequest(
+          fileId: 'file-ep-1',
+          mediaId: 'ep-1',
+          mediaType: 'episode',
+          showId: 'show-42',
+          title: 'Silo - S01E01',
+        ),
+      );
+      backend.loadedRequests.clear();
+
+      backend.emitFailure(CastFailureKind.connectionLost);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      await manager.reconnectStoredSession();
+
+      final ref = backend.loadedRequests.single.contentRef;
+      expect(ref?.mediaItemId, 'show-42');
+      expect(ref?.episodeId, 'ep-1');
+      expect((await store.load())?.showId, 'show-42');
+    });
   });
 
   group('seek', () {
