@@ -60,6 +60,10 @@ const _badRequest = 400;
 const _notFound = 404;
 
 abstract final class MediaRoutes {
+  /// Session id prefixes of the byte-stream routes.
+  static const directSessionPrefix = 'direct:';
+  static const downloadSessionPrefix = 'download:';
+
   /// URL of a session's HLS manifest.
   static String hls(String base, String sessionId) =>
       '$base/hls/$sessionId/index.m3u8';
@@ -111,7 +115,7 @@ abstract final class MediaRoutes {
         prefix: '/direct/',
         shape: '/direct/{file_id}/stream',
         idLabel: 'File ID',
-        sessionPrefix: 'direct:',
+        sessionPrefix: directSessionPrefix,
         remotePath: 'stream',
       );
     }
@@ -122,7 +126,7 @@ abstract final class MediaRoutes {
         prefix: '/download/',
         shape: '/download/{job_id}/file',
         idLabel: 'Job ID',
-        sessionPrefix: 'download:',
+        sessionPrefix: downloadSessionPrefix,
         remotePath: 'file',
       );
     }

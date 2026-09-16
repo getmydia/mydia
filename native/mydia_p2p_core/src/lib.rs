@@ -12,7 +12,7 @@ use iroh::endpoint::{Incoming, SendStream};
 use iroh::{
     address_lookup::memory::MemoryLookup,
     defaults::prod as default_relays,
-    endpoint::{presets, Connection, PathEvent},
+    endpoint::{presets, Connection, PathEvent, RecvStream},
     Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
 };
 // A browser has no DNS resolver to configure: iroh resolves peers over HTTPS
@@ -136,9 +136,38 @@ pub struct PairingResponse {
 pub struct HlsStreamResponse {
     /// Response header
     pub header: HlsResponseHeader,
-    /// Receiver for data chunks
+    /// Receiver for data chunks. Dropping it ends the stream.
     pub chunk_rx: mpsc::Receiver<Vec<u8>>,
+    /// Ends the stream without dropping `chunk_rx`.
+    pub cancel: HlsCancel,
 }
+
+/// Cancels a client-side HLS stream.
+///
+/// Cancelling stops the task reading the stream, tells the server to stop
+/// sending, and ends `chunk_rx`. It is idempotent and never blocks. Dropping
+/// every clone without calling `cancel` does not cancel anything; dropping
+/// `chunk_rx` does.
+#[derive(Clone, Debug)]
+pub struct HlsCancel(Arc<watch::Sender<bool>>);
+
+impl HlsCancel {
+    /// A handle and the receiver the reading task watches. Public so a bridge
+    /// crate can build an `HlsStreamResponse` of its own in tests.
+    pub fn new() -> (Self, watch::Receiver<bool>) {
+        let (tx, rx) = watch::channel(false);
+        (Self(Arc::new(tx)), rx)
+    }
+
+    pub fn cancel(&self) {
+        self.0.send_replace(true);
+    }
+}
+
+/// Prefix of the error `Host::stream_file_range` returns when the client
+/// stopped reading. Players do this on every seek, so callers can treat it
+/// as the normal end of a transfer nobody wants any more.
+pub const HLS_PEER_STOPPED: &str = "peer_stopped";
 
 /// Commands that can be sent to the Host
 enum Command {
@@ -1629,8 +1658,7 @@ async fn register_connection(
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
     disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
-    #[cfg(feature = "host")]
-    hls_registry: &HlsStreamRegistry,
+    #[cfg(feature = "host")] hls_registry: &HlsStreamRegistry,
 ) {
     let connection_type = PeerConnectionType::from_connection(&conn);
     tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
@@ -1731,11 +1759,7 @@ async fn accept_inbound(
 }
 
 #[cfg(feature = "host")]
-async fn dispatch_stream_cmd(
-    hls_registry: &HlsStreamRegistry,
-    stream_id: &str,
-    cmd: StreamCmd,
-) {
+async fn dispatch_stream_cmd(hls_registry: &HlsStreamRegistry, stream_id: &str, cmd: StreamCmd) {
     let stream_tx = {
         let registry = hls_registry.lock().await;
         registry.get(stream_id).cloned()
@@ -1775,8 +1799,7 @@ async fn handle_command(
     shared_state: &Arc<Mutex<SharedState>>,
     relay_connected: bool,
     internal_tx: &mpsc::Sender<InternalMessage>,
-    #[cfg(feature = "host")]
-    hls_registry: &HlsStreamRegistry,
+    #[cfg(feature = "host")] hls_registry: &HlsStreamRegistry,
 ) {
     match cmd {
         Command::Dial {
@@ -1850,9 +1873,7 @@ async fn handle_command(
                     // One dial per peer however many requests are waiting: the
                     // queue being non-empty is itself the "already dialing"
                     // flag.
-                    let waiters = pending_requests
-                        .entry(actual_node_id.clone())
-                        .or_default();
+                    let waiters = pending_requests.entry(actual_node_id.clone()).or_default();
                     let already_dialing = !waiters.is_empty();
                     waiters.push((request, reply));
                     if !already_dialing {
@@ -1978,21 +1999,11 @@ async fn handle_command(
             data,
             reply,
         } => {
-            dispatch_stream_cmd(
-                hls_registry,
-                &stream_id,
-                StreamCmd::Chunk { data, reply },
-            )
-            .await;
+            dispatch_stream_cmd(hls_registry, &stream_id, StreamCmd::Chunk { data, reply }).await;
         }
         #[cfg(feature = "host")]
         Command::FinishHlsStream { stream_id, reply } => {
-            dispatch_stream_cmd(
-                hls_registry,
-                &stream_id,
-                StreamCmd::Finish { reply },
-            )
-            .await;
+            dispatch_stream_cmd(hls_registry, &stream_id, StreamCmd::Finish { reply }).await;
         }
         #[cfg(feature = "host")]
         Command::StreamFileRange {
@@ -2104,6 +2115,16 @@ async fn monitor_connection_type(conn: Connection, peer_id: String, event_tx: mp
     }
 }
 
+/// Formats a failed write, marking a client that stopped reading with
+/// `HLS_PEER_STOPPED` so the caller can tell it from a real failure.
+#[cfg(feature = "host")]
+fn stream_write_error(context: &str, e: iroh::endpoint::WriteError) -> String {
+    match e {
+        iroh::endpoint::WriteError::Stopped(_) => format!("{HLS_PEER_STOPPED}: {context}"),
+        other => format!("{context}: {other}"),
+    }
+}
+
 /// Stream a file range to a QUIC SendStream with length-prefixed chunks.
 /// Uses a bounded channel pipeline: blocking reader → async QUIC writer.
 /// Memory usage is bounded at ~4MB regardless of file size.
@@ -2201,10 +2222,10 @@ async fn stream_file_to_quic(
         let w_start = Instant::now();
         send.write_all(&len_bytes)
             .await
-            .map_err(|e| format!("Failed to write chunk length: {}", e))?;
+            .map_err(|e| stream_write_error("Failed to write chunk length", e))?;
         send.write_all(&chunk)
             .await
-            .map_err(|e| format!("Failed to write chunk data: {}", e))?;
+            .map_err(|e| stream_write_error("Failed to write chunk data", e))?;
         quic_write_nanos += w_start.elapsed().as_nanos() as u64;
 
         total_bytes += chunk_len;
@@ -2215,7 +2236,7 @@ async fn stream_file_to_quic(
     let zero_bytes = [0u8; 4];
     send.write_all(&zero_bytes)
         .await
-        .map_err(|e| format!("Failed to write terminator: {}", e))?;
+        .map_err(|e| stream_write_error("Failed to write terminator", e))?;
     send.finish()
         .map_err(|e| format!("Failed to finish stream: {}", e))?;
 
@@ -2343,8 +2364,7 @@ async fn handle_connection(
     event_tx: mpsc::Sender<Event>,
     shared_state: Arc<Mutex<SharedState>>,
     disconnect_tx: mpsc::Sender<(String, ConnectionId)>,
-    #[cfg(feature = "host")]
-    hls_registry: HlsStreamRegistry,
+    #[cfg(feature = "host")] hls_registry: HlsStreamRegistry,
 ) {
     loop {
         match conn.accept_bi().await {
@@ -2640,6 +2660,7 @@ async fn do_send_hls_request(
 
     // Create a channel for streaming chunks
     let (chunk_tx, chunk_rx) = mpsc::channel::<Vec<u8>>(16);
+    let (cancel, mut cancel_rx) = HlsCancel::new();
     let content_length = header.content_length;
 
     // Spawn a task to read chunks and send them through the channel
@@ -2648,35 +2669,20 @@ async fn do_send_hls_request(
         let mut chunk_count: u32 = 0;
         let transfer_start = Instant::now();
 
-        loop {
-            // Read chunk length
-            let mut len_buf = [0u8; 4];
-            if let Err(e) = recv.read_exact(&mut len_buf).await {
-                tracing::debug!("HLS chunk read completed or error: {}", e);
-                break;
-            }
-            let chunk_len = u32::from_be_bytes(len_buf) as usize;
+        // The reader waits in two places: on the server (a stall) and on
+        // `chunk_tx` (nobody pulling). A cancel or a dropped receiver has to
+        // end either wait. `Ok(_)` disables the cancel branch when every
+        // `HlsCancel` is dropped, which is not a cancel.
+        let cancelled = tokio::select! {
+            _ = forward_hls_chunks(&mut recv, &chunk_tx, &mut total_bytes, &mut chunk_count) => false,
+            Ok(_) = cancel_rx.wait_for(|cancelled| *cancelled) => true,
+            _ = chunk_tx.closed() => true,
+        };
 
-            // Zero length indicates end of stream
-            if chunk_len == 0 {
-                break;
-            }
-
-            // Read the chunk
-            let mut chunk_data = vec![0u8; chunk_len];
-            if let Err(e) = recv.read_exact(&mut chunk_data).await {
-                tracing::error!("Failed to read chunk data: {}", e);
-                break;
-            }
-
-            total_bytes += chunk_len as u64;
-            chunk_count += 1;
-
-            // Send chunk through channel
-            if chunk_tx.send(chunk_data).await.is_err() {
-                tracing::debug!("HLS chunk receiver dropped");
-                break;
-            }
+        if cancelled {
+            // Dropping `recv` unread would also send STOP_SENDING; saying it
+            // here keeps the server's stop from hinging on that.
+            let _ = recv.stop(0u32.into());
         }
 
         let transfer_ms = transfer_start.elapsed().as_millis() as u64;
@@ -2688,20 +2694,65 @@ async fn do_send_hls_request(
         };
 
         tracing::info!(
-            "p2p_metrics: transfer_complete total_ms={} transfer_ms={} bytes={} content_length={} chunks={} throughput_mbps={:.2} connection_type={} session={} path={}",
+            "p2p_metrics: transfer_complete total_ms={} transfer_ms={} bytes={} content_length={} chunks={} throughput_mbps={:.2} cancelled={} connection_type={} session={} path={}",
             total_ms,
             transfer_ms,
             total_bytes,
             content_length,
             chunk_count,
             throughput_mbps,
+            cancelled,
             connection_type.as_str(),
             session_id,
             path
         );
     });
 
-    Ok(HlsStreamResponse { header, chunk_rx })
+    Ok(HlsStreamResponse {
+        header,
+        chunk_rx,
+        cancel,
+    })
+}
+
+/// Reads length-prefixed chunks off `recv` and forwards them, until the zero
+/// terminator, a read error, or a dropped receiver.
+async fn forward_hls_chunks(
+    recv: &mut RecvStream,
+    chunk_tx: &mpsc::Sender<Vec<u8>>,
+    total_bytes: &mut u64,
+    chunk_count: &mut u32,
+) {
+    loop {
+        // Read chunk length
+        let mut len_buf = [0u8; 4];
+        if let Err(e) = recv.read_exact(&mut len_buf).await {
+            tracing::debug!("HLS chunk read completed or error: {}", e);
+            return;
+        }
+        let chunk_len = u32::from_be_bytes(len_buf) as usize;
+
+        // Zero length indicates end of stream
+        if chunk_len == 0 {
+            return;
+        }
+
+        // Read the chunk
+        let mut chunk_data = vec![0u8; chunk_len];
+        if let Err(e) = recv.read_exact(&mut chunk_data).await {
+            tracing::error!("Failed to read chunk data: {}", e);
+            return;
+        }
+
+        *total_bytes += chunk_len as u64;
+        *chunk_count += 1;
+
+        // Send chunk through channel
+        if chunk_tx.send(chunk_data).await.is_err() {
+            tracing::debug!("HLS chunk receiver dropped");
+            return;
+        }
+    }
 }
 
 #[cfg(test)]

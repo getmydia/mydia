@@ -6,12 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/p2p/media_route.dart';
 import 'package:player/core/p2p/p2p_service.dart';
-import 'package:player/native/lib.dart'
-    show
-        FlutterHlsStreamEvent_Header,
-        FlutterHlsStreamEvent_Chunk,
-        FlutterHlsStreamEvent_End,
-        FlutterHlsStreamEvent_Error;
+import 'package:player/core/p2p/p2p_range_stream.dart';
+import 'package:player/core/p2p/range_source.dart';
+import 'package:player/core/p2p/range_spool.dart';
+import 'package:player/native/lib.dart' show FlutterHlsResponseHeader;
 
 final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
   final p2p = ref.watch(p2pServiceProvider);
@@ -50,6 +48,14 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// Cached non-loopback address used to build receiver-facing URLs.
   String? _lanAddress;
 
+  /// Byte-range transfers in flight, cancelled whenever the sockets they
+  /// write to are closed.
+  final Set<RangeSource> _activeSources = {};
+
+  /// Counts those cancellations, so a request can tell the server it started
+  /// on was closed while it was still opening its source.
+  var _sourceCancellations = 0;
+
   int get port => _server?.port ?? 0;
 
   @override
@@ -86,7 +92,17 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   @override
   String get baseUrl => _urlBase;
 
-  LocalProxyService(this._p2p);
+  LocalProxyService(
+    this._p2p, {
+    RangeSpoolSettings spool = const RangeSpoolSettings.platform(),
+  }) : _spoolSettings = spool;
+
+  final RangeSpoolSettings _spoolSettings;
+
+  /// Where spool files go. Prepared the first time a spool is needed, which
+  /// also clears whatever a crash left behind. Null when there is nowhere
+  /// to spool.
+  Future<Directory?>? _spoolDirectory;
 
   /// Test-only constructor: builds a service with no live P2P dependency.
   /// Requests that reach P2P will fail, which is fine for URL and gating tests.
@@ -142,6 +158,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // connection open here is the video pipeline's own: mpv holds a range
     // request for the whole file, so unforced it is left waiting on a socket
     // nothing will ever answer instead of seeing its stream end.
+    await _cancelActiveSources();
     await _server?.close(force: true);
     _server = null;
     _targetPeer = null;
@@ -260,6 +277,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // invalidates whatever URL the video pipeline is holding regardless, and
     // the caller restarts local playback afterwards. Left unforced, the
     // request in flight against the old port would hang rather than end.
+    await _cancelActiveSources();
     await _server?.close(force: true);
     _server = null;
 
@@ -399,14 +417,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       }
 
       // Parse Range header for seeking support
-      int? rangeStart;
-      int? rangeEnd;
-      final rangeHeader = request.headers.value('Range');
-      if (rangeHeader != null) {
-        final range = _parseRangeHeader(rangeHeader);
-        rangeStart = range.$1;
-        rangeEnd = range.$2;
-      }
+      final (rangeStart, rangeEnd) = _requestedRange(request);
 
       final proxySetupMs = sw.elapsedMilliseconds;
 
@@ -470,28 +481,26 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     }
   }
 
-  /// Shared logic for streaming range requests via P2P.
+  /// Streams a byte range from the server to the client.
   ///
-  /// Sends a single P2P streaming request for the entire range and pipes
-  /// chunks directly to the HTTP response as they arrive from QUIC. This
-  /// eliminates per-sub-request overhead (QUIC stream setup, CBOR, auth,
-  /// file stat) and lets QUIC congestion control ramp up within one stream.
+  /// The body comes from a [RangeSource] and is pulled as the socket takes
+  /// it. The source is cancelled as soon as the client goes away: mpv closes
+  /// its connection on every seek and opens a new one, and a transfer left
+  /// running would carry on to the end of the file, sharing the p2p link
+  /// with the one that is playing.
   Future<void> _forwardRangeRequest({
     required HttpRequest request,
     required MediaRouteMatch route,
   }) async {
     final sessionId = route.sessionId;
     final path = route.path;
-    // The session id already carries the route kind ("direct:" / "download:"),
-    // so it is the log label too.
-    final logLabel = sessionId;
+    final response = request.response;
     final sw = Stopwatch()..start();
+    final cancellations = _sourceCancellations;
 
-    int? rangeStart;
-    int? rangeEnd;
+    RangeSource? source;
     var bytesServed = 0;
     var chunkCount = 0;
-    var headersSent = false;
     int? firstHeaderMs;
     int? firstChunkMs;
 
@@ -499,96 +508,168 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // opened. The dispatcher does not await this, so anything that escapes
     // here surfaces as an unhandled async error rather than a response.
     try {
-      if (_targetPeer == null) {
-        request.response.statusCode = HttpStatus.serviceUnavailable;
-        _setCorsHeaders(request.response);
-        request.response.write('No target peer configured');
-        await request.response.close();
+      final peer = _targetPeer;
+      if (peer == null) {
+        response.statusCode = HttpStatus.serviceUnavailable;
+        _setCorsHeaders(response);
+        response.write('No target peer configured');
         return;
       }
 
-      // Parse the client's Range header.
-      final rangeHeader = request.headers.value('Range');
-      if (rangeHeader != null) {
-        final range = _parseRangeHeader(rangeHeader);
-        rangeStart = range.$1;
-        rangeEnd = range.$2;
-      }
-
+      final (rangeStart, rangeEnd) = _requestedRange(request);
       debugPrint(
-          '[LocalProxy] P2P stream $logLabel range=$rangeStart-$rangeEnd');
+          '[LocalProxy] P2P stream $sessionId range=$rangeStart-$rangeEnd');
 
-      final stream = _p2p.sendHlsRequestStreaming(
-        peer: _targetPeer!,
-        sessionId: sessionId,
-        path: path,
-        rangeStart: rangeStart,
-        rangeEnd: rangeEnd,
-        authToken: _authToken,
-      );
-
-      await for (final event in stream) {
-        switch (event) {
-          case FlutterHlsStreamEvent_Header(:final field0):
-            firstHeaderMs = sw.elapsedMilliseconds;
-            final header = field0;
-            request.response.statusCode = header.status;
-            request.response.headers.contentType =
-                ContentType.parse(header.contentType);
-            request.response.headers.contentLength =
-                header.contentLength.toInt();
-            if (header.contentRange != null) {
-              request.response.headers
-                  .set('Content-Range', header.contentRange!);
-            }
-            if (header.cacheControl != null) {
-              request.response.headers
-                  .set('Cache-Control', header.cacheControl!);
-            }
-            request.response.headers.set('Accept-Ranges', 'bytes');
-            _setCorsHeaders(request.response);
-            headersSent = true;
-
-          case FlutterHlsStreamEvent_Chunk(:final field0):
-            firstChunkMs ??= sw.elapsedMilliseconds;
-            request.response.add(field0);
-            bytesServed += field0.length;
-            chunkCount++;
-
-          case FlutterHlsStreamEvent_End():
-            break;
-
-          case FlutterHlsStreamEvent_Error(:final field0):
-            if (!headersSent) {
-              request.response.statusCode = HttpStatus.badGateway;
-              _setCorsHeaders(request.response);
-              request.response.write('P2P error: $field0');
-            }
-            debugPrint('[LocalProxy] P2P stream error for $logLabel: $field0');
-        }
+      final P2pRangeStream upstream;
+      try {
+        upstream = await _p2p.openRangeStream(
+          peer: peer,
+          sessionId: sessionId,
+          path: path,
+          rangeStart: rangeStart,
+          rangeEnd: rangeEnd,
+          authToken: _authToken,
+        );
+      } catch (e) {
+        debugPrint('[LocalProxy] P2P stream error for $sessionId: $e');
+        response.statusCode = HttpStatus.badGateway;
+        _setCorsHeaders(response);
+        response.write('P2P error: $e');
+        return;
       }
+      firstHeaderMs = sw.elapsedMilliseconds;
+      _applyUpstreamHeaders(response, upstream.header);
+
+      // Opening a spool waits on the disk, so the upstream is tracked on its
+      // own until then: a shutdown in that window still has to cancel it.
+      final opening = PassThroughSource(upstream);
+      _activeSources.add(opening);
+      final RangeSource active;
+      try {
+        active = source = await _openSource(upstream, sessionId);
+      } finally {
+        _activeSources.remove(opening);
+        if (source == null) await opening.cancel();
+      }
+
+      // The server was closed while the source was opening, so nothing will
+      // read it. The `finally` below cancels it.
+      if (cancellations != _sourceCancellations) return;
+      _activeSources.add(active);
+
+      // `done` is the only sign dart:io gives of a client that hung up:
+      // writes to its socket still succeed and are dropped. It fires on the
+      // first write after the hang-up, so a stalled upstream, which writes
+      // nothing, is cancelled once it resumes.
+      final clientGone = response.done
+          .then<void>((_) {}, onError: (Object _) {})
+          .whenComplete(active.cancel);
+
+      final body = active.bytes().map((chunk) {
+        firstChunkMs ??= sw.elapsedMilliseconds;
+        bytesServed += chunk.length;
+        chunkCount++;
+        return chunk;
+      });
+
+      // Raced with the hang-up because addStream is not guaranteed to
+      // complete once its socket is gone.
+      await Future.any([response.addStream(body), clientGone]);
     } catch (e) {
-      // Client likely closed the connection (seek / stop).
-      debugPrint('[LocalProxy] Stream interrupted for $logLabel: $e');
-      if (!headersSent) {
-        try {
-          request.response.statusCode = HttpStatus.internalServerError;
-          _setCorsHeaders(request.response);
-          request.response.write('Error: $e');
-        } catch (_) {}
+      debugPrint('[LocalProxy] Stream interrupted for $sessionId: $e');
+    } finally {
+      final finished = source;
+      if (finished != null) {
+        _activeSources.remove(finished);
+        await finished.cancel();
       }
+
+      try {
+        await response.close();
+      } catch (_) {}
+
+      final totalMs = sw.elapsedMilliseconds;
+      final throughputMbps = totalMs > 0
+          ? (bytesServed * 8.0 / (totalMs * 1000.0)).toStringAsFixed(2)
+          : '0.00';
+      debugPrint(
+          '[p2p_metrics_dart] range_stream first_header_ms=$firstHeaderMs first_chunk_ms=$firstChunkMs total_ms=$totalMs bytes=$bytesServed chunks=$chunkCount throughput_mbps=$throughputMbps spooled=${finished?.spooledBytes ?? 0} truncations=${finished?.truncations ?? 0} session=$sessionId path=$path');
+    }
+  }
+
+  /// The source a byte-range response is served from.
+  ///
+  /// Direct playback spools to disk, so a stream that is never seeked
+  /// downloads the whole file ahead of the player. Downloads do not: the
+  /// download job is already writing the bytes to a file of its own.
+  Future<RangeSource> _openSource(
+    P2pRangeStream upstream,
+    String sessionId,
+  ) async {
+    if (!sessionId.startsWith(MediaRoutes.directSessionPrefix)) {
+      return PassThroughSource(upstream);
     }
 
-    try {
-      await request.response.close();
-    } catch (_) {}
+    final directory = await (_spoolDirectory ??= _prepareSpoolDirectory());
+    final spool = directory == null
+        ? null
+        : await RangeSpool.open(
+            upstream: upstream,
+            directory: directory,
+            diskSpace: _spoolSettings.diskSpace,
+            policy: _spoolSettings.policy,
+          );
+    if (spool != null) return spool;
 
-    final totalMs = sw.elapsedMilliseconds;
-    final throughputMbps = totalMs > 0
-        ? (bytesServed * 8.0 / (totalMs * 1000.0)).toStringAsFixed(2)
-        : '0.00';
     debugPrint(
-        '[p2p_metrics_dart] range_stream first_header_ms=$firstHeaderMs first_chunk_ms=$firstChunkMs total_ms=$totalMs bytes=$bytesServed chunks=$chunkCount throughput_mbps=$throughputMbps session=$sessionId path=$path');
+        '[LocalProxy] No room to spool $sessionId, streaming without read-ahead');
+    return PassThroughSource(upstream);
+  }
+
+  Future<Directory?> _prepareSpoolDirectory() async {
+    try {
+      final root = await _spoolSettings.rootDirectory();
+      final directory = Directory('${root.path}/mydia-proxy-spool');
+      if (await directory.exists()) await directory.delete(recursive: true);
+      return await directory.create(recursive: true);
+    } catch (e) {
+      debugPrint('[LocalProxy] No spool directory: $e');
+      return null;
+    }
+  }
+
+  /// Cancels every byte-range transfer in flight. Their sockets are about to
+  /// close, and the transfers must not outlive them.
+  Future<void> _cancelActiveSources() async {
+    _sourceCancellations++;
+    final sources = _activeSources.toList();
+    _activeSources.clear();
+    await Future.wait(sources.map((source) => source.cancel()));
+  }
+
+  void _applyUpstreamHeaders(
+    HttpResponse response,
+    FlutterHlsResponseHeader header,
+  ) {
+    response.statusCode = header.status;
+    response.headers.contentType = ContentType.parse(header.contentType);
+    response.headers.contentLength = header.contentLength.toInt();
+    final contentRange = header.contentRange;
+    if (contentRange != null) {
+      response.headers.set('Content-Range', contentRange);
+    }
+    final cacheControl = header.cacheControl;
+    if (cacheControl != null) {
+      response.headers.set('Cache-Control', cacheControl);
+    }
+    response.headers.set('Accept-Ranges', 'bytes');
+    _setCorsHeaders(response);
+  }
+
+  /// The request's Range header as (start, end), either of which may be null.
+  (int?, int?) _requestedRange(HttpRequest request) {
+    final header = request.headers.value('Range');
+    return header == null ? (null, null) : _parseRangeHeader(header);
   }
 
   void _setCorsHeaders(HttpResponse response) {

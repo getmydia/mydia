@@ -26,6 +26,9 @@ tokio = { version = "1.49", features = ["sync"] }
 # build too, and the server role does not compile for wasm.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 mydia_p2p_core = { path = "../../../native/mydia_p2p_core" }
+# Free space on the volume the playback spool writes to. A browser has no
+# filesystem to ask.
+fs4 = "1.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

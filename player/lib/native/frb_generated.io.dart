@@ -18,6 +18,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     required super.portManager,
   });
 
+  CrossPlatformFinalizerArg
+      get rust_arc_decrement_strong_count_HlsStreamHandlePtr => wire
+          ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandlePtr;
+
   CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_P2PHostPtr => wire
       ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHostPtr;
 
@@ -25,13 +29,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
+  HlsStreamHandle
+      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          dynamic raw);
+
+  @protected
   P2PHost
       dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           dynamic raw);
 
   @protected
+  HlsStreamHandle
+      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          dynamic raw);
+
+  @protected
   P2PHost
       dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
+          dynamic raw);
+
+  @protected
+  HlsStreamHandle
+      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
           dynamic raw);
 
   @protected
@@ -41,10 +60,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RustStreamSink<String> dco_decode_StreamSink_String_Sse(dynamic raw);
-
-  @protected
-  RustStreamSink<FlutterHlsStreamEvent>
-      dco_decode_StreamSink_flutter_hls_stream_event_Sse(dynamic raw);
 
   @protected
   RustStreamSink<FlutterInboundControlRequest>
@@ -65,10 +80,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FlutterHlsRequest dco_decode_box_autoadd_flutter_hls_request(dynamic raw);
-
-  @protected
-  FlutterHlsResponseHeader dco_decode_box_autoadd_flutter_hls_response_header(
-      dynamic raw);
 
   @protected
   FlutterLoadContentRequest dco_decode_box_autoadd_flutter_load_content_request(
@@ -110,6 +121,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FlutterConnectionType dco_decode_flutter_connection_type(dynamic raw);
 
   @protected
+  FlutterDiskSpace dco_decode_flutter_disk_space(dynamic raw);
+
+  @protected
   FlutterGraphQLRequest dco_decode_flutter_graph_ql_request(dynamic raw);
 
   @protected
@@ -123,9 +137,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FlutterHlsResponseHeader dco_decode_flutter_hls_response_header(dynamic raw);
-
-  @protected
-  FlutterHlsStreamEvent dco_decode_flutter_hls_stream_event(dynamic raw);
 
   @protected
   FlutterInboundControlRequest dco_decode_flutter_inbound_control_request(
@@ -220,13 +231,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
+  HlsStreamHandle
+      sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          SseDeserializer deserializer);
+
+  @protected
   P2PHost
       sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           SseDeserializer deserializer);
 
   @protected
+  HlsStreamHandle
+      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          SseDeserializer deserializer);
+
+  @protected
   P2PHost
       sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
+          SseDeserializer deserializer);
+
+  @protected
+  HlsStreamHandle
+      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
           SseDeserializer deserializer);
 
   @protected
@@ -237,11 +263,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   RustStreamSink<String> sse_decode_StreamSink_String_Sse(
       SseDeserializer deserializer);
-
-  @protected
-  RustStreamSink<FlutterHlsStreamEvent>
-      sse_decode_StreamSink_flutter_hls_stream_event_Sse(
-          SseDeserializer deserializer);
 
   @protected
   RustStreamSink<FlutterInboundControlRequest>
@@ -263,10 +284,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FlutterHlsRequest sse_decode_box_autoadd_flutter_hls_request(
-      SseDeserializer deserializer);
-
-  @protected
-  FlutterHlsResponseHeader sse_decode_box_autoadd_flutter_hls_response_header(
       SseDeserializer deserializer);
 
   @protected
@@ -312,6 +329,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  FlutterDiskSpace sse_decode_flutter_disk_space(SseDeserializer deserializer);
+
+  @protected
   FlutterGraphQLRequest sse_decode_flutter_graph_ql_request(
       SseDeserializer deserializer);
 
@@ -329,10 +349,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   FlutterHlsResponseHeader sse_decode_flutter_hls_response_header(
-      SseDeserializer deserializer);
-
-  @protected
-  FlutterHlsStreamEvent sse_decode_flutter_hls_stream_event(
       SseDeserializer deserializer);
 
   @protected
@@ -437,13 +453,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void
+      sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          HlsStreamHandle self, SseSerializer serializer);
+
+  @protected
+  void
       sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           P2PHost self, SseSerializer serializer);
 
   @protected
   void
+      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          HlsStreamHandle self, SseSerializer serializer);
+
+  @protected
+  void
       sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(
           P2PHost self, SseSerializer serializer);
+
+  @protected
+  void
+      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+          HlsStreamHandle self, SseSerializer serializer);
 
   @protected
   void
@@ -453,10 +484,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_StreamSink_String_Sse(
       RustStreamSink<String> self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_StreamSink_flutter_hls_stream_event_Sse(
-      RustStreamSink<FlutterHlsStreamEvent> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_flutter_inbound_control_request_Sse(
@@ -479,10 +506,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_flutter_hls_request(
       FlutterHlsRequest self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_box_autoadd_flutter_hls_response_header(
-      FlutterHlsResponseHeader self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_flutter_load_content_request(
@@ -526,6 +549,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
       FlutterConnectionType self, SseSerializer serializer);
 
   @protected
+  void sse_encode_flutter_disk_space(
+      FlutterDiskSpace self, SseSerializer serializer);
+
+  @protected
   void sse_encode_flutter_graph_ql_request(
       FlutterGraphQLRequest self, SseSerializer serializer);
 
@@ -544,10 +571,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_flutter_hls_response_header(
       FlutterHlsResponseHeader self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_flutter_hls_stream_event(
-      FlutterHlsStreamEvent self, SseSerializer serializer);
 
   @protected
   void sse_encode_flutter_inbound_control_request(
@@ -660,6 +683,38 @@ class RustLibWire implements BaseWire {
   /// The symbols are looked up in [dynamicLibrary].
   RustLibWire(ffi.DynamicLibrary dynamicLibrary)
       : _lookup = dynamicLibrary.lookup;
+
+  void
+      rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandlePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+          'frbgen_player_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle');
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle =
+      _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandlePtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+      rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandlePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+          'frbgen_player_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle');
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandle =
+      _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerHlsStreamHandlePtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
 
   void
       rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerP2pHost(

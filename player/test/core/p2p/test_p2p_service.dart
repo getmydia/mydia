@@ -1,7 +1,10 @@
 import 'dart:typed_data';
 
+import 'package:player/core/p2p/p2p_range_stream.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/native/lib.dart';
+
+import 'fake_range_stream.dart';
 
 /// One request a proxy forwarded over p2p, recorded for assertions.
 class P2pRequestCall {
@@ -32,12 +35,11 @@ class TestP2pService extends P2pService {
 
   Future<FlutterHlsResponse> Function(P2pRequestCall call)? onSendHlsRequest;
 
-  /// Set only by tests that need to control the event sequence itself. When
-  /// left null, streaming replays [onSendHlsRequest]'s response as a header,
-  /// one chunk and an end, so a test that configures the buffered handler gets
-  /// consistent answers on both paths.
-  Stream<FlutterHlsStreamEvent> Function(P2pRequestCall call)?
-      onSendHlsRequestStreaming;
+  /// Set by tests that script a byte-range stream themselves. When left
+  /// null, [openRangeStream] replays [onSendHlsRequest]'s response as one
+  /// chunk, so a test that configures the buffered handler gets consistent
+  /// answers on both paths.
+  Future<P2pRangeStream> Function(P2pRequestCall call)? onOpenRangeStream;
 
   @override
   Future<FlutterHlsResponse> sendHlsRequest({
@@ -61,14 +63,14 @@ class TestP2pService extends P2pService {
   }
 
   @override
-  Stream<FlutterHlsStreamEvent> sendHlsRequestStreaming({
+  Future<P2pRangeStream> openRangeStream({
     required String peer,
     required String sessionId,
     required String path,
     int? rangeStart,
     int? rangeEnd,
     String? authToken,
-  }) async* {
+  }) async {
     final call = _record(
       peer: peer,
       sessionId: sessionId,
@@ -78,16 +80,11 @@ class TestP2pService extends P2pService {
       authToken: authToken,
     );
 
-    final streaming = onSendHlsRequestStreaming;
-    if (streaming != null) {
-      yield* streaming(call);
-      return;
-    }
+    final handler = onOpenRangeStream;
+    if (handler != null) return handler(call);
 
     final response = await _respond(call);
-    yield FlutterHlsStreamEvent.header(response.header);
-    yield FlutterHlsStreamEvent.chunk(response.data);
-    yield const FlutterHlsStreamEvent.end();
+    return FakeRangeStream.fromBytes(response.header, response.data);
   }
 
   P2pRequestCall _record({
