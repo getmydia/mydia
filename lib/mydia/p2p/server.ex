@@ -943,7 +943,7 @@ defmodule Mydia.P2p.Server do
             )
 
           {:error, reason} ->
-            Logger.error("Failed to stream file: #{inspect(reason)}")
+            log_stream_failure(reason, "file")
         end
 
       {:error, reason} ->
@@ -986,12 +986,24 @@ defmodule Mydia.P2p.Server do
             )
 
           {:error, reason} ->
-            Logger.error("Failed to stream file range: #{inspect(reason)}")
+            log_stream_failure(reason, "file range")
         end
 
       {:error, reason} ->
         Logger.error("Failed to send HLS header: #{inspect(reason)}")
     end
+  end
+
+  # A player closes its stream on every seek and when playback stops, and the
+  # write that fails then carries the `peer_stopped` prefix. That is the normal
+  # end of a transfer nobody wants any more.
+  @doc false
+  def log_stream_failure("peer_stopped" <> _ = reason, what) do
+    Logger.debug("Player stopped reading the #{what}: #{reason}")
+  end
+
+  def log_stream_failure(reason, what) do
+    Logger.error("Failed to stream #{what}: #{inspect(reason)}")
   end
 
   defp send_hls_error(resource, stream_id, status, message) do
