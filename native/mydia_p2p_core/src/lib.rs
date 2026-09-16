@@ -12,7 +12,7 @@ use iroh::endpoint::{Incoming, SendStream};
 use iroh::{
     defaults::prod as default_relays,
     endpoint::{presets, Connection, PathEvent},
-    Endpoint, EndpointAddr, EndpointId, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
+    Endpoint, EndpointAddr, RelayConfig, RelayMap, RelayMode, RelayUrl, SecretKey,
 };
 // A browser has no DNS resolver to configure: iroh resolves peers over HTTPS
 // pkarr there and gates the whole type out. Not a role split, a platform one.
@@ -226,7 +226,9 @@ enum Command {
     /// A command that never finishes, standing in for one waiting on a peer
     /// that has stopped reading. `started` fires once the loop is inside it.
     #[cfg(test)]
-    DebugStall { started: oneshot::Sender<()> },
+    DebugStall {
+        started: oneshot::Sender<()>,
+    },
 }
 
 /// Events emitted by the Host
@@ -494,6 +496,18 @@ fn endpoint_addr_from_json(json: &str) -> Result<EndpointAddr, String> {
     serde_json::from_str(json).map_err(|e| format!("Invalid EndpointAddr JSON: {}", e))
 }
 
+/// Extract actual node ID from either a bare node ID string or an EndpointAddr JSON.
+fn resolve_node_id(node_id: &str) -> String {
+    if node_id.starts_with('{') {
+        match endpoint_addr_from_json(node_id) {
+            Ok(addr) => addr.id.to_string(),
+            Err(_) => node_id.to_string(),
+        }
+    } else {
+        node_id.to_string()
+    }
+}
+
 /// The core Host struct that manages the iroh Endpoint
 pub struct Host {
     pub(crate) cmd_tx: mpsc::Sender<Command>,
@@ -510,7 +524,7 @@ impl Host {
         let node_id = secret_key.public().to_string();
         let node_id_str = node_id.clone();
 
-        let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(32);
+        let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(256);
         let (event_tx, event_rx) = mpsc::channel::<Event>(100);
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
@@ -853,14 +867,31 @@ impl Host {
 /// Shared state for pending responses
 struct SharedState {
     pending_responses: HashMap<String, oneshot::Sender<MydiaResponse>>,
-    /// Active HLS streaming connections - stores the send half of the stream.
-    ///
-    /// Host role only. Every command that drains this map is behind the same
-    /// feature, so a client build that could fill it would leak a `SendStream`
-    /// per request with nothing able to remove it.
-    #[cfg(feature = "host")]
-    hls_streams: HashMap<String, SendStream>,
 }
+
+#[cfg(feature = "host")]
+enum StreamCmd {
+    Header {
+        header: HlsResponseHeader,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    Chunk {
+        data: Vec<u8>,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    StreamFileRange {
+        file_path: String,
+        offset: u64,
+        length: u64,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    Finish {
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+}
+
+#[cfg(feature = "host")]
+type HlsStreamRegistry = Arc<Mutex<HashMap<String, mpsc::Sender<StreamCmd>>>>;
 
 /// Create a DNS resolver using the system default.
 #[cfg(not(target_arch = "wasm32"))]
@@ -905,6 +936,15 @@ fn build_relay_mode(config: &HostConfig) -> Option<RelayMode> {
     ]));
 
     Some(RelayMode::Custom(relay_map))
+}
+
+/// Internal messages sent by background workers to the main event loop.
+enum InternalMessage {
+    DialSucceeded {
+        node_id: String,
+        conn: Connection,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
 }
 
 /// Main event loop that runs in a background thread
@@ -968,9 +1008,9 @@ async fn run_event_loop(
     let mut connected_peers: HashMap<String, PeerConnections> = HashMap::new();
     let shared_state = Arc::new(Mutex::new(SharedState {
         pending_responses: HashMap::new(),
-        #[cfg(feature = "host")]
-        hls_streams: HashMap::new(),
     }));
+    #[cfg(feature = "host")]
+    let hls_registry: HlsStreamRegistry = Arc::new(Mutex::new(HashMap::new()));
     let mut relay_connected = false;
 
     // Set by a `Command::Shutdown` and answered after the endpoint closes.
@@ -984,6 +1024,7 @@ async fn run_event_loop(
     // guards against a stale disconnect signal evicting a *fresh*
     // reconnection under the same peer_id that raced ahead of it.
     let (disconnect_tx, mut disconnect_rx) = mpsc::channel::<(String, ConnectionId)>(64);
+    let (internal_tx, mut internal_rx) = mpsc::channel::<InternalMessage>(64);
 
     // Wait for the endpoint to come online (relay connected + local IP
     // available), bounded by a timeout so an unreachable relay cannot block
@@ -1052,10 +1093,11 @@ async fn run_event_loop(
                     cmd,
                     &endpoint,
                     &mut connected_peers,
-                    &event_tx,
                     &shared_state,
                     relay_connected,
-                    &disconnect_tx,
+                    &internal_tx,
+                    #[cfg(feature = "host")]
+                    &hls_registry,
                 ),
             )
             .await;
@@ -1093,7 +1135,14 @@ async fn run_event_loop(
                     Some(incoming) = endpoint.accept() => {
                         unless_shutdown(
                             &mut shutdown_rx,
-                            accept_inbound(incoming, &mut connected_peers, &event_tx, &shared_state, &disconnect_tx),
+                            accept_inbound(
+                                incoming,
+                                &mut connected_peers,
+                                &event_tx,
+                                &shared_state,
+                                &disconnect_tx,
+                                &hls_registry,
+                            ),
                         )
                         .await
                     }
@@ -1111,10 +1160,10 @@ async fn run_event_loop(
                                         cmd,
                                         &endpoint,
                                         &mut connected_peers,
-                                        &event_tx,
                                         &shared_state,
                                         relay_connected,
-                                        &disconnect_tx,
+                                        &internal_tx,
+                                        &hls_registry,
                                     ),
                                 )
                                 .await
@@ -1126,6 +1175,34 @@ async fn run_event_loop(
                     Some((peer_id, stable_id)) = disconnect_rx.recv() => {
                         prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
                         true
+                    }
+
+                    Some(msg) = internal_rx.recv() => {
+                        match msg {
+                            InternalMessage::DialSucceeded {
+                                node_id,
+                                conn,
+                                reply,
+                            } => {
+                                unless_shutdown(
+                                    &mut shutdown_rx,
+                                    async {
+                                        register_connection(
+                                            conn,
+                                            node_id,
+                                            &mut connected_peers,
+                                            &event_tx,
+                                            &shared_state,
+                                            &disconnect_tx,
+                                            &hls_registry,
+                                        )
+                                        .await;
+                                        let _ = reply.send(Ok(()));
+                                    },
+                                )
+                                .await
+                            }
+                        }
                     }
                 };
             }
@@ -1148,10 +1225,9 @@ async fn run_event_loop(
                                         cmd,
                                         &endpoint,
                                         &mut connected_peers,
-                                        &event_tx,
                                         &shared_state,
                                         relay_connected,
-                                        &disconnect_tx,
+                                        &internal_tx,
                                     ),
                                 )
                                 .await
@@ -1163,6 +1239,33 @@ async fn run_event_loop(
                     Some((peer_id, stable_id)) = disconnect_rx.recv() => {
                         prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
                         true
+                    }
+
+                    Some(msg) = internal_rx.recv() => {
+                        match msg {
+                            InternalMessage::DialSucceeded {
+                                node_id,
+                                conn,
+                                reply,
+                            } => {
+                                unless_shutdown(
+                                    &mut shutdown_rx,
+                                    async {
+                                        register_connection(
+                                            conn,
+                                            node_id,
+                                            &mut connected_peers,
+                                            &event_tx,
+                                            &shared_state,
+                                            &disconnect_tx,
+                                        )
+                                        .await;
+                                        let _ = reply.send(Ok(()));
+                                    },
+                                )
+                                .await
+                            }
+                        }
                     }
                 };
             }
@@ -1316,6 +1419,58 @@ async fn prune_disconnected_peer(
         .await;
 }
 
+/// Record a newly established connection, announce its arrival, and spawn its stream handler and type monitor.
+async fn register_connection(
+    conn: Connection,
+    peer_id: String,
+    connected_peers: &mut HashMap<String, PeerConnections>,
+    event_tx: &mpsc::Sender<Event>,
+    shared_state: &Arc<Mutex<SharedState>>,
+    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
+    #[cfg(feature = "host")]
+    hls_registry: &HlsStreamRegistry,
+) {
+    let connection_type = PeerConnectionType::from_connection(&conn);
+    tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
+
+    let conn_id = next_connection_id();
+    insert_connection(connected_peers, &peer_id, conn_id, conn.clone());
+    let _ = event_tx
+        .send(Event::Connected {
+            peer_id: peer_id.clone(),
+            connection_type,
+        })
+        .await;
+
+    // Spawn a task to handle incoming streams from this peer
+    let event_tx_clone = event_tx.clone();
+    let peer_id_clone = peer_id.clone();
+    let shared_state_clone = shared_state.clone();
+    let conn_clone = conn.clone();
+    let disconnect_tx_clone = disconnect_tx.clone();
+    #[cfg(feature = "host")]
+    let hls_registry_clone = hls_registry.clone();
+    runtime::spawn(async move {
+        handle_connection(
+            conn_clone,
+            peer_id_clone,
+            conn_id,
+            event_tx_clone,
+            shared_state_clone,
+            disconnect_tx_clone,
+            #[cfg(feature = "host")]
+            hls_registry_clone,
+        )
+        .await;
+    });
+
+    // Monitor connection type changes (relay -> direct)
+    let monitor_tx = event_tx.clone();
+    runtime::spawn(async move {
+        monitor_connection_type(conn, peer_id, monitor_tx).await;
+    });
+}
+
 /// Accept one inbound connection and start serving it.
 ///
 /// Host role only. A browser endpoint has nothing listening, so a client build
@@ -1327,6 +1482,7 @@ async fn accept_inbound(
     event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
     disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
+    hls_registry: &HlsStreamRegistry,
 ) {
     let mut accepting = match incoming.accept() {
         Ok(accepting) => accepting,
@@ -1360,41 +1516,50 @@ async fn accept_inbound(
     };
 
     let peer_id = conn.remote_id().to_string();
-    let connection_type = PeerConnectionType::from_connection(&conn);
-    tracing::info!("Peer connected: {} ({:?})", peer_id, connection_type);
+    register_connection(
+        conn,
+        peer_id,
+        connected_peers,
+        event_tx,
+        shared_state,
+        disconnect_tx,
+        hls_registry,
+    )
+    .await;
+}
 
-    let conn_id = next_connection_id();
-    insert_connection(connected_peers, &peer_id, conn_id, conn.clone());
-    let _ = event_tx
-        .send(Event::Connected {
-            peer_id: peer_id.clone(),
-            connection_type,
-        })
-        .await;
-
-    // Spawn a task to handle incoming streams from this peer
-    let event_tx_clone = event_tx.clone();
-    let peer_id_clone = peer_id.clone();
-    let shared_state_clone = shared_state.clone();
-    let conn_clone = conn.clone();
-    let disconnect_tx_clone = disconnect_tx.clone();
-    runtime::spawn(async move {
-        handle_connection(
-            conn_clone,
-            peer_id_clone,
-            conn_id,
-            event_tx_clone,
-            shared_state_clone,
-            disconnect_tx_clone,
-        )
-        .await;
-    });
-
-    // Monitor connection type changes (relay -> direct)
-    let monitor_tx = event_tx.clone();
-    runtime::spawn(async move {
-        monitor_connection_type(conn, peer_id, monitor_tx).await;
-    });
+#[cfg(feature = "host")]
+async fn dispatch_stream_cmd(
+    hls_registry: &HlsStreamRegistry,
+    stream_id: &str,
+    cmd: StreamCmd,
+) {
+    let stream_tx = {
+        let registry = hls_registry.lock().await;
+        registry.get(stream_id).cloned()
+    };
+    match stream_tx {
+        Some(stream_tx) => {
+            if let Err(mpsc::error::SendError(failed_cmd)) = stream_tx.send(cmd).await {
+                let reply = match failed_cmd {
+                    StreamCmd::Header { reply, .. } => reply,
+                    StreamCmd::Chunk { reply, .. } => reply,
+                    StreamCmd::StreamFileRange { reply, .. } => reply,
+                    StreamCmd::Finish { reply } => reply,
+                };
+                let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
+            }
+        }
+        None => {
+            let reply = match cmd {
+                StreamCmd::Header { reply, .. } => reply,
+                StreamCmd::Chunk { reply, .. } => reply,
+                StreamCmd::StreamFileRange { reply, .. } => reply,
+                StreamCmd::Finish { reply } => reply,
+            };
+            let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
+        }
+    }
 }
 
 /// Dispatch a single command from a `Host` handle.
@@ -1402,34 +1567,65 @@ async fn handle_command(
     cmd: Command,
     endpoint: &Endpoint,
     connected_peers: &mut HashMap<String, PeerConnections>,
-    event_tx: &mpsc::Sender<Event>,
     shared_state: &Arc<Mutex<SharedState>>,
     relay_connected: bool,
-    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
+    internal_tx: &mpsc::Sender<InternalMessage>,
+    #[cfg(feature = "host")]
+    hls_registry: &HlsStreamRegistry,
 ) {
     match cmd {
         Command::Dial {
             endpoint_addr_json,
             reply,
         } => {
-            let result = handle_dial(
-                endpoint,
-                &endpoint_addr_json,
-                connected_peers,
-                event_tx,
-                shared_state,
-                disconnect_tx,
-            )
-            .await;
-            let _ = reply.send(result);
+            let endpoint_addr = match endpoint_addr_from_json(&endpoint_addr_json) {
+                Ok(addr) => addr,
+                Err(e) => {
+                    let _ = reply.send(Err(e));
+                    return;
+                }
+            };
+
+            let endpoint = endpoint.clone();
+            let internal_tx = internal_tx.clone();
+            let node_id = endpoint_addr.id.to_string();
+
+            tracing::info!("Dialing peer in background: {}", node_id);
+            runtime::spawn(async move {
+                match endpoint.connect(endpoint_addr, ALPN).await {
+                    Ok(conn) => {
+                        let _ = internal_tx
+                            .send(InternalMessage::DialSucceeded {
+                                node_id,
+                                conn,
+                                reply,
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        let _ = reply.send(Err(format!("Failed to connect: {}", e)));
+                    }
+                }
+            });
         }
         Command::SendRequest {
             node_id,
             request,
             reply,
         } => {
-            let result = handle_send_request(connected_peers, &node_id, request).await;
-            let _ = reply.send(result);
+            let actual_node_id = resolve_node_id(&node_id);
+            match current_connection(connected_peers, &actual_node_id) {
+                Some(conn) => {
+                    let conn = conn.clone();
+                    runtime::spawn(async move {
+                        let result = do_send_request(conn, request).await;
+                        let _ = reply.send(result);
+                    });
+                }
+                None => {
+                    let _ = reply.send(Err(format!("Not connected to peer: {}", actual_node_id)));
+                }
+            }
         }
         Command::SendResponse {
             request_id,
@@ -1534,31 +1730,12 @@ async fn handle_command(
             header,
             reply,
         } => {
-            let result = {
-                let mut state = shared_state.lock().await;
-                if let Some(send) = state.hls_streams.get_mut(&stream_id) {
-                    // First write the HlsHeader response
-                    let header_response = MydiaResponse::HlsHeader(header);
-                    match serde_cbor::to_vec(&header_response) {
-                        Ok(header_data) => {
-                            // Write length prefix (4 bytes) then header
-                            let len = header_data.len() as u32;
-                            let len_bytes = len.to_be_bytes();
-                            if let Err(e) = send.write_all(&len_bytes).await {
-                                Err(format!("Failed to write header length: {}", e))
-                            } else if let Err(e) = send.write_all(&header_data).await {
-                                Err(format!("Failed to write header: {}", e))
-                            } else {
-                                Ok(())
-                            }
-                        }
-                        Err(e) => Err(format!("Failed to encode header: {}", e)),
-                    }
-                } else {
-                    Err(format!("HLS stream not found: {}", stream_id))
-                }
-            };
-            let _ = reply.send(result);
+            dispatch_stream_cmd(
+                hls_registry,
+                &stream_id,
+                StreamCmd::Header { header, reply },
+            )
+            .await;
         }
         #[cfg(feature = "host")]
         Command::SendHlsChunk {
@@ -1566,45 +1743,21 @@ async fn handle_command(
             data,
             reply,
         } => {
-            let result = {
-                let mut state = shared_state.lock().await;
-                if let Some(send) = state.hls_streams.get_mut(&stream_id) {
-                    // Write chunk length (4 bytes) then data
-                    let len = data.len() as u32;
-                    let len_bytes = len.to_be_bytes();
-                    if let Err(e) = send.write_all(&len_bytes).await {
-                        Err(format!("Failed to write chunk length: {}", e))
-                    } else if let Err(e) = send.write_all(&data).await {
-                        Err(format!("Failed to write chunk: {}", e))
-                    } else {
-                        Ok(())
-                    }
-                } else {
-                    Err(format!("HLS stream not found: {}", stream_id))
-                }
-            };
-            let _ = reply.send(result);
+            dispatch_stream_cmd(
+                hls_registry,
+                &stream_id,
+                StreamCmd::Chunk { data, reply },
+            )
+            .await;
         }
         #[cfg(feature = "host")]
         Command::FinishHlsStream { stream_id, reply } => {
-            let result = {
-                let mut state = shared_state.lock().await;
-                if let Some(mut send) = state.hls_streams.remove(&stream_id) {
-                    // Write zero-length terminator
-                    let zero_bytes = [0u8; 4];
-                    if let Err(e) = send.write_all(&zero_bytes).await {
-                        Err(format!("Failed to write terminator: {}", e))
-                    } else if let Err(e) = send.finish() {
-                        Err(format!("Failed to finish stream: {}", e))
-                    } else {
-                        tracing::debug!("HLS stream {} finished", stream_id);
-                        Ok(())
-                    }
-                } else {
-                    Err(format!("HLS stream not found: {}", stream_id))
-                }
-            };
-            let _ = reply.send(result);
+            dispatch_stream_cmd(
+                hls_registry,
+                &stream_id,
+                StreamCmd::Finish { reply },
+            )
+            .await;
         }
         #[cfg(feature = "host")]
         Command::StreamFileRange {
@@ -1614,92 +1767,38 @@ async fn handle_command(
             length,
             reply,
         } => {
-            // Remove the SendStream from hls_streams so we own it exclusively
-            let send_stream = {
-                let mut state = shared_state.lock().await;
-                state.hls_streams.remove(&stream_id)
-            };
-            match send_stream {
-                Some(send) => {
-                    // Spawn a task to stream the file data
-                    runtime::spawn(async move {
-                        let result = stream_file_to_quic(send, &file_path, offset, length).await;
-                        let _ = reply.send(result);
-                    });
-                }
-                None => {
-                    let _ = reply.send(Err(format!("HLS stream not found: {}", stream_id)));
-                }
-            }
+            dispatch_stream_cmd(
+                hls_registry,
+                &stream_id,
+                StreamCmd::StreamFileRange {
+                    file_path,
+                    offset,
+                    length,
+                    reply,
+                },
+            )
+            .await;
         }
         Command::SendHlsRequest {
             node_id,
             request,
             reply,
         } => {
-            let result = handle_send_hls_request(connected_peers, &node_id, request).await;
-            let _ = reply.send(result);
+            let actual_node_id = resolve_node_id(&node_id);
+            match current_connection(connected_peers, &actual_node_id) {
+                Some(conn) => {
+                    let conn = conn.clone();
+                    runtime::spawn(async move {
+                        let result = do_send_hls_request(conn, request).await;
+                        let _ = reply.send(result);
+                    });
+                }
+                None => {
+                    let _ = reply.send(Err(format!("Not connected to peer: {}", actual_node_id)));
+                }
+            }
         }
     }
-}
-
-/// Handle dialing a peer
-async fn handle_dial(
-    endpoint: &Endpoint,
-    endpoint_addr_json: &str,
-    connected_peers: &mut HashMap<String, PeerConnections>,
-    event_tx: &mpsc::Sender<Event>,
-    shared_state: &Arc<Mutex<SharedState>>,
-    disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
-) -> Result<(), String> {
-    let endpoint_addr = endpoint_addr_from_json(endpoint_addr_json)?;
-    let endpoint_id: EndpointId = endpoint_addr.id;
-    let node_id = endpoint_id.to_string();
-
-    tracing::info!("Dialing peer: {}", node_id);
-
-    let conn = endpoint
-        .connect(endpoint_addr, ALPN)
-        .await
-        .map_err(|e| format!("Failed to connect: {}", e))?;
-
-    let connection_type = PeerConnectionType::from_connection(&conn);
-    tracing::info!("Connected to peer: {} ({:?})", node_id, connection_type);
-
-    let conn_id = next_connection_id();
-    insert_connection(connected_peers, &node_id, conn_id, conn.clone());
-    let _ = event_tx
-        .send(Event::Connected {
-            peer_id: node_id.clone(),
-            connection_type,
-        })
-        .await;
-
-    // Spawn a task to handle incoming streams from this peer
-    let event_tx_clone = event_tx.clone();
-    let shared_state_clone = shared_state.clone();
-    let conn_clone = conn.clone();
-    let node_id_clone = node_id.clone();
-    let disconnect_tx_clone = disconnect_tx.clone();
-    runtime::spawn(async move {
-        handle_connection(
-            conn_clone,
-            node_id_clone,
-            conn_id,
-            event_tx_clone,
-            shared_state_clone,
-            disconnect_tx_clone,
-        )
-        .await;
-    });
-
-    // Monitor connection type changes (relay -> direct)
-    let monitor_tx = event_tx.clone();
-    runtime::spawn(async move {
-        monitor_connection_type(conn, node_id, monitor_tx).await;
-    });
-
-    Ok(())
 }
 
 /// Monitor a peer connection for type changes (e.g. relay -> direct after hole-punching).
@@ -1921,6 +2020,86 @@ const RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30)
 #[cfg(test)]
 const RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(300);
 
+#[cfg(feature = "host")]
+async fn run_hls_stream_worker(
+    mut send: SendStream,
+    stream_id: String,
+    mut stream_rx: mpsc::Receiver<StreamCmd>,
+    hls_registry: HlsStreamRegistry,
+) {
+    while let Some(cmd) = stream_rx.recv().await {
+        match cmd {
+            StreamCmd::Header { header, reply } => {
+                let header_response = MydiaResponse::HlsHeader(header);
+                let write_res = match serde_cbor::to_vec(&header_response) {
+                    Ok(header_data) => {
+                        let len = header_data.len() as u32;
+                        let len_bytes = len.to_be_bytes();
+                        if let Err(e) = send.write_all(&len_bytes).await {
+                            Err(format!("Failed to write header length: {}", e))
+                        } else if let Err(e) = send.write_all(&header_data).await {
+                            Err(format!("Failed to write header: {}", e))
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    Err(e) => Err(format!("Failed to encode header: {}", e)),
+                };
+                let is_err = write_res.is_err();
+                let _ = reply.send(write_res);
+                if is_err {
+                    hls_registry.lock().await.remove(&stream_id);
+                    return;
+                }
+            }
+            StreamCmd::Chunk { data, reply } => {
+                let len = data.len() as u32;
+                let len_bytes = len.to_be_bytes();
+                let write_res = if let Err(e) = send.write_all(&len_bytes).await {
+                    Err(format!("Failed to write chunk length: {}", e))
+                } else if let Err(e) = send.write_all(&data).await {
+                    Err(format!("Failed to write chunk: {}", e))
+                } else {
+                    Ok(())
+                };
+                let is_err = write_res.is_err();
+                let _ = reply.send(write_res);
+                if is_err {
+                    hls_registry.lock().await.remove(&stream_id);
+                    return;
+                }
+            }
+            StreamCmd::StreamFileRange {
+                file_path,
+                offset,
+                length,
+                reply,
+            } => {
+                hls_registry.lock().await.remove(&stream_id);
+                let result = stream_file_to_quic(send, &file_path, offset, length).await;
+                let _ = reply.send(result);
+                return;
+            }
+            StreamCmd::Finish { reply } => {
+                hls_registry.lock().await.remove(&stream_id);
+                let zero_bytes = [0u8; 4];
+                let write_res = if let Err(e) = send.write_all(&zero_bytes).await {
+                    Err(format!("Failed to write terminator: {}", e))
+                } else if let Err(e) = send.finish() {
+                    Err(format!("Failed to finish stream: {}", e))
+                } else {
+                    tracing::debug!("HLS stream {} finished", stream_id);
+                    Ok(())
+                };
+                let _ = reply.send(write_res);
+                return;
+            }
+        }
+    }
+
+    hls_registry.lock().await.remove(&stream_id);
+}
+
 /// Handle incoming streams from a peer connection
 async fn handle_connection(
     conn: Connection,
@@ -1929,6 +2108,8 @@ async fn handle_connection(
     event_tx: mpsc::Sender<Event>,
     shared_state: Arc<Mutex<SharedState>>,
     disconnect_tx: mpsc::Sender<(String, ConnectionId)>,
+    #[cfg(feature = "host")]
+    hls_registry: HlsStreamRegistry,
 ) {
     loop {
         match conn.accept_bi().await {
@@ -1992,21 +2173,24 @@ async fn handle_connection(
                     continue;
                 }
 
-                // For HLS streaming requests, store the send stream and emit
-                // event. Host role only: answering an HLS request means
-                // holding the send half open until the four HLS commands
-                // drain it, and those are behind this same feature. A client
-                // build must therefore not accept the request at all, or it
-                // would park a `SendStream` nothing can ever remove.
+                // For HLS streaming requests, create a dedicated per-stream worker task
+                // and register it in the HLS registry.
                 #[cfg(feature = "host")]
                 if let MydiaRequest::HlsStream(hls_request) = request {
                     let stream_id = request_id.clone();
 
-                    // Store the send stream for later use
+                    let (stream_tx, stream_rx) = mpsc::channel::<StreamCmd>(32);
                     {
-                        let mut state = shared_state.lock().await;
-                        state.hls_streams.insert(stream_id.clone(), send);
+                        let mut registry = hls_registry.lock().await;
+                        registry.insert(stream_id.clone(), stream_tx);
                     }
+
+                    runtime::spawn(run_hls_stream_worker(
+                        send,
+                        stream_id.clone(),
+                        stream_rx,
+                        hls_registry.clone(),
+                    ));
 
                     // Emit the HLS stream event
                     let _ = event_tx
@@ -2109,7 +2293,7 @@ async fn handle_connection(
     }
 }
 
-/// The most `handle_send_request` reads back from a peer. Requests stay capped
+/// The most `do_send_request` reads back from a peer. Requests stay capped
 /// at 64 KiB in `handle_connection`, but responses carry whole GraphQL
 /// documents: a season with many subtitle tracks came to 254 KB on a real
 /// library, and the old 64 KiB cap failed every such request with "stream too
@@ -2117,28 +2301,7 @@ async fn handle_connection(
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
 /// Send a request to a connected peer
-async fn handle_send_request(
-    connected_peers: &HashMap<String, PeerConnections>,
-    node_id: &str,
-    request: MydiaRequest,
-) -> Result<MydiaResponse, String> {
-    // The node_id parameter might be either:
-    // 1. A bare node ID string (e.g., "09ecb63dd2...")
-    // 2. A full EndpointAddr JSON (e.g., {"id":"09ecb63dd2...", ...})
-    // We need to extract the actual node ID in both cases.
-    let actual_node_id = if node_id.starts_with('{') {
-        // Try to parse as EndpointAddr JSON
-        match endpoint_addr_from_json(node_id) {
-            Ok(addr) => addr.id.to_string(),
-            Err(_) => node_id.to_string(),
-        }
-    } else {
-        node_id.to_string()
-    };
-
-    let conn = current_connection(connected_peers, &actual_node_id)
-        .ok_or_else(|| format!("Not connected to peer: {}", actual_node_id))?;
-
+async fn do_send_request(conn: Connection, request: MydiaRequest) -> Result<MydiaResponse, String> {
     // Open a bidirectional stream
     let (mut send, mut recv) = conn
         .open_bi()
@@ -2170,9 +2333,8 @@ async fn handle_send_request(
 
 /// Send an HLS streaming request to a connected peer (client-side).
 /// Returns a streaming response with header and channel for chunks.
-async fn handle_send_hls_request(
-    connected_peers: &HashMap<String, PeerConnections>,
-    node_id: &str,
+async fn do_send_hls_request(
+    conn: Connection,
     request: HlsRequest,
 ) -> Result<HlsStreamResponse, String> {
     use crate::runtime::time::Instant;
@@ -2181,20 +2343,7 @@ async fn handle_send_hls_request(
     let session_id = request.session_id.clone();
     let path = request.path.clone();
 
-    // Handle both bare node ID and full EndpointAddr JSON
-    let actual_node_id = if node_id.starts_with('{') {
-        match endpoint_addr_from_json(node_id) {
-            Ok(addr) => addr.id.to_string(),
-            Err(_) => node_id.to_string(),
-        }
-    } else {
-        node_id.to_string()
-    };
-
-    let conn = current_connection(connected_peers, &actual_node_id)
-        .ok_or_else(|| format!("Not connected to peer: {}", actual_node_id))?;
-
-    let connection_type = PeerConnectionType::from_connection(conn);
+    let connection_type = PeerConnectionType::from_connection(&conn);
 
     // Open a bidirectional stream
     let (mut send, mut recv) = conn
