@@ -18,7 +18,14 @@ class LocalPlaybackNotifier extends Notifier<bool> {
   @override
   bool build() => _initial;
 
+  // `PlayerScreen` calls these from microtasks scheduled in `initState` and
+  // `dispose`. When the whole `ProviderScope` goes away in the same frame as
+  // the screen, the notifier is already disposed by the time they run, and
+  // writing `state` would throw `UnmountedRefException` into whichever zone
+  // scheduled the microtask. There is nothing left to track by then.
+
   void acquire() {
+    if (!ref.mounted) return;
     _activeCount++;
     if (!state) {
       state = true;
@@ -26,6 +33,7 @@ class LocalPlaybackNotifier extends Notifier<bool> {
   }
 
   void release() {
+    if (!ref.mounted) return;
     if (_activeCount > 0) {
       _activeCount--;
     }
@@ -35,6 +43,7 @@ class LocalPlaybackNotifier extends Notifier<bool> {
   }
 
   void setActive(bool active) {
+    if (!ref.mounted) return;
     if (active) {
       if (_activeCount == 0) {
         _activeCount = 1;

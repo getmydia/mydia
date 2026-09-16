@@ -332,6 +332,17 @@ class P2pService {
     _configuredRelayUrls = List.unmodifiable(urls);
   }
 
+  /// Install native-stream subscriptions without initializing a host, so
+  /// tests can exercise teardown against streams shaped like the bridge's.
+  @visibleForTesting
+  void debugAdoptNativeSubscriptions({
+    StreamSubscription<String>? events,
+    StreamSubscription<FlutterInboundControlRequest>? control,
+  }) {
+    _eventSubscription = events;
+    _controlSubscription = control;
+  }
+
   /// Get the active relay URL (null before initialization)
   String? get activeRelayUrl => _getEffectiveRelayUrl();
 
@@ -870,13 +881,10 @@ class P2pService {
   ///
   /// This method is intentionally void, not `Future<void>`, so it cannot
   /// await the subscription cancellation below. Do not "fix" this into an
-  /// await; that does not compile in a void method, and reset() does not
-  /// need to be async because initialize() only checks _isInitialized,
-  /// which is cleared synchronously here regardless of when cancellation
-  /// finishes. Detach the subscription from the field before cancelling
-  /// it, so nothing can observe or act on a half-cancelled subscription,
-  /// and attach an error handler to the cancellation itself so a rejected
-  /// Future cannot surface as an unhandled async error.
+  /// await: [_detachNativeSubscriptions] explains why that cancel can hang
+  /// forever. reset() does not need to be async anyway, because initialize()
+  /// only checks _isInitialized, which is cleared synchronously here
+  /// regardless of when cancellation finishes.
   void reset() {
     // Abandon any in-flight _initialize before tearing state down, so it
     // cannot publish its host over the one the next initialize() builds.
@@ -884,16 +892,7 @@ class P2pService {
     _autoReconnectTimer?.cancel();
     _autoReconnectAttempts = 0;
     _lastDialedEndpointAddr = null;
-    final subscription = _eventSubscription;
-    _eventSubscription = null;
-    unawaited(subscription?.cancel().catchError((Object e) {
-      debugPrint('[P2P] Error cancelling event subscription on reset: $e');
-    }));
-    final controlSubscription = _controlSubscription;
-    _controlSubscription = null;
-    unawaited(controlSubscription?.cancel().catchError((Object e) {
-      debugPrint('[P2P] Error cancelling control subscription on reset: $e');
-    }));
+    _detachNativeSubscriptions('reset');
     _host = null;
     _isInitialized = false;
     _initializeFuture = null;
@@ -943,6 +942,33 @@ class P2pService {
     }
   }
 
+  /// Cancels both native-stream subscriptions without waiting for either.
+  ///
+  /// Never await these cancels. flutter_rust_bridge backs every native stream
+  /// with an `async*` loop over a port, and cancelling a subscription to an
+  /// `async*` stream completes only once the loop reaches its next `yield`,
+  /// which needs the Rust side to send another event. An idle host sends
+  /// none, so an awaited cancel never completes: `dispose()` did that, and
+  /// player B's teardown in `integration_test/remote_control_test.dart` hung
+  /// on it until the 8-minute timeout.
+  ///
+  /// Calling `cancel()` still stops delivery straight away. Only the returned
+  /// future lags. The fields are cleared first so nothing can act on a
+  /// half-cancelled subscription, and each cancel gets an error handler so a
+  /// rejected future cannot surface as an unhandled async error.
+  void _detachNativeSubscriptions(String reason) {
+    final subscription = _eventSubscription;
+    _eventSubscription = null;
+    unawaited(subscription?.cancel().catchError((Object e) {
+      debugPrint('[P2P] Error cancelling event subscription on $reason: $e');
+    }));
+    final controlSubscription = _controlSubscription;
+    _controlSubscription = null;
+    unawaited(controlSubscription?.cancel().catchError((Object e) {
+      debugPrint('[P2P] Error cancelling control subscription on $reason: $e');
+    }));
+  }
+
   Future<void> dispose() async {
     _disposed = true;
     _initGeneration++;
@@ -950,10 +976,7 @@ class P2pService {
     // Cancel before closing the controllers below: the Rust host is only
     // dropped when it is garbage collected, not synchronously here, so a
     // live subscription can otherwise still fire into a closed controller.
-    await _eventSubscription?.cancel();
-    _eventSubscription = null;
-    await _controlSubscription?.cancel();
-    _controlSubscription = null;
+    _detachNativeSubscriptions('dispose');
     // Rust host is dropped when P2PHost is garbage collected
     _host = null;
     _isInitialized = false;

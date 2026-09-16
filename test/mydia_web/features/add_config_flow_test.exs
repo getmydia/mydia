@@ -303,7 +303,10 @@ defmodule MydiaWeb.Features.AddConfigFlowTest do
     |> open_first_config()
     |> choose_library(library_a.id)
     |> click(Query.css(~s(#add-config-form button[type="submit"])))
-    |> refute_has(Query.css("#add-config-modal[open]"))
+    # Not refute_has: it retries only until the element is found, so it
+    # raises at once if the submit's patch has not landed yet. count: 0 makes
+    # the query succeed only once the dialog is gone, and that one is retried.
+    |> assert_has(Query.css("#add-config-modal[open]", count: 0))
 
     # The dialog closes synchronously on submit, but the add itself completes
     # in a handle_info the browser interaction does not wait on: it fetches

@@ -64,14 +64,15 @@ Also note `cancel-in-progress: true` in that workflow's concurrency group: pushi
 a new commit cancels the in-flight run, so a `gh pr checks --watch` started on the
 old head exits with a truncated view. Re-watch after each push.
 
-## Eight checks are required, and most are still advisory
+## Nine checks are required, and most are still advisory
 
 The Master ruleset (`gh api repos/getmydia/mydia/rulesets/9740184`) requires
-eight status checks:
+nine status checks:
 
 ```text
 Test, Test / PostgreSQL, Test / E2E Browser, Site build,
-Load lanes (ios), Load lanes (android), Build / Web, Test / Player
+Load lanes (ios), Load lanes (android), Build / Web, Test / Player,
+Test / Player E2E
 ```
 
 Everything else is still advisory, including `Build / Android`, `Build / Linux`,
@@ -82,6 +83,13 @@ and the lockfile scanners. A break visible only to those still merges.
 catalogued hang and network-block modes -- `Build / Linux` and `Flatpak / Build`
 -- were deliberately left out. Requiring either would trade a merge hole for a
 merge deadlock.
+
+`Test / Player E2E` was promoted 2026-09-16. It had been green on 63 of 63 master
+pushes before PR #832 merged it red, and it stayed red for a day because nothing
+blocked on it. It reports on every PR for the same reason `ci-player.yml` does:
+`ci-player-e2e.yml` has no workflow-level `paths:` filter, and its
+`dorny/paths-filter` result gates steps, never the job, so a PR with nothing
+relevant concludes green in seconds. Keep it that way.
 
 ### Why the list was short, and what changed
 
@@ -670,7 +678,19 @@ Three confirmations now, so treat this signature as flake-first. It and the
 evidence of a real break until you have read both signatures.
 
 **`MydiaWeb.Features.AddConfigFlowTest`**, "submitting the form with a chosen
-library adds the title and closes the dialog", fails alone (1 of 34) with
+library adds the title and closes the dialog". **Fixed 2026-09-16 (PR #840).**
+Earlier notes here said Wallaby polls a `refute_has`, and so ruled out a slow
+runner. It does not. `refute_has` runs the query through the same
+retry as `assert_has`, which stops as soon as the element *is* found, so a
+dialog still open at the first check raises immediately. The assertion ran
+straight after the submit click, and lost whenever the LiveView patch was
+slower than one WebDriver round trip. It failed twice in a row on #840.
+Delaying `submit_add_config` by 500ms reproduced it every time, and
+`assert_has(Query.css(..., count: 0))`, which does retry until the element is
+gone, passed under that same delay. `hover_select_test.exs` documents the same
+trap. Never follow an action with `refute_has`.
+
+It failed alone (1 of 34) with
 `(Wallaby.ExpectationNotMetError) Expected not to find 1 visible element that
 matched the css '#add-config-modal[open]', but 1 visible element was found`, at
 `test/mydia_web/features/add_config_flow_test.exs:306`.
@@ -682,13 +702,10 @@ break: the test file is young (`d73dc07fd` wrote it for the merged dialog,
 `4a4b44695` moved it onto `visit_liveview`), so a genuine regression is
 plausible enough to be worth one check rather than an assumption.
 
-The assertion is a bare `refute_has` immediately after the submit click, resting
-on the comment above it that "the dialog closes synchronously on submit". Wallaby
-does poll a `refute_has`, so a slow runner alone should not produce this. Worth
-noting for anyone who sees it a second time: `#689` gave the failure branch a
-reason to keep the dialog open, since a metadata failure now re-renders it with
-the operator's choices instead of closing and flashing. A stubbed fetch that
-errors rather than merely lagging would produce exactly this message.
+If the same message comes back with the `count: 0` assertion in place, the
+dialog stayed open past Wallaby's whole wait window, which no race explains.
+`submit_add_config` keeps it open only when `resolve_add_config_submit` halts
+without clearing it, so start from that function, not from a rerun.
 
 Seen again 2026-09-05 on PR #717, a `grid_density_components.ex`/CSS-only diff
 nowhere near the config-add dialog. Master's most recent run (`fc4003317`,
