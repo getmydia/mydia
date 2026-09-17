@@ -63,6 +63,13 @@
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <!-- Receives the outcome of a PackageInstaller session committed by
+             ApkInstaller. Only PendingIntents this app creates target it
+             explicitly, so it needs no intent-filter and stays unexported. -->
+        <receiver
+            android:name=".ApkInstallReceiver"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

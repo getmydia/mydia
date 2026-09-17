@@ -32,6 +32,11 @@ void main() {
     expect(calls.single.method, 'canInstall');
   });
 
+  test('canInstall is false when the host says so', () async {
+    response = false;
+    expect(await AndroidInstaller().canInstall(), isFalse);
+  });
+
   test('canInstall is false when the host is not there', () async {
     error = MissingPluginException();
     expect(await AndroidInstaller().canInstall(), isFalse);

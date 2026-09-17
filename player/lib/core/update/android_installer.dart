@@ -52,9 +52,11 @@ class AndroidInstaller {
 
   /// Hands [path] to the package installer.
   ///
-  /// Returns once the session has been committed. Android then shows its own
-  /// confirmation, and the app is replaced out from under this process, so
-  /// there is nothing meaningful to await afterwards.
+  /// Returns once the session has been committed, not once the user has
+  /// approved it. The confirmation dialog and the actual install happen
+  /// afterwards, on Android's own schedule, and are handled entirely on the
+  /// platform side (see `ApkInstallReceiver`); nothing comes back through
+  /// this call to say whether the user accepted or declined.
   Future<void> install(String path) async {
     try {
       await _channel.invokeMethod('install', {'path': path});

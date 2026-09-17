@@ -1,7 +1,7 @@
 package dev.mydia.player
 
 import android.app.Activity
-import android.content.Context
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.net.Uri
@@ -38,9 +38,16 @@ class ApkInstaller(private val activity: Activity) {
     /**
      * Streams [path] into a session and commits it.
      *
+     * Returns once the session has been committed, not once the user has
+     * approved it. Committing only hands the session to the OS; the
+     * confirmation dialog and the actual install happen afterwards, on the
+     * OS's own schedule, and are reported to [ApkInstallReceiver] rather than
+     * back through this call.
+     *
      * Throws IllegalStateException with a message the Dart side surfaces to
-     * the user. The session is abandoned on any failure so a half-written one
-     * cannot accumulate.
+     * the user. The session is abandoned on any failure, whether it happens
+     * while opening the session or afterwards, so a half-written or unopened
+     * one cannot accumulate.
      */
     fun install(path: String) {
         val apk = File(path)
@@ -53,29 +60,30 @@ class ApkInstaller(private val activity: Activity) {
         params.setAppPackageName(activity.packageName)
 
         val sessionId = installer.createSession(params)
-        val session = installer.openSession(sessionId)
+        var opened: PackageInstaller.Session? = null
 
         try {
+            val session = installer.openSession(sessionId)
+            opened = session
+
             session.openWrite("mydia-update", 0, apk.length()).use { output ->
                 apk.inputStream().use { input -> input.copyTo(output) }
                 session.fsync(output)
             }
 
-            val intent = Intent(activity, MainActivity::class.java)
+            val intent = Intent(activity, ApkInstallReceiver::class.java)
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                android.app.PendingIntent.FLAG_MUTABLE
+                PendingIntent.FLAG_MUTABLE
             } else {
                 0
             }
-            val pending = android.app.PendingIntent.getActivity(
-                activity, sessionId, intent, flags
-            )
+            val pending = PendingIntent.getBroadcast(activity, sessionId, intent, flags)
             session.commit(pending.intentSender)
         } catch (error: Exception) {
-            session.abandon()
+            opened?.abandon() ?: installer.abandonSession(sessionId)
             throw IllegalStateException(error.message ?: "The install session failed.")
         } finally {
-            session.close()
+            opened?.close()
         }
     }
 }
