@@ -14,6 +14,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
 
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.GridDensityComponents
   import MydiaWeb.MediaLive.Index.SectionComponents
   import MydiaWeb.MediaLive.Index.SelectionComponents
@@ -912,18 +913,6 @@ defmodule MydiaWeb.MediaLive.Index do
   # resolutions.
   defp get_quality_badge(%LibraryRow{resolutions: resolutions}) do
     Enum.max_by(resolutions, &DownloadService.parse_resolution_height/1, fn -> nil end)
-  end
-
-  defp format_file_size(nil), do: "N/A"
-
-  defp format_file_size(bytes) when is_integer(bytes) do
-    cond do
-      bytes >= 1_099_511_627_776 -> "#{Float.round(bytes / 1_099_511_627_776, 2)} TB"
-      bytes >= 1_073_741_824 -> "#{Float.round(bytes / 1_073_741_824, 2)} GB"
-      bytes >= 1_048_576 -> "#{Float.round(bytes / 1_048_576, 2)} MB"
-      bytes >= 1024 -> "#{Float.round(bytes / 1024, 2)} KB"
-      true -> "#{bytes} B"
-    end
   end
 
   defp total_file_size(%LibraryRow{total_size: total_size}), do: total_size

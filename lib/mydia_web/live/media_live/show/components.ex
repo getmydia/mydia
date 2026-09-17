@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   """
   use MydiaWeb, :html
   import MydiaWeb.MediaLive.Show.Formatters
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.MediaLive.Show.Helpers
 
   alias MydiaWeb.MediaLive.Show.LibraryComponents
