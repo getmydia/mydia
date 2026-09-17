@@ -18,19 +18,24 @@ const Key kDockKey = Key('dock-harness-nav');
 /// `Scaffold(extendBody: true)` with a real `BottomNav`, and the shell's
 /// content gutter around the body.
 ///
+/// Use this directly from a route builder when the test already owns a
+/// `MaterialApp.router`; otherwise use [shellHarness].
+///
 /// Callers must supply their own `ProviderScope`; `BottomNav` needs one
 /// because `SettingsNavItem` reads a provider for its badge.
-Widget shellHarness({required Widget child}) => MaterialApp(
-      home: Scaffold(
-        backgroundColor: Colors.transparent,
-        extendBody: true,
-        bottomNavigationBar: KeyedSubtree(
-          key: kDockKey,
-          child: BottomNav(location: '/', onNavigate: (_) {}),
-        ),
-        body: AppShell.contentGutter(child: child),
+Widget shellScaffold({required Widget child}) => Scaffold(
+      backgroundColor: Colors.transparent,
+      extendBody: true,
+      bottomNavigationBar: KeyedSubtree(
+        key: kDockKey,
+        child: BottomNav(location: '/', onNavigate: (_) {}),
       ),
+      body: AppShell.contentGutter(child: child),
     );
+
+/// [shellScaffold] mounted as the `home` of a plain `MaterialApp`.
+Widget shellHarness({required Widget child}) =>
+    MaterialApp(home: shellScaffold(child: child));
 
 /// The measured height of the harness's dock, safe-area inset included.
 double dockHeightOf(WidgetTester tester) =>
