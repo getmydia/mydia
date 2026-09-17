@@ -210,6 +210,8 @@
               Rating (High)
             </option>
             <option value="rating_asc" selected={@sort_by == "rating_asc"}>Rating (Low)</option>
+            <option value="size_desc" selected={@sort_by == "size_desc"}>Size (Largest)</option>
+            <option value="size_asc" selected={@sort_by == "size_asc"}>Size (Smallest)</option>
           </optgroup>
           <%= if @filter_type == "tv_show" do %>
             <optgroup label="TV Shows">
