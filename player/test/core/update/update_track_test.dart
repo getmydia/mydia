@@ -13,6 +13,17 @@ void main() {
       }
     });
 
+    // Written out as literals rather than derived from wireName itself: these
+    // three strings are the keys scripts/appcast/lib/releases-json.mjs writes
+    // into the deployed releases.json feed. A rename on either side breaks
+    // the client against the server, and a test that reads its own expected
+    // value off the thing it is checking can never catch a rename.
+    test("wire names are pinned to the feed's keys", () {
+      expect(UpdateTrack.stable.wireName, 'stable');
+      expect(UpdateTrack.beta.wireName, 'beta');
+      expect(UpdateTrack.dev.wireName, 'dev');
+    });
+
     test('an unknown or missing name is null, not a crash', () {
       expect(UpdateTrack.fromWireName(null), isNull);
       expect(UpdateTrack.fromWireName('nightly'), isNull);
