@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/input_capabilities.dart';
@@ -99,6 +100,22 @@ class ChromeVisibility extends StatefulWidget {
 
   final Duration autoHide;
 
+  /// How long the chrome stays up after the last activity while playing.
+  static const Duration defaultAutoHide = Duration(seconds: 3);
+
+  /// [autoHide] on the remote tier. A television is read from across the
+  /// room, and five seconds matches the default of Android TV's own ExoPlayer
+  /// controller.
+  static const Duration remoteAutoHide = Duration(seconds: 5);
+
+  /// Whether every key press restarts the [autoHide] countdown while the
+  /// chrome is shown.
+  ///
+  /// Off by default. `PlaybackChrome` turns it on for the remote tier, where
+  /// key presses are the only activity there is: moving between controls and
+  /// pressing OK on one would otherwise let the chrome hide mid-navigation.
+  final bool restartOnKeyActivity;
+
   /// Toggles fullscreen on a background double-click. Null by default.
   ///
   /// The platform gate lives in [PlaybackChrome], not here. Registering a
@@ -130,7 +147,8 @@ class ChromeVisibility extends StatefulWidget {
     required this.isPlaying,
     required this.child,
     this.isSeeking = false,
-    this.autoHide = const Duration(seconds: 3),
+    this.autoHide = ChromeVisibility.defaultAutoHide,
+    this.restartOnKeyActivity = false,
     this.onDoubleTap,
     this.onWindowDrag,
     this.onWindowButtonsHidden,
@@ -216,6 +234,9 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   void initState() {
     super.initState();
     widget.controller?._attach(this);
+    if (widget.restartOnKeyActivity) {
+      HardwareKeyboard.instance.addHandler(_onKeyActivity);
+    }
     _controller = AnimationController(
       vsync: this,
       value: 1.0,
@@ -246,6 +267,13 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
       old.controller?._detach(this);
       widget.controller?._attach(this);
     }
+    if (old.restartOnKeyActivity != widget.restartOnKeyActivity) {
+      if (widget.restartOnKeyActivity) {
+        HardwareKeyboard.instance.addHandler(_onKeyActivity);
+      } else {
+        HardwareKeyboard.instance.removeHandler(_onKeyActivity);
+      }
+    }
     if (old.isPlaying != widget.isPlaying ||
         old.isSeeking != widget.isSeeking) {
       if (widget.isPlaying && !widget.isSeeking) {
@@ -260,6 +288,9 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   @override
   void dispose() {
     widget.controller?._detach(this);
+    if (widget.restartOnKeyActivity) {
+      HardwareKeyboard.instance.removeHandler(_onKeyActivity);
+    }
     _hideTimer?.cancel();
     _setWindowButtonsHidden(false);
     _curved.dispose();
@@ -276,6 +307,24 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     _hideTimer = Timer(widget.autoHide, () {
       if (mounted && _mayHide) _hide();
     });
+  }
+
+  /// Restarts the countdown on every key press while the chrome is shown.
+  ///
+  /// Registered on [HardwareKeyboard] rather than read from an ancestor
+  /// `Focus`, because OK on a focused control is consumed by that control's
+  /// own shortcuts and never bubbles up. A held key counts through its
+  /// [KeyRepeatEvent]s; a release does not. A press while hidden is left to
+  /// the player screen, which decides whether it reveals the chrome.
+  ///
+  /// Always returns false. This observes keys and never claims one: a key
+  /// reported as handled is not passed back to the platform, and on Android
+  /// that includes BACK.
+  bool _onKeyActivity(KeyEvent event) {
+    if (event is KeyUpEvent || !_visible) return false;
+    widget.onActivity?.call();
+    _restartTimer();
+    return false;
   }
 
   /// Resolves to the injected test callback, or the real native bridge.
