@@ -88,7 +88,9 @@ test('the newest build wins within a track', () => {
   const older = release('v0.14.0', {
     assets: [asset('mydia-player-android-v0.14.0.apk')],
   })
-  const model = buildReleasesModel([older, stable], [])
+  // The newer release is listed first, so an implementation that just kept
+  // the last one seen (instead of comparing build numbers) would fail this.
+  const model = buildReleasesModel([stable, older], [])
   assert.equal(model.platforms.android.stable.version, '0.15.0')
 })
 
@@ -116,7 +118,7 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
   // trusting a comment to keep them in step. The shell one is what the
   // workflows call; this one is what the feed stamps into every entry, and a
   // disagreement would publish a number no device could act on.
-  for (const version of [
+  const accepted = [
     '0.15.0',
     '0.15.1',
     '1.15.0',
@@ -127,10 +129,42 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
     '0.15.0-beta2',
     'v0.8.1-rc13',
     '0.15.0+refresh.2',
-  ]) {
+    // Boundary pairs: the highest counter each band accepts before it would
+    // overflow into the next one.
+    '0.15.0-dev.299',
+    '0.15.0-alpha.199',
+    '0.15.0-beta.199',
+    '0.15.0-rc.199',
+    '0.15.0+refresh.99',
+  ]
+
+  for (const version of accepted) {
     const shell = execFileSync('../build-number.sh', [version], {
       encoding: 'utf8',
     }).trim()
     assert.equal(String(buildNumber(version)), shell, `mismatch for ${version}`)
+  }
+
+  // Inputs both implementations must refuse. execFileSync throws on a
+  // non-zero exit, so there is no number to compare here: the assertion is
+  // that both sides reject, not that their outputs match. Each of the first
+  // five is the first counter that overflows its band; the last is the
+  // no-dot refresh form the shell has never accepted (CI's only producer
+  // always writes the dot).
+  const rejected = [
+    '0.15.0-dev.300',
+    '0.15.0-alpha.200',
+    '0.15.0-beta.200',
+    '0.15.0-rc.200',
+    '0.15.0+refresh.100',
+    '0.15.0+refresh2',
+  ]
+
+  for (const version of rejected) {
+    assert.throws(
+      () => execFileSync('../build-number.sh', [version], { encoding: 'utf8' }),
+      `shell should have rejected ${version}`,
+    )
+    assert.throws(() => buildNumber(version), `buildNumber should have rejected ${version}`)
   }
 })

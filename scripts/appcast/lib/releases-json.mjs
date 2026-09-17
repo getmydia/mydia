@@ -43,22 +43,69 @@ export function buildNumber(version) {
   }
 
   // Bands in semver maturity order, each with its own counter space so
-  // beta.1 and rc.1 cannot land on the same number. The dot is optional
-  // because 36 existing tags predate it (v0.8.1-rc13, v0.9.0-beta2).
+  // beta.1 and rc.1 cannot land on the same number. The dot is optional in
+  // dev/alpha/beta/rc because 36 existing tags predate it (v0.8.1-rc13,
+  // v0.9.0-beta2). refresh has no such history and its only producer (CI)
+  // always writes the dot, so refresh requires it, matching
+  // scripts/build-number.sh exactly. Each band also mirrors that script's
+  // overflow guard: a counter large enough to reach into the next band
+  // would silently collide with it, defeating the "own counter space"
+  // guarantee this comment makes.
   const BANDS = [
-    [/^dev\.?(\d+)$/, 0],
-    [/^alpha\.?(\d+)$/, 300],
-    [/^beta\.?(\d+)$/, 500],
-    [/^rc\.?(\d+)$/, 700],
-    [/^refresh\.?(\d+)$/, 900],
+    {
+      pattern: /^dev\.?(\d+)$/,
+      base: 0,
+      validate: (n) => {
+        if (n > 299) {
+          throw new Error(`dev counter above 299 would collide with the alpha band: ${version}`)
+        }
+      },
+    },
+    {
+      pattern: /^alpha\.?(\d+)$/,
+      base: 300,
+      validate: (n) => {
+        if (n > 199) {
+          throw new Error(`alpha counter above 199 would collide with the beta band: ${version}`)
+        }
+      },
+    },
+    {
+      pattern: /^beta\.?(\d+)$/,
+      base: 500,
+      validate: (n) => {
+        if (n > 199) {
+          throw new Error(`beta counter above 199 would collide with the rc band: ${version}`)
+        }
+      },
+    },
+    {
+      pattern: /^rc\.?(\d+)$/,
+      base: 700,
+      validate: (n) => {
+        if (n > 199) {
+          throw new Error(`rc counter above 199 would collide with the stable slot: ${version}`)
+        }
+      },
+    },
+    {
+      pattern: /^refresh\.(\d+)$/,
+      base: 900,
+      validate: (n) => {
+        if (n < 1 || n > 99) {
+          throw new Error(`refresh counter must be 1..99: ${version}`)
+        }
+      },
+    },
   ]
 
   let slot = 900
   if (rest.length > 0) {
-    const band = BANDS.find(([pattern]) => pattern.test(suffix))
+    const band = BANDS.find(({ pattern }) => pattern.test(suffix))
     if (!band) throw new Error(`unrecognised version suffix: ${version}`)
-    const [pattern, base] = band
-    slot = base + Number(suffix.match(pattern)[1])
+    const n = Number(suffix.match(band.pattern)[1])
+    band.validate(n)
+    slot = band.base + n
   }
 
   return major * 10000000 + minor * 100000 + patch * 1000 + slot
