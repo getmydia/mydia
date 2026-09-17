@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../domain/models/available_update.dart';
 import '../platform_updater.dart';
+import '../update_track.dart';
 
 /// Method channel to the Sparkle host in AppDelegate.swift.
 ///
@@ -82,5 +83,31 @@ class MacOSUpdater extends PlatformUpdater {
       debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
       return false;
     }
+  }
+
+  /// The track this installation follows, as
+  /// [SparkleUpdateBackend]'s default track source.
+  ///
+  /// Sparkle's host side only knows a beta channel boolean today, so this
+  /// translates it rather than naming a track directly. Dev never comes back
+  /// from here because no macOS dev builds are published.
+  static Future<UpdateTrack> currentTrack({
+    MethodChannel channel = kSparkleChannel,
+  }) async =>
+      await betaChannelEnabled(channel: channel)
+          ? UpdateTrack.beta
+          : UpdateTrack.stable;
+
+  /// Points this installation at [track], as
+  /// [SparkleUpdateBackend]'s default track sink.
+  ///
+  /// Dev is refused here the same way [SparkleUpdateBackend.availableTracks]
+  /// never offers it: there is nothing published for the host to switch to.
+  static Future<bool> setTrack(
+    UpdateTrack track, {
+    MethodChannel channel = kSparkleChannel,
+  }) async {
+    if (track == UpdateTrack.dev) return false;
+    return setBetaChannel(track == UpdateTrack.beta, channel: channel);
   }
 }

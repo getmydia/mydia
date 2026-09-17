@@ -119,6 +119,7 @@ UpdateBackend? createUpdateBackend(
     return FlatpakUpdateBackend(
       portal: portal,
       releaseNotesUrl: flatpakReleaseNotesUrl(host.flatpakBranch),
+      branch: host.flatpakBranch,
     );
   }
 

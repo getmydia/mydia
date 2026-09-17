@@ -1,4 +1,5 @@
 import '../../domain/models/available_update.dart';
+import 'update_track.dart';
 
 /// What the settings "Check for updates" row should say and do.
 enum ManualCheckBehaviour {
@@ -52,6 +53,33 @@ final class UpdateDeferred extends UpdateOutcome {
   const UpdateDeferred();
 }
 
+/// What happened when the user chose a track.
+sealed class TrackSwitchOutcome {
+  const TrackSwitchOutcome();
+}
+
+/// The backend now follows the chosen track.
+final class TrackSwitchApplied extends TrackSwitchOutcome {
+  const TrackSwitchApplied();
+}
+
+/// Only the host or the store can make this switch, and the user has been
+/// told how. Flatpak branches and TestFlight groups both land here: no code
+/// inside the sandbox or the app bundle can move an install between them.
+final class TrackSwitchDeferred extends TrackSwitchOutcome {
+  final String instructions;
+  final String? url;
+
+  const TrackSwitchDeferred({required this.instructions, this.url});
+}
+
+/// The backend cannot offer this track at all.
+final class TrackSwitchUnsupported extends TrackSwitchOutcome {
+  final String reason;
+
+  const TrackSwitchUnsupported(this.reason);
+}
+
 /// How this installation learns about, and installs, its own updates.
 ///
 /// Checking and applying live behind one interface because on Flatpak they
@@ -82,6 +110,24 @@ abstract interface class UpdateBackend {
 
   /// Whether the update affordance can be offered at all.
   bool get canUpdateInPlace;
+
+  /// The tracks this installation can be pointed at.
+  ///
+  /// A track a platform has never published is absent, so a picker built from
+  /// this cannot offer a choice that resolves to nothing.
+  Set<UpdateTrack> get availableTracks;
+
+  /// The track this installation currently follows.
+  UpdateTrack get currentTrack;
+
+  /// The user chose a track. Must not throw, for the same reason
+  /// [requestUpdate] must not: the caller has no try/catch of its own.
+  ///
+  /// Selecting a lower track never downgrades anything. The installed build
+  /// stays until the chosen track publishes something newer, which is what
+  /// Sparkle has always done on macOS and what Android's refusal to install
+  /// an older build forces everywhere else.
+  Future<TrackSwitchOutcome> selectTrack(UpdateTrack track);
 
   Future<void> dispose();
 }

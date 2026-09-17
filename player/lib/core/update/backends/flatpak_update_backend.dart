@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../../../domain/models/available_update.dart';
 import '../flatpak_portal.dart';
 import '../update_backend.dart';
+import '../update_track.dart';
 
 /// Updates through org.freedesktop.portal.Flatpak.
 ///
@@ -15,11 +16,14 @@ class FlatpakUpdateBackend implements UpdateBackend {
   FlatpakUpdateBackend({
     required FlatpakPortal portal,
     required String releaseNotesUrl,
+    String? branch,
   })  : _portal = portal,
-        _releaseNotesUrl = releaseNotesUrl;
+        _releaseNotesUrl = releaseNotesUrl,
+        _branch = branch;
 
   final FlatpakPortal _portal;
   final String _releaseNotesUrl;
+  final String? _branch;
   final _controller = StreamController<AvailableUpdate?>.broadcast();
 
   bool _monitoring = false;
@@ -85,6 +89,33 @@ class FlatpakUpdateBackend implements UpdateBackend {
 
   @override
   bool get canUpdateInPlace => _monitoring;
+
+  @override
+  Set<UpdateTrack> get availableTracks =>
+      const {UpdateTrack.stable, UpdateTrack.beta};
+
+  @override
+  UpdateTrack get currentTrack =>
+      // The installed branch is the track. Nothing inside the sandbox can
+      // change it, so this reports rather than decides.
+      _branch == 'beta' ? UpdateTrack.beta : UpdateTrack.stable;
+
+  @override
+  Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async {
+    if (track == UpdateTrack.dev) {
+      return const TrackSwitchUnsupported(
+        'Dev builds are not published as a Flatpak.',
+      );
+    }
+
+    final remote = track == UpdateTrack.beta ? 'mydia-beta' : 'mydia';
+    final branch = track == UpdateTrack.beta ? 'beta' : 'stable';
+    return TrackSwitchDeferred(
+      instructions: 'Flatpak branches are changed outside the app. Run:\n\n'
+          'flatpak install $remote dev.mydia.player//$branch',
+      url: 'https://docs.mydia.dev/latest/using/how-to/install-player-linux/',
+    );
+  }
 
   @override
   Future<void> refresh({bool force = false}) async {

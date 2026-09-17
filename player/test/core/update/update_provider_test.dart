@@ -8,6 +8,7 @@ import 'package:player/core/update/backends/flatpak_update_backend.dart';
 import 'package:player/core/update/flatpak_portal.dart';
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
+import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
 
 /// `build()` calls the real `PackageInfo.fromPlatform()`, which is a
@@ -39,6 +40,16 @@ class _FakeBackend implements UpdateBackend {
 
   @override
   bool get canUpdateInPlace => true;
+
+  @override
+  Set<UpdateTrack> get availableTracks => const {UpdateTrack.stable};
+
+  @override
+  UpdateTrack get currentTrack => UpdateTrack.stable;
+
+  @override
+  Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async =>
+      const TrackSwitchApplied();
 
   @override
   Future<void> refresh({bool force = false}) async => refreshes++;
