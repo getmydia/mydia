@@ -30,6 +30,11 @@ on:
         type: boolean
         required: false
         default: false
+      publish_dev_build:
+        description: Upload the APK to the dev build bucket and refresh its index
+        type: boolean
+        required: false
+        default: false
     secrets:
       ANDROID_KEYSTORE_BASE64:
         required: false
@@ -40,6 +45,12 @@ on:
       ANDROID_KEY_PASSWORD:
         required: false
       PLAY_STORE_CREDENTIALS:
+        required: false
+      R2_ACCOUNT_ID:
+        required: false
+      R2_ACCESS_KEY_ID:
+        required: false
+      R2_SECRET_ACCESS_KEY:
         required: false
 
 permissions:
@@ -119,6 +130,71 @@ jobs:
 
       - name: Check AAB ABIs
         run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/bundle/release/app-release.aab
+
+      - name: Publish the dev build to R2
+        if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          VERSION: ${{ inputs.version }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          if [ -z "${R2_ACCESS_KEY_ID}" ]; then
+            echo "::error::R2 credentials are missing, so the dev build cannot be published."
+            exit 1
+          fi
+
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone jq
+
+          # The token is scoped to object read/write on one bucket and cannot
+          # ListBuckets, which rclone's default config probes for. Same shape
+          # as the Flatpak publish in release.yml.
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${R2_ACCESS_KEY_ID}
+          secret_access_key = ${R2_SECRET_ACCESS_KEY}
+          endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+          no_check_bucket = true
+          EOF
+
+          APK="${PLAYER_PATH}/build/app/outputs/flutter-apk/app-release.apk"
+          NAME="mydia-player-android-${VERSION}.apk"
+          SIZE=$(stat -c%s "$APK")
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+
+          rclone copyto "$APK" "r2:mydia-dev-builds/android/${NAME}"
+
+          # Read, amend, write. The index is small and only this workflow
+          # writes it, so a read-modify-write is safe and avoids a bucket
+          # listing the scoped token may not allow.
+          rclone cat r2:mydia-dev-builds/index.json > index.json 2>/dev/null || echo '{"builds":[]}' > index.json
+          jq --arg version "$VERSION" \
+             --argjson build "$VERSION_CODE" \
+             --arg file "android/${NAME}" \
+             --argjson size "$SIZE" \
+             --arg sha "$SHA" \
+             --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+             '{builds: ([{platform: "android", version: $version, build: $build, file: $file, size: $size, sha256: $sha, published_at: $published}]
+                        + [.builds[] | select(.platform != "android" or .version != $version)])
+                       | sort_by(-.build) }' index.json > index.next.json
+
+          # Keep the newest five per platform and delete the files that fall out.
+          jq '{builds: [.builds | group_by(.platform)[] | sort_by(-.build) | .[0:5]] | flatten | sort_by(-.build)}' \
+            index.next.json > index.kept.json
+          jq -r --slurpfile kept index.kept.json \
+            '[.builds[].file] - [$kept[0].builds[].file] | .[]' \
+            index.next.json > dropped.txt
+          while read -r file; do
+            [ -n "$file" ] && rclone deletefile "r2:mydia-dev-builds/${file}" || true
+          done < dropped.txt
+
+          rclone copyto index.kept.json r2:mydia-dev-builds/index.json
+          echo "Published ${NAME} (build ${VERSION_CODE})." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Ruby for Fastlane
         if: ${{ inputs.upload_to_play_store && !inputs.dry_run }}

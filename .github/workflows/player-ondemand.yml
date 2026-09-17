@@ -91,9 +91,6 @@ jobs:
           SHA=$(git rev-parse --verify "origin/$INPUT_REF^{commit}" 2>/dev/null || git rev-parse --verify "$INPUT_REF^{commit}")
           echo "Building SHA: $SHA from ref $INPUT_REF"
 
-          # Version code is monotonic and disjoint from releases (10000+) and refreshes (900000+)
-          VERSION_CODE=$(( RUN_NUMBER + 500000 ))
-
           if [ -n "$INPUT_VERSION" ]; then
             if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
               echo "::error::Invalid version_override '$INPUT_VERSION'. Must match semver (e.g. 1.2.3 or 1.2.3-beta.1)"
@@ -107,6 +104,16 @@ jobs:
             MINOR=$(echo "$BASE_VERSION" | cut -d. -f2)
             NEXT_MINOR=$(( MINOR + 1 ))
             VERSION="${MAJOR}.${NEXT_MINOR}.0-dev.${RUN_NUMBER}"
+          fi
+
+          # From the version, so a dev build sorts below the beta and stable of
+          # the same version instead of above every release. The old +500000
+          # offset is what made installing a dev APK a one way door.
+          VERSION_CODE=$(./scripts/build-number.sh "$VERSION")
+
+          if [ "${RUN_NUMBER}" -gt 299 ] && [ -z "$INPUT_VERSION" ]; then
+            echo "::error::run_number ${RUN_NUMBER} exceeds the dev slot range. Pass version_override with a dev counter below 300."
+            exit 1
           fi
 
           echo "Derived version: $VERSION (build $VERSION_CODE)"
@@ -168,12 +175,16 @@ jobs:
       upload_to_play_store: false
       play_store_track: 'internal'
       dry_run: ${{ inputs.dry_run }}
+      publish_dev_build: ${{ !inputs.dry_run }}
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   player-macos:
     name: Player / macOS
