@@ -1,6 +1,7 @@
 // The reported defect, asserted end to end: on a television, LEFT from the
-// leftmost card in a rail must land on the sidebar, and RIGHT from the sidebar
-// must return to the card that left it.
+// leftmost card in a rail must land on the sidebar, even while another rail is
+// scrolled so its built cards sit left of the screen, and RIGHT from the
+// sidebar must return to the card that left it.
 //
 // The shell is reconstructed at the television size rather than pumped whole:
 // AppShell's real tree needs an authenticated provider graph, and what is under
@@ -15,6 +16,7 @@
 // Requires --dart-define=MYDIA_FORCE_TV=true.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/focus/region_traversal_policy.dart';
@@ -248,6 +250,89 @@ void main() {
       // move, the policy calls the key unhandled, and focus stays in the
       // sidebar.
       expect(FocusManager.instance.primaryFocus, same(newRouteCard));
+    });
+
+    testWidgets(
+        'LEFT from the first card of a rail reaches the sidebar while another '
+        'rail is scrolled', (tester) async {
+      tester.view.physicalSize = const Size(960, 540);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      createShellNodes();
+
+      final upperController = ScrollController();
+      final lowerController = ScrollController();
+      addTearDown(upperController.dispose);
+      addTearDown(lowerController.dispose);
+
+      List<FocusNode> railNodes(String label) {
+        final nodes = List.generate(
+          10,
+          (i) => FocusNode(debugLabel: '$label-$i'),
+        );
+        for (final node in nodes) {
+          addTearDown(node.dispose);
+        }
+        return nodes;
+      }
+
+      final upperCards = railNodes('upper');
+      final lowerCards = railNodes('lower');
+
+      // Built the way ContentRail builds on the television tier: a
+      // horizontal list whose cache keeps cards built well past each edge.
+      // Those off-screen cards are what Flutter's search used to jump to.
+      Widget rail(ScrollController controller, List<FocusNode> nodes) {
+        return SizedBox(
+          width: 680,
+          height: 120,
+          child: ListView.builder(
+            controller: controller,
+            scrollDirection: Axis.horizontal,
+            scrollCacheExtent: const ScrollCacheExtent.pixels(2400),
+            itemCount: nodes.length,
+            itemExtent: 160,
+            itemBuilder: (context, index) => Focus(
+              focusNode: nodes[index],
+              child: const SizedBox(width: 150, height: 100),
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(
+        buildShell(
+          content: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              rail(upperController, upperCards),
+              rail(lowerController, lowerCards),
+            ],
+          ),
+        ),
+      );
+
+      // Cards 0 to 4 of the upper rail now sit left of the lower rail's
+      // first card, all still built.
+      upperController.jumpTo(800);
+      await tester.pump();
+
+      lowerCards.first.requestFocus();
+      await tester.pump();
+      expect(lowerCards.first.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+
+      expect(sidebarSelected.hasFocus, isTrue);
+      expect(upperCards.any((node) => node.hasFocus), isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      expect(lowerCards.first.hasFocus, isTrue);
     });
   }, skip: skipReason);
 }

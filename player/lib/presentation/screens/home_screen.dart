@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/cache/poster_cache_manager.dart';
+import '../../core/focus/focus_reveal_section.dart';
 import '../../core/graphql/watch/query_key.dart';
 import '../../core/player/best_file.dart';
 import '../../core/player/resume_plan.dart';
@@ -205,23 +206,28 @@ class HomeScreen extends ConsumerWidget {
                       if (data.continueWatching.isNotEmpty ||
                           data.recentlyAdded.isNotEmpty)
                         SliverToBoxAdapter(
-                          child: Builder(builder: (context) {
-                            if (data.continueWatching.isNotEmpty) {
-                              final item = data.continueWatching.first;
-                              return _HeroSection(
-                                item: item,
-                                onTap: () =>
-                                    _handleItemTap(context, item.id, item.type),
-                              );
-                            } else {
-                              final item = data.recentlyAdded.first;
-                              return _HeroSection(
-                                item: item,
-                                onTap: () =>
-                                    _handleItemTap(context, item.id, item.type),
-                              );
-                            }
-                          }),
+                          // UP from the first rail lands on the hero's
+                          // buttons, which sit at its bottom. On a television
+                          // this reveals the whole hero, not just the button.
+                          child: FocusRevealSection(
+                            child: Builder(builder: (context) {
+                              if (data.continueWatching.isNotEmpty) {
+                                final item = data.continueWatching.first;
+                                return _HeroSection(
+                                  item: item,
+                                  onTap: () => _handleItemTap(
+                                      context, item.id, item.type),
+                                );
+                              } else {
+                                final item = data.recentlyAdded.first;
+                                return _HeroSection(
+                                  item: item,
+                                  onTap: () => _handleItemTap(
+                                      context, item.id, item.type),
+                                );
+                              }
+                            }),
+                          ),
                         ),
 
                       // Content rails
