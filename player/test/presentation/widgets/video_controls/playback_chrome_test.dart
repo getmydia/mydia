@@ -2,9 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
+import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -454,6 +458,200 @@ void main() {
             'activity directly, since neither onEnter nor _show() fires',
       );
     });
+
+    test('auto-hide constants: 3 s by default, 5 s on the remote tier', () {
+      expect(ChromeVisibility.defaultAutoHide, const Duration(seconds: 3));
+      expect(ChromeVisibility.remoteAutoHide, const Duration(seconds: 5));
+      expect(
+        const ChromeVisibility(isPlaying: true, child: SizedBox()).autoHide,
+        ChromeVisibility.defaultAutoHide,
+      );
+    });
+
+    testWidgets(
+        'with restartOnKeyActivity, every key press restarts the countdown',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            restartOnKeyActivity: true,
+            autoHide: Duration(seconds: 5),
+            child: Text('chrome'),
+          ),
+        ),
+      );
+
+      // t=4: countdown now ends at t=9.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      // t=8: countdown now ends at t=13.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      // t=12.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(_opacity(tester), 1.0,
+          reason: 'a remote press must hold the chrome open');
+
+      // t=14: five seconds after the last press.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 0.0,
+          reason: 'the chrome must still hide once the presses stop');
+    });
+
+    testWidgets(
+        'a held key counts through its repeats, and releasing it does not '
+        'count', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            restartOnKeyActivity: true,
+            autoHide: Duration(seconds: 5),
+            child: Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(seconds: 4));
+      // t=4: the repeat moves the end of the countdown to t=9.
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(seconds: 4));
+      // t=8: a key-up must not move it again.
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(_opacity(tester), 1.0,
+          reason: 'the repeat at t=4 should have held the chrome to t=9');
+
+      // t=10: past t=9, and the key-up at t=8 did not extend it to t=13.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 0.0);
+    });
+
+    testWidgets('without restartOnKeyActivity, key presses change nothing',
+        (tester) async {
+      // Pins desktop and web: a keyboard press there does not hold the
+      // chrome open, exactly as before this flag existed.
+      await tester.pumpWidget(
+        _host(const ChromeVisibility(isPlaying: true, child: Text('chrome'))),
+      );
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 1500));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 0.0);
+    });
+
+    testWidgets('the key handler never reports a key as handled',
+        (tester) async {
+      // A handled key is not passed back to the platform, and on Android
+      // that includes BACK. keyQ has no default shortcut, so nothing else in
+      // this tree can claim it.
+      await tester.pumpWidget(
+        _host(
+          const ChromeVisibility(
+            isPlaying: true,
+            restartOnKeyActivity: true,
+            child: Text('chrome'),
+          ),
+        ),
+      );
+
+      final handled = await tester.sendKeyEvent(LogicalKeyboardKey.keyQ);
+      expect(handled, isFalse);
+    });
+
+    testWidgets('a press while hidden is not activity', (tester) async {
+      // Revealing is the player screen's job. The handler only extends a
+      // chrome that is already up.
+      final controller = ChromeVisibilityController();
+      addTearDown(controller.dispose);
+      var activity = 0;
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            controller: controller,
+            isPlaying: true,
+            restartOnKeyActivity: true,
+            onActivity: () => activity++,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      controller.hide();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyQ);
+      await tester.pump();
+
+      expect(activity, 0);
+      expect(controller.visible, isFalse);
+    });
+
+    testWidgets('stops listening to the keyboard once disposed',
+        (tester) async {
+      var activity = 0;
+      await tester.pumpWidget(
+        _host(
+          ChromeVisibility(
+            // Paused, so no countdown is pending when the tree is replaced.
+            isPlaying: false,
+            restartOnKeyActivity: true,
+            onActivity: () => activity++,
+            child: const Text('chrome'),
+          ),
+        ),
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyQ);
+      expect(activity, 1);
+
+      await tester.pumpWidget(_host(const Text('gone')));
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyQ);
+      expect(activity, 1,
+          reason: 'a disposed chrome must not leave a global key handler '
+              'behind');
+    });
+
+    testWidgets(
+        'does not auto-hide while a modal route is on top, and counts down '
+        'again once it closes', (tester) async {
+      // The subtitle, audio and quality pickers are sheets and dialogs over
+      // the player. Hiding underneath one strands focus on an invisible
+      // control once it closes, so the next OK reopens the picker.
+      await tester.pumpWidget(
+        _host(const ChromeVisibility(isPlaying: true, child: Text('chrome'))),
+      );
+
+      final context = tester.element(find.byType(ChromeVisibility));
+      unawaited(
+        showModalBottomSheet<void>(
+          context: context,
+          builder: (_) => const Text('picker'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 1.0,
+          reason: 'chrome hid underneath an open selector');
+
+      Navigator.of(context).pop();
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 1.0,
+          reason: 'closing the selector must not hide the chrome at once');
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 0.0,
+          reason: 'the countdown must start over once the selector closes');
+    });
   });
 
   group('ChromeSlide', () {
@@ -744,5 +942,45 @@ void main() {
         reason: 'double-tap is the only way to exit fullscreen',
       );
     });
+
+    group('off the remote tier', () {
+      testWidgets(
+          'Back, Cast, the volume controls and Fullscreen all render, on the '
+          'default auto-hide', (tester) async {
+        tester.view.physicalSize = const Size(1280, 720);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          _host(
+            PlaybackChrome(
+              player: player,
+              timeline: StreamTimeline.zero,
+              onSeekToReal: (_) async {},
+              onBack: () {},
+              castAction: const Icon(Icons.cast_rounded),
+              onCastTap: () {},
+              onFullscreenTap: () {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
+        expect(find.byKey(ChromeTopBar.castKey), findsOneWidget);
+        expect(find.byKey(VolumeSurface.muteKey), findsOneWidget);
+        expect(find.byKey(VolumeSurface.sliderKey), findsOneWidget);
+        expect(find.byKey(SecondaryCluster.fullscreenKey), findsOneWidget);
+
+        final visibility =
+            tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
+        expect(visibility.autoHide, ChromeVisibility.defaultAutoHide);
+        expect(visibility.restartOnKeyActivity, isFalse);
+      });
+    },
+        skip: InputCapabilities.directionalPrimary
+            ? 'covers the pointer and touch tiers; '
+                'playback_chrome_tv_test.dart covers the remote one'
+            : false);
   });
 }

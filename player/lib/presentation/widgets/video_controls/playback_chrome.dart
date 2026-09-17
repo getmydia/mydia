@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/input_capabilities.dart';
@@ -76,9 +77,11 @@ class ChromeVisibilityController extends ChangeNotifier {
 /// wraps it.
 ///
 /// Chrome hides only when all of these hold: playback is running, the user is
-/// not scrubbing, and the pointer is not resting over the chrome. That last
-/// condition fixes a real defect — previously the chrome would fade out from
-/// under a stationary cursor that was aiming at a button.
+/// not scrubbing, the pointer is not resting over the chrome, and no selector
+/// is open over the player. The pointer condition fixes a real defect:
+/// previously the chrome would fade out from under a stationary cursor that
+/// was aiming at a button. The selector condition keeps a remote viewer's
+/// focus from coming back to a control that hid while the selector was open.
 ///
 /// The pointer-left-the-window hide (below, in [build]) is gated on
 /// `!PlatformFeatures.isMobile`, i.e. it is live on Flutter web as well as
@@ -98,6 +101,22 @@ class ChromeVisibility extends StatefulWidget {
   final Widget child;
 
   final Duration autoHide;
+
+  /// How long the chrome stays up after the last activity while playing.
+  static const Duration defaultAutoHide = Duration(seconds: 3);
+
+  /// [autoHide] on the remote tier. A television is read from across the
+  /// room, and five seconds matches the default of Android TV's own ExoPlayer
+  /// controller.
+  static const Duration remoteAutoHide = Duration(seconds: 5);
+
+  /// Whether every key press restarts the [autoHide] countdown while the
+  /// chrome is shown.
+  ///
+  /// Off by default. `PlaybackChrome` turns it on for the remote tier, where
+  /// key presses are the only activity there is: moving between controls and
+  /// pressing OK on one would otherwise let the chrome hide mid-navigation.
+  final bool restartOnKeyActivity;
 
   /// Toggles fullscreen on a background double-click. Null by default.
   ///
@@ -130,7 +149,8 @@ class ChromeVisibility extends StatefulWidget {
     required this.isPlaying,
     required this.child,
     this.isSeeking = false,
-    this.autoHide = const Duration(seconds: 3),
+    this.autoHide = ChromeVisibility.defaultAutoHide,
+    this.restartOnKeyActivity = false,
     this.onDoubleTap,
     this.onWindowDrag,
     this.onWindowButtonsHidden,
@@ -192,14 +212,12 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   /// changes.
   bool _pointerOverChrome = false;
 
-  /// Whether the player's own route is still the top one, sampled in [build].
+  /// Whether the player's own route is still the top one.
   ///
-  /// Read in [build] rather than in the exit handler on purpose:
-  /// `ModalRoute.of` registers an inherited-widget dependency, and
-  /// `_ModalScopeStatus.updateShouldNotify` compares `isCurrent`, so sampling
-  /// it here means this widget rebuilds when a selector opens or closes and
-  /// the flag stays accurate without calling into the element tree from a
-  /// pointer callback.
+  /// Sampled in [didChangeDependencies]: `ModalRoute.isCurrentOf` registers
+  /// an inherited-widget dependency on exactly this aspect, so this state is
+  /// told when a selector opens or closes, and neither the timer nor a
+  /// pointer callback has to call into the element tree. Part of [_mayHide].
   bool _routeIsCurrent = true;
 
   /// Authoritative shown/hidden intent. Deliberately **not** derived from
@@ -216,6 +234,9 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   void initState() {
     super.initState();
     widget.controller?._attach(this);
+    if (widget.restartOnKeyActivity) {
+      HardwareKeyboard.instance.addHandler(_onKeyActivity);
+    }
     _controller = AnimationController(
       vsync: this,
       value: 1.0,
@@ -246,6 +267,13 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
       old.controller?._detach(this);
       widget.controller?._attach(this);
     }
+    if (old.restartOnKeyActivity != widget.restartOnKeyActivity) {
+      if (widget.restartOnKeyActivity) {
+        HardwareKeyboard.instance.addHandler(_onKeyActivity);
+      } else {
+        HardwareKeyboard.instance.removeHandler(_onKeyActivity);
+      }
+    }
     if (old.isPlaying != widget.isPlaying ||
         old.isSeeking != widget.isSeeking) {
       if (widget.isPlaying && !widget.isSeeking) {
@@ -258,8 +286,22 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final wasCurrent = _routeIsCurrent;
+    _routeIsCurrent = ModalRoute.isCurrentOf(context) ?? true;
+    // A selector just closed. The countdown may have run out underneath it
+    // and done nothing, so start a fresh one rather than leaving the chrome
+    // up until the next input.
+    if (_routeIsCurrent && !wasCurrent) _restartTimer();
+  }
+
+  @override
   void dispose() {
     widget.controller?._detach(this);
+    if (widget.restartOnKeyActivity) {
+      HardwareKeyboard.instance.removeHandler(_onKeyActivity);
+    }
     _hideTimer?.cancel();
     _setWindowButtonsHidden(false);
     _curved.dispose();
@@ -268,7 +310,10 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   }
 
   bool get _mayHide =>
-      widget.isPlaying && !widget.isSeeking && !_pointerOverChrome;
+      widget.isPlaying &&
+      !widget.isSeeking &&
+      !_pointerOverChrome &&
+      _routeIsCurrent;
 
   void _restartTimer() {
     _hideTimer?.cancel();
@@ -276,6 +321,24 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     _hideTimer = Timer(widget.autoHide, () {
       if (mounted && _mayHide) _hide();
     });
+  }
+
+  /// Restarts the countdown on every key press while the chrome is shown.
+  ///
+  /// Registered on [HardwareKeyboard] rather than read from an ancestor
+  /// `Focus`, because OK on a focused control is consumed by that control's
+  /// own shortcuts and never bubbles up. A held key counts through its
+  /// [KeyRepeatEvent]s; a release does not. A press while hidden is left to
+  /// the player screen, which decides whether it reveals the chrome.
+  ///
+  /// Always returns false. This observes keys and never claims one: a key
+  /// reported as handled is not passed back to the platform, and on Android
+  /// that includes BACK.
+  bool _onKeyActivity(KeyEvent event) {
+    if (event is KeyUpEvent || !_visible) return false;
+    widget.onActivity?.call();
+    _restartTimer();
+    return false;
   }
 
   /// Resolves to the injected test callback, or the real native bridge.
@@ -307,8 +370,6 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
 
   @override
   Widget build(BuildContext context) {
-    _routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
-
     final content = ChromeAnimation(
       animation: _curved,
       child: FadeTransition(
@@ -381,14 +442,14 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
           // pointer-over-chrome invariants. The 250ms reverse fade still
           // runs; "immediately" refers to the timer, not the animation.
           //
-          // `_routeIsCurrent` keeps an open selector from hiding the chrome
-          // underneath itself, which would leave it gone after dismissal
-          // until the mouse moved again.
+          // `_mayHide` includes `_routeIsCurrent`, which keeps an open
+          // selector from hiding the chrome underneath itself; that would
+          // leave it gone after dismissal until the mouse moved again.
           //
           // `mounted` is checked because a test's `gesture.removePointer`
           // teardown, and a real window close, both synthesise an exit that
           // can arrive while this State is being torn down.
-          if (mounted && _routeIsCurrent && _mayHide) _hide();
+          if (mounted && _mayHide) _hide();
         },
         child: stack,
       );
@@ -579,6 +640,13 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       touchPrimary: InputCapabilities.touchPrimary,
     );
 
+    // A remote has its own BACK key and volume control, a television is a
+    // cast target rather than a sender, and an Android TV app is always
+    // fullscreen, so none of those controls earns a focus stop here. Key
+    // presses are also the only activity this tier produces, which is what
+    // the auto-hide settings below account for.
+    final remote = InputCapabilities.directionalPrimary;
+
     return StreamBuilder<bool>(
       stream: widget.player.stream.playing,
       initialData: widget.player.state.playing,
@@ -590,6 +658,10 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
               controller: widget.chromeVisibility,
               isPlaying: snapshot.data ?? false,
               isSeeking: _seeking,
+              autoHide: remote
+                  ? ChromeVisibility.remoteAutoHide
+                  : ChromeVisibility.defaultAutoHide,
+              restartOnKeyActivity: remote,
               // Both gates live here, not inside ChromeVisibility, so widget
               // tests can construct that class with plain callbacks and get
               // deterministic behaviour regardless of the host platform.
@@ -614,9 +686,10 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                         hiddenOffsetY: -6,
                         child: ChromeTopBar(
                           title: widget.title,
+                          showBack: !remote,
                           onBack: widget.onBack,
-                          castAction: widget.castAction,
-                          onCastTap: widget.onCastTap,
+                          castAction: remote ? null : widget.castAction,
+                          onCastTap: remote ? null : widget.onCastTap,
                         ),
                       ),
                     ),
@@ -671,13 +744,19 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                               // this comment as "handled".
                               compact: metrics.compactTransport,
                             ),
-                            // Unconditional per ChromePanel's `volume`
-                            // dartdoc: it already gates visibility internally
-                            // via Visibility(maintainState: true), so
+                            // Null on the remote tier, which has no volume
+                            // control to show. Otherwise unconditional per
+                            // ChromePanel's `volume` dartdoc: it already gates
+                            // visibility internally via
+                            // Visibility(maintainState: true), so
                             // VolumeCluster's `_lastVolume` survives a
                             // breakpoint crossing only if it isn't also
-                            // rebuilt from scratch here.
-                            volume: VolumeCluster(player: widget.player),
+                            // rebuilt from scratch here. The tier itself never
+                            // changes at runtime, so the null branch loses no
+                            // state.
+                            volume: remote
+                                ? null
+                                : VolumeCluster(player: widget.player),
                             secondary: SecondaryCluster(
                               onSubtitleTap: widget.onSubtitleTap,
                               onAudioTap: widget.onAudioTap,
@@ -689,7 +768,8 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                               onQualityTap: metrics.showQuality
                                   ? widget.onQualityTap
                                   : null,
-                              onFullscreenTap: widget.onFullscreenTap,
+                              onFullscreenTap:
+                                  remote ? null : widget.onFullscreenTap,
                               onAlwaysOnTopTap: PlatformFeatures.isDesktop &&
                                       metrics.showAlwaysOnTop
                                   ? widget.onAlwaysOnTopTap

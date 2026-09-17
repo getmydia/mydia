@@ -157,10 +157,11 @@ Future<void> _mountPlayingScreen(WidgetTester tester) async {
 /// never happened.
 ///
 /// Generous budget: the screen's own start sequence has to finish before
-/// `isPlaying` is true, and only then does the 3s auto-hide timer start.
+/// `isPlaying` is true, and only then does the auto-hide timer start, which on
+/// this tier is `ChromeVisibility.remoteAutoHide`.
 Future<void> _waitForChromeToHide(WidgetTester tester) async {
-  await pumpUntil(tester, () => _chromeOpacity(tester) == 1.0, maxTries: 500);
-  await pumpUntil(tester, () => _chromeOpacity(tester) == 0.0, maxTries: 500);
+  await pumpUntil(tester, () => _chromeOpacity(tester) == 1.0, maxTries: 750);
+  await pumpUntil(tester, () => _chromeOpacity(tester) == 0.0, maxTries: 750);
 }
 
 void main() {
@@ -385,6 +386,80 @@ void main() {
         reason: 'OK over a visible but unfocused OSD must land on a control '
             'rather than doing nothing at all',
       );
+    });
+
+    testWidgets(
+        'D-pad presses keep the OSD up while playing, and it hides once '
+        'they stop', (tester) async {
+      // The reported defect: moving between OSD controls during playback,
+      // the OSD hid mid-navigation because arrow presses never restarted
+      // its countdown.
+      await _mountPlayingScreen(tester);
+      await _waitForChromeToHide(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'osd-play-pause');
+
+      // Twelve seconds of navigation, one press every three: well over the
+      // hide delay in total, never a gap as long as it. Alternating keeps
+      // focus moving without walking off the end of the row.
+      for (var i = 0; i < 4; i++) {
+        await tester.sendKeyEvent(i.isEven
+            ? LogicalKeyboardKey.arrowRight
+            : LogicalKeyboardKey.arrowLeft);
+        await tester.pump(const Duration(seconds: 3));
+        // A second frame: the hide's reverse fade does not reach 0.0 on the
+        // frame the timer fires, and the next arrow press would re-reveal the
+        // OSD anyway (LEFT/RIGHT seek while it is hidden, and seeking shows
+        // it), so without this the miss is invisible to the assertion.
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(
+          _chromeOpacity(tester),
+          1.0,
+          reason: 'the OSD hid while the viewer was moving between its '
+              'controls (after press ${i + 1})',
+        );
+      }
+
+      await _waitForChromeToHide(tester);
+      expect(_chromeOpacity(tester), 0.0);
+    });
+
+    testWidgets('repeated OK on a focused control keeps the OSD up',
+        (tester) async {
+      // OK on a focused control is consumed by that control and never
+      // reaches the screen's key handler, so only a keyboard-level listener
+      // can see it.
+      await _mountPlayingScreen(tester);
+      await _waitForChromeToHide(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      // Must be +10 s, not play/pause: pausing would hold the OSD open by
+      // itself and this test would pass for the wrong reason.
+      final focusedButton = FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<ControlButton>();
+      expect(focusedButton?.key, TransportSurface.forward10Key);
+
+      for (var i = 0; i < 4; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump(const Duration(seconds: 3));
+        // A second frame: the hide's reverse fade does not reach 0.0 on the
+        // frame the timer fires. Unlike the D-pad test there is no seek to
+        // re-reveal the OSD in between OK presses, so this is only about
+        // giving a real hide time to paint before the assertion reads it.
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(
+          _chromeOpacity(tester),
+          1.0,
+          reason: 'the OSD hid while the viewer kept pressing OK '
+              '(after press ${i + 1})',
+        );
+      }
     });
   }, skip: skipReason);
 }
