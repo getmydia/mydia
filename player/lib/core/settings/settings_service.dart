@@ -19,6 +19,7 @@ class SettingsService {
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
   static const _librarySortKeyPrefix = 'library_sort_';
   static const _crashReportingEnabledKey = 'crash_reporting_enabled';
+  static const _calendarViewModeKey = 'calendar_view_mode';
 
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
@@ -74,6 +75,19 @@ class SettingsService {
     await _storage.write('$_librarySortKeyPrefix$libraryKey', encoded);
   }
 
+  /// Get the remembered calendar layout, as its stored string.
+  ///
+  /// Returns null when nothing has been stored yet; decoding, including the
+  /// default, belongs to the caller.
+  Future<String?> getCalendarViewMode() async {
+    return _storage.read(_calendarViewModeKey);
+  }
+
+  /// Set the remembered calendar layout, as its stored string.
+  Future<void> setCalendarViewMode(String mode) async {
+    await _storage.write(_calendarViewModeKey, mode);
+  }
+
   /// Clear all settings.
   Future<void> clearSettings() async {
     await Future.wait([
@@ -81,6 +95,7 @@ class SettingsService {
       _storage.delete(_autoSkipSegmentsKey),
       _storage.delete('${_librarySortKeyPrefix}movies'),
       _storage.delete('${_librarySortKeyPrefix}tvShows'),
+      _storage.delete(_calendarViewModeKey),
     ]);
   }
 }
