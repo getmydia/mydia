@@ -57,17 +57,23 @@ jobs:
         run: ./scripts/ios-refresh-due.sh >> "$GITHUB_OUTPUT"
 
       # A refresh rebuilds a marketing version App Store Connect already holds,
-      # and Apple rejects a reused build number for it. The refresh slots in
-      # scripts/build-number.sh exist for exactly this: +refresh.N lands at
-      # 900+N, just above the original stable at 900.
+      # and Apple rejects a reused build number for it. The slot comes from
+      # this workflow's own run number rather than from counting ios-refresh/*
+      # markers, so it never depends on the marker push below landing: it
+      # survives exactly the failure the `mark` job's comments describe
+      # (upload succeeds, marker push fails, and a marker-derived count would
+      # then recompute the same number and get rejected by Apple every week
+      # after). Two refreshes of one marketing version are at least 60 days,
+      # and therefore many scheduled runs, apart, so run_number mod 99 does
+      # not repeat between them within that window.
       - name: Compute the refresh build number
         id: build_number
         env:
           VERSION: ${{ steps.due.outputs.version }}
-          REFRESH_COUNT: ${{ steps.due.outputs.refresh_count }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
-          echo "version_code=$(./scripts/build-number.sh "${VERSION}+refresh.$(( REFRESH_COUNT + 1 ))")" >> "$GITHUB_OUTPUT"
+          echo "version_code=$(./scripts/build-number.sh "${VERSION}+refresh.$(( RUN_NUMBER % 99 + 1 ))")" >> "$GITHUB_OUTPUT"
 
       # The same notes testers already saw for this release. Computed here
       # rather than in the build, for the same reason release.yml computes them
