@@ -21,8 +21,6 @@ defmodule Mydia.Plugins.DeviceFlow do
     * `:allow_private` / `:resolver` - gate test seams (never set in production)
   """
 
-  require Logger
-
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Net.Gate
 

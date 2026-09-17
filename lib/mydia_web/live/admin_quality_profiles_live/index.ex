@@ -5,7 +5,6 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
   alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
 
-  require Logger
   alias Mydia.Logger, as: MydiaLogger
 
   @impl true

@@ -33,8 +33,6 @@ defmodule MydiaWeb.Live.ErrorHandler do
 
   alias Mydia.Logger, as: MydiaLogger
 
-  require Logger
-
   @doc """
   Wraps a potentially failing operation with error handling.
 

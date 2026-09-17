@@ -13,8 +13,6 @@ defmodule Mydia.Media.Add do
   network work outside a database transaction and the insert inside one.
   """
 
-  require Logger
-
   alias Mydia.Media
   alias Mydia.Media.ExternalIds
   alias Mydia.Metadata

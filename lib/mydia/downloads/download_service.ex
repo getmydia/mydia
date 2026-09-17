@@ -15,8 +15,6 @@ defmodule Mydia.Downloads.DownloadService do
   - `{:error, :job_not_found}` - Transcode job not found
   """
 
-  require Logger
-
   alias Mydia.Library
   alias Mydia.Media
   alias Mydia.Downloads
