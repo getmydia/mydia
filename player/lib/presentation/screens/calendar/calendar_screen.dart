@@ -7,23 +7,9 @@ import '../../../core/graphql/watch/schema_downgrade.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/calendar_entry.dart';
 import '../../widgets/browse_scaffold.dart';
+import 'calendar_agenda_view.dart';
 import 'calendar_controller.dart';
-import 'calendar_dates.dart';
-import 'calendar_row.dart';
-
-/// Index of the first day on or after [today], or null when every day is past.
-///
-/// Not simply "the group whose date is today": today may have no entries at
-/// all, and the calendar still has to open somewhere sensible. The first
-/// upcoming day is that place.
-int? indexOfToday(List<DateTime> days, DateTime today) {
-  final midnight = truncateToDay(today);
-
-  for (var i = 0; i < days.length; i++) {
-    if (!days[i].isBefore(midnight)) return i;
-  }
-  return null;
-}
+import 'calendar_today_requests.dart';
 
 /// Whether [error] is this server saying it has no calendar query.
 ///
@@ -45,56 +31,13 @@ class CalendarScreen extends ConsumerStatefulWidget {
 }
 
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
-  final ScrollController _scrollController = ScrollController();
-
-  /// Attached to the first day section on or after today.
-  ///
-  /// A key rather than an offset because day sections have no fixed height:
-  /// each holds a different number of rows, so there is no arithmetic that
-  /// turns an index into a scroll position. `Scrollable.ensureVisible` asks
-  /// the laid-out element where it actually is.
-  final GlobalKey _todayKey = GlobalKey();
-
-  /// Whether the one-time jump to today has already happened.
-  ///
-  /// The stream rebuilds on every refetch and cache write, and re-jumping on
-  /// each of those would yank the list out from under someone who had
-  /// scrolled away.
-  bool _jumped = false;
+  /// Pinged by the Today button. Whichever view is showing listens.
+  final CalendarTodayRequests _todayRequests = CalendarTodayRequests();
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _todayRequests.dispose();
     super.dispose();
-  }
-
-  /// Puts today's section at the top of the viewport.
-  ///
-  /// `alignment: 0` pins it to the leading edge rather than merely bringing it
-  /// into view, so past entries sit above the fold where they belong.
-  Future<void> _scrollToToday() async {
-    final context = _todayKey.currentContext;
-    if (context == null) return;
-
-    await Scrollable.ensureVisible(
-      context,
-      alignment: 0,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-    );
-  }
-
-  /// Jumps to today once, after the first frame that has laid the list out.
-  void _jumpToTodayOnce() {
-    if (_jumped) return;
-    _jumped = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final context = _todayKey.currentContext;
-      if (context == null) return;
-      Scrollable.ensureVisible(context, alignment: 0);
-    });
   }
 
   @override
@@ -109,7 +52,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       onRefresh: () => ref.read(calendarControllerProvider.notifier).refresh(),
       actions: [
         TextButton(
-          onPressed: _scrollToToday,
+          onPressed: _todayRequests.request,
           child: const Text('Today'),
         ),
       ],
@@ -130,60 +73,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       return _empty(scrollTopPadding);
     }
 
-    final groups = groupByDay(entries);
-    final todayIndex = indexOfToday(groups.map((g) => g.key).toList(), today);
-
-    _jumpToTodayOnce();
-
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        // A spacer sliver, not SliverPadding: SliverPadding with no `sliver`
-        // child renders nothing at all, so the glass bar would overlap the
-        // first rows.
-        SliverToBoxAdapter(child: SizedBox(height: scrollTopPadding)),
-        for (final (index, group) in groups.indexed)
-          // SliverMainAxisGroup scopes the pinned header to its own group, so
-          // each date header sticks only while its own rows are on screen and
-          // is then pushed off by the next one. A bare pinned
-          // SliverPersistentHeader would pin all of them at once and stack
-          // every date at the top of the viewport.
-          SliverMainAxisGroup(
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _DayHeaderDelegate(
-                  headerKey: index == todayIndex ? _todayKey : null,
-                  label: formatDayHeader(group.key, today),
-                  isToday: isSameDay(group.key, today),
-                  dayKey: ValueKey(
-                    'calendar-day-${isoDate(group.key)}',
-                  ),
-                ),
-              ),
-              SliverList.builder(
-                itemCount: group.value.length,
-                itemBuilder: (context, itemIndex) {
-                  final entry = group.value[itemIndex];
-                  return CalendarRow(
-                    key: ValueKey('calendar-entry-${entry.id}'),
-                    entry: entry,
-                    today: today,
-                  );
-                },
-              ),
-            ],
-          ),
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 28, 16, 40),
-            child: Text(
-              'That is everything scheduled in the next 90 days.',
-              style: TextStyle(fontSize: 12, color: AppColors.textDisabled),
-            ),
-          ),
-        ),
-      ],
+    return CalendarAgendaView(
+      entries: entries,
+      today: today,
+      scrollTopPadding: scrollTopPadding,
+      todayRequests: _todayRequests,
     );
   }
 
@@ -257,60 +151,4 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       ),
     );
   }
-}
-
-class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _DayHeaderDelegate({
-    required this.label,
-    required this.isToday,
-    required this.dayKey,
-    this.headerKey,
-  });
-
-  final String label;
-  final bool isToday;
-  final Key dayKey;
-
-  /// Carried onto the rendered header so `Scrollable.ensureVisible` has an
-  /// element to target. Only the today header receives one.
-  final Key? headerKey;
-
-  static const double _height = 38;
-
-  @override
-  double get minExtent => _height;
-
-  @override
-  double get maxExtent => _height;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return Container(
-      key: headerKey,
-      height: _height,
-      // Opaque, or the rows scrolling underneath a pinned header show through.
-      color: AppColors.background,
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: Text(
-        label,
-        key: dayKey,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: isToday ? AppColors.primary : AppColors.textSecondary,
-        ),
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(_DayHeaderDelegate oldDelegate) =>
-      oldDelegate.label != label ||
-      oldDelegate.isToday != isToday ||
-      oldDelegate.headerKey != headerKey;
 }
