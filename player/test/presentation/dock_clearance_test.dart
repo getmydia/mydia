@@ -5,11 +5,44 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/layout/dock_insets.dart';
+import 'package:player/domain/models/calendar_entry.dart';
+import 'package:player/presentation/screens/calendar/calendar_controller.dart';
+import 'package:player/presentation/screens/calendar/calendar_screen.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 
 import '../test_utils/dock_harness.dart';
 import 'screens/library/library_screen_layout_test.dart' show pumpLibrary;
+
+/// The real `AuthStateNotifier` reads secure storage on build. The calendar's
+/// `FreshnessHeader` watches it, so the calendar test needs this stub.
+class _StubAuthState extends AuthStateNotifier {
+  @override
+  AsyncValue<AuthStatus> build() =>
+      const AsyncValue.data(AuthStatus.authenticated);
+}
+
+/// Thirty episodes over ten days from today: far more than 800px of rows, so
+/// the footer starts well below the fold.
+class _FixedCalendarController extends CalendarController {
+  @override
+  Stream<List<CalendarEntry>> build() {
+    final today = DateTime.now();
+    return Stream.value([
+      for (var i = 0; i < 30; i++)
+        CalendarEntry(
+          id: 'e$i',
+          kind: CalendarEntryKind.episode,
+          airDate: DateTime(today.year, today.month, today.day + i ~/ 3),
+          title: 'Episode $i',
+          mediaItemId: '7',
+          mediaItemTitle: 'The Lantern Keepers',
+        ),
+    ]);
+  }
+}
 
 void main() {
   // LibraryScreen awaits LibrarySortController before it queries, and that
@@ -84,6 +117,36 @@ void main() {
       await tester.pumpAndSettle();
 
       expectClearsDock(tester, find.byType(MediaPoster).last);
+    });
+  });
+
+  group('calendar', () {
+    testWidgets('scrolls its closing footer clear of the dock', (tester) async {
+      // Same 600-wide mobile layout and 34px home indicator as above.
+      tester.view.physicalSize = const Size(600, 800);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authStateProvider.overrideWith(_StubAuthState.new),
+            calendarControllerProvider
+                .overrideWith(_FixedCalendarController.new),
+          ],
+          child: shellHarness(child: const CalendarScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -20000));
+      await tester.pumpAndSettle();
+
+      expectClearsDock(
+        tester,
+        find.text('That is everything scheduled in the next 90 days.'),
+      );
     });
   });
 }
