@@ -10,6 +10,8 @@ import '../../widgets/browse_scaffold.dart';
 import 'calendar_agenda_view.dart';
 import 'calendar_controller.dart';
 import 'calendar_today_requests.dart';
+import 'calendar_view_mode.dart';
+import 'calendar_week_view.dart';
 
 /// Whether [error] is this server saying it has no calendar query.
 ///
@@ -44,6 +46,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   Widget build(BuildContext context) {
     final today = DateTime.now();
     final data = ref.watch(calendarControllerProvider);
+    // Null until storage answers. The body waits for it rather than mounting
+    // the default view and swapping, which would flash.
+    final mode = ref.watch(calendarViewModeControllerProvider).value;
 
     return BrowseScaffold(
       icon: Icons.calendar_month_outlined,
@@ -51,21 +56,41 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       queryKeys: [QueryKeys.calendar],
       onRefresh: () => ref.read(calendarControllerProvider.notifier).refresh(),
       actions: [
+        if (mode != null) _viewToggle(mode),
         TextButton(
           onPressed: _todayRequests.request,
           child: const Text('Today'),
         ),
       ],
-      body: (context, scrollTopPadding) => switch (data) {
-        AsyncData(:final value) => _body(value, today, scrollTopPadding),
-        AsyncError(:final error) => _error(error, scrollTopPadding),
+      body: (context, scrollTopPadding) => switch ((data, mode)) {
+        (AsyncData(:final value), final CalendarViewMode loadedMode) =>
+          _body(value, loadedMode, today, scrollTopPadding),
+        (AsyncError(:final error), _) => _error(error, scrollTopPadding),
         _ => const Center(child: CircularProgressIndicator()),
       },
     );
   }
 
+  /// Shows the icon of the view it switches to, like a two-state tab.
+  Widget _viewToggle(CalendarViewMode mode) {
+    final showingWeek = mode == CalendarViewMode.week;
+
+    return IconButton(
+      key: const ValueKey('calendar-view-toggle'),
+      tooltip: showingWeek ? 'Agenda view' : 'Week view',
+      icon: Icon(
+        showingWeek ? Icons.view_agenda_outlined : Icons.view_week_outlined,
+      ),
+      onPressed: () =>
+          ref.read(calendarViewModeControllerProvider.notifier).select(
+                showingWeek ? CalendarViewMode.agenda : CalendarViewMode.week,
+              ),
+    );
+  }
+
   Widget _body(
     List<CalendarEntry> entries,
+    CalendarViewMode mode,
     DateTime today,
     double scrollTopPadding,
   ) {
@@ -73,12 +98,20 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       return _empty(scrollTopPadding);
     }
 
-    return CalendarAgendaView(
-      entries: entries,
-      today: today,
-      scrollTopPadding: scrollTopPadding,
-      todayRequests: _todayRequests,
-    );
+    return switch (mode) {
+      CalendarViewMode.week => CalendarWeekView(
+          entries: entries,
+          today: today,
+          scrollTopPadding: scrollTopPadding,
+          todayRequests: _todayRequests,
+        ),
+      CalendarViewMode.agenda => CalendarAgendaView(
+          entries: entries,
+          today: today,
+          scrollTopPadding: scrollTopPadding,
+          todayRequests: _todayRequests,
+        ),
+    };
   }
 
   Widget _empty(double scrollTopPadding) {
