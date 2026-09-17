@@ -695,9 +695,11 @@ defmodule Mydia.Collections.SmartRules do
   defp do_apply_sort(query, "rating", direction) do
     json_val = json_extract_numeric(:metadata, "$.vote_average")
 
+    # The pinned value is an %Ecto.Query.DynamicExpr{}, so it pins as the whole
+    # order_by list. In the field position, OrderBy.field!/2 rejects it.
     case direction do
-      "asc" -> order_by(query, [m], asc: ^json_val)
-      "desc" -> order_by(query, [m], desc: ^json_val)
+      "asc" -> order_by(query, ^[asc: json_val])
+      "desc" -> order_by(query, ^[desc: json_val])
     end
   end
 
