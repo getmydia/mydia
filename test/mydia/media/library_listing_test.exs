@@ -244,6 +244,54 @@ defmodule Mydia.Media.LibraryListingTest do
       assert titles(page(user, sort_by: "not_a_sort")) == by_title
     end
 
+    test "size sorts by bytes on disk, with empty items last in both directions", %{user: user} do
+      big = media_item_fixture(%{title: "Harrowgate Bell"})
+      media_file_fixture(%{media_item_id: big.id, size: 40_000_000_000})
+
+      small = media_item_fixture(%{title: "Tin Orchard"})
+      media_file_fixture(%{media_item_id: small.id, size: 700_000_000})
+
+      media_item_fixture(%{title: "Nightjar Protocol"})
+
+      assert titles(page(user, sort_by: "size_desc")) ==
+               ["Harrowgate Bell", "Tin Orchard", "Nightjar Protocol"]
+
+      # Ascending shows the smallest file you actually have, not a wall of
+      # things you do not have.
+      assert titles(page(user, sort_by: "size_asc")) ==
+               ["Tin Orchard", "Harrowgate Bell", "Nightjar Protocol"]
+    end
+
+    test "size sums every version file on a show", %{user: user} do
+      heavy = media_item_fixture(%{type: "tv_show", title: "Coldwater Signal"})
+      first = episode_fixture(%{media_item_id: heavy.id})
+      second = episode_fixture(%{media_item_id: heavy.id})
+      media_file_fixture(%{episode_id: first.id, size: 3_000_000_000})
+      media_file_fixture(%{episode_id: second.id, size: 3_000_000_000})
+
+      light = media_item_fixture(%{type: "tv_show", title: "Paper Anchorage"})
+      only = episode_fixture(%{media_item_id: light.id})
+      media_file_fixture(%{episode_id: only.id, size: 4_000_000_000})
+
+      assert titles(page(user, type: "tv_show", sort_by: "size_desc")) ==
+               ["Coldwater Signal", "Paper Anchorage"]
+    end
+
+    test "size ties keep their incoming order in both directions", %{user: user} do
+      # Equal sizes must not reshuffle between requests: page/1 re-sorts the
+      # whole list per request, so an unstable tie group duplicates and skips
+      # rows during infinite scroll.
+      for title <- ["Alder Road", "Bellwether Lane", "Cobalt Ferry"] do
+        item = media_item_fixture(%{title: title})
+        media_file_fixture(%{media_item_id: item.id, size: 1_000_000_000})
+      end
+
+      by_title = ["Alder Road", "Bellwether Lane", "Cobalt Ferry"]
+
+      assert titles(page(user, sort_by: "size_desc")) == by_title
+      assert titles(page(user, sort_by: "size_asc")) == by_title
+    end
+
     test "air date and episode count sorts", %{user: user} do
       today = Date.utc_today()
       media_item_fixture(%{type: "tv_show", title: "Quiet Meridian"})

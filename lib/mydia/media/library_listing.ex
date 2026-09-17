@@ -333,6 +333,9 @@ defmodule Mydia.Media.LibraryListing do
   defp sort(rows, "rating_asc"), do: Enum.sort_by(rows, &rating/1, :asc)
   defp sort(rows, "rating_desc"), do: Enum.sort_by(rows, &rating/1, :desc)
 
+  defp sort(rows, "size_desc"), do: sort_by_size(rows, :desc)
+  defp sort(rows, "size_asc"), do: sort_by_size(rows, :asc)
+
   defp sort(rows, "last_aired_asc"),
     do: Enum.sort_by(rows, &(&1.last_air_date || @never_aired), {:asc, Date})
 
@@ -370,5 +373,17 @@ defmodule Mydia.Media.LibraryListing do
       &(Map.get(added_at, &1.id) || &1.item.inserted_at),
       {direction, DateTime}
     )
+  end
+
+  # A row with nothing on disk has no size to compare, so it sorts last in
+  # both directions, the same rule MediaSort states for unknown keys. Sorting
+  # it as 0 would make "Size (Smallest)" a list of things you do not have.
+  #
+  # Enum.split_with/2 and Enum.sort_by/3 are both stable, so ties and the
+  # unsized tail keep their incoming order and the sort stays total.
+  defp sort_by_size(rows, direction) do
+    {sized, unsized} = Enum.split_with(rows, &(&1.total_size > 0))
+
+    Enum.sort_by(sized, & &1.total_size, direction) ++ unsized
   end
 end
