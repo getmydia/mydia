@@ -70,6 +70,12 @@ defmodule Mydia.Collections.Collection do
     field :sidebar_icon, :string
     field :exclusive, :boolean, default: false
 
+    # Derived for display, never persisted. CollectionLive.Index populates
+    # these per row; declaring them keeps the decorated value a real
+    # Collection struct instead of a struct carrying undeclared keys.
+    field :item_count, :integer, virtual: true
+    field :poster_paths, {:array, :string}, virtual: true
+
     belongs_to :user, Mydia.Accounts.User
     has_many :collection_items, Mydia.Collections.CollectionItem
 

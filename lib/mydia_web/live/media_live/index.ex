@@ -533,7 +533,7 @@ defmodule MydiaWeb.MediaLive.Index do
     # Add item counts for each collection
     user_collections_with_counts =
       Enum.map(user_collections, fn collection ->
-        Map.put(collection, :item_count, Collections.item_count(collection))
+        %{collection | item_count: Collections.item_count(collection)}
       end)
 
     {:noreply,
