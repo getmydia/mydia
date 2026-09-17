@@ -90,10 +90,10 @@ jobs:
             #
             # The dev.N suffix is what scripts/build-number.sh accepts;
             # `dryrun.N` is not one of its recognised suffixes, and the
-            # modulo keeps it inside the dev band's 0..499 range no matter
+            # modulo keeps it inside the dev band's 0..299 range no matter
             # how large run_number grows.
             TAG="(dry run)"
-            VERSION_NUM="0.0.0-dev.$(( RUN_NUMBER % 500 ))"
+            VERSION_NUM="0.0.0-dev.$(( RUN_NUMBER % 300 ))"
             IS_PRERELEASE=true
             SHA="$DISPATCH_SHA"
             echo "Dry run: building ${VERSION_NUM} from ${SHA}. Nothing will be pushed or published."
