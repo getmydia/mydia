@@ -11,32 +11,20 @@
  * whole feed over it would take stable updates down with it.
  */
 
-export const DEV_INDEX_URL = 'https://dl.mydia.dev/index.json'
+import { isWellFormedDevBuild } from './lib/releases-json.mjs'
 
-/**
- * True for an entry that has every field buildReleasesModel reads to place
- * and compare it: platform to select the track, build to compare against
- * whatever else is already held, file to build the download url. An entry
- * failing this (null, a bare string, an object missing one of those fields)
- * is dropped here rather than reaching the model, which only defends against
- * it a second time rather than trusting a shape check to have already run.
- */
-function isWellFormedBuild(entry) {
-  return (
-    typeof entry === 'object' &&
-    entry !== null &&
-    typeof entry.platform === 'string' &&
-    typeof entry.build === 'number' &&
-    typeof entry.file === 'string'
-  )
-}
+export const DEV_INDEX_URL = 'https://dl.mydia.dev/index.json'
 
 export function parseDevIndex(body) {
   if (!body) return []
   try {
     const parsed = JSON.parse(body)
     const builds = Array.isArray(parsed?.builds) ? parsed.builds : []
-    return builds.filter(isWellFormedBuild)
+    // Dropped here rather than left for the model to find: isWellFormedDevBuild
+    // lives in lib/releases-json.mjs and is imported, not reimplemented, so
+    // this filter and buildReleasesModel's own defense cannot drift apart on
+    // what "well-formed" means.
+    return builds.filter(isWellFormedDevBuild)
   } catch {
     return []
   }

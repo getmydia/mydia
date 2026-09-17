@@ -238,3 +238,18 @@ test('buildReleasesModel skips a malformed dev build rather than throwing', () =
   const model = buildReleasesModel([stable], [null, 'not-an-object', ...devBuilds])
   assert.equal(model.platforms.android.dev.version, '0.16.0-dev.7')
 })
+
+test('buildReleasesModel skips a dev build missing platform, build, or file', () => {
+  // Each case is otherwise well-formed, isolating exactly the field the
+  // model's guard must catch. Without it, a missing build installs an entry
+  // with no build number and a missing file installs a url ending in
+  // "undefined", rather than being dropped.
+  const wellFormed = devBuilds[0]
+  const missingPlatform = { ...wellFormed, platform: undefined }
+  const missingBuild = { ...wellFormed, build: undefined }
+  const missingFile = { ...wellFormed, file: undefined }
+
+  assert.equal(buildReleasesModel([], [missingPlatform]).platforms.android.dev, undefined)
+  assert.equal(buildReleasesModel([], [missingBuild]).platforms.android.dev, undefined)
+  assert.equal(buildReleasesModel([], [missingFile]).platforms.android.dev, undefined)
+})

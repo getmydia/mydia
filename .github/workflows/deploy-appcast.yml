@@ -163,21 +163,35 @@ jobs:
           digest() { jq -S -c '.platforms' "$1" | sha256sum | cut -d' ' -f1; }
           summary() { jq -c '.platforms | map_values(map_values(.build))' "$1"; }
 
+          # dist/releases.json is what this run just generated, so a parse
+          # failure here is a real bug and should stop the job, same as the
+          # local reads below have always done.
           local_digest=$(digest dist/releases.json)
           local_summary=$(summary dist/releases.json)
           echo "Expecting platforms digest ${local_digest} (builds: ${local_summary})."
 
           for attempt in 1 2 3 4 5 6; do
             if curl -fsSL --max-time 20 https://updates.mydia.dev/releases.json -o served.json; then
-              served_digest=$(digest served.json)
+              # The served file gets no such trust: a Pages deployment mid
+              # propagation can serve an HTML error page instead of JSON,
+              # which is exactly the case this retry loop exists to ride
+              # out. `jq empty` as a plain `if` condition is exempt from
+              # `set -e`/pipefail, so an unparseable response becomes a
+              # failed attempt that retries instead of a pipeline failure
+              # that kills the step before the error message below can print.
+              if ! jq empty served.json 2>/dev/null; then
+                echo "Attempt ${attempt}: served content was not valid JSON. Retrying."
+              else
+                served_digest=$(digest served.json)
 
-              if [ "$served_digest" = "$local_digest" ]; then
-                echo "updates.mydia.dev is serving the expected platforms content after ${attempt} attempt(s)."
-                exit 0
+                if [ "$served_digest" = "$local_digest" ]; then
+                  echo "updates.mydia.dev is serving the expected platforms content after ${attempt} attempt(s)."
+                  exit 0
+                fi
+
+                served_summary=$(summary served.json)
+                echo "Attempt ${attempt}: served digest ${served_digest} (builds: ${served_summary}), expecting ${local_digest} (builds: ${local_summary})."
               fi
-
-              served_summary=$(summary served.json)
-              echo "Attempt ${attempt}: served digest ${served_digest} (builds: ${served_summary}), expecting ${local_digest} (builds: ${local_summary})."
             else
               echo "Attempt ${attempt}: could not fetch the feed. Retrying."
             fi

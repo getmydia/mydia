@@ -143,6 +143,26 @@ function entryFromRelease(release, platform) {
   }
 }
 
+/**
+ * True for a value with every field buildReleasesModel and entryFromDevBuild
+ * read from it: platform to select the track, build to compare against
+ * whatever else is already held, file to build the download url. Shared by
+ * dev-builds.mjs, which filters the R2 index through this before anything
+ * reaches this module, and by buildReleasesModel's own loop below, which is
+ * also called directly (including by its own tests) with hand-built arrays
+ * that never pass through that filter. One implementation, so the two call
+ * sites cannot drift on what "well-formed" means.
+ */
+export function isWellFormedDevBuild(entry) {
+  return (
+    typeof entry === 'object' &&
+    entry !== null &&
+    typeof entry.platform === 'string' &&
+    typeof entry.build === 'number' &&
+    typeof entry.file === 'string'
+  )
+}
+
 function entryFromDevBuild(devBuild) {
   return {
     version: devBuild.version,
@@ -190,8 +210,9 @@ export function buildReleasesModel(releases, devBuilds) {
     // trusting that every caller routes through it: this function is also
     // called directly, including by its own tests, with hand-built arrays.
     // Without this, a null or non-object element throws reading .platform
-    // below and takes the whole run down over a single bad entry.
-    if (!devBuild || typeof devBuild !== 'object') continue
+    // below, and an object missing platform, build, or file would install
+    // an entry with no build number or a url ending in "undefined".
+    if (!isWellFormedDevBuild(devBuild)) continue
 
     const platform = devBuild.platform
     if (!PLATFORMS.includes(platform)) continue
