@@ -46,14 +46,51 @@ class RegionTraversalPolicy extends ReadingOrderTraversalPolicy {
   @override
   bool inDirection(FocusNode currentNode, TraversalDirection direction) {
     if (_rowEndsIn(currentNode, direction)) {
-      return onExit?.call(direction) ?? false;
+      return _exit(currentNode, direction);
     }
     // `@mustCallSuper` on the mixin, and it is the mixin that performs the
     // in-region move. When it reports true the move already happened inside
     // the region, which is the case that must not consult `onExit`. It is
     // skipped above only when focus is about to leave the region anyway.
     if (super.inDirection(currentNode, direction)) return true;
+    return _exit(currentNode, direction);
+  }
+
+  /// Both call sites in [inDirection] that would otherwise consult [onExit]
+  /// route through here instead, so the popup guard below cannot be left off
+  /// one of them by accident.
+  ///
+  /// A bottom sheet opened with `showModalBottomSheet` and a menu opened with
+  /// `showMenu` both default to `useRootNavigator: false`, so each attaches to
+  /// the nearest `Navigator`, which for every content-region screen is
+  /// go_router's shell navigator, delivered to `AppShell` as the routed child
+  /// and therefore sitting inside the content region's own `FocusScope`. That
+  /// makes the sheet's or menu's rows just more candidates this policy walks,
+  /// and when the modal's own list has nothing further in the pressed
+  /// direction, the checks above would hand the press to `onExit`, which moves
+  /// focus into the sidebar row behind the still-open modal. A D-pad press
+  /// must never move focus somewhere the viewer cannot see it went, so a node
+  /// sitting inside a popup route never reaches `onExit`: the press is left
+  /// dead inside the modal on purpose, which beats teleporting behind it.
+  bool _exit(FocusNode currentNode, TraversalDirection direction) {
+    if (_isInsidePopupRoute(currentNode)) return false;
     return onExit?.call(direction) ?? false;
+  }
+
+  /// Whether [node] sits inside a popup route rather than on the page itself.
+  ///
+  /// `ModalRoute.of` walks up from [node]'s `context` to the nearest route.
+  /// `PopupRoute` is the common supertype of `ModalBottomSheetRoute`, the
+  /// route `showMenu` pushes, and dialog routes, while a go_router shell
+  /// destination is a `PageRoute`. Checking against `PopupRoute` therefore
+  /// tells "a modal is open above the page" from "this is the page", without
+  /// naming any one sheet or menu type. Answers false, rather than throwing,
+  /// when the node has no context or its context is no longer mounted, since
+  /// there is then nothing to ask.
+  static bool _isInsidePopupRoute(FocusNode node) {
+    final context = node.context;
+    if (context == null || !context.mounted) return false;
+    return ModalRoute.of(context) is PopupRoute;
   }
 
   /// Whether a left or right move from the scope's focused node has no

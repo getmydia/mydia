@@ -5,6 +5,8 @@
 // cannot satisfy is offered to onExit, handled directions are not
 // re-dispatched, and a left or right move never leaves the focused node's row.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -309,5 +311,156 @@ void main() {
 
     expect(upper.hasFocus, isTrue);
     expect(calls, 0);
+  });
+
+  group('modal popup route guard', () {
+    // A single-column list of equal-width rows, the shape `LibrarySortSheet`
+    // and `showMediaContextMenu` both build: a `Material` holding a `Column`
+    // of same-width focusable rows.
+    Widget rowsPage(List<FocusNode> rows) => Material(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final row in rows)
+                Focus(
+                  focusNode: row,
+                  child: const SizedBox(width: 300, height: 48),
+                ),
+            ],
+          ),
+        );
+
+    // A region: a FocusTraversalGroup running [policy] around a FocusScope
+    // around a nested Navigator, the same shape `AppShell._region` builds
+    // around the content column. `onGenerateRoute` hosts the initial page,
+    // whose context is captured through [onPageBuilt] so a test can push a
+    // real modal route onto this same Navigator afterwards.
+    Widget region({
+      required RegionTraversalPolicy policy,
+      required FocusScopeNode regionScope,
+      required GlobalKey<NavigatorState> navigatorKey,
+      required void Function(BuildContext) onPageBuilt,
+    }) {
+      return MaterialApp(
+        home: FocusTraversalGroup(
+          policy: policy,
+          child: FocusScope(
+            node: regionScope,
+            child: Navigator(
+              key: navigatorKey,
+              onGenerateRoute: (settings) => MaterialPageRoute(
+                builder: (context) {
+                  onPageBuilt(context);
+                  return const SizedBox.expand();
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets(
+        'LEFT inside a real modal bottom sheet stays put and never reaches '
+        'onExit', (tester) async {
+      final seen = <TraversalDirection>[];
+      final policy = RegionTraversalPolicy(onExit: (direction) {
+        seen.add(direction);
+        return true;
+      });
+
+      final regionScope = FocusScopeNode(debugLabel: 'region');
+      final navigatorKey = GlobalKey<NavigatorState>();
+      final rowA = FocusNode(debugLabel: 'sheet-row-a');
+      final rowB = FocusNode(debugLabel: 'sheet-row-b');
+      addTearDown(regionScope.dispose);
+      addTearDown(rowA.dispose);
+      addTearDown(rowB.dispose);
+
+      late BuildContext pageContext;
+
+      await tester.pumpWidget(region(
+        policy: policy,
+        regionScope: regionScope,
+        navigatorKey: navigatorKey,
+        onPageBuilt: (context) => pageContext = context,
+      ));
+
+      // The real production shape: `showModalBottomSheet` with the default
+      // `useRootNavigator: false`, attaching to this nested Navigator, the
+      // one that lives inside the content region's own FocusScope, exactly
+      // as it does under `AppShell`.
+      unawaited(showModalBottomSheet<void>(
+        context: pageContext,
+        useRootNavigator: false,
+        builder: (context) => rowsPage([rowA, rowB]),
+      ));
+      await tester.pumpAndSettle();
+
+      rowB.requestFocus();
+      await tester.pump();
+      expect(rowB.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+
+      expect(seen, isEmpty,
+          reason:
+              'a press inside the still-open sheet must not reach the region '
+              'exit');
+      expect(rowB.hasFocus, isTrue);
+
+      // Close the sheet so its route (and the Future awaited above) settles
+      // before the test ends; otherwise the still-open sheet's pending
+      // navigation work outlives this test's FocusManager and taints the
+      // next test.
+      navigatorKey.currentState!.pop();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+        'LEFT on the region\'s own page, with no popup route above it, '
+        'still calls onExit', (tester) async {
+      final seen = <TraversalDirection>[];
+      final policy = RegionTraversalPolicy(onExit: (direction) {
+        seen.add(direction);
+        return true;
+      });
+
+      final regionScope = FocusScopeNode(debugLabel: 'region');
+      final navigatorKey = GlobalKey<NavigatorState>();
+      final rowA = FocusNode(debugLabel: 'page-row-a');
+      final rowB = FocusNode(debugLabel: 'page-row-b');
+      addTearDown(regionScope.dispose);
+      addTearDown(rowA.dispose);
+      addTearDown(rowB.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FocusTraversalGroup(
+            policy: policy,
+            child: FocusScope(
+              node: regionScope,
+              child: Navigator(
+                key: navigatorKey,
+                onGenerateRoute: (settings) => MaterialPageRoute(
+                  builder: (context) => rowsPage([rowA, rowB]),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      rowB.requestFocus();
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+
+      expect(seen, [TraversalDirection.left],
+          reason: 'the guard must not disable the ordinary sidebar handoff');
+    });
   });
 }
