@@ -42,6 +42,19 @@ export function buildNumber(version) {
     throw new Error(`unparseable version: ${version}`)
   }
 
+  // Mirrors scripts/build-number.sh's own magnitude guard: past these values
+  // the multiplication below overflows Android's versionCode ceiling, so
+  // reject here rather than silently return a number no device can install.
+  if (major > 209) {
+    throw new Error(`major above 209 overflows Android's versionCode ceiling: ${version}`)
+  }
+  if (minor > 99) {
+    throw new Error(`minor above 99 overflows its field: ${version}`)
+  }
+  if (patch > 99) {
+    throw new Error(`patch above 99 overflows its field: ${version}`)
+  }
+
   // Bands in semver maturity order, each with its own counter space so
   // beta.1 and rc.1 cannot land on the same number. The dot is optional in
   // dev/alpha/beta/rc because 36 existing tags predate it (v0.8.1-rc13,

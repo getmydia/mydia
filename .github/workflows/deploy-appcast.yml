@@ -79,6 +79,7 @@ jobs:
             echo
             echo "Items: $(grep -c '<item>' dist/appcast.xml)"
             echo "Beta items: $(grep -c '<sparkle:channel>beta</sparkle:channel>' dist/appcast.xml || true)"
+            echo "Platform/track entries in releases.json: $(jq '[.platforms[] | keys[]] | length' dist/releases.json)"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Require the Cloudflare token
@@ -138,5 +139,33 @@ jobs:
           done
 
           echo "::error::updates.mydia.dev did not serve $local_count item(s) with newest build $local_newest after 6 attempts."
+          echo "::error::Check the mydia-appcast Pages project, its production branch, and the updates.mydia.dev DNS record."
+          exit 1
+
+      - name: Verify the deployed releases feed
+        working-directory: scripts/appcast
+        run: |
+          set -euo pipefail
+          # Same reasoning as the appcast check above: a Pages preview
+          # deployment succeeds loudly while updates.mydia.dev serves the old
+          # file, so compare content rather than trusting the deploy's exit
+          # code. The stable Android build number is the discriminator; it
+          # moves on every release.
+          local_build=$(jq -r '.platforms.android.stable.build // "none"' dist/releases.json)
+          echo "Expecting Android stable build ${local_build}."
+
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSL --max-time 20 https://updates.mydia.dev/releases.json -o served.json; then
+              served_build=$(jq -r '.platforms.android.stable.build // "none"' served.json)
+              if [ "$served_build" = "$local_build" ]; then
+                echo "updates.mydia.dev is serving build ${served_build} after ${attempt} attempt(s)."
+                exit 0
+              fi
+              echo "Attempt ${attempt}: serving ${served_build}, waiting for ${local_build}."
+            fi
+            sleep 10
+          done
+
+          echo "::error::updates.mydia.dev did not serve releases.json with build ${local_build} after 6 attempts."
           echo "::error::Check the mydia-appcast Pages project, its production branch, and the updates.mydia.dev DNS record."
           exit 1

@@ -5,6 +5,12 @@ import { marked } from 'marked'
 
 import { buildItems, assertFeedInvariants } from './lib/build.mjs'
 import { renderFeed } from './lib/render.mjs'
+import {
+  buildReleasesModel,
+  renderReleasesJson,
+  assertReleasesInvariants,
+} from './lib/releases-json.mjs'
+import { fetchDevBuilds } from './dev-builds.mjs'
 
 // APPCAST_REPO is the explicit override for a manual run. GITHUB_REPOSITORY is
 // set by Actions and keeps a fork or a renamed repo from building a feed out of
@@ -12,6 +18,7 @@ import { renderFeed } from './lib/render.mjs'
 const REPO =
   process.env.APPCAST_REPO ?? process.env.GITHUB_REPOSITORY ?? 'getmydia/mydia'
 const OUTPUT = process.argv[2] ?? 'dist/appcast.xml'
+const RELEASES_OUTPUT = `${dirname(OUTPUT)}/releases.json`
 const USER_AGENT = 'mydia-appcast-generator'
 
 function apiHeaders() {
@@ -66,3 +73,22 @@ await writeFile(OUTPUT, renderFeed(items), 'utf8')
 
 const betaCount = items.filter((item) => item.prerelease).length
 console.log(`Wrote ${OUTPUT}: ${items.length} item(s), ${betaCount} on the beta channel.`)
+
+const devBuilds = await fetchDevBuilds()
+const releasesModel = buildReleasesModel(releases, devBuilds)
+
+// Same reason the appcast asserts before writing: a feed with no stable entry
+// reads to every client as "there are no releases".
+assertReleasesInvariants(releasesModel)
+
+await writeFile(
+  RELEASES_OUTPUT,
+  renderReleasesJson(releasesModel, new Date().toISOString()),
+  'utf8',
+)
+
+const trackCount = Object.values(releasesModel.platforms).reduce(
+  (total, tracks) => total + Object.keys(tracks).length,
+  0,
+)
+console.log(`Wrote ${RELEASES_OUTPUT}: ${trackCount} platform/track entr(ies).`)

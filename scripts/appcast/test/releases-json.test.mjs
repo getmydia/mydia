@@ -8,6 +8,7 @@ import {
   assertReleasesInvariants,
   buildNumber,
 } from '../lib/releases-json.mjs'
+import { parseDevIndex } from '../dev-builds.mjs'
 
 const asset = (name, size = 1024) => ({
   name,
@@ -136,6 +137,12 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
     '0.15.0-beta.199',
     '0.15.0-rc.199',
     '0.15.0+refresh.99',
+    // Boundary values for the major/minor/patch magnitude guard: the highest
+    // value each field accepts before it would overflow Android's
+    // versionCode ceiling.
+    '209.0.0',
+    '0.99.0',
+    '0.0.99',
   ]
 
   for (const version of accepted) {
@@ -158,6 +165,10 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
     '0.15.0-rc.200',
     '0.15.0+refresh.100',
     '0.15.0+refresh2',
+    // First value that overflows each of the major/minor/patch fields.
+    '210.0.0',
+    '0.100.0',
+    '0.0.100',
   ]
 
   for (const version of rejected) {
@@ -167,4 +178,28 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
     )
     assert.throws(() => buildNumber(version), `buildNumber should have rejected ${version}`)
   }
+})
+
+test('the dev index parses to a build list', () => {
+  const body = JSON.stringify({
+    builds: [
+      {
+        platform: 'android',
+        version: '0.16.0-dev.7',
+        build: 1600007,
+        file: 'android/x.apk',
+        size: 10,
+        sha256: 'abc',
+        published_at: '2026-09-15T08:00:00Z',
+      },
+    ],
+  })
+  assert.equal(parseDevIndex(body)[0].version, '0.16.0-dev.7')
+})
+
+test('a missing or broken dev index yields no dev builds', () => {
+  assert.deepEqual(parseDevIndex(null), [])
+  assert.deepEqual(parseDevIndex(''), [])
+  assert.deepEqual(parseDevIndex('not json'), [])
+  assert.deepEqual(parseDevIndex('{"builds":"nope"}'), [])
 })
