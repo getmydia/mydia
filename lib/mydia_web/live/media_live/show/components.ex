@@ -222,7 +222,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
             <div class="flex-1 min-w-0 text-left">
               <div class="text-xs text-base-content/50">Quality Profile</div>
               <div class="text-sm font-medium truncate">
-                <%= if @media_item.quality_profile do %>
+                <%= if Ecto.assoc_loaded?(@media_item.quality_profile) and @media_item.quality_profile do %>
                   {@media_item.quality_profile.name}
                 <% else %>
                   <span class="text-base-content/40">Not Set</span>
@@ -289,6 +289,19 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </div>
             </div>
           <% end %>
+
+          <%!-- Size on Disk --%>
+          <div id="hero-size-on-disk" class="flex items-center gap-2.5 px-2 py-1.5">
+            <div class="w-8 h-8 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
+              <.icon name="hero-circle-stack" class="w-4 h-4 text-info" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-xs text-base-content/50">Size on Disk</div>
+              <div class="text-sm font-medium font-mono">
+                {format_file_size(total_media_size(@media_item))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -437,6 +450,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </span>
               <span class="text-base-content/60">/</span>
               <span>{length(@media_item.episodes)} total</span>
+              <span class="text-base-content/60">•</span>
+              <span id="show-total-size" class="text-base-content/70 font-mono">
+                {format_file_size(total_media_size(@media_item))}
+              </span>
 
               <%!-- Standing rule, not an action. Independent of the presets
                     on purpose: "everything I have, but do not chase new
