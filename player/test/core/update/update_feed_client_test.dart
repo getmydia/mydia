@@ -115,4 +115,46 @@ void main() {
     expect(update.downloadSize, 68000000);
     expect(update.releaseNotesUrl, contains('releases/tag'));
   });
+
+  group('resolveSlug', () {
+    // Every flag defaults to false, so a test only has to name the host it
+    // is putting together. A reviewer swapped the macOS branch to return
+    // 'windows' by hand and every existing test still passed, because
+    // platformSlug() could only ever be exercised against whatever machine
+    // happened to run the suite.
+    String? slug({
+      bool isWeb = false,
+      bool isAndroid = false,
+      bool isWindows = false,
+      bool isLinux = false,
+      bool isMacOS = false,
+    }) =>
+        UpdateFeedClient.resolveSlug(
+          isWeb: isWeb,
+          isAndroid: isAndroid,
+          isWindows: isWindows,
+          isLinux: isLinux,
+          isMacOS: isMacOS,
+        );
+
+    test('each platform maps to its own slug', () {
+      expect(slug(isAndroid: true), 'android');
+      expect(slug(isWindows: true), 'windows');
+      expect(slug(isLinux: true), 'linux');
+      expect(slug(isMacOS: true), 'macos');
+    });
+
+    test('iOS maps to null', () {
+      // No isIOS flag exists: it is the one host with every other flag
+      // false, exactly like the real Platform.isX checks that never test it.
+      expect(slug(), isNull);
+    });
+
+    test('web maps to null even if a platform flag is also set', () {
+      // kIsWeb is checked first in the real callsite, so this pins that
+      // ordering: a stray isAndroid: true on a web build must not leak
+      // through.
+      expect(slug(isWeb: true, isAndroid: true), isNull);
+    });
+  });
 }

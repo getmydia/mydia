@@ -108,8 +108,75 @@ class VersionComparator {
     if (a.preRelease == null && b.preRelease != null) return 1;
     if (a.preRelease != null && b.preRelease == null) return -1;
 
-    // Both have pre-release — lexicographic compare
-    return a.preRelease!.compareTo(b.preRelease!);
+    return _comparePrerelease(a.preRelease!, b.preRelease!);
+  }
+
+  /// The maturity bands a prerelease suffix can start with, in ascending
+  /// order. Mirrors the BANDS table in scripts/appcast/lib/releases-json.mjs,
+  /// which is the ground truth: it is what assigns every build's build
+  /// number, including Android's versionCode, so an update comparison that
+  /// disagreed with this order could point a dev install backwards at a beta,
+  /// or offer a device nothing forever once its counter crossed a boundary
+  /// lexicographic comparison gets wrong ("dev.10" sorts before "dev.9").
+  ///
+  /// A leading identifier outside this list (which the feed's own generator
+  /// never produces; buildNumber() rejects anything else before publishing)
+  /// falls through to plain identifier comparison against the other side.
+  static const _prereleaseBands = ['dev', 'alpha', 'beta', 'rc'];
+
+  /// Compares two prerelease suffixes such as "dev.7", "beta.12" or the
+  /// legacy no-dot "rc13".
+  ///
+  /// Splits each into semver-style identifiers, ranks a leading identifier
+  /// that names a known band before falling back to comparing identifiers
+  /// pairwise (numerically when both are numeric, lexicographically
+  /// otherwise). Without the numeric branch, "9".compareTo("10") reads as
+  /// greater because it compares the leading digit, which is what silently
+  /// stopped dev and beta installs from ever seeing a double-digit build.
+  static int _comparePrerelease(String a, String b) {
+    final identifiersA = _splitPrereleaseIdentifiers(a);
+    final identifiersB = _splitPrereleaseIdentifiers(b);
+
+    final bandA = _prereleaseBands.indexOf(identifiersA.first);
+    final bandB = _prereleaseBands.indexOf(identifiersB.first);
+    if (bandA != -1 && bandB != -1 && bandA != bandB) {
+      return bandA.compareTo(bandB);
+    }
+
+    final shorter =
+        identifiersA.length < identifiersB.length ? identifiersA : identifiersB;
+    for (var i = 0; i < shorter.length; i++) {
+      final cmp = _compareIdentifier(identifiersA[i], identifiersB[i]);
+      if (cmp != 0) return cmp;
+    }
+    // A longer identifier list has an extra field beyond what the shorter one
+    // specifies, which semver treats as more specific, hence higher.
+    return identifiersA.length.compareTo(identifiersB.length);
+  }
+
+  /// Splits a prerelease suffix into semver identifiers: first on dots, then,
+  /// for a part with no dot to already separate it (the legacy forms this
+  /// repo's tags carry: "rc13", "beta2"), peeling a trailing run of digits off
+  /// its leading letters so "rc13" compares as "rc" then 13, not as one
+  /// string sitting between "rc1" and "rc2" lexicographically.
+  static List<String> _splitPrereleaseIdentifiers(String preRelease) {
+    final legacySuffix = RegExp(r'^([A-Za-z]+)(\d+)$');
+    return preRelease.split('.').expand((part) {
+      final match = legacySuffix.firstMatch(part);
+      return match == null ? [part] : [match.group(1)!, match.group(2)!];
+    }).toList();
+  }
+
+  /// Compares one semver identifier pair: numeric identifiers compare as
+  /// integers, everything else lexicographically. A numeric identifier sorts
+  /// below a non-numeric one when they differ in kind, per the semver spec.
+  static int _compareIdentifier(String a, String b) {
+    final numA = int.tryParse(a);
+    final numB = int.tryParse(b);
+    if (numA != null && numB != null) return numA.compareTo(numB);
+    if (numA != null) return -1;
+    if (numB != null) return 1;
+    return a.compareTo(b);
   }
 }
 

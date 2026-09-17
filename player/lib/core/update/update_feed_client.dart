@@ -1,7 +1,8 @@
 import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 
 import '../../domain/models/available_update.dart';
 import 'update_track.dart';
@@ -84,12 +85,33 @@ class UpdateFeedClient {
 
   /// The feed key for the running platform, or null where the player does not
   /// update itself (web, iOS).
-  static String? platformSlug() {
-    if (kIsWeb) return null;
-    if (Platform.isAndroid) return 'android';
-    if (Platform.isWindows) return 'windows';
-    if (Platform.isLinux) return 'linux';
-    if (Platform.isMacOS) return 'macos';
+  static String? platformSlug() => resolveSlug(
+        isWeb: kIsWeb,
+        isAndroid: !kIsWeb && Platform.isAndroid,
+        isWindows: !kIsWeb && Platform.isWindows,
+        isLinux: !kIsWeb && Platform.isLinux,
+        isMacOS: !kIsWeb && Platform.isMacOS,
+      );
+
+  /// The mapping itself, separated from the platform lookups so every branch
+  /// is reachable from one test host. Mirrors the split UpdateHost.from and
+  /// InstallEnvironment.resolve already use for the same problem: a platform
+  /// swap here has nothing exercising it, since [platformSlug] previously
+  /// could only ever be called against whatever machine happened to run the
+  /// test.
+  @visibleForTesting
+  static String? resolveSlug({
+    required bool isWeb,
+    required bool isAndroid,
+    required bool isWindows,
+    required bool isLinux,
+    required bool isMacOS,
+  }) {
+    if (isWeb) return null;
+    if (isAndroid) return 'android';
+    if (isWindows) return 'windows';
+    if (isLinux) return 'linux';
+    if (isMacOS) return 'macos';
     return null;
   }
 
