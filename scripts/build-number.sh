@@ -5,10 +5,14 @@
 #
 #   build = major*10_000_000 + minor*100_000 + patch*1_000 + slot
 #
-#   slot:  dev.N          -> N          (0..499)
-#          beta.M, rc.M   -> 500 + M    (500..899)
+#   slot:  dev.N          -> N          (0..299)
+#          alpha.M        -> 300 + M    (300..499)
+#          beta.M         -> 500 + M    (500..699)
+#          rc.M           -> 700 + M    (700..899)
 #          stable         -> 900
 #          +refresh.N     -> 900 + N    (901..999)
+#
+#   The dot is optional in prerelease suffixes: rc13 parses as rc.13.
 #
 # Every workflow that mints a build number calls this, so the ordering holds
 # across them. Android refuses an install whose versionCode is below the
@@ -37,17 +41,33 @@ case "$version" in
     core="${version%%-*}"
     suffix="${version#*-}"
     case "$suffix" in
-      dev.*)
-        n="${suffix#dev.}"
-        [[ "$n" =~ ^[0-9]+$ ]] || die "dev suffix must be dev.<number>: $version"
-        [ "$n" -le 499 ] || die "dev counter above 499 would collide with the beta band: $version"
+      dev*|Dev*)
+        n="${suffix#[Dd]ev}"
+        n="${n#.}"
+        [[ "$n" =~ ^[0-9]+$ ]] || die "dev suffix must be dev<number> or dev.<number>: $version"
+        [ "$n" -le 299 ] || die "dev counter above 299 would collide with the alpha band: $version"
         slot=$(( 10#$n ))
         ;;
-      beta.*|rc.*)
-        n="${suffix#*.}"
-        [[ "$n" =~ ^[0-9]+$ ]] || die "beta suffix must be beta.<number> or rc.<number>: $version"
-        [ "$n" -le 399 ] || die "beta counter above 399 would collide with the stable slot: $version"
+      alpha*|Alpha*)
+        n="${suffix#[Aa]lpha}"
+        n="${n#.}"
+        [[ "$n" =~ ^[0-9]+$ ]] || die "alpha suffix must be alpha<number> or alpha.<number>: $version"
+        [ "$n" -le 199 ] || die "alpha counter above 199 would collide with the beta band: $version"
+        slot=$(( 300 + 10#$n ))
+        ;;
+      beta*|Beta*)
+        n="${suffix#[Bb]eta}"
+        n="${n#.}"
+        [[ "$n" =~ ^[0-9]+$ ]] || die "beta suffix must be beta<number> or beta.<number>: $version"
+        [ "$n" -le 199 ] || die "beta counter above 199 would collide with the rc band: $version"
         slot=$(( 500 + 10#$n ))
+        ;;
+      rc*|Rc*|RC*)
+        n="${suffix#[Rr][Cc]}"
+        n="${n#.}"
+        [[ "$n" =~ ^[0-9]+$ ]] || die "rc suffix must be rc<number> or rc.<number>: $version"
+        [ "$n" -le 199 ] || die "rc counter above 199 would collide with the stable slot: $version"
+        slot=$(( 700 + 10#$n ))
         ;;
       *)
         die "unrecognised prerelease suffix: $version"
