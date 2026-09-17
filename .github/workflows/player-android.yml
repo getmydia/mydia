@@ -141,8 +141,8 @@ jobs:
           VERSION_CODE: ${{ inputs.version_code }}
         run: |
           set -euo pipefail
-          if [ -z "${R2_ACCESS_KEY_ID}" ]; then
-            echo "::error::R2 credentials are missing, so the dev build cannot be published."
+          if [ -z "${R2_ACCOUNT_ID}" ] || [ -z "${R2_ACCESS_KEY_ID}" ] || [ -z "${R2_SECRET_ACCESS_KEY}" ]; then
+            echo "::error::R2 credentials are incomplete (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY are all required), so the dev build cannot be published."
             exit 1
           fi
 
@@ -159,23 +159,46 @@ jobs:
           access_key_id = ${R2_ACCESS_KEY_ID}
           secret_access_key = ${R2_SECRET_ACCESS_KEY}
           endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+          acl = private
           no_check_bucket = true
           EOF
 
           APK="${PLAYER_PATH}/build/app/outputs/flutter-apk/app-release.apk"
           NAME="mydia-player-android-${VERSION}.apk"
+          OWN_FILE="android/${NAME}"
           SIZE=$(stat -c%s "$APK")
           SHA=$(sha256sum "$APK" | cut -d' ' -f1)
 
-          rclone copyto "$APK" "r2:mydia-dev-builds/android/${NAME}"
+          rclone copyto "$APK" "r2:mydia-dev-builds/${OWN_FILE}"
 
           # Read, amend, write. The index is small and only this workflow
           # writes it, so a read-modify-write is safe and avoids a bucket
-          # listing the scoped token may not allow.
-          rclone cat r2:mydia-dev-builds/index.json > index.json 2>/dev/null || echo '{"builds":[]}' > index.json
+          # listing the scoped token may not allow. rclone exits 3 for a
+          # missing directory and 4 for a missing file: either means no index
+          # has been published yet. Any other non-zero exit is a real read
+          # failure, and treating it as "no index yet" would clobber the
+          # bucket's real index with one built from an empty base, dropping
+          # every previously tracked build, so that case fails loudly instead
+          # of guessing.
+          set +e
+          rclone cat r2:mydia-dev-builds/index.json > index.json 2>rclone-cat.err
+          RCLONE_CAT_RC=$?
+          set -e
+          case "$RCLONE_CAT_RC" in
+            0) ;;
+            3|4)
+              echo '{"builds":[]}' > index.json
+              ;;
+            *)
+              cat rclone-cat.err >&2
+              echo "::error::Could not read the existing index.json from R2 (rclone exit ${RCLONE_CAT_RC}). Leaving the bucket's index untouched."
+              exit 1
+              ;;
+          esac
+
           jq --arg version "$VERSION" \
              --argjson build "$VERSION_CODE" \
-             --arg file "android/${NAME}" \
+             --arg file "$OWN_FILE" \
              --argjson size "$SIZE" \
              --arg sha "$SHA" \
              --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -183,14 +206,30 @@ jobs:
                         + [.builds[] | select(.platform != "android" or .version != $version)])
                        | sort_by(-.build) }' index.json > index.next.json
 
-          # Keep the newest five per platform and delete the files that fall out.
+          # Keep the newest five per platform.
           jq '{builds: [.builds | group_by(.platform)[] | sort_by(-.build) | .[0:5]] | flatten | sort_by(-.build)}' \
             index.next.json > index.kept.json
-          jq -r --slurpfile kept index.kept.json \
-            '[.builds[].file] - [$kept[0].builds[].file] | .[]' \
+
+          # If this run's own build did not survive the prune, refuse rather
+          # than silently discard it or hide it from the index. The APK is
+          # already uploaded and is left in place; it is simply never
+          # deleted or indexed by this run.
+          if ! jq -e --arg file "$OWN_FILE" '.builds | any(.file == $file)' index.kept.json > /dev/null; then
+            LOWEST_KEPT=$(jq -r '[.builds[] | select(.platform == "android") | .build] | min' index.kept.json)
+            echo "::error::Build ${VERSION_CODE} (version ${VERSION}) is older than the five newest android builds already published (lowest kept build: ${LOWEST_KEPT}). Publishing it would either discard it or hide it from the index, so refusing."
+            exit 1
+          fi
+
+          # Delete the files that fell out of the kept set. The just-uploaded
+          # file is also excluded explicitly here, whatever the ranking says,
+          # even though the check above already guarantees it survived.
+          jq -r --slurpfile kept index.kept.json --arg own "$OWN_FILE" \
+            '[.builds[].file] - [$kept[0].builds[].file] - [$own] | .[]' \
             index.next.json > dropped.txt
           while read -r file; do
-            [ -n "$file" ] && rclone deletefile "r2:mydia-dev-builds/${file}" || true
+            if [ -n "$file" ]; then
+              rclone deletefile "r2:mydia-dev-builds/${file}" || echo "::warning::Failed to delete stale build ${file} from R2; it may need manual cleanup."
+            fi
           done < dropped.txt
 
           rclone copyto index.kept.json r2:mydia-dev-builds/index.json
