@@ -10,6 +10,7 @@ import 'flatpak_environment.dart';
 import 'flatpak_portal.dart';
 import 'platform_updater.dart';
 import 'update_backend.dart';
+import 'update_track.dart';
 
 /// Everything about the running installation that decides how it updates.
 ///
@@ -132,5 +133,12 @@ UpdateBackend? createUpdateBackend(
   return ReleaseUpdateBackend(
     updater: updater,
     currentVersion: currentVersion,
+    // This branch is Windows and non-Flatpak Linux (the isMacOS and
+    // isFlatpak cases above already returned). Only Android publishes dev
+    // builds in this plan, and Android never reaches here: supportsInAppUpdates
+    // excludes it before this function gets this far. Add UpdateTrack.dev
+    // here the day Windows or Linux dev builds start publishing; until then
+    // it would offer a picker choice that resolves to nothing.
+    availableTracks: const {UpdateTrack.stable, UpdateTrack.beta},
   );
 }

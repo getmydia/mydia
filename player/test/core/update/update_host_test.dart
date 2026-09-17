@@ -8,6 +8,7 @@ import 'package:player/core/update/flatpak_environment.dart';
 import 'package:player/core/update/flatpak_portal.dart';
 import 'package:player/core/update/platform_updater.dart';
 import 'package:player/core/update/update_host.dart';
+import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
 
 class _NoopUpdater extends PlatformUpdater {
@@ -106,6 +107,18 @@ void main() {
       );
 
       expect(backend, isA<ReleaseUpdateBackend>());
+    });
+
+    test(
+        'a Linux tarball install never offers Dev, because none is '
+        'published for it', () {
+      final backend = createUpdateBackend(
+        _linux,
+        currentVersion: '0.15.0',
+        archiveUpdater: _NoopUpdater.new,
+      ) as ReleaseUpdateBackend;
+
+      expect(backend.availableTracks, {UpdateTrack.stable, UpdateTrack.beta});
     });
 
     test(

@@ -97,8 +97,14 @@ class FlatpakUpdateBackend implements UpdateBackend {
   @override
   UpdateTrack get currentTrack =>
       // The installed branch is the track. Nothing inside the sandbox can
-      // change it, so this reports rather than decides.
-      _branch == 'beta' ? UpdateTrack.beta : UpdateTrack.stable;
+      // change it, so this reports rather than decides. Mirrors
+      // flatpakReleaseNotesUrl in available_update.dart: only the literal
+      // 'stable' branch is stable, so an unrecognized or missing branch
+      // (FlatpakEnvironment.branch is null on some real installs) reads as
+      // beta rather than claiming the most conservative channel for an
+      // installation whose channel this cannot actually identify. Keep the
+      // two resolutions in sync.
+      _branch == 'stable' ? UpdateTrack.stable : UpdateTrack.beta;
 
   @override
   Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async {
