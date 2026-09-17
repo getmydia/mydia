@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
+import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -939,5 +942,45 @@ void main() {
         reason: 'double-tap is the only way to exit fullscreen',
       );
     });
+
+    group('off the remote tier', () {
+      testWidgets(
+          'Back, Cast, the volume controls and Fullscreen all render, on the '
+          'default auto-hide', (tester) async {
+        tester.view.physicalSize = const Size(1280, 720);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          _host(
+            PlaybackChrome(
+              player: player,
+              timeline: StreamTimeline.zero,
+              onSeekToReal: (_) async {},
+              onBack: () {},
+              castAction: const Icon(Icons.cast_rounded),
+              onCastTap: () {},
+              onFullscreenTap: () {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
+        expect(find.byKey(ChromeTopBar.castKey), findsOneWidget);
+        expect(find.byKey(VolumeSurface.muteKey), findsOneWidget);
+        expect(find.byKey(VolumeSurface.sliderKey), findsOneWidget);
+        expect(find.byKey(SecondaryCluster.fullscreenKey), findsOneWidget);
+
+        final visibility =
+            tester.widget<ChromeVisibility>(find.byType(ChromeVisibility));
+        expect(visibility.autoHide, ChromeVisibility.defaultAutoHide);
+        expect(visibility.restartOnKeyActivity, isFalse);
+      });
+    },
+        skip: InputCapabilities.directionalPrimary
+            ? 'covers the pointer and touch tiers; '
+                'playback_chrome_tv_test.dart covers the remote one'
+            : false);
   });
 }

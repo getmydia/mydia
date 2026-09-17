@@ -640,6 +640,13 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       touchPrimary: InputCapabilities.touchPrimary,
     );
 
+    // A remote has its own BACK key and volume control, a television is a
+    // cast target rather than a sender, and an Android TV app is always
+    // fullscreen, so none of those controls earns a focus stop here. Key
+    // presses are also the only activity this tier produces, which is what
+    // the auto-hide settings below account for.
+    final remote = InputCapabilities.directionalPrimary;
+
     return StreamBuilder<bool>(
       stream: widget.player.stream.playing,
       initialData: widget.player.state.playing,
@@ -651,6 +658,10 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
               controller: widget.chromeVisibility,
               isPlaying: snapshot.data ?? false,
               isSeeking: _seeking,
+              autoHide: remote
+                  ? ChromeVisibility.remoteAutoHide
+                  : ChromeVisibility.defaultAutoHide,
+              restartOnKeyActivity: remote,
               // Both gates live here, not inside ChromeVisibility, so widget
               // tests can construct that class with plain callbacks and get
               // deterministic behaviour regardless of the host platform.
@@ -675,9 +686,10 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                         hiddenOffsetY: -6,
                         child: ChromeTopBar(
                           title: widget.title,
+                          showBack: !remote,
                           onBack: widget.onBack,
-                          castAction: widget.castAction,
-                          onCastTap: widget.onCastTap,
+                          castAction: remote ? null : widget.castAction,
+                          onCastTap: remote ? null : widget.onCastTap,
                         ),
                       ),
                     ),
@@ -732,13 +744,19 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                               // this comment as "handled".
                               compact: metrics.compactTransport,
                             ),
-                            // Unconditional per ChromePanel's `volume`
-                            // dartdoc: it already gates visibility internally
-                            // via Visibility(maintainState: true), so
+                            // Null on the remote tier, which has no volume
+                            // control to show. Otherwise unconditional per
+                            // ChromePanel's `volume` dartdoc: it already gates
+                            // visibility internally via
+                            // Visibility(maintainState: true), so
                             // VolumeCluster's `_lastVolume` survives a
                             // breakpoint crossing only if it isn't also
-                            // rebuilt from scratch here.
-                            volume: VolumeCluster(player: widget.player),
+                            // rebuilt from scratch here. The tier itself never
+                            // changes at runtime, so the null branch loses no
+                            // state.
+                            volume: remote
+                                ? null
+                                : VolumeCluster(player: widget.player),
                             secondary: SecondaryCluster(
                               onSubtitleTap: widget.onSubtitleTap,
                               onAudioTap: widget.onAudioTap,
@@ -750,7 +768,8 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                               onQualityTap: metrics.showQuality
                                   ? widget.onQualityTap
                                   : null,
-                              onFullscreenTap: widget.onFullscreenTap,
+                              onFullscreenTap:
+                                  remote ? null : widget.onFullscreenTap,
                               onAlwaysOnTopTap: PlatformFeatures.isDesktop &&
                                       metrics.showAlwaysOnTop
                                   ? widget.onAlwaysOnTopTap
