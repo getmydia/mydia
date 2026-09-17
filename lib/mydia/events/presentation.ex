@@ -730,7 +730,10 @@ defmodule Mydia.Events.Presentation do
   end
 
   def field_label(field) when is_atom(field) and not is_nil(field) do
-    Map.get(@field_labels, field, Phoenix.Naming.humanize(field))
+    # @field_labels is keyed by binary. Looking an atom up in it never hit, so
+    # every atom field fell through to humanize/1, which also strips a trailing
+    # "_id" and turned :tmdb_id into "Tmdb".
+    Map.get(@field_labels, Atom.to_string(field), Phoenix.Naming.humanize(field))
   end
 
   def field_label(_field), do: "Unknown field"
