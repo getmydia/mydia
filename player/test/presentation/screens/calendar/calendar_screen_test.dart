@@ -1,119 +1,142 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/cast/cast_capabilities.dart';
+import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/domain/models/calendar_entry.dart';
+import 'package:player/presentation/screens/calendar/calendar_controller.dart';
+import 'package:player/presentation/screens/calendar/calendar_dates.dart';
 import 'package:player/presentation/screens/calendar/calendar_screen.dart';
+import 'package:player/presentation/screens/settings/settings_controller.dart';
+
+import '../../../test_utils/mock_auth_storage.dart';
+
+/// The real notifier reaches for secure storage on build, which a widget
+/// test has no business doing. Mirrors `browse_scaffold_test.dart`.
+class _StubAuthState extends AuthStateNotifier {
+  @override
+  AsyncValue<AuthStatus> build() =>
+      const AsyncValue.data(AuthStatus.authenticated);
+}
+
+class _StubCalendar extends CalendarController {
+  _StubCalendar(this.entries);
+
+  final List<CalendarEntry> entries;
+
+  @override
+  Stream<List<CalendarEntry>> build() => Stream.value(entries);
+
+  @override
+  Future<void> refresh() async {}
+}
 
 CalendarEntry _entry(String id, DateTime airDate) => CalendarEntry(
       id: id,
       kind: CalendarEntryKind.episode,
       airDate: airDate,
       title: 'Episode $id',
+      seasonNumber: 1,
+      episodeNumber: 1,
       mediaItemId: '7',
       mediaItemTitle: 'A Show',
     );
 
+const _toggle = ValueKey('calendar-view-toggle');
+const _weekView = ValueKey('calendar-week-view');
+const _agendaView = ValueKey('calendar-agenda-view');
+
+Future<void> _pump(
+  WidgetTester tester, {
+  required MockAuthStorage storage,
+  required List<CalendarEntry> entries,
+}) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_StubAuthState.new),
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+        settingsServiceProvider
+            .overrideWithValue(SettingsService(storage: storage)),
+        calendarControllerProvider.overrideWith(() => _StubCalendar(entries)),
+      ],
+      child: const MaterialApp(home: CalendarScreen()),
+    ),
+  );
+  await tester.pump();
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  group('groupByDay', () {
-    test('groups entries under their date, preserving server order', () {
-      final grouped = groupByDay([
-        _entry('1', DateTime(2026, 8, 20)),
-        _entry('2', DateTime(2026, 8, 20)),
-        _entry('3', DateTime(2026, 8, 22)),
-      ]);
+  final today = truncateToDay(DateTime.now());
+  final entries = [_entry('today', today)];
 
-      expect(grouped.length, 2);
-      expect(grouped.first.key, DateTime(2026, 8, 20));
-      expect(grouped.first.value.map((e) => e.id).toList(), ['1', '2']);
-      expect(grouped.last.key, DateTime(2026, 8, 22));
-    });
+  testWidgets('opens on the week view when nothing is stored', (tester) async {
+    await _pump(tester, storage: MockAuthStorage(), entries: entries);
 
-    test('emits no group for a day with no entries', () {
-      final grouped = groupByDay([
-        _entry('1', DateTime(2026, 8, 20)),
-        _entry('2', DateTime(2026, 8, 25)),
-      ]);
-
-      expect(grouped.map((g) => g.key).toList(), [
-        DateTime(2026, 8, 20),
-        DateTime(2026, 8, 25),
-      ]);
-    });
-
-    test('ignores a time component when deciding the day', () {
-      final grouped = groupByDay([
-        _entry('1', DateTime(2026, 8, 20, 9)),
-        _entry('2', DateTime(2026, 8, 20, 21)),
-      ]);
-
-      expect(grouped.length, 1);
-    });
-
-    test('returns nothing for an empty list', () {
-      expect(groupByDay(const []), isEmpty);
-    });
+    expect(find.byKey(_weekView), findsOneWidget);
+    expect(find.byKey(_agendaView), findsNothing);
+    expect(find.byTooltip('Agenda view'), findsOneWidget);
   });
 
-  group('indexOfToday', () {
-    test('finds the group for today when today has entries', () {
-      final index = indexOfToday(
-        [DateTime(2026, 8, 20), DateTime(2026, 8, 27), DateTime(2026, 8, 30)],
-        DateTime(2026, 8, 27),
-      );
+  testWidgets('opens on the agenda when that was the last choice',
+      (tester) async {
+    final storage = MockAuthStorage()
+      ..seedData({'calendar_view_mode': 'agenda'});
 
-      expect(index, 1);
-    });
+    await _pump(tester, storage: storage, entries: entries);
 
-    test('falls forward to the next day when today has no entries', () {
-      final index = indexOfToday(
-        [DateTime(2026, 8, 20), DateTime(2026, 8, 30)],
-        DateTime(2026, 8, 27),
-      );
-
-      expect(index, 1);
-    });
-
-    test('is null when every day is in the past', () {
-      final index = indexOfToday(
-        [DateTime(2026, 8, 20), DateTime(2026, 8, 21)],
-        DateTime(2026, 8, 27),
-      );
-
-      expect(index, isNull);
-    });
-
-    test('ignores the time of day on the reference date', () {
-      final index = indexOfToday(
-        [DateTime(2026, 8, 27)],
-        DateTime(2026, 8, 27, 23, 30),
-      );
-
-      expect(index, 0);
-    });
-
-    test('is null for an empty list', () {
-      expect(indexOfToday(const [], DateTime(2026, 8, 27)), isNull);
-    });
+    expect(find.byKey(_agendaView), findsOneWidget);
+    expect(find.byKey(_weekView), findsNothing);
+    expect(find.byTooltip('Week view'), findsOneWidget);
   });
 
-  group('formatDayHeader', () {
-    test('marks today', () {
-      expect(
-        formatDayHeader(DateTime(2026, 8, 27), DateTime(2026, 8, 27)),
-        'Thu 27 August · Today',
-      );
-    });
+  testWidgets('the toggle switches views and remembers the choice',
+      (tester) async {
+    final storage = MockAuthStorage();
+    await _pump(tester, storage: storage, entries: entries);
 
-    test('omits the year inside the current year', () {
-      expect(
-        formatDayHeader(DateTime(2026, 8, 20), DateTime(2026, 8, 27)),
-        'Thu 20 August',
-      );
-    });
+    await tester.tap(find.byKey(_toggle));
+    await tester.pumpAndSettle();
 
-    test('includes the year outside the current year', () {
-      expect(
-        formatDayHeader(DateTime(2027, 1, 4), DateTime(2026, 8, 27)),
-        'Mon 4 January 2027',
-      );
-    });
+    expect(find.byKey(_agendaView), findsOneWidget);
+    expect(storage.contents['calendar_view_mode'], 'agenda');
+
+    await tester.tap(find.byKey(_toggle));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(_weekView), findsOneWidget);
+    expect(storage.contents['calendar_view_mode'], 'week');
+  });
+
+  testWidgets('Today brings the week view back to this week', (tester) async {
+    await _pump(tester, storage: MockAuthStorage(), entries: entries);
+    final todayHeader = find.byKey(ValueKey('calendar-day-${isoDate(today)}'));
+
+    await tester.tap(find.byKey(const ValueKey('calendar-week-next')));
+    await tester.pumpAndSettle();
+    expect(todayHeader, findsNothing);
+
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+
+    expect(todayHeader, findsOneWidget);
+    expect(find.byKey(const ValueKey('calendar-entry-today')), findsOneWidget);
+  });
+
+  testWidgets('an empty window shows the empty state in both views',
+      (tester) async {
+    await _pump(tester, storage: MockAuthStorage(), entries: const []);
+
+    expect(find.byKey(const ValueKey('calendar-empty')), findsOneWidget);
+
+    await tester.tap(find.byKey(_toggle));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('calendar-empty')), findsOneWidget);
   });
 }

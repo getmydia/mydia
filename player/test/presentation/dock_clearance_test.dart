@@ -11,6 +11,7 @@ import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/domain/models/calendar_entry.dart';
 import 'package:player/presentation/screens/calendar/calendar_controller.dart';
 import 'package:player/presentation/screens/calendar/calendar_screen.dart';
+import 'package:player/presentation/screens/calendar/calendar_view_mode.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 
 import '../test_utils/dock_harness.dart';
@@ -42,6 +43,64 @@ class _FixedCalendarController extends CalendarController {
         ),
     ]);
   }
+}
+
+/// Twenty episodes all airing today, so the week view's single day overflows
+/// the viewport on its own.
+class _BusyDayCalendarController extends CalendarController {
+  @override
+  Stream<List<CalendarEntry>> build() {
+    final today = DateTime.now();
+    return Stream.value([
+      for (var i = 0; i < 20; i++)
+        CalendarEntry(
+          id: 'busy$i',
+          kind: CalendarEntryKind.episode,
+          airDate: DateTime(today.year, today.month, today.day),
+          title: 'Episode $i',
+          mediaItemId: '7',
+          mediaItemTitle: 'The Lantern Keepers',
+        ),
+    ]);
+  }
+}
+
+/// Pins the calendar layout without touching settings storage.
+class _FixedViewMode extends CalendarViewModeController {
+  _FixedViewMode(this.mode);
+
+  final CalendarViewMode mode;
+
+  @override
+  Future<CalendarViewMode> build() async => mode;
+}
+
+Future<void> _pumpCalendar(
+  WidgetTester tester, {
+  required CalendarController Function() controller,
+  required CalendarViewMode mode,
+}) async {
+  // Same 600-wide mobile layout and 34px home indicator as the library cases.
+  tester.view.physicalSize = const Size(600, 800);
+  tester.view.devicePixelRatio = 1.0;
+  tester.view.padding = const FakeViewPadding(bottom: 34);
+  addTearDown(tester.view.reset);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_StubAuthState.new),
+        calendarControllerProvider.overrideWith(controller),
+        calendarViewModeControllerProvider
+            .overrideWith(() => _FixedViewMode(mode)),
+      ],
+      child: shellHarness(child: const CalendarScreen()),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  await tester.drag(find.byType(CustomScrollView), const Offset(0, -20000));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -121,31 +180,30 @@ void main() {
   });
 
   group('calendar', () {
-    testWidgets('scrolls its closing footer clear of the dock', (tester) async {
-      // Same 600-wide mobile layout and 34px home indicator as above.
-      tester.view.physicalSize = const Size(600, 800);
-      tester.view.devicePixelRatio = 1.0;
-      tester.view.padding = const FakeViewPadding(bottom: 34);
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            authStateProvider.overrideWith(_StubAuthState.new),
-            calendarControllerProvider
-                .overrideWith(_FixedCalendarController.new),
-          ],
-          child: shellHarness(child: const CalendarScreen()),
-        ),
+    testWidgets('scrolls the agenda footer clear of the dock', (tester) async {
+      await _pumpCalendar(
+        tester,
+        controller: _FixedCalendarController.new,
+        mode: CalendarViewMode.agenda,
       );
-      await tester.pumpAndSettle();
-
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -20000));
-      await tester.pumpAndSettle();
 
       expectClearsDock(
         tester,
         find.text('That is everything scheduled in the next 90 days.'),
+      );
+    });
+
+    testWidgets('scrolls the last row of a busy day clear of the dock',
+        (tester) async {
+      await _pumpCalendar(
+        tester,
+        controller: _BusyDayCalendarController.new,
+        mode: CalendarViewMode.week,
+      );
+
+      expectClearsDock(
+        tester,
+        find.byKey(const ValueKey('calendar-entry-busy19')),
       );
     });
   });
