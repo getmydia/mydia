@@ -3,7 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../domain/models/available_update.dart';
 import '../storage/secure_storage_options.dart';
-import 'github_release_client.dart';
+import 'update_feed_client.dart';
+import 'update_track.dart';
 import 'version_comparator.dart';
 
 /// Orchestrates update checking: rate-limiting, version comparison, and caching.
@@ -11,21 +12,24 @@ class UpdateService {
   static const _lastCheckKey = 'update_last_check_timestamp';
   static const _checkIntervalHours = 24;
 
-  final GitHubReleaseClient _client;
+  final UpdateFeedClient _client;
   static const _storage = FlutterSecureStorage(
     aOptions: kAndroidSecureStorageOptions,
     mOptions: kMacOsSecureStorageOptions,
   );
 
-  UpdateService({GitHubReleaseClient? client})
-      : _client = client ?? GitHubReleaseClient();
+  UpdateService({UpdateFeedClient? client})
+      : _client = client ?? UpdateFeedClient();
 
-  /// Checks for an available update, respecting the 24-hour rate limit.
+  /// Checks for an available update on [track], respecting the 24-hour rate
+  /// limit.
   ///
-  /// Returns an [AppUpdate] if a newer version is available, null otherwise.
-  /// Pass [force] = true to bypass the rate limit (e.g. manual "Check for Updates").
+  /// Returns an [AppUpdate] when the feed's entry for this platform and track
+  /// is newer than [currentVersion], null otherwise. Pass [force] to bypass
+  /// the rate limit, which the manual check does.
   Future<AppUpdate?> checkForUpdate({
     required String currentVersion,
+    required UpdateTrack track,
     bool force = false,
   }) async {
     if (kIsWeb) return null;
@@ -35,19 +39,22 @@ class UpdateService {
       return null;
     }
 
-    final update = await _client.fetchLatestRelease();
+    final platform = UpdateFeedClient.platformSlug();
+    if (platform == null) return null;
+
+    final entry = await _client.fetch(track: track, platform: platform);
     await _recordCheckTimestamp();
 
-    if (update == null) return null;
+    if (entry == null) return null;
 
-    if (VersionComparator.isNewer(currentVersion, update.version)) {
+    if (VersionComparator.isNewer(currentVersion, entry.version)) {
       debugPrint(
-          '[UpdateService] Update available: ${update.version} (current: $currentVersion)');
-      return update;
+          '[UpdateService] ${track.wireName} update available: ${entry.version} (current: $currentVersion)');
+      return entry.toAppUpdate();
     }
 
     debugPrint(
-        '[UpdateService] No update needed (current: $currentVersion, latest: ${update.version})');
+        '[UpdateService] No update needed (current: $currentVersion, ${track.wireName}: ${entry.version})');
     return null;
   }
 

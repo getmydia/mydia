@@ -3,6 +3,7 @@ import 'package:player/core/update/backends/release_update_backend.dart';
 import 'package:player/core/update/platform_updater.dart';
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_service.dart';
+import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
 
 AppUpdate _update() => AppUpdate(
@@ -22,6 +23,7 @@ class _StubService implements UpdateService {
   @override
   Future<AppUpdate?> checkForUpdate({
     required String currentVersion,
+    required UpdateTrack track,
     bool force = false,
   }) async {
     calls++;

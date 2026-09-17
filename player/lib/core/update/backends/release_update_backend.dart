@@ -92,6 +92,7 @@ class ReleaseUpdateBackend implements UpdateBackend {
   Future<void> refresh({bool force = false}) async {
     _latest = await _service.checkForUpdate(
       currentVersion: _currentVersion,
+      track: _track,
       force: force,
     );
     if (!_controller.isClosed) _controller.add(_latest);
