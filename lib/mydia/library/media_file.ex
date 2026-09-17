@@ -50,6 +50,7 @@ defmodule Mydia.Library.MediaFile do
           episode: Mydia.Media.Episode.t() | nil | Ecto.Association.NotLoaded.t(),
           quality_profile:
             Mydia.Settings.QualityProfile.t() | nil | Ecto.Association.NotLoaded.t(),
+          media_hash: Mydia.Subtitles.MediaHash.t() | nil,
           inserted_at: DateTime.t(),
           updated_at: DateTime.t()
         }
@@ -140,6 +141,11 @@ defmodule Mydia.Library.MediaFile do
     belongs_to :quality_profile, Mydia.Settings.QualityProfile
     has_many :segments, Mydia.Library.MediaSegment
     belongs_to :supersedes_media_file, __MODULE__, foreign_key: :supersedes_media_file_id
+
+    # Populated by Mydia.Subtitles.fetch_media_file_with_associations/1 from a
+    # left join, never persisted on this table. Declared so the decorated value
+    # stays a MediaFile struct rather than a struct with an undeclared key.
+    field :media_hash, :any, virtual: true
 
     timestamps(type: :utc_datetime)
   end
