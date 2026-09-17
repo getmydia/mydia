@@ -263,33 +263,56 @@ defmodule Mydia.Media.LibraryListingTest do
     end
 
     test "size sums every version file on a show", %{user: user} do
-      heavy = media_item_fixture(%{type: "tv_show", title: "Coldwater Signal"})
+      # Titles run opposite to sizes on purpose: under the catch-all title
+      # sort this expectation is the reverse of what you see here, so the
+      # test cannot pass unless the size clause actually runs.
+      heavy = media_item_fixture(%{type: "tv_show", title: "Windward Signal"})
       first = episode_fixture(%{media_item_id: heavy.id})
       second = episode_fixture(%{media_item_id: heavy.id})
       media_file_fixture(%{episode_id: first.id, size: 3_000_000_000})
       media_file_fixture(%{episode_id: second.id, size: 3_000_000_000})
 
-      light = media_item_fixture(%{type: "tv_show", title: "Paper Anchorage"})
+      light = media_item_fixture(%{type: "tv_show", title: "Alder Anchorage"})
       only = episode_fixture(%{media_item_id: light.id})
       media_file_fixture(%{episode_id: only.id, size: 4_000_000_000})
 
       assert titles(page(user, type: "tv_show", sort_by: "size_desc")) ==
-               ["Coldwater Signal", "Paper Anchorage"]
+               ["Windward Signal", "Alder Anchorage"]
     end
 
-    test "size ties keep their incoming order in both directions", %{user: user} do
+    test "size ties hold one order, and the same order in both directions", %{user: user} do
       # Equal sizes must not reshuffle between requests: page/1 re-sorts the
       # whole list per request, so an unstable tie group duplicates and skips
       # rows during infinite scroll.
-      for title <- ["Alder Road", "Bellwether Lane", "Cobalt Ferry"] do
-        item = media_item_fixture(%{title: title})
-        media_file_fixture(%{media_item_id: item.id, size: 1_000_000_000})
+      heaviest = media_item_fixture(%{title: "Cobalt Ferry"})
+      media_file_fixture(%{media_item_id: heaviest.id, size: 3_000_000_000})
+
+      for title <- ["Alder Road", "Bellwether Lane"] do
+        tied = media_item_fixture(%{title: title})
+        media_file_fixture(%{media_item_id: tied.id, size: 2_000_000_000})
       end
 
-      by_title = ["Alder Road", "Bellwether Lane", "Cobalt Ferry"]
+      lightest = media_item_fixture(%{title: "Zephyr Cross"})
+      media_file_fixture(%{media_item_id: lightest.id, size: 1_000_000_000})
 
-      assert titles(page(user, sort_by: "size_desc")) == by_title
-      assert titles(page(user, sort_by: "size_asc")) == by_title
+      desc = titles(page(user, sort_by: "size_desc"))
+      asc = titles(page(user, sort_by: "size_asc"))
+
+      # A title sort would lead with "Alder Road", so these four pin the
+      # ordering to size rather than to the catch-all clause.
+      assert List.first(desc) == "Cobalt Ferry"
+      assert List.last(desc) == "Zephyr Cross"
+      assert List.first(asc) == "Zephyr Cross"
+      assert List.last(asc) == "Cobalt Ferry"
+
+      # The tie group holds whatever order the rows arrived in, and holds the
+      # SAME order in both directions, because Enum.sort_by/3 is stable and
+      # neither direction reverses it. Asserting the group's membership plus
+      # that agreement, rather than a literal order, keeps this independent of
+      # the database's scan order, which media_items_query/1 does not
+      # constrain.
+      assert Enum.sort(Enum.slice(desc, 1..2)) == ["Alder Road", "Bellwether Lane"]
+      assert Enum.slice(desc, 1..2) == Enum.slice(asc, 1..2)
     end
 
     test "air date and episode count sorts", %{user: user} do
