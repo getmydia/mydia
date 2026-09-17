@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/calendar_entry.dart';
 import 'calendar_controller.dart';
@@ -207,7 +208,7 @@ class _CalendarWeekViewState extends State<CalendarWeekView> {
                     );
                   },
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              const SliverDockGap(),
             ],
           ),
         ),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/calendar_entry.dart';
 import 'calendar_dates.dart';
@@ -169,13 +170,14 @@ class _CalendarAgendaViewState extends State<CalendarAgendaView> {
           ),
         const SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 28, 16, 40),
+            padding: EdgeInsets.fromLTRB(16, 28, 16, 0),
             child: Text(
               'That is everything scheduled in the next 90 days.',
               style: TextStyle(fontSize: 12, color: AppColors.textDisabled),
             ),
           ),
         ),
+        const SliverDockGap(),
       ],
     );
   }
