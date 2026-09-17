@@ -46,14 +46,69 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
   """
   @spec all_media_files(map()) :: [Library.MediaFile.t()]
   def all_media_files(media_item) do
-    episode_files =
-      media_item
-      |> Map.get(:episodes)
-      |> List.wrap()
-      |> Enum.flat_map(&Map.get(&1, :media_files, []))
+    media_files =
+      case Map.get(media_item, :media_files) do
+        files when is_list(files) -> files
+        _ -> []
+      end
 
-    media_item.media_files ++ episode_files
+    episode_files =
+      case Map.get(media_item, :episodes) do
+        episodes when is_list(episodes) ->
+          Enum.flat_map(episodes, fn
+            nil ->
+              []
+
+            episode ->
+              case Map.get(episode, :media_files) do
+                files when is_list(files) -> files
+                _ -> []
+              end
+          end)
+
+        _ ->
+          []
+      end
+
+    media_files ++ episode_files
   end
+
+  @doc """
+  Calculates the total byte size of all active media files belonging to a media item.
+  Sums media files attached directly (movies, extras) and those attached to episodes (TV shows).
+  """
+  @spec total_media_size(map()) :: non_neg_integer()
+  def total_media_size(media_item) do
+    media_item
+    |> all_media_files()
+    |> Enum.reduce(0, fn file, acc ->
+      acc + (Map.get(file, :size) || 0)
+    end)
+  end
+
+  @doc """
+  Calculates the total byte size of all media files belonging to a list of episodes
+  (typically representing one season).
+  """
+  @spec season_total_size(list()) :: non_neg_integer()
+  def season_total_size(episodes) when is_list(episodes) do
+    episodes
+    |> Enum.flat_map(fn
+      nil ->
+        []
+
+      episode ->
+        case Map.get(episode, :media_files) do
+          files when is_list(files) -> files
+          _ -> []
+        end
+    end)
+    |> Enum.reduce(0, fn file, acc ->
+      acc + (Map.get(file, :size) || 0)
+    end)
+  end
+
+  def season_total_size(_), do: 0
 
   def get_poster_url(media_item),
     do: MydiaWeb.Live.Helpers.MediaImages.poster_url(media_item)
@@ -72,16 +127,30 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
     # For movies, check media_files directly
     # For TV shows, check episode media_files
     first_file =
-      case media_item.media_files do
+      case Map.get(media_item, :media_files) do
         [file | _] ->
           file
 
         _ ->
           # Try to get from episodes for TV shows
-          media_item
-          |> Map.get(:episodes, [])
-          |> Enum.flat_map(&Map.get(&1, :media_files, []))
-          |> List.first()
+          case Map.get(media_item, :episodes) do
+            episodes when is_list(episodes) ->
+              episodes
+              |> Enum.flat_map(fn
+                nil ->
+                  []
+
+                ep ->
+                  case Map.get(ep, :media_files) do
+                    files when is_list(files) -> files
+                    _ -> []
+                  end
+              end)
+              |> List.first()
+
+            _ ->
+              nil
+          end
       end
 
     case first_file do

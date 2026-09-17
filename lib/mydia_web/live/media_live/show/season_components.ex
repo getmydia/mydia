@@ -468,6 +468,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   def season_header(assigns) do
     counts = season_episode_counts(assigns.episodes)
     season_state = Mydia.Media.season_monitoring_state(assigns.episodes)
+    season_size = season_total_size(assigns.episodes)
 
     chip =
       cond do
@@ -487,6 +488,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
     assigns =
       assign(assigns, :counts, counts)
       |> assign(:season_state, season_state)
+      |> assign(:season_size, season_size)
       |> assign(:chip, chip)
 
     ~H"""
@@ -513,6 +515,14 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         ></progress>
         <%= if @chip do %>
           <span class={@chip.class}>{@chip.label}</span>
+        <% end %>
+        <%= if @season_size > 0 do %>
+          <span
+            id={"season-#{@season_number}-total-size"}
+            class="text-sm font-mono text-base-content/70 shrink-0"
+          >
+            {format_file_size(@season_size)}
+          </span>
         <% end %>
       </button>
 
