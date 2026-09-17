@@ -20,6 +20,7 @@ class SettingsService {
   static const _librarySortKeyPrefix = 'library_sort_';
   static const _crashReportingEnabledKey = 'crash_reporting_enabled';
   static const _calendarViewModeKey = 'calendar_view_mode';
+  static const _updateTrackKey = 'update_track';
 
   /// Get the default quality setting.
   Future<String> getDefaultQuality() async {
@@ -88,7 +89,24 @@ class SettingsService {
     await _storage.write(_calendarViewModeKey, mode);
   }
 
+  /// The release track this install follows, as its stored string.
+  ///
+  /// A device-level choice rather than an account preference, so
+  /// [clearSettings] leaves it alone: signing out of a server says nothing
+  /// about which builds this machine should install. Decoding, including the
+  /// default, belongs to the caller.
+  Future<String?> getUpdateTrack() async => _storage.read(_updateTrackKey);
+
+  /// Set the release track this install follows.
+  Future<void> setUpdateTrack(String track) async {
+    await _storage.write(_updateTrackKey, track);
+  }
+
   /// Clear all settings.
+  ///
+  /// Deletes an explicit list of keys, not everything in storage. Device-level
+  /// choices are deliberately left out of that list: [_updateTrackKey] and
+  /// [_crashReportingEnabledKey] both survive a clear for that reason.
   Future<void> clearSettings() async {
     await Future.wait([
       _storage.delete(_defaultQualityKey),
