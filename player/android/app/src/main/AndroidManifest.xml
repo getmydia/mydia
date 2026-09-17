@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Sideloaded builds update themselves through PackageInstaller. Installs
+         that came from Google Play never reach that path: Play forbids an app
+         it distributes from updating itself by any other mechanism, and
+         UpdateHost refuses to build a backend for them. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <!-- Television support. Both are optional so a single bundle keeps
          serving phones: `required="false"` declares the app runs with or
          without them. Google TV filters out any app that does not mark
