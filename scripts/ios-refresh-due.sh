@@ -23,7 +23,10 @@
 # them. IOS_REFRESH_MARKER uses `${VAR-default}` rather than `${VAR:-default}`
 # so a deliberately empty value means "no marker exists" instead of falling
 # through to the git lookup, which is how the no-marker cases are tested in a
-# repository that has markers.
+# repository that has markers. IOS_REFRESH_MARKER_DATES is the same shape of
+# seam for the full marker list that refresh_count below counts over: a
+# newline-separated list of dates, again with an explicitly empty value
+# meaning "no markers".
 set -euo pipefail
 export LC_ALL=C.UTF-8
 
@@ -77,6 +80,19 @@ newest_marker() {
     | tail -n1
 }
 
+# Every refresh marker's date, unsorted, for refresh_count below to count over.
+# Shares newest_marker()'s validation: a marker whose suffix is not a date is
+# skipped rather than silently sorting as garbage.
+all_marker_dates() {
+  git for-each-ref --format='%(refname:short)' "refs/tags/${MARKER_PREFIX}*" \
+    | while IFS= read -r ref; do
+        marker_date="${ref#"${MARKER_PREFIX}"}"
+        case "$marker_date" in
+          [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) echo "$marker_date" ;;
+        esac
+      done
+}
+
 threshold="${IOS_REFRESH_THRESHOLD_DAYS:-$DEFAULT_THRESHOLD_DAYS}"
 today="${IOS_REFRESH_TODAY:-$(date -u +%Y-%m-%d)}"
 
@@ -86,6 +102,16 @@ stable="${IOS_REFRESH_STABLE:-$(newest_stable)}"
 tag="${stable%% *}"
 baseline_date="${stable##* }"
 baseline_why="stable release ${tag} (${baseline_date})"
+
+# Markers dated after the current stable, so the count resets every release
+# and cannot walk past the 99 refresh slots in scripts/build-number.sh. Read
+# now, before baseline_date can be overridden below by a newer marker: the
+# count must stay pinned to the stable release's own date, not to whichever
+# date ends up as the age baseline.
+marker_dates="${IOS_REFRESH_MARKER_DATES-$(all_marker_dates)}"
+refresh_count=$(printf '%s\n' "$marker_dates" \
+  | awk -v since="$baseline_date" 'NF && $0 > since' \
+  | wc -l | tr -d ' ')
 
 marker="${IOS_REFRESH_MARKER-$(newest_marker)}"
 if [ -n "$marker" ]; then
@@ -112,6 +138,7 @@ sha="$(git rev-list -n1 "$tag")"
   echo "tag=${tag}"
   echo "version=${tag#v}"
   echo "sha=${sha}"
+  echo "refresh_count=${refresh_count}"
 }
 
 echo "ios-refresh-due: ${age_days}d since ${baseline_why}, threshold ${threshold}d, due=${due}" >&2

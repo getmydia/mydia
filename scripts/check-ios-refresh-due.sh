@@ -65,6 +65,14 @@ expect "age is measured" 61 \
 expect "version drops the leading v" 0.13.2 \
   "$(run_case 2026-09-04 "$REAL_TAG 2026-07-05" "" version)"
 
+# refresh_count is only asserted to be numeric here: run_case's three seams
+# (today/stable/marker) do not reach the marker list refresh_count counts
+# over, so its value falls through to whatever ios-refresh/* tags exist in
+# this real repository at test time. IOS_REFRESH_MARKER_DATES is the seam for
+# that list.
+count=$(run_case "2026-09-17" "$REAL_TAG 2026-06-01" "" "refresh_count")
+[[ "$count" =~ ^[0-9]+$ ]] || note_failure "refresh_count: got '$count', wanted a number"
+
 # A real marker tag, reaching newest_marker() for real. Every case above
 # overrides IOS_REFRESH_MARKER and so never executes that function at all, which
 # is how a real bug survived a full green suite once already.

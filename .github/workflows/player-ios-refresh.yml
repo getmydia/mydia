@@ -56,19 +56,18 @@ jobs:
         id: due
         run: ./scripts/ios-refresh-due.sh >> "$GITHUB_OUTPUT"
 
-      # release.yml derives its build number from `github.run_number + 10000`.
-      # This workflow has its own independent run_number, so reusing that
-      # formula would eventually mint a CFBundleVersion Apple already holds for
-      # the same marketing version and reject the upload. 900000 is disjoint by
-      # 890,000 release runs.
-      #
-      # Arithmetic is done here rather than in the `with:` block below because
-      # GitHub expressions have no arithmetic operators.
-      - name: Compute a build number that cannot collide with a release
+      # A refresh rebuilds a marketing version App Store Connect already holds,
+      # and Apple rejects a reused build number for it. The refresh slots in
+      # scripts/build-number.sh exist for exactly this: +refresh.N lands at
+      # 900+N, just above the original stable at 900.
+      - name: Compute the refresh build number
         id: build_number
         env:
-          RUN_NUMBER: ${{ github.run_number }}
-        run: echo "version_code=$(( RUN_NUMBER + 900000 ))" >> "$GITHUB_OUTPUT"
+          VERSION: ${{ steps.due.outputs.version }}
+          REFRESH_COUNT: ${{ steps.due.outputs.refresh_count }}
+        run: |
+          set -euo pipefail
+          echo "version_code=$(./scripts/build-number.sh "${VERSION}+refresh.$(( REFRESH_COUNT + 1 ))")" >> "$GITHUB_OUTPUT"
 
       # The same notes testers already saw for this release. Computed here
       # rather than in the build, for the same reason release.yml computes them
