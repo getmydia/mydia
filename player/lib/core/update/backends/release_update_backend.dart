@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../../../domain/models/available_update.dart';
+import '../android_installer.dart';
 import '../platform_updater.dart';
 import '../update_backend.dart';
 import '../update_service.dart';
@@ -111,8 +112,18 @@ class ReleaseUpdateBackend implements UpdateBackend {
       // line is only reached when the updater handed off without replacing
       // anything, which is what the browser fallback does. Reporting it as
       // installed is still right from this screen's point of view: there is
-      // nothing further for it to do.
+      // nothing further for it to do. Android is the exception: its updater
+      // sets handsOffUnconfirmed because a committed install session opens
+      // Android's own confirmation dialog and returns before the user has
+      // answered it, so this reports that as deferred instead.
+      if (_updater.handsOffUnconfirmed) return const UpdateDeferred();
       return const UpdateInstalled();
+    } on InstallerPermissionDenied catch (e) {
+      // Not a failure to retry: the user has to grant the permission, and the
+      // updater has already opened the screen where they do it.
+      return UpdateUnsupported(e.toString());
+    } on InstallerUnavailable catch (e) {
+      return UpdateUnsupported(e.toString());
     } catch (e) {
       return UpdateFailed(e.toString());
     }

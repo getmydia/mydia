@@ -48,20 +48,33 @@ const _linux = UpdateHost(
   isLinux: true,
 );
 
+const _sideloadedAndroid = UpdateHost(
+  isWeb: false,
+  isAndroid: true,
+  isIOS: false,
+  isMacOS: false,
+  isWindows: false,
+  isLinux: false,
+  installedFromPlay: false,
+);
+
+const _playAndroid = UpdateHost(
+  isWeb: false,
+  isAndroid: true,
+  isIOS: false,
+  isMacOS: false,
+  isWindows: false,
+  isLinux: false,
+  installedFromPlay: true,
+);
+
 void main() {
   group('supportsInAppUpdates', () {
-    test('web, Android and iOS update elsewhere', () {
+    test('web and iOS update elsewhere', () {
       for (final host in [
         const UpdateHost(
             isWeb: true,
             isAndroid: false,
-            isIOS: false,
-            isMacOS: false,
-            isWindows: false,
-            isLinux: false),
-        const UpdateHost(
-            isWeb: false,
-            isAndroid: true,
             isIOS: false,
             isMacOS: false,
             isWindows: false,
@@ -76,6 +89,32 @@ void main() {
       ]) {
         expect(host.supportsInAppUpdates, isFalse);
       }
+    });
+
+    test('a sideloaded Android install updates itself', () {
+      const host = UpdateHost(
+        isWeb: false,
+        isAndroid: true,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: false,
+        isLinux: false,
+        installedFromPlay: false,
+      );
+      expect(host.supportsInAppUpdates, isTrue);
+    });
+
+    test('a Play install does not', () {
+      const host = UpdateHost(
+        isWeb: false,
+        isAndroid: true,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: false,
+        isLinux: false,
+        installedFromPlay: true,
+      );
+      expect(host.supportsInAppUpdates, isFalse);
     });
 
     test('desktop updates in app', () {
@@ -119,6 +158,41 @@ void main() {
       ) as ReleaseUpdateBackend;
 
       expect(backend.availableTracks, {UpdateTrack.stable, UpdateTrack.beta});
+    });
+
+    test('a sideloaded Android install gets the release backend', () {
+      final backend = createUpdateBackend(
+        _sideloadedAndroid,
+        currentVersion: '0.15.0',
+        archiveUpdater: _NoopUpdater.new,
+      );
+
+      expect(backend, isA<ReleaseUpdateBackend>());
+    });
+
+    test(
+        'a sideloaded Android install offers Dev too, since it is the one '
+        'platform that publishes it', () {
+      final backend = createUpdateBackend(
+        _sideloadedAndroid,
+        currentVersion: '0.15.0',
+        archiveUpdater: _NoopUpdater.new,
+      ) as ReleaseUpdateBackend;
+
+      expect(
+        backend.availableTracks,
+        {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev},
+      );
+    });
+
+    test('a Play install gets no backend at all', () {
+      final backend = createUpdateBackend(
+        _playAndroid,
+        currentVersion: '0.15.0',
+        archiveUpdater: _NoopUpdater.new,
+      );
+
+      expect(backend, isNull);
     });
 
     test(

@@ -111,7 +111,7 @@ ProviderContainer _container(_FakeBackend backend) {
   final container = ProviderContainer(
     overrides: [
       updateBackendFactoryProvider.overrideWithValue(
-        ({required String currentVersion}) => backend,
+        ({required String currentVersion}) async => backend,
       ),
     ],
   );
@@ -234,7 +234,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         updateBackendFactoryProvider.overrideWithValue(
-          ({required String currentVersion}) => backend,
+          ({required String currentVersion}) async => backend,
         ),
       ],
     );
@@ -267,7 +267,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         updateBackendFactoryProvider.overrideWithValue(
-          ({required String currentVersion}) => backend,
+          ({required String currentVersion}) async => backend,
         ),
       ],
     );

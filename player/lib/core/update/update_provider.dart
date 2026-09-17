@@ -17,13 +17,16 @@ import 'update_host.dart';
 void Function(int code) debugExitProcess = exit;
 
 /// Builds the backend for this installation. Overridden in tests.
-typedef UpdateBackendFactory = UpdateBackend? Function({
+///
+/// Async because deciding Android's host needs a platform call (which store
+/// installed this copy), via [UpdateHost.currentAsync].
+typedef UpdateBackendFactory = Future<UpdateBackend?> Function({
   required String currentVersion,
 });
 
 final updateBackendFactoryProvider = Provider<UpdateBackendFactory>(
-  (ref) => ({required String currentVersion}) => createUpdateBackend(
-        UpdateHost.current(),
+  (ref) => ({required String currentVersion}) async => createUpdateBackend(
+        await UpdateHost.currentAsync(),
         currentVersion: currentVersion,
       ),
 );
@@ -126,10 +129,13 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
       state = state.copyWith(currentVersion: info.version);
 
-      final backend = ref.read(updateBackendFactoryProvider)(
+      final backend = await ref.read(updateBackendFactoryProvider)(
         currentVersion: info.version,
       );
       if (backend == null) return;
+      // The container can be disposed while that await is in flight too, for
+      // the same reason as the guard above. A non-null backend must still be
+      // disposed even when unmounted, so this cannot simply return early.
       if (!ref.mounted) {
         await backend.dispose();
         return;
