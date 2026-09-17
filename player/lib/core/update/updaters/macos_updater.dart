@@ -47,6 +47,12 @@ class MacOSUpdater extends PlatformUpdater {
   /// The value lives in macOS user defaults, owned by the Swift side, because
   /// Sparkle asks for the allowed channels through a synchronous callback that
   /// cannot wait on Dart.
+  ///
+  /// Retained only for `BetaChannelRow`, the settings widget that still calls
+  /// this pair directly. [currentTrack] and [setTrack] below no longer route
+  /// through it: they call the host's track methods directly. Once the
+  /// settings screen moves to a track picker, this pair and the Swift
+  /// `getBetaChannel`/`setBetaChannel` cases behind it can be deleted.
   static Future<bool> betaChannelEnabled({
     MethodChannel channel = kSparkleChannel,
   }) async {
@@ -69,6 +75,8 @@ class MacOSUpdater extends PlatformUpdater {
   /// On opt-in the host also runs an update check immediately, so the change
   /// is visible without waiting for the next scheduled check. That happens on
   /// the Swift side, not here.
+  ///
+  /// See [betaChannelEnabled] for why this still exists alongside [setTrack].
   static Future<bool> setBetaChannel(
     bool enabled, {
     MethodChannel channel = kSparkleChannel,
@@ -85,29 +93,46 @@ class MacOSUpdater extends PlatformUpdater {
     }
   }
 
-  /// The track this installation follows, as
+  /// The track Sparkle is currently allowed to offer, as
   /// [SparkleUpdateBackend]'s default track source.
   ///
-  /// Sparkle's host side only knows a beta channel boolean today, so this
-  /// translates it rather than naming a track directly. Dev never comes back
-  /// from here because no macOS dev builds are published.
+  /// The value lives in macOS user defaults, owned by the Swift side, because
+  /// Sparkle asks for the allowed channels through a synchronous callback
+  /// that cannot wait on Dart.
   static Future<UpdateTrack> currentTrack({
     MethodChannel channel = kSparkleChannel,
-  }) async =>
-      await betaChannelEnabled(channel: channel)
-          ? UpdateTrack.beta
-          : UpdateTrack.stable;
+  }) async {
+    try {
+      final name = await channel.invokeMethod<String>('getTrack');
+      return UpdateTrack.fromWireName(name) ?? UpdateTrack.stable;
+    } on PlatformException catch (e) {
+      debugPrint('[MacOSUpdater] Sparkle getTrack failed: $e');
+      return UpdateTrack.stable;
+    } on MissingPluginException catch (e) {
+      debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
+      return UpdateTrack.stable;
+    }
+  }
 
-  /// Points this installation at [track], as
-  /// [SparkleUpdateBackend]'s default track sink.
+  /// Points Sparkle at a track, as [SparkleUpdateBackend]'s default track
+  /// sink. Returns true when the host accepted it.
   ///
-  /// Dev is refused here the same way [SparkleUpdateBackend.availableTracks]
-  /// never offers it: there is nothing published for the host to switch to.
+  /// On anything but stable the host also runs a check immediately, so the
+  /// change is visible without waiting for the next scheduled one. That
+  /// happens on the Swift side, not here.
   static Future<bool> setTrack(
     UpdateTrack track, {
     MethodChannel channel = kSparkleChannel,
   }) async {
-    if (track == UpdateTrack.dev) return false;
-    return setBetaChannel(track == UpdateTrack.beta, channel: channel);
+    try {
+      await channel.invokeMethod('setTrack', track.wireName);
+      return true;
+    } on PlatformException catch (e) {
+      debugPrint('[MacOSUpdater] Sparkle setTrack failed: $e');
+      return false;
+    } on MissingPluginException catch (e) {
+      debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
+      return false;
+    }
   }
 }

@@ -2,7 +2,7 @@ import Cocoa
 import FlutterMacOS
 import Sparkle
 
-/// User-defaults key backing the beta channel opt-in.
+/// User-defaults key backing the track choice.
 ///
 /// Swift owns this rather than Flutter because `allowedChannels(for:)` is a
 /// synchronous Objective-C callback that must return a value immediately.
@@ -11,11 +11,35 @@ import Sparkle
 /// method channel below.
 ///
 /// Settable without the UI for testing:
-///   defaults write dev.mydia.player MydiaBetaChannel -bool true
-let betaChannelDefaultsKey = "MydiaBetaChannel"
+///   defaults write dev.mydia.player MydiaUpdateTrack -string beta
+let updateTrackDefaultsKey = "MydiaUpdateTrack"
 
-/// The Sparkle channel prerelease items are tagged with in the appcast.
+/// The previous boolean opt-in. Still live: the settings screen has not been
+/// migrated off it yet, so the `getBetaChannel`/`setBetaChannel` cases below
+/// keep reading and writing it. `currentUpdateTrack()` only falls back to it
+/// when nothing has been written under the new key, so an existing beta user
+/// stays on beta after this upgrade, and a track write always wins from then
+/// on.
+///
+/// Settable without the UI for testing:
+///   defaults write dev.mydia.player MydiaBetaChannel -bool true
+let legacyBetaChannelDefaultsKey = "MydiaBetaChannel"
+
+/// Channels an item can be tagged with in the appcast. Stable items carry no
+/// channel and are visible to everyone, which is what lets a beta user return
+/// to stable on their own once a stable build number passes the beta they
+/// are running.
 let betaChannelName = "beta"
+let devChannelName = "dev"
+
+/// Resolves the track this installation follows, migrating the legacy
+/// boolean opt-in the first time nothing has been written under the new key.
+func currentUpdateTrack() -> String {
+  if let stored = UserDefaults.standard.string(forKey: updateTrackDefaultsKey) {
+    return stored
+  }
+  return UserDefaults.standard.bool(forKey: legacyBetaChannelDefaultsKey) ? betaChannelName : "stable"
+}
 
 /// Reports the user's channel choice to Sparkle on every update check.
 ///
@@ -28,7 +52,16 @@ let betaChannelName = "beta"
 /// ten lines.
 class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-    UserDefaults.standard.bool(forKey: betaChannelDefaultsKey) ? [betaChannelName] : []
+    switch currentUpdateTrack() {
+    case devChannelName:
+      // A dev user sees beta items too: dev is a superset, so they are never
+      // stranded below a beta that has already shipped.
+      return [betaChannelName, devChannelName]
+    case betaChannelName:
+      return [betaChannelName]
+    default:
+      return []
+    }
   }
 }
 
@@ -58,7 +91,7 @@ class AppDelegate: FlutterAppDelegate {
         result(nil)
 
       case "getBetaChannel":
-        result(UserDefaults.standard.bool(forKey: betaChannelDefaultsKey))
+        result(UserDefaults.standard.bool(forKey: legacyBetaChannelDefaultsKey))
 
       case "setBetaChannel":
         guard let enabled = call.arguments as? Bool else {
@@ -70,7 +103,7 @@ class AppDelegate: FlutterAppDelegate {
             ))
           return
         }
-        UserDefaults.standard.set(enabled, forKey: betaChannelDefaultsKey)
+        UserDefaults.standard.set(enabled, forKey: legacyBetaChannelDefaultsKey)
         result(nil)
         // Sparkle reads allowedChannels on every check, so this takes effect
         // without a restart. Check immediately on opt-in so the toggle does
@@ -78,6 +111,32 @@ class AppDelegate: FlutterAppDelegate {
         // result is answered first so the Dart future never depends on how
         // long Sparkle's check takes.
         if enabled {
+          self?.updaterController.checkForUpdates(nil)
+        }
+
+      case "getTrack":
+        result(currentUpdateTrack())
+
+      case "setTrack":
+        guard let track = call.arguments as? String,
+          ["stable", betaChannelName, devChannelName].contains(track)
+        else {
+          result(
+            FlutterError(
+              code: "bad-arguments",
+              message: "setTrack expects one of stable, beta, dev",
+              details: nil
+            ))
+          return
+        }
+        UserDefaults.standard.set(track, forKey: updateTrackDefaultsKey)
+        result(nil)
+        // Sparkle reads allowedChannels on every check, so this takes effect
+        // without a restart. Check immediately on anything but stable so the
+        // choice does something visible instead of waiting for the next
+        // scheduled check. result is answered first so the Dart future never
+        // depends on how long Sparkle's check takes.
+        if track != "stable" {
           self?.updaterController.checkForUpdates(nil)
         }
 

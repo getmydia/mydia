@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/update/update_track.dart';
 import 'package:player/core/update/updaters/macos_updater.dart';
 
 void main() {
@@ -82,5 +83,36 @@ void main() {
     await expectLater(MacOSUpdater.checkForUpdates(), completes);
     expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
     expect(await MacOSUpdater.setBetaChannel(true), isFalse);
+  });
+
+  test('currentTrack maps the host string', () async {
+    mock((_) async => 'beta');
+
+    expect(await MacOSUpdater.currentTrack(), UpdateTrack.beta);
+    expect(calls.map((c) => c.method), ['getTrack']);
+  });
+
+  test('an unknown host string falls back to stable', () async {
+    mock((_) async => 'banana');
+
+    expect(await MacOSUpdater.currentTrack(), UpdateTrack.stable);
+  });
+
+  test('setTrack sends the wire name and reports acceptance', () async {
+    expect(await MacOSUpdater.setTrack(UpdateTrack.dev), isTrue);
+
+    expect(calls.single.method, 'setTrack');
+    expect(calls.single.arguments, 'dev');
+  });
+
+  test('a host that is not there reports failure rather than throwing',
+      () async {
+    // Clearing the handler is what a real macOS build looks like before the
+    // native side registers, and MissingPluginException is not a
+    // PlatformException, so it needs its own catch clause.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kSparkleChannel, null);
+
+    expect(await MacOSUpdater.setTrack(UpdateTrack.beta), isFalse);
   });
 }
