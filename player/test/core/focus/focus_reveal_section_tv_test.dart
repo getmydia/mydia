@@ -26,7 +26,14 @@ void main() {
 
     /// A 400px hero with two buttons along its bottom, above a 600px block
     /// holding one card. The viewport is 540px, so the page scrolls.
-    Future<void> pumpPage(WidgetTester tester) async {
+    ///
+    /// [disableAnimations] wraps the scroll view in a `MediaQuery` requesting
+    /// reduced motion, built from the ambient one so the real view size is
+    /// preserved.
+    Future<void> pumpPage(
+      WidgetTester tester, {
+      bool disableAnimations = false,
+    }) async {
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -40,50 +47,60 @@ void main() {
       addTearDown(info.dispose);
       addTearDown(card.dispose);
 
+      final scrollView = CustomScrollView(
+        controller: controller,
+        slivers: [
+          SliverToBoxAdapter(
+            child: FocusRevealSection(
+              child: SizedBox(
+                height: 400,
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Focus(
+                        focusNode: play,
+                        child: const SizedBox(width: 100, height: 40),
+                      ),
+                      const SizedBox(width: 12),
+                      Focus(
+                        focusNode: info,
+                        child: const SizedBox(width: 100, height: 40),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 600,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Focus(
+                  focusNode: card,
+                  child: const SizedBox(width: 150, height: 200),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: CustomScrollView(
-              controller: controller,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: FocusRevealSection(
-                    child: SizedBox(
-                      height: 400,
-                      child: Align(
-                        alignment: Alignment.bottomLeft,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Focus(
-                              focusNode: play,
-                              child: const SizedBox(width: 100, height: 40),
-                            ),
-                            const SizedBox(width: 12),
-                            Focus(
-                              focusNode: info,
-                              child: const SizedBox(width: 100, height: 40),
-                            ),
-                          ],
-                        ),
-                      ),
+            body: !disableAnimations
+                ? scrollView
+                : Builder(
+                    builder: (context) => MediaQuery(
+                      data: MediaQuery.of(context)
+                          .copyWith(disableAnimations: true),
+                      child: scrollView,
                     ),
                   ),
-                ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 600,
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: Focus(
-                        focusNode: card,
-                        child: const SizedBox(width: 150, height: 200),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       );
@@ -125,6 +142,28 @@ void main() {
 
       expect(info.hasFocus, isTrue);
       expect(controller.offset, 100);
+    });
+
+    testWidgets(
+        'UP into the section with reduced motion lands at the revealed '
+        'position with no animation to settle', (tester) async {
+      await pumpPage(tester, disableAnimations: true);
+
+      // Same setup as the first test: the card is at the top of the
+      // viewport and the hero's buttons are just above it, off screen.
+      controller.jumpTo(400);
+      card.requestFocus();
+      await tester.pumpAndSettle();
+      expect(card.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      // A single pump, not pumpAndSettle: with reduced motion the reveal
+      // has no animation to settle, so the scroll must already be at its
+      // final position after one frame.
+      await tester.pump();
+
+      expect(play.hasFocus, isTrue);
+      expect(controller.offset, 0);
     });
   }, skip: skipReason);
 }

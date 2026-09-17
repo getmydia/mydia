@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../player/input_capabilities.dart';
+import '../ui/reduced_motion.dart';
 
 /// Scrolls the whole of its child into view, top-aligned, when focus enters
 /// it.
@@ -35,12 +36,25 @@ class FocusRevealSection extends StatefulWidget {
 }
 
 class _FocusRevealSectionState extends State<FocusRevealSection> {
+  static const _defaultRevealDuration = Duration(milliseconds: 220);
+
   /// Whether the subtree held focus at the last notification.
   ///
   /// `Focus` calls `onFocusChange` on every notification its node receives,
   /// including property changes that leave focus where it was, so the
   /// transition is tracked here rather than assumed.
   bool _hadFocus = false;
+
+  /// The reveal's animation duration, resolved from [ReducedMotion] on the
+  /// last build.
+  ///
+  /// It has to be read here rather than inline in the post-frame callback
+  /// below: `ReducedMotion.duration` registers a `MediaQuery` dependency only
+  /// when called from `build`, which is what makes this widget rebuild when
+  /// the viewer flips their reduced-motion preference. The callback fires
+  /// later, outside any build, so it just reads the value this field already
+  /// captured.
+  Duration _revealDuration = _defaultRevealDuration;
 
   void _handleFocusChange(bool hasFocus) {
     final entered = hasFocus && !_hadFocus;
@@ -51,7 +65,7 @@ class _FocusRevealSectionState extends State<FocusRevealSection> {
       Scrollable.ensureVisible(
         context,
         alignment: 0.0,
-        duration: const Duration(milliseconds: 220),
+        duration: _revealDuration,
         curve: Curves.easeOutCubic,
       );
     });
@@ -60,6 +74,7 @@ class _FocusRevealSectionState extends State<FocusRevealSection> {
   @override
   Widget build(BuildContext context) {
     if (!InputCapabilities.directionalPrimary) return widget.child;
+    _revealDuration = ReducedMotion.duration(context, _defaultRevealDuration);
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
