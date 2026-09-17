@@ -45,6 +45,27 @@ void main() {
     expect(metrics.valueSize, greaterThan(14));
   });
 
+  // A D-pad viewport too short for the tv tier falls through to full or
+  // compact, but buttons must stay off regardless: a focusable button in
+  // the panel would still join D-pad traversal and fight the OSD's focus
+  // scope, and that hazard does not care which density branch was taken.
+  test('a D-pad viewport that falls through to full still hides buttons', () {
+    // 650 tall, minus the 64px top inset, minus the desktop tier's 174px
+    // corner inset, leaves 412: enough for the full panel, not the tv one.
+    final metrics = resolve(1280, 650, tv: true);
+
+    expect(metrics!.density, StatsDensity.full);
+    expect(metrics.showButtons, isFalse);
+  });
+
+  test('a D-pad viewport that falls through to compact still hides buttons',
+      () {
+    final metrics = resolve(844, 390, tv: true);
+
+    expect(metrics!.density, StatsDensity.compact);
+    expect(metrics.showButtons, isFalse);
+  });
+
   // The panel hangs below the chrome's top pill row, which sits at
   // `Positioned(top: 16)` inside a SafeArea and is GlassPill.defaultHeight
   // (36) tall. Anything smaller draws the panel over the title pill.

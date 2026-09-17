@@ -26,7 +26,11 @@ class StatsMetrics {
     required this.showButtons,
   });
 
+  /// Which tier [resolve] picked for this viewport.
   final StatsDensity density;
+
+  /// Panel width in logical pixels. See the per-tier comments in [resolve]
+  /// for where each value comes from.
   final double width;
 
   /// Distance from the left edge of the safe area.
@@ -36,13 +40,22 @@ class StatsMetrics {
   /// renders no taller than this.
   final double maxHeight;
 
+  /// Row label font size. See the per-tier comments in [resolve].
   final double labelSize;
+
+  /// Row value font size. See the per-tier comments in [resolve].
   final double valueSize;
+
+  /// Vertical gap between rows. See the per-tier comments in [resolve].
   final double rowGap;
+
+  /// Whether the sparkline renders. False only on the compact tier, which
+  /// has no room for it once the fixed rows are laid out.
   final bool showSparkline;
 
-  /// Whether the copy and close buttons render. False on the remote tier:
-  /// a focusable button in the panel would join traversal and fight the
+  /// Whether the copy and close buttons render. False whenever the input
+  /// is D-pad primary, regardless of which density tier was resolved: a
+  /// focusable button in the panel would join traversal and fight the
   /// OSD's own focus scope.
   final bool showButtons;
 
@@ -88,13 +101,27 @@ class StatsMetrics {
     // directly. `touchPrimary` is hardcoded to false rather than threaded
     // through as a parameter here because `cornerInsetBottom`, the only
     // field this reads, is set per width tier in every branch of
-    // `PanelMetrics.resolve` and never varies with `touchPrimary`.
+    // `PanelMetrics.resolve` and never varies with `touchPrimary`. If a
+    // future change needs a field that does vary with it instead
+    // (`touchTargets`, `maxWidth`, `compactTransport`), thread the real
+    // `touchPrimary` through `StatsMetrics.resolve` rather than assuming
+    // false here.
     final available = viewport.height -
         topInset -
         PanelMetrics.resolve(width: viewport.width, touchPrimary: false)
             .cornerInsetBottom;
 
+    // A focusable copy/close button in the panel would join D-pad
+    // traversal and fight the OSD's own focus scope. That hazard is about
+    // the remote, not the density: even when the viewport is too short
+    // for the tv tier below and falls through to full or compact, buttons
+    // stay off whenever the input is D-pad primary.
+    final showButtons = !directionalPrimary;
+
     if (directionalPrimary && available >= tvHeight) {
+      // Scaled for 10-foot viewing. The width is set so the longest value
+      // string the panel can show, the Why row's "remembered decode
+      // failure", does not wrap at 15px.
       return StatsMetrics(
         density: StatsDensity.tv,
         width: 462,
@@ -104,10 +131,13 @@ class StatsMetrics {
         valueSize: 15,
         rowGap: 9,
         showSparkline: true,
-        showButtons: false,
+        showButtons: showButtons,
       );
     }
     if (available >= fullHeight) {
+      // Width and reading sizes from the approved design mockup, for a
+      // pointer at desk distance. The 90px label column in a later task's
+      // panel widget is sized against this.
       return StatsMetrics(
         density: StatsDensity.full,
         width: 352,
@@ -117,10 +147,14 @@ class StatsMetrics {
         valueSize: 12,
         rowGap: 7,
         showSparkline: true,
-        showButtons: true,
+        showButtons: showButtons,
       );
     }
     if (available >= compactHeight) {
+      // Not a design choice, a fit constraint: a phone in landscape
+      // leaves about 168px between `topInset` and the control panel's
+      // corner inset, and seven rows plus a header only fit that at this
+      // density. This is why `compactHeight` is 164 and not rounder.
       return StatsMetrics(
         density: StatsDensity.compact,
         width: 292,
@@ -130,7 +164,7 @@ class StatsMetrics {
         valueSize: 11,
         rowGap: 4,
         showSparkline: false,
-        showButtons: true,
+        showButtons: showButtons,
       );
     }
     return null;
