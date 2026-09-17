@@ -131,4 +131,24 @@ defmodule MydiaWeb.MediaLive.SizeSortTest do
     refute cell_html =~ "0 B"
     assert cell_html =~ "—"
   end
+
+  test "the header reports the filtered item count and total size", %{conn: conn} do
+    keeper = media_item_fixture(%{type: "movie", title: "Harrowgate Bell"})
+    media_file_fixture(%{media_item_id: keeper.id, size: 3 * 1_073_741_824})
+
+    other = media_item_fixture(%{type: "movie", title: "Tin Orchard"})
+    media_file_fixture(%{media_item_id: other.id, size: 1_073_741_824})
+
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    assert has_element?(view, "#library-total-size", "4.0 GB")
+    assert has_element?(view, "#library-item-count", "2")
+
+    view
+    |> element("#library-search-form")
+    |> render_change(%{"search" => "Harrowgate"})
+
+    assert has_element?(view, "#library-total-size", "3.0 GB")
+    assert has_element?(view, "#library-item-count", "1")
+  end
 end

@@ -11,9 +11,24 @@
           />
           <h1 id="section-heading" class="text-3xl font-bold">{@page_title}</h1>
         </div>
-        <p class="text-base-content/70 mt-1">
-          Browse and manage your media library
-        </p>
+        <%!-- What the active search and filters actually match, and cost.
+              Both figures come from LibraryListing.page/1, which already
+              walks every matching row before it paginates. --%>
+        <div :if={@loading?} class="skeleton h-9 w-48 mt-1"></div>
+        <div :if={not @loading?} class="stats stats-horizontal bg-transparent mt-1">
+          <div class="stat px-0 pr-6 py-0">
+            <div class="stat-title text-xs">Items</div>
+            <div id="library-item-count" class="stat-value text-2xl tabular-nums">
+              {MapSet.size(@all_visible_ids)}
+            </div>
+          </div>
+          <div class="stat px-6 py-0">
+            <div class="stat-title text-xs">On disk</div>
+            <div id="library-total-size" class="stat-value text-2xl tabular-nums">
+              {format_file_size(@total_size)}
+            </div>
+          </div>
+        </div>
 
         <div :if={@section_error} id="section-rules-error" class="alert alert-warning mt-3">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />

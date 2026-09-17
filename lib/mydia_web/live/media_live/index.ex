@@ -71,6 +71,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:show_add_to_collection_modal, false)
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
+     |> assign(:total_size, 0)
      |> stream(:media_items, [])}
   end
 
@@ -132,6 +133,7 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:loading?, false)
         |> assign(:media_items_empty?, true)
         |> assign(:all_visible_ids, MapSet.new())
+        |> assign(:total_size, 0)
         |> assign(:has_more, false)
         |> stream(:media_items, [], reset: true)
     end
@@ -862,6 +864,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:media_items_empty?, reset? and listing.empty?)
     # Every matching id, not only the page, for "Select All".
     |> assign(:all_visible_ids, listing.visible_ids)
+    |> assign(:total_size, listing.total_size)
     |> stream(:media_items, listing.rows, reset: reset?)
   end
 
