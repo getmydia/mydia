@@ -1,6 +1,6 @@
 defmodule MydiaWeb.MediaLive.SizeSortTest do
-  # async: false — the Postgres non-shared sandbox hides these rows from the
-  # LiveView mount process otherwise. Same reason as added_sort_test.exs.
+  # async: false, because the Postgres non-shared sandbox hides these rows from
+  # the LiveView mount process otherwise. Same reason as added_sort_test.exs.
   use MydiaWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
@@ -83,5 +83,52 @@ defmodule MydiaWeb.MediaLive.SizeSortTest do
 
     assert small_position < big_position
     assert big_position < empty_position
+  end
+
+  # `<.view_mode_toggle>` renders through SegmentedControl, whose segments are
+  # `<button phx-click="toggle_view" phx-value-mode="grid|list">`.
+  @list_view "button[phx-click=toggle_view][phx-value-mode=list]"
+
+  test "the list view size cell shows tabular-nums and an icon for a sized item", %{
+    conn: conn
+  } do
+    item = media_item_fixture(%{type: "movie", title: "Harrowgate Bell"})
+    media_file_fixture(%{media_item_id: item.id, size: 3 * 1_073_741_824})
+
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    view |> element(@list_view) |> render_click()
+
+    # Scoped to this row's own cell so the header stat block the next task
+    # adds (which also renders a formatted size) can never satisfy this.
+    cell_selector = "#list-item-#{item.id} [title='Size on disk']"
+    assert has_element?(view, cell_selector)
+
+    cell_html = view |> element(cell_selector) |> render()
+
+    # Each assertion fails on its own if that one detail regresses: dropping
+    # `tabular-nums`, dropping the icon, or the size branch not firing.
+    assert cell_html =~ "tabular-nums"
+    assert cell_html =~ "hero-circle-stack"
+    assert cell_html =~ "3.0 GB"
+  end
+
+  test "an item with nothing on disk shows a dash, not 0 B", %{conn: conn} do
+    item = media_item_fixture(%{type: "movie", title: "Nightjar Protocol"})
+
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    view |> element(@list_view) |> render_click()
+
+    cell_selector = "#list-item-#{item.id} [title='Size on disk']"
+    assert has_element?(view, cell_selector)
+
+    cell_html = view |> element(cell_selector) |> render()
+
+    # Scoped to the row's own cell, not the page, so the header stat block
+    # the next task adds (also "0 B" when the filtered set is empty) cannot
+    # make this pass by accident.
+    refute cell_html =~ "0 B"
+    assert cell_html =~ "—"
   end
 end

@@ -623,9 +623,23 @@
                 <span class="text-base-content/40">—</span>
               <% end %>
             </div>
-            <%!-- Size column --%>
-            <div class="w-24 hidden xl:block text-right text-base-content/70 text-sm flex-shrink-0">
-              {format_file_size(total_file_size(row))}
+            <%!-- Size column. tabular-nums so a size-sorted column reads down;
+                 proportional digits make it look ragged. Matches the treatment
+                 downloads_live/index.html.heex already uses for this value. --%>
+            <div
+              class="w-24 hidden xl:block text-right text-base-content/70 text-sm flex-shrink-0"
+              title="Size on disk"
+            >
+              <% size = total_file_size(row) %>
+              <%= if size > 0 do %>
+                <span class="inline-flex items-center gap-1 tabular-nums">
+                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_file_size(
+                    size
+                  )}
+                </span>
+              <% else %>
+                <span class="text-base-content/40">—</span>
+              <% end %>
             </div>
           </div>
         <% end %>
