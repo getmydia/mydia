@@ -203,3 +203,38 @@ test('a missing or broken dev index yields no dev builds', () => {
   assert.deepEqual(parseDevIndex('not json'), [])
   assert.deepEqual(parseDevIndex('{"builds":"nope"}'), [])
 })
+
+test('parseDevIndex drops malformed elements instead of letting them crash buildReleasesModel', () => {
+  const wellFormed = {
+    platform: 'android',
+    version: '0.16.0-dev.7',
+    build: 1600007,
+    file: 'android/x.apk',
+    size: 10,
+    sha256: 'abc',
+    published_at: '2026-09-15T08:00:00Z',
+  }
+
+  const body = JSON.stringify({
+    builds: [
+      null,
+      'not-an-object',
+      { ...wellFormed, platform: undefined },
+      { ...wellFormed, build: undefined },
+      { ...wellFormed, file: undefined },
+      wellFormed,
+    ],
+  })
+
+  const builds = parseDevIndex(body)
+  assert.equal(builds.length, 1)
+  assert.equal(builds[0].version, '0.16.0-dev.7')
+})
+
+test('buildReleasesModel skips a malformed dev build rather than throwing', () => {
+  // Exercises the model's own guard directly, since it is also called with
+  // hand-built arrays (as every other test in this file does) rather than
+  // exclusively through parseDevIndex.
+  const model = buildReleasesModel([stable], [null, 'not-an-object', ...devBuilds])
+  assert.equal(model.platforms.android.dev.version, '0.16.0-dev.7')
+})

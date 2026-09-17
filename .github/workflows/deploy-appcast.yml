@@ -149,23 +149,42 @@ jobs:
           # Same reasoning as the appcast check above: a Pages preview
           # deployment succeeds loudly while updates.mydia.dev serves the old
           # file, so compare content rather than trusting the deploy's exit
-          # code. The stable Android build number is the discriminator; it
-          # moves on every release.
-          local_build=$(jq -r '.platforms.android.stable.build // "none"' dist/releases.json)
-          echo "Expecting Android stable build ${local_build}."
+          # code.
+          #
+          # The whole platforms object is hashed, not just the stable Android
+          # build. A dev-build-only refresh leaves
+          # platforms.android.stable.build unchanged, so comparing only that
+          # field would be blind to exactly the track this file adds.
+          # generated_at is excluded from the digest: it changes on every run
+          # and would keep the digest from ever matching.
+          #
+          # Retries for the same reason as the appcast check: Cloudflare
+          # propagation timing is not guaranteed.
+          digest() { jq -S -c '.platforms' "$1" | sha256sum | cut -d' ' -f1; }
+          summary() { jq -c '.platforms | map_values(map_values(.build))' "$1"; }
+
+          local_digest=$(digest dist/releases.json)
+          local_summary=$(summary dist/releases.json)
+          echo "Expecting platforms digest ${local_digest} (builds: ${local_summary})."
 
           for attempt in 1 2 3 4 5 6; do
             if curl -fsSL --max-time 20 https://updates.mydia.dev/releases.json -o served.json; then
-              served_build=$(jq -r '.platforms.android.stable.build // "none"' served.json)
-              if [ "$served_build" = "$local_build" ]; then
-                echo "updates.mydia.dev is serving build ${served_build} after ${attempt} attempt(s)."
+              served_digest=$(digest served.json)
+
+              if [ "$served_digest" = "$local_digest" ]; then
+                echo "updates.mydia.dev is serving the expected platforms content after ${attempt} attempt(s)."
                 exit 0
               fi
-              echo "Attempt ${attempt}: serving ${served_build}, waiting for ${local_build}."
+
+              served_summary=$(summary served.json)
+              echo "Attempt ${attempt}: served digest ${served_digest} (builds: ${served_summary}), expecting ${local_digest} (builds: ${local_summary})."
+            else
+              echo "Attempt ${attempt}: could not fetch the feed. Retrying."
             fi
+
             sleep 10
           done
 
-          echo "::error::updates.mydia.dev did not serve releases.json with build ${local_build} after 6 attempts."
+          echo "::error::updates.mydia.dev did not serve releases.json matching digest ${local_digest} (builds: ${local_summary}) after 6 attempts."
           echo "::error::Check the mydia-appcast Pages project, its production branch, and the updates.mydia.dev DNS record."
           exit 1

@@ -186,6 +186,13 @@ export function buildReleasesModel(releases, devBuilds) {
   }
 
   for (const devBuild of devBuilds ?? []) {
+    // Defends the same shape parseDevIndex already filters for, rather than
+    // trusting that every caller routes through it: this function is also
+    // called directly, including by its own tests, with hand-built arrays.
+    // Without this, a null or non-object element throws reading .platform
+    // below and takes the whole run down over a single bad entry.
+    if (!devBuild || typeof devBuild !== 'object') continue
+
     const platform = devBuild.platform
     if (!PLATFORMS.includes(platform)) continue
 
