@@ -41,13 +41,13 @@ case "$version" in
         n="${suffix#dev.}"
         [[ "$n" =~ ^[0-9]+$ ]] || die "dev suffix must be dev.<number>: $version"
         [ "$n" -le 499 ] || die "dev counter above 499 would collide with the beta band: $version"
-        slot="$n"
+        slot=$(( 10#$n ))
         ;;
       beta.*|rc.*)
         n="${suffix#*.}"
         [[ "$n" =~ ^[0-9]+$ ]] || die "beta suffix must be beta.<number> or rc.<number>: $version"
         [ "$n" -le 399 ] || die "beta counter above 399 would collide with the stable slot: $version"
-        slot=$(( 500 + n ))
+        slot=$(( 500 + 10#$n ))
         ;;
       *)
         die "unrecognised prerelease suffix: $version"
@@ -59,7 +59,7 @@ case "$version" in
     n="${version#*+refresh.}"
     [[ "$n" =~ ^[0-9]+$ ]] || die "refresh suffix must be +refresh.<number>: $version"
     [ "$n" -ge 1 ] && [ "$n" -le 99 ] || die "refresh counter must be 1..99: $version"
-    slot=$(( 900 + n ))
+    slot=$(( 900 + 10#$n ))
     ;;
 esac
 
@@ -72,4 +72,4 @@ done
 [ "$minor" -le 99 ] || die "minor above 99 overflows its field: $version"
 [ "$patch" -le 99 ] || die "patch above 99 overflows its field: $version"
 
-echo $(( major * 10000000 + minor * 100000 + patch * 1000 + slot ))
+echo $(( 10#$major * 10000000 + 10#$minor * 100000 + 10#$patch * 1000 + slot ))

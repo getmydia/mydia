@@ -32,6 +32,10 @@ expect "dev zero" 1500000 "$($SCRIPT 0.15.0-dev.0)"
 expect "beta" 1500502 "$($SCRIPT 0.15.0-beta.2)"
 expect "rc shares the beta band" 1500501 "$($SCRIPT 0.15.0-rc.1)"
 expect "refresh" 1500902 "$($SCRIPT 0.15.0+refresh.2)"
+expect "leading zero dev counter" 1500010 "$($SCRIPT 0.15.0-dev.010)"
+expect "leading zero that would be invalid octal" 1500008 "$($SCRIPT 0.15.0-dev.08)"
+expect "leading zero version field" 1500900 "$($SCRIPT 0.15.0)"
+expect "zero padded minor" 1500900 "$($SCRIPT 0.015.0)"
 
 # Ordering is the property that matters, so assert it rather than trusting the
 # numbers above to stay in step with each other.
