@@ -4,15 +4,22 @@ defmodule MydiaWeb.Formatters do
   @doc """
   Formats a byte count into a human-readable file size string.
 
+  `nil` renders as an em dash, the same "no value" marker the library list's
+  quality column uses. This is the one byte formatter in the web layer; six
+  near-copies of it were folded into this function, and they disagreed both
+  on the largest tier and on the wording for an unknown size.
+
   ## Examples
 
       iex> MydiaWeb.Formatters.format_file_size(1024)
       "1.0 KB"
 
-      iex> MydiaWeb.Formatters.format_file_size(1_073_741_824)
-      "1.0 GB"
+      iex> MydiaWeb.Formatters.format_file_size(nil)
+      "—"
 
   """
+  def format_file_size(nil), do: "—"
+
   def format_file_size(bytes) when is_integer(bytes) do
     cond do
       bytes >= 1_099_511_627_776 -> "#{Float.round(bytes / 1_099_511_627_776, 2)} TB"
