@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.IndexTest do
   import Mydia.MediaFixtures
   import Mydia.DownloadsFixtures
   import Mydia.AccountsFixtures
+  import Mydia.CollectionsFixtures
   import MydiaWeb.AuthHelpers
 
   describe "Media Library Index" do
@@ -1354,6 +1355,49 @@ defmodule MydiaWeb.MediaLive.IndexTest do
 
       refute has_element?(view, "#media-items-skeleton")
       assert has_element?(view, "#grid-item-#{show.id}")
+    end
+  end
+
+  describe "add to collection modal" do
+    setup %{conn: conn} do
+      admin = admin_user_fixture()
+      %{conn: log_in_user(conn, admin), admin: admin}
+    end
+
+    test "show_add_to_collection decorates the user's collections with a populated item_count",
+         %{conn: conn, admin: admin} do
+      target = insert(:media_item, type: "movie", title: "Skyline Drift")
+
+      collection = collection_fixture(%{user: admin, name: "Weekend Watchlist"})
+
+      collection_item_fixture(%{
+        collection: collection,
+        media_item: insert(:media_item, type: "movie", title: "Harbor Lights")
+      })
+
+      collection_item_fixture(%{
+        collection: collection,
+        media_item: insert(:media_item, type: "movie", title: "Glass Horizon")
+      })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      # Before the handler runs, user_collections starts empty (see mount/3),
+      # so the modal renders its empty state rather than the collection.
+      refute has_element?(view, "#add-to-collection-modal", "Weekend Watchlist")
+
+      render_click(view, "toggle_selection_mode", %{})
+      render_click(view, "toggle_select", %{"id" => target.id})
+      render_click(view, "show_add_to_collection", %{})
+
+      modal_html = view |> element("#add-to-collection-modal") |> render()
+
+      # This is the line the struct-update conversion touched: the modal
+      # template reads collection.item_count straight off the decorated
+      # struct, so a wrong or missing value here means %{collection |
+      # item_count: ...} raised or produced the wrong count.
+      assert modal_html =~ "Weekend Watchlist"
+      assert modal_html =~ "2 items"
     end
   end
 end
