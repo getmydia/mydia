@@ -113,6 +113,13 @@ class ChromeTopBar extends StatelessWidget {
   /// title stays optically centered.
   final VoidCallback? onBack;
 
+  /// Whether the back pill renders at all.
+  ///
+  /// False on the remote tier, whose BACK key already dismisses the chrome
+  /// and then leaves playback. Distinct from a null [onBack], which keeps the
+  /// pill on screen but inert.
+  final bool showBack;
+
   /// Cast / AirPlay affordance. When null the pill is omitted.
   final Widget? castAction;
 
@@ -128,6 +135,7 @@ class ChromeTopBar extends StatelessWidget {
     super.key,
     this.title,
     this.onBack,
+    this.showBack = true,
     this.castAction,
     this.onCastTap,
     this.tier,
@@ -183,22 +191,24 @@ class ChromeTopBar extends StatelessWidget {
         Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
-            child: _focusablePill(
-              onTap: onBack,
-              child: GlassPill(
-                key: backKey,
-                tier: tier,
-                onTap: onBack,
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.chevron_left_rounded),
-                    SizedBox(width: 2),
-                    Text('Back'),
-                  ],
-                ),
-              ),
-            ),
+            child: !showBack
+                ? const SizedBox.shrink()
+                : _focusablePill(
+                    onTap: onBack,
+                    child: GlassPill(
+                      key: backKey,
+                      tier: tier,
+                      onTap: onBack,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.chevron_left_rounded),
+                          SizedBox(width: 2),
+                          Text('Back'),
+                        ],
+                      ),
+                    ),
+                  ),
           ),
         ),
         if (titleText != null)

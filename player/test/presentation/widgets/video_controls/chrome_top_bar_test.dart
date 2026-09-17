@@ -270,6 +270,27 @@ void main() {
       expect(titleHeight, GlassPill.defaultHeight);
       expect(castHeight, GlassPill.defaultHeight);
     });
+
+    testWidgets(
+        'showBack: false omits the back pill entirely and keeps the title '
+        'centered', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChromeTopBar(
+            tier: PlayerGlassTier.full,
+            showBack: false,
+            onBack: () {},
+            title: 'Harbor Lights',
+          ),
+        ),
+      );
+
+      expect(find.byKey(ChromeTopBar.backKey), findsNothing);
+
+      final rowRect = tester.getRect(find.byType(ChromeTopBar));
+      final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
+      expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
+    });
   });
 
   group('GlassPill', () {
