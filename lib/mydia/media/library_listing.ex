@@ -56,7 +56,8 @@ defmodule Mydia.Media.LibraryListing do
           rows: [LibraryRow.t()],
           has_more?: boolean(),
           visible_ids: MapSet.t(binary()),
-          empty?: boolean()
+          empty?: boolean(),
+          total_size: non_neg_integer()
         }
 
   @doc """
@@ -65,6 +66,8 @@ defmodule Mydia.Media.LibraryListing do
   `rows` is the page, with `user_id`'s playback progress. `visible_ids` covers
   every row the search and filters match, not only the page, so select-all can
   use it. `limit: 0` skips the progress query when only `visible_ids` is needed.
+  `total_size` is the bytes on disk across every matching row, not only the
+  page, so a filtered listing can report what the filter actually costs.
 
   Filter options go to `Mydia.Media.media_items_query/1`: `:base_query`,
   `:exclude_categories`, `:type`, `:monitored`. Applied in memory: `:search`,
@@ -90,7 +93,8 @@ defmodule Mydia.Media.LibraryListing do
       rows: rows |> Enum.drop(offset) |> Enum.take(limit) |> put_progress(user_id),
       has_more?: length(rows) > offset + limit,
       visible_ids: MapSet.new(rows, & &1.id),
-      empty?: rows == []
+      empty?: rows == [],
+      total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum()
     }
   end
 

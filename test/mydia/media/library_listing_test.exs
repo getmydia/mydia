@@ -404,6 +404,37 @@ defmodule Mydia.Media.LibraryListingTest do
 
       assert small == large
     end
+
+    test "total_size sums every matching row, not only the page", %{user: user} do
+      first = media_item_fixture(%{title: "Harrowgate Bell"})
+      media_file_fixture(%{media_item_id: first.id, size: 3_000})
+
+      second = media_item_fixture(%{title: "Tin Orchard"})
+      media_file_fixture(%{media_item_id: second.id, size: 5_000})
+
+      media_item_fixture(%{title: "Nightjar Protocol"})
+
+      assert page(user, limit: 1).total_size == 8_000
+    end
+
+    test "total_size respects the search and quality filters", %{user: user} do
+      keeper = media_item_fixture(%{title: "Harrowgate Bell"})
+      media_file_fixture(%{media_item_id: keeper.id, resolution: "2160p", size: 3_000})
+
+      other = media_item_fixture(%{title: "Tin Orchard"})
+      media_file_fixture(%{media_item_id: other.id, resolution: "1080p", size: 5_000})
+
+      assert page(user, search: "Harrowgate").total_size == 3_000
+      assert page(user, quality: "1080p").total_size == 5_000
+      assert page(user, search: "no such title").total_size == 0
+    end
+
+    test "total_size is returned when limit is 0", %{user: user} do
+      item = media_item_fixture(%{title: "Harrowgate Bell"})
+      media_file_fixture(%{media_item_id: item.id, size: 3_000})
+
+      assert page(user, limit: 0).total_size == 3_000
+    end
   end
 
   # What the listing computed before LibraryListing existed: a fully preloaded
