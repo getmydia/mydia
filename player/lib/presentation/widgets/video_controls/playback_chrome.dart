@@ -77,9 +77,11 @@ class ChromeVisibilityController extends ChangeNotifier {
 /// wraps it.
 ///
 /// Chrome hides only when all of these hold: playback is running, the user is
-/// not scrubbing, and the pointer is not resting over the chrome. That last
-/// condition fixes a real defect — previously the chrome would fade out from
-/// under a stationary cursor that was aiming at a button.
+/// not scrubbing, the pointer is not resting over the chrome, and no selector
+/// is open over the player. The pointer condition fixes a real defect:
+/// previously the chrome would fade out from under a stationary cursor that
+/// was aiming at a button. The selector condition keeps a remote viewer's
+/// focus from coming back to a control that hid while the selector was open.
 ///
 /// The pointer-left-the-window hide (below, in [build]) is gated on
 /// `!PlatformFeatures.isMobile`, i.e. it is live on Flutter web as well as
@@ -210,14 +212,12 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   /// changes.
   bool _pointerOverChrome = false;
 
-  /// Whether the player's own route is still the top one, sampled in [build].
+  /// Whether the player's own route is still the top one.
   ///
-  /// Read in [build] rather than in the exit handler on purpose:
-  /// `ModalRoute.of` registers an inherited-widget dependency, and
-  /// `_ModalScopeStatus.updateShouldNotify` compares `isCurrent`, so sampling
-  /// it here means this widget rebuilds when a selector opens or closes and
-  /// the flag stays accurate without calling into the element tree from a
-  /// pointer callback.
+  /// Sampled in [didChangeDependencies]: `ModalRoute.isCurrentOf` registers
+  /// an inherited-widget dependency on exactly this aspect, so this state is
+  /// told when a selector opens or closes, and neither the timer nor a
+  /// pointer callback has to call into the element tree. Part of [_mayHide].
   bool _routeIsCurrent = true;
 
   /// Authoritative shown/hidden intent. Deliberately **not** derived from
@@ -286,6 +286,17 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final wasCurrent = _routeIsCurrent;
+    _routeIsCurrent = ModalRoute.isCurrentOf(context) ?? true;
+    // A selector just closed. The countdown may have run out underneath it
+    // and done nothing, so start a fresh one rather than leaving the chrome
+    // up until the next input.
+    if (_routeIsCurrent && !wasCurrent) _restartTimer();
+  }
+
+  @override
   void dispose() {
     widget.controller?._detach(this);
     if (widget.restartOnKeyActivity) {
@@ -299,7 +310,10 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   }
 
   bool get _mayHide =>
-      widget.isPlaying && !widget.isSeeking && !_pointerOverChrome;
+      widget.isPlaying &&
+      !widget.isSeeking &&
+      !_pointerOverChrome &&
+      _routeIsCurrent;
 
   void _restartTimer() {
     _hideTimer?.cancel();
@@ -356,8 +370,6 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
 
   @override
   Widget build(BuildContext context) {
-    _routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
-
     final content = ChromeAnimation(
       animation: _curved,
       child: FadeTransition(
@@ -430,14 +442,14 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
           // pointer-over-chrome invariants. The 250ms reverse fade still
           // runs; "immediately" refers to the timer, not the animation.
           //
-          // `_routeIsCurrent` keeps an open selector from hiding the chrome
-          // underneath itself, which would leave it gone after dismissal
-          // until the mouse moved again.
+          // `_mayHide` includes `_routeIsCurrent`, which keeps an open
+          // selector from hiding the chrome underneath itself; that would
+          // leave it gone after dismissal until the mouse moved again.
           //
           // `mounted` is checked because a test's `gesture.removePointer`
           // teardown, and a real window close, both synthesise an exit that
           // can arrive while this State is being torn down.
-          if (mounted && _routeIsCurrent && _mayHide) _hide();
+          if (mounted && _mayHide) _hide();
         },
         child: stack,
       );

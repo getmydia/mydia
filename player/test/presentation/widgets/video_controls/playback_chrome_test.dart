@@ -614,6 +614,41 @@ void main() {
           reason: 'a disposed chrome must not leave a global key handler '
               'behind');
     });
+
+    testWidgets(
+        'does not auto-hide while a modal route is on top, and counts down '
+        'again once it closes', (tester) async {
+      // The subtitle, audio and quality pickers are sheets and dialogs over
+      // the player. Hiding underneath one strands focus on an invisible
+      // control once it closes, so the next OK reopens the picker.
+      await tester.pumpWidget(
+        _host(const ChromeVisibility(isPlaying: true, child: Text('chrome'))),
+      );
+
+      final context = tester.element(find.byType(ChromeVisibility));
+      unawaited(
+        showModalBottomSheet<void>(
+          context: context,
+          builder: (_) => const Text('picker'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 1.0,
+          reason: 'chrome hid underneath an open selector');
+
+      Navigator.of(context).pop();
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 1.0,
+          reason: 'closing the selector must not hide the chrome at once');
+
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(_opacity(tester), 0.0,
+          reason: 'the countdown must start over once the selector closes');
+    });
   });
 
   group('ChromeSlide', () {
