@@ -1,16 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/auth/auth_service.dart';
+import '../../../core/settings/settings_providers.dart';
 import '../../../core/settings/settings_service.dart';
 import '../../../domain/models/user_settings.dart';
 
 part 'settings_controller.g.dart';
 
 /// Provider for the settings service instance.
+///
+/// Delegates to `coreSettingsServiceProvider` so an override in a test, or
+/// a future change of storage, reaches every reader at once.
 @riverpod
-SettingsService settingsService(Ref ref) {
-  return SettingsService();
-}
+SettingsService settingsService(Ref ref) =>
+    ref.watch(coreSettingsServiceProvider);
 
 /// Controller for managing user settings.
 @riverpod
