@@ -27,6 +27,8 @@ import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_identity.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
+import '../../../test_utils/dock_harness.dart';
+
 /// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
 /// `Box`, and the settings screen's row is the thing under test here, not a
 /// stand-in for it. A unique box name per test avoids Hive's open-box cache
@@ -170,6 +172,7 @@ Future<void> _pump(
   RegistrationStatus registration = const RegistrationIdle(),
   UpdateState? updateState,
   CrashReporter? crashReporter,
+  bool inShell = false,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -219,7 +222,9 @@ Future<void> _pump(
           routes: [
             GoRoute(
               path: '/settings',
-              builder: (context, state) => const SettingsScreen(),
+              builder: (context, state) => inShell
+                  ? shellScaffold(child: const SettingsScreen())
+                  : const SettingsScreen(),
             ),
             GoRoute(
               path: '/settings/devices',
@@ -628,5 +633,24 @@ void main() {
     );
 
     expect(find.byKey(const Key('crash-reporting-switch')), findsOneWidget);
+  });
+
+  testWidgets('scrolls its version footer clear of the dock', (tester) async {
+    tester.view.physicalSize = const Size(600, 800);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.padding = const FakeViewPadding(bottom: 34);
+    addTearDown(tester.view.reset);
+
+    await _pump(
+      tester,
+      size: const Size(600, 800),
+      version: '1.2.3',
+      inShell: true,
+    );
+
+    await tester.drag(find.byType(ListView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+
+    expectClearsDock(tester, find.text('Mydia Player 1.2.3'));
   });
 }

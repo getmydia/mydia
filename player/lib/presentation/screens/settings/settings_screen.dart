@@ -6,6 +6,7 @@ import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/crash_reporting/crash_reporter_provider.dart';
 import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/remote/node_registration_providers.dart';
@@ -61,6 +62,7 @@ class SettingsScreen extends ConsumerWidget {
       type: p2pStatus.peerConnectionType,
       isInitialized: p2pStatus.isInitialized,
     );
+    final horizontal = MediaQuery.sizeOf(context).width >= 600 ? 26.0 : 14.0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -75,10 +77,14 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
+      // An explicit padding turns off ListView's own MediaQuery bottom inset,
+      // so the dock's height has to be reserved here by hand.
       body: ListView(
-        padding: EdgeInsets.symmetric(
-          horizontal: MediaQuery.sizeOf(context).width >= 600 ? 26 : 14,
-          vertical: 20,
+        padding: EdgeInsets.fromLTRB(
+          horizontal,
+          20,
+          horizontal,
+          DockInsets.bottomOf(context),
         ),
         children: [
           Center(
