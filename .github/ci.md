@@ -65,12 +65,28 @@ When triaging a red `CI / Nix`, grep the job log for `hash mismatch` first. It i
 a one-line fix and it masks everything downstream, since the build aborts before
 the Rust crate vendoring even starts.
 
-## Toolchain pins live in several files at once
+## The Elixir pin lives in one file
 
-The Elixir/OTP pin lives in three places that must be bumped together:
-`nix/devShells/flake-module.nix` (`elixir_1_19` plus `erlang_28`), `Dockerfile.dev`
-(`elixir:1.19-otp-28`), and `ci.yml` (`ELIXIR_VERSION` and `OTP_VERSION`). Bumping
-one alone produces green-locally, red-in-CI.
+`.elixir-version` holds the Elixir minor, and nothing else may name one.
+`elixir-version.nix` resolves it against `beam.packages.erlang_28` and throws
+when the pinned nixpkgs has no matching attribute. `devenv.nix` imports that
+resolver and is the toolchain for both local development and all three
+Elixir jobs in `ci.yml`, which run their steps inside `devenv shell`.
+`nix/packages/flake-module.nix` imports it too, for the release build and the
+NixOS module VM tests. The Dockerfile's builder is digest-pinned and cannot
+read a file, so `ci-nix.yml`'s `Check / Elixir Pin` job asserts its base tag
+agrees with the pin instead.
+
+This replaced a comment in `devenv.nix` asking three files to be kept in sync
+by hand. That comment omitted `nix/packages/flake-module.nix`, which floated
+to whatever `beam.packages.erlang_28` defaulted to and drifted onto Elixir
+1.18.4 while `devenv.nix`/CI held 1.19.5 and the Dockerfile ran 1.19.x. The
+visible symptom was the `Test / NixOS Module (SQLite)` and `(PostgreSQL)`
+jobs (see above) going red on master with every other job green, unnoticed
+pre-merge because neither runs on pull requests.
+
+OTP is pinned separately, as `erlang_28`, in `devenv.nix` and in
+`elixir-version.nix`'s beam set. Bump both together.
 
 The Rust pin has the same shape and one more consumer, since the wasip2 plugin
 guests' WASI version tracks it. See `plugins/README.md`.

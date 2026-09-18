@@ -90,7 +90,12 @@ RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
 # Nothing bumps this automatically: .github/dependabot.yml has no docker
 # ecosystem. It is pinned for correctness, not currency. Move it once a
 # released OTP tag carries erlang/otp#11376.
-FROM elixir:1.19-alpine@sha256:c504b910bbc1d5dccefb2d81e6a49a7747b931ab737c1e774a46fdf85906ef11 AS builder
+#
+# The Elixir minor here must match .elixir-version. The patch may lag the Nix
+# build's, since the Alpine base constrains which patch is available on a safe
+# musl: 1.20.1-otp-28-alpine is still on Alpine 3.23.5, but 1.20.2 and 1.20.4
+# already moved to Alpine 3.24.x.
+FROM elixir:1.20.1-otp-28-alpine@sha256:61d32799642b324e14d22b2a3b1657eb4c1005dc430dd77630a9841262825a15 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
