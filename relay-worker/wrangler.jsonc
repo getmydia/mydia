@@ -139,8 +139,20 @@
         // env.production on purpose: production's dashboards wait for the
         // relay.mydia.dev Access application at cutover, and its workers.dev
         // host must stay dark until then. See src/dashboards/hostname-guard.ts.
-        "ADMIN_ACCESS_HOSTNAME": "mydia-relay-staging.arsfeld.workers.dev"
+        "ADMIN_ACCESS_HOSTNAME": "mydia-relay-staging.arsfeld.workers.dev",
+        // The cutover traffic layer's rehearsal. relay-staging.mydia.dev is an
+        // originless hostname whose "origin" is the real Elixir relay, so every
+        // mode can be exercised against production's relay with no user
+        // traffic in the path. Reaching relay.mydia.dev from here goes to its
+        // origin, skipping production's Worker route, because both hostnames
+        // are on the mydia.dev zone (see src/routing/router.ts).
+        "TRAFFIC_HOSTNAME": "relay-staging.mydia.dev",
+        "TRAFFIC_ORIGIN": "https://relay.mydia.dev"
       },
+      // Explicit so adding `routes` never takes the workers.dev hostname away:
+      // the staging Access application and the contract diff both use it.
+      "workers_dev": true,
+      "routes": [{ "pattern": "relay-staging.mydia.dev/*", "zone_name": "mydia.dev" }],
       "kv_namespaces": [
         { "binding": "CACHE_KV", "id": "19d00e7cf9524ebe809786d6b96e1951" }
       ],
@@ -167,19 +179,24 @@
     //
     // `name` is overridden so this deploys as `mydia-relay`, not
     // `mydia-relay-production`: this is the script the eventual
-    // relay.mydia.dev route attaches to, and the hostname it serves on until
-    // then is mydia-relay.<subdomain>.workers.dev.
+    // relay.mydia.dev route attaches to.
     //
-    // No `routes` key here on purpose. relay.mydia.dev is still served by the
-    // Elixir relay; adding the route is the cutover, and it is deliberately
-    // not part of this config yet. See README.md's runbook.
+    // The route covers the whole hostname, but deploying it changes nothing
+    // on its own: the traffic layer (src/routing/router.ts) sends every route
+    // group to TRAFFIC_ORIGIN, the Elixir relay, until the routing config in
+    // CACHE_KV says otherwise. Moving traffic is a KV write, not a deploy.
+    // See README.md's runbook, Step 4.
     "production": {
       "name": "mydia-relay",
       "vars": {
-        "RELAY_VERSION": "1.0.0",
+        "RELAY_VERSION": "1.1.0",
         "FEEDBACK_FROM": "metadata-relay@mydia.dev",
-        "FEEDBACK_TO": "arsfeld@gmail.com"
+        "FEEDBACK_TO": "arsfeld@gmail.com",
+        "TRAFFIC_HOSTNAME": "relay.mydia.dev",
+        "TRAFFIC_ORIGIN": "https://relay.mydia.dev"
       },
+      "workers_dev": true,
+      "routes": [{ "pattern": "relay.mydia.dev/*", "zone_name": "mydia.dev" }],
       "kv_namespaces": [
         { "binding": "CACHE_KV", "id": "a3ce6dbae7ca40bebaa835fd8baecdf3" }
       ],

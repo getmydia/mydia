@@ -15,6 +15,7 @@ import { adminHostnameBlocked } from "./dashboards/hostname-guard";
 import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
 import { runScheduledSweep } from "./obs/sweep";
+import { routeRequest } from "./routing/router";
 
 export const app = new Hono<{ Bindings: Env }>();
 
@@ -162,7 +163,12 @@ registerFeedbackDashboard(app);
 app.all("*", (c) => c.json({ error: "Not found" }, 404));
 
 export default {
-  fetch: app.fetch,
+  // Every request passes through the cutover traffic layer first. It is inert
+  // unless TRAFFIC_HOSTNAME matches the request, in which case it decides per
+  // route group whether the Elixir relay or `app` answers.
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return routeRequest(request, env, ctx, async (req) => app.fetch(req, env, ctx));
+  },
   // Cron Trigger (wrangler.jsonc's triggers.crons), never the request path.
   // Sweeps two tables that grow without an eviction path otherwise:
   // feedback_rate_limits (src/obs/sweep.ts's justification for why this is
