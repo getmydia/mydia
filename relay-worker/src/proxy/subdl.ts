@@ -430,7 +430,15 @@ export function registerSubdlRoutes(app: Hono<{ Bindings: Env }>): void {
     if (!upstream.ok) {
       // No upstream body is forwarded here, ever. dl.subdl.com is fetched
       // unauthenticated, but its error body is still never this relay's to
-      // hand back verbatim.
+      // hand back verbatim. The status is logged, because every failure
+      // below answers the client the same 502.
+      console.log(
+        JSON.stringify({
+          event: "subdl_download_error",
+          status: upstream.status,
+          mitigated: upstream.headers.get("cf-mitigated"),
+        }),
+      );
       return subtitleUnavailable(c);
     }
 
@@ -444,11 +452,13 @@ export function registerSubdlRoutes(app: Hono<{ Bindings: Env }>): void {
 
     const bytes = await readCapped(upstream, MAX_DOWNLOAD_BYTES);
     if (!bytes) {
+      console.log(JSON.stringify({ event: "subdl_download_error", reason: "too_large" }));
       return subtitleUnavailable(c);
     }
 
     const subtitle = extractSubtitle(bytes);
     if (!subtitle) {
+      console.log(JSON.stringify({ event: "subdl_download_error", reason: "extract", bytes: bytes.length }));
       return subtitleUnavailable(c);
     }
 
