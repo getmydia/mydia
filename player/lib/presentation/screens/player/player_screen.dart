@@ -4133,6 +4133,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       autoSubtitle: _autoDeliverySubtitle(),
       originalSubtitle: _originalDeliverySubtitle,
       clampNote: qualityClampNote(plan: _plan, effective: _effectiveQuality),
+      statsEnabled: ref.read(statsOverlayEnabledProvider).value ?? false,
+      onStatsChanged: (enabled) => unawaited(
+        ref.read(statsOverlayEnabledProvider.notifier).set(enabled),
+      ),
     );
 
     // A fallback or automatic seek can start while the dialog is open.
