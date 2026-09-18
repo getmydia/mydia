@@ -1020,7 +1020,7 @@ defmodule MydiaWeb.CollectionLive.Show do
 
     # Add sort if specified
     rules =
-      if sort_field && sort_field != "" do
+      if sort_field != "" do
         Map.put(rules, "sort", %{"field" => sort_field, "direction" => sort_direction})
       else
         rules

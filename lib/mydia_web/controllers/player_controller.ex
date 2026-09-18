@@ -3,8 +3,6 @@ defmodule MydiaWeb.PlayerController do
 
   alias Mydia.Auth.Guardian
 
-  require Logger
-
   @moduledoc """
   Serves the Flutter web player application.
 
@@ -56,14 +54,6 @@ defmodule MydiaWeb.PlayerController do
         |> put_status(:not_found)
         |> put_view(html: MydiaWeb.ErrorHTML)
         |> render(:"404")
-
-      {:error, reason} ->
-        Logger.error("Failed to fetch player HTML: #{inspect(reason)}")
-
-        conn
-        |> put_status(:service_unavailable)
-        |> put_view(html: MydiaWeb.ErrorHTML)
-        |> render(:"500")
     end
   end
 

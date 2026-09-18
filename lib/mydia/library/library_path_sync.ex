@@ -339,5 +339,4 @@ defmodule Mydia.Library.LibraryPathSync do
   end
 
   defp get_or_create_library_path_id(id) when is_binary(id), do: id
-  defp get_or_create_library_path_id(nil), do: nil
 end

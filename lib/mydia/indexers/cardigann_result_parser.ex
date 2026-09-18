@@ -211,23 +211,21 @@ defmodule Mydia.Indexers.CardigannResultParser do
          {:ok, rows} <- extract_rows(document, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from HTML")
 
-      case parse_row_fields(rows, definition.search, document, template_context) do
-        {:ok, parsed_rows} ->
-          # Apply andmatch row-level filter if any field has it
-          filtered_rows =
-            apply_andmatch_filter(parsed_rows, definition.search, template_context)
+      # parse_row_fields/4 has a single clause and always returns {:ok, _}, so
+      # there is no error case to branch on here.
+      {:ok, parsed_rows} = parse_row_fields(rows, definition.search, document, template_context)
 
-          Logger.info("[#{indexer_name}] Parsed #{length(filtered_rows)} rows successfully")
+      # Apply andmatch row-level filter if any field has it
+      filtered_rows =
+        apply_andmatch_filter(parsed_rows, definition.search, template_context)
 
-          results =
-            transform_to_search_results(filtered_rows, indexer_name, base_url, category_mappings)
+      Logger.info("[#{indexer_name}] Parsed #{length(filtered_rows)} rows successfully")
 
-          Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
-          {:ok, results}
+      results =
+        transform_to_search_results(filtered_rows, indexer_name, base_url, category_mappings)
 
-        error ->
-          error
-      end
+      Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
+      {:ok, results}
     end
   rescue
     error ->
@@ -266,19 +264,17 @@ defmodule Mydia.Indexers.CardigannResultParser do
          {:ok, rows} <- extract_json_rows(json, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from JSON")
 
-      case parse_json_row_fields(rows, definition.search, template_context) do
-        {:ok, parsed_rows} ->
-          Logger.info("[#{indexer_name}] Parsed #{length(parsed_rows)} JSON rows successfully")
+      # parse_json_row_fields/3 has a single clause and always returns {:ok, _},
+      # so there is no error case to branch on here.
+      {:ok, parsed_rows} = parse_json_row_fields(rows, definition.search, template_context)
 
-          results =
-            transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
+      Logger.info("[#{indexer_name}] Parsed #{length(parsed_rows)} JSON rows successfully")
 
-          Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
-          {:ok, results}
+      results =
+        transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
 
-        error ->
-          error
-      end
+      Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
+      {:ok, results}
     else
       {:error, %Jason.DecodeError{} = error} ->
         {:error, Error.search_failed("Invalid JSON: #{inspect(error)}")}
@@ -349,19 +345,17 @@ defmodule Mydia.Indexers.CardigannResultParser do
          {:ok, rows} <- extract_xml_rows(doc, definition.search, template_context) do
       Logger.info("[#{indexer_name}] Extracted #{length(rows)} rows from XML")
 
-      case parse_xml_row_fields(rows, definition.search, template_context) do
-        {:ok, parsed_rows} ->
-          Logger.info("[#{indexer_name}] Parsed #{length(parsed_rows)} XML rows successfully")
+      # parse_xml_row_fields/3 has a single clause and always returns {:ok, _},
+      # so there is no error case to branch on here.
+      {:ok, parsed_rows} = parse_xml_row_fields(rows, definition.search, template_context)
 
-          results =
-            transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
+      Logger.info("[#{indexer_name}] Parsed #{length(parsed_rows)} XML rows successfully")
 
-          Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
-          {:ok, results}
+      results =
+        transform_to_search_results(parsed_rows, indexer_name, base_url, category_mappings)
 
-        error ->
-          error
-      end
+      Logger.info("[#{indexer_name}] Transformed to #{length(results)} search results")
+      {:ok, results}
     end
   rescue
     error ->
@@ -791,11 +785,6 @@ defmodule Mydia.Indexers.CardigannResultParser do
     end
   end
 
-  # Fallback for non-map configs
-  defp compute_text_field(_field_config, _extracted_values, _template_context) do
-    {:error, :invalid_field_config}
-  end
-
   # Combine compound fields like title_default/title_optional into a single title field
   # This handles Cardigann definitions that use field variants for fallback logic
   defp combine_compound_fields(field_values) do
@@ -817,7 +806,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
       title =
         cond do
           title_optional && title_optional != "" && title_default &&
-              String.contains?(title_default || "", "...") ->
+              String.contains?(title_default, "...") ->
             title_optional
 
           title_default && title_default != "" ->
@@ -903,11 +892,6 @@ defmodule Mydia.Indexers.CardigannResultParser do
           error
         end
     end
-  end
-
-  # Fallback for non-map field configs
-  defp extract_field_value(_row, _field_config, _template_context) do
-    {:error, :invalid_field_config}
   end
 
   # `case` maps a CSS selector to a literal output value, scoped to whatever the
@@ -1037,17 +1021,17 @@ defmodule Mydia.Indexers.CardigannResultParser do
       iex> apply_filters("text", [%{name: "append", args: ["{{ if .Config.flag }} suffix{{ else }}{{ end }}"]}], %{config: %{"flag" => true}})
       {:ok, "text suffix"}
   """
-  @spec apply_filters(String.t(), list(), map()) :: {:ok, String.t()} | {:error, term()}
+  @spec apply_filters(String.t(), list(), map()) :: {:ok, String.t()}
   def apply_filters(value, [], _template_context), do: {:ok, value}
 
   def apply_filters(value, [filter | rest], template_context) do
     # Render templates in filter arguments
     rendered_filter = render_filter_templates(filter, template_context)
 
-    case apply_single_filter(value, rendered_filter) do
-      {:ok, new_value} -> apply_filters(new_value, rest, template_context)
-      error -> error
-    end
+    # apply_single_filter/2 delegates to CardigannFilters.apply/2, whose spec
+    # guarantees {:ok, _}, so there is no error case to branch on here.
+    {:ok, new_value} = apply_single_filter(value, rendered_filter)
+    apply_filters(new_value, rest, template_context)
   end
 
   # Backward compatibility - allow calling without template_context

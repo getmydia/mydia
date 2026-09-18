@@ -490,6 +490,19 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
       item ->
         # Merge the ACCUMULATED state, not just this call's `extra`, so the row
         # rendered here matches exactly what a later stream rebuild produces.
+        #
+        # This stays Map.merge/2 rather than struct-update syntax
+        # (`%{item | ...}`) or `struct!/2` on purpose. `states` is built from
+        # partial maps contributed by four different call sites over the
+        # lifetime of a grab (this module's download_from_search/2,
+        # handle_grab_completed/2, handle_grab_failed/2,
+        # handle_grab_duplicate/2), so its key set is only known at runtime,
+        # not as compile-time literals struct-update syntax could check.
+        # `struct!/2` would get the same "reject an unknown key" check, but
+        # only by raising `KeyError` and crashing this LiveView for what is
+        # purely a per-row badge, in exchange for a check that is already
+        # satisfied: every caller above passes a literal subset of
+        # SearchResult's four declared display fields.
         stream_insert(socket, :search_results, Map.merge(item, Map.fetch!(states, download_url)))
     end
   end

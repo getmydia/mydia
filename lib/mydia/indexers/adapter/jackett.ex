@@ -114,14 +114,11 @@ defmodule Mydia.Indexers.Adapter.Jackett do
 
   @impl true
   def get_capabilities(config) do
-    # Use the test_connection which already fetches capabilities
+    # test_connection/1 always resolves to parse_caps_response/1, which always
+    # returns a %{name: ...} identity map, never the full capabilities. So
+    # this always falls through to a second request via fetch_capabilities/1.
     case test_connection(config) do
-      {:ok, caps} when is_map(caps) and not is_map_key(caps, :name) ->
-        # If caps doesn't have :name, it's already the capabilities map
-        {:ok, caps}
-
       {:ok, %{name: _}} ->
-        # If it has :name, we need to fetch capabilities separately
         fetch_capabilities(config)
 
       {:error, reason} ->
@@ -156,7 +153,6 @@ defmodule Mydia.Indexers.Adapter.Jackett do
     "#{base_url}?#{query_string}"
   end
 
-  defp maybe_add_param(params, _key, nil), do: params
   defp maybe_add_param(params, _key, ""), do: params
   defp maybe_add_param(params, key, value), do: params ++ [{key, value}]
 

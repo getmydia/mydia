@@ -35,8 +35,6 @@ defmodule MydiaWeb.MediaLive.Show do
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.Loaders
 
-  require Logger
-
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     if connected?(socket) do

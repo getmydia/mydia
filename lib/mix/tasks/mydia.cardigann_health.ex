@@ -109,11 +109,11 @@ defmodule Mix.Tasks.Mydia.CardigannHealth do
   defp do_test_indexer(definition, query) do
     with {:ok, parsed} <- CardigannParser.parse_definition(definition.definition),
          base_url <- List.first(parsed.links) || "",
-         search_opts <- %{
+         search_opts <- [
            query: query,
            categories: [],
            search_path: List.first(parsed.search.paths)
-         },
+         ],
          {:ok, response} <- CardigannSearchEngine.execute_search(parsed, search_opts, %{}),
          {:ok, results} <-
            CardigannResultParser.parse_results(parsed, response, definition.name,

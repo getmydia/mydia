@@ -25,8 +25,6 @@ defmodule Mydia.Indexers.CardigannHealthCheck do
   alias Mydia.Indexers.CardigannSearchEngine
   alias Mydia.Repo
 
-  require Logger
-
   @type test_result :: %{
           success: boolean(),
           status: String.t(),

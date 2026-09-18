@@ -437,7 +437,6 @@ defmodule Mydia.MediaRequests do
 
   defp maybe_or_match_id(dynamic, _field, nil), do: dynamic
   defp maybe_or_match_id(false, :tmdb_id, val), do: dynamic([r], r.tmdb_id == ^val)
-  defp maybe_or_match_id(dynamic, :tmdb_id, val), do: dynamic([r], ^dynamic or r.tmdb_id == ^val)
   defp maybe_or_match_id(false, :tvdb_id, val), do: dynamic([r], r.tvdb_id == ^val)
   defp maybe_or_match_id(dynamic, :tvdb_id, val), do: dynamic([r], ^dynamic or r.tvdb_id == ^val)
 

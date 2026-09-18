@@ -3,8 +3,6 @@ defmodule Mydia.RemoteAccess.Pairing do
   Handles device pairing validation and token generation.
   """
 
-  require Logger
-
   alias Mydia.RemoteAccess
   alias Mydia.RemoteAccess.MediaToken
   alias Mydia.Auth.Guardian

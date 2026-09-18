@@ -5,7 +5,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   alias MydiaWeb.AdminSettingsLive.Components
   alias MydiaWeb.AdminSettingsLive.LanguageSettings
 
-  require Logger
   alias Mydia.Logger, as: MydiaLogger
 
   @impl true

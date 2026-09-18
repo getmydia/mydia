@@ -423,8 +423,6 @@ defmodule Mydia.Metadata.Provider.Relay do
     end)
   end
 
-  defp find_remote_id(_remote_ids, _source), do: nil
-
   # Transform TVDB API response to match TMDB format for consistent parsing
   defp transform_tvdb_to_tmdb_format(data, _media_type, language, opts) when is_map(data) do
     # Extract year from firstAired date or year field

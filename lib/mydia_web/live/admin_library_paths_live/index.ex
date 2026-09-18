@@ -4,7 +4,6 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
   alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
 
-  require Logger
   alias Mydia.Logger, as: MydiaLogger
 
   @impl true

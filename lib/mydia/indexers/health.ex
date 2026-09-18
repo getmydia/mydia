@@ -66,7 +66,8 @@ defmodule Mydia.Indexers.Health do
       {:ok, %{status: :healthy, ...}} = check_health("prowlarr-main")
       {:error, :not_found} = check_health("nonexistent-indexer")
   """
-  @spec check_health(String.t(), keyword()) :: {:ok, Health.health_result()} | {:error, term()}
+  @spec check_health(String.t(), keyword()) ::
+          {:ok, Health.health_result()} | {:error, :not_found}
   def check_health(indexer_id, opts \\ []) do
     force? = Keyword.get(opts, :force, false)
 

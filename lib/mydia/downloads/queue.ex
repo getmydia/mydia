@@ -1915,6 +1915,4 @@ defmodule Mydia.Downloads.Queue do
         end
     end
   end
-
-  defp extract_magnet_from_html(_), do: {:error, :no_magnet_found}
 end

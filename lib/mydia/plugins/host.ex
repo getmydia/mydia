@@ -66,8 +66,6 @@ defmodule Mydia.Plugins.Host do
 
   @behaviour NimblePool
 
-  require Logger
-
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs

@@ -1050,8 +1050,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
     type in Enum.map(Settings.DownloadClientConfig.category_capable_types(), &Atom.to_string/1)
   end
 
-  defp category_capable_type?(_type), do: false
-
   # Whether a client's saved connection_settings has remote_fetch enabled,
   # for the row-level "Seedbox" badge in the list. `enabled` is stored as
   # whatever the form submitted — HTML checkboxes send the string "true",

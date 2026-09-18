@@ -29,7 +29,6 @@ defmodule Mix.Tasks.Mydia.MigrateTvdbIds do
   """
 
   use Mix.Task
-  require Logger
 
   alias Mydia.Media
   alias Mydia.Media.MediaItem

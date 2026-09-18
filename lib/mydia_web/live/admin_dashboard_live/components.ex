@@ -515,7 +515,6 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   defp user_label(%{email: email}) when is_binary(email) and email != "", do: email
   defp user_label(_), do: "Unknown"
 
-  defp build_image_url(nil), do: nil
   defp build_image_url(path) when is_binary(path), do: ImageUrl.image_url(path, "w92")
   defp build_image_url(_), do: nil
 

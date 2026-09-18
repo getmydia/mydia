@@ -409,21 +409,6 @@ defmodule MydiaWeb.AdminIndexersLive.Index do
 
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Indexer not found")}
-
-      {:error, reason} ->
-        MydiaLogger.log_error(:liveview, "Indexer health check failed",
-          error: reason,
-          operation: :test_indexer,
-          indexer_id: id,
-          user_id: socket.assigns.current_user.id
-        )
-
-        error_msg = MydiaLogger.extract_error_message(reason)
-
-        {:noreply,
-         socket
-         |> put_flash(:error, "Health check failed: #{error_msg}")
-         |> load_data()}
     end
   end
 

@@ -31,7 +31,6 @@ defmodule Mix.Tasks.Mydia.NfoExport do
   """
 
   use Mix.Task
-  require Logger
 
   alias Mydia.{Repo, Settings}
   alias Mydia.Library.MediaFile

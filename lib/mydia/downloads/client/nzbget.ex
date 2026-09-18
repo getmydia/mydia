@@ -515,8 +515,6 @@ defmodule Mydia.Downloads.Client.Nzbget do
     end
   end
 
-  defp status_class(nil), do: ""
-
   defp status_class(status) when is_binary(status) do
     status
     |> String.split("/", parts: 2)

@@ -231,8 +231,6 @@ defmodule Mydia.Library.FileIngest do
     }
   end
 
-  defp storable_parsed_info(_), do: %{}
-
   defp parsed_value(parsed, key) do
     Map.get(parsed, key) || Map.get(parsed, Atom.to_string(key))
   end

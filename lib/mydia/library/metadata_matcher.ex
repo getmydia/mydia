@@ -533,9 +533,6 @@ defmodule Mydia.Library.MetadataMatcher do
             )
 
             try_series_level_match(parsed, config, opts)
-
-          error ->
-            error
         end
 
       {:error, reason} = error ->

@@ -1764,8 +1764,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp format_ratio(ratio) when is_float(ratio), do: Float.round(ratio, 2) |> to_string()
   defp format_ratio(ratio) when is_integer(ratio), do: "#{ratio}.00"
 
-  defp format_relative_time(nil), do: "—"
-
   defp format_relative_time(%DateTime{} = dt) do
     now = DateTime.utc_now()
     diff = DateTime.diff(now, dt, :second)
@@ -1896,8 +1894,6 @@ defmodule MydiaWeb.DownloadsLive.Index do
   defp format_protocol("nzb"), do: "Usenet"
   defp format_protocol("torrent"), do: "Torrent"
   defp format_protocol(_), do: nil
-
-  defp format_next_retry(nil), do: "—"
 
   defp format_next_retry(%DateTime{} = dt) do
     now = DateTime.utc_now()

@@ -6,7 +6,6 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Index do
   alias Mydia.Settings.DownloadClientConfig
   alias Mydia.Downloads.ClientHealth
 
-  require Logger
   alias Mydia.Logger, as: MydiaLogger
 
   @impl true

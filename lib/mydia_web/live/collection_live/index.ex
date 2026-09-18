@@ -708,12 +708,12 @@ defmodule MydiaWeb.CollectionLive.Index do
 
   defp add_item_count(%Collection{} = collection) do
     count = Collections.item_count(collection)
-    Map.put(collection, :item_count, count)
+    %{collection | item_count: count}
   end
 
   defp add_poster_paths(%Collection{} = collection) do
     paths = Collections.poster_paths(collection, 4)
-    Map.put(collection, :poster_paths, paths)
+    %{collection | poster_paths: paths}
   end
 
   defp can_edit?(%Collection{user_id: user_id}, %{id: current_user_id}) do

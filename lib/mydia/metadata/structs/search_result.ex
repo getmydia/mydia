@@ -112,7 +112,6 @@ defmodule Mydia.Metadata.Structs.SearchResult do
 
   defp get_title(data, :movie), do: data["title"] || data["name"]
   defp get_title(data, :tv_show), do: data["name"] || data["title"]
-  defp get_title(data, _), do: data["title"] || data["name"]
 
   defp extract_year(data, :movie) do
     case data["release_date"] do
