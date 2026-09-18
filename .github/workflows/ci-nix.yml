@@ -111,6 +111,105 @@ jobs:
       - name: Assert npmDeps.hash matches assets/package-lock.json
         run: nix build .#packages.x86_64-linux.default.npmDeps --no-link
 
+  check-elixir-pin:
+    name: Check / Elixir Pin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The nix eval two steps down only proves elixir-version.nix agrees with
+      # nixpkgs. It cannot see a stale Elixir version literal re-added to a
+      # workflow or a Dockerfile -- the exact regression this pin exists to
+      # prevent, and how the app ended up compiling on three different Elixir
+      # versions at once before this guard existed. So scan every file that
+      # can select an SDK (workflows, Dockerfiles, compose files, nix modules,
+      # scripts) for a version literal sitting outside .elixir-version. Needs
+      # only the checkout, so it runs first and fails in seconds.
+      #
+      # metadata-relay/ is a separately deployed service with its own mix.exs
+      # and CI, and it moves on its own release schedule, so its files are out
+      # of scope for this repo's pin.
+      #
+      # Dockerfile is excluded here for a specific reason, not tidied away: a
+      # `FROM` line needs a literal, and a digest cannot be derived from a
+      # file. It gets something stronger than a scan instead -- the next step
+      # checks its builder tag directly against .elixir-version.
+      #
+      # mix.exs is excluded here for a specific reason too: its `elixir:`
+      # requirement is a Hex version floor used in dependency resolution, not
+      # an SDK selection, and Mix has no mechanism to read that floor from an
+      # external file.
+      #
+      # `uses:` lines are skipped for the same reason as the Flutter job above:
+      # SHA-pinning an action with a trailing version comment must not trip
+      # this check for doing the right thing.
+      #
+      # Note this file is in scope for its own scan, so do not write an Elixir
+      # version literal in these comments either.
+      - name: Assert no other build or CI file names an Elixir version
+        run: |
+          set -euo pipefail
+          hits="$(
+            git ls-files -z \
+                '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
+                'scripts/*' 'dev' 'mix.exs' \
+              | xargs -0 grep -HnIE 'elixir' \
+              | grep -viE '^metadata-relay/' \
+              | grep -vE '^(Dockerfile|mix\.exs):' \
+              | grep -viE 'elixir_make|bcrypt_elixir|argon2_elixir|yaml_elixir' \
+              | grep -vE ':[[:space:]]*uses:[[:space:]]*[^[:space:]]+@' \
+              | grep -E '[0-9]+\.[0-9]+|elixir_[0-9]' \
+              || true
+          )"
+          if [ -n "$hits" ]; then
+            echo "::error::An Elixir version literal escaped .elixir-version"
+            echo "$hits"
+            echo
+            echo ".elixir-version is the single source of truth. Read from it instead:"
+            echo "  nix         -> import ./elixir-version.nix { inherit pkgs; }"
+            echo "  Dockerfile  -> the base tag is checked against it below"
+            exit 1
+          fi
+          echo "OK: .elixir-version is the only file naming an Elixir version."
+
+      # A `FROM` line needs a literal, so the Dockerfile is excluded from the
+      # scan above and checked directly here instead: extract the minor from
+      # the builder's tag and assert it agrees with the pin. The current line
+      # is a digest-pinned `FROM elixir:<version>-otp-28-alpine@sha256:...`,
+      # so the extraction has to stop at the minor rather than being thrown by
+      # the trailing digest.
+      - name: Assert the Dockerfile base matches the pin
+        run: |
+          set -euo pipefail
+          pinned="$(tr -d '\n' < .elixir-version)"
+          tag="$(grep -oE 'FROM elixir:[0-9]+\.[0-9]+' Dockerfile | head -1 | cut -d: -f2)"
+          if [ -z "$tag" ]; then
+            echo "::error file=Dockerfile::no elixir builder FROM line found"
+            exit 1
+          fi
+          if [ "$tag" != "$pinned" ]; then
+            echo "::error file=Dockerfile::builder base is elixir:$tag but .elixir-version pins $pinned"
+            exit 1
+          fi
+          echo "OK: Dockerfile builder is elixir:$tag, matching .elixir-version."
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      # elixir-version.nix throws when this nixpkgs has no
+      # beam.packages.erlang_28 attribute for the pinned minor. This step only
+      # forces that evaluation against the flake's own pinned nixpkgs input;
+      # it builds nothing.
+      - name: Assert the resolver agrees with nixpkgs
+        run: |
+          nix eval --raw --impure --expr \
+            '(import ./elixir-version.nix { pkgs = (builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux; }).version'
+
   apple-deployment-targets:
     name: Check / Apple Deployment Targets
     runs-on: ubuntu-latest
