@@ -169,32 +169,96 @@ jobs:
           SIZE=$(stat -c%s "$APK")
           SHA=$(sha256sum "$APK" | cut -d' ' -f1)
 
+          # Attempt 1 of this exact upload has been observed to fail with a
+          # transient "NotImplemented: Not Implemented" from R2 (rclone
+          # 1.60.1 from Ubuntu's apt, a 109 MiB APK), then succeed on
+          # attempt 2 with nothing else changed. This is not a
+          # multipart-threshold problem: R2's own limits documentation
+          # (developers.cloudflare.com/r2/platform/limits/) puts the
+          # single-part PutObject cap at ~5 GiB, far above any APK this
+          # produces, and a search of rclone's changelog between v1.60.0 and
+          # v1.65.0 found no fix matching this symptom, so there is no
+          # specific rclone version or flag to point at instead. What
+          # actually recovered it is rclone's own default `--retries=3`
+          # (`rclone help flags`), already active here with no flags of its
+          # own, which retries the whole `copyto` up to twice more on
+          # failure. Community reports describe assorted transient R2-side
+          # errors (403s, signature failures, NotImplemented) across many
+          # rclone versions with no single client-side bug behind them,
+          # consistent with edge-node flakiness on R2's side rather than a
+          # defect here. This step runs once per manually dispatched dev
+          # build, not in a hot path, so relying on the existing default
+          # instead of an unproven flag or a version pin is the accepted
+          # trade-off, not an oversight.
           rclone copyto "$APK" "r2:mydia-dev-builds/${OWN_FILE}"
 
           # Read, amend, write. The index is small and only this workflow
           # writes it, so a read-modify-write is safe and avoids a bucket
-          # listing the scoped token may not allow. rclone exits 3 for a
-          # missing directory and 4 for a missing file: either means no index
-          # has been published yet. Any other non-zero exit is a real read
-          # failure, and treating it as "no index yet" would clobber the
-          # bucket's real index with one built from an empty base, dropping
-          # every previously tracked build, so that case fails loudly instead
-          # of guessing.
+          # listing the scoped token may not allow.
+          #
+          # The exit code alone cannot say whether an index already exists.
+          # Against a local filesystem rclone exits 3 for a missing
+          # directory and 4 for a missing file, but against R2 (S3) a
+          # missing object exits 0 and writes nothing at all: this bit a
+          # real publish, whose bucket was empty on its very first run, so
+          # `index.json` came back a zero-byte file, the case below took the
+          # `0)` branch, and the survival check below failed on an index
+          # that never described anything. So the case here only separates
+          # "worth inspecting further" (0, 3, 4) from a genuine read
+          # failure; the actual bootstrap decision is made afterward by
+          # checking what index.json actually contains, not by trusting any
+          # exit code. Any other exit is a real read failure, and treating
+          # it as "no index yet" would clobber the bucket's real index with
+          # one built from an empty base, dropping every previously tracked
+          # build, so that case still fails loudly instead of guessing.
           set +e
           rclone cat r2:mydia-dev-builds/index.json > index.json 2>rclone-cat.err
           RCLONE_CAT_RC=$?
           set -e
           case "$RCLONE_CAT_RC" in
-            0) ;;
-            3|4)
-              echo '{"builds":[]}' > index.json
-              ;;
+            0|3|4) ;;
             *)
               cat rclone-cat.err >&2
               echo "::error::Could not read the existing index.json from R2 (rclone exit ${RCLONE_CAT_RC}). Leaving the bucket's index untouched."
               exit 1
               ;;
           esac
+
+          # index.json might be empty, absent, `{}`, or otherwise not shaped
+          # like an index, whatever the exit code said. Bootstrap whenever it
+          # is not a JSON object with a .builds array; only a genuinely
+          # populated, well-formed index is used as-is.
+          if ! jq -e 'type == "object" and has("builds") and (.builds | type == "array")' index.json > /dev/null 2>&1; then
+            echo '{"builds":[]}' > index.json
+          fi
+
+          # The container can be a well-formed {"builds": [...]} array while
+          # still holding a malformed element inside it: a null, a bare
+          # string, or an object missing platform, build, or file. That
+          # entry survives the check above, then `-.build` below throws on
+          # anything that is not a number, and set -e stops the step before
+          # rclone copyto ever writes the index back, wedging every future
+          # publish behind one bad row that only manual bucket surgery can
+          # clear. Drop malformed entries instead of failing the whole
+          # index, using the same three required fields the feed generator
+          # does (isWellFormedDevBuild in
+          # scripts/appcast/lib/releases-json.mjs: a string platform, a
+          # number build, a string file), so this step never accepts what
+          # the generator would silently reject anyway. Filtering here,
+          # before the amend below, means the prune and the survival check
+          # both run against the cleaned set, so a genuine prune loss is
+          # still refused correctly even when the index it is competing
+          # against also had junk in it. jq's `type` (unlike JS's `typeof`)
+          # already reports "null" for null, so the object check alone
+          # excludes it without a separate null test, and short-circuiting
+          # `and` means a non-object entry is never indexed into, so this
+          # cannot itself throw on the very values it is filtering out.
+          WELL_FORMED='type == "object" and (.platform | type == "string") and (.build | type == "number") and (.file | type == "string")'
+          jq -c ".builds[] | select(($WELL_FORMED) | not)" index.json | while IFS= read -r bad; do
+            echo "::warning::Dropping malformed dev build index entry (missing or mistyped platform, build, or file): ${bad}"
+          done
+          jq ".builds |= map(select($WELL_FORMED))" index.json > index.clean.json
+          mv index.clean.json index.json
 
           jq --arg version "$VERSION" \
              --argjson build "$VERSION_CODE" \
