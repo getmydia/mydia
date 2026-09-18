@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/player/platform_features.dart';
-import '../../../core/update/update_host.dart';
 import '../../../core/update/update_provider.dart';
 import '../connection_status_dot.dart';
 import 'bottom_nav.dart';
@@ -23,8 +22,12 @@ class SettingsBadge extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final supported =
-        supportedOverride ?? UpdateHost.current().supportsInAppUpdates;
+    // Not a synchronous UpdateHost.current() guess, which cannot tell a
+    // sideloaded Android install from a Play one and used to hide this badge
+    // on the one platform that most needs it. createUpdateBackend never
+    // builds a backend anywhere self-update is unsupported, so an
+    // availableUpdate below already proves the platform qualifies.
+    final supported = supportedOverride ?? true;
     final updatePending = supported &&
         !PlatformFeatures.isMacOS &&
         ref.watch(updateProvider).availableUpdate != null;

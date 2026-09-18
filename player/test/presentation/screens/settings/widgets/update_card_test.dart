@@ -294,6 +294,31 @@ void main() {
       expect(find.text("You're up to date"), findsOneWidget);
     });
 
+    testWidgets(
+        'a deferred install leaves a notice instead of the same Update Now '
+        'row', (tester) async {
+      // This is the state UpdateNotifier.requestUpdate leaves behind for
+      // UpdateDeferred: availableUpdate cleared, a notice set. Before that
+      // mapping existed, the card fell back to `update != null`, which was
+      // still true, and redrew the same button while Android's confirmation
+      // dialog was already open, inviting a second download.
+      await _pump(
+        tester,
+        state: const UpdateState(
+          notice: 'Handed off outside Mydia. Confirm there to finish '
+              'installing.',
+          manualCheck: ManualCheckBehaviour.checksOnly,
+        ),
+      );
+
+      expect(
+        find.text('Handed off outside Mydia. Confirm there to finish '
+            'installing.'),
+        findsOneWidget,
+      );
+      expect(find.text('Update Now'), findsNothing);
+    });
+
     testWidgets('an error alone renders, with no update ever having been held',
         (tester) async {
       // The ordinary shape of "the portal is unreachable": the very first

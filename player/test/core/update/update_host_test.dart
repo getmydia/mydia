@@ -317,4 +317,73 @@ void main() {
       expect(host.flatpakBranch, isNull);
     });
   });
+
+  group('UpdateHost.resolveInstalledFromPlay', () {
+    test('the Play store id reports Play', () async {
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => 'com.android.vending',
+      );
+
+      expect(fromPlay, isTrue);
+    });
+
+    test('a sideloaded installer id reports not Play', () async {
+      // A real id a manual-install path can report, not a placeholder: proof
+      // that a known non-Play answer is trusted rather than defaulting to the
+      // safe direction the way an unreadable one does.
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => 'com.android.packageinstaller',
+      );
+
+      expect(fromPlay, isFalse);
+    });
+
+    test('a null installer id reports not Play', () async {
+      // Android reports no installer package at all for an ADB or manual
+      // sideload, which is a successful, confident answer, not a failure. It
+      // must not fall into the same bucket as a lookup that could not
+      // complete.
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => null,
+      );
+
+      expect(fromPlay, isFalse);
+    });
+
+    test('an empty installer id reports not Play', () async {
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => '',
+      );
+
+      expect(fromPlay, isFalse);
+    });
+
+    test('a lookup that throws reports Play, the safe direction', () async {
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => throw Exception('channel error'),
+      );
+
+      expect(fromPlay, isTrue);
+    });
+
+    test('a non-Android host never calls the lookup and reports not Play',
+        () async {
+      var calls = 0;
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: false,
+        readInstallerStore: () async {
+          calls++;
+          return 'com.android.vending';
+        },
+      );
+
+      expect(fromPlay, isFalse);
+      expect(calls, 0);
+    });
+  });
 }

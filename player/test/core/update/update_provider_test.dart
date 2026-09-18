@@ -195,6 +195,35 @@ void main() {
     expect(container.read(updateProvider).restartRequired, isTrue);
   });
 
+  test(
+      'a deferred result clears the pending update and says where it went, '
+      'instead of leaving the same Update Now row', () async {
+    final backend = _FakeBackend(outcome: const UpdateDeferred());
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    // Established first, so clearing it below is observable rather than a
+    // no-op on a field that was already null.
+    backend.controller.add(const FlatpakRemoteUpdate(
+      releaseNotesUrl: 'https://example.invalid/releases',
+    ));
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(updateProvider).availableUpdate, isNotNull);
+
+    await container.read(updateProvider.notifier).requestUpdate();
+
+    final state = container.read(updateProvider);
+    expect(state.availableUpdate, isNull);
+    expect(state.isApplying, isFalse);
+    expect(state.notice, isNotNull);
+    // The card falls back to `update != null` for its "Update Now" row, so a
+    // notice that does not clear the update would draw that row right back
+    // and invite tapping it a second time while the first hand-off is still
+    // waiting on the user.
+    expect(state.error, isNull);
+  });
+
   test('an unsupported result surfaces its reason as an error', () async {
     final backend = _FakeBackend(
       outcome: const UpdateUnsupported('This update needs new permissions.'),

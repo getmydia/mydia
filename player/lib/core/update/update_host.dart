@@ -14,6 +14,9 @@ import 'platform_updater.dart';
 import 'update_backend.dart';
 import 'update_track.dart';
 
+/// The installer package id Android reports for a Play Store install.
+const _playStoreId = 'com.android.vending';
+
 /// Everything about the running installation that decides how it updates.
 ///
 /// A value object rather than a pile of static lookups, so every combination
@@ -50,6 +53,7 @@ class UpdateHost {
           'Flatpak is a Linux packaging format; isFlatpak implies isLinux.',
         );
 
+  /// The best guess available without awaiting anything.
   ///
   /// Cannot tell a sideloaded Android install from a Play one, since that
   /// takes an async platform call. Defaults [installedFromPlay] to true on
@@ -89,19 +93,11 @@ class UpdateHost {
   }) async {
     if (kIsWeb) return UpdateHost.current(flatpak: flatpak);
 
-    var fromPlay = false;
-    if (Platform.isAndroid) {
-      try {
-        final info = await PackageInfo.fromPlatform();
-        fromPlay = info.installerStore == 'com.android.vending';
-      } catch (e) {
-        // Unknown provenance is treated as Play. Refusing to self-update is
-        // the safe direction: the worst case is an Android user who keeps
-        // updating by hand, against a policy violation on the listing.
-        debugPrint('[UpdateHost] could not read the installer store: $e');
-        fromPlay = true;
-      }
-    }
+    final fromPlay = await resolveInstalledFromPlay(
+      isAndroid: Platform.isAndroid,
+      readInstallerStore: () async =>
+          (await PackageInfo.fromPlatform()).installerStore,
+    );
 
     return UpdateHost.from(
       isWeb: false,
@@ -113,6 +109,33 @@ class UpdateHost {
       flatpak: flatpak,
       installedFromPlay: fromPlay,
     );
+  }
+
+  /// The Play decision itself, separated from the platform lookup so every
+  /// shape a store lookup can produce is reachable from one test host.
+  /// Mirrors [UpdateHost.from] and `InstallEnvironment.resolve`, which split
+  /// their own decisions away from the platform calls the same way.
+  ///
+  /// [readInstallerStore] is only ever called on Android: asking it on any
+  /// other platform would be a pointless platform-channel round trip for a
+  /// value this getter always ignores there.
+  @visibleForTesting
+  static Future<bool> resolveInstalledFromPlay({
+    required bool isAndroid,
+    required Future<String?> Function() readInstallerStore,
+  }) async {
+    if (!isAndroid) return false;
+
+    try {
+      final store = await readInstallerStore();
+      return store == _playStoreId;
+    } catch (e) {
+      // Unknown provenance is treated as Play. Refusing to self-update is
+      // the safe direction: the worst case is an Android user who keeps
+      // updating by hand, against a policy violation on the listing.
+      debugPrint('[UpdateHost] could not read the installer store: $e');
+      return true;
+    }
   }
 
   /// The host decision itself, separated from the platform lookups so every

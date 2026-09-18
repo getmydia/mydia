@@ -257,7 +257,17 @@ class UpdateNotifier extends Notifier<UpdateState> {
         state.copyWith(isApplying: false, error: reason),
       UpdateFailed(:final message) =>
         state.copyWith(isApplying: false, error: message),
-      UpdateDeferred() => state.copyWith(isApplying: false),
+      // The backend has already handed this off somewhere outside the app
+      // (Android's own confirmation dialog, Sparkle's window) and holds no
+      // pending update of its own to retry. Leaving availableUpdate set
+      // would draw the same "Update Now" row right back, inviting a second
+      // download while the first is still waiting on the user.
+      UpdateDeferred() => state.copyWith(
+          isApplying: false,
+          notice: 'Handed off outside Mydia. Confirm there to finish '
+              'installing.',
+          clearUpdate: true,
+        ),
     };
   }
 

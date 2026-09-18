@@ -8,7 +8,6 @@ import '../../core/graphql/graphql_provider.dart';
 import '../../core/player/platform_features.dart';
 import '../../core/theme/colors.dart';
 import '../../core/update/update_dismissal_provider.dart';
-import '../../core/update/update_host.dart';
 import '../../core/update/update_provider.dart';
 import 'banner_button.dart';
 import 'update_action.dart';
@@ -66,9 +65,11 @@ bool shouldShowUpdateBanner({
 /// is a lazy NotifierProvider whose `build()` starts the GitHub query, and
 /// before this banner existed its only watchers were on the Settings screen.
 class UpdateBanner extends ConsumerWidget {
-  /// Overrides the platform-support check. Tests only: a `flutter test` host
-  /// on Linux always reports a supported platform, so the unsupported branch
-  /// is otherwise unreachable. Mirrors [UpdateCard.supportedOverride].
+  /// Overrides the platform-support check. Tests only, so the unsupported
+  /// branch (unreachable in production: an available update already proves
+  /// the backend that produced it runs on a supported platform, since
+  /// createUpdateBackend never builds one anywhere else) stays exercisable.
+  /// Mirrors [SettingsBadge.supportedOverride].
   final bool? supportedOverride;
 
   /// Opens the release notes. Tests only, so the Notes action can be observed
@@ -93,7 +94,13 @@ class UpdateBanner extends ConsumerWidget {
         compatibility == null && !compatibilityAsync.hasError;
 
     final visible = shouldShowUpdateBanner(
-      supported: supportedOverride ?? UpdateHost.current().supportsInAppUpdates,
+      // Not a synchronous UpdateHost.current() guess, which cannot tell a
+      // sideloaded Android install from a Play one and used to hide this
+      // banner on the one platform that most needs it. createUpdateBackend
+      // never builds a backend anywhere self-update is unsupported, so
+      // reaching this line with an update already proves the platform
+      // qualifies; there is nothing left here to guess.
+      supported: supportedOverride ?? true,
       isMacOS: PlatformFeatures.isMacOS,
       availableVersion: update?.version,
       dismissedVersions: ref.watch(updateDismissalProvider).value,
