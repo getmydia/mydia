@@ -80,22 +80,31 @@ RUN --mount=type=cache,target=/root/.pub-cache,sharing=locked \
 # ============================================
 # Elixir Build Stage
 # ============================================
-# Digest-pinned, not tag-pinned, because the official elixir images publish no
-# Alpine-qualified tag: the variants are <version>[-otp-NN]-alpine and nothing
-# more, so a tag cannot express which Alpine a builder runs on. This digest
-# carries Alpine 3.23.5. It matters because this stage runs the BEAM to
-# compile, and musl 1.2.6 (Alpine 3.24) aborts the VM at startup on a CPU with
-# a large XSAVE area. See metadata-relay/Dockerfile for the full explanation.
+# hexpm/elixir rather than the official elixir image, because its tags name
+# the exact Elixir, OTP and Alpine versions (<elixir>-erlang-<otp>-alpine-
+# <alpine>), and the official image's tags cannot say which Alpine a builder
+# runs on. That matters twice here:
 #
-# Nothing bumps this automatically: .github/dependabot.yml has no docker
-# ecosystem. It is pinned for correctness, not currency. Move it once a
-# released OTP tag carries erlang/otp#11376.
+# - The release this stage builds carries this stage's ERTS into the runtime
+#   stage (mix.exs declares no `releases`, so include_erts defaults to true).
+#   That ERTS links against this Alpine's libcrypto, ncurses and libstdc++, so
+#   the Alpine minor here must equal the runtime stage's `FROM alpine:` minor.
+# - musl 1.2.6 (Alpine 3.24 and later) rejects any sigaltstack() size below
+#   sysconf(_SC_MINSIGSTKSZ). On a CPU with a large XSAVE area (AVX-512, AMX)
+#   that exceeds the fixed size older ERTS asked for, and the VM aborted at
+#   startup with "sys_sigaltstack(): Failed to set alternate signal stack".
+#   OTP fixed its side in erlang/otp#11376, first released in OTP 29.1. On a
+#   musl 1.2.6 base, never pin an OTP patch older than that.
 #
-# The Elixir minor here must match .elixir-version. The patch may lag the Nix
-# build's, since the Alpine base constrains which patch is available on a safe
-# musl: 1.20.1-otp-28-alpine is still on Alpine 3.23.5, but 1.20.2 and 1.20.4
-# already moved to Alpine 3.24.x.
-FROM elixir:1.20.1-otp-28-alpine@sha256:61d32799642b324e14d22b2a3b1657eb4c1005dc430dd77630a9841262825a15 AS builder
+# Digest-pinned too: nothing bumps it automatically (.github/dependabot.yml has
+# no docker ecosystem). ci-nix.yml's "Check / BEAM Pin" job asserts the tag's
+# Elixir minor, OTP major and Alpine minor against .elixir-version,
+# .otp-version and the runtime stage.
+FROM hexpm/elixir:1.20.4-erlang-29.1-alpine-3.24.2@sha256:b6fda8246507074bd84911c234bfc9b346c391b2be7f9fd275e37d9bc5a049b6 AS builder
+
+# The official elixir image sets this and hexpm/elixir does not. Without it the
+# VM falls back to latin1 native filename encoding.
+ENV LANG=C.UTF-8
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -257,19 +266,16 @@ RUN mix release
 # ============================================
 # Runtime Stage
 # ============================================
-# Alpine 3.23, and not an erlang image. metadata-relay/Dockerfile carries the
-# full explanation: musl 1.2.6, which Alpine 3.24 ships, tightened
-# sigaltstack() to reject any size below sysconf(_SC_MINSIGSTKSZ), which on a
-# CPU with a large XSAVE area exceeds the fixed 8 KB OTP 28 asks for, so the VM
-# aborts at startup. erlang:28-alpine happens to be built on 3.23.5 with musl
-# 1.2.5 today, but no tag of that image pins an Alpine version, so an upstream
-# rebuild would break every user with such a CPU and no commit here.
+# Bare Alpine, not an erlang image. mix.exs declares no `releases`, so
+# include_erts defaults to true and the release carries the ERTS the builder
+# produced; an image's own OTP would never run. The shared libraries that ERTS
+# and the Rust NIFs link against are installed explicitly below.
 #
-# No erlang base is needed. mix.exs declares no `releases`, so include_erts
-# defaults to true and the release carries the ERTS the builder produced. This
-# image's own OTP was never executed, only its shared libraries were, and those
-# are installed explicitly below.
-FROM alpine:3.23
+# The Alpine minor must equal the builder tag's, because that bundled ERTS
+# links against the builder's libcrypto, ncurses and libstdc++. The tag floats
+# within the minor so security patches still arrive. See the builder stage for
+# why a musl 1.2.6 base needs OTP 29.1 or later.
+FROM alpine:3.24
 
 # Database type: sqlite (default) or postgres
 # This argument is only used for image labels - the actual adapter is already compiled
