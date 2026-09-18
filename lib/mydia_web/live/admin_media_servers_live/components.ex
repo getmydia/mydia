@@ -1002,7 +1002,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   defp health_status_dot_class(:unhealthy), do: "bg-error"
   defp health_status_dot_class(:unknown), do: "bg-warning"
   defp health_status_dot_class(:disabled), do: "bg-base-content/30"
-  defp health_status_dot_class(_), do: "bg-base-content/30"
 
   defp health_status_badge_class(:healthy), do: "badge-success"
   defp health_status_badge_class(:unhealthy), do: "badge-error"

@@ -321,8 +321,6 @@ defmodule MydiaWeb.DevicesLive.Components do
   defp platform_icon("web"), do: "hero-computer-desktop"
   defp platform_icon(_), do: "hero-device-tablet"
 
-  defp format_relative_time(nil), do: "never"
-
   defp format_relative_time(%DateTime{} = dt) do
     now = DateTime.utc_now()
     diff_seconds = DateTime.diff(now, dt, :second)

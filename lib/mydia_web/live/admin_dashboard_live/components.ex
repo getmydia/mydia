@@ -513,11 +513,9 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
   defp user_label(%{email: email}) when is_binary(email) and email != "", do: email
   defp user_label(_), do: "Unknown"
 
-  defp build_image_url(nil), do: nil
   defp build_image_url(path) when is_binary(path), do: ImageUrl.image_url(path, "w92")
   defp build_image_url(_), do: nil
 
-  defp format_size(nil), do: "-"
   defp format_size(bytes) when bytes < 1024, do: "#{bytes} B"
   defp format_size(bytes) when bytes < 1024 * 1024, do: "#{Float.round(bytes / 1024, 1)} KB"
 

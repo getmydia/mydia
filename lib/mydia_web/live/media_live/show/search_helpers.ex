@@ -93,13 +93,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       on_indexer_result: fn progress -> send(lv, {:indexer_progress, search_id, progress}) end
     ]
 
-    case Indexers.search_all(query, opts) do
-      {:ok, %{results: results, indexer_errors: indexer_errors}} ->
-        {:ok, results, indexer_errors}
+    {:ok, %{results: results, indexer_errors: indexer_errors}} = Indexers.search_all(query, opts)
 
-      other ->
-        {:error, other}
-    end
+    {:ok, results, indexer_errors}
   end
 
   @doc """
