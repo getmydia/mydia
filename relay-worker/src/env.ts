@@ -18,6 +18,13 @@ export interface Env {
   // exactly the behaviour production and local dev want.
   ADMIN_ACCESS_HOSTNAME?: string;
 
+  // The cutover traffic layer (src/routing/router.ts). On TRAFFIC_HOSTNAME,
+  // each route group is answered by TRAFFIC_ORIGIN (the Elixir relay), by
+  // this Worker, or by both, per the routing config in CACHE_KV. Both unset,
+  // or any other hostname, and this Worker answers everything itself.
+  TRAFFIC_HOSTNAME?: string;
+  TRAFFIC_ORIGIN?: string;
+
   // Bindings
   CACHE_KV: KVNamespace;
   DB: D1Database;

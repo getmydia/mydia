@@ -5,24 +5,27 @@ service). It proxies TMDB, TVDB, SubDL, MusicBrainz and OpenLibrary for every
 mydia install, plus pairing, crash ingest and feedback. TypeScript, Hono for
 routing, no server and no tunnel — Cloudflare's edge is the whole runtime.
 
-**Nothing has cut over yet.** `relay.mydia.dev` is still served by the Elixir
-relay; this Worker deploys continuously but does not yet own any production
-traffic. The runbook at the bottom of this file is the cutover sequence, and
-only Step 0 (account setup) has been executed.
+**The cutover is gradual and per route group.** The Worker's production
+deploy carries a `relay.mydia.dev/*` route, but a traffic layer in front of
+the app (`src/routing/`, described under "Cutover traffic layer" below) decides
+per route group whether the Elixir relay or the Worker answers, and it starts
+with every group on the Elixir relay. Moving a group is a KV write, not a
+deploy. The runbook at the bottom of this file is the cutover sequence.
 
 **Two environments, two Workers.** `wrangler.jsonc` defines `staging` and
 `production`; the top-level environment is for `wrangler dev` and vitest and
 is never deployed.
 
-| | Deploys on | Worker | Hostname | D1 |
+| | Deploys on | Worker | Hostnames | D1 |
 | --- | --- | --- | --- | --- |
-| staging | push to `master`/`main` touching `relay-worker/**` | `mydia-relay-staging` | `mydia-relay-staging.<subdomain>.workers.dev` | `mydia-relay-staging` |
-| production | `relay-worker-v*` tag | `mydia-relay` | `mydia-relay.<subdomain>.workers.dev` | `mydia-relay` |
+| staging | push to `master`/`main` touching `relay-worker/**` | `mydia-relay-staging` | `mydia-relay-staging.arsfeld.workers.dev`, `relay-staging.mydia.dev` | `mydia-relay-staging` |
+| production | `relay-worker-v*` tag | `mydia-relay` | `mydia-relay.arsfeld.workers.dev`, `relay.mydia.dev` | `mydia-relay` |
 
-Both are Cloudflare-only hostnames today. Neither has a `routes` key, so
-`relay.mydia.dev` is untouched by either — adding that route to
-`env.production` is the cutover, and it is Step 4, not something a deploy does
-on its own.
+On the `workers.dev` hostnames the Worker answers every request itself. On the
+`mydia.dev` hostname each Worker is routed on, the traffic layer decides, and
+both environments send their "origin" traffic to the real Elixir relay.
+`relay-staging.mydia.dev` is therefore a rehearsal of the production cutover
+against the production relay, with no user traffic in the path.
 
 ## What this migration changed
 
@@ -294,6 +297,114 @@ unprotected hostnames from reach, it does not decide who may look. Access
 still decides that, and skipping Step 1 still leaves the dashboards open on
 the production hostname the moment Step 4b adds the route.
 
+## Cutover traffic layer
+
+`src/routing/` sits in front of the Hono app. On the one hostname named by
+`TRAFFIC_HOSTNAME` it sorts each request into a route group and decides who
+answers it: the Elixir relay at `TRAFFIC_ORIGIN`, this Worker, or both. On any
+other hostname, or with either var unset, it does nothing and the Worker
+answers everything, which is why the test suite and the `workers.dev`
+hostnames behave exactly as before.
+
+Reaching the Elixir relay works because of how Workers route same-zone
+subrequests. With `global_fetch_strictly_public` off (the default; do not turn
+it on), a `fetch()` to a hostname on the Worker's own zone goes to that
+hostname's origin server and skips any Worker route on it. So a Worker routed
+on `relay.mydia.dev/*` can fetch `https://relay.mydia.dev/...` and reach the
+Elixir pod rather than itself. Verified on staging on 2026-09-18.
+
+### Groups and modes
+
+| Group | Paths | Allowed modes |
+| --- | --- | --- |
+| `tmdb` | `/tmdb/*`, `/configuration` | origin, worker, shadow, split |
+| `tvdb` | `/tvdb/*` | origin, worker, shadow, split |
+| `music` | `/music/*` | origin, worker, shadow, split |
+| `openlibrary` | `/openlibrary/*` | origin, worker, shadow, split |
+| `client_config` | `/client-config` | origin, worker, shadow, split |
+| `health` | `/health`, `/stats` | origin, worker, shadow, split |
+| `subtitles` | `/api/v1/subtitles/*` | origin, worker, split |
+| `pairing` | `/pairing/*` | origin, worker, fallback |
+| `crashes` | `/crashes/*` | origin, worker |
+| `feedback` | `/feedback` | origin, worker |
+| `admin` | `/admin`, `/admin/*` | origin, worker |
+| `other` | everything else, including the Elixir-only `/metrics` | origin, worker |
+
+- **`origin`**: the Elixir relay answers. The default for every group.
+- **`worker`**: this Worker answers.
+- **`shadow[:N]`**: the Elixir relay answers. For N% of GET/HEAD requests
+  (100 if N is omitted) the Worker also runs the request after the response
+  has been sent, and logs whether it agreed. POSTs are never run twice.
+- **`split:N`**: N% of client IPs are answered by the Worker, the rest by the
+  Elixir relay. The bucket is a hash of `cf-connecting-ip`, so an install
+  stays on one side, and raising N only moves installs toward the Worker.
+- **`fallback`** (pairing only): the Worker answers, a claim lookup it cannot
+  find is retried against the Elixir relay, and a delete goes to both. This
+  moves pairing without losing claims created just before the switch.
+
+A mode a group may not use is refused and that group stays on `origin`.
+Subtitles cannot shadow because SubDL's key has one 2000/day quota for every
+install. Pairing cannot split because the server writes a claim and the player
+reads it from another IP. Crash and feedback ingest keep separate hourly
+budgets and history on each side, so they move as a unit.
+
+### Changing modes
+
+The config is JSON in `CACHE_KV` under `routing:config`. It is read with a
+30s `cacheTtl`, so a change is live everywhere within about 30 seconds and
+needs no deploy:
+
+```bash
+cd relay-worker
+npx wrangler kv key put --env production --binding CACHE_KV --remote \
+  routing:config '{"default":"origin","groups":{"tmdb":"shadow","tvdb":"shadow"}}'
+npx wrangler kv key get --env production --binding CACHE_KV --remote routing:config
+```
+
+`default` applies to every group not listed, wherever that group allows it.
+Deleting the key, or writing something that does not parse, sends every group
+to the Elixir relay. Rejected entries are logged once per isolate as
+`routing_config_warning`.
+
+**Rolling back any step is the same write with that group set back to
+`origin`.** It is live within about 30 seconds.
+
+### Seeing what happened
+
+- Every response on the routed hostname carries `x-relay-backend: origin`,
+  `worker` or `origin-fallback`.
+- Workers Logs holds one JSON line per decision. `event: "route"` has
+  `group`, `mode`, `backend`, `status` and `path`. `event: "shadow"` has
+  `outcome` (`match`, `status_mismatch`, `body_mismatch`, `skipped_large`,
+  `worker_error`), `diff` (the first JSON path that disagreed), both statuses
+  and `worker_ms`. `event: "origin_error"` means the Elixir relay could not be
+  reached and the client got a 502.
+- To read the shadow results, query Workers Logs for the `mydia-relay`
+  service with `event = shadow`, count grouped by `outcome` and `path`, then
+  by `diff` for anything that is not `match`.
+
+A shadowed request costs more CPU than either backend alone, because both
+bodies are parsed to compare them. On staging, shadowing the contract route
+list peaked at 23ms CPU (on the season and `append_to_response` bodies), with a
+4ms median and every invocation `ok`. Bodies over 512KB are compared by status
+only (`skipped_large`). If `$workers.outcome` ever shows `exceededCpu`, lower
+the shadow percentage.
+
+### Expected shadow diffs
+
+Measured on staging on 2026-09-18 by replaying `test/contract/routes.json`
+through `relay-staging.mydia.dev` in shadow mode: 36 of 39 GET routes matched.
+The three that did not are expected:
+
+- `/music/search`: MusicBrainz's fuzzy ranking reorders results between two
+  identical requests. See the note in `routes.json`.
+- `/openlibrary/isbn/:isbn` on a 404: the Elixir relay JSON-encodes OpenLibrary's
+  empty error body as `""`, and the Worker sends it empty. Books are deprecated,
+  so this is not worth matching.
+- OpenLibrary 522s: `openlibrary.org` occasionally times out from Cloudflare's
+  network (one request, 19.6s, then 200 on retry). Expect sporadic
+  `status_mismatch` on `/openlibrary/*` with `worker_status` 522.
+
 ## Project structure
 
 ```
@@ -309,6 +420,7 @@ relay-worker/
 │   ├── dashboards/         # overview + errors + feedback maintainer dashboards, under /admin/*
 │   ├── stats/              # the overview's D1 aggregates, one batch per page load
 │   ├── archive/             # SubDL zip extraction with size caps
+│   ├── routing/            # cutover traffic layer: route groups, KV modes, shadow compare
 │   └── obs/                # rate limiting, request logging, scheduled sweep
 ├── migrations/              # D1 migrations, applied by wrangler + vitest-pool-workers
 ├── test/                   # mirrors src/, plus test/contract (see above)
@@ -349,13 +461,22 @@ migration counts, and staging is always at or ahead of production. Do not
 ## Runbook: one-time and manual deployment steps
 
 Everything above this line is code and CI, already working. Everything below
-is **manual** — it needs Cloudflare dashboard/API access this repo's CI and
-local dev environment do not have, and nobody has executed it yet. Follow it
-in order; each step depends on the one before it.
+is **manual**: it needs Cloudflare dashboard/API access this repo's CI and
+local dev environment do not have. Follow it in order; each step depends on
+the one before it.
+
+Status on 2026-09-18: Steps 0 and 1 are done, Step 2 has been run against
+staging through the traffic layer (see "Expected shadow diffs" above), and
+Step 3 found a blocker for subtitle downloads rather than a CPU number (see
+Step 3). Step 4 is where the production cutover stands.
 
 ### Step 0: Cloudflare account setup (before the CI job can succeed at all)
 
-Sub-steps 1 and 2 below are **done**; 3 and 4 are not. The top-level
+All four sub-steps are **done**. `deploy-staging` has deployed on every
+`relay-worker/**` push since 2026-09-06, which needs the CI token and account
+id from sub-steps 3 and 4. Production has the TMDB, TVDB and SubDL secrets but
+no `RESEND_API_KEY`, so it stores feedback without mailing it (a supported
+configuration, see Bindings). The top-level
 `d1_databases[0].database_id` and `kv_namespaces[0].id` are still
 `"placeholder_local_dev_only"` and should stay that way — that environment is
 never deployed, and Miniflare/vitest-pool-workers need it. Only `env.staging`
@@ -445,7 +566,20 @@ having deployed anything broken (the failure is expected and safe).
 
 ### Step 1: Cloudflare Access — hard ordering constraint
 
-**The dashboards are currently unauthenticated.** `GET /admin`,
+**Done, 2026-09-18.** Three self-hosted applications, each with one
+"Maintainer" allow policy on the maintainer email:
+
+| Application | Scope | Id |
+| --- | --- | --- |
+| mydia relay admin | `relay.mydia.dev/admin*` | `5a03b1fa-dabb-4880-bb19-7b20ddbecba4` |
+| mydia relay-staging admin | `relay-staging.mydia.dev/admin*` | `434e4e43-5562-4e0a-b439-1871329ac140` |
+| mydia relay staging admin | `mydia-relay-staging.arsfeld.workers.dev/admin*` | `7a94371e-4599-416e-950c-960a1c4f26f5` |
+
+`/admin`, `/admin/errors` and `/admin/feedback` on `relay.mydia.dev` and
+`relay-staging.mydia.dev` all answered 302 to the Access login when checked.
+The rest of this step is kept for why it is shaped this way.
+
+**Without Access the dashboards are unauthenticated.** `GET /admin`,
 `GET /admin/errors` and `GET /admin/feedback` expose crash reports,
 user-submitted feedback, and the aggregate stats built from both, including
 instance identifiers. **Nothing may be routed to a public hostname
@@ -579,6 +713,26 @@ the suite at all) — never trust the bare exit code.
 
 ### Step 3: real platform CPU measurement (subtitle download path)
 
+**Blocked, 2026-09-18: the download never reaches extraction.** Every
+`/api/v1/subtitles/download/:id` request through the staging Worker answered
+502, while the same ids through the Elixir relay answered 200 with the
+subtitle. The Worker's new `subdl_download_error` log line shows why:
+`dl.subdl.com` answers the Worker with **429**, on the first request and every
+retry, with no `cf-mitigated` header, and sending the Elixir relay's
+`req/0.5.15` User-Agent did not change it. `dl.subdl.com` is itself behind
+Cloudflare, so it most likely sees one shared Workers egress address for
+every Worker in the world and rate-limits all of them together. Subtitle
+*search* (`api.subdl.com`) works from the Worker.
+
+Until that is solved, the `subtitles` group stays on `origin`, and the Elixir
+relay cannot be decommissioned (Step 5), because it is the only thing that can
+download subtitles. Ways forward, none tried yet: ask SubDL whether an
+authenticated download endpoint or an allowlist exists; fetch downloads from a
+non-Worker egress; or have mydia instances download from `dl.subdl.com`
+themselves, since the download needs no API key.
+
+The measurement below still applies once downloads work.
+
 `src/proxy/subdl.ts`'s archive extraction (`extractSubtitle`) shipped with a
 **local-only** CPU measurement: 0.1630ms mean / 0.3049ms p99 over a ~10KB
 archive, measured with Node's `perf_hooks`. That is a different engine (V8 in
@@ -623,21 +777,24 @@ Step 4 is what later adds `relay.mydia.dev` routes, but the Worker is live on
 
 ### Step 4: production cutover
 
-Everything below is **manual** and moves real traffic. Nothing in this repo
-adds a production route ahead of time — `wrangler.jsonc` has no `routes` key
-today, on purpose. Add it by hand, deliberately, following this sequence.
+`env.production` carries the `relay.mydia.dev/*` route, so the first
+`relay-worker-v*` tag that includes the traffic layer puts the Worker in front
+of the whole hostname. It changes nothing for clients on its own: with no
+routing config in KV, every group goes to the Elixir relay. Everything after
+that deploy is a KV write (see "Changing modes" above), and every step rolls
+back the same way.
 
 **Preconditions, all must already be true:**
 
-- Steps 0-3 above are done: real Cloudflare resources exist (not
-  `placeholder_local_dev_only`), the four secrets are set, CI has deployed at
-  least once to the Worker's `*.workers.dev` subdomain, and the Step 3 CPU
-  measurement has a recorded number.
+- Steps 0 and 1 above are done: real Cloudflare resources exist (not
+  `placeholder_local_dev_only`), the secrets are set, and CI has deployed at
+  least once to the Worker's `*.workers.dev` subdomain. Step 3's blocker only
+  holds back the `subtitles` group, not the rest of this step.
 - **The `/admin*` Access application from Step 1 exists and all three of its
   verification curls pass.** This is the ordering constraint that matters
   most in this whole runbook: neither a Worker route nor a Cloudflare Access
   application can be scoped by HTTP method, only by path. A bare
-  `relay.mydia.dev/*` route (added below in 4b) exposes every path the
+  `relay.mydia.dev/*` route (deployed in 4b) exposes every path the
   Worker answers, `/admin`, `/admin/errors` and `/admin/feedback` included, to
   anonymous traffic the instant it deploys — regardless of what Access
   policy exists for any other path. Do not add the wildcard route on the
@@ -689,55 +846,70 @@ before trusting it:
     treating it as a blocker, and if it's the Elixir, port the fix into the
     Worker to keep them matching.
 
-**4b. Add production routes for the metadata paths only:**
-
-```jsonc
-  "routes": [
-    { "pattern": "relay.mydia.dev/configuration", "zone_name": "mydia.dev" },
-    { "pattern": "relay.mydia.dev/tmdb/*", "zone_name": "mydia.dev" },
-    { "pattern": "relay.mydia.dev/tvdb/*", "zone_name": "mydia.dev" },
-    { "pattern": "relay.mydia.dev/api/v1/subtitles/*", "zone_name": "mydia.dev" },
-    { "pattern": "relay.mydia.dev/music/*", "zone_name": "mydia.dev" },
-    { "pattern": "relay.mydia.dev/openlibrary/*", "zone_name": "mydia.dev" }
-  ]
-```
-
-`cae1-1.relay.mydia.dev` is a different hostname (iroh-relay) and none of
-these patterns touch it — confirm that by eye before deploying, then:
+**4b. Put the Worker in front, with everything still on the Elixir relay.**
+Tag a commit that has been through `deploy-staging`:
 
 ```bash
-cd relay-worker && npx wrangler deploy
+git tag relay-worker-v1.1.0 && git push origin relay-worker-v1.1.0
 ```
 
-Verify from outside:
+`cae1-1.relay.mydia.dev` (iroh-relay) is a different, unproxied hostname, and
+`relay.mydia.dev/*` does not match it. Verify from outside:
 
 ```bash
-# Worker is serving, with real edge caching (not the Elixir's DYNAMIC).
-curl -sI "https://relay.mydia.dev/tmdb/genre/movie?_cb=$RANDOM" | grep -iE 'cache-control|cf-cache-status'
-# expect: cache-control: public, s-maxage=..., stale-if-error=...
+# The Elixir relay still answers, now through the Worker.
+curl -sS -D - -o /dev/null https://relay.mydia.dev/health | grep -iE 'x-relay-backend|cache-control'
+# expect: x-relay-backend: origin, cache-control: max-age=0, private, must-revalidate
 
-# iroh relay still answers on its own hostname, untouched.
+# iroh relay untouched.
 curl -sI https://cae1-1.relay.mydia.dev/ | head -1
-
-# Anything not in the route list above is still the Elixir relay.
-curl -sS -o /dev/null -w '%{http_code}\n' https://relay.mydia.dev/health
 ```
 
-Watch Workers Logs and the Cloudflare dashboard's request analytics for at
-least an hour before moving on. Rollback at this stage is removing the
-routes from `wrangler.jsonc` and redeploying — the Elixir relay is still
-live and still routed for everything else.
+If anything is wrong at this stage, KV cannot help, because the Worker itself
+is in the path. Delete the `relay.mydia.dev/*` route (Workers & Pages →
+`mydia-relay` → Settings → Domains & Routes, or `DELETE
+/zones/{zone_id}/workers/routes/{route_id}`), and requests go straight to the
+Elixir relay again. Routes are not versioned, so `wrangler rollback` does not
+remove one.
 
-**4c. Move the remaining paths — only after the Access precondition above is
-confirmed, again:**
-
-```jsonc
-  "routes": [{ "pattern": "relay.mydia.dev/*", "zone_name": "mydia.dev" }]
-```
+**4c. Shadow the read-only groups.** Leave it at least a day, so the
+comparison covers real traffic, not just the contract routes:
 
 ```bash
-cd relay-worker && npx wrangler deploy
+npx wrangler kv key put --env production --binding CACHE_KV --remote routing:config \
+  '{"groups":{"tmdb":"shadow","tvdb":"shadow","music":"shadow","openlibrary":"shadow","client_config":"shadow","health":"shadow"}}'
 ```
+
+Read the `shadow` events in Workers Logs (see "Seeing what happened"). Every
+`body_mismatch` and `status_mismatch` should be one of the "Expected shadow
+diffs" above or a new, understood one; fix the Worker for anything else before
+moving on. Check `$workers.outcome` for `exceededCpu` too.
+
+**4d. Ramp the read-only groups.** `split:5`, then `split:25`, `split:50`,
+then `worker`, holding each for at least an hour and watching `route` events
+for 5xx and 429s and `x-relay-cache` for edge cache hits. Any group can move
+back to `origin` on its own:
+
+```bash
+npx wrangler kv key put --env production --binding CACHE_KV --remote routing:config \
+  '{"groups":{"tmdb":"split:25","tvdb":"split:25","music":"shadow","openlibrary":"shadow","client_config":"split:25","health":"split:25"}}'
+```
+
+**4e. Subtitles: blocked.** Leave `subtitles` on `origin` until Step 3's
+`dl.subdl.com` 429 is solved.
+
+**4f. Move pairing, crash ingest, feedback and the dashboards together.**
+Check the Access precondition again first, then:
+
+```bash
+npx wrangler kv key put --env production --binding CACHE_KV --remote routing:config \
+  '{"default":"worker","groups":{"subtitles":"origin","pairing":"fallback","other":"origin"}}'
+```
+
+`fallback` keeps claims created on the Elixir relay in the last few minutes
+working. After an hour (claims live for minutes), change `pairing` to
+`worker`. `other` stays on `origin` while anything still reads the Elixir-only
+`/metrics`.
 
 Verify pairing, crash ingest and feedback ingest end to end. Note the real
 response field name below — it is `claim_code`, not `code`:
@@ -774,8 +946,9 @@ and the dashboards are at `/admin/errors` and `/admin/feedback`, not `/errors`
 and `/feedback`. Anything asserting otherwise predates the `/admin/*` move and
 the status-code fix.
 
-Commit only `relay-worker/wrangler.jsonc` once the whole hostname is moved
-and stable.
+Once every group but `subtitles` has been on `worker` for a week, record the
+final routing config here. The traffic layer is removed only after Step 5,
+when there is no origin left to send anything to.
 
 ### Step 5: decommission the Elixir relay on can-1
 
@@ -786,12 +959,14 @@ stage is either reversible in seconds or a pure archival step, right up
 until the last one, which is neither.
 
 **5a. Soak with the Elixir relay running but unrouted, at least 7 days.**
-Once Step 4c lands, `relay.mydia.dev` no longer sends the Elixir pod any
-traffic, but nothing has stopped it. Leave it running. Confirm from Workers
-Logs that the Worker is serving every route and that error rates match the
-pre-cutover baseline. The pod costs nothing while idle and it is the entire
-rollback plan for this stage — if anything looks wrong, the fix is
-re-pointing `wrangler.jsonc`'s routes back, not touching can-1 at all.
+Not before Step 4e is solved: the Elixir relay is the only working subtitle
+download path. Once every group is on `worker`, `relay.mydia.dev` no longer
+sends the Elixir pod any traffic, but nothing has stopped it. Leave it
+running. Confirm from Workers Logs that `route` events show `backend: worker`
+for every group and that error rates match the pre-cutover baseline. The pod
+costs nothing while idle and it is the entire rollback plan for this stage:
+if anything looks wrong, the fix is setting the affected groups back to
+`origin` in KV, not touching can-1 at all.
 
 **5b. Archive the crash history — from the host path, never from inside the
 pod.**
@@ -950,8 +1125,13 @@ Recorded so the next person doesn't re-discover them the hard way:
   typecheck step stops the job before `wrangler deploy` runs), but it means a
   broken PR currently gets no automated feedback before merge — only after.
   Worth a small follow-up workflow.
-- **The real CPU measurement was never performed**, because it needs a
-  deployed Worker and none exists. See Step 3 of the runbook above.
+- **Subtitle downloads do not work from a Worker.** `dl.subdl.com` answers
+  429 to every request from the Worker, so the download route always 502s.
+  This blocks the `subtitles` group and the Elixir decommission, and it is
+  also why the subtitle CPU measurement has no number yet. See Step 3.
+- **The contract diff never tested the download route for real.** Its only
+  download entry uses a made-up file id, which answers 400 on both sides
+  before either one calls SubDL. A real id is what exposed the 429.
 - **The pairing claim response field is `claim_code`, not `code`.** Anything
   parsing `["code"]` out of `POST /pairing/claims` gets a `KeyError`;
   `src/pairing/routes.ts` returns `{"claim_code": "..."}`, confirmed against
