@@ -269,4 +269,98 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });
+
+  // CodeRabbit's finding on this PR (outside-diff comment on
+  // player_screen.dart:4805-4810): this listener had no casting guard of
+  // its own, so toggling the stats flag off then on again while a cast
+  // session was already active re-armed the collector against `_player`,
+  // which is still the backgrounded local player -- casting hides it
+  // behind the cast placeholder, it never gets torn down. The
+  // `isCastingProvider` listener above only intercepts the *transition*
+  // into casting (the test above this one); a flag flip mid-session never
+  // fires it, so this listener needs its own guard, reaching the same
+  // defect by a different path.
+  testWidgets(
+      'toggling the flag off then on during an active cast session does '
+      'not re-arm the collector', (tester) async {
+    final sessions = StreamController<CastSession?>.broadcast();
+    // Same LIFO teardown reasoning as the test above: dispose the
+    // container before closing the broadcast stream it is still
+    // subscribed to.
+    addTearDown(sessions.close);
+
+    final (container, fake) = await _mountPlayingScreen(
+      tester,
+      castSessionStream: sessions.stream,
+    );
+
+    await container.read(statsOverlayEnabledProvider.notifier).set(true);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(fake.hasBufferListener, isTrue,
+        reason: 'sanity check: the armed collector subscribes to the '
+            'buffer stream, or the assertions below would pass vacuously');
+
+    sessions.add(const CastSession(
+      device: testDevice,
+      mediaInfo: CastMediaInfo(
+        title: 'The Long Aurora',
+        duration: Duration(seconds: 5400),
+        position: Duration.zero,
+      ),
+      playbackState: CastPlaybackState.playing,
+      connectionState: CastConnectionState.connected,
+    ));
+    await tester.pump();
+
+    // Same async gap the test above documents: `dispose()` cancels its
+    // subscriptions behind their own `await`s, which only progresses on the
+    // real event loop.
+    await tester.runAsync(() async {
+      for (var i = 0; i < 40 && fake.hasBufferListener; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+    await tester.pump();
+    expect(fake.hasBufferListener, isFalse,
+        reason: 'sanity check: cast start already stopped the collector, '
+            'or the assertions below would pass vacuously');
+
+    // Off then on, both while the cast session is still active. Neither
+    // transitions `isCastingProvider`, so the listener above never fires
+    // for either flip -- this listener is the only one that can see it.
+    await container.read(statsOverlayEnabledProvider.notifier).set(false);
+    await tester.pump();
+    await container.read(statsOverlayEnabledProvider.notifier).set(true);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(fake.hasBufferListener, isFalse,
+        reason: 'the on branch must not re-arm the collector while '
+            'casting -- it would sample the hidden local player for the '
+            'rest of the cast session, the same defect the '
+            'isCastingProvider listener exists to prevent, reached here by '
+            'flipping the flag instead of starting a new cast session');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  // The cast-end half of this scenario -- ending the session and confirming
+  // the collector re-arms once local playback resumes -- is deliberately
+  // not covered here. `_restartLocalPlayback` disposes `_player`, and
+  // media_kit's own `PlatformPlayer.dispose` closes every stream
+  // controller on it, including `bufferController`; `_mountPlayingScreen`
+  // hands `createPlayer` a closure over a single `fake` shared for the
+  // whole test, so the player `_initializePlayer` constructs afterwards
+  // would reuse that already-closed instance and throw on its first
+  // `open()`. `StubLink`'s handler here is also positional
+  // (`index == 0..3`), scripted for exactly one startup sequence; a
+  // restart repeats the same four queries and would fall through to the
+  // catch-all `updateMovieProgress` response instead. Covering the restart
+  // needs a `createPlayer` that mints a fresh fake per call and a
+  // `StubLink` that answers by operation name instead of position, the way
+  // `player_screen_cast_skip_segments_test.dart`'s `_link` does -- real
+  // harness changes, not a two-line addition, so left for a follow-up
+  // rather than bent to fit here.
 }

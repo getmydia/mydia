@@ -4806,7 +4806,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final player = _player;
       if (player == null) return;
       if (next.value ?? false) {
-        if (_statsCollector == null) {
+        // Guarded on casting too, not just on `_statsCollector == null`:
+        // the `isCastingProvider` listener above only fires on the
+        // transition into casting, so toggling this flag off then on again
+        // while a cast session is already active reaches this branch with
+        // no transition to intercept it. Without the guard, `_player` is
+        // still the backgrounded local player -- casting hides it behind
+        // the cast placeholder, it never gets torn down -- so
+        // `_startStatsCollector` would rearm a `Timer.periodic` sampling
+        // that hidden player for the rest of the session, the same defect
+        // the transition guard above exists to prevent, reached by a
+        // different path. Local playback resuming is what re-arms it
+        // properly, through `_openPlayerAndStart`'s unconditional
+        // `_startStatsCollector`.
+        if (_statsCollector == null && !ref.read(isCastingProvider)) {
           setState(() => _startStatsCollector(player));
         }
       } else {
