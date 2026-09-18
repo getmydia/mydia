@@ -536,7 +536,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The viewer's choice while a source switch carries it to the new
   /// source, in the server's id space. See [SubtitleIntent].
   ///
-  /// Non-null from [_switchSource]'s capture until the restore that
+  /// Non-null from when [_switchSource] lands until the restore that
   /// consumes it finishes. A switch sets it only when it is null, so a
   /// rollback after a failed switch reuses the original choice rather than
   /// reading one from the failed source. A sheet or remote pick clears it,
@@ -1691,17 +1691,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Persist where the viewer actually is before the old source goes away.
       await _saveProgress();
       // Read while the old file is still loaded, since an mpv track's stream
-      // index can only be read from its own file, and committed only past
-      // the abort check below, so an aborted switch leaves nothing behind.
+      // index can only be read from its own file. Committed only once
+      // replaceSource has landed, so a throw there does not leave intent
+      // pending and block sync for the rest of playback.
       final subtitleIntent =
           _subtitleIntentAcrossSwitch ?? await _captureSubtitleIntent(player);
       if (!mounted || !identical(playback, _playback)) return false;
-      _subtitleIntentAcrossSwitch = subtitleIntent;
-      if (subtitleIntent != null) {
-        // Supersedes a pick still resolving: its target is the intent just
-        // captured, and applying it to the outgoing file would be lost.
-        _subtitleSelectionGeneration++;
-      }
       _stopVerification();
 
       // Every switch past this point keeps the same `Player` (a fallback, a
@@ -1721,8 +1716,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         attach: (source) => _attachSource(player, source, at: at),
         onProgress: (message) => debugPrint('[PlayerScreen] $message'),
       );
-
-      if (!mounted) return false;
+      if (!mounted || !identical(playback, _playback)) return false;
+      _subtitleIntentAcrossSwitch = subtitleIntent;
+      if (subtitleIntent != null) {
+        // Supersedes a pick still resolving: its target is the intent just
+        // captured, and applying it to the outgoing file would be lost.
+        _subtitleSelectionGeneration++;
+      }
       setState(() {
         _plan = plan;
         _isDirectPlay = plan is DirectPlayPlan;
@@ -1800,8 +1800,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
     if (generation != _subtitleSelectionGeneration) return;
 
-    _subtitleIntentAcrossSwitch = null;
-    if (restore is RestoreUnavailable) _showPlaybackSnackBar(restore.message);
+    if (restore is RestoreUnavailable) {
+      _showPlaybackSnackBar(restore.message);
+      return;
+    }
+    if (subtitleRestoreConsumed(
+        restore: restore, selected: _selectedSubtitleTrack)) {
+      _subtitleIntentAcrossSwitch = null;
+    }
   }
 
   /// Monitors a source and lets the policy decide when to replace it.

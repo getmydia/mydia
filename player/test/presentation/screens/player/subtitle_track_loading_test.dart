@@ -911,4 +911,43 @@ void main() {
       expect(shouldAcceptSubtitlePick(switchInFlight: false), isTrue);
     });
   });
+
+  group('subtitleRestoreConsumed', () {
+    test('keeps the intent after an unavailable restore', () {
+      expect(
+        subtitleRestoreConsumed(
+          restore: const RestoreUnavailable(kImageSubtitleUnavailableMessage),
+          selected: null,
+        ),
+        isFalse,
+      );
+    });
+
+    test('clears the intent once the track is actually selected', () {
+      expect(
+        subtitleRestoreConsumed(
+          restore: const RestoreTrack(sidecar),
+          selected: sidecar,
+        ),
+        isTrue,
+      );
+      expect(
+        subtitleRestoreConsumed(
+          restore: const RestoreTrack(sidecar),
+          selected: null,
+        ),
+        isFalse,
+      );
+    });
+
+    test('clears the intent once Off is actually applied', () {
+      expect(
+        subtitleRestoreConsumed(
+          restore: const RestoreOff(),
+          selected: null,
+        ),
+        isTrue,
+      );
+    });
+  });
 }

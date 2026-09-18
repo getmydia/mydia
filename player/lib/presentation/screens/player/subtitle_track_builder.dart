@@ -362,6 +362,21 @@ SubtitleRestore resolveSubtitleIntent({
   }
 }
 
+/// Whether [_restoreSubtitleIntent] should clear the carried choice after
+/// applying [restore] to [selected].
+///
+/// Unavailable restores apply Off for this source but keep the intent so a
+/// later switch back (for example PGS at Original) can still resolve it.
+bool subtitleRestoreConsumed({
+  required SubtitleRestore restore,
+  required SubtitleTrack? selected,
+}) =>
+    switch (restore) {
+      RestoreTrack(:final track) => selected?.id == track.id,
+      RestoreOff() => selected == null,
+      RestoreUnavailable() => false,
+    };
+
 /// Whether `_syncSelectedSubtitleTrack` may overwrite the selection with
 /// whatever media_kit reports.
 ///
