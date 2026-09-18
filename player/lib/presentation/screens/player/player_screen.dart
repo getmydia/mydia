@@ -98,7 +98,17 @@ import '../../../core/player/resume_plan.dart';
 import '../../../core/remote/remote_control_intent.dart';
 import '../../../core/remote/remote_target_controller.dart';
 import '../../../native/lib.dart';
+import '../../../core/connection/connection_summary.dart';
+import '../../../core/p2p/p2p_service.dart';
+import '../../../core/playback/stats/playback_stats.dart';
+import '../../../core/playback/stats/playback_stats_collector.dart';
+import '../../../core/playback/stats/stats_metrics.dart';
+import '../../../core/playback/stats/stats_report.dart';
+import '../../../core/settings/stats_overlay_setting.dart';
+import '../../../core/update/update_provider.dart';
+import '../../widgets/playback_stats/stats_panel.dart';
 import '../settings/settings_controller.dart';
+import 'stats_context_builder.dart';
 import 'subtitle_content_query.dart';
 import 'subtitle_track_builder.dart';
 
@@ -574,6 +584,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   PlaybackMonitor? _monitor;
   AdaptationPolicy? _policy;
   StreamSubscription<HealthSample>? _healthSubscription;
+
+  /// Runs whenever the stats panel is on, including for a downloaded file
+  /// and on a source `_startVerification` never arms the monitor for.
+  PlaybackStatsCollector? _statsCollector;
+
+  /// The last fallback this session, for the panel's Why row.
+  StatsFallback? _lastFallback;
 
   /// Samples seen since the last throughput write; one write a minute.
   int _throughputSamples = 0;
@@ -1716,6 +1733,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _policy = null;
   }
 
+  /// Starts, restarts or stops the collector to match the flag.
+  ///
+  /// Separate from `_startVerification`: that arms `AdaptationPolicy` and
+  /// deliberately skips a downloaded file and a cast session, while the
+  /// panel reports on whatever is playing.
+  void _startStatsCollector(Player player) {
+    _stopStatsCollector();
+    if (!(ref.read(statsOverlayEnabledProvider).value ?? false)) return;
+    final collector = PlaybackStatsCollector(
+      signals: PlayerSignals.of(player),
+      sampler: frameStatsSamplerFor(player),
+    );
+    _statsCollector = collector;
+    collector.start();
+  }
+
+  void _stopStatsCollector() {
+    unawaited(_statsCollector?.dispose());
+    _statsCollector = null;
+  }
+
   void _onHealthSample(HealthSample sample, AdaptationPolicy policy) {
     // A sample from a monitor that has since been replaced.
     if (!mounted || !identical(policy, _policy)) return;
@@ -1784,6 +1822,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         debugPrint('[PlayerScreen] Could not update playback memory: $e');
       }
     }
+
+    // For the panel's Why row, and a fresh dropped-frame baseline: on
+    // native the same `Player` carries on into the new source, so without
+    // `rebind()` the next sample would diff against the outgoing source's
+    // counters and report a spike that never happened.
+    _lastFallback = StatsFallback(reason: action.reason, detail: action.detail);
+    _statsCollector?.rebind();
 
     // The choice stays the viewer's: `fallbackPlan` already honours it as
     // closely as this device allows. The stored default is never written
@@ -1922,6 +1967,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Broadcast errors and playing events can arrive during open/play.
     // Subscribe now so verification sees even a decoder's first failure.
     if (verificationPlan != null) _startVerification(verificationPlan);
+
+    // Unconditional, unlike `_startVerification` above: the panel reports
+    // on a downloaded file too, which `_startVerification` deliberately
+    // skips (see its own `_isDownloadedSource` guard).
+    _startStatsCollector(player);
 
     // Open media
     await player.open(
@@ -4466,6 +4516,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Terminate HLS session on server to stop FFmpeg (fire and forget)
     _stopVerification();
+    _stopStatsCollector();
     _terminateHlsSession();
 
     // Unregister beforeunload handler on web
@@ -4694,6 +4745,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final position = session?.mediaInfo?.position;
       if (session == null || position == null || session.isStale) return;
       _maybeAutoSkipAt(position, _castSeekToReal);
+    });
+
+    // Flipping the switch while a file is open must start or stop the
+    // collector; without this the panel only appears on the next source.
+    ref.listen<AsyncValue<bool>>(statsOverlayEnabledProvider, (_, next) {
+      final player = _player;
+      if (player == null) return;
+      if (next.value ?? false) {
+        if (_statsCollector == null) _startStatsCollector(player);
+      } else {
+        setState(_stopStatsCollector);
+      }
     });
 
     final isCasting = ref.watch(isCastingProvider);
@@ -4974,6 +5037,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // not the seek gestures underneath. Nothing below it can do anything
         // useful while the browser is still refusing to start.
         if (_autoplayBlocked) TapToPlayOverlay(onPlay: _playAfterAutoplayBlock),
+        // Last, so it draws over the chrome rather than under it, and
+        // outside `GestureControls` so a tap on the panel is not a seek.
+        // `StatsMetrics.resolve` returns null on a viewport too short to
+        // hold even the compact panel, which is when drawing nothing beats
+        // drawing over the scrubber.
+        if (_statsCollector != null) _buildStatsPanel(),
       ],
     );
   }
@@ -4989,6 +5058,113 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _seasonEpisodes != null &&
       _currentEpisodeIndex != null &&
       _currentEpisodeIndex! < _seasonEpisodes!.length - 1;
+
+  Widget _buildStatsPanel() {
+    final collector = _statsCollector;
+    if (collector == null) return const SizedBox.shrink();
+
+    final metrics = StatsMetrics.resolve(
+      viewport: MediaQuery.sizeOf(context),
+      directionalPrimary: InputCapabilities.directionalPrimary,
+    );
+    if (metrics == null) return const SizedBox.shrink();
+
+    return Positioned.fill(
+      child: SafeArea(
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: metrics.top,
+              left: metrics.gutter,
+            ),
+            child: ValueListenableBuilder<StatsSample?>(
+              valueListenable: collector.samples,
+              builder: (context, sample, _) {
+                if (sample == null) return const SizedBox.shrink();
+                final statsContext = _statsContext();
+                return StatsPanel(
+                  sample: sample,
+                  context: statsContext,
+                  metrics: metrics,
+                  onCopy: metrics.showButtons
+                      ? () => _copyStats(sample, statsContext)
+                      : null,
+                  onClose: metrics.showButtons
+                      ? () => unawaited(
+                            ref
+                                .read(statsOverlayEnabledProvider.notifier)
+                                .set(false),
+                          )
+                      : null,
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  StatsContext _statsContext() {
+    final player = _player;
+    final status = ref.read(p2pStatusNotifierProvider);
+    final isP2P = ref.read(conn.connectionProvider).isP2PMode;
+    final summary = ConnectionSummary.from(
+      isP2P: isP2P,
+      type: status.peerConnectionType,
+      isInitialized: status.isInitialized,
+    );
+    return buildStatsContext(
+      plan: _plan,
+      isDownloadedSource: _isDownloadedSource,
+      selectedQuality: _selectedQuality,
+      effectiveQuality: _effectiveQuality,
+      duration: _timeline.resolveDuration(
+        player?.state.duration ?? Duration.zero,
+      ),
+      lastFallback: _lastFallback,
+      knownFailures: _planInputs?.knownFailures ?? const {},
+      sourceHeight: _planInputs?.sourceHeight,
+      sourceCodec: _sourceCodec(_planInputs),
+      sourceBitrateKbps: _planInputs?.fileBitrateKbps,
+      sourceContainer: null,
+      videoTrack: player?.state.track.video,
+      audioTrack: player?.state.track.audio,
+      linkLabel: '${summary.label} - ${status.connectedPeersCount} peer'
+          '${status.connectedPeersCount == 1 ? '' : 's'}',
+      linkHealthy: status.isRelayConnected == false,
+    );
+  }
+
+  /// The first candidate's video codec, or null when there is no plan or
+  /// no candidate names one.
+  ///
+  /// A plain loop rather than `candidates.map((c) => c.videoCodec)
+  /// .firstWhere((c) => c != null, orElse: () => null)`: that one-liner
+  /// does typecheck and behave correctly (both "no match" and "found
+  /// null" collapse to the same `orElse: () => null`), but it reads as
+  /// more clever than the job needs.
+  String? _sourceCodec(PlanInputs? inputs) {
+    if (inputs == null) return null;
+    for (final candidate in inputs.candidates) {
+      if (candidate.videoCodec != null) return candidate.videoCodec;
+    }
+    return null;
+  }
+
+  Future<void> _copyStats(StatsSample sample, StatsContext stats) async {
+    final version = ref.read(updateProvider).currentVersion;
+    await Clipboard.setData(
+      ClipboardData(
+        text: statsClipboardText(sample, stats, appVersion: version),
+      ),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Stats copied')),
+    );
+  }
 
   Widget _buildError() {
     return Center(
