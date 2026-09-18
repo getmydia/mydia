@@ -167,6 +167,22 @@ jobs:
     name: Player / Android
     if: inputs.build_android
     needs: prepare
+    # Serialises this job against every other dev build publish, across
+    # refs. This workflow's own concurrency group above is keyed on
+    # inputs.ref, so two dispatches for different refs run their
+    # player-android jobs at the same time; the "Publish the dev build to
+    # R2" step inside player-android.yml does an unserialised
+    # read-amend-write of index.json, so two concurrent runs can both read
+    # the same index and the later write drops the earlier run's entry
+    # while its APK stays in the bucket, orphaned and invisible to the feed.
+    # Scoped to this caller job, not to player-android.yml itself: that
+    # workflow is also called from release.yml for the real release build,
+    # which never sets publish_dev_build and never touches this bucket, and
+    # must never be made to wait behind a dev build publish it has nothing
+    # to do with.
+    concurrency:
+      group: mydia-dev-builds-index
+      cancel-in-progress: false
     uses: ./.github/workflows/player-android.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}
