@@ -131,17 +131,19 @@ in
   packages = with pkgs; [
     flutterPkg
 
-    # OTP, rebar3 and the Erlang language server, from the resolver's beam set
-    # rather than languages.erlang. The pinned devenv's languages.erlang builds
-    # rebar3 as nixpkgs' default-OTP rebar3 with this OTP swapped into
-    # buildInputs, which skips nixpkgs' rebar3 patch for the newer OTP major,
-    # and the build fails. The set's own rebar3 is the correct, binary-cached
-    # build. devenv fixed its module upstream (cachix/devenv 84b8f8dfe2);
-    # return to languages.erlang once devenv.lock's devenv input and CI's
-    # devenv CLI both include that commit.
+    # OTP and rebar3, from the resolver's beam set rather than
+    # languages.erlang. The pinned devenv's languages.erlang builds rebar3 as
+    # nixpkgs' default-OTP rebar3 with this OTP swapped into buildInputs, which
+    # skips nixpkgs' rebar3 patch for the newer OTP major, and the build fails.
+    # The set's own rebar3 is the correct, binary-cached build. devenv fixed
+    # its module upstream (cachix/devenv 84b8f8dfe2); return to
+    # languages.erlang once devenv.lock's devenv input and CI's devenv CLI both
+    # include that commit, with its lsp option off. The Erlang language server
+    # that module adds by default is left out on purpose: nixpkgs ships it as
+    # prebuilt binaries for older OTP majors only, so it cannot match this
+    # OTP, and the repo has no Erlang sources for it to serve.
     beamPin.erlang
     beamPin.beam.rebar3
-    erlang-language-platform
 
     # Node.js for assets
     nodejs

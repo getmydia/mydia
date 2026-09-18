@@ -21,6 +21,12 @@
 #     Mix cannot read that floor from an external file.
 #   - `uses:` lines. SHA-pinning an action with a trailing version comment is
 #     not an SDK selection and must not trip this check.
+#   - NIF versions (`nif-N.N`), for the Elixir scan only. A precompiled NIF's
+#     ABI version is not an Elixir version, and the wasmex checksum file that
+#     names one is itself called checksum-Elixir.*.
+#
+# Both scans ignore case, so shouty spellings such as an ELIXIR_VERSION or
+# ERLANG_VERSION env var are caught too.
 #
 # This script is in scope for its own scan, so do not write a version literal
 # in these comments either.
@@ -43,10 +49,11 @@ scan() {
 }
 
 elixir_hits="$(
-  scan 'elixir' \
+  scan 'elixir' -i \
     | grep -vE '^mix\.exs:' \
     | grep -viE 'elixir_make|bcrypt_elixir|argon2_elixir|yaml_elixir' \
-    | grep -E '[0-9]+\.[0-9]+|elixir_[0-9]' \
+    | grep -viE 'nif-[0-9]+\.[0-9]+' \
+    | grep -iE '[0-9]+\.[0-9]+|elixir_[0-9]' \
     || true
 )"
 if [ -n "$elixir_hits" ]; then
@@ -61,7 +68,7 @@ else
   echo "OK: .elixir-version is the only file naming an Elixir version."
 fi
 
-otp_pattern="erlang[_-][0-9]|otp-[0-9]|otp[-_]version[\"']?[[:space:]]*[:=][[:space:]]*[\"']?[0-9]|\\botp[[:space:]]*[0-9]{2}\\b"
+otp_pattern="erlang[_-][0-9]|otp-[0-9]|(otp|erlang)[-_]version[\"']?[[:space:]]*[:=][[:space:]]*[\"']?[0-9]|\\botp[[:space:]]*[0-9]{2}\\b"
 otp_hits="$(scan "$otp_pattern" -i)"
 if [ -n "$otp_hits" ]; then
   echo "::error::An OTP major escaped .otp-version"

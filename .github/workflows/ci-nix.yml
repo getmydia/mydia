@@ -114,10 +114,15 @@ jobs:
   check-beam-pin:
     name: Check / BEAM Pin
     runs-on: ubuntu-latest
+    # Reads the checkout and evaluates nix; it never pushes or calls the API.
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # The nix eval below only proves beam-version.nix agrees with nixpkgs. It
       # cannot see a stale Elixir or OTP version literal re-added to a workflow,
