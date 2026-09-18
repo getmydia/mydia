@@ -6,12 +6,13 @@
 # `mix test`, `mix precommit`, Flutter codegen) runs natively in this shell;
 # each git worktree derives its own non-colliding ports and isolated state.
 #
-# ⚠️ KEEP IN SYNC — this file is the source of truth for the Elixir/OTP
-# toolchain, and the CI test jobs consume it directly (`devenv shell -- …` in
-# .github/workflows/ci.yml), so those versions are NO LONGER duplicated in CI.
-# Bump Elixir/OTP here (and the Dockerfile prod base) and CI follows.
-#   - this file    (beam.packages.erlang_28)
-#   - Dockerfile   (FROM elixir:1.19-otp-28 prod base)
+# The Elixir minor is NOT named in this file. It lives in .elixir-version,
+# resolved by elixir-version.nix, and is read by this file, by
+# nix/packages/flake-module.nix and by the Dockerfile. ci-nix.yml's
+# "Check / Elixir Pin" job fails the build if any other file names one.
+#
+# OTP is pinned here, as erlang_28, and elixir-version.nix resolves against
+# that same beam set so the pair is always matched.
 #
 # Two toolchains are NOT listed above and must not be named here, because each
 # lives in exactly one file that everything else reads:
@@ -41,7 +42,7 @@ let
       '';
     rustToolchain.channel;
 
-  # Elixir 1.19 / OTP 28 built as a matched pair from one beam set. devenv's
+  # Elixir and OTP built as a matched pair from one beam set. devenv's
   # languages.elixir only adds the elixir package — it does NOT pull a matching
   # OTP — so we pin erlang from the same erlang_28 binding to avoid the classic
   # mismatched-OTP-on-PATH footgun (KTD1).
@@ -100,11 +101,16 @@ let
   # throws if nixpkgs disagrees, so a `devenv update` that moves Flutter fails
   # loudly here instead of silently shipping a different SDK than CI uses.
   flutterPkg = import ./player/flutter-version.nix { inherit pkgs; };
+
+  # Elixir (single source of truth). .elixir-version is the only place the
+  # Elixir minor is written. The resolver throws if this nixpkgs has no
+  # matching attribute, so a lock move that drops it fails loudly here.
+  elixirPkg = import ./elixir-version.nix { inherit pkgs; };
 in
 {
   languages.elixir = {
     enable = true;
-    package = beam.elixir_1_19;
+    package = elixirPkg;
   };
 
   languages.erlang = {
@@ -361,8 +367,9 @@ in
       # does: `mydia.backup_before_migrate` calls `exit({:shutdown, 1})` on a
       # failed backup, which terminates the `mix do` process outright (Mix's
       # `do` task has no rescue/catch around each step) before `ecto.migrate`
-      # ever runs — verified empirically against this pinned Elixir 1.19.5
-      # with a throwaway two-task `mix do`, not just read off the docs.
+      # ever runs — verified empirically against the Elixir pinned in
+      # .elixir-version with a throwaway two-task `mix do`, not just read off
+      # the docs.
       after = [ "mydia:deps" ];
     };
 
