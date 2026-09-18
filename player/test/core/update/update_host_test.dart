@@ -8,6 +8,7 @@ import 'package:player/core/update/flatpak_environment.dart';
 import 'package:player/core/update/flatpak_portal.dart';
 import 'package:player/core/update/platform_updater.dart';
 import 'package:player/core/update/update_host.dart';
+import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
 
 class _NoopUpdater extends PlatformUpdater {
@@ -47,20 +48,33 @@ const _linux = UpdateHost(
   isLinux: true,
 );
 
+const _sideloadedAndroid = UpdateHost(
+  isWeb: false,
+  isAndroid: true,
+  isIOS: false,
+  isMacOS: false,
+  isWindows: false,
+  isLinux: false,
+  installedFromPlay: false,
+);
+
+const _playAndroid = UpdateHost(
+  isWeb: false,
+  isAndroid: true,
+  isIOS: false,
+  isMacOS: false,
+  isWindows: false,
+  isLinux: false,
+  installedFromPlay: true,
+);
+
 void main() {
   group('supportsInAppUpdates', () {
-    test('web, Android and iOS update elsewhere', () {
+    test('web and iOS update elsewhere', () {
       for (final host in [
         const UpdateHost(
             isWeb: true,
             isAndroid: false,
-            isIOS: false,
-            isMacOS: false,
-            isWindows: false,
-            isLinux: false),
-        const UpdateHost(
-            isWeb: false,
-            isAndroid: true,
             isIOS: false,
             isMacOS: false,
             isWindows: false,
@@ -75,6 +89,32 @@ void main() {
       ]) {
         expect(host.supportsInAppUpdates, isFalse);
       }
+    });
+
+    test('a sideloaded Android install updates itself', () {
+      const host = UpdateHost(
+        isWeb: false,
+        isAndroid: true,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: false,
+        isLinux: false,
+        installedFromPlay: false,
+      );
+      expect(host.supportsInAppUpdates, isTrue);
+    });
+
+    test('a Play install does not', () {
+      const host = UpdateHost(
+        isWeb: false,
+        isAndroid: true,
+        isIOS: false,
+        isMacOS: false,
+        isWindows: false,
+        isLinux: false,
+        installedFromPlay: true,
+      );
+      expect(host.supportsInAppUpdates, isFalse);
     });
 
     test('desktop updates in app', () {
@@ -106,6 +146,53 @@ void main() {
       );
 
       expect(backend, isA<ReleaseUpdateBackend>());
+    });
+
+    test(
+        'a Linux tarball install never offers Dev, because none is '
+        'published for it', () {
+      final backend = createUpdateBackend(
+        _linux,
+        currentVersion: '0.15.0',
+        archiveUpdater: _NoopUpdater.new,
+      ) as ReleaseUpdateBackend;
+
+      expect(backend.availableTracks, {UpdateTrack.stable, UpdateTrack.beta});
+    });
+
+    test('a sideloaded Android install gets the release backend', () {
+      final backend = createUpdateBackend(
+        _sideloadedAndroid,
+        currentVersion: '0.15.0',
+        archiveUpdater: _NoopUpdater.new,
+      );
+
+      expect(backend, isA<ReleaseUpdateBackend>());
+    });
+
+    test(
+        'a sideloaded Android install offers Dev too, since it is the one '
+        'platform that publishes it', () {
+      final backend = createUpdateBackend(
+        _sideloadedAndroid,
+        currentVersion: '0.15.0',
+        archiveUpdater: _NoopUpdater.new,
+      ) as ReleaseUpdateBackend;
+
+      expect(
+        backend.availableTracks,
+        {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev},
+      );
+    });
+
+    test('a Play install gets no backend at all', () {
+      final backend = createUpdateBackend(
+        _playAndroid,
+        currentVersion: '0.15.0',
+        archiveUpdater: _NoopUpdater.new,
+      );
+
+      expect(backend, isNull);
     });
 
     test(
@@ -228,6 +315,75 @@ void main() {
 
       expect(host.isFlatpak, isFalse);
       expect(host.flatpakBranch, isNull);
+    });
+  });
+
+  group('UpdateHost.resolveInstalledFromPlay', () {
+    test('the Play store id reports Play', () async {
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => 'com.android.vending',
+      );
+
+      expect(fromPlay, isTrue);
+    });
+
+    test('a sideloaded installer id reports not Play', () async {
+      // A real id a manual-install path can report, not a placeholder: proof
+      // that a known non-Play answer is trusted rather than defaulting to the
+      // safe direction the way an unreadable one does.
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => 'com.android.packageinstaller',
+      );
+
+      expect(fromPlay, isFalse);
+    });
+
+    test('a null installer id reports not Play', () async {
+      // Android reports no installer package at all for an ADB or manual
+      // sideload, which is a successful, confident answer, not a failure. It
+      // must not fall into the same bucket as a lookup that could not
+      // complete.
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => null,
+      );
+
+      expect(fromPlay, isFalse);
+    });
+
+    test('an empty installer id reports not Play', () async {
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => '',
+      );
+
+      expect(fromPlay, isFalse);
+    });
+
+    test('a lookup that throws reports Play, the safe direction', () async {
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: true,
+        readInstallerStore: () async => throw Exception('channel error'),
+      );
+
+      expect(fromPlay, isTrue);
+    });
+
+    test('a non-Android host never calls the lookup and reports not Play',
+        () async {
+      var calls = 0;
+      final fromPlay = await UpdateHost.resolveInstalledFromPlay(
+        isAndroid: false,
+        readInstallerStore: () async {
+          calls++;
+          return 'com.android.vending';
+        },
+      );
+
+      expect(fromPlay, isFalse);
+      expect(calls, 0);
     });
   });
 }

@@ -8,6 +8,7 @@ import 'package:player/core/update/backends/flatpak_update_backend.dart';
 import 'package:player/core/update/flatpak_portal.dart';
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
+import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/available_update.dart';
 
 /// `build()` calls the real `PackageInfo.fromPlatform()`, which is a
@@ -20,12 +21,22 @@ const _packageInfoChannel =
     MethodChannel('dev.fluttercommunity.plus/package_info');
 
 class _FakeBackend implements UpdateBackend {
-  _FakeBackend({this.outcome = const AlreadyUpToDate()});
+  _FakeBackend({
+    this.outcome = const AlreadyUpToDate(),
+    this.trackSwitchOutcome = const TrackSwitchApplied(),
+    UpdateTrack currentTrack = UpdateTrack.stable,
+  }) : _currentTrack = currentTrack;
 
   final UpdateOutcome outcome;
+
+  /// Mutable so a test can change what the next `selectTrack` call returns,
+  /// proving trackUrl is decided fresh on every switch rather than sticking
+  /// from an earlier one.
+  TrackSwitchOutcome trackSwitchOutcome;
   final controller = StreamController<AvailableUpdate?>.broadcast();
   int refreshes = 0;
   bool disposed = false;
+  UpdateTrack _currentTrack;
 
   @override
   Future<void> start() async {}
@@ -39,6 +50,21 @@ class _FakeBackend implements UpdateBackend {
 
   @override
   bool get canUpdateInPlace => true;
+
+  @override
+  Set<UpdateTrack> get availableTracks =>
+      const {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev};
+
+  @override
+  UpdateTrack get currentTrack => _currentTrack;
+
+  @override
+  Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async {
+    // A real backend that applies the switch also starts reporting the new
+    // track, which is what UpdateNotifier.selectTrack reads back afterward.
+    if (trackSwitchOutcome is TrackSwitchApplied) _currentTrack = track;
+    return trackSwitchOutcome;
+  }
 
   @override
   Future<void> refresh({bool force = false}) async => refreshes++;
@@ -100,7 +126,7 @@ ProviderContainer _container(_FakeBackend backend) {
   final container = ProviderContainer(
     overrides: [
       updateBackendFactoryProvider.overrideWithValue(
-        ({required String currentVersion}) => backend,
+        ({required String currentVersion}) async => backend,
       ),
     ],
   );
@@ -184,6 +210,35 @@ void main() {
     expect(container.read(updateProvider).restartRequired, isTrue);
   });
 
+  test(
+      'a deferred result clears the pending update and says where it went, '
+      'instead of leaving the same Update Now row', () async {
+    final backend = _FakeBackend(outcome: const UpdateDeferred());
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    // Established first, so clearing it below is observable rather than a
+    // no-op on a field that was already null.
+    backend.controller.add(const FlatpakRemoteUpdate(
+      releaseNotesUrl: 'https://example.invalid/releases',
+    ));
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(updateProvider).availableUpdate, isNotNull);
+
+    await container.read(updateProvider.notifier).requestUpdate();
+
+    final state = container.read(updateProvider);
+    expect(state.availableUpdate, isNull);
+    expect(state.isApplying, isFalse);
+    expect(state.notice, isNotNull);
+    // The card falls back to `update != null` for its "Update Now" row, so a
+    // notice that does not clear the update would draw that row right back
+    // and invite tapping it a second time while the first hand-off is still
+    // waiting on the user.
+    expect(state.error, isNull);
+  });
+
   test('an unsupported result surfaces its reason as an error', () async {
     final backend = _FakeBackend(
       outcome: const UpdateUnsupported('This update needs new permissions.'),
@@ -223,7 +278,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         updateBackendFactoryProvider.overrideWithValue(
-          ({required String currentVersion}) => backend,
+          ({required String currentVersion}) async => backend,
         ),
       ],
     );
@@ -256,7 +311,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         updateBackendFactoryProvider.overrideWithValue(
-          ({required String currentVersion}) => backend,
+          ({required String currentVersion}) async => backend,
         ),
       ],
     );
@@ -283,5 +338,131 @@ void main() {
 
     expect(backend.refreshes, 0);
     expect(container.read(updateProvider).restartRequired, isTrue);
+  });
+
+  test('the backend\'s tracks and current track reach the state', () async {
+    final backend = _FakeBackend(currentTrack: UpdateTrack.beta);
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    final state = container.read(updateProvider);
+    expect(state.availableTracks, backend.availableTracks);
+    expect(state.currentTrack, UpdateTrack.beta);
+  });
+
+  test('an applied track switch updates the current track', () async {
+    final backend = _FakeBackend(currentTrack: UpdateTrack.stable);
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
+
+    final state = container.read(updateProvider);
+    expect(state.currentTrack, UpdateTrack.dev);
+    expect(state.trackNotice, isNull);
+  });
+
+  test('a deferred track switch reports its instructions without switching',
+      () async {
+    final backend = _FakeBackend(
+      trackSwitchOutcome: const TrackSwitchDeferred(
+        instructions: 'flatpak install mydia-beta dev.mydia.player//beta',
+        url: 'https://example.invalid/install',
+      ),
+    );
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.beta);
+
+    final state = container.read(updateProvider);
+    expect(state.trackNotice, contains('flatpak install'));
+    expect(state.trackUrl, 'https://example.invalid/install');
+    // The instructions live in trackNotice, not notice: the update card reads
+    // notice, and a deferred track switch has nothing to do with it.
+    expect(state.notice, isNull);
+    expect(state.currentTrack, UpdateTrack.stable);
+  });
+
+  test('a deferred track switch with no url leaves trackUrl null', () async {
+    final backend = _FakeBackend(
+      trackSwitchOutcome: const TrackSwitchDeferred(
+        instructions: 'Ask an administrator to change your update channel.',
+      ),
+    );
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.beta);
+
+    final state = container.read(updateProvider);
+    expect(state.trackNotice, isNotNull);
+    expect(state.trackUrl, isNull);
+  });
+
+  test('a later deferred switch with no url clears a previous one', () async {
+    final backend = _FakeBackend(
+      trackSwitchOutcome: const TrackSwitchDeferred(
+        instructions: 'flatpak install mydia-beta dev.mydia.player//beta',
+        url: 'https://example.invalid/install',
+      ),
+    );
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.beta);
+    expect(container.read(updateProvider).trackUrl, isNotNull);
+
+    backend.trackSwitchOutcome = const TrackSwitchDeferred(
+      instructions: 'flatpak install mydia dev.mydia.player//stable',
+    );
+    await container
+        .read(updateProvider.notifier)
+        .selectTrack(UpdateTrack.stable);
+
+    // copyWith's `??` would otherwise let the stale url survive a fresh
+    // deferred switch that did not repeat it.
+    expect(container.read(updateProvider).trackUrl, isNull);
+  });
+
+  test('an applied track switch clears a previous deferred url', () async {
+    final backend = _FakeBackend(
+      trackSwitchOutcome: const TrackSwitchDeferred(
+        instructions: 'flatpak install mydia-beta dev.mydia.player//beta',
+        url: 'https://example.invalid/install',
+      ),
+    );
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.beta);
+    expect(container.read(updateProvider).trackUrl, isNotNull);
+
+    backend.trackSwitchOutcome = const TrackSwitchApplied();
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
+
+    expect(container.read(updateProvider).trackUrl, isNull);
+  });
+
+  test('an unsupported track switch surfaces its reason as an error', () async {
+    final backend = _FakeBackend(
+      trackSwitchOutcome:
+          const TrackSwitchUnsupported('Dev builds are not published yet.'),
+    );
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
+
+    final state = container.read(updateProvider);
+    expect(state.error, contains('not published'));
+    expect(state.currentTrack, UpdateTrack.stable);
   });
 }

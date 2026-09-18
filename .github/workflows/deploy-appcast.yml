@@ -79,6 +79,7 @@ jobs:
             echo
             echo "Items: $(grep -c '<item>' dist/appcast.xml)"
             echo "Beta items: $(grep -c '<sparkle:channel>beta</sparkle:channel>' dist/appcast.xml || true)"
+            echo "Platform/track entries in releases.json: $(jq '[.platforms[] | keys[]] | length' dist/releases.json)"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Require the Cloudflare token
@@ -138,5 +139,70 @@ jobs:
           done
 
           echo "::error::updates.mydia.dev did not serve $local_count item(s) with newest build $local_newest after 6 attempts."
+          echo "::error::Check the mydia-appcast Pages project, its production branch, and the updates.mydia.dev DNS record."
+          exit 1
+
+      - name: Verify the deployed releases feed
+        working-directory: scripts/appcast
+        run: |
+          set -euo pipefail
+          # Same reasoning as the appcast check above: a Pages preview
+          # deployment succeeds loudly while updates.mydia.dev serves the old
+          # file, so compare content rather than trusting the deploy's exit
+          # code.
+          #
+          # The whole platforms object is hashed, not just the stable Android
+          # build. A dev-build-only refresh leaves
+          # platforms.android.stable.build unchanged, so comparing only that
+          # field would be blind to exactly the track this file adds.
+          # generated_at is excluded from the digest: it changes on every run
+          # and would keep the digest from ever matching.
+          #
+          # Retries for the same reason as the appcast check: Cloudflare
+          # propagation timing is not guaranteed.
+          digest() { jq -S -c '.platforms' "$1" | sha256sum | cut -d' ' -f1; }
+          summary() { jq -c '.platforms | map_values(map_values(.build))' "$1"; }
+
+          # dist/releases.json is what this run just generated, so a parse
+          # failure here is a real bug and should stop the job, same as the
+          # local reads below have always done.
+          local_digest=$(digest dist/releases.json)
+          local_summary=$(summary dist/releases.json)
+          echo "Expecting platforms digest ${local_digest} (builds: ${local_summary})."
+
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSL --max-time 20 https://updates.mydia.dev/releases.json -o served.json; then
+              # The served file gets no such trust: a Pages deployment mid
+              # propagation can serve an HTML error page, or valid JSON that
+              # is not a usable feed (a bare 42, [], "hello", {}, or an
+              # object whose .platforms isn't shaped the way digest()/
+              # summary() expect), instead of the real thing. Every stage
+              # below is either a plain `if` condition or a guarded
+              # assignment, both exempt from `set -e`/pipefail, so any
+              # unusable response becomes a failed attempt that retries
+              # instead of a pipeline failure that kills the step before the
+              # error message can print. Guessing which malformed bodies are
+              # plausible enough to guard is how this list grows one review
+              # at a time; guarding every stage closes the whole class.
+              if ! jq empty served.json 2>/dev/null; then
+                echo "Attempt ${attempt}: served content was not valid JSON. Retrying."
+              elif ! served_digest=$(digest served.json 2>/dev/null); then
+                echo "Attempt ${attempt}: served JSON had an invalid releases feed shape. Retrying."
+              elif [ "$served_digest" = "$local_digest" ]; then
+                echo "updates.mydia.dev is serving the expected platforms content after ${attempt} attempt(s)."
+                exit 0
+              elif served_summary=$(summary served.json 2>/dev/null); then
+                echo "Attempt ${attempt}: served digest ${served_digest} (builds: ${served_summary}), expecting ${local_digest} (builds: ${local_summary})."
+              else
+                echo "Attempt ${attempt}: served JSON had an invalid releases feed shape. Retrying."
+              fi
+            else
+              echo "Attempt ${attempt}: could not fetch the feed. Retrying."
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::updates.mydia.dev did not serve releases.json matching digest ${local_digest} (builds: ${local_summary}) after 6 attempts."
           echo "::error::Check the mydia-appcast Pages project, its production branch, and the updates.mydia.dev DNS record."
           exit 1
