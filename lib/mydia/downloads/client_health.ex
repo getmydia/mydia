@@ -58,7 +58,8 @@ defmodule Mydia.Downloads.ClientHealth do
       {:ok, %{status: :healthy, ...}} = check_health("qbittorrent-main")
       {:error, :not_found} = check_health("nonexistent-client")
   """
-  @spec check_health(String.t(), keyword()) :: {:ok, Health.health_result()} | {:error, term()}
+  @spec check_health(String.t(), keyword()) ::
+          {:ok, Health.health_result()} | {:error, :not_found}
   def check_health(client_id, opts \\ []) do
     force? = Keyword.get(opts, :force, false)
 

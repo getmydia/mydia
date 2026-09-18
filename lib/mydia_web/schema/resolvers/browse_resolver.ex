@@ -342,17 +342,13 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
       case determine_node_type(parent) do
         :tv_show ->
           # Get all seasons
-          case resolve_seasons_as_list(parent) do
-            {:ok, seasons} -> seasons
-            _ -> []
-          end
+          {:ok, seasons} = resolve_seasons_as_list(parent)
+          seasons
 
         :season ->
           # Get all episodes in this season
-          case resolve_episodes_as_list(parent) do
-            {:ok, episodes} -> episodes
-            _ -> []
-          end
+          {:ok, episodes} = resolve_episodes_as_list(parent)
+          episodes
 
         _ ->
           # Movies, Episodes, and LibraryPaths have no children
