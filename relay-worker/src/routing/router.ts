@@ -111,9 +111,10 @@ async function fromOrigin(request: Request, origin: string): Promise<Response> {
     // Elixir relay directly.
     return await fetch(new Request(target.toString(), request), { redirect: "manual" });
   } catch (err) {
-    console.log(
-      JSON.stringify({ event: "origin_error", path: loggablePath(url.pathname), error: String(err) }),
-    );
+    // The error's name only: a fetch error message can quote the URL, and
+    // with it a pairing claim code that loggablePath keeps out of `path`.
+    const error = err instanceof Error ? err.name : typeof err;
+    console.log(JSON.stringify({ event: "origin_error", path: loggablePath(url.pathname), error }));
     return Response.json({ error: "Bad gateway" }, { status: 502 });
   }
 }
