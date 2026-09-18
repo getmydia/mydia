@@ -24,8 +24,10 @@ class StatsRow {
   final String value;
   final StatsTone tone;
 
-  /// Short uppercase badge drawn before [value], for example `TRANSCODE`.
-  /// Only the Playing row sets it.
+  /// Short uppercase badge text drawn before [value], for example
+  /// `TRANSCODE`. Only the Playing row sets it. This is the badge's text,
+  /// not a boolean flag; the brief's own interface summary said `bool
+  /// pill`, which was wrong.
   final String? pill;
 }
 

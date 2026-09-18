@@ -96,6 +96,59 @@ void main() {
     );
   });
 
+  // The badge the panel draws before the Playing value. Untested badge
+  // text would let a casing typo reach the UI silently.
+  test('the Playing row carries the mode badge', () {
+    expect(
+      statsRows(_sample, _context, StatsDensity.full).first.pill,
+      'TRANSCODE',
+    );
+
+    const direct = StatsContext(
+      mode: PlaybackMode.direct,
+      qualityLabel: 'Original',
+      duration: Duration(minutes: 30),
+    );
+    expect(
+      statsRows(_sample, direct, StatsDensity.full).first.pill,
+      'DIRECT',
+    );
+
+    const copy = StatsContext(
+      mode: PlaybackMode.copy,
+      qualityLabel: 'Original',
+      duration: Duration(minutes: 30),
+    );
+    expect(
+      statsRows(_sample, copy, StatsDensity.full).first.pill,
+      'COPY',
+    );
+
+    const localFile = StatsContext(
+      mode: PlaybackMode.localFile,
+      qualityLabel: 'Original',
+      duration: Duration(minutes: 30),
+    );
+    expect(
+      statsRows(_sample, localFile, StatsDensity.full).first.pill,
+      isNull,
+    );
+  });
+
+  // A platform that reports a decoder description but cannot say whether
+  // it is hardware falls back to the bare label, with no suffix guessed.
+  test('the decoder row has no suffix when hardware is unknown', () {
+    const context = StatsContext(
+      mode: PlaybackMode.transcode,
+      qualityLabel: 'Auto -> 1080p',
+      duration: Duration(minutes: 30),
+      decoderLabel: 'h264 (vaapi)',
+    );
+    final rows = statsRows(_sample, context, StatsDensity.full);
+
+    expect(valueFor(rows, 'Decoder'), 'h264 (vaapi)');
+  });
+
   test('a local file reports no throughput and no link', () {
     const local = StatsContext(
       mode: PlaybackMode.localFile,
@@ -193,6 +246,11 @@ void main() {
       text,
       contains('Detail: decodeTooSlow: 47 drops in last 10s (limit 12)'),
     );
+    expect(text, contains('Frames: 0 dropped this second, 0 total'));
+    expect(text, contains('Buffer: 18.4 s ahead'));
+    expect(text, contains('Throughput: 6.2 Mb/s'));
+    expect(text, contains('Link: direct p2p - 1 peer'));
+    expect(text, contains('Position: 24:11 / 1:52:40'));
   });
 
   test('the clipboard omits what it does not know', () {
