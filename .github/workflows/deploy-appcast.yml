@@ -189,8 +189,18 @@ jobs:
                   exit 0
                 fi
 
-                served_summary=$(summary served.json)
-                echo "Attempt ${attempt}: served digest ${served_digest} (builds: ${served_summary}), expecting ${local_digest} (builds: ${local_summary})."
+                # jq empty above only proves served.json is valid JSON, not
+                # that it has the shape summary() expects: {} is valid JSON
+                # and passes that check, then map_values on its absent
+                # .platforms fails. Guarded the same way as the shape check
+                # itself, so a response that is JSON but not a releases feed
+                # retries instead of killing the step on a digest mismatch
+                # that never gets explained.
+                if served_summary=$(summary served.json 2>/dev/null); then
+                  echo "Attempt ${attempt}: served digest ${served_digest} (builds: ${served_summary}), expecting ${local_digest} (builds: ${local_summary})."
+                else
+                  echo "Attempt ${attempt}: served JSON had an invalid releases feed shape. Retrying."
+                fi
               fi
             else
               echo "Attempt ${attempt}: could not fetch the feed. Retrying."
