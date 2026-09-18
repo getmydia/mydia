@@ -236,6 +236,4 @@ defmodule Mydia.RelayGuard.Escapes do
   defp self_module?(mod) when is_atom(mod) do
     mod |> Atom.to_string() |> String.starts_with?(@self_prefix)
   end
-
-  defp self_module?(_mod), do: false
 end
