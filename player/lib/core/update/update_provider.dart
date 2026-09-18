@@ -75,6 +75,11 @@ class UpdateState {
   /// the update card renders, because this belongs beside the picker instead.
   final String? trackNotice;
 
+  /// A link alongside [trackNotice], when the backend gave one (Flatpak's
+  /// install docs). Null whenever [trackNotice] is, and also whenever the
+  /// backend supplied instructions with no link of their own.
+  final String? trackUrl;
+
   const UpdateState({
     this.availableUpdate,
     this.currentVersion = '',
@@ -88,6 +93,7 @@ class UpdateState {
     this.availableTracks = const <UpdateTrack>{},
     this.currentTrack = UpdateTrack.stable,
     this.trackNotice,
+    this.trackUrl,
   });
 
   UpdateState copyWith({
@@ -103,10 +109,12 @@ class UpdateState {
     Set<UpdateTrack>? availableTracks,
     UpdateTrack? currentTrack,
     String? trackNotice,
+    String? trackUrl,
     bool clearUpdate = false,
     bool clearNotice = false,
     bool clearError = false,
     bool clearTrackNotice = false,
+    bool clearTrackUrl = false,
   }) {
     return UpdateState(
       availableUpdate:
@@ -122,6 +130,7 @@ class UpdateState {
       availableTracks: availableTracks ?? this.availableTracks,
       currentTrack: currentTrack ?? this.currentTrack,
       trackNotice: clearTrackNotice ? null : (trackNotice ?? this.trackNotice),
+      trackUrl: clearTrackUrl ? null : (trackUrl ?? this.trackUrl),
     );
   }
 }
@@ -352,11 +361,21 @@ class UpdateNotifier extends Notifier<UpdateState> {
           currentTrack: backend.currentTrack,
           clearError: true,
           clearNotice: true,
-          // Instructions from an earlier deferred switch no longer apply.
+          // Instructions (and any link) from an earlier deferred switch no
+          // longer apply.
           clearTrackNotice: true,
+          clearTrackUrl: true,
         ),
-      TrackSwitchDeferred(:final instructions) =>
-        state.copyWith(trackNotice: instructions),
+      TrackSwitchDeferred(:final instructions, :final url) => state.copyWith(
+          trackNotice: instructions,
+          trackUrl: url,
+          // A url of null must actually clear a stale one from an earlier
+          // deferred switch, not fall through to it: copyWith's `??` keeps
+          // the old value on a null argument, which is right for a value
+          // that was not asked to change, but wrong here since this switch
+          // is deciding trackUrl fresh every time.
+          clearTrackUrl: url == null,
+        ),
       TrackSwitchUnsupported(:final reason) => state.copyWith(error: reason),
     };
   }

@@ -64,4 +64,70 @@ void main() {
 
     expect(find.textContaining('flatpak install'), findsOneWidget);
   });
+
+  testWidgets('shows the link when the backend supplies one', (tester) async {
+    const url =
+        'https://docs.mydia.dev/latest/using/how-to/install-player-linux/';
+    await tester.pumpWidget(host(TrackPickerRow(
+      availableTracks: const {UpdateTrack.stable, UpdateTrack.beta},
+      currentTrack: UpdateTrack.stable,
+      installedVersion: '0.15.0',
+      deferredInstructions: 'flatpak install mydia-beta dev.mydia.player//beta',
+      deferredUrl: url,
+      onSelected: (_) async {},
+    )));
+
+    expect(find.text(url), findsOneWidget);
+  });
+
+  testWidgets('shows no link when the backend gives none', (tester) async {
+    await tester.pumpWidget(host(TrackPickerRow(
+      availableTracks: const {UpdateTrack.stable, UpdateTrack.beta},
+      currentTrack: UpdateTrack.stable,
+      installedVersion: '0.15.0',
+      deferredInstructions: 'flatpak install mydia-beta dev.mydia.player//beta',
+      onSelected: (_) async {},
+    )));
+
+    expect(
+      find.textContaining('https://', findRichText: true),
+      findsNothing,
+    );
+  });
+
+  testWidgets('marks the current track selected, and only that one',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(host(TrackPickerRow(
+      availableTracks: const {UpdateTrack.stable, UpdateTrack.beta},
+      currentTrack: UpdateTrack.beta,
+      installedVersion: '0.15.0',
+      onSelected: (_) async {},
+    )));
+
+    expect(
+      tester.getSemantics(find.byKey(const Key('update-track-option-beta'))),
+      matchesSemantics(
+        isButton: true,
+        isSelected: true,
+        hasSelectedState: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+    expect(
+      tester.getSemantics(find.byKey(const Key('update-track-option-stable'))),
+      matchesSemantics(
+        isButton: true,
+        isSelected: false,
+        hasSelectedState: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+
+    handle.dispose();
+  });
 }

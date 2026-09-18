@@ -157,7 +157,9 @@ class _TrackOption extends StatelessWidget {
       key: Key('update-track-option-${track.wireName}'),
       selected: selected,
       button: true,
-      label: track.label,
+      // No explicit label: the title and description Text children already
+      // merge upward into this node's announced label. Adding one here would
+      // just repeat the title ("Beta\nBeta\n...") rather than add anything.
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -287,6 +289,7 @@ class UpdateTrackSection extends ConsumerWidget {
       currentTrack: state.currentTrack,
       installedVersion: state.currentVersion,
       deferredInstructions: state.trackNotice,
+      deferredUrl: state.trackUrl,
       onSelected: (track) =>
           ref.read(updateProvider.notifier).selectTrack(track),
     );
