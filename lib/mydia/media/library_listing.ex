@@ -383,11 +383,20 @@ defmodule Mydia.Media.LibraryListing do
   # both directions, the same rule MediaSort states for unknown keys. Sorting
   # it as 0 would make "Size (Smallest)" a list of things you do not have.
   #
-  # Enum.split_with/2 and Enum.sort_by/3 are both stable, so ties and the
-  # unsized tail keep their incoming order and the sort stays total.
+  # Enum.sort_by/3 is stable, so a sort on total_size alone would only
+  # preserve the incoming row order for ties. That incoming order comes from
+  # Media.media_items_query/1, which has no ORDER BY, so it is whatever the
+  # database happens to return for an unordered scan and it can change
+  # between two requests for the same page. page/1 re-sorts the whole list on
+  # every request, including each load_more, so an unstable tie group
+  # reshuffles, duplicating or skipping rows across the page boundary. The
+  # sort key below is total, breaking ties by title and then id so the same
+  # rows always land in the same order regardless of scan order.
   defp sort_by_size(rows, direction) do
-    {sized, unsized} = Enum.split_with(rows, &(&1.total_size > 0))
+    Enum.sort_by(rows, fn row ->
+      size_key = if direction == :desc, do: -row.total_size, else: row.total_size
 
-    Enum.sort_by(sized, & &1.total_size, direction) ++ unsized
+      {if(row.total_size > 0, do: 0, else: 1), size_key, title_key(row), row.id}
+    end)
   end
 end

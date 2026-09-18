@@ -315,6 +315,24 @@ defmodule Mydia.Media.LibraryListingTest do
       assert Enum.slice(desc, 1..2) == Enum.slice(asc, 1..2)
     end
 
+    test "size ties break by title, not by scan order", %{user: user} do
+      # Inserted in reverse-alphabetical order on purpose. media_items_query/1
+      # has no ORDER BY, so a sort that only breaks size ties by incoming
+      # order would carry this exact insertion order through unchanged. The
+      # assertion below only holds because the tie-break key is the title.
+      for title <- ["Zinc Foundry", "Mercury Loop", "Amber Drift"] do
+        item = media_item_fixture(%{title: title})
+        media_file_fixture(%{media_item_id: item.id, size: 2_000_000_000})
+      end
+
+      tied_by_title = ["Amber Drift", "Mercury Loop", "Zinc Foundry"]
+
+      # Same tie-break order in both directions: direction only scales the
+      # size key, it never reverses the title tiebreaker.
+      assert titles(page(user, sort_by: "size_desc")) == tied_by_title
+      assert titles(page(user, sort_by: "size_asc")) == tied_by_title
+    end
+
     test "air date and episode count sorts", %{user: user} do
       today = Date.utc_today()
       media_item_fixture(%{type: "tv_show", title: "Quiet Meridian"})
