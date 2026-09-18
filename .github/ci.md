@@ -65,17 +65,25 @@ When triaging a red `CI / Nix`, grep the job log for `hash mismatch` first. It i
 a one-line fix and it masks everything downstream, since the build aborts before
 the Rust crate vendoring even starts.
 
-## The Elixir pin lives in one file
+## The Elixir and OTP pins each live in one file
 
-`.elixir-version` holds the Elixir minor, and nothing else may name one.
-`elixir-version.nix` resolves it against `beam.packages.erlang_28` and throws
-when the pinned nixpkgs has no matching attribute. `devenv.nix` imports that
-resolver and is the toolchain for both local development and all three
-Elixir jobs in `ci.yml`, which run their steps inside `devenv shell`.
-`nix/packages/flake-module.nix` imports it too, for the release build and the
-NixOS module VM tests. The Dockerfile's builder is digest-pinned and cannot
-read a file, so `ci-nix.yml`'s `Check / Elixir Pin` job asserts its base tag
-agrees with the pin instead.
+`.elixir-version` holds the Elixir minor and `.otp-version` the OTP major, and
+nothing else may name either. `beam-version.nix` resolves the pair from one
+nixpkgs beam set and throws when the pinned nixpkgs lacks the OTP set or the
+Elixir attribute under it. `devenv.nix` imports that resolver and is the
+toolchain for both local development and all three Elixir jobs in `ci.yml`,
+which run their steps inside `devenv shell`. `nix/packages/flake-module.nix`
+imports it too, for the release build and the NixOS module VM tests.
+
+The Dockerfile's builder is digest-pinned and cannot read a file, so
+`ci-nix.yml`'s `Check / BEAM Pin` job (`scripts/check-beam-pin.sh`) parses its
+`hexpm/elixir` tag instead and asserts three things: the Elixir minor matches
+`.elixir-version`, the OTP major matches `.otp-version`, and the builder's
+Alpine minor matches the runtime stage's `FROM alpine:`, because the release
+carries the builder's ERTS into the runtime image. Patches differ by design:
+devenv and the Nix release take whatever their lock resolves, and the
+Dockerfile names its own, because only it builds against musl, where OTP 29.1
+is the floor (the Dockerfile's builder comment explains why).
 
 This replaced a comment in `devenv.nix` asking three files to be kept in sync
 by hand. That comment omitted `nix/packages/flake-module.nix`, which floated
@@ -85,8 +93,11 @@ visible symptom was the `Test / NixOS Module (SQLite)` and `(PostgreSQL)`
 jobs (see above) going red on master with every other job green, unnoticed
 pre-merge because neither runs on pull requests.
 
-OTP is pinned separately, as `erlang_28`, in `devenv.nix` and in
-`elixir-version.nix`'s beam set. Bump both together.
+The OTP major had the same problem in a different shape: it was written by
+hand as a nixpkgs attribute name in `devenv.nix` (twice), the Elixir resolver
+and `nix/packages/flake-module.nix`, plus the Dockerfile tag, and nothing
+checked that they agreed. Bumping it now means editing `.otp-version` and the
+Dockerfile's builder tag and digest.
 
 The Rust pin has the same shape and one more consumer, since the wasip2 plugin
 guests' WASI version tracks it. See `plugins/README.md`.
