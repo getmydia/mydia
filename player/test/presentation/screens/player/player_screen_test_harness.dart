@@ -33,6 +33,7 @@ import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
+import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
@@ -616,12 +617,21 @@ ProviderContainer buildPlayerScreenContainer({
   AuthStatus authStatus = AuthStatus.authenticated,
   PlaybackProgressStore? progressStore,
   SettingsService? settingsService,
+  // Deliberately not defaulted the way [settingsService] is:
+  // `settingsServiceProvider` and `coreSettingsServiceProvider` are two
+  // independent providers (see `settings_providers.dart`'s own doc comment
+  // for why), so overriding one never reaches the other. Null leaves
+  // `coreSettingsServiceProvider` at its real, unoverridden default, which
+  // every test but the stats-panel ones already relies on.
+  SettingsService? coreSettingsService,
   GraphQLCache? cache,
   Stream<CastSession?>? castSessionStream,
 }) {
   return ProviderContainer(overrides: [
     settingsServiceProvider
         .overrideWithValue(settingsService ?? FakeSettingsService()),
+    if (coreSettingsService != null)
+      coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
     authStateProvider.overrideWith(
       () => FakeAuthNotifier(AsyncValue.data(authStatus)),
     ),

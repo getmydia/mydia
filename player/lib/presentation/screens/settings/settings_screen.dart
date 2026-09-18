@@ -11,6 +11,7 @@ import '../../../core/p2p/p2p_service.dart';
 import '../../../core/remote/node_registration_providers.dart';
 import '../../../core/remote/registration_status.dart';
 import '../../../core/remote/remote_control_settings.dart';
+import '../../../core/settings/stats_overlay_setting.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/update/update_backend.dart';
 import '../../../core/update/update_provider.dart';
@@ -186,6 +187,21 @@ class _PlaybackSection extends ConsumerWidget {
               : (value) => ref
                   .read(settingsControllerProvider.notifier)
                   .setAutoSkipSegments(value),
+        ),
+        Consumer(
+          builder: (context, ref, _) {
+            final enabled =
+                ref.watch(statsOverlayEnabledProvider).value ?? false;
+            return SettingsRow.toggle(
+              key: const Key('stats-overlay-switch'),
+              icon: Icons.speed,
+              title: 'Stats for nerds',
+              subtitle: 'Live playback numbers over the video',
+              value: enabled,
+              onChanged: (value) =>
+                  ref.read(statsOverlayEnabledProvider.notifier).set(value),
+            );
+          },
         ),
         if (failed)
           SettingsRow.action(

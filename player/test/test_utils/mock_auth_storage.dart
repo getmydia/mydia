@@ -15,6 +15,10 @@ class MockAuthStorage implements AuthStorage {
   /// When true, every delete throws.
   bool failAllDeletes = false;
 
+  /// When true, every write throws, simulating a keychain or disk that
+  /// refuses the call.
+  bool failAllWrites = false;
+
   @override
   bool get degraded => degradedValue;
 
@@ -25,6 +29,9 @@ class MockAuthStorage implements AuthStorage {
 
   @override
   Future<void> write(String key, String value) async {
+    if (failAllWrites) {
+      throw Exception('keyring refused write of $key');
+    }
     _storage[key] = value;
   }
 

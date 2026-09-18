@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../domain/models/quality_delivery_subtitle.dart';
 import '../../domain/models/quality_rung.dart';
 
+/// The stats row inside the quality sheet.
+const Key statsToggleKey = Key('quality-stats-toggle');
+
 /// Shows the playback quality picker and returns the chosen rung, or null if
 /// the viewer dismissed it.
 ///
@@ -16,6 +19,14 @@ import '../../domain/models/quality_rung.dart';
 /// `autoDeliverySubtitle`). [originalSubtitle] is the delivery-mode line for
 /// the Original rung (Direct Play / lossless / re-encoding), computed by the
 /// caller.
+///
+/// [statsEnabled] and [onStatsChanged] add a "Stats for nerds" row under a
+/// divider at the foot of the sheet. Both or neither: the settings
+/// screen's standing-preference picker passes neither and keeps its
+/// current shape. The sheet is where a viewer already stands when they
+/// wonder why the picture is soft, which is why the panel's discovery path
+/// is here rather than on a chrome button `SecondaryCluster` cannot
+/// afford.
 Future<QualityRung?> showQualityPicker(
   BuildContext context,
   List<QualityRung> rungs,
@@ -23,7 +34,10 @@ Future<QualityRung?> showQualityPicker(
   required String autoSubtitle,
   required String originalSubtitle,
   String? clampNote,
+  bool? statsEnabled,
+  ValueChanged<bool>? onStatsChanged,
 }) {
+  var statsValue = statsEnabled ?? false;
   return showDialog<QualityRung>(
     context: context,
     builder: (context) => AlertDialog(
@@ -49,6 +63,33 @@ Future<QualityRung?> showQualityPicker(
               ),
             for (final rung in rungs)
               _rungTile(context, rung, current, autoSubtitle, originalSubtitle),
+            if (statsEnabled != null && onStatsChanged != null) ...[
+              const Divider(height: 17, color: Color(0xFF2E2E33)),
+              StatefulBuilder(
+                builder: (context, setState) {
+                  return SwitchListTile(
+                    key: statsToggleKey,
+                    value: statsValue,
+                    title: const Text(
+                      'Stats for nerds',
+                      style: TextStyle(color: Colors.white, fontSize: 14.5),
+                    ),
+                    subtitle: const Text(
+                      'Also in Settings. Stays on after the controls fade.',
+                      style: TextStyle(color: Colors.grey, fontSize: 11.5),
+                    ),
+                    secondary: const Icon(
+                      Icons.speed,
+                      color: Colors.grey,
+                    ),
+                    onChanged: (next) {
+                      setState(() => statsValue = next);
+                      onStatsChanged(next);
+                    },
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),

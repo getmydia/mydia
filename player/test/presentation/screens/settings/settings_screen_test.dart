@@ -19,6 +19,8 @@ import 'package:player/core/remote/remote_control_settings.dart';
 import 'package:player/core/crash_reporting/crash_report.dart';
 import 'package:player/core/crash_reporting/crash_reporter.dart';
 import 'package:player/core/crash_reporting/crash_reporter_provider.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
@@ -28,6 +30,7 @@ import 'package:player/presentation/screens/settings/widgets/settings_identity.d
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
 import '../../../test_utils/dock_harness.dart';
+import '../../../test_utils/mock_auth_storage.dart';
 
 /// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
 /// `Box`, and the settings screen's row is the thing under test here, not a
@@ -172,6 +175,7 @@ Future<void> _pump(
   RegistrationStatus registration = const RegistrationIdle(),
   UpdateState? updateState,
   CrashReporter? crashReporter,
+  SettingsService? coreSettingsService,
   bool inShell = false,
 }) async {
   await tester.binding.setSurfaceSize(size);
@@ -215,6 +219,13 @@ Future<void> _pump(
         ),
         if (crashReporter != null)
           crashReporterProvider.overrideWithValue(crashReporter),
+        // Left unoverridden by default: `coreSettingsServiceProvider`'s real
+        // implementation degrades to an in-memory fallback rather than
+        // throwing (see `NativeAuthStorage`), so every test but the ones
+        // that need a deterministic, isolated value can leave it alone —
+        // mirroring `buildPlayerScreenContainer`'s `coreSettingsService`.
+        if (coreSettingsService != null)
+          coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
       ],
       child: MaterialApp.router(
         routerConfig: GoRouter(
@@ -387,6 +398,39 @@ void main() {
     await tester.pump();
 
     expect(_FakeSettingsController.skipCalls, [true]);
+  });
+
+  // `settings_stats_row_test.dart` pins `SettingsRow.toggle` plus
+  // `statsOverlayEnabledProvider` in isolation, hand-reconstructed. Neither
+  // it nor any other test mounted the real edit in `_PlaybackSection`
+  // (`settings_screen.dart`), so a wrong key, a swapped provider, or the row
+  // simply missing from the section's children would have shipped
+  // undetected. Settings is the canonical entry point and the only one
+  // reachable on the remote tier, where the panel has no focusable controls
+  // of its own — a silently-missing row here would strand a television
+  // viewer with no way to turn the panel off.
+  testWidgets('the stats overlay row is present in the mounted screen',
+      (tester) async {
+    await _pump(tester);
+
+    expect(find.byKey(const Key('stats-overlay-switch')), findsOneWidget);
+  });
+
+  testWidgets('the stats overlay row reflects the stored value',
+      (tester) async {
+    final storage = MockAuthStorage()
+      ..seedData({'stats_overlay_enabled': 'true'});
+    await _pump(
+      tester,
+      coreSettingsService: SettingsService(storage: storage),
+    );
+    await tester.pumpAndSettle();
+
+    final toggle = find.descendant(
+      of: find.byKey(const Key('stats-overlay-switch')),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
   });
 
   testWidgets(

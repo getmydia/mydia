@@ -20,6 +20,7 @@ class SettingsService {
   static const _librarySortKeyPrefix = 'library_sort_';
   static const _crashReportingEnabledKey = 'crash_reporting_enabled';
   static const _calendarViewModeKey = 'calendar_view_mode';
+  static const _statsOverlayEnabledKey = 'stats_overlay_enabled';
   static const _updateTrackKey = 'update_track';
 
   /// Get the default quality setting.
@@ -59,6 +60,22 @@ class SettingsService {
   /// Set whether crash reports are sent to the Mydia developers.
   Future<void> setCrashReportingEnabled(bool enabled) async {
     await _storage.write(_crashReportingEnabledKey, enabled.toString());
+  }
+
+  /// Whether the playback stats panel is drawn over the video.
+  ///
+  /// Off by default. A device-level choice like
+  /// [getCrashReportingEnabled], so [clearSettings] leaves it alone: a
+  /// viewer who turned the panel on does not expect signing out of one
+  /// server to turn it off.
+  Future<bool> getStatsOverlayEnabled() async {
+    final value = await _storage.read(_statsOverlayEnabledKey);
+    return value == 'true';
+  }
+
+  /// Set whether the playback stats panel is drawn over the video.
+  Future<void> setStatsOverlayEnabled(bool enabled) async {
+    await _storage.write(_statsOverlayEnabledKey, enabled.toString());
   }
 
   /// Get the remembered sort for a library, as its encoded string.

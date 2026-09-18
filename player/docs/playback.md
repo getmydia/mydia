@@ -172,3 +172,98 @@ controller are therefore tested as units: scripted candidates, scripted
 `HealthSample`s, and, in `playback_controller_test.dart`, a `StubLink` with a
 fake `attach` callback standing in for the screen. Screen tests assert on the
 requests that reach the wire.
+
+## Stats for nerds
+
+A device-level flag (`stats_overlay_enabled`, exposed as
+`statsOverlayEnabledProvider`) draws `StatsPanel` over the video. There is no
+chrome button for it: `SecondaryCluster` already runs at a measured overflow
+floor (`chrome_panel_overflow_test.dart`), so the two entry points are the
+settings row and a row `showQualityPicker` adds at the foot of the quality
+sheet, since that is where a viewer already stands when wondering why the
+picture looks soft.
+
+The panel is fed by two things kept deliberately apart. `buildStatsContext`
+composes a `StatsContext` from the plan, the selected tracks and the p2p
+status; `PlaybackStatsCollector` samples `FrameStatsSampler` once a second
+into a `StatsSample` with a 60-point history. `PlaybackStatsCollector` is
+deliberately not `PlaybackMonitor`. `_startVerification` arms the monitor
+only for a server-backed, non-cast source (a downloaded file skips it via
+`_isDownloadedSource`; a cast session never reaches `_startVerification` at
+all, since `_buildBody` branches to the cast placeholder first), its
+dropped-frame figure is a delta whose baseline resets per verification
+generation, and its lifetime is a verification window, not a playback
+session. Arming it more widely would change what `AdaptationPolicy`
+observes. The collector instead borrows `FrameStatsSampler` one layer down,
+which already returns cumulative counters, already has native, web and stub
+implementations, and already answers null on a failed property read rather
+than zero.
+
+`StatsMetrics.tvMinHeight`, `fullMinHeight` and `compactMinHeight` are
+minimums: the least available height worth drawing a density in, never a
+height the panel renders at. An earlier revision declared rendered heights
+and could not make them hold, because the Why row's text length varies with
+the adaptation reason and rows appear or disappear with what the platform
+can report. The panel sizes to its content and scrolls the row region
+(`Flexible` plus `SingleChildScrollView` inside `StatsPanel.build`) once
+content exceeds the box; the header, the divider, the compact footnote and
+the remote hint stay pinned outside that scroll region.
+
+`tvMinHeight` (589) is set to the tv panel's own measured content height on
+purpose, so a television never scrolls its stats: a D-pad cannot scroll an
+unfocusable scroll view, and the remote tier deliberately draws no
+focusable controls at all. It also has to stay above 412, the available
+height `stats_metrics_test.dart` gives a 1280x650 D-pad viewport, or that
+viewport would resolve to the tv density instead of falling through to
+full, breaking the test that asserts the fallthrough.
+
+Every row's height is a function of font and density alone, never of the
+string. That is why `StatsPanel._row` lays the pill and value out in a
+`Row` with the value wrapped in `Flexible`, not a `Wrap`: a `Wrap` can push
+the value onto a second line when it and the pill do not both fit, which
+makes the row's height depend on the string currently in it. `Flexible`
+keeps the pill and value on one line always, ellipsizing an overlong value
+instead of reflowing it. This is load-bearing for the tv tier's "never
+scrolls" guarantee above, which only holds if every row, not just the ones
+drawn at tv density, has a height fixed by font and density alone.
+
+A row with no value is omitted, never dashed (`statsRows` in
+`stats_report.dart`): a dash beside a label reads as a fault in the player,
+not as "nothing to report," and the copy payload carries the field either
+way. `whyDetail`, the raw string `AdaptationPolicy` already builds for its
+own `debugPrint`, reaches `statsClipboardText` and the clipboard only; it
+never becomes a row. That split, a one-sentence `why` on screen and the
+full detail one copy away, is what justifies the copy button existing at
+all.
+
+`PlaybackStatsCollector.rebind()` is called once, inside `_switchSource`,
+rather than at each of its three call sites (a fallback, a quality change,
+a seek restart past a WINDOW playlist). Without it, the next sample after a
+switch diffs the new source's cumulative dropped-frame count against the
+previous source's baseline and reports a spike that never happened. Calling
+it centrally means a future switch path inherits the reset without the
+caller having to remember it.
+
+`_lastFallback` is cleared on a genuinely fresh media item but preserved
+across a fallback's own source switch (the `isSourceSwitch` guard in
+`_initializePlayer`). `go_router` keys the player page by route pattern, not
+the resolved path, so navigating to the next episode of a season reuses the
+same `PlayerScreen` state rather than rerunning `initState`, which is
+exactly the moment a stale Why message would otherwise outlive the file it
+explained if the clear were unconditional.
+
+Known gap, left as is rather than patched: a 1280x720 television leaves
+482px of available height (720 minus the 64px top inset minus the desktop
+tier's 174px corner inset), which is below `tvMinHeight` (589). A common
+Android TV resolution therefore resolves to the `full` density and draws
+11.5px label text meant for a desk, not a couch across the room. Fixing it
+properly means letting the remote tier keep tv typography while showing
+fewer rows at short viewports, a fourth density rather than a constant
+change, and it has not been built.
+
+One more thing worth knowing before trusting a height measured in
+`flutter test`: this repo has no `flutter_test_config.dart` calling
+`loadAppFonts()`, so tests render text with Flutter's fallback test font,
+whose glyphs run noticeably wider than the real ones. A layout that is
+text-driven, like this panel's rows before the scroll fix above, measures
+taller in a test than it ever renders on a device.
