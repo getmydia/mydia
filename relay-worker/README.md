@@ -311,7 +311,12 @@ subrequests. With `global_fetch_strictly_public` off (the default; do not turn
 it on), a `fetch()` to a hostname on the Worker's own zone goes to that
 hostname's origin server and skips any Worker route on it. So a Worker routed
 on `relay.mydia.dev/*` can fetch `https://relay.mydia.dev/...` and reach the
-Elixir pod rather than itself. Verified on staging on 2026-09-18.
+Elixir pod rather than itself. Verified on staging on 2026-09-18, including
+POST bodies: a crash report sent through `relay-staging.mydia.dev` got the
+same validation response from the Elixir relay as one sent directly. The
+extra hop costs about 20ms at the median: `/tvdb/search`, 15 requests each,
+87ms direct to `relay.mydia.dev` against 106ms through the staging Worker in
+`origin` mode.
 
 ### Groups and modes
 
@@ -923,7 +928,7 @@ curl -sS -X DELETE -o /dev/null -w '%{http_code}\n' "https://relay.mydia.dev/pai
 
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://relay.mydia.dev/crashes/report \
   -H 'content-type: application/json' \
-  -d '{"error_type":"RuntimeError","error_message":"cutover smoke test","version":"0.0.0"}'
+  -d '{"error_type":"RuntimeError","error_message":"cutover smoke test","stacktrace":[],"version":"0.0.0"}'
 # expect 201, NOT 202: CrashReporter.Sender matches only 201 as success and
 # retries/logs-failed on anything else.
 
