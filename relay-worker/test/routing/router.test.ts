@@ -128,6 +128,11 @@ describe("origin mode", () => {
     expect(res.status).toBe(502);
     expect(logs).toContainEqual(expect.objectContaining({ event: "origin_error", path: "/tvdb/search" }));
   });
+
+  it("keeps a claim code out of the origin_error log", async () => {
+    const { logs } = await route(new Request(`${ORIGIN}/pairing/claim/ABCD`), workerReplying({}));
+    expect(logs).toContainEqual(expect.objectContaining({ event: "origin_error", path: "/pairing/claim/*" }));
+  });
 });
 
 describe("worker mode", () => {

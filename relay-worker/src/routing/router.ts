@@ -111,7 +111,9 @@ async function fromOrigin(request: Request, origin: string): Promise<Response> {
     // Elixir relay directly.
     return await fetch(new Request(target.toString(), request), { redirect: "manual" });
   } catch (err) {
-    console.log(JSON.stringify({ event: "origin_error", path: url.pathname, error: String(err) }));
+    console.log(
+      JSON.stringify({ event: "origin_error", path: loggablePath(url.pathname), error: String(err) }),
+    );
     return Response.json({ error: "Bad gateway" }, { status: 502 });
   }
 }
@@ -143,7 +145,7 @@ async function shadow(
 
   const shadowRequest = request.clone();
   const originResponse = await fromOrigin(request, origin);
-  const path = new URL(request.url).pathname;
+  const path = loggablePath(new URL(request.url).pathname);
 
   if (originResponse.body === null) {
     ctx.waitUntil(runShadow(shadowRequest, worker, originResponse.status, null, group, path));
