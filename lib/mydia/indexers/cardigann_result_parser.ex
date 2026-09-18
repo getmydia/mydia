@@ -1021,7 +1021,7 @@ defmodule Mydia.Indexers.CardigannResultParser do
       iex> apply_filters("text", [%{name: "append", args: ["{{ if .Config.flag }} suffix{{ else }}{{ end }}"]}], %{config: %{"flag" => true}})
       {:ok, "text suffix"}
   """
-  @spec apply_filters(String.t(), list(), map()) :: {:ok, String.t()} | {:error, term()}
+  @spec apply_filters(String.t(), list(), map()) :: {:ok, String.t()}
   def apply_filters(value, [], _template_context), do: {:ok, value}
 
   def apply_filters(value, [filter | rest], template_context) do
