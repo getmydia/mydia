@@ -28,6 +28,22 @@ defmodule Mydia.Indexers.SearchResult do
       Used by the release blacklist (issue #123) to match repeat failures. When
       missing, the blacklist falls back to a SHA-256 of (indexer, title, size).
 
+  ## Per-row display state
+
+  The following fields never come from an indexer. They are transient UI state
+  for the manual search modal, written onto a result by
+  `MydiaWeb.MediaLive.Show.SearchEvents.mark_result/3` as a grab is attempted,
+  and read back by `MydiaWeb.MediaLive.Show.Modals` to render the row's action
+  button. They are declared here (rather than left as bare `Map.merge` keys)
+  so a decorated result stays a real `SearchResult` for the type checker, not
+  a struct carrying undeclared keys.
+
+    * `:downloading` - `true` while a grab is in flight for this row.
+    * `:downloaded` - `true` once the grab completes.
+    * `:duplicate` - `true` when the grab was skipped as an existing download.
+    * `:grab_failed` - the formatted error message when the grab failed, or
+      `nil` otherwise.
+
   ## Quality Information
 
   The `:quality` field contains parsed quality information extracted from
@@ -80,7 +96,11 @@ defmodule Mydia.Indexers.SearchResult do
           usenet_date: DateTime.t() | nil,
           nzb_completion: float() | nil,
           nzb_grabs: non_neg_integer() | nil,
-          guid: String.t() | nil
+          guid: String.t() | nil,
+          downloading: boolean(),
+          downloaded: boolean(),
+          duplicate: boolean(),
+          grab_failed: String.t() | nil
         }
 
   @enforce_keys [:title, :size, :seeders, :leechers, :download_url, :indexer]
@@ -103,7 +123,14 @@ defmodule Mydia.Indexers.SearchResult do
     :usenet_date,
     :nzb_completion,
     :nzb_grabs,
-    :guid
+    :guid,
+    # Per-row display state; see the moduledoc section above. Never enforced
+    # (they are not part of a result's identity) and never set by `new/1` or
+    # an indexer adapter, only by SearchEvents.mark_result/3.
+    downloading: false,
+    downloaded: false,
+    duplicate: false,
+    grab_failed: nil
   ]
 
   @info_url_schemes ~w(http https)

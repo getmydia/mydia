@@ -806,6 +806,79 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
            "the grabbed badge was erased by the next indexer's progress message"
   end
 
+  # Same shape as the test above, but for the failure path
+  # (SearchEvents.handle_grab_failed/2), which is what
+  # Downloads.Grabber broadcasts when a grab can't be completed. This is the
+  # runtime path behind the :grab_failed field declared on SearchResult
+  # (lib/mydia/indexers/search_result.ex): the row is read back with
+  # `Map.get(result, :grab_failed)` in MediaLive.Show.Modals, so the reason
+  # must survive both the initial render and a later stream rebuild.
+  test "a grab failure reason survives the next indexer reporting", %{conn: conn} do
+    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    indexer = pending_indexer_fixture("slow-indexer")
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
+    view |> element("#manual-search-button") |> render_click()
+    wait_for_indexer_progress(view)
+
+    dune = search_result("Dune.2024.2160p.UHD")
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "slow-indexer",
+         indexer_id: indexer.id,
+         status: :ok,
+         results: [dune],
+         result_count: 1,
+         duration_ms: 700,
+         completed: 1,
+         total: 2
+       }}
+    )
+
+    render(view)
+
+    send(
+      view.pid,
+      {:grab_failed,
+       %{download_url: dune.download_url, reason: "No download clients are configured"}}
+    )
+
+    render(view)
+
+    row = "##{positioned_result_dom_id(dune)}"
+
+    assert has_element?(view, "#{row} .btn-error"),
+           "precondition failed: the failed badge never rendered"
+
+    assert has_element?(view, "#{row}", "No download clients are configured")
+
+    send(
+      view.pid,
+      {:indexer_progress, current_search_id(view),
+       %IndexerProgress{
+         indexer: "other-indexer",
+         indexer_id: "other-id",
+         status: :ok,
+         results: [],
+         result_count: 0,
+         duration_ms: 90,
+         completed: 2,
+         total: 2
+       }}
+    )
+
+    render(view)
+
+    assert has_element?(view, "#{row} .btn-error"),
+           "the failed badge was erased by the next indexer's progress message"
+
+    assert has_element?(view, "#{row}", "No download clients are configured"),
+           "the failure reason was erased by the next indexer's progress message"
+  end
+
   # The results list renders as soon as the first indexer reports, but the
   # filters bar above it used to stay gated on `!@searching`, so a user could
   # see streamed results and not be able to filter or re-sort them until the
