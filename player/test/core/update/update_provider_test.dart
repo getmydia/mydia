@@ -21,12 +21,18 @@ const _packageInfoChannel =
     MethodChannel('dev.fluttercommunity.plus/package_info');
 
 class _FakeBackend implements UpdateBackend {
-  _FakeBackend({this.outcome = const AlreadyUpToDate()});
+  _FakeBackend({
+    this.outcome = const AlreadyUpToDate(),
+    this.trackSwitchOutcome = const TrackSwitchApplied(),
+    UpdateTrack currentTrack = UpdateTrack.stable,
+  }) : _currentTrack = currentTrack;
 
   final UpdateOutcome outcome;
+  final TrackSwitchOutcome trackSwitchOutcome;
   final controller = StreamController<AvailableUpdate?>.broadcast();
   int refreshes = 0;
   bool disposed = false;
+  UpdateTrack _currentTrack;
 
   @override
   Future<void> start() async {}
@@ -42,14 +48,19 @@ class _FakeBackend implements UpdateBackend {
   bool get canUpdateInPlace => true;
 
   @override
-  Set<UpdateTrack> get availableTracks => const {UpdateTrack.stable};
+  Set<UpdateTrack> get availableTracks =>
+      const {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev};
 
   @override
-  UpdateTrack get currentTrack => UpdateTrack.stable;
+  UpdateTrack get currentTrack => _currentTrack;
 
   @override
-  Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async =>
-      const TrackSwitchApplied();
+  Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async {
+    // A real backend that applies the switch also starts reporting the new
+    // track, which is what UpdateNotifier.selectTrack reads back afterward.
+    if (trackSwitchOutcome is TrackSwitchApplied) _currentTrack = track;
+    return trackSwitchOutcome;
+  }
 
   @override
   Future<void> refresh({bool force = false}) async => refreshes++;
@@ -323,5 +334,67 @@ void main() {
 
     expect(backend.refreshes, 0);
     expect(container.read(updateProvider).restartRequired, isTrue);
+  });
+
+  test('the backend\'s tracks and current track reach the state', () async {
+    final backend = _FakeBackend(currentTrack: UpdateTrack.beta);
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    final state = container.read(updateProvider);
+    expect(state.availableTracks, backend.availableTracks);
+    expect(state.currentTrack, UpdateTrack.beta);
+  });
+
+  test('an applied track switch updates the current track', () async {
+    final backend = _FakeBackend(currentTrack: UpdateTrack.stable);
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
+
+    final state = container.read(updateProvider);
+    expect(state.currentTrack, UpdateTrack.dev);
+    expect(state.trackNotice, isNull);
+  });
+
+  test('a deferred track switch reports its instructions without switching',
+      () async {
+    final backend = _FakeBackend(
+      trackSwitchOutcome: const TrackSwitchDeferred(
+        instructions: 'flatpak install mydia-beta dev.mydia.player//beta',
+        url: 'https://example.invalid/install',
+      ),
+    );
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.beta);
+
+    final state = container.read(updateProvider);
+    expect(state.trackNotice, contains('flatpak install'));
+    // The instructions live in trackNotice, not notice: the update card reads
+    // notice, and a deferred track switch has nothing to do with it.
+    expect(state.notice, isNull);
+    expect(state.currentTrack, UpdateTrack.stable);
+  });
+
+  test('an unsupported track switch surfaces its reason as an error', () async {
+    final backend = _FakeBackend(
+      trackSwitchOutcome:
+          const TrackSwitchUnsupported('Dev builds are not published yet.'),
+    );
+    final container = _container(backend);
+    container.read(updateProvider);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(updateProvider.notifier).selectTrack(UpdateTrack.dev);
+
+    final state = container.read(updateProvider);
+    expect(state.error, contains('not published'));
+    expect(state.currentTrack, UpdateTrack.stable);
   });
 }

@@ -14,12 +14,12 @@ import Sparkle
 ///   defaults write dev.mydia.player MydiaUpdateTrack -string beta
 let updateTrackDefaultsKey = "MydiaUpdateTrack"
 
-/// The previous boolean opt-in. Still live: the settings screen has not been
-/// migrated off it yet, so the `getBetaChannel`/`setBetaChannel` cases below
-/// keep reading and writing it. `currentUpdateTrack()` only falls back to it
-/// when nothing has been written under the new key, so an existing beta user
-/// stays on beta after this upgrade, and a track write always wins from then
-/// on.
+/// The previous boolean opt-in. Kept only so `currentUpdateTrack()` can
+/// migrate an existing beta user onto the new track key the first time
+/// nothing has been written under it, so they stay on beta after this
+/// upgrade instead of dropping back to stable. No live code writes to this
+/// key any more: the settings screen moved to the track picker, which calls
+/// `setTrack` directly, and a track write always wins from then on.
 ///
 /// Settable without the UI for testing:
 ///   defaults write dev.mydia.player MydiaBetaChannel -bool true
@@ -89,30 +89,6 @@ class AppDelegate: FlutterAppDelegate {
       case "checkForUpdates":
         self?.updaterController.checkForUpdates(nil)
         result(nil)
-
-      case "getBetaChannel":
-        result(UserDefaults.standard.bool(forKey: legacyBetaChannelDefaultsKey))
-
-      case "setBetaChannel":
-        guard let enabled = call.arguments as? Bool else {
-          result(
-            FlutterError(
-              code: "bad-arguments",
-              message: "setBetaChannel expects a boolean argument",
-              details: nil
-            ))
-          return
-        }
-        UserDefaults.standard.set(enabled, forKey: legacyBetaChannelDefaultsKey)
-        result(nil)
-        // Sparkle reads allowedChannels on every check, so this takes effect
-        // without a restart. Check immediately on opt-in so the toggle does
-        // something visible instead of waiting for the next scheduled check.
-        // result is answered first so the Dart future never depends on how
-        // long Sparkle's check takes.
-        if enabled {
-          self?.updaterController.checkForUpdates(nil)
-        }
 
       case "getTrack":
         result(currentUpdateTrack())

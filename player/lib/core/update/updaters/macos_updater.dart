@@ -42,57 +42,6 @@ class MacOSUpdater extends PlatformUpdater {
     }
   }
 
-  /// Whether the user has opted into prerelease builds.
-  ///
-  /// The value lives in macOS user defaults, owned by the Swift side, because
-  /// Sparkle asks for the allowed channels through a synchronous callback that
-  /// cannot wait on Dart.
-  ///
-  /// Retained only for `BetaChannelRow`, the settings widget that still calls
-  /// this pair directly. [currentTrack] and [setTrack] below no longer route
-  /// through it: they call the host's track methods directly. Once the
-  /// settings screen moves to a track picker, this pair and the Swift
-  /// `getBetaChannel`/`setBetaChannel` cases behind it can be deleted.
-  static Future<bool> betaChannelEnabled({
-    MethodChannel channel = kSparkleChannel,
-  }) async {
-    try {
-      return await channel.invokeMethod<bool>('getBetaChannel') ?? false;
-    } on PlatformException catch (e) {
-      debugPrint('[MacOSUpdater] Sparkle getBetaChannel failed: $e');
-      return false;
-    } on MissingPluginException catch (e) {
-      debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
-      return false;
-    }
-  }
-
-  /// Opts into or out of prerelease builds.
-  ///
-  /// Returns true when the host accepted the change. On false the preference
-  /// was not written, so a caller showing an optimistic toggle must revert it.
-  ///
-  /// On opt-in the host also runs an update check immediately, so the change
-  /// is visible without waiting for the next scheduled check. That happens on
-  /// the Swift side, not here.
-  ///
-  /// See [betaChannelEnabled] for why this still exists alongside [setTrack].
-  static Future<bool> setBetaChannel(
-    bool enabled, {
-    MethodChannel channel = kSparkleChannel,
-  }) async {
-    try {
-      await channel.invokeMethod('setBetaChannel', enabled);
-      return true;
-    } on PlatformException catch (e) {
-      debugPrint('[MacOSUpdater] Sparkle setBetaChannel failed: $e');
-      return false;
-    } on MissingPluginException catch (e) {
-      debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
-      return false;
-    }
-  }
-
   /// The track Sparkle is currently allowed to offer, as
   /// [SparkleUpdateBackend]'s default track source.
   ///

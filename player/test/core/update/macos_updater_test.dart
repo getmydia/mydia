@@ -32,45 +32,14 @@ void main() {
     expect(calls.map((c) => c.method), ['checkForUpdates']);
   });
 
-  test('betaChannelEnabled returns what the host reports', () async {
-    mock((_) async => true);
-
-    expect(await MacOSUpdater.betaChannelEnabled(), isTrue);
-    expect(calls.map((c) => c.method), ['getBetaChannel']);
-  });
-
-  test('betaChannelEnabled defaults to false when the host returns null',
-      () async {
-    mock((_) async => null);
-
-    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
-  });
-
-  test('setBetaChannel forwards the boolean', () async {
-    await MacOSUpdater.setBetaChannel(true);
-
-    expect(calls.single.method, 'setBetaChannel');
-    expect(calls.single.arguments, isTrue);
-  });
-
   test('a host failure never propagates to the caller', () async {
     // The updater is called from settings taps. A PlatformException escaping
     // here would surface as an unhandled error in the widget tree.
     mock((_) async => throw PlatformException(code: 'boom'));
 
     await expectLater(MacOSUpdater.checkForUpdates(), completes);
-    await expectLater(MacOSUpdater.setBetaChannel(true), completes);
-    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
-  });
-
-  test('setBetaChannel reports success', () async {
-    expect(await MacOSUpdater.setBetaChannel(true), isTrue);
-  });
-
-  test('setBetaChannel reports failure when the host errors', () async {
-    mock((_) async => throw PlatformException(code: 'boom'));
-
-    expect(await MacOSUpdater.setBetaChannel(true), isFalse);
+    await expectLater(MacOSUpdater.setTrack(UpdateTrack.beta), completes);
+    expect(await MacOSUpdater.currentTrack(), UpdateTrack.stable);
   });
 
   test('an unregistered host never propagates', () async {
@@ -81,8 +50,8 @@ void main() {
         .setMockMethodCallHandler(kSparkleChannel, null);
 
     await expectLater(MacOSUpdater.checkForUpdates(), completes);
-    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
-    expect(await MacOSUpdater.setBetaChannel(true), isFalse);
+    expect(await MacOSUpdater.currentTrack(), UpdateTrack.stable);
+    expect(await MacOSUpdater.setTrack(UpdateTrack.beta), isFalse);
   });
 
   test('currentTrack maps the host string', () async {
