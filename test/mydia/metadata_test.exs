@@ -506,6 +506,7 @@ defmodule Mydia.MetadataTest do
       assert "videos" in resources
       assert "keywords" in resources
       assert "recommendations" in resources
+      assert "alternative_titles" in resources
       assert "release_dates" in resources
       refute "content_ratings" in resources
     end
@@ -518,6 +519,7 @@ defmodule Mydia.MetadataTest do
       assert "videos" in resources
       assert "keywords" in resources
       assert "recommendations" in resources
+      assert "alternative_titles" in resources
       assert "content_ratings" in resources
       refute "release_dates" in resources
     end

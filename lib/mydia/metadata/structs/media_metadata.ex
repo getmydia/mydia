@@ -383,6 +383,10 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     |> Enum.uniq()
   end
 
+  # TMDB nests TV alternative titles under "results"; movies use "titles".
+  defp parse_alternative_titles(%{"results" => titles}) when is_list(titles),
+    do: parse_alternative_titles(%{"titles" => titles})
+
   defp parse_alternative_titles(_), do: []
 
   defp parse_videos(nil), do: []

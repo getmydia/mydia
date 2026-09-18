@@ -532,7 +532,8 @@ defmodule Mydia.Metadata do
     "videos",
     "keywords",
     "recommendations",
-    "external_ids"
+    "external_ids",
+    "alternative_titles"
   ]
 
   @doc """
