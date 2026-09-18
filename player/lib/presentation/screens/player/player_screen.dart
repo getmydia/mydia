@@ -40,6 +40,7 @@ import '../../../core/playback/playback_monitor.dart';
 import '../../../core/playback/quality_choice.dart';
 import '../../../core/playback/seek_decision.dart';
 import '../../../core/playback/playback_controller.dart';
+import '../../../core/playback/link_path.dart';
 import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_memory_providers.dart';
 import '../../../core/playback/playback_plan.dart';
@@ -1385,6 +1386,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _memory = memory;
       _serverKey = serverKey;
       _playFileId = playFileId;
+      // After an await: `ref` is only safe while mounted.
+      final linkPath = mounted ? _currentLinkPath() : null;
 
       final inputs = PlanInputs(
         candidates: candidateStrategiesFrom(candidatesResult?.candidates),
@@ -1394,7 +1397,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         sourceHeight: candidatesResult?.metadata.height,
         fileBitrateKbps:
             kbpsFromBitsPerSecond(candidatesResult?.metadata.bitrate),
-        knownThroughputKbps: memory?.throughputKbps(serverKey),
+        recentStall: linkPath == null
+            ? null
+            : memory?.recentStall(serverKey, linkPath, now: DateTime.now()),
         knownFailures:
             memory?.failuresFor(serverKey, now: DateTime.now()) ?? const {},
       );
@@ -1403,7 +1408,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Plan: ${playbackPlan.describe()} '
           'shape=${inputs.shape.videoCodec}/${inputs.shape.heightBucket} '
           'bitrateKbps=${inputs.fileBitrateKbps} '
-          'throughputKbps=${inputs.knownThroughputKbps}');
+          'path=${linkPath?.name ?? 'unknown'} '
+          'stallCeilingKbps=${inputs.recentStall?.ceilingKbps}');
       _plan = playbackPlan;
       _planInputs = inputs;
       _rememberOriginalDeliverySubtitle(inputs);
@@ -1802,7 +1808,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (_switchingSource) return;
 
     final position = _timeline.toReal(player.state.position);
-    final throughput = action.throughputKbps ?? inputs.knownThroughputKbps;
+    final throughput = action.throughputKbps ?? inputs.recentStall?.ceilingKbps;
     final plan = fallbackPlan(
       choice: QualityChoice.fromRung(_selectedQuality),
       sourceHeight: inputs.sourceHeight,
@@ -5182,6 +5188,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ),
         ),
       ),
+    );
+  }
+
+  /// The link path playback is on right now, or null while a p2p connection
+  /// has no peer path. Read at the moment of use: the path can change
+  /// mid-play, and a relay switch is exactly when a stall is likely.
+  ///
+  /// Plain HTTP returns before reading the p2p status, so an HTTP session
+  /// never builds the p2p providers just to learn it is not using them.
+  LinkPath? _currentLinkPath() {
+    if (!ref.read(conn.connectionProvider).isP2PMode) return LinkPath.http;
+    return linkPathFor(
+      isP2P: true,
+      type: ref.read(p2pStatusNotifierProvider).peerConnectionType,
     );
   }
 

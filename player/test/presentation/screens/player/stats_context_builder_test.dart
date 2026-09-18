@@ -252,7 +252,7 @@ void main() {
         strategy: HlsStrategy.transcode,
         rung: _r720,
         adaptive: true,
-        reason: PlanReason.bitrateExceedsThroughput,
+        reason: PlanReason.recentStallOnPath,
       ),
       isDownloadedSource: false,
       selectedQuality: QualityRung.auto,
@@ -278,7 +278,7 @@ void main() {
 
     expect(context.why, isNot(contains('Remembered decode failure')));
     expect(context.why, isNot(contains('hevc')));
-    expect(context.why, "Remembered connection speed doesn't fit this file");
+    expect(context.why, 'Recent stall on this connection');
   });
 
   test('a browser MIME rejection explains the re-encode', () {

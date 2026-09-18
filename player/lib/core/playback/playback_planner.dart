@@ -20,7 +20,7 @@ class PlanInputs {
     required this.choice,
     this.sourceHeight,
     this.fileBitrateKbps,
-    this.knownThroughputKbps,
+    this.recentStall,
     this.knownFailures = const {},
   });
 
@@ -36,8 +36,10 @@ class PlanInputs {
   /// `streamingCandidates.metadata.bitrate` divided by 1000.
   final int? fileBitrateKbps;
 
-  /// This server's remembered throughput, if any.
-  final int? knownThroughputKbps;
+  /// The stall remembered against this server on the current link path, if
+  /// one is younger than `kStallMemoryTtl`. The caller applies the path and
+  /// the TTL, which keeps planning pure and clock-free.
+  final StallRecord? recentStall;
 
   /// Shapes that failed to decode against this server.
   final Set<FailureKey> knownFailures;
@@ -49,7 +51,7 @@ class PlanInputs {
         choice: choice ?? this.choice,
         sourceHeight: sourceHeight,
         fileBitrateKbps: fileBitrateKbps,
-        knownThroughputKbps: knownThroughputKbps,
+        recentStall: recentStall,
         knownFailures: knownFailures,
       );
 
@@ -177,16 +179,17 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   }
 
   final failureKey = FailureKey.fromShape(inputs.shape);
-  // Auto respects the memory: remembered decode failures and remembered
-  // throughput. Original is the viewer overriding both, since they asked for
-  // the file's own bytes and a slow link buffers rather than being swapped
-  // for a transcode. A fixed rung returned above.
+  // Auto respects the memory: remembered decode failures, and a recent stall
+  // on this link path. Original is the viewer overriding both, since they
+  // asked for the file's own bytes and a slow link buffers rather than being
+  // swapped for a transcode. A fixed rung returned above.
   final isAuto = choice.kind == QualityChoiceKind.auto;
   final knownToFail = isAuto && inputs.knownFailures.contains(failureKey);
+  final ceiling = inputs.recentStall?.ceilingKbps;
   final fits = !isAuto ||
       bitrateFits(
         fileBitrateKbps: inputs.fileBitrateKbps,
-        throughputKbps: inputs.knownThroughputKbps,
+        throughputKbps: ceiling,
       );
 
   // Rule 1: direct play.
@@ -198,7 +201,7 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   } else if (knownToFail) {
     blocker = PlanReason.shapeKnownToFail;
   } else if (!fits) {
-    blocker = PlanReason.bitrateExceedsThroughput;
+    blocker = PlanReason.recentStallOnPath;
   } else {
     return const DirectPlayPlan(reason: PlanReason.directPlayAccepted);
   }
@@ -211,7 +214,7 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   if (knownToFail) {
     reason = PlanReason.shapeKnownToFail;
   } else if (!fits) {
-    reason = PlanReason.bitrateExceedsThroughput;
+    reason = PlanReason.recentStallOnPath;
   } else if (copy == null) {
     reason = PlanReason.noCopyCandidate;
   } else if (inputs.isWeb && !inputs.typeSupported(copy.mime)) {
@@ -226,14 +229,14 @@ PlaybackPlan planPlayback(PlanInputs inputs) {
   }
 
   // Rule 3: transcode. Auto caps only on evidence that the link cannot
-  // carry the file: a remembered throughput its bitrate does not fit. Knowing
-  // nothing is not evidence, so a first play, and every web play (web never
-  // measures throughput), transcodes at the source resolution like Original.
+  // carry the file: a recent stall on this path whose ceiling its bitrate
+  // does not fit. Knowing nothing is not evidence, so a play with no recent
+  // stall transcodes at the source resolution like Original.
   final adaptive = isAuto;
   final rung = adaptive && !fits
       ? startingRung(
           deriveAdaptiveLadder(sourceHeight: inputs.sourceHeight),
-          inputs.knownThroughputKbps,
+          ceiling,
         )
       : QualityRung.original;
 

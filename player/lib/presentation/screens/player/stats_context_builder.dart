@@ -141,8 +141,7 @@ String? _why({
         sourceHeight,
         sourceCodec,
       ),
-    PlanReason.bitrateExceedsThroughput =>
-      "Remembered connection speed doesn't fit this file",
+    PlanReason.recentStallOnPath => 'Recent stall on this connection',
     PlanReason.fixedRungRequested =>
       'Quality capped to ${selectedQuality.label}',
     // Both mean the server decided this file needs re-encoding for every
