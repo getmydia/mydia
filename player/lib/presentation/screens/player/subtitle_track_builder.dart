@@ -149,7 +149,7 @@ bool shouldStartSubtitleSelection({
 /// regression this function exists to close: a failed `SubtitleContent`
 /// fetch (a dropped connection, a server error) left the pending target
 /// stuck at the track that just failed, so re-tapping it after the
-/// "could not load" snackbar was a silent no-op.
+/// "could not load" toast was a silent no-op.
 SubtitleTrack? pendingSubtitleSelectionAfterFailure({
   required int requestGeneration,
   required int currentGeneration,
@@ -245,7 +245,7 @@ int? subtitleDelayDisplayMs({
   return storedOffsetMs + nudgeMs;
 }
 
-/// What the OSD snackbar should say right after a `z`/`shift+z` nudge (or a
+/// What the toast should say right after a `z`/`shift+z` nudge (or a
 /// sheet stepper tap), given the new total delay in [totalMs].
 ///
 /// [appliesImmediately] is `false` on web: `applySubtitleDelay` is a genuine
@@ -257,7 +257,7 @@ int? subtitleDelayDisplayMs({
 /// not happened yet. See [subtitleDelaySavedMessage] for the other half of
 /// this: Save does not make the change visible on web either, only
 /// persists it.
-String subtitleDelaySnackBarMessage({
+String subtitleDelayToastMessage({
   required int totalMs,
   required bool appliesImmediately,
 }) {
@@ -266,11 +266,11 @@ String subtitleDelaySnackBarMessage({
   return 'Subtitle delay will be $signed after Save';
 }
 
-/// What the OSD snackbar should say right after a successful subtitle delay
+/// What the toast should say right after a successful subtitle delay
 /// save.
 ///
 /// [appliesImmediately] is `false` on web for a second, distinct reason from
-/// [subtitleDelaySnackBarMessage]'s: `_saveSubtitleDelay` persists the offset
+/// [subtitleDelayToastMessage]'s: `_saveSubtitleDelay` persists the offset
 /// to the server and updates `_subtitleOffsets`/`_subtitleNudgeMs`, but never
 /// evicts or refetches the `SubtitleContent` body already cached in
 /// `_mediaKitSubtitleTrackMap` for this track. That cached body still has the

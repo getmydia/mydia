@@ -15,6 +15,7 @@ import 'package:player/presentation/widgets/video_controls/playback_chrome.dart'
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/toast_harness.dart';
 import 'player_screen_test_harness.dart';
 
 /// Keeps the media_kit Player and its real streams; only the native decoder
@@ -141,6 +142,7 @@ Future<void> _mount(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
+      builder: toastLayerBuilder,
       home: PlayerScreen(
         mediaId: 'movie-1',
         mediaType: 'movie',
