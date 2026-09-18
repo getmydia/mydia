@@ -8,6 +8,12 @@ export function serviceFromPath(path: string): string | null {
   return null;
 }
 
+// A v1 claim code or v2 lookup key in a pairing path is what retrieves the
+// claim while it lives, so it never reaches Workers Logs.
+export function loggablePath(path: string): string {
+  return path.replace(/^(\/pairing\/(?:v2\/)?claim\/)[^/]+/, "$1*");
+}
+
 // One structured line per request, retained by Workers Logs. The old
 // metadata_relay_requests_total{status="ok"|"error"} counter was dominated by
 // benign upstream 404s for TMDB ids that do not exist, which read as a 61%
@@ -21,7 +27,7 @@ export function logRequest(
   console.log(
     JSON.stringify({
       service: serviceFromPath(path) ?? "other",
-      path,
+      path: loggablePath(path),
       status,
       cache,
     }),

@@ -282,10 +282,12 @@ describe("fallback mode", () => {
     fetchMock.get(ORIGIN).intercept({ method: "GET", path: "/pairing/v2/claim/key1" }).reply(200, { sealed: "s" });
     const worker = workerReplying({ error: "not_found" }, 404);
 
-    const { res, body } = await route(new Request(`${ORIGIN}/pairing/v2/claim/key1`), worker);
+    const { res, body, logs } = await route(new Request(`${ORIGIN}/pairing/v2/claim/key1`), worker);
 
     expect(res.headers.get(BACKEND_HEADER)).toBe("origin-fallback");
     expect(JSON.parse(body)).toEqual({ sealed: "s" });
+    // The lookup key retrieves the claim, so it is never logged.
+    expect(logs).toContainEqual(expect.objectContaining({ event: "route", path: "/pairing/v2/claim/*" }));
   });
 
   it("deletes from both stores", async () => {

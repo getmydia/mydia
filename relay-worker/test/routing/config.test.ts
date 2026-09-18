@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseMode, parseRoutingConfig } from "../../src/routing/config";
 import { routeGroupFor } from "../../src/routing/groups";
+import { loggablePath } from "../../src/obs/log";
 
 describe("routeGroupFor", () => {
   it.each([
@@ -28,6 +29,18 @@ describe("routeGroupFor", () => {
     ["/tmdbx", "other"],
   ])("%s -> %s", (path, group) => {
     expect(routeGroupFor(path)).toBe(group);
+  });
+});
+
+describe("loggablePath", () => {
+  it.each([
+    ["/pairing/claim/ABCD", "/pairing/claim/*"],
+    ["/pairing/v2/claim/lookup-key", "/pairing/v2/claim/*"],
+    ["/pairing/claim", "/pairing/claim"],
+    ["/pairing/v2/claim", "/pairing/v2/claim"],
+    ["/tmdb/movies/550", "/tmdb/movies/550"],
+  ])("%s -> %s", (path, logged) => {
+    expect(loggablePath(path)).toBe(logged);
   });
 });
 

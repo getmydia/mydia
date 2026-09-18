@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { loggablePath } from "../obs/log";
 import { compareResponses, readCapped, type ShadowVerdict } from "./compare";
 import { loadRoutingConfig, type RoutingMode } from "./config";
 import { routeGroupFor, type RouteGroup } from "./groups";
@@ -70,7 +71,7 @@ export async function routeRequest(
       mode: mode.kind,
       backend,
       status: response.status,
-      path: url.pathname,
+      path: loggablePath(url.pathname),
     }),
   );
   return withBackend(response, backend);
