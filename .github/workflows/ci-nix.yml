@@ -130,7 +130,11 @@ jobs:
       #
       # metadata-relay/ is a separately deployed service with its own mix.exs
       # and CI, and it moves on its own release schedule, so its files are out
-      # of scope for this repo's pin.
+      # of scope for this repo's pin. Its CI workflow is excluded by exact
+      # path alongside the directory prefix: ci-relay.yml pins that service's
+      # Elixir independently, but the file itself lives under
+      # .github/workflows/ rather than under metadata-relay/, so the prefix
+      # above cannot reach it.
       #
       # Dockerfile is excluded here for a specific reason, not tidied away: a
       # `FROM` line needs a literal, and a digest cannot be derived from a
@@ -156,7 +160,7 @@ jobs:
                 '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
                 'scripts/*' 'dev' 'mix.exs' \
               | xargs -0 grep -HnIE 'elixir' \
-              | grep -viE '^metadata-relay/' \
+              | grep -viE '^metadata-relay/|^\.github/workflows/ci-relay\.yml:' \
               | grep -vE '^(Dockerfile|mix\.exs):' \
               | grep -viE 'elixir_make|bcrypt_elixir|argon2_elixir|yaml_elixir' \
               | grep -vE ':[[:space:]]*uses:[[:space:]]*[^[:space:]]+@' \
