@@ -56,6 +56,7 @@ defmodule Mydia.Indexers.RankingOptions do
   builder stays free of both. An explicit `nil` means "no item, no preference".
   """
 
+  alias Mydia.Indexers.ReleaseIdentity
   alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Settings.QualityProfile
 
@@ -70,6 +71,7 @@ defmodule Mydia.Indexers.RankingOptions do
           optional(:size_range) => {number() | nil, number() | nil} | nil,
           optional(:search_query) => String.t() | nil,
           optional(:expected_title) => String.t() | nil,
+          optional(:identity_target) => ReleaseIdentity.Target.t() | nil,
           optional(:expected_season) => non_neg_integer() | nil,
           optional(:expected_episode) => non_neg_integer() | nil,
           optional(:blocked_tags) => [String.t()] | nil,
@@ -98,6 +100,7 @@ defmodule Mydia.Indexers.RankingOptions do
       |> maybe_put(:size_range, Map.get(input, :size_range))
       |> maybe_put(:search_query, Map.get(input, :search_query))
       |> maybe_put(:expected_title, Map.get(input, :expected_title))
+      |> maybe_put(:identity_target, Map.get(input, :identity_target))
       |> maybe_put(:min_seeders, Map.get(input, :min_seeders))
       |> maybe_put(:expected_season, Map.get(input, :expected_season))
       |> maybe_put(:expected_episode, Map.get(input, :expected_episode))

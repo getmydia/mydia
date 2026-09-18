@@ -2698,4 +2698,54 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       assert row.rejection_reason == "custom_format: VFQ"
     end
   end
+
+  describe "identity_gate" do
+    @lantern %Mydia.Indexers.ReleaseIdentity.Target{type: :movie, year: 2031, keys: ["lantern"]}
+    @junk "2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv"
+    @real "Lantern.2031.1080p.WEB-DL.x264-GROUP"
+
+    defp identity_result(title),
+      do: build_result(%{title: title, quality: QualityParser.parse(title)})
+
+    test "the legacy gate is the default and keeps a release with no parsed title" do
+      ranked =
+        ReleaseRanker.rank_all([identity_result(@junk)],
+          expected_title: "Lantern",
+          identity_target: @lantern,
+          media_type: :movie,
+          min_seeders: 0
+        )
+
+      assert [%{result: %{title: @junk}}] = ranked
+    end
+
+    test "the exact gate drops a release that is not the item" do
+      assert ReleaseRanker.rank_all([identity_result(@junk)],
+               expected_title: "Lantern",
+               identity_target: @lantern,
+               identity_gate: :exact,
+               media_type: :movie,
+               min_seeders: 0
+             ) == []
+    end
+
+    test "the exact gate keeps a release that is the item" do
+      assert [%{result: %{title: @real}}] =
+               ReleaseRanker.rank_all([identity_result(@real)],
+                 identity_target: @lantern,
+                 identity_gate: :exact,
+                 media_type: :movie,
+                 min_seeders: 0
+               )
+    end
+
+    test "the exact gate without a target filters nothing" do
+      assert [_] =
+               ReleaseRanker.rank_all([identity_result(@junk)],
+                 identity_gate: :exact,
+                 media_type: :movie,
+                 min_seeders: 0
+               )
+    end
+  end
 end
