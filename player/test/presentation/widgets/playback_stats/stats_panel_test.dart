@@ -4,6 +4,7 @@ import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_panel.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_sparkline.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 
 const _sample = StatsSample(
   bufferedAhead: Duration(milliseconds: 18400),
@@ -80,6 +81,18 @@ Future<StatsMetrics> pumpPanel(
     ),
   );
   return metrics;
+}
+
+/// The panel's rows/sparkline `Scrollable`, whichever density resolved. Used
+/// to assert on `position.maxScrollExtent` rather than on the `Scrollable`
+/// widget's mere presence, which a `SingleChildScrollView` satisfies at
+/// every density regardless of whether its content actually overflows.
+ScrollableState panelScrollable(WidgetTester tester) {
+  final scrollable = find.descendant(
+    of: find.byKey(StatsPanel.panelKey),
+    matching: find.byType(Scrollable),
+  );
+  return tester.state<ScrollableState>(scrollable.first);
 }
 
 void main() {
@@ -221,10 +234,13 @@ void main() {
 
   // A future change that clips the overflowing rows instead of scrolling
   // them would still pass the height assertion above (a clipped panel also
-  // never exceeds `metrics.maxHeight`), so it needs its own guard: the
-  // compact panel's content is taller than the 844x390 phone's available
-  // room, so it must expose a real `Scrollable` to reach the rows that do
-  // not fit.
+  // never exceeds `metrics.maxHeight`), so it needs its own guard. Merely
+  // finding a `Scrollable` is not enough either: a `SingleChildScrollView`
+  // is in the tree at every density, so that alone would still pass if a
+  // future change made compact's content always fit, silently losing the
+  // property this test claims. Asserting `maxScrollExtent > 0` is the real
+  // claim: compact's content genuinely exceeds the 844x390 phone's
+  // available room, so it genuinely has something left to scroll to.
   testWidgets('the compact panel scrolls its rows', (tester) async {
     await pumpPanel(
       tester,
@@ -234,12 +250,38 @@ void main() {
       onClose: () {},
     );
 
-    expect(
-      find.descendant(
-        of: find.byKey(StatsPanel.panelKey),
-        matching: find.byType(Scrollable),
-      ),
-      findsWidgets,
+    expect(panelScrollable(tester).position.maxScrollExtent, greaterThan(0));
+  });
+
+  // The tv tier's whole reason for existing is that a D-pad cannot scroll
+  // an unfocusable scroll view, so `StatsMetrics.tvMinHeight` must
+  // genuinely be enough room for the tv panel's content with nothing left
+  // over to scroll to. `tvMinHeight` is exactly the tv panel's measured
+  // content height (no slack at the boundary), so this pumps the panel at
+  // the viewport where available height equals `tvMinHeight` precisely,
+  // derived from the same constants `StatsMetrics.resolve` itself reads
+  // rather than a hardcoded number, and asserts there is nothing to scroll.
+  testWidgets('the tv panel needs no scrolling at its minimum height',
+      (tester) async {
+    const width = 1920.0;
+    final cornerInsetBottom =
+        PanelMetrics.resolve(width: width, touchPrimary: false)
+            .cornerInsetBottom;
+    final viewport = Size(
+      width,
+      StatsMetrics.tvMinHeight + StatsMetrics.topInset + cornerInsetBottom,
     );
+
+    await pumpPanel(
+      tester,
+      viewport: viewport,
+      tv: true,
+      sample: sampleWithHistory(),
+      onCopy: () {},
+      onClose: () {},
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(panelScrollable(tester).position.maxScrollExtent, 0);
   });
 }

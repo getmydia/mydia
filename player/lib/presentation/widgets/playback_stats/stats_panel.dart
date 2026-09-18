@@ -190,20 +190,33 @@ class StatsPanel extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 7,
+          // A `Row` with the value `Flexible`, not a `Wrap`: a `Wrap`
+          // pushes the value onto a second run when the pill and the
+          // value don't both fit on the value column's width, which makes
+          // the row's height a function of the string. `Flexible` instead
+          // keeps the pill and value on exactly one line always, ellipsizing
+          // an overlong value rather than reflowing it, so every row's
+          // height is a function of the font and the density alone. The
+          // tv tier's "never scrolls" promise (`StatsMetrics.tvMinHeight`)
+          // depends on that being true at every density, not just tv's.
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (row.pill != null) _pill(row.pill!),
-              Text(
-                row.value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: metrics.valueSize,
-                  color: color,
-                  height: 1.45,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              if (row.pill != null) ...[
+                _pill(row.pill!),
+                const SizedBox(width: 7),
+              ],
+              Flexible(
+                child: Text(
+                  row.value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: metrics.valueSize,
+                    color: color,
+                    height: 1.45,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
             ],
