@@ -3271,6 +3271,10 @@ port and creates <code>mydia_dev</code> / <code>mydia_test</code>.</p>
 <blockquote>
 <p><code>initialDatabases</code> only runs on first init. To change it later, delete
 <code>.devenv/state/postgres</code> and re-enter the shell.</p>
+<p>The dev Postgres is whatever major <code>devenv.lock</code>'s nixpkgs defaults to, so a
+lock bump can move it (the move to PostgreSQL 18 did). An existing data dir
+from an older major will not start; delete <code>.devenv/state/postgres</code> and
+re-enter the shell to re-initialise it.</p>
 </blockquote>
 <p><code>DATABASE_TYPE</code> is read when devenv evaluates, so export it <em>before</em> entering
 the shell. Postgres builds into <code>_build/postgres</code> rather than <code>_build</code>, because
