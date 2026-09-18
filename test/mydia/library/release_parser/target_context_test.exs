@@ -121,4 +121,27 @@ defmodule Mydia.Library.ReleaseParser.TargetContextTest do
       assert ctx.title == ""
     end
   end
+
+  describe "alt_titles/1" do
+    test "returns the original title and stored alternatives, never the title itself" do
+      item = %MediaItem{
+        type: "movie",
+        title: "The Lantern and Ash",
+        original_title: "La Lanterne et la Cendre",
+        metadata: %MediaMetadata{
+          provider_id: "1",
+          provider: :tmdb,
+          media_type: :movie,
+          alternative_titles: ["Starfall: The Lantern and Ash", "The Lantern and Ash"]
+        }
+      }
+
+      assert TargetContext.alt_titles(item) ==
+               ["La Lanterne et la Cendre", "Starfall: The Lantern and Ash"]
+    end
+
+    test "needs no preloads" do
+      assert TargetContext.alt_titles(%MediaItem{type: "movie", title: "Glass Harbor"}) == []
+    end
+  end
 end
