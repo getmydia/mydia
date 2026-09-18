@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/core/playback/link_path.dart';
 import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
@@ -82,27 +83,48 @@ void main() {
         expect(memory.failuresFor(server, now: justBefore), {key});
       });
 
-      test('throughput is an EWMA with alpha 0.3, seeded by the first sample',
-          () async {
-        expect(memory.throughputKbps(server), isNull);
-        await memory.observeThroughput(server, 10000);
-        expect(memory.throughputKbps(server), 10000);
-        await memory.observeThroughput(server, 20000);
-        // 0.3 * 20000 + 0.7 * 10000
-        expect(memory.throughputKbps(server), 13000);
+      test('a stall is remembered per server and per path', () async {
+        await memory.recordStall(server, LinkPath.relay, 6000, now: now);
+        final stall = memory.recentStall(server, LinkPath.relay, now: now);
+        expect(stall?.ceilingKbps, 6000);
+        expect(stall?.at.isAtSameMomentAs(now), isTrue);
+        expect(memory.recentStall(server, LinkPath.direct, now: now), isNull);
+        expect(
+          memory.recentStall('https://other.example', LinkPath.relay, now: now),
+          isNull,
+        );
       });
 
-      test('a bound only ever lowers the estimate', () async {
-        await memory.observeThroughput(server, 10000);
-        await memory.boundThroughput(server, 12000);
-        expect(memory.throughputKbps(server), 10000);
-        await memory.boundThroughput(server, 3600);
-        expect(memory.throughputKbps(server), 3600);
+      test('a stall lapses after an hour', () async {
+        await memory.recordStall(server, LinkPath.http, 6000, now: now);
+        final justBefore =
+            now.add(kStallMemoryTtl).subtract(const Duration(seconds: 1));
+        expect(
+          memory.recentStall(server, LinkPath.http, now: justBefore),
+          isNotNull,
+        );
+        expect(
+          memory.recentStall(server, LinkPath.http,
+              now: now.add(kStallMemoryTtl)),
+          isNull,
+        );
       });
 
-      test('a bound on an unknown server records it outright', () async {
-        await memory.boundThroughput(server, 3600);
-        expect(memory.throughputKbps(server), 3600);
+      test('a newer stall on the same path replaces the older one', () async {
+        await memory.recordStall(server, LinkPath.relay, 6000, now: now);
+        final later = now.add(const Duration(minutes: 5));
+        await memory.recordStall(server, LinkPath.relay, 9000, now: later);
+        expect(
+          memory.recentStall(server, LinkPath.relay, now: later)?.ceilingKbps,
+          9000,
+        );
+      });
+
+      test('recording a stall keeps the failures already remembered', () async {
+        await memory.recordFailure(server, key, FailureReason.decodeFailed,
+            now: now);
+        await memory.recordStall(server, LinkPath.http, 6000, now: now);
+        expect(memory.failuresFor(server, now: now), {key});
       });
     });
   }
@@ -110,10 +132,54 @@ void main() {
   test('HivePlaybackMemory survives a malformed record', () async {
     final box =
         await Hive.openBox<Map>('playback_memory_bad', bytes: Uint8List(0));
-    await box.put(server, {'failures': 'not a map', 'throughputKbps': 'nope'});
+    await box.put(server, {'failures': 'not a map', 'stalls': 'nope'});
     final memory = HivePlaybackMemory(box);
     expect(memory.failuresFor(server, now: now), isEmpty);
-    expect(memory.throughputKbps(server), isNull);
+    expect(memory.recentStall(server, LinkPath.http, now: now), isNull);
+  });
+
+  test('HivePlaybackMemory skips malformed stall entries', () async {
+    final box = await Hive.openBox<Map>(
+      'playback_memory_bad_stalls',
+      bytes: Uint8List(0),
+    );
+    await box.put(server, {
+      'failures': <String, dynamic>{},
+      'stalls': {
+        'relay': {'ceilingKbps': 'fast', 'at': now.toIso8601String()},
+        'direct': 'not a map',
+        'http': {'ceilingKbps': 6000, 'at': now.toIso8601String()},
+      },
+    });
+    final memory = HivePlaybackMemory(box);
+    expect(memory.recentStall(server, LinkPath.relay, now: now), isNull);
+    expect(memory.recentStall(server, LinkPath.direct, now: now), isNull);
+    expect(
+      memory.recentStall(server, LinkPath.http, now: now)?.ceilingKbps,
+      6000,
+    );
+  });
+
+  test('HivePlaybackMemory drops a legacy throughput estimate on write',
+      () async {
+    final box = await Hive.openBox<Map>(
+      'playback_memory_legacy_throughput',
+      bytes: Uint8List(0),
+    );
+    await box.put(server, {
+      'failures': <String, dynamic>{},
+      'throughputKbps': 8000,
+    });
+    final memory = HivePlaybackMemory(box);
+    expect(memory.recentStall(server, LinkPath.http, now: now), isNull);
+
+    await memory.recordStall(server, LinkPath.http, 6000, now: now);
+
+    expect(box.get(server)!.containsKey('throughputKbps'), isFalse);
+    expect(
+      memory.recentStall(server, LinkPath.http, now: now)?.ceilingKbps,
+      6000,
+    );
   });
 
   test('HivePlaybackMemory survives errors reading and deleting a record',
@@ -121,7 +187,7 @@ void main() {
     final memory = HivePlaybackMemory(_UnreadableBox());
 
     expect(memory.failuresFor(server, now: now), isEmpty);
-    expect(memory.throughputKbps(server), isNull);
+    expect(memory.recentStall(server, LinkPath.http, now: now), isNull);
     await pumpEventQueue();
   });
 

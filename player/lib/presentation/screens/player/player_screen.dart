@@ -41,6 +41,7 @@ import '../../../core/playback/playback_monitor.dart';
 import '../../../core/playback/quality_choice.dart';
 import '../../../core/playback/seek_decision.dart';
 import '../../../core/playback/playback_controller.dart';
+import '../../../core/playback/link_path.dart';
 import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_memory_providers.dart';
 import '../../../core/playback/playback_plan.dart';
@@ -612,9 +613,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// The last fallback this session, for the panel's Why row.
   StatsFallback? _lastFallback;
-
-  /// Samples seen since the last throughput write; one write a minute.
-  int _throughputSamples = 0;
 
   /// Includes the progress save before the controller claims its switch.
   bool _sourceSwitchInFlight = false;
@@ -1410,6 +1408,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _memory = memory;
       _serverKey = serverKey;
       _playFileId = playFileId;
+      // After an await: `ref` is only safe while mounted.
+      final linkPath = mounted ? _currentLinkPath() : null;
 
       final inputs = PlanInputs(
         candidates: candidateStrategiesFrom(candidatesResult?.candidates),
@@ -1419,7 +1419,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         sourceHeight: candidatesResult?.metadata.height,
         fileBitrateKbps:
             kbpsFromBitsPerSecond(candidatesResult?.metadata.bitrate),
-        knownThroughputKbps: memory?.throughputKbps(serverKey),
+        recentStall: linkPath == null
+            ? null
+            : memory?.recentStall(serverKey, linkPath, now: DateTime.now()),
         knownFailures:
             memory?.failuresFor(serverKey, now: DateTime.now()) ?? const {},
       );
@@ -1428,7 +1430,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Plan: ${playbackPlan.describe()} '
           'shape=${inputs.shape.videoCodec}/${inputs.shape.heightBucket} '
           'bitrateKbps=${inputs.fileBitrateKbps} '
-          'throughputKbps=${inputs.knownThroughputKbps}');
+          'path=${linkPath?.name ?? 'unknown'} '
+          'stallCeilingKbps=${inputs.recentStall?.ceilingKbps}');
       _plan = playbackPlan;
       _planInputs = inputs;
       _rememberOriginalDeliverySubtitle(inputs);
@@ -1836,7 +1839,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
     _monitor = monitor;
     _policy = policy;
-    _throughputSamples = 0;
     _healthSubscription =
         monitor.samples.listen((sample) => _onHealthSample(sample, policy));
     monitor.start();
@@ -1876,27 +1878,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // A sample from a monitor that has since been replaced.
     if (!mounted || !identical(policy, _policy)) return;
 
-    _recordThroughput(sample);
-
     final action = policy.observe(sample);
     if (action is FallbackToTranscode) {
       unawaited(_fallbackToTranscode(action));
     }
-  }
-
-  /// One throughput write a minute, from samples taken while playing
-  /// cleanly. Only native reports throughput.
-  void _recordThroughput(HealthSample sample) {
-    final kbps = sample.throughputKbps;
-    final memory = _memory;
-    final serverKey = _serverKey;
-    if (kbps == null || memory == null || serverKey == null) return;
-    if (!sample.playing || sample.buffering) return;
-    _throughputSamples++;
-    if (_throughputSamples % 60 != 0) return;
-    unawaited(memory.observeThroughput(serverKey, kbps).catchError((Object e) {
-      debugPrint('[PlayerScreen] Could not record throughput: $e');
-    }));
   }
 
   Future<void> _fallbackToTranscode(FallbackToTranscode action) async {
@@ -1907,7 +1892,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (_switchingSource) return;
 
     final position = _timeline.toReal(player.state.position);
-    final throughput = action.throughputKbps ?? inputs.knownThroughputKbps;
+    final throughput = action.throughputKbps ?? inputs.recentStall?.ceilingKbps;
     final plan = fallbackPlan(
       choice: QualityChoice.fromRung(_selectedQuality),
       sourceHeight: inputs.sourceHeight,
@@ -1930,10 +1915,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               now: DateTime.now(),
             );
           case FailureReason.bandwidth:
-            // The bytes that would not fit were the file's own.
-            final bound = inputs.fileBitrateKbps;
-            if (bound != null) {
-              await memory.boundThroughput(serverKey, (bound * 0.9).round());
+            // The path now, not at plan time: a relay switch mid-play is
+            // exactly when a stall is likely. Read before the first await,
+            // while `_onHealthSample`'s mounted check still holds.
+            final path = _currentLinkPath();
+            final ceiling = stallCeilingKbps(
+              measuredKbps: action.throughputKbps,
+              fileBitrateKbps: inputs.fileBitrateKbps,
+            );
+            if (path != null && ceiling != null) {
+              await memory.recordStall(serverKey, path, ceiling,
+                  now: DateTime.now());
             }
         }
       } catch (e) {
@@ -5328,6 +5320,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
+  /// The link path playback is on right now, or null while a p2p connection
+  /// has no peer path. Read at the moment of use: the path can change
+  /// mid-play, and a relay switch is exactly when a stall is likely.
+  ///
+  /// Plain HTTP returns before reading the p2p status, so an HTTP session
+  /// never builds the p2p providers just to learn it is not using them.
+  LinkPath? _currentLinkPath() {
+    if (!ref.read(conn.connectionProvider).isP2PMode) return LinkPath.http;
+    return linkPathFor(
+      isP2P: true,
+      type: ref.read(p2pStatusNotifierProvider).peerConnectionType,
+    );
+  }
+
   StatsContext _statsContext() {
     final player = _player;
     final status = ref.read(p2pStatusNotifierProvider);
@@ -5356,6 +5362,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       linkLabel: '${summary.label} - ${status.connectedPeersCount} peer'
           '${status.connectedPeersCount == 1 ? '' : 's'}',
       linkHealthy: !status.isRelayConnected,
+      recentStall: _planInputs?.recentStall,
+      now: DateTime.now(),
     );
   }
 

@@ -252,7 +252,7 @@ void main() {
         strategy: HlsStrategy.transcode,
         rung: _r720,
         adaptive: true,
-        reason: PlanReason.bitrateExceedsThroughput,
+        reason: PlanReason.recentStallOnPath,
       ),
       isDownloadedSource: false,
       selectedQuality: QualityRung.auto,
@@ -278,7 +278,45 @@ void main() {
 
     expect(context.why, isNot(contains('Remembered decode failure')));
     expect(context.why, isNot(contains('hevc')));
-    expect(context.why, "Remembered connection speed doesn't fit this file");
+    expect(context.why, 'Recent stall on this connection');
+  });
+
+  test('a recent stall says how long ago it happened', () {
+    final now = DateTime.utc(2026, 9, 18, 12);
+    StatsContext build(Duration ago) => buildStatsContext(
+          plan: const HlsPlan(
+            strategy: HlsStrategy.transcode,
+            rung: _r720,
+            adaptive: true,
+            reason: PlanReason.recentStallOnPath,
+          ),
+          isDownloadedSource: false,
+          selectedQuality: QualityRung.auto,
+          effectiveQuality: _r720,
+          duration: const Duration(minutes: 90),
+          lastFallback: null,
+          knownFailures: const {},
+          sourceHeight: 2160,
+          sourceCodec: 'hevc',
+          sourceBitrateKbps: 14200,
+          sourceContainer: 'mkv',
+          videoTrack: null,
+          audioTrack: null,
+          linkLabel: 'Connected through a relay - 1 peer',
+          linkHealthy: false,
+          recentStall: StallRecord(ceilingKbps: 6000, at: now.subtract(ago)),
+          now: now,
+        );
+
+    expect(
+      build(const Duration(minutes: 12)).why,
+      'Stalled on this connection 12 min ago',
+    );
+    // Under a minute still reads as a minute, never "0 min ago".
+    expect(
+      build(const Duration(seconds: 20)).why,
+      'Stalled on this connection 1 min ago',
+    );
   });
 
   test('a browser MIME rejection explains the re-encode', () {

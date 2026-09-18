@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/core/playback/link_path.dart';
 import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
 
@@ -389,7 +390,7 @@ void main() {
     expect(sessionRequests(link), hasLength(1),
         reason: 'Auto must respect the remembered failure and transcode '
             'instead of direct playing');
-    // No remembered throughput says this link cannot carry the file, so the
+    // No recent stall says this link cannot carry the file, so the
     // transcode Auto falls back to is uncapped, like Original.
     final variables = sessionRequests(link).single.variables;
     expect(variables.containsKey('maxHeight'), isFalse);
@@ -397,8 +398,8 @@ void main() {
   });
 
   testWidgets(
-      'Auto caps to the highest fitting rung when remembered throughput '
-      'says the file will not fit', (tester) async {
+      'Auto caps to the highest fitting rung after a recent stall on this '
+      'path', (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
@@ -422,16 +423,21 @@ void main() {
     // Seeded before the screen ever reads memory, at the same key
     // `serverUrlProvider` resolves to for a non-p2p connection.
     final memory = await container.read(playbackMemoryProvider.future);
-    await memory.observeThroughput('https://mydia.test', 6000);
+    await memory.recordStall(
+      'https://mydia.test',
+      LinkPath.http,
+      6000,
+      now: DateTime.now(),
+    );
 
     await pumpPlayerScreen(tester, container);
     await pumpUntilSessionStarted(tester, link);
 
     final variables = sessionRequests(link).single.variables;
     expect(variables['maxHeight'], 720,
-        reason: 'remembered throughput says this file will not fit, which '
-            'is evidence Auto acts on: it asks for the highest adaptive '
-            'rung that does');
+        reason: 'a recent stall on this link path is evidence Auto acts '
+            'on: it asks for the highest adaptive rung that fits the '
+            "stall's ceiling");
     expect(variables['maxBitrate'], 4000);
   });
 
@@ -479,8 +485,8 @@ void main() {
   });
 
   testWidgets(
-      'a stored Original direct plays despite remembered throughput below '
-      'the file bitrate', (tester) async {
+      'a stored Original direct plays despite a recent stall below the file '
+      'bitrate', (tester) async {
     final link = StubLink.responses([
       movieDetailResponse(),
       movieSegmentsResponse(),
@@ -508,7 +514,12 @@ void main() {
     // Seeded before the screen ever reads memory, at the same key
     // `serverUrlProvider` resolves to for a non-p2p connection.
     final memory = await container.read(playbackMemoryProvider.future);
-    await memory.observeThroughput('https://mydia.test', 10685);
+    await memory.recordStall(
+      'https://mydia.test',
+      LinkPath.http,
+      10685,
+      now: DateTime.now(),
+    );
 
     final logs = <String>[];
     await withCapturedDebugPrint(logs, () async {
@@ -520,8 +531,59 @@ void main() {
     final planLine =
         logs.firstWhere((l) => l.startsWith('[PlayerScreen] Plan: '));
     expect(planLine, contains('directPlay'),
-        reason: 'Original asks for the file itself; a remembered slow link '
-            'does not turn it into a transcode');
+        reason: 'Original asks for the file itself; a recent stall does '
+            'not turn it into a transcode');
+    expect(sessionRequests(link), isEmpty);
+  });
+
+  testWidgets(
+      'Auto direct plays when the only remembered stall is on another path',
+      (tester) async {
+    final link = StubLink.responses([
+      movieDetailResponse(),
+      movieSegmentsResponse(),
+      subtitleTrackSettingsResponse(),
+      // 11700000 bps = 11700 kbps; 11700 * 1.3 = 15210 > 8000, so a stall
+      // with this ceiling on the http path would stop Auto direct playing.
+      streamingCandidatesResponse(
+        duration: 1423,
+        height: 2160,
+        bitrate: 11700000,
+        directPlay: true,
+      ),
+      endStreamingSessionResponse(),
+    ]);
+
+    final container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.direct(),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    // A relayed p2p stall against the same key. This connection is plain
+    // HTTP, so the record describes a different link and must not apply.
+    final memory = await container.read(playbackMemoryProvider.future);
+    await memory.recordStall(
+      'https://mydia.test',
+      LinkPath.relay,
+      8000,
+      now: DateTime.now(),
+    );
+
+    final logs = <String>[];
+    await withCapturedDebugPrint(logs, () async {
+      await pumpPlayerScreen(tester, container);
+      await pumpUntil(
+          tester, () => logs.any((l) => l.startsWith('[PlayerScreen] Plan: ')));
+    });
+
+    final planLine =
+        logs.firstWhere((l) => l.startsWith('[PlayerScreen] Plan: '));
+    expect(planLine, contains('directPlay'));
+    expect(planLine, contains('path=http'));
+    expect(planLine, contains('stallCeilingKbps=null'));
     expect(sessionRequests(link), isEmpty);
   });
 }

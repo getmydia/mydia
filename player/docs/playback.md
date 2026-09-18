@@ -6,8 +6,8 @@ Everything after that is the player's, in `lib/core/playback/`:
 | Unit | Job |
 | --- | --- |
 | `planPlayback` (`playback_planner.dart`) | candidates plus memory in, `PlaybackPlan` out. A top-level function, not a class. Pure. |
-| `fallbackPlan` (`playback_planner.dart`) | the transcode a fallback lands on: quality choice, source height and remembered throughput in, an `HlsPlan` out (adaptive under Auto, source resolution under Original). Also a function. Pure. |
-| `PlaybackMemory` | per server: file shapes that failed to decode here (14 days), and an EWMA of throughput. An abstract class; `HivePlaybackMemory` backs the app, `InMemoryPlaybackMemory` backs tests. |
+| `fallbackPlan` (`playback_planner.dart`) | the transcode a fallback lands on: quality choice, source height and a throughput reading in, an `HlsPlan` out (adaptive under Auto, source resolution under Original). Also a function. Pure. |
+| `PlaybackMemory` | per server: file shapes that failed to decode here (14 days), and the latest bandwidth stall on each link path (1 hour). An abstract class; `HivePlaybackMemory` backs the app, `InMemoryPlaybackMemory` backs tests. |
 | `PlaybackMonitor` | one `HealthSample` a second from media_kit's streams and the engine's frame counters (mpv's properties on native, the video element's on web) |
 | `AdaptationPolicy` | the sample window in, `FallbackToTranscode` out. Pure state machine. |
 | `PlaybackController` | starts and ends sessions, and replaces a source on the live `Player` |
@@ -19,39 +19,42 @@ reports. It does not read the candidate list itself.
 
 The initial decision, made once when a file starts, logs one line:
 `[PlayerScreen] Plan: <plan> shape=<codec>/<bucket> bitrateKbps=<n>
-throughputKbps=<n>`, where `<plan>` is `directPlay (<reason>)` for a direct
-play, or `<strategy> <rung> (<reason>)` for an HLS plan (copy or transcode
-carry a rung; direct play does not). The reason names the rule that fired.
-Read that line before reading code. A later switch, from
-verification or a quality change, logs a different line; see
-"Verification" and "The switch".
+path=<path> stallCeilingKbps=<n>`, where `<plan>` is `directPlay (<reason>)`
+for a direct play, or `<strategy> <rung> (<reason>)` for an HLS plan (copy or
+transcode carry a rung; direct play does not). The reason names the rule that
+fired. `<path>` is the link path (`direct`, `relay`, `mixed`, `http`, or
+`unknown` while a p2p connection has no peer path), and `stallCeilingKbps` is
+the ceiling of the recent stall on it, `null` when there is none. Read that
+line before reading code. A later switch, from verification or a quality
+change, logs a different line; see "Verification" and "The switch".
 
 The viewer's choice is Auto (the default), Original, or a fixed rung. Auto
 direct plays or copies when the rules below allow it, and otherwise
-transcodes at the source resolution, like Original, unless remembered
-throughput says the file will not fit, in which case it asks for the highest
-adaptive rung that does. Knowing nothing about the connection is not evidence
-against it, so a first play, and every web play (web never measures
-throughput), transcodes uncapped. A fallback after a playback failure is a
-different case: under Auto it steps down deliberately rather than waiting for
-evidence (`fallbackPlan`; see "Verification" below). Original is the viewer's
-override: it bypasses remembered decode failures and remembered throughput,
-wherever that choice came from. A fixed rung pins its own caps and always
-transcodes, skipping both checks below.
+transcodes at the source resolution, like Original, unless a recent stall on
+the current link path says the file will not fit, in which case it asks for
+the highest adaptive rung that does. Knowing nothing about the connection is
+not evidence against it, so a play with no recent stall on its path tries
+the file's own bytes, or transcodes uncapped when it cannot. A fallback after
+a playback failure is a different case: under Auto it steps down deliberately
+rather than waiting for evidence (`fallbackPlan`; see "Verification" below).
+Original is the viewer's override: it bypasses remembered decode failures and
+recent stalls, wherever that choice came from. A fixed rung pins its own caps
+and always transcodes, skipping both checks below.
 
 Three rules, in order, decide between direct play, copy and transcode for
 Auto and Original alike. Direct play needs native, a leading DIRECT_PLAY or
-REMUX, and no fixed rung chosen; for Auto it also needs a bitrate that fits
-remembered throughput with 30% headroom. Copy needs a non-leading HLS_COPY,
-the same bitrate condition for Auto, and on web a MIME string
-`MediaSource.isTypeSupported` accepts. Otherwise transcode.
+REMUX, and no fixed rung chosen; for Auto it also needs a bitrate that fits,
+with 30% headroom, the ceiling of any recent stall on the current link path.
+Copy needs a non-leading HLS_COPY, the same bitrate condition for Auto, and
+on web a MIME string `MediaSource.isTypeSupported` accepts. Otherwise
+transcode.
 
 A shape known to fail here (the failure memory below) also blocks direct play
 and copy for Auto; picking Original in the quality menu tries it anyway,
 whether that choice was just tapped, seeded from storage, or carried over
-from the previous episode. Remembered throughput has the same carve-out:
-Original plays the file's own bytes on any link, and buffers if the link
-cannot keep up.
+from the previous episode. A recent stall has the same carve-out: Original
+plays the file's own bytes on any link, and buffers if the link cannot keep
+up.
 
 The stored `default_quality` key: `auto` reads back as Auto, `original` as
 Original. Before the Auto rung existed, Original was the default and was
@@ -60,6 +63,30 @@ preference now reads as Auto rather than Original.
 
 A leading HLS_COPY is the server's `:needs_transcoding` verdict and is never
 taken; see `lib/mydia/streaming/README.md`.
+
+### Stalls, not a throughput estimate
+
+The only bandwidth evidence Auto acts on is a stall that forced a fallback. A
+bandwidth fallback records one `StallRecord` for the link path in use at that
+moment: `direct`, `relay` or `mixed` over p2p, `http` otherwise, and nothing
+while a p2p connection has no peer path. Its ceiling is the throughput read
+while the source stalled, capped at 90% of the file's bitrate, or that cap
+alone when the reading is missing or zero (`stallCeilingKbps`). A newer stall
+on the same path replaces it, and it lapses after an hour, so a link that
+recovers, or a relayed path that goes direct, gets a direct play attempt on
+the next file. A weak link pays the verification window once an hour rather
+than never being tried.
+
+An earlier revision kept a running average of mpv's `cache-speed`, sampled
+once a minute during clean playback, and gated direct play on it. That
+reading measures consumption, not capacity: once mpv's demuxer cache is full
+(media_kit's 32 MB default), mpv reads only as fast as playback drains it.
+The average therefore converged on the bitrate of whatever Auto last played,
+and with the 30% headroom it then refused direct play of files the link
+carried without trouble, including the file it had just direct played. A
+reading taken while a source stalls does not have this problem, since the
+cache is draining then. Do not bring back an estimate built from
+clean-playback samples.
 
 ## Verification
 
@@ -109,11 +136,12 @@ height bucket) against the server, regardless of the quality choice in play.
 Whether that record is later consulted follows the same rule as "The
 decision": a remembered shape skips direct play and copy for Auto on the next
 play, and Original bypasses it regardless of where that choice came from. A
-bandwidth fallback, which only Auto can trigger, lowers the remembered
-throughput, and Auto consults it on the very next attempt; Original ignores
-it. There is no control to clear the box: a remembered shape expires after
-14 days, Original skips it before then, and remembered throughput keeps
-updating from what playback measures.
+bandwidth fallback, which only Auto can trigger, records a stall for the
+current link path (see "Stalls, not a throughput estimate"), and Auto
+consults it on the next play over that path within the hour; Original
+ignores it. There is no control to clear the box: a remembered shape expires
+after 14 days and a stall after an hour, and Original skips both before
+then.
 
 ## The switch
 
