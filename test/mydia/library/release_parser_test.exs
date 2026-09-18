@@ -316,7 +316,7 @@ defmodule Mydia.Library.ReleaseParserTest do
     # `season != nil or episodes != nil` clause below it. Every marker form
     # the resolver recognizes pairs a non-nil `episodes` with a non-nil
     # `season` (explicit, or defaulted to season 1 for bare absolute
-    # numbering like "E05" — see `Resolver.parse_absolute_episode/1`), so
+    # numbering like "E05", see `Resolver.parse_absolute_episode/1`), so
     # the resolver itself already infers `:tv_show` before this cond ever
     # runs. Reaching the second clause therefore requires locking `type`
     # away from `:tv_show` via `:target`, as a caller does when it already
