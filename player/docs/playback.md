@@ -132,6 +132,19 @@ Seeks past a WINDOW playlist (servers older than full-playlist support) and a
 quality change that needs different bytes use the same switch. There is no
 restart path.
 
+A switch keeps the viewer's subtitle choice. Opening the new file drops any
+subtitle mpv was given with `sub-add`, and media_kit resets its own record of
+the selection, so `_switchSource` captures the choice before the old file goes
+away and `_restoreSubtitleIntent` applies it again once the switch lands. A
+sidecar comes back from the body already fetched. An embedded stream is
+matched across Original and a transcode by its ffprobe stream index, which is
+both the server's track id and mpv's `ff-index`, with the language tags as a
+cross-check. An image track (PGS, VobSub) cannot be delivered in a transcode,
+so subtitles turn off with a snackbar saying so. An explicit Off is applied
+again; a viewer who never touched subtitles gets no call at all, so mpv keeps
+the defaults it uses on a fresh open. Subtitle picks are ignored while a
+switch is in flight, the same way quality picks are.
+
 The quality picker offers Auto above Original, then the ladder
 `deriveQualityLadder` builds for the source. Auto's subtitle names what it is
 doing right now: `Auto · Direct Play`, `Auto · Original, no re-encoding`, or

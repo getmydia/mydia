@@ -19,6 +19,7 @@ import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
 import '../../../core/player/player_orientation_lease_controller.dart';
 import '../../../core/player/progress_service.dart';
+import '../../../core/player/subtitle_stream_index.dart';
 import '../../../core/player/subtitle_delay.dart';
 import '../../../core/player/video_output_config.dart';
 import '../../../core/playback/playback_progress_providers.dart';
@@ -523,6 +524,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// call from *before* this tap must count as superseded even when this
   /// tap itself has no player to act on.
   int _subtitleSelectionGeneration = 0;
+
+  /// Whether the viewer picked a subtitle, or "Off", this playback.
+  ///
+  /// What tells "the viewer chose Off" from "the viewer never chose", which
+  /// [_pendingSubtitleSelection] cannot: both are null there. A source
+  /// switch carries the first and leaves mpv to its own defaults for the
+  /// second. Cleared by [_initializePlayer].
+  bool _subtitleChosenThisPlayback = false;
+
+  /// The viewer's choice while a source switch carries it to the new
+  /// source, in the server's id space. See [SubtitleIntent].
+  ///
+  /// Non-null from [_switchSource]'s capture until the restore that
+  /// consumes it finishes. A switch sets it only when it is null, so a
+  /// rollback after a failed switch reuses the original choice rather than
+  /// reading one from the failed source. A sheet or remote pick clears it,
+  /// since the pick replaces any carried choice. [_restoreSubtitleIntent]
+  /// clears it only when nothing superseded it: a restore cancelled by a
+  /// newer switch leaves it for that switch to consume.
+  SubtitleIntent? _subtitleIntentAcrossSwitch;
 
   /// Stored per-track subtitle offsets from the server, keyed by track ref
   /// (the same id space `SubtitleTrack.id`/`SubtitleContent` use). Empty
@@ -1060,6 +1081,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // narrate its old delivery, for the one about to load.
     _plan = null;
     _planInputs = null;
+    // A choice carried by a switch that never landed belongs to the source
+    // this load replaces, and a fresh load starts with no choice made.
+    _subtitleIntentAcrossSwitch = null;
+    _subtitleChosenThisPlayback = false;
 
     try {
       setState(() {
@@ -1665,7 +1690,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     try {
       // Persist where the viewer actually is before the old source goes away.
       await _saveProgress();
+      // Read while the old file is still loaded, since an mpv track's stream
+      // index can only be read from its own file, and committed only past
+      // the abort check below, so an aborted switch leaves nothing behind.
+      final subtitleIntent =
+          _subtitleIntentAcrossSwitch ?? await _captureSubtitleIntent(player);
       if (!mounted || !identical(playback, _playback)) return false;
+      _subtitleIntentAcrossSwitch = subtitleIntent;
+      if (subtitleIntent != null) {
+        // Supersedes a pick still resolving: its target is the intent just
+        // captured, and applying it to the outgoing file would be lost.
+        _subtitleSelectionGeneration++;
+      }
       _stopVerification();
 
       // Every switch past this point keeps the same `Player` (a fallback, a
@@ -1697,12 +1733,75 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // switch just succeeded. Clear it here so a working video is never
         // left behind the error page.
         _error = null;
+        // Derived again for the mode just adopted: `_attachSource` detected
+        // tracks while `_isDirectPlay` still described the old source.
+        _applySubtitleTracks(
+            _player?.state.tracks.subtitle ?? const <SubtitleTrack>[]);
+        // Nothing is applied on the new file yet. The restore below sets
+        // this once the carried choice actually takes effect.
+        if (_subtitleIntentAcrossSwitch != null) _selectedSubtitleTrack = null;
       });
       _startVerification(plan);
+      unawaited(_restoreSubtitleIntent());
       return true;
     } finally {
       _sourceSwitchInFlight = false;
     }
+  }
+
+  /// What [_switchSource] carries to the new source: the latest pick,
+  /// counting one still resolving, in the server's id space. Null when the
+  /// viewer never chose this playback, so mpv keeps its own defaults.
+  ///
+  /// An mpv-native pick is translated through its stream index, which has
+  /// to be read now, while the file it belongs to is still loaded.
+  Future<SubtitleIntent?> _captureSubtitleIntent(Player player) async {
+    final selected = _pendingSubtitleSelection;
+    final mpvId = selected == null ? null : mpvIdOfSubtitleTrack(selected.id);
+    final streamIndex =
+        mpvId == null ? null : (await subtitleStreamIndices(player))[mpvId];
+    return subtitleIntentBeforeSwitch(
+      selected: selected,
+      viewerChose: _subtitleChosenThisPlayback,
+      selectedStreamIndex: streamIndex,
+      serverTracks: _serverSubtitleTracks,
+    );
+  }
+
+  /// Re-applies the choice [_switchSource] carried across, on the source
+  /// that just landed.
+  ///
+  /// mpv loses a `sub-add`ed track when it opens a new file, and media_kit
+  /// resets its own record of the selection, so neither can say what should
+  /// be showing now; [_subtitleIntentAcrossSwitch] is the only record.
+  /// Applied through [_applySubtitleSelection] like any pick, so a viewer
+  /// pick or another switch arriving meanwhile supersedes it cleanly.
+  Future<void> _restoreSubtitleIntent() async {
+    final intent = _subtitleIntentAcrossSwitch;
+    final player = _player;
+    if (intent == null || player == null || !mounted) return;
+
+    // A viewer pick or a newer switch during the read below bumps this and
+    // then owns the choice.
+    final token = _subtitleSelectionGeneration;
+    final indices = _isDirectPlay
+        ? await subtitleStreamIndices(player)
+        : const <String, int>{};
+    if (!mounted || token != _subtitleSelectionGeneration) return;
+
+    final restore = resolveSubtitleIntent(
+      intent: intent,
+      tracks: _subtitleTracks,
+      streamIndexByMpvId: indices,
+    );
+    final generation = await _applySubtitleSelection(
+      restore is RestoreTrack ? restore.track : null,
+      keepNudge: true,
+    );
+    if (generation != _subtitleSelectionGeneration) return;
+
+    _subtitleIntentAcrossSwitch = null;
+    if (restore is RestoreUnavailable) _showPlaybackSnackBar(restore.message);
   }
 
   /// Monitors a source and lets the policy decide when to replace it.
@@ -2699,9 +2798,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// against the player being replaced backs off instead of applying its
   /// result to the new one; [pendingSubtitleSelectionAfterFailure] leaves
   /// the values set here alone when that superseded attempt unwinds.
+  ///
+  /// Stands down while a source switch is in flight or its restore is still
+  /// pending. media_kit's `open()` resets its record of the selection to
+  /// `auto`, so a sync then would wipe the choice [_switchSource] is
+  /// carrying, and its generation bump would cancel a restore still
+  /// fetching a subtitle body. [_restoreSubtitleIntent] sets both fields
+  /// itself once the choice is back on screen.
   void _syncSelectedSubtitleTrack() {
     final player = _player;
     if (player == null) return;
+
+    if (!shouldSyncSubtitleSelectionFromPlayer(
+      switchInFlight: _switchingSource,
+      intentPending: _subtitleIntentAcrossSwitch != null,
+    )) {
+      return;
+    }
 
     final currentMkSubtitle = player.state.track.subtitle;
     app_models.SubtitleTrack? applied;
@@ -3518,6 +3631,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// re-picking what is already pending is a no-op (see
   /// [shouldStartSubtitleSelection]).
   Future<void> _showSubtitleSelector() async {
+    // Same as the quality picker: a switch in flight carries the current
+    // choice across itself, and a pick now would apply to the file it is
+    // about to replace.
+    if (!shouldAcceptSubtitlePick(switchInFlight: _switchingSource)) return;
+
     final outcome = await showSubtitleTrackSelector(
       context,
       _subtitleTracks,
@@ -3548,7 +3666,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     )) {
       return;
     }
+    // Rechecked: a fallback can start while the sheet is open.
+    if (!shouldAcceptSubtitlePick(switchInFlight: _switchingSource)) return;
 
+    _subtitleChosenThisPlayback = true;
+    _subtitleIntentAcrossSwitch = null;
     await _applySubtitleSelection(selected);
   }
 
@@ -4669,6 +4791,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (mounted) setState(() => _selectedAudioTrack = track);
 
       case TrackKind.subtitle:
+        if (!shouldAcceptSubtitlePick(switchInFlight: _switchingSource)) {
+          return;
+        }
+
         // `id` names a track a remote peer chose; one this screen does not
         // list is dropped rather than guessed at, as for audio above.
         final app_models.SubtitleTrack? track;
@@ -4679,7 +4805,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           if (track == null) return;
         }
         // The same routine as the sheet, so a remote pick gets the same
-        // generation guard against a slower pick still in flight.
+        _subtitleChosenThisPlayback = true;
+        _subtitleIntentAcrossSwitch = null;
         await _applySubtitleSelection(track);
     }
   }
