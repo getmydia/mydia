@@ -226,3 +226,29 @@ jobs:
       version: ${{ needs.prepare.outputs.version }}
       version_code: ${{ needs.prepare.outputs.version_code }}
       dry_run: ${{ inputs.dry_run }}
+
+  appcast:
+    name: Deploy Appcast
+    needs:
+      - prepare
+      - player-android
+    # A custom `if` does not disable the runner's own "skip if a needed job
+    # didn't succeed" gate (see release.yml's `publish` job, which relies on
+    # exactly this and only opts out with always() when it deliberately wants
+    # to run despite a failed platform). The checks below are still explicit
+    # and positive rather than a bare `!inputs.dry_run`, because skipped and
+    # failed are different result strings and only a negative check like
+    # `!= 'failure'` would miss that a skipped player-android (build_android
+    # disabled) also means nothing published. Either way, no dev build
+    # reached the bucket, so the feed has nothing new to pick up.
+    if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.player-android.result == 'success' }}
+    # A reusable workflow gets the calling job's token scopes, so the callee's
+    # own permissions block cannot widen this. Reading the release list and
+    # checking out the generator is all it does; the Cloudflare deploy
+    # authenticates with CLOUDFLARE_API_TOKEN, not GITHUB_TOKEN.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-appcast.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+    secrets: inherit
