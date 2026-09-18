@@ -593,9 +593,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The last fallback this session, for the panel's Why row.
   StatsFallback? _lastFallback;
 
-  /// Samples seen since the last throughput write; one write a minute.
-  int _throughputSamples = 0;
-
   /// Includes the progress save before the controller claims its switch.
   bool _sourceSwitchInFlight = false;
 
@@ -1737,7 +1734,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
     _monitor = monitor;
     _policy = policy;
-    _throughputSamples = 0;
     _healthSubscription =
         monitor.samples.listen((sample) => _onHealthSample(sample, policy));
     monitor.start();
@@ -1777,27 +1773,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // A sample from a monitor that has since been replaced.
     if (!mounted || !identical(policy, _policy)) return;
 
-    _recordThroughput(sample);
-
     final action = policy.observe(sample);
     if (action is FallbackToTranscode) {
       unawaited(_fallbackToTranscode(action));
     }
-  }
-
-  /// One throughput write a minute, from samples taken while playing
-  /// cleanly. Only native reports throughput.
-  void _recordThroughput(HealthSample sample) {
-    final kbps = sample.throughputKbps;
-    final memory = _memory;
-    final serverKey = _serverKey;
-    if (kbps == null || memory == null || serverKey == null) return;
-    if (!sample.playing || sample.buffering) return;
-    _throughputSamples++;
-    if (_throughputSamples % 60 != 0) return;
-    unawaited(memory.observeThroughput(serverKey, kbps).catchError((Object e) {
-      debugPrint('[PlayerScreen] Could not record throughput: $e');
-    }));
   }
 
   Future<void> _fallbackToTranscode(FallbackToTranscode action) async {
@@ -1831,10 +1810,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               now: DateTime.now(),
             );
           case FailureReason.bandwidth:
-            // The bytes that would not fit were the file's own.
-            final bound = inputs.fileBitrateKbps;
-            if (bound != null) {
-              await memory.boundThroughput(serverKey, (bound * 0.9).round());
+            // The path now, not at plan time: a relay switch mid-play is
+            // exactly when a stall is likely. Read before the first await,
+            // while `_onHealthSample`'s mounted check still holds.
+            final path = _currentLinkPath();
+            final ceiling = stallCeilingKbps(
+              measuredKbps: action.throughputKbps,
+              fileBitrateKbps: inputs.fileBitrateKbps,
+            );
+            if (path != null && ceiling != null) {
+              await memory.recordStall(serverKey, path, ceiling,
+                  now: DateTime.now());
             }
         }
       } catch (e) {
