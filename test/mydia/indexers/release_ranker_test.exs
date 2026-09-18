@@ -2263,30 +2263,80 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       assert length(ranked) == 1
     end
 
-    test "passes through release names with no extractable title (fail-open)" do
-      # ReleaseParser returns no title for this input, so the title-mismatch
-      # filter cannot compare and lets it through (fail-open). Note: ReleaseParser
-      # is more capable than the old parser — gibberish that DOES yield a title
-      # (e.g. "abc123def456") is now correctly extracted and filtered when it
-      # differs from the expected title.
-      # We omit search_query to avoid reject_zero_title_match catching it.
+    test "rejects a release with no readable title unless its name leads with the expected title" do
+      # A leading air date leaves ReleaseParser with no title at all. Letting
+      # that through unexamined grabbed this exact shape on every search for a
+      # short movie title.
       results = [
         build_result(%{
-          title: "1080p.x264.AAC",
-          size: round(1.0 * @gb),
-          seeders: 10,
-          quality: nil
+          title: "2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv",
+          quality:
+            QualityParser.parse("2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv")
+        }),
+        build_result(%{title: "1080p.x264.AAC", quality: nil})
+      ]
+
+      ranked =
+        ReleaseRanker.rank_all(results,
+          expected_title: "Lantern",
+          media_type: :movie,
+          min_seeders: 0
+        )
+
+      assert ranked == []
+    end
+
+    test "accepts a release whose title the parser reads as its year" do
+      # Numeric titles come back from ReleaseParser with no title, so the
+      # release name itself is the only thing left to compare.
+      results = [
+        build_result(%{
+          title: "2043.2031.1080p.BluRay.x264-GROUP",
+          quality: QualityParser.parse("2043.2031.1080p.BluRay.x264")
         })
       ]
 
       ranked =
         ReleaseRanker.rank_all(results,
-          expected_title: "Fallout",
+          expected_title: "2043",
+          media_type: :movie,
+          search_query: "2043 2031",
           min_seeders: 0
         )
 
-      assert length(ranked) == 1,
-             "Releases with no extractable title should pass through (fail-open)"
+      assert length(ranked) == 1
+    end
+
+    test "rejects a parsed title that only starts with a short expected title" do
+      # Jaro rewards a shared prefix, so this scores 0.716 against "lantern"
+      # and cleared the 0.7 threshold on its own.
+      title = "Lantern Vale - Lantern Came Over For Dinner (01.06.2031)_1080p.mp4"
+
+      results = [build_result(%{title: title, quality: QualityParser.parse(title)})]
+      opts = [expected_title: "Lantern", media_type: :movie, search_query: "Lantern 2031"]
+
+      assert ReleaseRanker.rank_all(results, [min_seeders: 0] ++ opts) == []
+
+      assert [%{status: :rejected, rejection_reason: "title_mismatch"}] =
+               ReleaseRanker.score_all_with_reasons(results, opts)
+    end
+
+    test "accepts a parsed title that carries a second-language title after the expected one" do
+      # Shaped like the lowest-ratio correct grab in production data, where the
+      # library title is 28% of the parsed title's length.
+      title = "The Copper Orchard - Il frutteto di rame sotto la luna (2031) 1080p x264 ita.mkv"
+
+      results = [build_result(%{title: title, quality: QualityParser.parse(title)})]
+
+      ranked =
+        ReleaseRanker.rank_all(results,
+          expected_title: "The Copper Orchard",
+          media_type: :movie,
+          search_query: "The Copper Orchard 2031",
+          min_seeders: 0
+        )
+
+      assert length(ranked) == 1
     end
 
     test "skips filter when expected_title is empty string" do

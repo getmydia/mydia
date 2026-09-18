@@ -41,7 +41,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
   - `:media_type` - Either `:movie` or `:episode` (default: `nil`, TV filtering only applied when `:movie`)
   - `:expected_title` - Expected show/movie title for pre-ranking title validation. When provided,
     each result is parsed with `ReleaseParser` and rejected if the parsed title has a Jaro distance
-    below 0.7 from the expected title. Unparseable releases pass through (fail-open).
+    below 0.7 from the expected title, or is more than five times its length. A release with no
+    parseable title passes only when its name begins with the expected title's words.
     Ignored when `nil` or empty/whitespace-only. (default: `nil`)
   - `:apply_source_exclusion` - Whether `:quality_profile`'s `:excluded_sources` list is enforced
     as a hard removal (default: `true`). The automatic search jobs leave this at the default.
@@ -102,6 +103,14 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   @default_min_seeders 0
   @title_match_threshold 0.7
+
+  # Jaro rewards a shared prefix: when one title starts with the other it scores
+  # (2 + shorter/longer) / 3, never below 2/3, so the threshold alone admits a
+  # parsed title up to ten times the expected one's length. The floor binds only
+  # when the parsed title is the longer one, because a release that drops a
+  # subtitle is still the same work. Correct production grabs whose parsed title
+  # adds a second-language title go as low as 0.28.
+  @min_expected_title_share 0.2
 
   # Identity penalty: a large tier separator (not a nudge). It deliberately
   # exceeds the maximum achievable base score (quality·0.6 ≈ 60 + seeders ≈ 30
@@ -585,15 +594,12 @@ defmodule Mydia.Indexers.ReleaseRanker do
     if trimmed == "" do
       results
     else
-      normalized_expected = normalize_for_comparison(trimmed)
-
       Enum.filter(results, fn result ->
-        case parse_and_compare(result, normalized_expected) do
-          {:mismatch, parsed_title, distance} ->
+        case parse_and_compare(result, trimmed) do
+          {:mismatch, detail} ->
             Logger.info(
               "[ReleaseRanker] Filtered out (title mismatch): " <>
-                "parsed='#{parsed_title}' expected='#{trimmed}' " <>
-                "distance=#{Float.round(distance, 2)}: #{result.title}"
+                "#{detail} expected='#{trimmed}': #{result.title}"
             )
 
             false
@@ -605,29 +611,54 @@ defmodule Mydia.Indexers.ReleaseRanker do
     end
   end
 
-  # Parse a result's title and compare against the pre-normalized expected title.
-  # Returns {:mismatch, parsed_title, distance} if below threshold, :ok otherwise.
+  # Parse a result's title and compare it against the expected title.
+  # Returns {:mismatch, detail} when they differ, :ok otherwise.
   #
   # Calls ReleaseParser.parse/1 directly (not ReleaseIntake): reject_invalid_releases/1
   # already ran the validator over the full result list upstream, so re-validating
   # here would be a redundant double-pass. The two stages must be maintained
   # together — if the upstream validator filter is removed, this path would need
-  # its own validation. A nil/unparseable title falls through to :ok (fail-open).
-  defp parse_and_compare(result, normalized_expected) do
+  # its own validation.
+  #
+  # The parser finds no title in a name that opens with a number it reads as a
+  # year, which covers both numeric titles ("2043.2031.1080p") and air-dated
+  # names ("2031-05-12 Other Title ..."). Only the first kind is the expected
+  # work, and only the first kind leads with the expected title's words.
+  defp parse_and_compare(result, expected_title) do
     case ReleaseParser.parse(result.title) do
       %ParsedFileInfo{title: parsed_title} when is_binary(parsed_title) ->
-        distance =
-          String.jaro_distance(normalized_expected, normalize_for_comparison(parsed_title))
+        normalized_expected = normalize_for_comparison(expected_title)
+        normalized_parsed = normalize_for_comparison(parsed_title)
+        distance = String.jaro_distance(normalized_expected, normalized_parsed)
 
-        if distance < @title_match_threshold do
-          {:mismatch, parsed_title, distance}
+        if distance < @title_match_threshold or
+             String.length(normalized_expected) <
+               @min_expected_title_share * String.length(normalized_parsed) do
+          {:mismatch, "parsed='#{parsed_title}' distance=#{Float.round(distance, 2)}"}
         else
           :ok
         end
 
       _ ->
-        :ok
+        if leads_with_words?(result.title, expected_title),
+          do: :ok,
+          else: {:mismatch, "no parsed title"}
     end
+  end
+
+  defp leads_with_words?(release_title, expected_title) do
+    expected_words = title_words(expected_title)
+    Enum.take(title_words(release_title), length(expected_words)) == expected_words
+  end
+
+  # Splits on every run of punctuation and separators, on both sides alike, so
+  # "2043: A Tale" and "2043.A.Tale.2031" yield the same leading words.
+  defp title_words(title) do
+    title
+    |> String.downcase()
+    |> normalize_unicode()
+    |> String.split(~r/[^\p{L}\p{N}]+/u, trim: true)
+    |> Enum.reject(&(&1 in ~w(the a an)))
   end
 
   defp normalize_for_comparison(title) do
@@ -982,7 +1013,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
     if trimmed == "" do
       false
     else
-      match?({:mismatch, _, _}, parse_and_compare(result, normalize_for_comparison(trimmed)))
+      match?({:mismatch, _}, parse_and_compare(result, trimmed))
     end
   end
 

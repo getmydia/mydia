@@ -58,8 +58,12 @@ short on purpose:
 
 - The release title does not plausibly match the item being searched for. Two
   independent checks apply here: a parsed-title similarity threshold, and a
-  relevance score that reaches zero. Alternate and localised titles are the
-  usual innocent victims.
+  relevance score that reaches zero. The similarity check also turns away a
+  parsed title more than five times the length of the item's own, and a name
+  the parser cannot read a title from at all unless it opens with the item's
+  title. Short titles need both: a search for a one-word movie otherwise
+  accepts anything whose name merely starts with that word. Alternate and
+  localised titles are the usual innocent victims.
 - The release fails a validity check: an executable or script extension, a
   hashed or numeric-only title, an apparently password-protected archive, or no
   meaningful content in the name.
