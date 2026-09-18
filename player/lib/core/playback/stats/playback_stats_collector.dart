@@ -68,9 +68,16 @@ class PlaybackStatsCollector {
   /// empty history, and no sample until the next tick. Without this, the
   /// first reading of a new source diffs against the previous source's
   /// cumulative count and reports a spike that never happened.
+  ///
+  /// Also resets the position and buffer carried from the previous source's
+  /// `position`/`buffer` stream listeners: if the new source has not
+  /// emitted both by the next tick, a sample built from a stale `_position`
+  /// or `_buffer` would report the old source's numbers as the new one's.
   void rebind() {
     _generation++;
     _history.clear();
+    _position = Duration.zero;
+    _buffer = Duration.zero;
     _lastTotal = null;
     _lastThroughput = null;
     _unreadableTicks = 0;

@@ -52,4 +52,20 @@ void main() {
     await pending;
     expect(storage.contents['stats_overlay_enabled'], 'true');
   });
+
+  // A throwing write must not escape `set` as an unhandled asynchronous
+  // error: both call sites (the quality sheet and the settings row) discard
+  // the returned future. The optimistic state is not rolled back either --
+  // that is the documented behaviour this test is not reopening.
+  test('a throwing write does not escape set, and the state stays flipped',
+      () async {
+    final storage = MockAuthStorage()..failAllWrites = true;
+    final container = containerWith(storage);
+    await container.read(statsOverlayEnabledProvider.future);
+
+    await container.read(statsOverlayEnabledProvider.notifier).set(true);
+
+    expect(container.read(statsOverlayEnabledProvider).value, isTrue);
+    expect(storage.contents.containsKey('stats_overlay_enabled'), isFalse);
+  });
 }

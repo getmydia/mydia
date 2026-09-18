@@ -77,14 +77,16 @@ void main() {
 
   // A fallback that actually happened outranks anything inferred from the
   // plan: it is the more specific answer and it has a raw detail worth
-  // carrying to the clipboard.
+  // carrying to the clipboard. `fallbackPlan` (playback_planner.dart) always
+  // sets `reason: fallbackFromFailure` on the plan it returns, so a real
+  // active fallback always looks like this, not like an arbitrary reason.
   test('a fallback this session wins over the plan-derived reason', () {
     final context = buildStatsContext(
       plan: const HlsPlan(
         strategy: HlsStrategy.transcode,
         rung: _r720,
         adaptive: true,
-        reason: PlanReason.bitrateExceedsThroughput,
+        reason: PlanReason.fallbackFromFailure,
       ),
       isDownloadedSource: false,
       selectedQuality: QualityRung.auto,
@@ -110,6 +112,45 @@ void main() {
       context.whyDetail,
       'bandwidth: buffer drained for 4 samples',
     );
+  });
+
+  // The bug this gate fixes: a fallback from earlier this session must not
+  // outlive the plan it explained. Once a later plan replaces it for an
+  // unrelated reason (here, a manual quality cap), the Why row has to
+  // report *that* plan, not the stale fallback message, and the clipboard's
+  // detail line must not carry the stale fallback either.
+  test(
+      'stale fallback data is omitted once the plan has moved on to a '
+      'different reason', () {
+    final context = buildStatsContext(
+      plan: const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: _r720,
+        adaptive: false,
+        reason: PlanReason.fixedRungRequested,
+      ),
+      isDownloadedSource: false,
+      selectedQuality: _r720,
+      effectiveQuality: _r720,
+      duration: const Duration(minutes: 90),
+      lastFallback: const StatsFallback(
+        reason: FailureReason.bandwidth,
+        detail: 'bandwidth: buffer drained for 4 samples',
+      ),
+      knownFailures: const {},
+      sourceHeight: 2160,
+      sourceCodec: 'hevc',
+      sourceBitrateKbps: 14200,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+    );
+
+    expect(context.why, isNot(fallbackMessageFor(FailureReason.bandwidth)));
+    expect(context.why, contains('capped'));
+    expect(context.whyDetail, isNull);
   });
 
   test('a stream copy says the container is not playable directly', () {
@@ -424,6 +465,37 @@ void main() {
     expect(context.decoderLabel, 'h264 (vaapi)');
     expect(context.hardwareDecode, isTrue);
     expect(context.audioLabel, 'eac3 5.1 - 48 kHz - eng');
+  });
+
+  // CD audio is 44.1 kHz and common; a bare `~/ 1000` integer divide would
+  // round it down to a misreported "44 kHz".
+  test('a 44100 Hz sample rate keeps its fraction', () {
+    final context = buildStatsContext(
+      plan: const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.original,
+      effectiveQuality: null,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 1080,
+      sourceCodec: 'h264',
+      sourceBitrateKbps: 8000,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: const AudioTrack(
+        '2',
+        'Audio',
+        'eng',
+        codec: 'flac',
+        channels: '2.0',
+        samplerate: 44100,
+      ),
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+    );
+
+    expect(context.audioLabel, 'flac 2.0 - 44.1 kHz - eng');
   });
 
   test('a software decoder reads as software', () {

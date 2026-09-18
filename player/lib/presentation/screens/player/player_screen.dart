@@ -1836,17 +1836,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
-    // For the panel's Why row. The dropped-frame baseline is reset by
-    // `_switchSource` itself (every caller keeps the same `Player`, not
-    // just this one), so it is not repeated here.
-    _lastFallback = StatsFallback(reason: action.reason, detail: action.detail);
-
     // The choice stays the viewer's: `fallbackPlan` already honours it as
     // closely as this device allows. The stored default is never written
     // here either, since one file failing says nothing about the next.
     _showPlaybackSnackBar(fallbackMessage(action.reason));
     try {
-      await _switchSource(plan, at: position);
+      final switched = await _switchSource(plan, at: position);
+      // For the panel's Why row, recorded only once the switch actually
+      // took effect: `_switchSource` returns false when it aborted
+      // (unmounted, or `_playback` already replaced), and recording the
+      // fallback anyway would leave the row reporting a switch that never
+      // happened. The dropped-frame baseline is reset by `_switchSource`
+      // itself (every caller keeps the same `Player`, not just this one),
+      // so it is not repeated here.
+      if (switched) {
+        _lastFallback =
+            StatsFallback(reason: action.reason, detail: action.detail);
+      }
     } catch (e) {
       debugPrint('[PlayerScreen] Fallback failed: $e');
       if (!mounted) return;
@@ -4879,6 +4885,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   /// Cancels every subscription bound to the current player and disposes it.
+  ///
+  /// Also stops the stats collector, covering every disposal path rather
+  /// than requiring each caller to remember it -- the same reasoning that
+  /// put `rebind()` inside `_switchSource` instead of at its call sites. It
+  /// matters most on the init-failure path: `_startStatsCollector` runs
+  /// before `player.open()` has succeeded, and `_initializePlayer`'s own
+  /// catch calls `_disposePlayer` on that throw, so without this a
+  /// `Timer.periodic` would keep sampling a player nothing is using.
+  /// `_stopStatsCollector` is idempotent, so calling it again here on a
+  /// path that already stopped the collector is a no-op.
   Future<void> _disposePlayer() async {
     await _positionSubscription?.cancel();
     _positionSubscription = null;
@@ -4887,6 +4903,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await _errorSubscription?.cancel();
     _errorSubscription = null;
     _progressService?.stopSync();
+    _stopStatsCollector();
 
     final player = _player;
     _player = null;

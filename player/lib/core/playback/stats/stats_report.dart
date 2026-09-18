@@ -116,9 +116,11 @@ String statsClipboardText(
     if (context.videoLabel != null) 'Video: ${context.videoLabel}',
     if (context.decoderLabel != null) 'Decoder: ${_decoder(context)}',
     if (context.audioLabel != null) 'Audio: ${context.audioLabel}',
-    if (sample.droppedFramesTotal != null)
-      'Frames: ${sample.droppedFrames ?? 0} dropped this second, '
-          '${sample.droppedFramesTotal} total',
+    if (sample.droppedFrames != null && sample.droppedFramesTotal != null)
+      'Frames: ${sample.droppedFrames} dropped this second, '
+          '${sample.droppedFramesTotal} total'
+    else if (sample.droppedFramesTotal != null)
+      'Frames: ${sample.droppedFramesTotal} total',
     'Buffer: ${_seconds(sample.bufferedAhead)}',
     if (context.mode != PlaybackMode.localFile && sample.throughputKbps != null)
       'Throughput: ${formatBitrate(sample.throughputKbps!)}',

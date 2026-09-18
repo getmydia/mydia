@@ -280,6 +280,26 @@ void main() {
     expect(text, contains('Position: 24:11 / 1:52:40'));
   });
 
+  // `droppedFrames` is null on the first sample of a source -- unknown, not
+  // zero. `?? 0` would state a delta the platform never reported.
+  test(
+      'the clipboard states only the total when the delta is not known '
+      'yet', () {
+    final text = statsClipboardText(
+      const StatsSample(
+        bufferedAhead: Duration(seconds: 4),
+        position: Duration(seconds: 90),
+        droppedFramesTotal: 12,
+      ),
+      _context,
+      appVersion: '1.4.2',
+    );
+
+    expect(text, isNot(contains('0 dropped this second')));
+    expect(text, isNot(contains('dropped this second')));
+    expect(text, contains('Frames: 12 total'));
+  });
+
   test('the clipboard omits what it does not know', () {
     final text = statsClipboardText(
       const StatsSample(

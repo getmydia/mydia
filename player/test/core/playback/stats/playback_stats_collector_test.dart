@@ -169,6 +169,43 @@ void main() {
     });
   });
 
+  // Without a reset, a sample taken before the new source emits either
+  // stream would report the previous source's position and buffer depth.
+  test('rebind clears the carried position and buffer', () {
+    fakeAsync((async) {
+      final s = _Signals();
+      final collector = PlaybackStatsCollector(
+        signals: s.signals,
+        sampler: _ScriptedSampler([
+          const FrameStats(droppedFrames: 0),
+          const FrameStats(droppedFrames: 0),
+        ]),
+      );
+      addTearDown(collector.dispose);
+      collector.start();
+
+      s.position.add(const Duration(minutes: 5));
+      s.buffer.add(const Duration(minutes: 5, seconds: 10));
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(collector.samples.value!.position, const Duration(minutes: 5));
+      expect(
+        collector.samples.value!.bufferedAhead,
+        const Duration(seconds: 10),
+      );
+
+      collector.rebind();
+
+      // Neither stream emits again before the next tick.
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+
+      final sample = collector.samples.value!;
+      expect(sample.position, Duration.zero);
+      expect(sample.bufferedAhead, Duration.zero);
+    });
+  });
+
   test('the history caps at sixty points, oldest dropped first', () {
     fakeAsync((async) {
       final s = _Signals();

@@ -15,6 +15,7 @@ import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_plan.dart';
 import '../../../core/playback/stats/playback_stats.dart';
 import '../../../domain/models/quality_rung.dart';
+import '../../widgets/media_info/stream_formatters.dart' show formatSampleRate;
 
 /// A fallback the policy performed during this session.
 class StatsFallback {
@@ -50,10 +51,20 @@ StatsContext buildStatsContext({
   required bool linkHealthy,
 }) {
   final mode = _mode(plan, isDownloadedSource);
+  // A fallback only explains the *active* plan when the active plan is
+  // still the fallback's own plan. Once a later plan replaces it for a
+  // different reason (a manual quality change, a fresh source), the
+  // fallback is stale and must not narrate that unrelated plan -- the same
+  // class of bug as the stale `_lastFallback` across episodes and the
+  // codec-only remembered-failure match this branch already fixed.
+  final activeFallback =
+      lastFallback != null && plan?.reason == PlanReason.fallbackFromFailure
+          ? lastFallback
+          : null;
   final why = _why(
     plan: plan,
     mode: mode,
-    lastFallback: lastFallback,
+    lastFallback: activeFallback,
     selectedQuality: selectedQuality,
     knownFailures: knownFailures,
     sourceHeight: sourceHeight,
@@ -65,7 +76,7 @@ StatsContext buildStatsContext({
     qualityLabel: _qualityLabel(selectedQuality, effectiveQuality),
     duration: duration,
     why: why,
-    whyDetail: lastFallback?.detail,
+    whyDetail: activeFallback?.detail,
     sourceLabel: mode == PlaybackMode.localFile
         ? null
         : _sourceLabel(
@@ -236,8 +247,12 @@ String? _audioLabel(AudioTrack? track) {
     if (track.codec != null) track.codec!,
     if (track.channels != null) track.channels!,
   ].join(' ');
+  // `formatSampleRate` (media_info/stream_formatters.dart) keeps the
+  // fraction (44.1 kHz), unlike a bare `~/ 1000` integer divide, which
+  // rounds CD audio's 44100 Hz down to a misreported "44 kHz".
+  final sampleRateLabel = formatSampleRate(track.samplerate);
   final tail = <String>[
-    if (track.samplerate != null) '${track.samplerate! ~/ 1000} kHz',
+    if (sampleRateLabel != null) sampleRateLabel,
     if (track.language != null && track.language != 'und') track.language!,
   ];
   if (parts.isEmpty && tail.isEmpty) return null;
