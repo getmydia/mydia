@@ -5219,6 +5219,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       linkLabel: '${summary.label} - ${status.connectedPeersCount} peer'
           '${status.connectedPeersCount == 1 ? '' : 's'}',
       linkHealthy: !status.isRelayConnected,
+      recentStall: _planInputs?.recentStall,
+      now: DateTime.now(),
     );
   }
 
