@@ -914,4 +914,28 @@ defmodule Mydia.Events.PresentationTest do
                inspect(unregistered)
     end
   end
+
+  describe "search.identity_shadow" do
+    test "is registered" do
+      assert "search.identity_shadow" in Presentation.known_types()
+    end
+
+    test "names both picks" do
+      detail =
+        Presentation.detail(
+          event(
+            type: "search.identity_shadow",
+            metadata: %{
+              "title" => "Lantern",
+              "media_type" => "movie",
+              "legacy_pick" => "Lantern Vale Special",
+              "exact_pick" => nil
+            }
+          )
+        )
+
+      assert detail =~ "title gate picked Lantern Vale Special"
+      assert detail =~ "identity check picked nothing"
+    end
+  end
 end
