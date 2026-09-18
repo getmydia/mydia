@@ -338,7 +338,7 @@ defmodule Mydia.Library.ReleaseParser do
     type =
       cond do
         type == :tv_show -> :tv_show
-        season != nil or (episodes != nil and episodes != []) -> :tv_show
+        season != nil or episodes != nil -> :tv_show
         true -> infer_media_type(type, title, year, quality)
       end
 

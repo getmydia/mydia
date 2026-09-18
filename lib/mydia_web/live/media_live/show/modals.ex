@@ -845,7 +845,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     ) %>
                 <% ring_value = max(0, trunc(score)) %>
                 <% has_penalty =
-                  profile? and breakdown != nil and
+                  profile? && breakdown &&
                     (breakdown.size_penalty < 0.0 or breakdown.seeder_penalty < 0.0 or
                        breakdown.identity_penalty < 0.0) %>
                 <%!-- Score display --%>
