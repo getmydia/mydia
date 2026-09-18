@@ -1031,7 +1031,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
       if (mounted) {
         if (e is CastBackendException) {
-          showCastErrorSnackBar(context, e,
+          showCastErrorToast(context, e,
               ref: ref,
               isMydiaTarget: target.protocol == CastProtocolKind.mydia);
         } else {
@@ -5384,7 +5384,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      showCastErrorSnackBar(context, e,
+      showCastErrorToast(context, e,
           ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
     } catch (e) {
       // Anything that isn't a CastBackendException: the session manager

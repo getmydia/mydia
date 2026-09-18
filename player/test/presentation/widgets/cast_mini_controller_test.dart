@@ -25,6 +25,7 @@ import 'package:player/presentation/widgets/cast_mini_controller.dart';
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
 import '../../test_utils/stub_graphql_client.dart';
+import '../../test_utils/toast_harness.dart';
 
 class _FakeAuthNotifier extends AuthStateNotifier {
   _FakeAuthNotifier(this._initial);
@@ -240,7 +241,10 @@ Future<ProviderContainer> _pumpWithManager(
 
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+    child: const MaterialApp(
+      builder: toastLayerBuilder,
+      home: Scaffold(body: CastMiniController()),
+    ),
   ));
   await tester.pump();
   return container;
