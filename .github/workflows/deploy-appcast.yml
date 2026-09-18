@@ -173,34 +173,28 @@ jobs:
           for attempt in 1 2 3 4 5 6; do
             if curl -fsSL --max-time 20 https://updates.mydia.dev/releases.json -o served.json; then
               # The served file gets no such trust: a Pages deployment mid
-              # propagation can serve an HTML error page instead of JSON,
-              # which is exactly the case this retry loop exists to ride
-              # out. `jq empty` as a plain `if` condition is exempt from
-              # `set -e`/pipefail, so an unparseable response becomes a
-              # failed attempt that retries instead of a pipeline failure
-              # that kills the step before the error message below can print.
+              # propagation can serve an HTML error page, or valid JSON that
+              # is not a usable feed (a bare 42, [], "hello", {}, or an
+              # object whose .platforms isn't shaped the way digest()/
+              # summary() expect), instead of the real thing. Every stage
+              # below is either a plain `if` condition or a guarded
+              # assignment, both exempt from `set -e`/pipefail, so any
+              # unusable response becomes a failed attempt that retries
+              # instead of a pipeline failure that kills the step before the
+              # error message can print. Guessing which malformed bodies are
+              # plausible enough to guard is how this list grows one review
+              # at a time; guarding every stage closes the whole class.
               if ! jq empty served.json 2>/dev/null; then
                 echo "Attempt ${attempt}: served content was not valid JSON. Retrying."
+              elif ! served_digest=$(digest served.json 2>/dev/null); then
+                echo "Attempt ${attempt}: served JSON had an invalid releases feed shape. Retrying."
+              elif [ "$served_digest" = "$local_digest" ]; then
+                echo "updates.mydia.dev is serving the expected platforms content after ${attempt} attempt(s)."
+                exit 0
+              elif served_summary=$(summary served.json 2>/dev/null); then
+                echo "Attempt ${attempt}: served digest ${served_digest} (builds: ${served_summary}), expecting ${local_digest} (builds: ${local_summary})."
               else
-                served_digest=$(digest served.json)
-
-                if [ "$served_digest" = "$local_digest" ]; then
-                  echo "updates.mydia.dev is serving the expected platforms content after ${attempt} attempt(s)."
-                  exit 0
-                fi
-
-                # jq empty above only proves served.json is valid JSON, not
-                # that it has the shape summary() expects: {} is valid JSON
-                # and passes that check, then map_values on its absent
-                # .platforms fails. Guarded the same way as the shape check
-                # itself, so a response that is JSON but not a releases feed
-                # retries instead of killing the step on a digest mismatch
-                # that never gets explained.
-                if served_summary=$(summary served.json 2>/dev/null); then
-                  echo "Attempt ${attempt}: served digest ${served_digest} (builds: ${served_summary}), expecting ${local_digest} (builds: ${local_summary})."
-                else
-                  echo "Attempt ${attempt}: served JSON had an invalid releases feed shape. Retrying."
-                fi
+                echo "Attempt ${attempt}: served JSON had an invalid releases feed shape. Retrying."
               fi
             else
               echo "Attempt ${attempt}: could not fetch the feed. Retrying."
