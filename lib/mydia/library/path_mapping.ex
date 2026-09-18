@@ -132,6 +132,4 @@ defmodule Mydia.Library.PathMapping do
   defp under_local_prefix?(candidate, local) when is_binary(local) do
     candidate == local or String.starts_with?(candidate, local <> "/")
   end
-
-  defp under_local_prefix?(_candidate, _local), do: false
 end

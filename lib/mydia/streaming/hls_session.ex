@@ -1303,11 +1303,6 @@ defmodule Mydia.Streaming.HlsSession do
     end
   end
 
-  defp start_backend(backend, _media_file, _temp_dir, _job_id, _opts, _generation) do
-    Logger.error("Unknown backend: #{backend}")
-    {:error, :unknown_backend}
-  end
-
   # Stop the backend process
   defp stop_backend(:ffmpeg, backend_pid) do
     Logger.info("Stopping FFmpeg backend")

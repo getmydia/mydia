@@ -335,8 +335,6 @@ defmodule Mydia.Metadata.Provider.Error do
     end
   end
 
-  defp get_retry_after(_), do: nil
-
   defp parse_retry_after(value) when is_binary(value) do
     case Integer.parse(value) do
       {seconds, ""} -> seconds

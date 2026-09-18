@@ -32,7 +32,13 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
     end
   end
 
-  @spec perform(Oban.Job.t()) :: :ok | {:ok, term()} | {:error, term()} | {:snooze, pos_integer()}
+  # get_import_list/1 can only fail with {:error, :not_found} (its lone rescue
+  # clause), and get_pending_items/1's result is bound with a bare variable, so
+  # it can never fail the `with`. The only value that can ever reach `else` is
+  # {:error, :not_found}; a general {:error, reason} clause here is therefore
+  # unreachable, which is why `perform/1`'s own return type is narrowed to
+  # :ok below.
+  @spec perform(Oban.Job.t()) :: :ok
   @impl Oban.Worker
   def perform(%Oban.Job{args: raw_args}) do
     args = Args.parse(raw_args)
@@ -58,14 +64,6 @@ defmodule Mydia.Jobs.ImportListAutoAdd do
         )
 
         :ok
-
-      {:error, reason} ->
-        Logger.error("[ImportListAutoAdd] Auto-add failed",
-          import_list_id: import_list_id,
-          error: inspect(reason)
-        )
-
-        {:error, reason}
     end
   end
 

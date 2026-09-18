@@ -907,7 +907,6 @@ defmodule Mydia.Plugins do
       {:error, Error.new(:invalid_config, "plugin #{slug} has no artifact to activate")}
     else
       {:ok, _bytes} = ok -> ok
-      {:error, _} = err -> err
     end
   end
 

@@ -381,7 +381,6 @@ defmodule Mydia.Library.ReleaseParser do
   defp nilify(m), do: m
 
   defp infer_media_type(:movie, _title, _year, _quality), do: :movie
-  defp infer_media_type(:tv_show, _title, _year, _quality), do: :tv_show
 
   defp infer_media_type(_, title, year, quality) do
     has_year = year != nil
