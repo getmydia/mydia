@@ -91,7 +91,7 @@ class PlaybackStatsCollector {
       final delta = total == null || previous == null ? null : total - previous;
       if (total != null) _lastTotal = total;
 
-      final throughput = _resolveThroughput(stats);
+      final throughput = _updateThroughput(stats);
 
       final ahead = _buffer - _position;
       final bufferedAhead = ahead.isNegative ? Duration.zero : ahead;
@@ -119,7 +119,10 @@ class PlaybackStatsCollector {
 
   /// The engine's reading when it has one, the previous reading while it is
   /// inside [throughputStaleAfter], and null after that.
-  int? _resolveThroughput(FrameStats? stats) {
+  ///
+  /// Advances the staleness counter as a side effect and must be called
+  /// exactly once per tick.
+  int? _updateThroughput(FrameStats? stats) {
     final reading = stats?.throughputKbps;
     if (reading != null) {
       _lastThroughput = reading;

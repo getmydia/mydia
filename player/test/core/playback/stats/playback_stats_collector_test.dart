@@ -37,6 +37,19 @@ class _ScriptedSampler implements FrameStatsSampler {
   }
 }
 
+/// Returns a distinct reading per call, so a point's position in the
+/// history identifies the tick that produced it. A constant sampler cannot
+/// tell an eviction from the front apart from one off the back.
+class _IncrementingSampler implements FrameStatsSampler {
+  var calls = 0;
+
+  @override
+  Future<FrameStats?> sample() async {
+    final n = calls++;
+    return FrameStats(droppedFrames: n, throughputKbps: 5000 + n);
+  }
+}
+
 void main() {
   test('the first sample has a total but no delta', () {
     fakeAsync((async) {
@@ -100,6 +113,9 @@ void main() {
         signals: s.signals,
         sampler: _ScriptedSampler([
           const FrameStats(droppedFrames: 0, throughputKbps: 6000),
+          // Reused for every tick after this one once the list is
+          // exhausted, which is what produces the six unreadable seconds
+          // below.
           null,
         ]),
       );
@@ -158,20 +174,31 @@ void main() {
       final s = _Signals();
       final collector = PlaybackStatsCollector(
         signals: s.signals,
-        sampler: _ScriptedSampler([
-          const FrameStats(droppedFrames: 0, throughputKbps: 5000),
-        ]),
+        sampler: _IncrementingSampler(),
       );
       addTearDown(collector.dispose);
       collector.start();
 
       s.buffer.add(const Duration(seconds: 9));
-      async.elapse(const Duration(seconds: 90));
+      const totalTicks = 90;
+      async.elapse(const Duration(seconds: totalTicks));
       async.flushMicrotasks();
 
       final history = collector.samples.value!.history;
       expect(history, hasLength(PlaybackStatsCollector.historyLength));
-      expect(history.last.throughputKbps, 5000);
+
+      // Tick k (1-indexed) reads n = k - 1 from the sampler. After
+      // `totalTicks` ticks, eviction from the front leaves the newest
+      // `historyLength` readings: the oldest surviving one is from tick
+      // `totalTicks - historyLength + 1` (n = totalTicks - historyLength),
+      // the newest from the final tick (n = totalTicks - 1). Oldest-first
+      // eviction (the front, not the back) is what makes these two ends
+      // differ; a reversed eviction would leave the first 60 readings
+      // frozen in place instead.
+      final oldestReading = totalTicks - PlaybackStatsCollector.historyLength;
+      final newestReading = totalTicks - 1;
+      expect(history.first.throughputKbps, 5000 + oldestReading);
+      expect(history.last.throughputKbps, 5000 + newestReading);
       expect(history.last.bufferedMs, 9000);
     });
   });
