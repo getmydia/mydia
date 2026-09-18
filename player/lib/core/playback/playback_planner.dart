@@ -67,6 +67,27 @@ bool bitrateFits({
   return fileBitrateKbps * kThroughputHeadroom <= throughputKbps;
 }
 
+/// The ceiling a bandwidth fallback records for its link path.
+///
+/// [measuredKbps] is the throughput the monitor read while the failing
+/// source stalled. mpv's cache was draining then, so `cache-speed` was
+/// bounded by the link rather than by playback, which makes it the one
+/// throughput reading worth keeping. It is capped at 90% of
+/// [fileBitrateKbps], since the file demonstrably did not fit, and a missing
+/// or non-positive reading falls back to that cap. Null when neither is
+/// known.
+int? stallCeilingKbps({
+  required int? measuredKbps,
+  required int? fileBitrateKbps,
+}) {
+  final cap = fileBitrateKbps == null ? null : (fileBitrateKbps * 0.9).round();
+  final measured =
+      measuredKbps != null && measuredKbps > 0 ? measuredKbps : null;
+  if (measured == null) return cap;
+  if (cap == null) return measured;
+  return measured < cap ? measured : cap;
+}
+
 /// The rung an adaptive transcode starts at: the highest whose bitrate fits
 /// [throughputKbps] with headroom; the top when throughput is unknown; the
 /// bottom when nothing fits; Original when the ladder is empty.

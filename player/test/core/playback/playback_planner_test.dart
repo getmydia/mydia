@@ -422,6 +422,51 @@ void main() {
     });
   });
 
+  group('stallCeilingKbps', () {
+    test('a measured reading below the cap is the ceiling', () {
+      expect(
+        stallCeilingKbps(measuredKbps: 6000, fileBitrateKbps: 20000),
+        6000,
+      );
+    });
+
+    test('the cap is 90% of the file bitrate', () {
+      expect(
+        stallCeilingKbps(measuredKbps: 30000, fileBitrateKbps: 20000),
+        18000,
+      );
+    });
+
+    test('a zero or missing reading falls back to the cap', () {
+      expect(
+        stallCeilingKbps(measuredKbps: 0, fileBitrateKbps: 20000),
+        18000,
+      );
+      expect(
+        stallCeilingKbps(measuredKbps: null, fileBitrateKbps: 20000),
+        18000,
+      );
+    });
+
+    test('an unknown file bitrate leaves the reading uncapped', () {
+      expect(
+        stallCeilingKbps(measuredKbps: 6000, fileBitrateKbps: null),
+        6000,
+      );
+    });
+
+    test('nothing known is null', () {
+      expect(
+        stallCeilingKbps(measuredKbps: null, fileBitrateKbps: null),
+        isNull,
+      );
+      expect(
+        stallCeilingKbps(measuredKbps: 0, fileBitrateKbps: null),
+        isNull,
+      );
+    });
+  });
+
   group('startingRung', () {
     final ladder = deriveAdaptiveLadder(sourceHeight: 1080);
 
