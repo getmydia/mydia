@@ -70,8 +70,7 @@ void main() {
   });
 
   testWidgets('reverts when the choice cannot be stored', (tester) async {
-    // Gated so the optimistic value is observable before the write fails,
-    // as in beta_channel_row_test.dart.
+    // Gated so the optimistic value is observable before the write fails.
     final gate = Completer<void>();
     await pump(
       tester,

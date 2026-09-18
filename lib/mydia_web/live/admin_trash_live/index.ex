@@ -274,12 +274,12 @@ defmodule MydiaWeb.AdminTrashLive.Index do
 
   defp sweep_message(%{swept: swept, bytes: bytes, skipped: 0}) do
     "Swept #{swept} item(s), reclaiming " <>
-      MydiaWeb.AdminTrashLive.Components.humanize_bytes(bytes) <> "."
+      MydiaWeb.Formatters.format_file_size(bytes) <> "."
   end
 
   defp sweep_message(%{swept: swept, bytes: bytes, skipped: skipped}) do
     "Swept #{swept} item(s), reclaiming " <>
-      MydiaWeb.AdminTrashLive.Components.humanize_bytes(bytes) <>
+      MydiaWeb.Formatters.format_file_size(bytes) <>
       ". Skipped #{skipped}, either too recently written to be safe or not removable."
   end
 

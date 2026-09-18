@@ -9,7 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
   # Import the formatting and search helper functions
   import MydiaWeb.MediaLive.Show.Formatters
-  import MydiaWeb.Formatters, only: [format_progress: 1]
+  import MydiaWeb.Formatters, only: [format_progress: 1, format_file_size: 1]
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.ScoreBreakdown
 

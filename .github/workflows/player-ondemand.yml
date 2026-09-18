@@ -91,9 +91,6 @@ jobs:
           SHA=$(git rev-parse --verify "origin/$INPUT_REF^{commit}" 2>/dev/null || git rev-parse --verify "$INPUT_REF^{commit}")
           echo "Building SHA: $SHA from ref $INPUT_REF"
 
-          # Version code is monotonic and disjoint from releases (10000+) and refreshes (900000+)
-          VERSION_CODE=$(( RUN_NUMBER + 500000 ))
-
           if [ -n "$INPUT_VERSION" ]; then
             if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
               echo "::error::Invalid version_override '$INPUT_VERSION'. Must match semver (e.g. 1.2.3 or 1.2.3-beta.1)"
@@ -108,6 +105,16 @@ jobs:
             NEXT_MINOR=$(( MINOR + 1 ))
             VERSION="${MAJOR}.${NEXT_MINOR}.0-dev.${RUN_NUMBER}"
           fi
+
+          if [ "${RUN_NUMBER}" -gt 299 ] && [ -z "$INPUT_VERSION" ]; then
+            echo "::error::run_number ${RUN_NUMBER} exceeds the dev slot range. Pass version_override with a dev counter below 300."
+            exit 1
+          fi
+
+          # From the version, so a dev build sorts below the beta and stable of
+          # the same version instead of above every release. The old +500000
+          # offset is what made installing a dev APK a one way door.
+          VERSION_CODE=$(./scripts/build-number.sh "$VERSION")
 
           echo "Derived version: $VERSION (build $VERSION_CODE)"
 
@@ -160,6 +167,22 @@ jobs:
     name: Player / Android
     if: inputs.build_android
     needs: prepare
+    # Serialises this job against every other dev build publish, across
+    # refs. This workflow's own concurrency group above is keyed on
+    # inputs.ref, so two dispatches for different refs run their
+    # player-android jobs at the same time; the "Publish the dev build to
+    # R2" step inside player-android.yml does an unserialised
+    # read-amend-write of index.json, so two concurrent runs can both read
+    # the same index and the later write drops the earlier run's entry
+    # while its APK stays in the bucket, orphaned and invisible to the feed.
+    # Scoped to this caller job, not to player-android.yml itself: that
+    # workflow is also called from release.yml for the real release build,
+    # which never sets publish_dev_build and never touches this bucket, and
+    # must never be made to wait behind a dev build publish it has nothing
+    # to do with.
+    concurrency:
+      group: mydia-dev-builds-index
+      cancel-in-progress: false
     uses: ./.github/workflows/player-android.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}
@@ -168,12 +191,16 @@ jobs:
       upload_to_play_store: false
       play_store_track: 'internal'
       dry_run: ${{ inputs.dry_run }}
+      publish_dev_build: ${{ !inputs.dry_run }}
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   player-macos:
     name: Player / macOS
@@ -215,3 +242,29 @@ jobs:
       version: ${{ needs.prepare.outputs.version }}
       version_code: ${{ needs.prepare.outputs.version_code }}
       dry_run: ${{ inputs.dry_run }}
+
+  appcast:
+    name: Deploy Appcast
+    needs:
+      - prepare
+      - player-android
+    # A custom `if` does not disable the runner's own "skip if a needed job
+    # didn't succeed" gate (see release.yml's `publish` job, which relies on
+    # exactly this and only opts out with always() when it deliberately wants
+    # to run despite a failed platform). The checks below are still explicit
+    # and positive rather than a bare `!inputs.dry_run`, because skipped and
+    # failed are different result strings and only a negative check like
+    # `!= 'failure'` would miss that a skipped player-android (build_android
+    # disabled) also means nothing published. Either way, no dev build
+    # reached the bucket, so the feed has nothing new to pick up.
+    if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.player-android.result == 'success' }}
+    # A reusable workflow gets the calling job's token scopes, so the callee's
+    # own permissions block cannot widen this. Reading the release list and
+    # checking out the generator is all it does; the Cloudflare deploy
+    # authenticates with CLOUDFLARE_API_TOKEN, not GITHUB_TOKEN.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-appcast.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+    secrets: inherit

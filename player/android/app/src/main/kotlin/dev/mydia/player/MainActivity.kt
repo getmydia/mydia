@@ -16,6 +16,7 @@ class MainActivity : FlutterActivity() {
     private val channelName = "dev.mydia.player/notifications"
     private val multicastChannelName = "dev.mydia.player/multicast"
     private val codecChannelName = "dev.mydia.player/codecs"
+    private val installerChannelName = "dev.mydia.player/installer"
 
     /**
      * Held only while cast discovery is running.
@@ -51,6 +52,34 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "videoDecoderCapabilities" -> result.success(videoDecoderCapabilities())
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, installerChannelName)
+            .setMethodCallHandler { call, result ->
+                val installer = ApkInstaller(this)
+                when (call.method) {
+                    "canInstall" -> result.success(installer.canInstall())
+                    "requestPermission" -> {
+                        installer.requestPermission()
+                        result.success(null)
+                    }
+                    "install" -> {
+                        val path = call.argument<String>("path")
+                        if (path == null) {
+                            result.error("bad_arguments", "install expects a path", null)
+                        } else if (!installer.canInstall()) {
+                            result.error("permission_denied", "Install permission is not granted", null)
+                        } else {
+                            try {
+                                installer.install(path)
+                                result.success(null)
+                            } catch (error: Exception) {
+                                result.error("install_failed", error.message, null)
+                            }
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

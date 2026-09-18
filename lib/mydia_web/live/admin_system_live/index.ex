@@ -1,6 +1,8 @@
 defmodule MydiaWeb.AdminSystemLive.Index do
   use MydiaWeb, :live_view
 
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
+
   alias Mydia.DB
   alias Mydia.Health
   alias Mydia.Repo
@@ -133,16 +135,6 @@ defmodule MydiaWeb.AdminSystemLive.Index do
       memory_used: format_file_size(total_memory),
       uptime: format_uptime(:erlang.statistics(:wall_clock) |> elem(0))
     }
-  end
-
-  defp format_file_size(bytes) when is_integer(bytes) do
-    cond do
-      bytes >= 1_099_511_627_776 -> "#{Float.round(bytes / 1_099_511_627_776, 2)} TB"
-      bytes >= 1_073_741_824 -> "#{Float.round(bytes / 1_073_741_824, 2)} GB"
-      bytes >= 1_048_576 -> "#{Float.round(bytes / 1_048_576, 2)} MB"
-      bytes >= 1024 -> "#{Float.round(bytes / 1024, 2)} KB"
-      true -> "#{bytes} B"
-    end
   end
 
   defp format_uptime(milliseconds) do

@@ -4,6 +4,8 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
 
   alias MydiaWeb.AdminDashboardLive.ChartGeometry
 
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
+
   @chart_w 600
   @chart_h 160
   @stack_gap 2
@@ -346,7 +348,7 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
             {@job.status}
           </span>
           <%= if @job.file_size do %>
-            <span class="font-mono">{format_size(@job.file_size)}</span>
+            <span class="font-mono">{format_file_size(@job.file_size)}</span>
           <% end %>
         </div>
       </div>
@@ -515,14 +517,6 @@ defmodule MydiaWeb.AdminDashboardLive.Components do
 
   defp build_image_url(path) when is_binary(path), do: ImageUrl.image_url(path, "w92")
   defp build_image_url(_), do: nil
-
-  defp format_size(bytes) when bytes < 1024, do: "#{bytes} B"
-  defp format_size(bytes) when bytes < 1024 * 1024, do: "#{Float.round(bytes / 1024, 1)} KB"
-
-  defp format_size(bytes) when bytes < 1024 * 1024 * 1024,
-    do: "#{Float.round(bytes / 1024 / 1024, 1)} MB"
-
-  defp format_size(bytes), do: "#{Float.round(bytes / 1024 / 1024 / 1024, 1)} GB"
 
   defp relative_time(datetime) do
     now = DateTime.utc_now()

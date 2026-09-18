@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../domain/models/available_update.dart';
 import '../platform_updater.dart';
+import '../update_track.dart';
 
 /// Method channel to the Sparkle host in AppDelegate.swift.
 ///
@@ -41,42 +42,42 @@ class MacOSUpdater extends PlatformUpdater {
     }
   }
 
-  /// Whether the user has opted into prerelease builds.
+  /// The track Sparkle is currently allowed to offer, as
+  /// [SparkleUpdateBackend]'s default track source.
   ///
   /// The value lives in macOS user defaults, owned by the Swift side, because
-  /// Sparkle asks for the allowed channels through a synchronous callback that
-  /// cannot wait on Dart.
-  static Future<bool> betaChannelEnabled({
+  /// Sparkle asks for the allowed channels through a synchronous callback
+  /// that cannot wait on Dart.
+  static Future<UpdateTrack> currentTrack({
     MethodChannel channel = kSparkleChannel,
   }) async {
     try {
-      return await channel.invokeMethod<bool>('getBetaChannel') ?? false;
+      final name = await channel.invokeMethod<String>('getTrack');
+      return UpdateTrack.fromWireName(name) ?? UpdateTrack.stable;
     } on PlatformException catch (e) {
-      debugPrint('[MacOSUpdater] Sparkle getBetaChannel failed: $e');
-      return false;
+      debugPrint('[MacOSUpdater] Sparkle getTrack failed: $e');
+      return UpdateTrack.stable;
     } on MissingPluginException catch (e) {
       debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');
-      return false;
+      return UpdateTrack.stable;
     }
   }
 
-  /// Opts into or out of prerelease builds.
+  /// Points Sparkle at a track, as [SparkleUpdateBackend]'s default track
+  /// sink. Returns true when the host accepted it.
   ///
-  /// Returns true when the host accepted the change. On false the preference
-  /// was not written, so a caller showing an optimistic toggle must revert it.
-  ///
-  /// On opt-in the host also runs an update check immediately, so the change
-  /// is visible without waiting for the next scheduled check. That happens on
-  /// the Swift side, not here.
-  static Future<bool> setBetaChannel(
-    bool enabled, {
+  /// On anything but stable the host also runs a check immediately, so the
+  /// change is visible without waiting for the next scheduled one. That
+  /// happens on the Swift side, not here.
+  static Future<bool> setTrack(
+    UpdateTrack track, {
     MethodChannel channel = kSparkleChannel,
   }) async {
     try {
-      await channel.invokeMethod('setBetaChannel', enabled);
+      await channel.invokeMethod('setTrack', track.wireName);
       return true;
     } on PlatformException catch (e) {
-      debugPrint('[MacOSUpdater] Sparkle setBetaChannel failed: $e');
+      debugPrint('[MacOSUpdater] Sparkle setTrack failed: $e');
       return false;
     } on MissingPluginException catch (e) {
       debugPrint('[MacOSUpdater] Sparkle host unavailable: $e');

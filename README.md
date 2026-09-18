@@ -84,7 +84,7 @@ peer-to-peer connection. No port forwarding, no VPN.
 
 | Platform | Get it | Notes |
 |---|---|---|
-| Android | [Download APK](https://mydia.dev/download/android) | Allow installs from unknown sources |
+| Android | [Download APK](https://mydia.dev/download/android) | Allow installs from unknown sources; updates itself afterward, track chosen in Settings |
 | iOS | [Install via TestFlight](https://testflight.apple.com/join/KFSYxaQP) | Needs the TestFlight app |
 | macOS | [Download .dmg](https://mydia.dev/download/macos) | Notarized, updates itself |
 | Windows | [Download installer](https://mydia.dev/download/windows) | Per-user install, unsigned build |

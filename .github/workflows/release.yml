@@ -83,19 +83,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Build number (CFBundleVersion / Android versionCode) — globally
-          # monotonic via github.run_number, with an offset to clear the
-          # historical high-water mark of 1000 from earlier failed uploads.
-          # Re-runs of the same workflow run preserve run_number; new dispatches
-          # increment it, which is exactly what TestFlight/Play Store require.
-          VERSION_CODE=$(( RUN_NUMBER + 10000 ))
-
           if [ "$DRY_RUN" = "true" ]; then
             # Rehearsal: no draft, no tag, no publish. Everything that has
             # historically broken (signing, notarization, appcast, installer)
             # still runs, against a synthetic version.
+            #
+            # The dev.N suffix is what scripts/build-number.sh accepts;
+            # `dryrun.N` is not one of its recognised suffixes, and the
+            # modulo keeps it inside the dev band's 0..299 range no matter
+            # how large run_number grows.
             TAG="(dry run)"
-            VERSION_NUM="0.0.0-dryrun.${RUN_NUMBER}"
+            VERSION_NUM="0.0.0-dev.$(( RUN_NUMBER % 300 ))"
             IS_PRERELEASE=true
             SHA="$DISPATCH_SHA"
             echo "Dry run: building ${VERSION_NUM} from ${SHA}. Nothing will be pushed or published."
@@ -176,6 +174,12 @@ jobs:
               echo "Bundled release notes found at ${NOTES_PATH}."
             fi
           fi
+
+          # Derived from the version, not from run_number, so a dev build of
+          # 0.16.0 sorts below 0.16.0-beta.1 and both sort below 0.16.0. See
+          # scripts/build-number.sh for the formula and why the old per
+          # workflow offsets were wrong.
+          VERSION_CODE=$(./scripts/build-number.sh "$VERSION_NUM")
 
           {
             echo "tag=$TAG"

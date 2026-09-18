@@ -244,6 +244,95 @@ defmodule Mydia.Media.LibraryListingTest do
       assert titles(page(user, sort_by: "not_a_sort")) == by_title
     end
 
+    test "size sorts by bytes on disk, with empty items last in both directions", %{user: user} do
+      big = media_item_fixture(%{title: "Harrowgate Bell"})
+      media_file_fixture(%{media_item_id: big.id, size: 40_000_000_000})
+
+      small = media_item_fixture(%{title: "Tin Orchard"})
+      media_file_fixture(%{media_item_id: small.id, size: 700_000_000})
+
+      media_item_fixture(%{title: "Nightjar Protocol"})
+
+      assert titles(page(user, sort_by: "size_desc")) ==
+               ["Harrowgate Bell", "Tin Orchard", "Nightjar Protocol"]
+
+      # Ascending shows the smallest file you actually have, not a wall of
+      # things you do not have.
+      assert titles(page(user, sort_by: "size_asc")) ==
+               ["Tin Orchard", "Harrowgate Bell", "Nightjar Protocol"]
+    end
+
+    test "size sums every version file on a show", %{user: user} do
+      # Titles run opposite to sizes on purpose: under the catch-all title
+      # sort this expectation is the reverse of what you see here, so the
+      # test cannot pass unless the size clause actually runs.
+      heavy = media_item_fixture(%{type: "tv_show", title: "Windward Signal"})
+      first = episode_fixture(%{media_item_id: heavy.id})
+      second = episode_fixture(%{media_item_id: heavy.id})
+      media_file_fixture(%{episode_id: first.id, size: 3_000_000_000})
+      media_file_fixture(%{episode_id: second.id, size: 3_000_000_000})
+
+      light = media_item_fixture(%{type: "tv_show", title: "Alder Anchorage"})
+      only = episode_fixture(%{media_item_id: light.id})
+      media_file_fixture(%{episode_id: only.id, size: 4_000_000_000})
+
+      assert titles(page(user, type: "tv_show", sort_by: "size_desc")) ==
+               ["Windward Signal", "Alder Anchorage"]
+    end
+
+    test "size ties hold one order, and the same order in both directions", %{user: user} do
+      # Equal sizes must not reshuffle between requests: page/1 re-sorts the
+      # whole list per request, so an unstable tie group duplicates and skips
+      # rows during infinite scroll.
+      heaviest = media_item_fixture(%{title: "Cobalt Ferry"})
+      media_file_fixture(%{media_item_id: heaviest.id, size: 3_000_000_000})
+
+      for title <- ["Alder Road", "Bellwether Lane"] do
+        tied = media_item_fixture(%{title: title})
+        media_file_fixture(%{media_item_id: tied.id, size: 2_000_000_000})
+      end
+
+      lightest = media_item_fixture(%{title: "Zephyr Cross"})
+      media_file_fixture(%{media_item_id: lightest.id, size: 1_000_000_000})
+
+      desc = titles(page(user, sort_by: "size_desc"))
+      asc = titles(page(user, sort_by: "size_asc"))
+
+      # A title sort would lead with "Alder Road", so these four pin the
+      # ordering to size rather than to the catch-all clause.
+      assert List.first(desc) == "Cobalt Ferry"
+      assert List.last(desc) == "Zephyr Cross"
+      assert List.first(asc) == "Zephyr Cross"
+      assert List.last(asc) == "Cobalt Ferry"
+
+      # The tie group holds whatever order the rows arrived in, and holds the
+      # SAME order in both directions, because Enum.sort_by/3 is stable and
+      # neither direction reverses it. Asserting the group's membership plus
+      # that agreement, rather than a literal order, keeps this independent of
+      # the database's scan order, which media_items_query/1 does not
+      # constrain.
+      assert Enum.sort(Enum.slice(desc, 1..2)) == ["Alder Road", "Bellwether Lane"]
+      assert Enum.slice(desc, 1..2) == Enum.slice(asc, 1..2)
+    end
+
+    test "size ties break by title, not by scan order", %{user: user} do
+      # Inserted in reverse-alphabetical order on purpose. media_items_query/1
+      # has no ORDER BY, so a sort that only breaks size ties by incoming
+      # order would carry this exact insertion order through unchanged. The
+      # assertion below only holds because the tie-break key is the title.
+      for title <- ["Zinc Foundry", "Mercury Loop", "Amber Drift"] do
+        item = media_item_fixture(%{title: title})
+        media_file_fixture(%{media_item_id: item.id, size: 2_000_000_000})
+      end
+
+      tied_by_title = ["Amber Drift", "Mercury Loop", "Zinc Foundry"]
+
+      # Same tie-break order in both directions: direction only scales the
+      # size key, it never reverses the title tiebreaker.
+      assert titles(page(user, sort_by: "size_desc")) == tied_by_title
+      assert titles(page(user, sort_by: "size_asc")) == tied_by_title
+    end
+
     test "air date and episode count sorts", %{user: user} do
       today = Date.utc_today()
       media_item_fixture(%{type: "tv_show", title: "Quiet Meridian"})
@@ -332,6 +421,37 @@ defmodule Mydia.Media.LibraryListingTest do
       large = count_queries(fn -> page(user, type: "tv_show") end)
 
       assert small == large
+    end
+
+    test "total_size sums every matching row, not only the page", %{user: user} do
+      first = media_item_fixture(%{title: "Harrowgate Bell"})
+      media_file_fixture(%{media_item_id: first.id, size: 3_000})
+
+      second = media_item_fixture(%{title: "Tin Orchard"})
+      media_file_fixture(%{media_item_id: second.id, size: 5_000})
+
+      media_item_fixture(%{title: "Nightjar Protocol"})
+
+      assert page(user, limit: 1).total_size == 8_000
+    end
+
+    test "total_size respects the search and quality filters", %{user: user} do
+      keeper = media_item_fixture(%{title: "Harrowgate Bell"})
+      media_file_fixture(%{media_item_id: keeper.id, resolution: "2160p", size: 3_000})
+
+      other = media_item_fixture(%{title: "Tin Orchard"})
+      media_file_fixture(%{media_item_id: other.id, resolution: "1080p", size: 5_000})
+
+      assert page(user, search: "Harrowgate").total_size == 3_000
+      assert page(user, quality: "1080p").total_size == 5_000
+      assert page(user, search: "no such title").total_size == 0
+    end
+
+    test "total_size is returned when limit is 0", %{user: user} do
+      item = media_item_fixture(%{title: "Harrowgate Bell"})
+      media_file_fixture(%{media_item_id: item.id, size: 3_000})
+
+      assert page(user, limit: 0).total_size == 3_000
     end
   end
 
