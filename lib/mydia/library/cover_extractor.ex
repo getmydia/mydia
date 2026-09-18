@@ -3,8 +3,6 @@ defmodule Mydia.Library.CoverExtractor do
   Extracts embedded cover art from audio files using FFmpeg.
   """
 
-  require Logger
-
   @doc """
   Extracts embedded cover art from the given audio file.
   Returns `{:ok, binary_content}` or `{:error, reason}`.

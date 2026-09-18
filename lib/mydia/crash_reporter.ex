@@ -53,8 +53,6 @@ defmodule Mydia.CrashReporter do
   Local crash reports (in Mydia) contain full details for effective debugging.
   """
 
-  require Logger
-
   alias ErrorTracker.Error
   alias Mydia.CrashReporter.{Sanitizer, Queue, Sender}
 

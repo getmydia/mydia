@@ -365,9 +365,11 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   ## Private Functions - Filtering
 
-  # NZB results have no seeders concept - the seeder minimum applies only to
-  # torrents. nil seeders pass through.
-  defp meets_seeder_minimum?(%SearchResult{seeders: nil}, _min_seeders), do: true
+  # Both helpers below are only ever called from seeder_penalty/2's second
+  # clause, whose first clause already short-circuits NZB results (nil
+  # seeders) to 0.0 before either is reached. A nil-seeders defensive clause
+  # here would therefore never match; see seeder_penalty/2's own nil-seeders
+  # clause for where that case is actually handled.
 
   # A nil/absent minimum means no seeder floor.
   defp meets_seeder_minimum?(_result, nil), do: true
@@ -376,11 +378,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
     seeders >= min_seeders
   end
 
-  defp meets_ratio_minimum?(_result, nil), do: true
-
-  # NZB results have no ratio concept - skip the ratio check for them.
-  defp meets_ratio_minimum?(%SearchResult{seeders: nil}, _min_ratio), do: true
-
+  # Only called when min_ratio != nil (see seeder_penalty/2), so there is no
+  # nil-minimum or nil-seeders case to guard here.
   defp meets_ratio_minimum?(%SearchResult{seeders: seeders, leechers: leechers}, min_ratio) do
     leechers = leechers || 0
     total_peers = seeders + leechers

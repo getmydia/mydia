@@ -535,7 +535,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
       file_ids: Enum.map(trashed, & &1.id),
       label:
         "Trashed #{Components.file_count(length(trashed))} #{scope_label} " <>
-          "(#{Components.humanize_bytes(bytes)})"
+          "(#{MydiaWeb.Formatters.format_file_size(bytes)})"
     })
   end
 end

@@ -8,8 +8,8 @@ import 'settings_row.dart';
 ///
 /// The choice belongs to the device, not the account, and lives behind the
 /// app's `CrashReporter`, so flipping it applies to the next report with no
-/// restart. Built like `BetaChannelRow`: the switch moves at once, and a
-/// generation counter keeps a slow first read from clobbering a tap.
+/// restart. The switch moves at once, and a generation counter keeps a slow
+/// first read from clobbering a tap.
 ///
 /// The platform gate lives at the call site (`CrashReporter.isAvailable`), so
 /// a `flutter test` host can still exercise the row.

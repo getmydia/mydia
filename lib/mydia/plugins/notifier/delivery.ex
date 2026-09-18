@@ -20,8 +20,6 @@ defmodule Mydia.Plugins.Notifier.Delivery do
     queue: :notifications,
     max_attempts: 5
 
-  require Logger
-
   alias Mydia.Plugins.Host
   alias Mydia.Settings
 

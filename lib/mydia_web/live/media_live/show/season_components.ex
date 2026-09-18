@@ -7,6 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   use MydiaWeb, :html
 
   import MydiaWeb.MediaLive.Show.Formatters
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.MediaLive.Show.Helpers
 
   alias MydiaWeb.MediaLive.Show.Components
@@ -422,7 +423,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
             class="text-xs bg-base-100 rounded p-2 flex flex-col gap-1"
           >
             <span class="font-mono truncate">{download.title}</span>
-            <span :if={download_note(download)} class="text-base-content/60">
+            <span class="text-base-content/60">
               {download_note(download)}
             </span>
           </div>

@@ -387,12 +387,97 @@ way it can be tested: a `workflow_dispatch` workflow only triggers for a file on
 the default branch, and schedules only run there, so nothing about this workflow
 is exercisable from a pull request.
 
-Refresh build numbers are `run_number + 900000`, disjoint from release.yml's
-`run_number + 10000`. Apple rejects a reused build number for a marketing
-version it already holds, and the two workflows have independent run counters.
+Refresh build numbers use the `+refresh.N` suffix from the "Versioning and
+build numbers" table below, with `N` computed as `run_number % 99 + 1` rather
+than by counting `ios-refresh/*` marker tags, so it never depends on this
+workflow's own marker push landing. Two refreshes of the same marketing
+version are at least 60 days, and therefore many scheduled runs, apart, so the
+modulo does not repeat within that window. Apple rejects a reused build number
+for a marketing version it already holds, which is exactly what a repeat
+would risk.
 
 To force one: `gh workflow run player-ios-refresh.yml -f force=true`. Add
 `-f dry_run=true` to build without uploading or moving the marker tag.
+
+## Release tracks
+
+The player follows one of three tracks, picked in Settings:
+
+| Track | Wire name | What it carries |
+| --- | --- | --- |
+| Stable | `stable` | Published releases. The default. |
+| Beta | `beta` | Prerelease builds, a few weeks ahead of stable and less tested. |
+| Dev | `dev` | Builds straight from development, published when a maintainer asks for one. Expect rough edges. |
+
+The wire names, the labels and the descriptions above all come from
+`player/lib/core/update/update_track.dart`, the one place that has to agree
+with `releases.json` and the stored preference on what each track is called.
+
+### The feed
+
+`https://updates.mydia.dev/releases.json` describes each platform's newest
+build on each track. It is generated in the same run as the macOS appcast, by
+`scripts/appcast/generate.mjs` (deployed by `deploy-appcast.yml`), so the two
+outputs can never disagree with each other. A platform with nothing published
+on a track simply has no key for it; macOS and Flatpak have no `dev` key
+because neither publishes dev builds.
+
+**Selecting a lower track never downgrades an install.** The stored track
+only changes what the next check compares against; it never forces an install
+by itself, and on Android the OS enforces the rest, since `versionCode` only
+moves forward. A device that is already ahead of the chosen track just stays
+there until that track publishes something newer. The in-app track picker
+says as much, in the running build's own version number, whenever it detects
+this.
+
+### Dev builds
+
+`player-ondemand.yml` is the only workflow that publishes to the dev track,
+and only for Android. Its Android job uploads the APK to the
+`mydia-dev-builds` R2 bucket (served at `https://dl.mydia.dev`) and rewrites
+the bucket's `index.json`, keeping the five newest builds per platform and
+deleting whatever falls out of that window in the same run. `deploy-appcast.yml`
+reads that index the next time it runs and folds it into `releases.json`;
+publishing a dev build does not refresh the feed by itself, so dispatch
+`deploy-appcast.yml` afterward if the build needs to be visible before the
+next real release does that for you. A missing or unreachable index is
+treated as "no dev track" rather than a failed feed build, the same way a
+release with no DMG is skipped rather than aborting the appcast.
+
+**One-time operator action.** The `mydia-dev-builds` bucket, its public
+hostname `dl.mydia.dev`, and an R2 token scoped to just that bucket
+(`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) are account
+configuration that nothing in this repository creates. All three have to
+exist before `player-ondemand.yml` is dispatched with Android enabled, or the
+publish step fails loudly instead of silently skipping.
+
+### Switching per platform
+
+| Platform | Tracks offered | Switching |
+| --- | --- | --- |
+| Windows | Stable, Beta | In app, applies immediately |
+| Linux (tarball) | Stable, Beta | In app, applies immediately |
+| Linux (Flatpak) | Stable, Beta | Shown, but not switchable in app: it hands back a `flatpak install` command to run instead |
+| macOS | Stable, Beta | In app, through Sparkle's own channel setting |
+| Android (sideloaded) | Stable, Beta, Dev | In app, applies immediately |
+| Android (Play Store install) | None | No updater at all; see below |
+| iOS | None | No in-app picker; switch by joining the other TestFlight group |
+| Web | None | Served by your own Mydia server; nothing to switch |
+
+Flatpak and iOS are the two platforms that cannot make the switch from inside
+the app. Flatpak's branch lives outside the sandbox, so the settings screen
+hands back the `flatpak install` command instead of pretending the tap
+worked, the same command in "Flatpak channels" above. iOS has no in-app
+picker at all, because a TestFlight build belongs to whichever external group
+installed it; switching means joining the other group through the links in
+"iOS TestFlight tracks" above instead.
+
+A copy installed from the Play Store gets no update backend at all, not a
+disabled one. This is deliberate, not a gap: Play forbids an app it
+distributes from updating itself by any mechanism other than Play's own, so a
+Play install goes without a track picker rather than risk shipping one that
+works. The APK at `mydia.dev/download/android` is a sideloaded install and
+updates itself, which is why it is the one the README links to.
 
 ## On-demand player testing builds
 
@@ -436,11 +521,53 @@ gh workflow run player-ondemand.yml --repo getmydia/mydia -f dry_run=true
 
 ### Versioning and build numbers
 
-Unless specified via `version_override`, the version string is derived automatically from the latest release tag as `<major>.<next_minor>.0-dev.<run_number>` (for example, `0.14.0-dev.42`).
+Unless overridden by `version_override`, the version string is derived
+automatically from the latest release tag as
+`<major>.<next_minor>.0-dev.<run_number>` (for example, `0.14.0-dev.42`). The
+workflow refuses to derive one once `run_number` passes 299, since that is the
+ceiling of the dev band below, and asks for an explicit `version_override`
+instead.
 
-Build numbers (`version_code`) are calculated as `RUN_NUMBER + 500000`. This range is monotonic and completely disjoint from `release.yml` (`RUN_NUMBER + 10000`) and `player-ios-refresh.yml` (`RUN_NUMBER + 900000`), ensuring that iOS test builds never collide with production or refresh builds in App Store Connect.
+Every workflow that mints a build number, this one, `release.yml`, and
+`player-ios-refresh.yml`, calls the same `scripts/build-number.sh <version>` to
+turn a version string into the integer that Android's `versionCode` and
+Apple's `CFBundleVersion` both use:
 
-Android test builds are distributed directly as release artifacts rather than uploaded to Google Play Console. Because Google Play requires `versionCode` to be strictly increasing across the entire lifetime of the application ID across all tracks, uploading on-demand test builds to Google Play with a separate offset would permanently leapfrog and block subsequent production releases in `release.yml`. Direct APK sideloading completely avoids this restriction while providing instant on-device installation.
+    build = major*10_000_000 + minor*100_000 + patch*1_000 + slot
+
+| Suffix | Slot | Range |
+| --- | --- | --- |
+| `dev.N` | `N` | 0-299 |
+| `alpha.N` | `300 + N` | 300-499 |
+| `beta.N` | `500 + N` | 500-699 |
+| `rc.N` | `700 + N` | 700-899 |
+| *(none, stable)* | `900` | 900 |
+| `+refresh.N` | `900 + N` | 901-999 |
+
+The suffix keyword is case-insensitive and the dot before the counter is
+optional (`rc13` parses the same as `rc.13`), because 36 tags predating this
+scheme already used the bare form (`v0.8.1-rc13`, `v0.9.0-beta2`).
+`+refresh.N` has no such history and always requires the dot.
+
+Deriving the number from the version, instead of from `github.run_number` with
+a per workflow offset the way this used to work, is what makes a track switch
+possible on Android: the OS refuses to install a `versionCode` lower than the
+one already running, so a number that follows version order is what lets a
+device move from a dev build to a beta and on to the stable of the same
+version. The old per workflow offsets were unrelated to version order, so an
+on-demand build outranked every future release and permanently blocked
+updates on any device that had installed one. `scripts/build-number.sh` is
+the single source for this table; read it, not this page, before changing any
+workflow that calls it.
+
+Android test builds still are not uploaded to Google Play Console, but not for
+the reason this used to say. They are the dev track's own build, published to
+`https://dl.mydia.dev` and picked up by anyone who chose Dev in Settings (see
+"Release tracks" below), which is a complete distribution path of its own.
+Google Play's requirement that `versionCode` only increase no longer enters
+into it: `scripts/build-number.sh` already keeps a dev build's number below
+the beta and stable of the same version, so there is nothing left for it to
+leapfrog.
 
 ### Distribution channels
 

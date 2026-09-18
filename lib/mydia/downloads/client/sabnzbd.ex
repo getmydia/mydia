@@ -78,7 +78,6 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
   alias Mydia.Downloads.Priority
   alias Mydia.Downloads.Client.Helpers
   alias Mydia.Downloads.Structs.{ClientInfo, DownloadStatus}
-  require Logger
   @invalid_filename_chars ~r{[<>:"/\\|?*]}
 
   @default_priority_map %{
@@ -198,7 +197,7 @@ defmodule Mydia.Downloads.Client.Sabnzbd do
 
     File.write!(tmp_file, file_contents)
 
-    stream = File.stream!(tmp_file, [], 2048)
+    stream = File.stream!(tmp_file, 2048)
     stat = File.stat!(tmp_file)
 
     multipart_filename = nzb_filename(title)

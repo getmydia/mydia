@@ -1,6 +1,8 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../domain/models/available_update.dart';
 import 'backends/flatpak_update_backend.dart';
@@ -10,6 +12,10 @@ import 'flatpak_environment.dart';
 import 'flatpak_portal.dart';
 import 'platform_updater.dart';
 import 'update_backend.dart';
+import 'update_track.dart';
+
+/// The installer package id Android reports for a Play Store install.
+const _playStoreId = 'com.android.vending';
 
 /// Everything about the running installation that decides how it updates.
 ///
@@ -25,6 +31,13 @@ class UpdateHost {
   final bool isFlatpak;
   final String? flatpakBranch;
 
+  /// True when this copy was installed by the Play Store.
+  ///
+  /// Play forbids an app it distributes from updating itself by any mechanism
+  /// other than Play's own, so a Play install gets no backend at all and no
+  /// update row, exactly as before this existed.
+  final bool installedFromPlay;
+
   const UpdateHost({
     required this.isWeb,
     required this.isAndroid,
@@ -34,11 +47,19 @@ class UpdateHost {
     required this.isLinux,
     this.isFlatpak = false,
     this.flatpakBranch,
+    this.installedFromPlay = false,
   }) : assert(
           !isFlatpak || isLinux,
           'Flatpak is a Linux packaging format; isFlatpak implies isLinux.',
         );
 
+  /// The best guess available without awaiting anything.
+  ///
+  /// Cannot tell a sideloaded Android install from a Play one, since that
+  /// takes an async platform call. Defaults [installedFromPlay] to true on
+  /// Android, so a caller that skips [currentAsync] never accidentally
+  /// enables a Play self-updater. Kept for the places that cannot await;
+  /// prefer [currentAsync] everywhere else.
   factory UpdateHost.current({
     FlatpakEnvironment flatpak = const FlatpakEnvironment(),
   }) {
@@ -61,7 +82,60 @@ class UpdateHost {
       isWindows: Platform.isWindows,
       isLinux: Platform.isLinux,
       flatpak: flatpak,
+      installedFromPlay: Platform.isAndroid,
     );
+  }
+
+  /// Same as [current], but able to ask Android which store installed this
+  /// copy.
+  static Future<UpdateHost> currentAsync({
+    FlatpakEnvironment flatpak = const FlatpakEnvironment(),
+  }) async {
+    if (kIsWeb) return UpdateHost.current(flatpak: flatpak);
+
+    final fromPlay = await resolveInstalledFromPlay(
+      isAndroid: Platform.isAndroid,
+      readInstallerStore: () async =>
+          (await PackageInfo.fromPlatform()).installerStore,
+    );
+
+    return UpdateHost.from(
+      isWeb: false,
+      isAndroid: Platform.isAndroid,
+      isIOS: Platform.isIOS,
+      isMacOS: Platform.isMacOS,
+      isWindows: Platform.isWindows,
+      isLinux: Platform.isLinux,
+      flatpak: flatpak,
+      installedFromPlay: fromPlay,
+    );
+  }
+
+  /// The Play decision itself, separated from the platform lookup so every
+  /// shape a store lookup can produce is reachable from one test host.
+  /// Mirrors [UpdateHost.from] and `InstallEnvironment.resolve`, which split
+  /// their own decisions away from the platform calls the same way.
+  ///
+  /// [readInstallerStore] is only ever called on Android: asking it on any
+  /// other platform would be a pointless platform-channel round trip for a
+  /// value this getter always ignores there.
+  @visibleForTesting
+  static Future<bool> resolveInstalledFromPlay({
+    required bool isAndroid,
+    required Future<String?> Function() readInstallerStore,
+  }) async {
+    if (!isAndroid) return false;
+
+    try {
+      final store = await readInstallerStore();
+      return store == _playStoreId;
+    } catch (e) {
+      // Unknown provenance is treated as Play. Refusing to self-update is
+      // the safe direction: the worst case is an Android user who keeps
+      // updating by hand, against a policy violation on the listing.
+      debugPrint('[UpdateHost] could not read the installer store: $e');
+      return true;
+    }
   }
 
   /// The host decision itself, separated from the platform lookups so every
@@ -76,6 +150,7 @@ class UpdateHost {
     required bool isWindows,
     required bool isLinux,
     required FlatpakEnvironment flatpak,
+    bool installedFromPlay = false,
   }) {
     // Flatpak is a Linux packaging format. A /.flatpak-info anywhere else is
     // nonsense, and carrying its branch would let a caller build a Flatpak
@@ -90,12 +165,18 @@ class UpdateHost {
       isLinux: isLinux,
       isFlatpak: inFlatpak,
       flatpakBranch: inFlatpak ? flatpak.branch : null,
+      installedFromPlay: installedFromPlay,
     );
   }
 
-  /// iOS and Android update through their app stores and web is served by the
-  /// Mydia server, so none of them can replace the running app.
-  bool get supportsInAppUpdates => !isWeb && !isAndroid && !isIOS;
+  /// iOS updates through the App Store and web is served by the Mydia
+  /// server, so neither can replace the running app. Android can, when it
+  /// was sideloaded.
+  bool get supportsInAppUpdates {
+    if (isWeb || isIOS) return false;
+    if (isAndroid) return !installedFromPlay;
+    return true;
+  }
 }
 
 /// The backend for this installation, or null when the platform updates
@@ -119,6 +200,7 @@ UpdateBackend? createUpdateBackend(
     return FlatpakUpdateBackend(
       portal: portal,
       releaseNotesUrl: flatpakReleaseNotesUrl(host.flatpakBranch),
+      branch: host.flatpakBranch,
     );
   }
 
@@ -131,5 +213,16 @@ UpdateBackend? createUpdateBackend(
   return ReleaseUpdateBackend(
     updater: updater,
     currentVersion: currentVersion,
+    // This branch is Windows, non-Flatpak Linux, and sideloaded Android (the
+    // isMacOS and isFlatpak cases above already returned, and a Play install
+    // never reaches here: supportsInAppUpdates excludes it before this
+    // function gets this far). Android is the one platform of the three that
+    // publishes dev builds, so it alone gets the full set. Add
+    // UpdateTrack.dev for Windows or Linux the day dev builds start
+    // publishing there too; until then it would offer a picker choice that
+    // resolves to nothing.
+    availableTracks: host.isAndroid
+        ? const {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev}
+        : const {UpdateTrack.stable, UpdateTrack.beta},
   );
 }

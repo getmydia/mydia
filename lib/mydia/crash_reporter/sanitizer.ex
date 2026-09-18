@@ -120,8 +120,6 @@ defmodule Mydia.CrashReporter.Sanitizer do
     |> String.replace(~r{C:\\Users\\[^\\:\s]+}, "C:\\Users\\[USER]")
   end
 
-  defp sanitize_file_path(path), do: path
-
   # Redact usernames in file paths but keep the rest
   defp redact_usernames_in_paths(str) do
     str
@@ -192,6 +190,4 @@ defmodule Mydia.CrashReporter.Sanitizer do
       &String.contains?(key_lower, &1)
     )
   end
-
-  defp sensitive_key?(_), do: false
 end

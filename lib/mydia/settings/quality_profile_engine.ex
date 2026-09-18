@@ -314,9 +314,6 @@ defmodule Mydia.Settings.QualityProfileEngine do
          {:ok, _updated_file} <- assign_profile_to_file(file, profile, evaluation) do
       {:ok, :updated}
     else
-      {:error, :skip} ->
-        {:ok, :skipped}
-
       {:error, reason} ->
         {:error, {file.id, reason}}
     end

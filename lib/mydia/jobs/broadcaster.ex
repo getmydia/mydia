@@ -6,8 +6,6 @@ defmodule Mydia.Jobs.Broadcaster do
   so that LiveViews can subscribe and update their UI when jobs start/complete.
   """
 
-  require Logger
-
   @pubsub Mydia.PubSub
   @topic "jobs:status"
 

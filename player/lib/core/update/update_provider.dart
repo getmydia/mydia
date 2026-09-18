@@ -9,6 +9,7 @@ import '../../domain/models/available_update.dart';
 import 'backends/flatpak_update_backend.dart';
 import 'update_backend.dart';
 import 'update_host.dart';
+import 'update_track.dart';
 
 /// Terminates the process, mirroring Flutter's own `debugPrint`: a mutable
 /// top-level seam rather than a direct `exit()` call, so a test can prove
@@ -17,13 +18,16 @@ import 'update_host.dart';
 void Function(int code) debugExitProcess = exit;
 
 /// Builds the backend for this installation. Overridden in tests.
-typedef UpdateBackendFactory = UpdateBackend? Function({
+///
+/// Async because deciding Android's host needs a platform call (which store
+/// installed this copy), via [UpdateHost.currentAsync].
+typedef UpdateBackendFactory = Future<UpdateBackend?> Function({
   required String currentVersion,
 });
 
 final updateBackendFactoryProvider = Provider<UpdateBackendFactory>(
-  (ref) => ({required String currentVersion}) => createUpdateBackend(
-        UpdateHost.current(),
+  (ref) => ({required String currentVersion}) async => createUpdateBackend(
+        await UpdateHost.currentAsync(),
         currentVersion: currentVersion,
       ),
 );
@@ -57,6 +61,25 @@ class UpdateState {
   /// Error message from the last check or apply attempt.
   final String? error;
 
+  /// The tracks this installation can be pointed at. Empty on a platform the
+  /// backend never offers a choice on (iOS, web, Play-installed Android),
+  /// which is what lets [UpdateTrackSection] render nothing rather than a
+  /// call site needing its own platform check.
+  final Set<UpdateTrack> availableTracks;
+
+  /// The track this installation currently follows.
+  final UpdateTrack currentTrack;
+
+  /// Instructions from a track switch the backend could not make itself
+  /// (Flatpak's branch, TestFlight's group). Kept apart from [notice], which
+  /// the update card renders, because this belongs beside the picker instead.
+  final String? trackNotice;
+
+  /// A link alongside [trackNotice], when the backend gave one (Flatpak's
+  /// install docs). Null whenever [trackNotice] is, and also whenever the
+  /// backend supplied instructions with no link of their own.
+  final String? trackUrl;
+
   const UpdateState({
     this.availableUpdate,
     this.currentVersion = '',
@@ -67,6 +90,10 @@ class UpdateState {
     this.restartRequired = false,
     this.notice,
     this.error,
+    this.availableTracks = const <UpdateTrack>{},
+    this.currentTrack = UpdateTrack.stable,
+    this.trackNotice,
+    this.trackUrl,
   });
 
   UpdateState copyWith({
@@ -79,9 +106,15 @@ class UpdateState {
     bool? restartRequired,
     String? notice,
     String? error,
+    Set<UpdateTrack>? availableTracks,
+    UpdateTrack? currentTrack,
+    String? trackNotice,
+    String? trackUrl,
     bool clearUpdate = false,
     bool clearNotice = false,
     bool clearError = false,
+    bool clearTrackNotice = false,
+    bool clearTrackUrl = false,
   }) {
     return UpdateState(
       availableUpdate:
@@ -94,6 +127,10 @@ class UpdateState {
       restartRequired: restartRequired ?? this.restartRequired,
       notice: clearNotice ? null : (notice ?? this.notice),
       error: clearError ? null : (error ?? this.error),
+      availableTracks: availableTracks ?? this.availableTracks,
+      currentTrack: currentTrack ?? this.currentTrack,
+      trackNotice: clearTrackNotice ? null : (trackNotice ?? this.trackNotice),
+      trackUrl: clearTrackUrl ? null : (trackUrl ?? this.trackUrl),
     );
   }
 }
@@ -126,10 +163,13 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
       state = state.copyWith(currentVersion: info.version);
 
-      final backend = ref.read(updateBackendFactoryProvider)(
+      final backend = await ref.read(updateBackendFactoryProvider)(
         currentVersion: info.version,
       );
       if (backend == null) return;
+      // The container can be disposed while that await is in flight too, for
+      // the same reason as the guard above. A non-null backend must still be
+      // disposed even when unmounted, so this cannot simply return early.
       if (!ref.mounted) {
         await backend.dispose();
         return;
@@ -140,6 +180,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
       if (!ref.mounted) return;
 
       state = state.copyWith(manualCheck: backend.manualCheck);
+      state = state.copyWith(
+        availableTracks: backend.availableTracks,
+        currentTrack: backend.currentTrack,
+      );
 
       _sub = backend.availability.listen((update) {
         if (!ref.mounted) return;
@@ -251,7 +295,17 @@ class UpdateNotifier extends Notifier<UpdateState> {
         state.copyWith(isApplying: false, error: reason),
       UpdateFailed(:final message) =>
         state.copyWith(isApplying: false, error: message),
-      UpdateDeferred() => state.copyWith(isApplying: false),
+      // The backend has already handed this off somewhere outside the app
+      // (Android's own confirmation dialog, Sparkle's window) and holds no
+      // pending update of its own to retry. Leaving availableUpdate set
+      // would draw the same "Update Now" row right back, inviting a second
+      // download while the first is still waiting on the user.
+      UpdateDeferred() => state.copyWith(
+          isApplying: false,
+          notice: 'Handed off outside Mydia. Confirm there to finish '
+              'installing.',
+          clearUpdate: true,
+        ),
     };
   }
 
@@ -290,6 +344,41 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// Whether the current platform supports in-place updates.
   bool get canUpdateInPlace => _backend?.canUpdateInPlace ?? false;
+
+  /// The user chose a track.
+  ///
+  /// Mirrors requestUpdate's guard discipline: selectTrack is contracted not
+  /// to throw, so the one mounted check below has to cover every write.
+  Future<void> selectTrack(UpdateTrack track) async {
+    final backend = _backend;
+    if (backend == null || !ref.mounted) return;
+
+    final outcome = await backend.selectTrack(track);
+    if (!ref.mounted) return;
+
+    state = switch (outcome) {
+      TrackSwitchApplied() => state.copyWith(
+          currentTrack: backend.currentTrack,
+          clearError: true,
+          clearNotice: true,
+          // Instructions (and any link) from an earlier deferred switch no
+          // longer apply.
+          clearTrackNotice: true,
+          clearTrackUrl: true,
+        ),
+      TrackSwitchDeferred(:final instructions, :final url) => state.copyWith(
+          trackNotice: instructions,
+          trackUrl: url,
+          // A url of null must actually clear a stale one from an earlier
+          // deferred switch, not fall through to it: copyWith's `??` keeps
+          // the old value on a null argument, which is right for a value
+          // that was not asked to change, but wrong here since this switch
+          // is deciding trackUrl fresh every time.
+          clearTrackUrl: url == null,
+        ),
+      TrackSwitchUnsupported(:final reason) => state.copyWith(error: reason),
+    };
+  }
 }
 
 /// Global provider for the update system.

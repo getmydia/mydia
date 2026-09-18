@@ -1209,6 +1209,15 @@ defmodule Mydia.Streaming.HlsSession do
   end
 
   # Start FFmpeg backend
+  #
+  # `backend` is a closed singleton today: State.t() declares `backend: :ffmpeg`
+  # (see the @type above), and both call sites pass the literal atom. A
+  # catch-all fallback clause here would therefore be unreachable, and 1.20's
+  # type checker rejects unreachable clauses under --warnings-as-errors, so
+  # one is not kept "just in case" the way stop_backend/2 below still keeps
+  # one. Widening `backend` to add a second value is what makes a fallback
+  # here reachable again; do that first, then reinstate one, rather than
+  # assuming this function already degrades gracefully.
   defp start_backend(:ffmpeg, media_file, temp_dir, job_id, opts, generation) do
     # Resolve absolute path for FFmpeg input
     absolute_path = Mydia.Library.MediaFile.absolute_path(media_file)
@@ -1301,11 +1310,6 @@ defmodule Mydia.Streaming.HlsSession do
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  defp start_backend(backend, _media_file, _temp_dir, _job_id, _opts, _generation) do
-    Logger.error("Unknown backend: #{backend}")
-    {:error, :unknown_backend}
   end
 
   # Stop the backend process

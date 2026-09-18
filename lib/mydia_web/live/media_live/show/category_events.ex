@@ -163,5 +163,4 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
   defp category_display_name(:tv_show), do: "TV Show"
   defp category_display_name(:anime_series), do: "Anime Series"
   defp category_display_name(:cartoon_series), do: "Cartoon Series"
-  defp category_display_name(cat), do: to_string(cat)
 end

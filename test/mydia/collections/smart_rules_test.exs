@@ -561,4 +561,16 @@ defmodule Mydia.Collections.SmartRulesTest do
       assert Enum.any?(errors, &String.contains?(&1, "within_last"))
     end
   end
+
+  describe "rating sort" do
+    test "a rating-sorted smart collection builds and runs a query" do
+      # Returning a list is the assertion: the previous form raised inside the
+      # query builder before any SQL was produced.
+      for direction <- ["asc", "desc"] do
+        rules = %{"sort" => %{"field" => "rating", "direction" => direction}}
+
+        assert is_list(SmartRules.execute_query!(rules))
+      end
+    end
+  end
 end

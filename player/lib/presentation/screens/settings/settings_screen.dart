@@ -8,7 +8,6 @@ import '../../../core/crash_reporting/crash_reporter_provider.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/p2p/p2p_service.dart';
-import '../../../core/player/platform_features.dart';
 import '../../../core/remote/node_registration_providers.dart';
 import '../../../core/remote/registration_status.dart';
 import '../../../core/remote/remote_control_settings.dart';
@@ -26,11 +25,11 @@ import '../../widgets/cast_button.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
 import 'settings_controller.dart';
-import 'widgets/beta_channel_row.dart';
 import 'widgets/crash_reporting_row.dart';
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
+import 'widgets/track_picker_row.dart';
 import 'widgets/update_card.dart';
 
 /// The settings screen.
@@ -288,10 +287,7 @@ class _ManageSection extends ConsumerWidget {
             subtitle: 'Try to make this device discoverable again',
             onTap: () => ref.read(nodeRegistrationProvider.notifier).retry(),
           ),
-        // Sparkle channels are macOS-only. Linux beta ships as a separate
-        // Flatpak branch, chosen at install time rather than in-app, and
-        // Windows has no channel support at all.
-        if (PlatformFeatures.isMacOS) const BetaChannelRow(),
+        const UpdateTrackSection(),
         // Hidden where nothing would be sent: web builds, and the inert
         // reporter whole-app tests run with. See CrashReporter.isAvailable.
         if (ref.watch(crashReporterProvider).isAvailable)

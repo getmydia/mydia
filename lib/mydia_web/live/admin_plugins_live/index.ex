@@ -13,8 +13,6 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   """
   use MydiaWeb, :live_view
 
-  require Logger
-
   alias Mydia.Events
   alias Mydia.Plugins
   alias Mydia.Plugins.Index

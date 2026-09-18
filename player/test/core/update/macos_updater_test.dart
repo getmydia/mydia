@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/update/update_track.dart';
 import 'package:player/core/update/updaters/macos_updater.dart';
 
 void main() {
@@ -31,45 +32,14 @@ void main() {
     expect(calls.map((c) => c.method), ['checkForUpdates']);
   });
 
-  test('betaChannelEnabled returns what the host reports', () async {
-    mock((_) async => true);
-
-    expect(await MacOSUpdater.betaChannelEnabled(), isTrue);
-    expect(calls.map((c) => c.method), ['getBetaChannel']);
-  });
-
-  test('betaChannelEnabled defaults to false when the host returns null',
-      () async {
-    mock((_) async => null);
-
-    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
-  });
-
-  test('setBetaChannel forwards the boolean', () async {
-    await MacOSUpdater.setBetaChannel(true);
-
-    expect(calls.single.method, 'setBetaChannel');
-    expect(calls.single.arguments, isTrue);
-  });
-
   test('a host failure never propagates to the caller', () async {
     // The updater is called from settings taps. A PlatformException escaping
     // here would surface as an unhandled error in the widget tree.
     mock((_) async => throw PlatformException(code: 'boom'));
 
     await expectLater(MacOSUpdater.checkForUpdates(), completes);
-    await expectLater(MacOSUpdater.setBetaChannel(true), completes);
-    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
-  });
-
-  test('setBetaChannel reports success', () async {
-    expect(await MacOSUpdater.setBetaChannel(true), isTrue);
-  });
-
-  test('setBetaChannel reports failure when the host errors', () async {
-    mock((_) async => throw PlatformException(code: 'boom'));
-
-    expect(await MacOSUpdater.setBetaChannel(true), isFalse);
+    await expectLater(MacOSUpdater.setTrack(UpdateTrack.beta), completes);
+    expect(await MacOSUpdater.currentTrack(), UpdateTrack.stable);
   });
 
   test('an unregistered host never propagates', () async {
@@ -80,7 +50,38 @@ void main() {
         .setMockMethodCallHandler(kSparkleChannel, null);
 
     await expectLater(MacOSUpdater.checkForUpdates(), completes);
-    expect(await MacOSUpdater.betaChannelEnabled(), isFalse);
-    expect(await MacOSUpdater.setBetaChannel(true), isFalse);
+    expect(await MacOSUpdater.currentTrack(), UpdateTrack.stable);
+    expect(await MacOSUpdater.setTrack(UpdateTrack.beta), isFalse);
+  });
+
+  test('currentTrack maps the host string', () async {
+    mock((_) async => 'beta');
+
+    expect(await MacOSUpdater.currentTrack(), UpdateTrack.beta);
+    expect(calls.map((c) => c.method), ['getTrack']);
+  });
+
+  test('an unknown host string falls back to stable', () async {
+    mock((_) async => 'banana');
+
+    expect(await MacOSUpdater.currentTrack(), UpdateTrack.stable);
+  });
+
+  test('setTrack sends the wire name and reports acceptance', () async {
+    expect(await MacOSUpdater.setTrack(UpdateTrack.dev), isTrue);
+
+    expect(calls.single.method, 'setTrack');
+    expect(calls.single.arguments, 'dev');
+  });
+
+  test('a host that is not there reports failure rather than throwing',
+      () async {
+    // Clearing the handler is what a real macOS build looks like before the
+    // native side registers, and MissingPluginException is not a
+    // PlatformException, so it needs its own catch clause.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kSparkleChannel, null);
+
+    expect(await MacOSUpdater.setTrack(UpdateTrack.beta), isFalse);
   });
 }

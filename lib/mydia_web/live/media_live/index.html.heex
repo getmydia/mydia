@@ -11,9 +11,24 @@
           />
           <h1 id="section-heading" class="text-3xl font-bold">{@page_title}</h1>
         </div>
-        <p class="text-base-content/70 mt-1">
-          Browse and manage your media library
-        </p>
+        <%!-- What the active search and filters actually match, and cost.
+              Both figures come from LibraryListing.page/1, which already
+              walks every matching row before it paginates. --%>
+        <div :if={@loading?} class="skeleton h-9 w-48 mt-1"></div>
+        <div :if={not @loading?} class="stats stats-horizontal bg-transparent mt-1">
+          <div class="stat px-0 pr-6 py-0">
+            <div class="stat-title text-xs">Items</div>
+            <div id="library-item-count" class="stat-value text-2xl tabular-nums">
+              {MapSet.size(@all_visible_ids)}
+            </div>
+          </div>
+          <div class="stat px-6 py-0">
+            <div class="stat-title text-xs">On disk</div>
+            <div id="library-total-size" class="stat-value text-2xl tabular-nums">
+              {format_file_size(@total_size)}
+            </div>
+          </div>
+        </div>
 
         <div :if={@section_error} id="section-rules-error" class="alert alert-warning mt-3">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
@@ -210,6 +225,8 @@
               Rating (High)
             </option>
             <option value="rating_asc" selected={@sort_by == "rating_asc"}>Rating (Low)</option>
+            <option value="size_desc" selected={@sort_by == "size_desc"}>Size (Largest)</option>
+            <option value="size_asc" selected={@sort_by == "size_asc"}>Size (Smallest)</option>
           </optgroup>
           <%= if @filter_type == "tv_show" do %>
             <optgroup label="TV Shows">
@@ -621,9 +638,23 @@
                 <span class="text-base-content/40">—</span>
               <% end %>
             </div>
-            <%!-- Size column --%>
-            <div class="w-24 hidden xl:block text-right text-base-content/70 text-sm flex-shrink-0">
-              {format_file_size(total_file_size(row))}
+            <%!-- Size column. tabular-nums so a size-sorted column reads down;
+                 proportional digits make it look ragged. Matches the treatment
+                 downloads_live/index.html.heex already uses for this value. --%>
+            <div
+              class="w-24 hidden xl:block text-right text-base-content/70 text-sm flex-shrink-0"
+              title="Size on disk"
+            >
+              <% size = total_file_size(row) %>
+              <%= if size > 0 do %>
+                <span class="inline-flex items-center gap-1 tabular-nums">
+                  <.icon name="hero-circle-stack" class="size-3 opacity-70" />{format_file_size(
+                    size
+                  )}
+                </span>
+              <% else %>
+                <span class="text-base-content/40">—</span>
+              <% end %>
             </div>
           </div>
         <% end %>

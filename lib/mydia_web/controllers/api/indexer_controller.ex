@@ -112,11 +112,6 @@ defmodule MydiaWeb.Api.IndexerController do
         conn
         |> put_status(:not_found)
         |> json(%{error: "Indexer not found"})
-
-      {:error, reason} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: inspect(reason)})
     end
   end
 

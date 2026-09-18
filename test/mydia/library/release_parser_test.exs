@@ -308,4 +308,34 @@ defmodule Mydia.Library.ReleaseParserTest do
       assert result.year == 2020
     end
   end
+
+  describe "media type inference from episodes (build_parsed_file_info/3 cond, release_parser.ex:341)" do
+    # The cond has two clauses that can produce `:tv_show`: `type == :tv_show`
+    # (already set by the resolver whenever it found an episode/season
+    # marker) and, only reached when the first clause fails, the
+    # `season != nil or episodes != nil` clause below it. Every marker form
+    # the resolver recognizes pairs a non-nil `episodes` with a non-nil
+    # `season` (explicit, or defaulted to season 1 for bare absolute
+    # numbering like "E05", see `Resolver.parse_absolute_episode/1`), so
+    # the resolver itself already infers `:tv_show` before this cond ever
+    # runs. Reaching the second clause therefore requires locking `type`
+    # away from `:tv_show` via `:target`, as a caller does when it already
+    # (wrongly) believes the file is a movie.
+    test "an episode marker overrides a locked movie type back to tv_show" do
+      target = %TargetContext{type: :movie, title: "Invented Feature"}
+
+      result =
+        ReleaseParser.parse("Fictional.Show.E05.1080p.WEB-DL.mkv", target: target)
+
+      assert result.type == :tv_show
+      assert result.season != nil
+      assert result.episodes == [5]
+    end
+
+    test "a release with neither season nor episodes is not a tv_show" do
+      result = ReleaseParser.parse("Invented.Feature.2021.1080p.BluRay.mkv")
+
+      refute result.type == :tv_show
+    end
+  end
 end

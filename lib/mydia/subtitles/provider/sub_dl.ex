@@ -18,8 +18,6 @@ defmodule Mydia.Subtitles.Provider.SubDL do
 
   @behaviour Mydia.Subtitles.Provider
 
-  require Logger
-
   alias Mydia.Subtitles.Archive
   alias Mydia.Subtitles.Provider.QuotaInfo
   alias Mydia.Subtitles.Provider.SearchResult

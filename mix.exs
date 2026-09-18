@@ -60,8 +60,11 @@ defmodule Mydia.MixProject do
       compilers: compilers(),
       unused: [ignore: unused_ignore()],
       listeners: [Phoenix.CodeReloader],
-      # Enforce warnings as errors to maintain code quality
-      warnings_as_errors: Mix.env() != :prod,
+      # Mix reads warnings_as_errors from :elixirc_options, not from the top
+      # level of project/0. Set at the top level it silently did nothing, so a
+      # plain `mix compile` exited 0 with warnings while CI, which passes
+      # --warnings-as-errors explicitly, went red.
+      elixirc_options: [warnings_as_errors: Mix.env() != :prod],
       # Disable coverage threshold for now - will improve coverage later
       test_coverage: [summary: false]
     ]

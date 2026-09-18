@@ -55,6 +55,91 @@ defmodule Mydia.SubtitlesTest do
     end
   end
 
+  defmodule SearchRecordingAdapter do
+    @behaviour Mydia.Subtitles.Provider
+
+    # Search runs inside a Task (Mydia.Subtitles.ProviderChain.run_all/2), so
+    # `send(self(), ...)` would land in the task's own mailbox rather than the
+    # test process's. :persistent_term is process-independent and read back
+    # after ProviderChain.search/1 (and the Task.yield inside it) has
+    # returned, so no race.
+    @impl true
+    def search(config, params) do
+      :persistent_term.put({__MODULE__, config.id}, params)
+      {:ok, []}
+    end
+
+    @impl true
+    def download(_config, _info), do: {:ok, "1\n00:00:01,000 --> 00:00:02,000\nhi\n"}
+
+    @impl true
+    def validate_config(config), do: {:ok, config}
+
+    @impl true
+    def quota_info(_config),
+      do: {:ok, Mydia.Subtitles.Provider.QuotaInfo.unlimited(:relay)}
+
+    @impl true
+    def capabilities do
+      %{
+        media_types: [:movie],
+        search_keys: [:file_hash],
+        requires_credentials: false,
+        quota: :unlimited
+      }
+    end
+  end
+
+  describe "media_hash decoration" do
+    test "a MediaFile struct carries media_hash as a virtual field" do
+      media_file = %Mydia.Library.MediaFile{}
+
+      assert Map.has_key?(media_file, :media_hash)
+      assert media_file.media_hash == nil
+    end
+
+    test "struct update keeps it a MediaFile" do
+      decorated = %{%Mydia.Library.MediaFile{} | media_hash: %Mydia.Subtitles.MediaHash{}}
+
+      assert %Mydia.Library.MediaFile{} = decorated
+      assert %Mydia.Subtitles.MediaHash{} = decorated.media_hash
+    end
+
+    # Drives fetch_media_file_with_associations/1 (private) through its public
+    # caller, search_candidates/2, with a real media_hashes row present. This
+    # proves the struct-update decoration actually carries the hash through to
+    # build_search_params/2, not merely that it fails to raise.
+    test "search_candidates/2 forwards the decorated media_hash to providers" do
+      alias Mydia.MediaFixtures
+      alias Mydia.SubtitleProviderFixtures
+      alias Mydia.Subtitles.Health
+
+      for %{type: type} <- Mydia.Subtitles.ProviderRegistry.builtins(), do: Health.reset(type)
+
+      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
+      media_file = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+      {:ok, _media_hash} =
+        %Mydia.Subtitles.MediaHash{}
+        |> Mydia.Subtitles.MediaHash.changeset(%{
+          media_file_id: media_file.id,
+          opensubtitles_hash: "deadbeefcafebabe",
+          file_size: 123_456_789,
+          calculated_at: DateTime.utc_now()
+        })
+        |> Mydia.Repo.insert()
+
+      config = SubtitleProviderFixtures.config_fixture(%{adapter: SearchRecordingAdapter})
+      on_exit(fn -> :persistent_term.erase({SearchRecordingAdapter, config.id}) end)
+
+      assert {:ok, %{results: [], providers: _providers}} =
+               Mydia.Subtitles.search_candidates(media_file.id, "en")
+
+      assert %{file_hash: "deadbeefcafebabe", file_size: 123_456_789} =
+               :persistent_term.get({SearchRecordingAdapter, config.id})
+    end
+  end
+
   describe "auto-download confidence" do
     # SubDL cannot report a hash match, so a metadata match plus a decent
     # rating and download count has to be enough to clear the bar. If it is

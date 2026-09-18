@@ -25,6 +25,14 @@ final class AppUpdate extends AvailableUpdate {
   /// Size of the download in bytes, if known.
   final int? downloadSize;
 
+  /// The digest the feed published for this file, or null when the source
+  /// does not publish one.
+  ///
+  /// Release assets are signed by the pipeline that built them and carry
+  /// null. Dev builds are plain files in a bucket, so the feed publishes a
+  /// digest and the updater refuses a download that does not match it.
+  final String? sha256;
+
   @override
   final String releaseNotesUrl;
 
@@ -38,6 +46,7 @@ final class AppUpdate extends AvailableUpdate {
     required this.version,
     required this.downloadUrl,
     this.downloadSize,
+    this.sha256,
     required this.releaseNotesUrl,
     required this.releaseTitle,
     required this.publishedAt,

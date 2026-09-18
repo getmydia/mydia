@@ -56,7 +56,8 @@ defmodule Mydia.Media.LibraryListing do
           rows: [LibraryRow.t()],
           has_more?: boolean(),
           visible_ids: MapSet.t(binary()),
-          empty?: boolean()
+          empty?: boolean(),
+          total_size: non_neg_integer()
         }
 
   @doc """
@@ -65,6 +66,8 @@ defmodule Mydia.Media.LibraryListing do
   `rows` is the page, with `user_id`'s playback progress. `visible_ids` covers
   every row the search and filters match, not only the page, so select-all can
   use it. `limit: 0` skips the progress query when only `visible_ids` is needed.
+  `total_size` is the bytes on disk across every matching row, not only the
+  page, so a filtered listing can report what the filter actually costs.
 
   Filter options go to `Mydia.Media.media_items_query/1`: `:base_query`,
   `:exclude_categories`, `:type`, `:monitored`. Applied in memory: `:search`,
@@ -90,7 +93,8 @@ defmodule Mydia.Media.LibraryListing do
       rows: rows |> Enum.drop(offset) |> Enum.take(limit) |> put_progress(user_id),
       has_more?: length(rows) > offset + limit,
       visible_ids: MapSet.new(rows, & &1.id),
-      empty?: rows == []
+      empty?: rows == [],
+      total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum()
     }
   end
 
@@ -333,6 +337,9 @@ defmodule Mydia.Media.LibraryListing do
   defp sort(rows, "rating_asc"), do: Enum.sort_by(rows, &rating/1, :asc)
   defp sort(rows, "rating_desc"), do: Enum.sort_by(rows, &rating/1, :desc)
 
+  defp sort(rows, "size_desc"), do: sort_by_size(rows, :desc)
+  defp sort(rows, "size_asc"), do: sort_by_size(rows, :asc)
+
   defp sort(rows, "last_aired_asc"),
     do: Enum.sort_by(rows, &(&1.last_air_date || @never_aired), {:asc, Date})
 
@@ -370,5 +377,26 @@ defmodule Mydia.Media.LibraryListing do
       &(Map.get(added_at, &1.id) || &1.item.inserted_at),
       {direction, DateTime}
     )
+  end
+
+  # A row with nothing on disk has no size to compare, so it sorts last in
+  # both directions, the same rule MediaSort states for unknown keys. Sorting
+  # it as 0 would make "Size (Smallest)" a list of things you do not have.
+  #
+  # Enum.sort_by/3 is stable, so a sort on total_size alone would only
+  # preserve the incoming row order for ties. That incoming order comes from
+  # Media.media_items_query/1, which has no ORDER BY, so it is whatever the
+  # database happens to return for an unordered scan and it can change
+  # between two requests for the same page. page/1 re-sorts the whole list on
+  # every request, including each load_more, so an unstable tie group
+  # reshuffles, duplicating or skipping rows across the page boundary. The
+  # sort key below is total, breaking ties by title and then id so the same
+  # rows always land in the same order regardless of scan order.
+  defp sort_by_size(rows, direction) do
+    Enum.sort_by(rows, fn row ->
+      size_key = if direction == :desc, do: -row.total_size, else: row.total_size
+
+      {if(row.total_size > 0, do: 0, else: 1), size_key, title_key(row), row.id}
+    end)
   end
 end

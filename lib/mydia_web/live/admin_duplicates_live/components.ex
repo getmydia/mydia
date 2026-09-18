@@ -17,6 +17,8 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
 
   use MydiaWeb, :html
 
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
+
   alias Mydia.Library.MediaFile
 
   @doc """
@@ -92,7 +94,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         phx-click="open_trash_modal"
       >
         <.icon name="hero-trash" class="w-4 h-4" />
-        Trash {file_count(MapSet.size(@selected))} ({humanize_bytes(@reclaimable)})
+        Trash {file_count(MapSet.size(@selected))} ({format_file_size(@reclaimable)})
       </button>
     </div>
     """
@@ -152,7 +154,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
           phx-disable-with="Trashing..."
         >
           <.icon name="hero-trash" class="w-4 h-4" />
-          Trash {file_count(@selected_count)} ({humanize_bytes(@selected_bytes)})
+          Trash {file_count(@selected_count)} ({format_file_size(@selected_bytes)})
         </button>
       </div>
 
@@ -197,7 +199,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
         Best copy
       </span>
       <span class="badge badge-ghost badge-sm">{quality_label(@file)}</span>
-      <span class="text-xs opacity-60 whitespace-nowrap">{humanize_bytes(@file.size)}</span>
+      <span class="text-xs opacity-60 whitespace-nowrap">{format_file_size(@file.size)}</span>
 
       <%!--
       One radiogroup per file, not a checkbox: the two options are named on
@@ -285,7 +287,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
           <div>
             <h3 class="font-bold text-lg">Trash {file_count(@count)}?</h3>
             <p class="text-sm text-base-content/60">
-              Across {item_count(@items)}, reclaiming {humanize_bytes(@bytes)}.
+              Across {item_count(@items)}, reclaiming {format_file_size(@bytes)}.
             </p>
           </div>
         </div>
@@ -404,7 +406,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
   end
 
   @doc """
-  Pluralized counts. Public for the same reason `humanize_bytes/1` is: the page
+  Pluralized counts. Public because the page template calls it: the page
   module builds the undo toast's label and must count files and items the same
   way the rows above it do.
   """
@@ -413,18 +415,4 @@ defmodule MydiaWeb.AdminDuplicatesLive.Components do
 
   def item_count(1), do: "1 item"
   def item_count(n), do: "#{n} items"
-
-  @doc """
-  Formats a byte count for display. Public because the page template uses it
-  for the running total on the confirm button.
-  """
-  def humanize_bytes(nil), do: "unknown"
-
-  def humanize_bytes(bytes) when bytes >= 1_073_741_824,
-    do: "#{Float.round(bytes / 1_073_741_824, 1)} GB"
-
-  def humanize_bytes(bytes) when bytes >= 1_048_576,
-    do: "#{Float.round(bytes / 1_048_576, 1)} MB"
-
-  def humanize_bytes(bytes), do: "#{bytes} B"
 end

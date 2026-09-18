@@ -13,8 +13,6 @@ defmodule MydiaWeb.AdminImportListsLive.Index do
   alias Mydia.Collections
   alias Mydia.Jobs.ImportListSync
 
-  require Logger
-
   @impl true
   def mount(_params, _session, socket) do
     if Mydia.ImportLists.FeatureFlags.enabled?() do

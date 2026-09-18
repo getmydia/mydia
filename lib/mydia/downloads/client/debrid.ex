@@ -471,8 +471,6 @@ defmodule Mydia.Downloads.Client.Debrid do
     |> String.contains?("<nzb")
   end
 
-  defp looks_like_nzb?(_), do: false
-
   defp sanitize_error(%Error{details: nil} = err, _config), do: err
 
   defp sanitize_error(%Error{details: details} = err, config) do

@@ -396,4 +396,50 @@ defmodule Mydia.Indexers.SearchResultTest do
       assert SearchResult.info_page_url(streamed) == "https://tracker.example/details/42"
     end
   end
+
+  describe "per-row display state" do
+    test "a SearchResult struct carries downloading/downloaded/duplicate/grab_failed with falsy defaults" do
+      result = search_result([])
+
+      assert Map.has_key?(result, :downloading)
+      assert Map.has_key?(result, :downloaded)
+      assert Map.has_key?(result, :duplicate)
+      assert Map.has_key?(result, :grab_failed)
+      assert result.downloading == false
+      assert result.downloaded == false
+      assert result.duplicate == false
+      assert result.grab_failed == nil
+    end
+
+    # Mirrors exactly what SearchEvents.mark_result/3 does: merge an
+    # accumulated map of per-row state (built from a subset of the four
+    # fields above, across several PubSub messages) onto a %SearchResult{}
+    # pulled from the stream. This pins that the decorated value is still a
+    # real SearchResult, not a plain map, and that every flag mark_result/3
+    # can write is readable afterwards, both for a full state map and for a
+    # partial one (as handle_grab_completed/handle_grab_failed/
+    # handle_grab_duplicate each send).
+    test "merging accumulated grab state keeps it a SearchResult with readable flags" do
+      result = search_result([])
+
+      full_state = %{downloading: true, downloaded: false, grab_failed: nil, duplicate: false}
+      decorated = Map.merge(result, full_state)
+
+      assert %SearchResult{} = decorated
+      assert decorated.downloading == true
+      assert decorated.downloaded == false
+      assert decorated.duplicate == false
+      assert decorated.grab_failed == nil
+
+      partial_state = %{downloading: false, grab_failed: "No download clients are configured"}
+      decorated = Map.merge(decorated, partial_state)
+
+      assert %SearchResult{} = decorated
+      assert decorated.downloading == false
+      assert decorated.grab_failed == "No download clients are configured"
+      # Untouched by the partial merge, so the earlier state survives.
+      assert decorated.downloaded == false
+      assert decorated.duplicate == false
+    end
+  end
 end

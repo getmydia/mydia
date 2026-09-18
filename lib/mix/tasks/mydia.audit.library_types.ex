@@ -31,7 +31,6 @@ defmodule Mix.Tasks.Mydia.Audit.LibraryTypes do
   """
 
   use Mix.Task
-  require Logger
 
   alias Mydia.{Library, Repo, Settings}
   alias Mydia.Library.MediaFile

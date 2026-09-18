@@ -26,8 +26,6 @@ defmodule Mix.Tasks.Mydia.CardigannCapture do
 
   use Mix.Task
 
-  require Logger
-
   @shortdoc "Captures live indexer responses as test fixtures"
 
   @github_raw_base "https://raw.githubusercontent.com/Prowlarr/Indexers/master/definitions/v11"

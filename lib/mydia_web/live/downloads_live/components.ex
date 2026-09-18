@@ -6,6 +6,8 @@ defmodule MydiaWeb.DownloadsLive.Components do
   """
   use MydiaWeb, :html
 
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
+
   alias Mydia.Downloads.Blacklists
 
   @doc """
@@ -73,7 +75,7 @@ defmodule MydiaWeb.DownloadsLive.Components do
               {candidate["name"]}
             </div>
             <div class="text-xs text-base-content/50">
-              {format_size(candidate["size"])}
+              {format_file_size(candidate["size"])}
               <span :if={candidate["probe"]}>
                 • {probe_label(candidate["probe"])}
               </span>
@@ -350,25 +352,6 @@ defmodule MydiaWeb.DownloadsLive.Components do
       {:ok, _indexer, _guid} -> "Blacklist this release and search again"
       {:error, :no_indexer} -> "Remove this download and search again (no indexer to blacklist)"
       {:error, :no_guid} -> "Remove this download and search again (no release id to blacklist)"
-    end
-  end
-
-  @doc """
-  Formats a byte count for display. Returns "—" for `nil`.
-
-  The single formatter for this feature (downloads list + this modal). Public
-  so `DownloadsLive.Index`'s template can call `Components.format_size/1`.
-  """
-  @spec format_size(integer() | nil) :: String.t()
-  def format_size(nil), do: "—"
-
-  def format_size(bytes) when is_integer(bytes) do
-    cond do
-      bytes >= 1_099_511_627_776 -> "#{Float.round(bytes / 1_099_511_627_776, 2)} TB"
-      bytes >= 1_073_741_824 -> "#{Float.round(bytes / 1_073_741_824, 2)} GB"
-      bytes >= 1_048_576 -> "#{Float.round(bytes / 1_048_576, 2)} MB"
-      bytes >= 1024 -> "#{Float.round(bytes / 1024, 2)} KB"
-      true -> "#{bytes} B"
     end
   end
 end

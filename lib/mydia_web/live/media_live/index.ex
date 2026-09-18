@@ -14,6 +14,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
 
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.GridDensityComponents
   import MydiaWeb.MediaLive.Index.SectionComponents
   import MydiaWeb.MediaLive.Index.SelectionComponents
@@ -70,6 +71,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:show_add_to_collection_modal, false)
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
+     |> assign(:total_size, 0)
      |> stream(:media_items, [])}
   end
 
@@ -131,6 +133,7 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:loading?, false)
         |> assign(:media_items_empty?, true)
         |> assign(:all_visible_ids, MapSet.new())
+        |> assign(:total_size, 0)
         |> assign(:has_more, false)
         |> stream(:media_items, [], reset: true)
     end
@@ -533,7 +536,7 @@ defmodule MydiaWeb.MediaLive.Index do
     # Add item counts for each collection
     user_collections_with_counts =
       Enum.map(user_collections, fn collection ->
-        Map.put(collection, :item_count, Collections.item_count(collection))
+        %{collection | item_count: Collections.item_count(collection)}
       end)
 
     {:noreply,
@@ -861,6 +864,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:media_items_empty?, reset? and listing.empty?)
     # Every matching id, not only the page, for "Select All".
     |> assign(:all_visible_ids, listing.visible_ids)
+    |> assign(:total_size, listing.total_size)
     |> stream(:media_items, listing.rows, reset: reset?)
   end
 
@@ -912,18 +916,6 @@ defmodule MydiaWeb.MediaLive.Index do
   # resolutions.
   defp get_quality_badge(%LibraryRow{resolutions: resolutions}) do
     Enum.max_by(resolutions, &DownloadService.parse_resolution_height/1, fn -> nil end)
-  end
-
-  defp format_file_size(nil), do: "N/A"
-
-  defp format_file_size(bytes) when is_integer(bytes) do
-    cond do
-      bytes >= 1_099_511_627_776 -> "#{Float.round(bytes / 1_099_511_627_776, 2)} TB"
-      bytes >= 1_073_741_824 -> "#{Float.round(bytes / 1_073_741_824, 2)} GB"
-      bytes >= 1_048_576 -> "#{Float.round(bytes / 1_048_576, 2)} MB"
-      bytes >= 1024 -> "#{Float.round(bytes / 1024, 2)} KB"
-      true -> "#{bytes} B"
-    end
   end
 
   defp total_file_size(%LibraryRow{total_size: total_size}), do: total_size

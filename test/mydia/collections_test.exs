@@ -459,4 +459,24 @@ defmodule Mydia.CollectionsTest do
       end
     end
   end
+
+  describe "derived display fields" do
+    test "a Collection struct carries item_count and poster_paths as virtual fields" do
+      collection = %Mydia.Collections.Collection{}
+
+      assert Map.has_key?(collection, :item_count)
+      assert Map.has_key?(collection, :poster_paths)
+      assert collection.item_count == nil
+      assert collection.poster_paths == nil
+    end
+
+    test "struct update syntax populates them without leaving the struct" do
+      collection = %Mydia.Collections.Collection{name: "Test"}
+      decorated = %{collection | item_count: 7, poster_paths: ["/a.jpg"]}
+
+      assert %Mydia.Collections.Collection{} = decorated
+      assert decorated.item_count == 7
+      assert decorated.poster_paths == ["/a.jpg"]
+    end
+  end
 end

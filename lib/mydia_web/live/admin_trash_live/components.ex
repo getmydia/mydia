@@ -8,6 +8,8 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   """
   use MydiaWeb, :html
 
+  import MydiaWeb.Formatters, only: [format_file_size: 1]
+
   alias Mydia.Library.MediaFile
 
   @reasons [
@@ -112,7 +114,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   def summary_bar(assigns) do
     ~H"""
     <p id="trash-summary" class="text-sm text-base-content/60">
-      {file_count(@summary.count)} tracked, using {humanize_bytes(@summary.bytes)}. Files are
+      {file_count(@summary.count)} tracked, using {format_file_size(@summary.bytes)}. Files are
       permanently deleted after {@retention_days} days.
     </p>
     """
@@ -186,7 +188,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
               >
                 {reason_label(file.trashed_reason)}
               </span>
-              <span>{humanize_bytes(file.size)}</span>
+              <span>{format_file_size(file.size)}</span>
               <span>Trashed {relative_age(file.trashed_at)}</span>
               <span>Purges {purge_due(file.trashed_at, @retention_days)}</span>
             </div>
@@ -341,7 +343,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
           <div>
             <h3 class="font-bold text-lg">Empty the trash?</h3>
             <p class="text-sm text-base-content/60">
-              {file_count(@count)}, reclaiming {humanize_bytes(@bytes)}.
+              {file_count(@count)}, reclaiming {format_file_size(@bytes)}.
             </p>
           </div>
         </div>
@@ -386,7 +388,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
           {length(@audit.retained)} kept by a restore that found the library path occupied, {length(
             @audit.orphaned
           )} with no record behind them.
-          Total {humanize_bytes(audit_bytes(@audit))}.
+          Total {format_file_size(audit_bytes(@audit))}.
         </div>
       </div>
       <button id="trash-sweep" type="button" class="btn btn-sm" phx-click="sweep">
@@ -449,16 +451,6 @@ defmodule MydiaWeb.AdminTrashLive.Components do
 
   defp file_count(1), do: "1 file"
   defp file_count(n), do: "#{n} files"
-
-  def humanize_bytes(nil), do: "unknown"
-
-  def humanize_bytes(bytes) when bytes >= 1_073_741_824,
-    do: "#{Float.round(bytes / 1_073_741_824, 1)} GB"
-
-  def humanize_bytes(bytes) when bytes >= 1_048_576,
-    do: "#{Float.round(bytes / 1_048_576, 1)} MB"
-
-  def humanize_bytes(bytes), do: "#{bytes} B"
 
   defp relative_age(nil), do: "at an unknown time"
 

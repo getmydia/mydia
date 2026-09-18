@@ -384,7 +384,7 @@ defmodule Mydia.Subtitles do
         {:error, :media_file_not_found}
 
       %{media_file: media_file, media_hash: media_hash} ->
-        {:ok, Map.put(media_file, :media_hash, media_hash)}
+        {:ok, %{media_file | media_hash: media_hash}}
     end
   end
 

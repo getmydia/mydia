@@ -208,19 +208,16 @@ defmodule MydiaWeb.AdminIndexersLive.FlareSolverrComponents do
 
   defp fs_status_icon(:healthy), do: "hero-check-circle"
   defp fs_status_icon(:unhealthy), do: "hero-x-circle"
-  defp fs_status_icon(:disabled), do: "hero-minus-circle"
   defp fs_status_icon(:loading), do: "hero-arrow-path"
   defp fs_status_icon(_), do: "hero-question-mark-circle"
 
   defp fs_badge_class(:healthy), do: "badge-success"
   defp fs_badge_class(:unhealthy), do: "badge-error"
-  defp fs_badge_class(:disabled), do: "badge-ghost"
   defp fs_badge_class(:loading), do: "badge-ghost"
   defp fs_badge_class(_), do: "badge-warning"
 
   defp fs_status_label(:healthy), do: "Healthy"
   defp fs_status_label(:unhealthy), do: "Unhealthy"
-  defp fs_status_label(:disabled), do: "Disabled"
   defp fs_status_label(:loading), do: "Checking…"
   defp fs_status_label(_), do: "Unknown"
 

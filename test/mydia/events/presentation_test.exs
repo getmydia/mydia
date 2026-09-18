@@ -357,6 +357,17 @@ defmodule Mydia.Events.PresentationTest do
       assert Presentation.field_label(%{"not" => "a field name"}) == "Unknown field"
       assert Presentation.field_label(["nope"]) == "Unknown field"
     end
+
+    test "an atom field resolves against the label map, like its string twin" do
+      assert Presentation.field_label(:tmdb_id) == "TMDB ID"
+      assert Presentation.field_label(:tmdb_id) == Presentation.field_label("tmdb_id")
+      assert Presentation.field_label(:monitored) == "Monitoring"
+      assert Presentation.field_label(:overview) == "Description"
+    end
+
+    test "an unmapped atom still falls back to humanize" do
+      assert Presentation.field_label(:some_unmapped_field) == "Some unmapped field"
+    end
   end
 
   describe "detail/1 media_file.*" do
