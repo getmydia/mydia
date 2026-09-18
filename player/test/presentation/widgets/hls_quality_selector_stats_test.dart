@@ -41,6 +41,22 @@ void main() {
     expect(find.byKey(statsToggleKey), findsNothing);
   });
 
+  // Proves the gate is `&&`, not `||`: either parameter alone must not be
+  // enough to grow the row. Without this, a regression to `||` would show a
+  // dead toggle in the settings screen's standing-preference picker, which
+  // passes neither parameter and has nothing to wire an `onChanged` to.
+  testWidgets('no stats row with only statsEnabled supplied', (tester) async {
+    await openPicker(tester, statsEnabled: true);
+
+    expect(find.byKey(statsToggleKey), findsNothing);
+  });
+
+  testWidgets('no stats row with only onStatsChanged supplied', (tester) async {
+    await openPicker(tester, onStatsChanged: (_) {});
+
+    expect(find.byKey(statsToggleKey), findsNothing);
+  });
+
   testWidgets('the stats row reflects the flag', (tester) async {
     await openPicker(tester, statsEnabled: true, onStatsChanged: (_) {});
 
@@ -65,6 +81,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(flips, [true]);
-    expect(find.byKey(statsToggleKey), findsOneWidget);
+    final toggle = tester.widget<SwitchListTile>(
+      find.byKey(statsToggleKey),
+    );
+    expect(toggle.value, isTrue,
+        reason: 'the switch itself must move, not just report the change '
+            'and survive the tap');
   });
 }
