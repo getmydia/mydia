@@ -5,9 +5,9 @@ version: 1.0.0+1
 
 environment:
   # Floor raised from 3.3.0 by liquid_glass_widgets, which requires Dart
-  # >=3.5.0. The toolchain in player/.fvmrc (Flutter 3.44.2) ships a much
-  # newer Dart than either bound, so this only tightens what the manifest
-  # *claims* to support; nothing in resolution or CI changes.
+  # >=3.5.0. The Flutter pinned in player/.fvmrc ships a much newer Dart than
+  # either bound, so this only tightens what the manifest *claims* to
+  # support; nothing in resolution or CI changes.
   sdk: '>=3.5.0 <4.0.0'
   # Chooses the Flutter that Dependabot resolves pubspec.lock with. Dependabot
   # never reads .fvmrc; it takes the newest stable release this range allows.
