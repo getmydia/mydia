@@ -14,6 +14,8 @@ export type ShadowOutcome =
   | "status_mismatch"
   | "body_mismatch"
   | "skipped_large"
+  // The origin's body stream failed partway, so there is nothing to compare.
+  | "origin_error"
   | "worker_error";
 
 export interface ShadowVerdict {
@@ -90,12 +92,13 @@ function parseJson(bytes: Uint8Array): unknown {
   }
 }
 
-// Same volatile keys as test/contract/contract.test.ts: `version` at the top
-// level (each side reports its own), and any bare-string `created`, which
-// MusicBrainz stamps with "now" on every search. OpenLibrary's object-shaped
-// `created` is real catalog data and is still compared.
-function isVolatile(path: string, key: string, value: unknown): boolean {
-  if (path === "$" && key === "version") return true;
+// Same volatile keys as test/contract/contract.test.ts, whose stripVolatile
+// applies them at every depth: `version` (each relay reports its own), and
+// any bare-string `created`, which MusicBrainz stamps with "now" on every
+// search. OpenLibrary's object-shaped `created` is real catalog data and is
+// still compared.
+function isVolatile(key: string, value: unknown): boolean {
+  if (key === "version") return true;
   return key === "created" && typeof value === "string";
 }
 
@@ -122,8 +125,8 @@ export function firstDifference(a: unknown, b: unknown, path: string): string | 
   for (const key of keys) {
     const inLeft = Object.hasOwn(left, key);
     const inRight = Object.hasOwn(right, key);
-    if (inLeft && isVolatile(path, key, left[key])) continue;
-    if (inRight && isVolatile(path, key, right[key])) continue;
+    if (inLeft && isVolatile(key, left[key])) continue;
+    if (inRight && isVolatile(key, right[key])) continue;
     if (!inLeft || !inRight) return `${path}.${key}`;
     const diff = firstDifference(left[key], right[key], `${path}.${key}`);
     if (diff !== null) return diff;

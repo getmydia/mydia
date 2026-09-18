@@ -44,8 +44,8 @@ describe("compareResponses", () => {
     ).toEqual({ outcome: "match" });
   });
 
-  it("still compares a nested version and an object-shaped created", () => {
-    expect(firstDifference({ a: { version: 1 } }, { a: { version: 2 } }, "$")).toBe("$.a.version");
+  it("ignores a nested version, as the contract diff does, but compares an object-shaped created", () => {
+    expect(firstDifference({ a: { version: 1 } }, { a: { version: 2 } }, "$")).toBeNull();
     expect(
       firstDifference(
         { created: { type: "/type/datetime", value: "2008" } },

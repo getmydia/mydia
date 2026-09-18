@@ -381,7 +381,8 @@ to the Elixir relay. Rejected entries are logged once per isolate as
 - Workers Logs holds one JSON line per decision. `event: "route"` has
   `group`, `mode`, `backend`, `status` and `path`. `event: "shadow"` has
   `outcome` (`match`, `status_mismatch`, `body_mismatch`, `skipped_large`,
-  `worker_error`), `diff` (the first JSON path that disagreed), both statuses
+  `origin_error` for an origin body that failed midway, `worker_error`),
+  `diff` (the first JSON path that disagreed), both statuses
   and `worker_ms`. `event: "origin_error"` means the Elixir relay could not be
   reached and the client got a 502.
 - To read the shadow results, query Workers Logs for the `mydia-relay`

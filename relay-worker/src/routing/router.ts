@@ -157,6 +157,8 @@ async function shadow(
   return new Response(clientBody, originResponse);
 }
 
+const ORIGIN_READ_FAILED = Symbol("origin-read-failed");
+
 async function runShadow(
   request: Request,
   worker: WorkerHandler,
@@ -171,7 +173,8 @@ async function runShadow(
   // Both run at once, and the origin branch is always drained, even if the
   // Worker throws, so the tee() never buffers a body nobody reads.
   const [originBytes, workerResult] = await Promise.all([
-    readCapped(originBody).catch(() => null),
+    // null means "over the cap"; a stream that failed is its own outcome.
+    readCapped(originBody).catch((): typeof ORIGIN_READ_FAILED => ORIGIN_READ_FAILED),
     (async (): Promise<{ status: number; bytes: Uint8Array | null } | Error> => {
       try {
         const res = await worker(request);
@@ -183,7 +186,10 @@ async function runShadow(
   ]);
 
   let verdict: ShadowVerdict;
-  if (workerResult instanceof Error) {
+  if (originBytes === ORIGIN_READ_FAILED) {
+    verdict = { outcome: "origin_error" };
+    if (!(workerResult instanceof Error)) workerStatus = workerResult.status;
+  } else if (workerResult instanceof Error) {
     verdict = { outcome: "worker_error", diff: workerResult.message };
   } else {
     workerStatus = workerResult.status;

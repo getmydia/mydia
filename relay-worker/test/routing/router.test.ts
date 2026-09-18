@@ -227,6 +227,34 @@ describe("shadow mode", () => {
     expect(logs).toContainEqual(expect.objectContaining({ event: "shadow", outcome: "worker_error", diff: "boom" }));
   });
 
+  it("reports an origin body that fails midway as origin_error, not skipped_large", async () => {
+    await setConfig({ groups: { tmdb: "shadow" } });
+    const failing = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"id":'));
+        controller.error(new Error("connection reset"));
+      },
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(failing, { status: 200 }));
+    const worker = workerReplying({ id: 9 });
+
+    try {
+      const ctx = createExecutionContext();
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const res = await routeRequest(new Request(`${ORIGIN}/tmdb/movies/9`), routedEnv, ctx, worker);
+        await res.text().catch(() => "");
+        await waitOnExecutionContext(ctx);
+        const shadowLine = log.mock.calls.map(([line]) => String(line)).find((l) => l.includes('"event":"shadow"'));
+        expect(JSON.parse(shadowLine!)).toMatchObject({ outcome: "origin_error", worker_status: 200 });
+      } finally {
+        log.mockRestore();
+      }
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it("never runs a POST twice", async () => {
     await setConfig({ default: "shadow" });
     fetchMock.get(ORIGIN).intercept({ method: "POST", path: "/tmdb/movies/6" }).reply(200, { id: 6 });
