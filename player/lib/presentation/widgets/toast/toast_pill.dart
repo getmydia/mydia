@@ -29,6 +29,30 @@ class ToastPill extends StatelessWidget {
   static const BorderRadius _radius =
       BorderRadius.all(Radius.circular(ToastMetrics.radius));
 
+  static const double _padHorizontal = 16;
+  static const double _padVertical = 12;
+
+  static const EdgeInsets _padding = EdgeInsets.symmetric(
+    horizontal: _padHorizontal,
+    vertical: _padVertical,
+  );
+
+  /// The action never takes more than half the pill's content width.
+  ///
+  /// [ToastMetrics.maxWidth] governs the pill, so a long or localised label
+  /// must yield to the cap rather than run past it and be silently cut off by
+  /// `GlassSurface`'s `ClipRRect`. Wrapping the button in a [Flexible] would
+  /// bound it too, but a [Row] splits space by flex factor rather than by
+  /// need: two flexible children split the free width evenly, so a short
+  /// label would silently shrink the message with it. Bounding the button's
+  /// intrinsic width instead leaves the message the whole remainder, so a
+  /// short-label pill lays out exactly as an unbounded action would. The row
+  /// then fits any parent at least 234 wide (a 194 cap plus the 28 glyph and
+  /// 12 gap), which is narrower than any supported window once the layer's
+  /// 16px gutters are taken off it.
+  static const double _maxActionWidth =
+      (ToastMetrics.maxWidth - 2 * _padHorizontal) / 2;
+
   @override
   Widget build(BuildContext context) {
     final leading = _leading();
@@ -60,8 +84,7 @@ class ToastPill extends StatelessWidget {
             child: Material(
               type: MaterialType.transparency,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: _padding,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -82,16 +105,24 @@ class ToastPill extends StatelessWidget {
                     ),
                     if (action != null) ...[
                       const SizedBox(width: 12),
-                      TextButton(
-                        key: const Key('toast-action'),
-                        onPressed: onAction,
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          minimumSize: const Size(0, 32),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: _maxActionWidth),
+                        child: TextButton(
+                          key: const Key('toast-action'),
+                          onPressed: onAction,
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            minimumSize: const Size(0, 32),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            action.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        child: Text(action.label),
                       ),
                     ],
                   ],

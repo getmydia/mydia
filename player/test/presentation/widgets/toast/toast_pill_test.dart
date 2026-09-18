@@ -116,4 +116,38 @@ void main() {
     expect(tester.getSemantics(_pill), containsSemantics(isLiveRegion: true));
     semantics.dispose();
   });
+
+  testWidgets('a long action label is bounded instead of overrunning the pill',
+      (tester) async {
+    final message = List.filled(80, 'wordy').join(' ');
+    const label = 'Open the notification settings panel';
+    await _pump(
+      tester,
+      _entry(message,
+          kind: ToastKind.error,
+          action: ToastAction(label: label, onPressed: () {})),
+    );
+    expect(tester.takeException(), isNull);
+    expect(
+        tester.getSize(_pill).width, lessThanOrEqualTo(ToastMetrics.maxWidth));
+    final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
+    expect(paragraph.didExceedMaxLines, isTrue);
+    expect(tester.widget<Text>(find.text(label)).maxLines, 1);
+    expect(tester.getRect(find.byKey(const Key('toast-action'))).right,
+        lessThanOrEqualTo(tester.getRect(_pill).right + 0.01));
+  });
+
+  testWidgets('a short action label leaves the message the pill width',
+      (tester) async {
+    final message = List.filled(80, 'wordy').join(' ');
+    await _pump(
+      tester,
+      _entry(message,
+          kind: ToastKind.error,
+          action: ToastAction(label: 'Retry', onPressed: () {})),
+    );
+    expect(tester.getSize(find.text(message)).width,
+        greaterThan(ToastMetrics.maxWidth / 2),
+        reason: 'the message, not the button, owns the pill width');
+  });
 }
