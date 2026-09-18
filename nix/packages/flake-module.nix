@@ -3,18 +3,20 @@
 {
   perSystem = { pkgs, system, lib, ... }:
     let
-      # BEAM packages (Erlang/Elixir). Elixir comes from .elixir-version
-      # through elixir-version.nix, the same source devenv.nix and the
-      # Dockerfile read. Overriding `elixir` in the set makes mixRelease and
-      # every buildMix dep in deps.nix compile on it, rather than on whatever
-      # patch nixpkgs happens to default this set to.
+      # BEAM packages (Erlang/Elixir). The OTP major and the Elixir minor come
+      # from .otp-version and .elixir-version through beam-version.nix, the
+      # same source devenv.nix imports and the Dockerfile is checked against.
+      # Overriding `elixir` in the set makes mixRelease and every buildMix dep
+      # in deps.nix compile on it, rather than on whatever patch nixpkgs
+      # happens to default this set to.
       #
       # `overrideScope`, not `.extend`: this nixpkgs pin has already removed
       # `.extend` from beamPackages in favor of `.overrideScope` (it throws
       # "'beamPackages.extend' has been replaced by 'beamPackages.overrideScope'"
       # when evaluated, even though `? extend` reports the attribute present).
-      beamPackages = pkgs.beam.packages.erlang_28.overrideScope (_final: _prev: {
-        elixir = import ../../elixir-version.nix { inherit pkgs; };
+      beamPin = import ../../beam-version.nix { inherit pkgs; };
+      beamPackages = beamPin.beam.overrideScope (_final: _prev: {
+        elixir = beamPin.elixir;
       });
 
       # Pinned Rust toolchain (rust-overlay, same construction as the dev

@@ -6,13 +6,11 @@
 # `mix test`, `mix precommit`, Flutter codegen) runs natively in this shell;
 # each git worktree derives its own non-colliding ports and isolated state.
 #
-# The Elixir minor is NOT named in this file. It lives in .elixir-version,
-# resolved by elixir-version.nix, and is read by this file, by
-# nix/packages/flake-module.nix and by the Dockerfile. ci-nix.yml's
-# "Check / Elixir Pin" job fails the build if any other file names one.
-#
-# OTP is pinned here, as erlang_28, and elixir-version.nix resolves against
-# that same beam set so the pair is always matched.
+# The Elixir minor and the OTP major are NOT named in this file. They live in
+# .elixir-version and .otp-version, resolved as a matched pair by
+# beam-version.nix, which this file and nix/packages/flake-module.nix import
+# and the Dockerfile's base tag is checked against. ci-nix.yml's
+# "Check / BEAM Pin" job fails the build if any other file names either one.
 #
 # Two toolchains are NOT listed above and must not be named here, because each
 # lives in exactly one file that everything else reads:
@@ -41,12 +39,6 @@ let
         channel cannot be expressed as languages.rust.version.
       '';
     rustToolchain.channel;
-
-  # Elixir and OTP built as a matched pair from one beam set. devenv's
-  # languages.elixir only adds the elixir package — it does NOT pull a matching
-  # OTP — so we pin erlang from the same erlang_28 binding to avoid the classic
-  # mismatched-OTP-on-PATH footgun (KTD1).
-  beam = pkgs.beam.packages.erlang_28;
 
   # ── Per-worktree deterministic ports (KTD5 / R8) ────────────────────────────
   # Hash the absolute worktree path (config.devenv.root, known at eval time) to a
@@ -102,20 +94,18 @@ let
   # loudly here instead of silently shipping a different SDK than CI uses.
   flutterPkg = import ./player/flutter-version.nix { inherit pkgs; };
 
-  # Elixir (single source of truth). .elixir-version is the only place the
-  # Elixir minor is written. The resolver throws if this nixpkgs has no
-  # matching attribute, so a lock move that drops it fails loudly here.
-  elixirPkg = import ./elixir-version.nix { inherit pkgs; };
+  # Elixir and OTP (single source of truth). .elixir-version and .otp-version
+  # are the only places the Elixir minor and the OTP major are written.
+  # beam-version.nix draws both from one beam set, so the pair on PATH always
+  # matches: devenv's languages.elixir adds only the elixir package and does
+  # not pull a matching OTP. The resolver throws if this nixpkgs lacks either
+  # attribute, so a lock move that drops one fails loudly here.
+  beamPin = import ./beam-version.nix { inherit pkgs; };
 in
 {
   languages.elixir = {
     enable = true;
-    package = elixirPkg;
-  };
-
-  languages.erlang = {
-    enable = true;
-    package = pkgs.erlang_28;
+    package = beamPin.elixir;
   };
 
   # Rust version is NOT named here: it comes from rust-toolchain.toml via the
@@ -140,6 +130,20 @@ in
   # flutterPkg above, shared with the Android shell, CI and Docker.
   packages = with pkgs; [
     flutterPkg
+
+    # OTP and rebar3, from the resolver's beam set rather than
+    # languages.erlang. The pinned devenv's languages.erlang builds rebar3 as
+    # nixpkgs' default-OTP rebar3 with this OTP swapped into buildInputs, which
+    # skips nixpkgs' rebar3 patch for the newer OTP major, and the build fails.
+    # The set's own rebar3 is the correct, binary-cached build. devenv fixed
+    # its module upstream (cachix/devenv 84b8f8dfe2); return to
+    # languages.erlang once devenv.lock's devenv input and CI's devenv CLI both
+    # include that commit, with its lsp option off. The Erlang language server
+    # that module adds by default is left out on purpose: nixpkgs ships it as
+    # prebuilt binaries for older OTP majors only, so it cannot match this
+    # OTP, and the repo has no Erlang sources for it to serve.
+    beamPin.erlang
+    beamPin.beam.rebar3
 
     # Node.js for assets
     nodejs

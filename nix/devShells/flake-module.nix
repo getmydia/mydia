@@ -54,7 +54,10 @@
 
       androidComposition = pkgs.androidenv.composeAndroidPackages {
         cmdLineToolsVersion = "13.0";
-        platformToolsVersion = "35.0.2";
+        # nixpkgs' androidenv keeps only the newest platform-tools (adb,
+        # fastboot), so this moves whenever nixpkgs-android does. Nothing
+        # compiles against it.
+        platformToolsVersion = "37.0.1";
         buildToolsVersions = [ "30.0.3" "33.0.1" "34.0.0" "35.0.0" "36.0.0" ];
         # 37.0 is load-bearing, not padding. The pinned
         # flutter_secure_storage package declares compileSdk = 37
@@ -83,7 +86,7 @@
       # the build SDK above stays the only one Gradle and the NDK linkers see.
       androidTvComposition = pkgs.androidenv.composeAndroidPackages {
         cmdLineToolsVersion = "13.0";
-        platformToolsVersion = "35.0.2";
+        platformToolsVersion = "37.0.1";
         buildToolsVersions = [ ];
         platformVersions = [ "36" ];
         abiVersions = [ "x86_64" ];

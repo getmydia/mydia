@@ -1,9 +1,10 @@
 # devenv inputs. See https://devenv.sh/reference/options/
 #
-# Pinned to nixos-unstable for parity with flake.nix, which resolves
-# `beam.packages.erlang_28.elixir_1_19` from this same channel. devenv.lock pins
-# the exact rev. The Android shell (nix/devShells) deliberately uses its own
-# `nixpkgs-android` input instead, so its SDK/NDK set does not drift with this.
+# Pinned to nixos-unstable for parity with flake.nix, which resolves the
+# Elixir/OTP pair through beam-version.nix from this same channel. devenv.lock
+# pins the exact rev; keep it on the same rev as flake.lock's nixpkgs. The
+# Android shell (nix/devShells) deliberately uses its own `nixpkgs-android`
+# input instead, so its SDK/NDK set does not drift with this.
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixos-unstable
