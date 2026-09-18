@@ -920,6 +920,45 @@ defmodule Mydia.Jobs.MovieSearchTest do
     end
   end
 
+  describe "identity shadow" do
+    test "grabs exactly as before and records the identity check's disagreement", %{
+      bypass: bypass
+    } do
+      junk = "2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv"
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [Map.put(IndexerMock.movie_result(%{seeders: 40}), :title, junk)]
+      )
+
+      movie = media_item_fixture(%{type: "movie", title: "Lantern", year: 2031})
+
+      assert :ok =
+               perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      assert [download] = Mydia.Downloads.list_downloads()
+      assert download.title == junk
+
+      assert [event] = Mydia.Events.list_events(type: "search.identity_shadow")
+      assert event.metadata["query"] == "Lantern 2031"
+      assert event.metadata["legacy_pick"] == junk
+      assert event.metadata["exact_pick"] == nil
+    end
+
+    test "records nothing when the identity check agrees", %{bypass: bypass} do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [IndexerMock.movie_result(%{title: "Glass.Harbor", year: 2031, seeders: 40})]
+      )
+
+      movie = media_item_fixture(%{type: "movie", title: "Glass Harbor", year: 2031})
+
+      assert :ok =
+               perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      assert [_download] = Mydia.Downloads.list_downloads()
+      assert Mydia.Events.list_events(type: "search.identity_shadow") == []
+    end
+  end
+
   # Overrides only the :downloads embed of the layered runtime config
   # (Mydia.Config.get().downloads), leaving the rest of the resolved config
   # (indexers, media, and so on) exactly as this suite's setup left it.

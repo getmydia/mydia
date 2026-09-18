@@ -55,7 +55,7 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
   alias Mydia.Downloads.{Blacklists, Download, Queue}
-  alias Mydia.Indexers.RankingOptions
+  alias Mydia.Indexers.{IdentityShadow, RankingOptions, ReleaseIdentity}
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.Structs.SearchResultMetadata
@@ -1107,6 +1107,12 @@ defmodule Mydia.Jobs.TVShowSearch do
     ranking_opts = build_ranking_options_for_season(media_item, season_number, episodes, args)
     resource_types = Keyword.get(opts, :backoff_resource_types, ["season"])
 
+    IdentityShadow.observe(media_item, candidates, ranking_opts, %{
+      "query" => query,
+      "season_number" => season_number,
+      "search_type" => "season_pack"
+    })
+
     case ReleaseRanker.select_best_result(candidates, ranking_opts) do
       nil ->
         Logger.warning(
@@ -1390,6 +1396,10 @@ defmodule Mydia.Jobs.TVShowSearch do
     ranking_opts = build_ranking_options(episode, args)
     resource_types = Keyword.get(opts, :backoff_resource_types, ["episode"])
 
+    IdentityShadow.observe(episode.media_item, results, ranking_opts, %{"query" => query},
+      episode: episode
+    )
+
     case ReleaseRanker.select_best_result(results, ranking_opts) do
       nil ->
         Logger.warning("No suitable results after ranking for episode",
@@ -1487,6 +1497,7 @@ defmodule Mydia.Jobs.TVShowSearch do
       size_range: args.size_range,
       search_query: build_episode_query(episode),
       expected_title: episode.media_item.title,
+      identity_target: ReleaseIdentity.Target.from_media_item(episode.media_item),
       expected_season: episode.season_number,
       expected_episode: episode.episode_number,
       blocked_tags: merged_blocked_tags(args.blocked_tags),
@@ -1511,6 +1522,7 @@ defmodule Mydia.Jobs.TVShowSearch do
       size_range: args.size_range,
       search_query: build_season_query(media_item, season_number),
       expected_title: media_item.title,
+      identity_target: ReleaseIdentity.Target.from_media_item(media_item),
       expected_season: season_number,
       blocked_tags: merged_blocked_tags(args.blocked_tags),
       preferred_tags: args.preferred_tags
