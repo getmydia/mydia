@@ -23,7 +23,8 @@
 #     not an SDK selection and must not trip this check.
 #   - NIF versions (`nif-N.N`), for the Elixir scan only. A precompiled NIF's
 #     ABI version is not an Elixir version, and the wasmex checksum file that
-#     names one is itself called checksum-Elixir.*.
+#     names one is itself called checksum-Elixir.*. Only that token is
+#     stripped, so an Elixir version elsewhere on the same line still counts.
 #
 # Both scans ignore case, so shouty spellings such as an ELIXIR_VERSION or
 # ERLANG_VERSION env var are caught too.
@@ -52,7 +53,7 @@ elixir_hits="$(
   scan 'elixir' -i \
     | grep -vE '^mix\.exs:' \
     | grep -viE 'elixir_make|bcrypt_elixir|argon2_elixir|yaml_elixir' \
-    | grep -viE 'nif-[0-9]+\.[0-9]+' \
+    | sed -E 's/nif-[0-9]+(\.[0-9]+)+//gI' \
     | grep -iE '[0-9]+\.[0-9]+|elixir_[0-9]' \
     || true
 )"
