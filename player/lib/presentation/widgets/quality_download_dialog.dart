@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/downloads/download_job_providers.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/download_option.dart';
+import 'toast/toaster.dart';
 
 /// Dialog for selecting download quality before starting a progressive download.
 ///
@@ -363,11 +364,10 @@ class _QualityDownloadDialogState extends ConsumerState<QualityDownloadDialog> {
         setState(() {
           _isStartingDownload = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to start download: $e'),
-            backgroundColor: AppColors.error,
-          ),
+        showToast(
+          context,
+          'Failed to start download: $e',
+          kind: ToastKind.error,
         );
       }
     }

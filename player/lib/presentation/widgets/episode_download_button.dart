@@ -7,6 +7,7 @@ import '../../core/downloads/download_providers.dart';
 import '../../core/downloads/download_job_providers.dart';
 import '../../core/theme/colors.dart';
 import 'quality_download_dialog.dart';
+import 'toast/toaster.dart';
 
 /// Standalone progressive-download action for an episode.
 ///
@@ -52,23 +53,7 @@ class EpisodeDownloadButton extends ConsumerWidget {
   ) async {
     if (isDownloaded) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 12),
-                Text('Already downloaded'),
-              ],
-            ),
-            backgroundColor: AppColors.surface,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        showToast(context, 'Already downloaded');
       }
     } else if (episode.files.isNotEmpty) {
       // Show quality download dialog for progressive downloads
@@ -133,36 +118,18 @@ class EpisodeDownloadButton extends ConsumerWidget {
             );
 
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.download_rounded,
-                          color: Colors.white, size: 20),
-                      SizedBox(width: 12),
-                      Text('Download started'),
-                    ],
-                  ),
-                  backgroundColor: AppColors.primary,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
+              showToast(
+                context,
+                'Download started',
+                kind: ToastKind.success,
               );
             }
           } catch (e) {
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to start download: $e'),
-                  backgroundColor: AppColors.error,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
+              showToast(
+                context,
+                'Failed to start download: $e',
+                kind: ToastKind.error,
               );
             }
           }

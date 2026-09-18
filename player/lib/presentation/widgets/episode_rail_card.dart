@@ -9,6 +9,7 @@ import '../../domain/models/watch_status.dart';
 import '../screens/show/season_episodes_controller.dart';
 import 'episode_download_button.dart';
 import 'focus_highlight.dart';
+import 'toast/toaster.dart';
 import 'watch_indicator.dart';
 
 /// A self-contained landscape (16:9) episode card for the horizontal episodes
@@ -377,11 +378,10 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update watched status'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        showToast(
+          context,
+          'Could not update watched status',
+          kind: ToastKind.error,
         );
       }
     }

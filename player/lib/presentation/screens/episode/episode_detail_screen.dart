@@ -18,6 +18,7 @@ import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/smart_play_button.dart';
+import '../../widgets/toast/toaster.dart';
 
 class EpisodeDetailScreen extends ConsumerWidget {
   final String id;
@@ -469,12 +470,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
             ? () async {
                 if (isDownloaded) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Already downloaded'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
+                    showToast(context, 'Already downloaded');
                   }
                 } else {
                   final selectedResolution = await showQualityDownloadDialog(
@@ -542,20 +538,18 @@ class EpisodeDetailScreen extends ConsumerWidget {
                         );
 
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Download started'),
-                              duration: Duration(seconds: 2),
-                            ),
+                          showToast(
+                            context,
+                            'Download started',
+                            kind: ToastKind.success,
                           );
                         }
                       } catch (e) {
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to start download: $e'),
-                              backgroundColor: AppColors.error,
-                            ),
+                          showToast(
+                            context,
+                            'Failed to start download: $e',
+                            kind: ToastKind.error,
                           );
                         }
                       }

@@ -10,6 +10,8 @@ import 'package:player/core/player/fullscreen/fullscreen_report.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report_signal.dart';
 import 'package:player/presentation/screens/settings/diagnostics_screen.dart';
 
+import '../../../test_utils/toast_harness.dart';
+
 class _FakeConnectionNotifier extends ConnectionNotifier {
   _FakeConnectionNotifier(this._state);
 
@@ -43,7 +45,10 @@ Future<void> _pump(
           () => _FakeP2pStatusNotifier(status),
         ),
       ],
-      child: const MaterialApp(home: DiagnosticsScreen()),
+      child: MaterialApp(
+        builder: toastLayerBuilder,
+        home: const DiagnosticsScreen(),
+      ),
     ),
   );
   await tester.pump();

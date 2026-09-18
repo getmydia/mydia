@@ -7,6 +7,7 @@ import 'collections_controller.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/media_poster.dart';
 import '../../widgets/quality_download_dialog.dart';
+import '../../widgets/toast/toaster.dart';
 import '../../../core/downloads/collection_sync_providers.dart';
 import '../../../core/downloads/collection_sync_service.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
@@ -314,37 +315,15 @@ class _CollectionDownloadButtonState
       if (!mounted) return;
 
       final message = _buildResultMessage(result);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                result.hasNewDownloads
-                    ? Icons.download_rounded
-                    : Icons.info_outline_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Text(message)),
-            ],
-          ),
-          backgroundColor: result.hasNewDownloads
-              ? AppColors.primary
-              : AppColors.textSecondary,
-          behavior: SnackBarBehavior.floating,
-        ),
+      showToast(
+        context,
+        message,
+        icon: result.hasNewDownloads ? Icons.download_rounded : null,
       );
     } catch (e) {
       debugPrint('Collection sync failed: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Sync failed: $e'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showToast(context, 'Sync failed: $e', kind: ToastKind.error);
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }

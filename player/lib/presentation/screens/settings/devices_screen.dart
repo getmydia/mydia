@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/format/relative_time.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/remote_device.dart';
 import 'devices_controller.dart';
 
@@ -50,27 +51,15 @@ class DevicesScreen extends ConsumerWidget {
             .revokeDevice(device.id);
 
         if (context.mounted) {
-          final scheme = Theme.of(context).colorScheme;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                success
-                    ? 'Device revoked successfully'
-                    : 'Failed to revoke device',
-              ),
-              backgroundColor: success ? AppColors.success : scheme.error,
-            ),
+          showToast(
+            context,
+            success ? 'Device revoked successfully' : 'Failed to revoke device',
+            kind: success ? ToastKind.success : ToastKind.error,
           );
         }
       } catch (e) {
         if (context.mounted) {
-          final scheme = Theme.of(context).colorScheme;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: ${e.toString()}'),
-              backgroundColor: scheme.error,
-            ),
-          );
+          showToast(context, 'Error: ${e.toString()}', kind: ToastKind.error);
         }
       }
     }

@@ -13,7 +13,6 @@ import '../../core/navigation/sidebar_layout_providers.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
-import '../../core/theme/colors.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
 import 'cast_actions.dart';
@@ -22,6 +21,7 @@ import 'nav/bottom_nav.dart';
 import 'nav/desktop_sidebar.dart';
 import 'nav/mobile_drawer.dart';
 import 'offline_banner.dart';
+import 'toast/toaster.dart';
 import 'update_banner.dart';
 
 /// Modern app shell with adaptive navigation.
@@ -238,7 +238,7 @@ class _AppShellState extends ConsumerState<AppShell>
     _collectionAutoSync = ref.read(collectionAutoSyncProvider)(ref);
     _collectionAutoSync!.install(
       enabled: isDownloadSupported,
-      onQueued: _showAutoSyncSnackBar,
+      onQueued: _showAutoSyncToast,
     );
     WidgetsBinding.instance.addObserver(this);
   }
@@ -289,22 +289,12 @@ class _AppShellState extends ConsumerState<AppShell>
     super.dispose();
   }
 
-  void _showAutoSyncSnackBar(int totalQueued) {
+  void _showAutoSyncToast(int totalQueued) {
     if (totalQueued > 0 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.sync_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 12),
-              Text(
-                'Auto-sync: queued $totalQueued new item${totalQueued != 1 ? 's' : ''} for download',
-              ),
-            ],
-          ),
-          backgroundColor: AppColors.primary,
-          behavior: SnackBarBehavior.floating,
-        ),
+      showToast(
+        context,
+        'Auto-sync: queued $totalQueued new item${totalQueued != 1 ? 's' : ''} for download',
+        icon: Icons.sync_rounded,
       );
     }
   }
@@ -318,24 +308,14 @@ class _AppShellState extends ConsumerState<AppShell>
     );
   }
 
-  /// Show a snackbar when a disabled nav item is tapped in offline mode
-  void _showOfflineSnackbar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Connect to server to access this'),
-        backgroundColor: AppColors.surfaceVariant,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-    );
+  /// Show a toast when a disabled nav item is tapped in offline mode
+  void _showOfflineToast() {
+    showToast(context, 'Connect to server to access this');
   }
 
   void _navigateTo(String route) {
     if (_isOfflineMode() && route != '/downloads') {
-      _showOfflineSnackbar();
+      _showOfflineToast();
       return;
     }
     context.go(route);
