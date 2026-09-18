@@ -71,13 +71,14 @@ class StatsMetrics {
   /// Distance from the top of the safe area.
   double get top => topInset;
 
-  /// Rendered height of each variant, pinned by
-  /// `stats_panel_test.dart`, which pumps the real panel and reads its
-  /// RenderBox rather than recomputing this arithmetic. Same contract as
-  /// `PanelMetrics._panelHeight`.
-  static const double fullHeight = 344.0;
-  static const double compactHeight = 164.0;
-  static const double tvHeight = 470.0;
+  /// The least available height worth drawing this density in. NOT the
+  /// panel's rendered height: the panel sizes to its content and scrolls
+  /// its rows when the content exceeds the box, because the row set and
+  /// the Why row's text length both vary at runtime. An earlier revision
+  /// declared rendered heights here and they could not hold.
+  static const double tvMinHeight = 589.0;
+  static const double fullMinHeight = 300.0;
+  static const double compactMinHeight = 140.0;
 
   /// A wider margin on a television, for a viewer sitting across a room.
   /// Not a safe-area claim: neither this app nor its chrome implements
@@ -118,10 +119,16 @@ class StatsMetrics {
     // stay off whenever the input is D-pad primary.
     final showButtons = !directionalPrimary;
 
-    if (directionalPrimary && available >= tvHeight) {
+    if (directionalPrimary && available >= tvMinHeight) {
       // Scaled for 10-foot viewing. The width is set so the longest value
       // string the panel can show, the Why row's "remembered decode
       // failure", does not wrap at 15px.
+      //
+      // `tvMinHeight` is the tv panel's measured content height rather
+      // than a smaller threshold: a television always clears it, so the
+      // tv panel never has to scroll. That matters because a D-pad cannot
+      // scroll an unfocusable scroll view, so the remote tier must never
+      // need to.
       return StatsMetrics(
         density: StatsDensity.tv,
         width: 462,
@@ -134,7 +141,7 @@ class StatsMetrics {
         showButtons: showButtons,
       );
     }
-    if (available >= fullHeight) {
+    if (available >= fullMinHeight) {
       // Width and reading sizes from the approved design mockup, for a
       // pointer at desk distance. The 90px label column in a later task's
       // panel widget is sized against this.
@@ -150,11 +157,14 @@ class StatsMetrics {
         showButtons: showButtons,
       );
     }
-    if (available >= compactHeight) {
+    if (available >= compactMinHeight) {
       // Not a design choice, a fit constraint: a phone in landscape
       // leaves about 168px between `topInset` and the control panel's
-      // corner inset, and seven rows plus a header only fit that at this
-      // density. This is why `compactHeight` is 164 and not rounder.
+      // corner inset. The compact panel still draws all seven of its rows
+      // at this tier; it scrolls to reach whichever ones do not fit rather
+      // than dropping them, since the row set and the Why row's text
+      // length both vary at runtime and neither can be pinned to a fixed
+      // budget.
       return StatsMetrics(
         density: StatsDensity.compact,
         width: 292,

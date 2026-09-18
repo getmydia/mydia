@@ -27,7 +27,10 @@ void main() {
 
     expect(metrics!.density, StatsDensity.compact);
     expect(metrics.showSparkline, isFalse);
-    expect(metrics.maxHeight, greaterThanOrEqualTo(StatsMetrics.compactHeight));
+    expect(
+      metrics.maxHeight,
+      greaterThanOrEqualTo(StatsMetrics.compactMinHeight),
+    );
   });
 
   // A panel that cannot clear the control panel must not be drawn at all.
