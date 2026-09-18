@@ -232,6 +232,34 @@ jobs:
             echo '{"builds":[]}' > index.json
           fi
 
+          # The container can be a well-formed {"builds": [...]} array while
+          # still holding a malformed element inside it: a null, a bare
+          # string, or an object missing platform, build, or file. That
+          # entry survives the check above, then `-.build` below throws on
+          # anything that is not a number, and set -e stops the step before
+          # rclone copyto ever writes the index back, wedging every future
+          # publish behind one bad row that only manual bucket surgery can
+          # clear. Drop malformed entries instead of failing the whole
+          # index, using the same three required fields the feed generator
+          # does (isWellFormedDevBuild in
+          # scripts/appcast/lib/releases-json.mjs: a string platform, a
+          # number build, a string file), so this step never accepts what
+          # the generator would silently reject anyway. Filtering here,
+          # before the amend below, means the prune and the survival check
+          # both run against the cleaned set, so a genuine prune loss is
+          # still refused correctly even when the index it is competing
+          # against also had junk in it. jq's `type` (unlike JS's `typeof`)
+          # already reports "null" for null, so the object check alone
+          # excludes it without a separate null test, and short-circuiting
+          # `and` means a non-object entry is never indexed into, so this
+          # cannot itself throw on the very values it is filtering out.
+          WELL_FORMED='type == "object" and (.platform | type == "string") and (.build | type == "number") and (.file | type == "string")'
+          jq -c ".builds[] | select(($WELL_FORMED) | not)" index.json | while IFS= read -r bad; do
+            echo "::warning::Dropping malformed dev build index entry (missing or mistyped platform, build, or file): ${bad}"
+          done
+          jq ".builds |= map(select($WELL_FORMED))" index.json > index.clean.json
+          mv index.clean.json index.json
+
           jq --arg version "$VERSION" \
              --argjson build "$VERSION_CODE" \
              --arg file "$OWN_FILE" \
