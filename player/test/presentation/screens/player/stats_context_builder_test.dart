@@ -196,6 +196,195 @@ void main() {
     expect(context.why, isNull);
   });
 
+  // The bug this brief exists to fix: a remembered failure at one
+  // resolution must not narrate a transcode of a *different* resolution of
+  // the same codec, chosen for an unrelated reason. Against the old
+  // `videoCodec`-only matching (which also ignored `plan.reason` entirely
+  // and consulted `knownFailures` for every Auto/Original transcode) this
+  // exact fixture -- same codec, mismatched height bucket, a non-decode
+  // reason -- would have returned 'Remembered decode failure on hevc'.
+  test(
+      'a mismatched-resolution memory entry does not narrate an unrelated '
+      'bandwidth transcode', () {
+    final context = buildStatsContext(
+      plan: const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: _r720,
+        adaptive: true,
+        reason: PlanReason.bitrateExceedsThroughput,
+      ),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.auto,
+      effectiveQuality: _r720,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      // A real remembered failure -- same codec as this file -- but at
+      // 1080p, not the 2160p this file actually is. `FailureKey` and
+      // `FileShape` key on codec plus height bucket together, so this must
+      // not match.
+      knownFailures: {
+        const FailureKey(videoCodec: 'hevc', heightBucket: 1080),
+      },
+      sourceHeight: 2160,
+      sourceCodec: 'hevc',
+      sourceBitrateKbps: 14200,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+    );
+
+    expect(context.why, isNot(contains('Remembered decode failure')));
+    expect(context.why, isNot(contains('hevc')));
+    expect(context.why, "Remembered connection speed doesn't fit this file");
+  });
+
+  test('a browser MIME rejection explains the re-encode', () {
+    final context = buildStatsContext(
+      plan: const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: QualityRung.original,
+        adaptive: false,
+        reason: PlanReason.copyRejectedByMime,
+      ),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.original,
+      effectiveQuality: null,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 1080,
+      sourceCodec: 'h264',
+      sourceBitrateKbps: 8000,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+    );
+
+    expect(context.why, contains('re-encoding'));
+  });
+
+  test('no direct-play candidate reads as a server decision', () {
+    final context = buildStatsContext(
+      plan: const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: QualityRung.original,
+        adaptive: false,
+        reason: PlanReason.noDirectPlayCandidate,
+      ),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.auto,
+      effectiveQuality: null,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 1080,
+      sourceCodec: 'h264',
+      sourceBitrateKbps: 8000,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+    );
+
+    expect(context.why, 'Server is re-encoding for this device');
+  });
+
+  // Unreachable through `planPlayback` itself (see `playback_planner.dart`:
+  // the local `reason` this enum value would be assigned is always
+  // overwritten before the plan is returned), but the mapping in `_why`
+  // still has to answer for it since it switches exhaustively over
+  // `PlanReason`.
+  test('no copy candidate reads as the same server decision', () {
+    final context = buildStatsContext(
+      plan: const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: QualityRung.original,
+        adaptive: false,
+        reason: PlanReason.noCopyCandidate,
+      ),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.auto,
+      effectiveQuality: null,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 1080,
+      sourceCodec: 'h264',
+      sourceBitrateKbps: 8000,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+    );
+
+    expect(context.why, 'Server is re-encoding for this device');
+  });
+
+  test('web reads its own inherent limit, not a file or connection problem',
+      () {
+    final context = buildStatsContext(
+      plan: const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: QualityRung.original,
+        adaptive: false,
+        reason: PlanReason.webNeverDirectPlays,
+      ),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.auto,
+      effectiveQuality: null,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 1080,
+      sourceCodec: 'h264',
+      sourceBitrateKbps: 8000,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+    );
+
+    expect(context.why, 'Browser playback always re-encodes');
+  });
+
+  // Also unreachable in a real session: `_fallbackToTranscode` sets
+  // `lastFallback` in the same breath as a plan carrying this reason, so
+  // the fallback branch above always answers first. Exercised directly here
+  // since the pure function accepts any combination.
+  test('a fallback-shaped plan with no recorded fallback still answers', () {
+    final context = buildStatsContext(
+      plan: const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: _r720,
+        adaptive: true,
+        reason: PlanReason.fallbackFromFailure,
+      ),
+      isDownloadedSource: false,
+      selectedQuality: QualityRung.auto,
+      effectiveQuality: _r720,
+      duration: const Duration(minutes: 90),
+      lastFallback: null,
+      knownFailures: const {},
+      sourceHeight: 1080,
+      sourceCodec: 'h264',
+      sourceBitrateKbps: 8000,
+      sourceContainer: 'mkv',
+      videoTrack: null,
+      audioTrack: null,
+      linkLabel: 'direct p2p - 1 peer',
+      linkHealthy: true,
+    );
+
+    expect(context.why, isNotNull);
+  });
+
   test('a video track becomes the Video and Decoder rows', () {
     final context = buildStatsContext(
       plan: const DirectPlayPlan(reason: PlanReason.directPlayAccepted),

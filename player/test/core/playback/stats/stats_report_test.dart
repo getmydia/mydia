@@ -173,6 +173,33 @@ void main() {
     expect(valueFor(rows, 'Playing'), 'Local file');
   });
 
+  // The collector now arms for a downloaded file too (deliberately, so the
+  // panel reports on it at all), and `cache-speed` on that code path is an
+  // unverified mpv contract. A local file has no server to measure
+  // throughput to, so the row and its clipboard line must stay gone even
+  // when the sample carries a non-null reading, not only when it happens to
+  // be null.
+  test(
+      'a local file omits Throughput even when the sample carries a '
+      'reading', () {
+    const local = StatsContext(
+      mode: PlaybackMode.localFile,
+      qualityLabel: 'Original',
+      duration: Duration(minutes: 30),
+    );
+    const sample = StatsSample(
+      bufferedAhead: Duration(seconds: 30),
+      position: Duration.zero,
+      throughputKbps: 4200,
+    );
+    final rows = statsRows(sample, local, StatsDensity.full);
+
+    expect(labelsOf(rows), isNot(contains('Throughput')));
+
+    final text = statsClipboardText(sample, local, appVersion: '1.4.2');
+    expect(text, isNot(contains('Throughput')));
+  });
+
   test('compact keeps seven rows and drops the long tail', () {
     final rows = statsRows(_sample, _context, StatsDensity.compact);
 

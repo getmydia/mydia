@@ -1661,21 +1661,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final fileId = _playFileId;
     if (playback == null || player == null || fileId == null) return false;
 
-    // Every switch through here keeps the same `Player` (a fallback, a
-    // manual quality change, a seek restart): a fresh dropped-frame
-    // baseline and an empty sparkline history, or the next sample diffs
-    // against the outgoing source's counters and reports a spike that
-    // never happened. Here, once, rather than at each call site, so a
-    // future switch path gets it too without relying on the caller to
-    // remember.
-    _statsCollector?.rebind();
-
     _sourceSwitchInFlight = true;
     try {
       // Persist where the viewer actually is before the old source goes away.
       await _saveProgress();
       if (!mounted || !identical(playback, _playback)) return false;
       _stopVerification();
+
+      // Every switch past this point keeps the same `Player` (a fallback, a
+      // manual quality change, a seek restart): a fresh dropped-frame
+      // baseline and an empty sparkline history, or the next sample diffs
+      // against the outgoing source's counters and reports a spike that
+      // never happened. After the abort checks above, not before: an
+      // aborted switch (unmounted, or `_playback` already replaced) must
+      // not wipe a history nothing is actually replacing.
+      _statsCollector?.rebind();
 
       final source = await playback.replaceSource(
         plan,
@@ -4756,8 +4756,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // The receiver is now the thing the viewer is watching. A fault on the
       // backgrounded local player is not theirs to see, so it must not spend
       // a fallback or a failure-memory write on a source nothing is showing.
+      //
+      // The collector stops for a different reason: it does not feed
+      // `AdaptationPolicy` at all, so nothing it observes is wrong while
+      // casting, only pointless. `_buildBody`'s `Stack` (where the panel
+      // lives) is not built while `isCastingProvider` is true -- `build`
+      // swaps to `_buildCastPlaceholder` first -- so the panel is already
+      // invisible without this. Invisible is not inactive: without also
+      // stopping the collector here, its `Timer.periodic` keeps sampling
+      // mpv once a second against a player that is not decoding anything,
+      // for the whole cast session. `_startStatsCollector`, called
+      // unconditionally from `_openPlayerAndStart`, re-arms it when local
+      // playback resumes (`_restartLocalPlayback` -> `_initializePlayer`).
       if (previous == false && next == true) {
         _stopVerification();
+        _stopStatsCollector();
       }
     });
 
@@ -5169,7 +5182,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       audioTrack: player?.state.track.audio,
       linkLabel: '${summary.label} - ${status.connectedPeersCount} peer'
           '${status.connectedPeersCount == 1 ? '' : 's'}',
-      linkHealthy: status.isRelayConnected == false,
+      linkHealthy: !status.isRelayConnected,
     );
   }
 

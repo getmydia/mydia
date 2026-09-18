@@ -15,6 +15,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/settings/stats_overlay_setting.dart';
+import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_panel.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
@@ -54,6 +55,23 @@ class _FakePlatformPlayer extends PlatformPlayer {
     state = state.copyWith(playing: true);
     playingController.add(true);
   }
+
+  /// Whether anything is currently subscribed to `player.stream.buffer`.
+  ///
+  /// `bufferController` is `@protected` on `PlatformPlayer`, reachable here
+  /// because this class extends it; `PlatformPlayer.stream` wraps it in a
+  /// single `late`-initialised `distinct()` stream built once at
+  /// construction (not recomputed per access), so this reflects every
+  /// listener of `player.stream.buffer` for this player's lifetime, not
+  /// just this fake's own bookkeeping.
+  ///
+  /// The proxy this test needs: `PlaybackStatsCollector.start()` is the
+  /// only thing that subscribes to it once verification has stopped and the
+  /// cast placeholder has unmounted the chrome's `VideoProgressBar` (the
+  /// only other subscriber in `lib/`), so this stays true exactly as long
+  /// as the collector is actually armed and sampling, not merely as long as
+  /// the panel happens to be on screen.
+  bool get hasBufferListener => bufferController.hasListener;
 }
 
 /// Mounts the real `PlayerScreen` direct-playing a file, with the stats
@@ -62,7 +80,23 @@ class _FakePlatformPlayer extends PlatformPlayer {
 /// harness leaves `coreSettingsServiceProvider` unoverridden, which every
 /// other `PlayerScreen` test relies on, so this passes it explicitly rather
 /// than changing that default.
-Future<ProviderContainer> _mountPlayingScreen(WidgetTester tester) async {
+///
+/// [castSessionStream] threads straight through to
+/// `buildPlayerScreenContainer`, which is the only way to drive
+/// `isCastingProvider` under test (see that parameter's own dartdoc); left
+/// null, casting never starts and `castSessionProvider` reports `null`
+/// throughout, exactly like every other caller of this helper.
+///
+/// Returns the fake platform player alongside the container, not just the
+/// container, so a caller can inspect what is actually still subscribed to
+/// the player's streams (`_FakePlatformPlayer.hasBufferListener`) -- the
+/// only way to tell "the collector stopped" from "the panel is merely
+/// off screen" from outside `_PlayerScreenState`, which is private to
+/// `player_screen.dart`.
+Future<(ProviderContainer, _FakePlatformPlayer)> _mountPlayingScreen(
+  WidgetTester tester, {
+  Stream<CastSession?>? castSessionStream,
+}) async {
   final storage = MockAuthStorage();
   final settings = SettingsService(storage: storage);
   final fake = _FakePlatformPlayer();
@@ -93,6 +127,7 @@ Future<ProviderContainer> _mountPlayingScreen(WidgetTester tester) async {
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
     coreSettingsService: settings,
+    castSessionStream: castSessionStream,
   );
   addTearDown(container.dispose);
 
@@ -109,7 +144,7 @@ Future<ProviderContainer> _mountPlayingScreen(WidgetTester tester) async {
   // matching `stats_overlay_setting_test.dart`'s own setup.
   await container.read(statsOverlayEnabledProvider.future);
 
-  return container;
+  return (container, fake);
 }
 
 void main() {
@@ -117,7 +152,7 @@ void main() {
       'turning the flag on mid-playback shows the panel after one pump plus '
       "the collector's first tick, with no other rebuild to mask it",
       (tester) async {
-    final container = await _mountPlayingScreen(tester);
+    final (container, _) = await _mountPlayingScreen(tester);
 
     expect(find.byType(StatsPanel), findsNothing,
         reason: 'the flag starts off, so nothing has armed the collector');
@@ -141,7 +176,7 @@ void main() {
 
   testWidgets('turning the flag off mid-playback hides the panel',
       (tester) async {
-    final container = await _mountPlayingScreen(tester);
+    final (container, _) = await _mountPlayingScreen(tester);
     await container.read(statsOverlayEnabledProvider.notifier).set(true);
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
@@ -151,6 +186,85 @@ void main() {
     await tester.pump();
 
     expect(find.byType(StatsPanel), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  // The bug this covers: `ref.listen<bool>(isCastingProvider, ...)` called
+  // `_stopVerification()` on cast start but not `_stopStatsCollector()`, so
+  // the collector's `Timer.periodic` kept sampling once a second for the
+  // whole cast session. Invisible (the cast placeholder replaces the body
+  // that holds the panel) is not the same as inactive, so the assertion
+  // below checks the collector's own subscription, not what is on screen.
+  testWidgets(
+      'starting a cast session stops the stats collector, not just the '
+      'panel', (tester) async {
+    final sessions = StreamController<CastSession?>.broadcast();
+    // Registered before `_mountPlayingScreen` runs (which registers
+    // `container.dispose` itself), so LIFO teardown disposes the container
+    // first and closes `sessions` second -- the same ordering
+    // `player_screen_source_switch_test.dart` uses for the same reason: a
+    // broadcast `close()` waits for every listener to be delivered its done
+    // event, and only disposing the container first cancels Riverpod's own
+    // subscription to this stream.
+    addTearDown(sessions.close);
+
+    final (container, fake) = await _mountPlayingScreen(
+      tester,
+      castSessionStream: sessions.stream,
+    );
+
+    await container.read(statsOverlayEnabledProvider.notifier).set(true);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(StatsPanel), findsOneWidget);
+    expect(fake.hasBufferListener, isTrue,
+        reason: 'sanity check: the armed collector subscribes to the '
+            'buffer stream, or the assertion below would pass vacuously');
+
+    sessions.add(const CastSession(
+      device: testDevice,
+      mediaInfo: CastMediaInfo(
+        title: 'The Long Aurora',
+        duration: Duration(seconds: 5400),
+        position: Duration.zero,
+      ),
+      playbackState: CastPlaybackState.playing,
+      connectionState: CastConnectionState.connected,
+    ));
+    await tester.pump();
+
+    expect(find.byType(StatsPanel), findsNothing,
+        reason: 'the cast placeholder replaces the body that holds it');
+
+    // `_stopStatsCollector` (like `_stopVerification` beside it) disposes
+    // fire-and-forget (`unawaited`), and `PlaybackStatsCollector.dispose`
+    // cancels its two stream subscriptions -- position, then buffer --
+    // behind their own `await`s. That chain never resolves under plain
+    // `tester.pump()`, however many times or however much fake duration is
+    // elapsed (verified empirically: 100 iterations of `pumpUntil` and 20
+    // bare pumps both leave it pending); it only progresses on the real
+    // event loop, which is exactly what `tester.runAsync` exists to reach.
+    // Not a test artifact to route around: it is a genuine, harmless async
+    // gap between "the timer that drove mpv reads is already cancelled"
+    // (synchronous, inside `dispose()` before its first `await`, so the
+    // actual defect this test guards is fixed the instant
+    // `_stopStatsCollector` is called) and "the now-pointless stream
+    // subscriptions have finished unsubscribing".
+    await tester.runAsync(() async {
+      for (var i = 0; i < 40 && fake.hasBufferListener; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+    // Brings the binding back in sync with the real time `runAsync` just
+    // spent, per its own contract.
+    await tester.pump();
+
+    expect(fake.hasBufferListener, isFalse,
+        reason: '_stopStatsCollector must run alongside _stopVerification '
+            'on cast start, or the collector keeps sampling mpv for the '
+            'whole cast session with nothing on screen to show for it');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();

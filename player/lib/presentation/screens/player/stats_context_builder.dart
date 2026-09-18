@@ -51,6 +51,7 @@ StatsContext buildStatsContext({
 }) {
   final mode = _mode(plan, isDownloadedSource);
   final why = _why(
+    plan: plan,
     mode: mode,
     lastFallback: lastFallback,
     selectedQuality: selectedQuality,
@@ -94,9 +95,13 @@ PlaybackMode _mode(PlaybackPlan? plan, bool isDownloadedSource) {
 /// The Why row, or null when the mode needs no explaining.
 ///
 /// A fallback that actually happened wins: it is the more specific answer
-/// and it carries a raw detail worth pasting. Otherwise the reason is
-/// derived from the plan, in the order a viewer would ask about it.
+/// and it carries a raw detail worth pasting. Otherwise the sentence comes
+/// from the plan's own [PlanReason] -- the rule the planner actually applied
+/// -- rather than from guessing it back out of [mode] and [selectedQuality],
+/// which is what let a remembered failure at one resolution mislabel an
+/// unrelated transcode of a different resolution as the same failure.
 String? _why({
+  required PlaybackPlan? plan,
   required PlaybackMode mode,
   required StatsFallback? lastFallback,
   required QualityRung selectedQuality,
@@ -107,36 +112,81 @@ String? _why({
   if (lastFallback != null) {
     return policy.fallbackMessage(lastFallback.reason);
   }
-  switch (mode) {
-    case PlaybackMode.direct:
-    case PlaybackMode.localFile:
-      return null;
-    case PlaybackMode.copy:
-      return 'Container is not playable directly';
-    case PlaybackMode.transcode:
-      if (!selectedQuality.isAuto && !selectedQuality.isOriginal) {
-        return 'Quality capped to ${selectedQuality.label}';
-      }
-      final remembered = _rememberedFailure(
+  // A downloaded file may carry a stale plan from before it was recognised
+  // as local; `mode` already folds that in, and nothing needs explaining
+  // for local playback either way.
+  if (mode == PlaybackMode.localFile || plan == null) return null;
+
+  return switch (plan.reason) {
+    // Direct play is the obvious case; only `mode == direct` ever reaches
+    // it, and that already reads as "nothing to explain".
+    PlanReason.directPlayAccepted => null,
+    PlanReason.copyAccepted => 'Container is not playable directly',
+    PlanReason.copyRejectedByMime =>
+      "Browser can't stream-copy this container, so the server is "
+          're-encoding',
+    PlanReason.shapeKnownToFail => _shapeKnownToFailMessage(
         knownFailures,
         sourceHeight,
         sourceCodec,
-      );
-      if (remembered != null) {
-        return 'Remembered decode failure on $remembered';
-      }
-      return 'Server is re-encoding for this device';
-  }
+      ),
+    PlanReason.bitrateExceedsThroughput =>
+      "Remembered connection speed doesn't fit this file",
+    PlanReason.fixedRungRequested =>
+      'Quality capped to ${selectedQuality.label}',
+    // Both mean the server decided this file needs re-encoding for every
+    // device, not just this one -- the same generic sentence the plan-blind
+    // version of this function always fell back to.
+    PlanReason.noDirectPlayCandidate ||
+    PlanReason.noCopyCandidate =>
+      'Server is re-encoding for this device',
+    PlanReason.webNeverDirectPlays => 'Browser playback always re-encodes',
+    // Unreachable in practice: `_fallbackToTranscode` sets `lastFallback` in
+    // the same breath it sets a plan with this reason, so the
+    // `lastFallback != null` branch above always wins first. Kept only so
+    // this switch stays exhaustive over `PlanReason`.
+    PlanReason.fallbackFromFailure => 'Switched to transcoding earlier '
+        'this session',
+  };
 }
 
-String? _rememberedFailure(
+/// The Why sentence for [PlanReason.shapeKnownToFail]: the remembered
+/// failure that actually explains this transcode, or the generic sentence
+/// when nothing in [knownFailures] matches this file's exact shape.
+///
+/// `FailureKey` (`playback_memory.dart`) and `FileShape`
+/// (`playback_plan.dart`) both key remembered failures on codec *and*
+/// height bucket together, because the planner does: a plan only carries
+/// `shapeKnownToFail` when `knownFailures` contains an entry matching both.
+/// Matching on codec alone here would let a failure remembered at one
+/// resolution narrate a transcode of a different resolution of the same
+/// codec, which is not what happened.
+String _shapeKnownToFailMessage(
+  Set<FailureKey> knownFailures,
+  int? sourceHeight,
+  String? sourceCodec,
+) {
+  final remembered = _rememberedFailureCodec(
+    knownFailures,
+    sourceHeight,
+    sourceCodec,
+  );
+  return remembered == null
+      ? 'Server is re-encoding for this device'
+      : 'Remembered decode failure on $remembered';
+}
+
+String? _rememberedFailureCodec(
   Set<FailureKey> knownFailures,
   int? sourceHeight,
   String? sourceCodec,
 ) {
   if (sourceCodec == null) return null;
+  final bucket = FileShape.bucketHeight(sourceHeight);
   for (final key in knownFailures) {
-    if (key.videoCodec == sourceCodec) return key.videoCodec;
+    if (key.videoCodec == sourceCodec && key.heightBucket == bucket) {
+      return key.videoCodec;
+    }
   }
   return null;
 }

@@ -73,7 +73,13 @@ List<StatsRow> statsRows(
         tone: sample.droppedFrames! > 0 ? StatsTone.warn : StatsTone.good,
       ),
     StatsRow(label: 'Buffer', value: _seconds(sample.bufferedAhead)),
-    if (sample.throughputKbps != null)
+    // Gated on mode, not just on the sample carrying a reading: a local
+    // file has no server to measure throughput to, so a number here would
+    // read as a real figure even though `cache-speed` on that code path is
+    // an unverified mpv contract -- possibly a disk-read speed, possibly a
+    // bogus zero -- that the collector never used to read before the panel
+    // started arming it for downloaded files too.
+    if (context.mode != PlaybackMode.localFile && sample.throughputKbps != null)
       StatsRow(
         label: 'Throughput',
         value: formatBitrate(sample.throughputKbps!),
@@ -114,7 +120,7 @@ String statsClipboardText(
       'Frames: ${sample.droppedFrames ?? 0} dropped this second, '
           '${sample.droppedFramesTotal} total',
     'Buffer: ${_seconds(sample.bufferedAhead)}',
-    if (sample.throughputKbps != null)
+    if (context.mode != PlaybackMode.localFile && sample.throughputKbps != null)
       'Throughput: ${formatBitrate(sample.throughputKbps!)}',
     if (context.linkLabel != null) 'Link: ${context.linkLabel}',
     'Position: ${_timecode(sample.position)} / '
