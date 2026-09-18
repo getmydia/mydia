@@ -13,6 +13,8 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 import 'package:player/presentation/widgets/nav/desktop_sidebar.dart';
+import 'package:player/presentation/widgets/toast/toast_layer.dart';
+import 'package:player/presentation/widgets/toast/toast_models.dart';
 import 'package:player/presentation/widgets/toast/toaster.dart';
 
 class _FakeAuthNotifier extends AuthStateNotifier {
@@ -84,7 +86,19 @@ void main() {
         .getRect(
             find.descendant(of: bar, matching: find.byType(SafeArea)).first)
         .top;
-    expect(pill.left, greaterThanOrEqualTo(tester.getRect(sidebar).right));
+    // The column the sidebar leaves free, in window coordinates. The sidebar
+    // and the layer are both measured, so nothing here is pinned to the
+    // sidebar's own width or to the 1400 window: a pill that ignored the left
+    // claim would centre on the window instead of on this column.
+    final sidebarRect = tester.getRect(sidebar);
+    final layerRect = tester.getRect(find.byType(ToastLayer));
+    const gutter = ToastMetrics.gutter;
+    final freeLeft = sidebarRect.right + gutter;
+    final freeRight = layerRect.right - gutter;
+    expect(pill.center.dx, closeTo((freeLeft + freeRight) / 2, 1.0),
+        reason: 'the pill centres in the column the sidebar leaves free, so '
+            'this fails the moment the sidebar stops claiming its edge');
+    expect(pill.left, greaterThanOrEqualTo(sidebarRect.right));
     expect(pill.bottom, lessThanOrEqualTo(barTop - 16 + 0.5));
   });
 }
