@@ -814,14 +814,14 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
   # `Map.get(result, :grab_failed)` in MediaLive.Show.Modals, so the reason
   # must survive both the initial render and a later stream rebuild.
   test "a grab failure reason survives the next indexer reporting", %{conn: conn} do
-    media_item = media_item_fixture(%{title: "Dune", type: "movie"})
+    media_item = media_item_fixture(%{title: "Starlight Vault", type: "movie"})
     indexer = pending_indexer_fixture("slow-indexer")
 
     {:ok, view, _html} = live(conn, ~p"/media/#{media_item.id}")
     view |> element("#manual-search-button") |> render_click()
     wait_for_indexer_progress(view)
 
-    dune = search_result("Dune.2024.2160p.UHD")
+    vault = search_result("Starlight.Vault.2024.2160p.UHD")
 
     send(
       view.pid,
@@ -830,7 +830,7 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
          indexer: "slow-indexer",
          indexer_id: indexer.id,
          status: :ok,
-         results: [dune],
+         results: [vault],
          result_count: 1,
          duration_ms: 700,
          completed: 1,
@@ -843,12 +843,12 @@ defmodule MydiaWeb.MediaLive.ManualSearchStreamingTest do
     send(
       view.pid,
       {:grab_failed,
-       %{download_url: dune.download_url, reason: "No download clients are configured"}}
+       %{download_url: vault.download_url, reason: "No download clients are configured"}}
     )
 
     render(view)
 
-    row = "##{positioned_result_dom_id(dune)}"
+    row = "##{positioned_result_dom_id(vault)}"
 
     assert has_element?(view, "#{row} .btn-error"),
            "precondition failed: the failed badge never rendered"
