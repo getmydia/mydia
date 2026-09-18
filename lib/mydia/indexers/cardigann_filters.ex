@@ -481,15 +481,13 @@ defmodule Mydia.Indexers.CardigannFilters do
           {:ok, now}
 
         Regex.match?(~r/(?i)\bago\b/, input) ->
-          case apply_timeago(input) do
-            {:ok, iso} ->
-              case DateTime.from_iso8601(iso) do
-                {:ok, dt, _offset} -> {:ok, dt}
-                _ -> :error
-              end
+          # apply_timeago/1 always returns {:ok, iso}, so there is no error
+          # case to branch on here.
+          {:ok, iso} = apply_timeago(input)
 
-            _ ->
-              :error
+          case DateTime.from_iso8601(iso) do
+            {:ok, dt, _offset} -> {:ok, dt}
+            _ -> :error
           end
 
         Regex.match?(~r/(?i)^today/i, input) ->
@@ -714,10 +712,10 @@ defmodule Mydia.Indexers.CardigannFilters do
   def apply_keywords_filters(query, %{search: %{keywordsfilters: filters}})
       when is_list(filters) and filters != [] and is_binary(query) do
     Enum.reduce(filters, query, fn filter, acc ->
-      case __MODULE__.apply(normalize_keywords_filter(filter), acc) do
-        {:ok, filtered} -> filtered
-        _ -> acc
-      end
+      # apply/2's spec guarantees {:ok, _}, so there is no error case to
+      # branch on here.
+      {:ok, filtered} = __MODULE__.apply(normalize_keywords_filter(filter), acc)
+      filtered
     end)
   end
 

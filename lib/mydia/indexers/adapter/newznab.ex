@@ -133,10 +133,10 @@ defmodule Mydia.Indexers.Adapter.Newznab do
 
   @impl true
   def get_capabilities(config) do
+    # test_connection/1 always resolves to parse_caps_response/1, which always
+    # returns a %{name: ...} identity map, never the full capabilities. So
+    # this always falls through to a second request via fetch_capabilities/1.
     case test_connection(config) do
-      {:ok, caps} when is_map(caps) and not is_map_key(caps, :name) ->
-        {:ok, caps}
-
       {:ok, %{name: _}} ->
         fetch_capabilities(config)
 
@@ -177,7 +177,6 @@ defmodule Mydia.Indexers.Adapter.Newznab do
     end
   end
 
-  defp maybe_add_param(params, _key, nil), do: params
   defp maybe_add_param(params, _key, ""), do: params
   defp maybe_add_param(params, key, value), do: params ++ [{key, value}]
 

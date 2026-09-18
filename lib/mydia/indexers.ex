@@ -833,8 +833,10 @@ defmodule Mydia.Indexers do
         []
 
       definition ->
+        # get_stored_session/1 always coalesces cookies to a list before
+        # returning {:ok, session}, so there is no nil case to fall back on.
         case CardigannAuth.get_stored_session(definition.id) do
-          {:ok, session} -> session.cookies || []
+          {:ok, session} -> session.cookies
           {:error, _} -> []
         end
     end
@@ -857,9 +859,11 @@ defmodule Mydia.Indexers do
         nil
 
       definition ->
+        # get_stored_session/1 always coalesces cookies to a list before
+        # returning {:ok, session}, so there is no nil case to fall back on.
         cookies =
           case CardigannAuth.get_stored_session(definition.id) do
-            {:ok, session} -> session.cookies || []
+            {:ok, session} -> session.cookies
             {:error, _} -> []
           end
 
