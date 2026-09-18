@@ -6,6 +6,7 @@ import '../../../core/theme/colors.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../focus_highlight.dart';
 import '../glass_surface.dart';
+import '../toast/toast_obstruction.dart';
 import 'nav_badges.dart';
 
 /// Mobile bottom navigation bar
@@ -28,90 +29,93 @@ class BottomNav extends StatelessWidget {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: DecoratedBox(
-          // Drop shadow lives on an outer box; GlassSurface clips its own
-          // blurred fill so the pill now reads as true frosted glass over the
-          // ambient backdrop instead of a near-opaque surface.
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 16,
-                spreadRadius: 2,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: GlassSurface(
-            blurSigma: 10,
-            fillColor: AppColors.surface.withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: AppColors.border.withValues(alpha: 0.2),
+        child: ToastObstruction(
+          edge: ToastEdge.bottom,
+          child: DecoratedBox(
+            // Drop shadow lives on an outer box; GlassSurface clips its own
+            // blurred fill so the pill now reads as true frosted glass over the
+            // ambient backdrop instead of a near-opaque surface.
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  if (showBackToMydia)
+            child: GlassSurface(
+              blurSigma: 10,
+              fillColor: AppColors.surface.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: AppColors.border.withValues(alpha: 0.2),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    if (showBackToMydia)
+                      NavItem(
+                        icon: Icons.arrow_back_rounded,
+                        selectedIcon: Icons.arrow_back_rounded,
+                        label: 'Mydia',
+                        isSelected: false,
+                        onTap: navigateToMydiaApp,
+                      ),
                     NavItem(
-                      icon: Icons.arrow_back_rounded,
-                      selectedIcon: Icons.arrow_back_rounded,
-                      label: 'Mydia',
-                      isSelected: false,
-                      onTap: navigateToMydiaApp,
-                    ),
-                  NavItem(
-                    icon: Icons.home_outlined,
-                    selectedIcon: Icons.home_rounded,
-                    label: 'Home',
-                    isSelected: builtinDestinations
-                        .firstWhere((d) => d.id == 'home')
-                        .matches(location),
-                    isDisabled: isOffline,
-                    onTap: () => onNavigate('/'),
-                  ),
-                  NavItem(
-                    icon: Icons.movie_outlined,
-                    selectedIcon: Icons.movie_rounded,
-                    label: 'Movies',
-                    isSelected: location.startsWith('/movies'),
-                    isDisabled: isOffline,
-                    onTap: () => onNavigate('/movies'),
-                  ),
-                  NavItem(
-                    icon: Icons.tv_outlined,
-                    selectedIcon: Icons.tv_rounded,
-                    label: 'Shows',
-                    isSelected: location.startsWith('/shows'),
-                    isDisabled: isOffline,
-                    onTap: () => onNavigate('/shows'),
-                  ),
-                  if (isDownloadSupported)
-                    NavItem(
-                      icon: Icons.download_outlined,
-                      selectedIcon: Icons.download_rounded,
-                      label: 'Downloads',
-                      isSelected: location.startsWith('/downloads'),
-                      onTap: () => onNavigate('/downloads'),
-                    )
-                  else
-                    NavItem(
-                      icon: Icons.favorite_outline_rounded,
-                      selectedIcon: Icons.favorite_rounded,
-                      label: 'Favorites',
-                      isSelected: location.startsWith('/favorites'),
+                      icon: Icons.home_outlined,
+                      selectedIcon: Icons.home_rounded,
+                      label: 'Home',
+                      isSelected: builtinDestinations
+                          .firstWhere((d) => d.id == 'home')
+                          .matches(location),
                       isDisabled: isOffline,
-                      onTap: () => onNavigate('/favorites'),
+                      onTap: () => onNavigate('/'),
                     ),
-                  SettingsNavItem(
-                    isSelected: location.startsWith('/settings'),
-                    isDisabled: isOffline,
-                    onTap: () => onNavigate('/settings'),
-                  ),
-                ],
+                    NavItem(
+                      icon: Icons.movie_outlined,
+                      selectedIcon: Icons.movie_rounded,
+                      label: 'Movies',
+                      isSelected: location.startsWith('/movies'),
+                      isDisabled: isOffline,
+                      onTap: () => onNavigate('/movies'),
+                    ),
+                    NavItem(
+                      icon: Icons.tv_outlined,
+                      selectedIcon: Icons.tv_rounded,
+                      label: 'Shows',
+                      isSelected: location.startsWith('/shows'),
+                      isDisabled: isOffline,
+                      onTap: () => onNavigate('/shows'),
+                    ),
+                    if (isDownloadSupported)
+                      NavItem(
+                        icon: Icons.download_outlined,
+                        selectedIcon: Icons.download_rounded,
+                        label: 'Downloads',
+                        isSelected: location.startsWith('/downloads'),
+                        onTap: () => onNavigate('/downloads'),
+                      )
+                    else
+                      NavItem(
+                        icon: Icons.favorite_outline_rounded,
+                        selectedIcon: Icons.favorite_rounded,
+                        label: 'Favorites',
+                        isSelected: location.startsWith('/favorites'),
+                        isDisabled: isOffline,
+                        onTap: () => onNavigate('/favorites'),
+                      ),
+                    SettingsNavItem(
+                      isSelected: location.startsWith('/settings'),
+                      isDisabled: isOffline,
+                      onTap: () => onNavigate('/settings'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

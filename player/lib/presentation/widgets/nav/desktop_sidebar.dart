@@ -4,6 +4,7 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../glass_surface.dart';
+import '../toast/toast_obstruction.dart';
 import 'back_to_mydia_button.dart';
 import 'sidebar_content.dart';
 
@@ -67,22 +68,25 @@ class GlassSidebarPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: Breakpoints.sidebarWidth,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(boxShadow: DepthTokens.chrome),
-        child: GlassSurface(
-          blurSigma: DepthTokens.blurChrome,
-          fillColor: AppColors.surface.withValues(
-            alpha: DepthTokens.chromeFillOpacity,
-          ),
-          border: const Border(
-            right: BorderSide(
-              color: DepthTokens.rimColor,
-              width: DepthTokens.rimWidth,
+    return ToastObstruction(
+      edge: ToastEdge.left,
+      child: SizedBox(
+        width: Breakpoints.sidebarWidth,
+        child: DecoratedBox(
+          decoration: const BoxDecoration(boxShadow: DepthTokens.chrome),
+          child: GlassSurface(
+            blurSigma: DepthTokens.blurChrome,
+            fillColor: AppColors.surface.withValues(
+              alpha: DepthTokens.chromeFillOpacity,
             ),
+            border: const Border(
+              right: BorderSide(
+                color: DepthTokens.rimColor,
+                width: DepthTokens.rimWidth,
+              ),
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );

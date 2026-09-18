@@ -10,6 +10,7 @@ import 'core/layout/window_chrome_inset.dart';
 import 'core/theme/app_theme.dart';
 import 'core/window/decoration_layout_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
+import 'presentation/widgets/toast/toast_layer.dart';
 import 'core/providers/providers.dart';
 import 'core/graphql/graphql_provider.dart';
 import 'core/graphql/watch/resume_gate.dart';
@@ -519,8 +520,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // Float the cast mini controller above every route. `CastBarLayer`
       // documents what mounting it out here costs the bar.
       //
-      // `WindowChromeInset` wraps it rather than the reverse: the cast bar is
-      // itself a route-level overlay, so it has to sit inside the reserved
+      // `ToastLayer` wraps the cast bar so toasts render above it, above
+      // every route and dialog, and outlive the route that showed them. It
+      // sits inside `WindowChromeInset` for the same reason the bar does.
+      //
+      // `WindowChromeInset` wraps both rather than the reverse: the cast bar
+      // is itself a route-level overlay, so it has to sit inside the reserved
       // window chrome like everything else.
       //
       // `DesktopWindowChrome` wraps `WindowChromeInset` rather than the
@@ -531,7 +536,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         child: DesktopWindowChrome(
           layout: _decorationLayout.layout,
           child: WindowChromeInset(
-            child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+            child: ToastLayer(
+              child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+            ),
           ),
         ),
       ),

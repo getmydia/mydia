@@ -19,6 +19,7 @@ import '../screens/episode/episode_detail_controller.dart';
 import '../screens/movie/movie_detail_controller.dart';
 import 'cast_actions.dart';
 import 'cast_subtitle_sheet.dart';
+import 'toast/toast_obstruction.dart';
 
 /// Mounts [CastMiniController] at the bottom of [child], floating above it.
 ///
@@ -141,7 +142,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     }
 
     if (content == null) return const SizedBox.shrink();
-    return SafeArea(top: false, child: content);
+    return ToastObstruction(
+      edge: ToastEdge.bottom,
+      child: SafeArea(top: false, child: content),
+    );
   }
 
   /// Shared chrome for the three text-only rows.
