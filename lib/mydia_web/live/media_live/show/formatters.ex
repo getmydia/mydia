@@ -1,22 +1,11 @@
 defmodule MydiaWeb.MediaLive.Show.Formatters do
   @moduledoc """
   Formatting functions for the MediaLive.Show page.
-  Handles formatting of file sizes, dates, times, download statuses, and quality information.
+  Handles formatting of dates, times, download statuses, and quality
+  information. File sizes go through `MydiaWeb.Formatters.format_file_size/1`.
   """
 
   alias Mydia.Indexers.SearchResult
-
-  def format_file_size(nil), do: "N/A"
-
-  def format_file_size(bytes) when is_integer(bytes) do
-    cond do
-      bytes >= 1_099_511_627_776 -> "#{Float.round(bytes / 1_099_511_627_776, 2)} TB"
-      bytes >= 1_073_741_824 -> "#{Float.round(bytes / 1_073_741_824, 2)} GB"
-      bytes >= 1_048_576 -> "#{Float.round(bytes / 1_048_576, 2)} MB"
-      bytes >= 1024 -> "#{Float.round(bytes / 1024, 2)} KB"
-      true -> "#{bytes} B"
-    end
-  end
 
   def format_date(nil), do: "N/A"
 
