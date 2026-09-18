@@ -1624,6 +1624,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         source.url,
         source.headers,
         plan: source.seekOnOpen ? ResumePlan(at) : ResumePlan.fromStart,
+        // This is `_switchSource`'s web continuation, not a fresh media
+        // item: a fallback's `_lastFallback` was set moments ago by the
+        // caller and must survive into the replacement source.
+        isSourceSwitch: true,
       );
       return fresh.stream.position;
     }
@@ -1656,6 +1660,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     final fileId = _playFileId;
     if (playback == null || player == null || fileId == null) return false;
+
+    // Every switch through here keeps the same `Player` (a fallback, a
+    // manual quality change, a seek restart): a fresh dropped-frame
+    // baseline and an empty sparkline history, or the next sample diffs
+    // against the outgoing source's counters and reports a spike that
+    // never happened. Here, once, rather than at each call site, so a
+    // future switch path gets it too without relying on the caller to
+    // remember.
+    _statsCollector?.rebind();
 
     _sourceSwitchInFlight = true;
     try {
@@ -1823,12 +1836,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     }
 
-    // For the panel's Why row, and a fresh dropped-frame baseline: on
-    // native the same `Player` carries on into the new source, so without
-    // `rebind()` the next sample would diff against the outgoing source's
-    // counters and report a spike that never happened.
+    // For the panel's Why row. The dropped-frame baseline is reset by
+    // `_switchSource` itself (every caller keeps the same `Player`, not
+    // just this one), so it is not repeated here.
     _lastFallback = StatsFallback(reason: action.reason, detail: action.detail);
-    _statsCollector?.rebind();
 
     // The choice stays the viewer's: `fallbackPlan` already honours it as
     // closely as this device allows. The stored default is never written
@@ -1896,11 +1907,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// hold or expose the whole file at real coordinates and have nothing to
   /// bake an offset into, so for them resuming is a plain [Player.seek] after
   /// the media opens.
+  ///
+  /// A fourth path reaches this too: web's `_attachSource` reopens the
+  /// whole `Player` for a mid-session switch (`_switchSource`), and passes
+  /// [isSourceSwitch] so this does not treat that continuation as a fresh
+  /// media item.
   Future<Player> _openPlayerAndStart(
     String mediaSource,
     Map<String, String> httpHeaders, {
     required ResumePlan plan,
     PlaybackPlan? verificationPlan,
+    bool isSourceSwitch = false,
   }) async {
     if (mounted) {
       setState(() {
@@ -1972,6 +1989,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // on a downloaded file too, which `_startVerification` deliberately
     // skips (see its own `_isDownloadedSource` guard).
     _startStatsCollector(player);
+
+    // A genuinely fresh media item: whatever this session last fell back
+    // to says nothing about it, and without clearing it here a stale Why
+    // message from a previous file would outlive the source it explained.
+    // Not cleared when `isSourceSwitch`, since that is `_switchSource`'s
+    // own web continuation and the one case (a fallback) where the
+    // message just set must survive into the replacement source.
+    if (!isSourceSwitch) _lastFallback = null;
 
     // Open media
     await player.open(
@@ -4749,11 +4774,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Flipping the switch while a file is open must start or stop the
     // collector; without this the panel only appears on the next source.
+    // Both branches call `setState`: `ref.listen`'s callback does not
+    // itself trigger a rebuild, and nothing else guarantees one soon after
+    // (`_onPlaybackProgress` does not `setState` every tick), so turning
+    // the flag on mid-playback could otherwise leave the panel unbuilt
+    // until some unrelated rebuild happened to come along.
     ref.listen<AsyncValue<bool>>(statsOverlayEnabledProvider, (_, next) {
       final player = _player;
       if (player == null) return;
       if (next.value ?? false) {
-        if (_statsCollector == null) _startStatsCollector(player);
+        if (_statsCollector == null) {
+          setState(() => _startStatsCollector(player));
+        }
       } else {
         setState(_stopStatsCollector);
       }
@@ -5128,7 +5160,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       sourceHeight: _planInputs?.sourceHeight,
       sourceCodec: _sourceCodec(_planInputs),
       sourceBitrateKbps: _planInputs?.fileBitrateKbps,
-      sourceContainer: null,
+      sourceContainer: _sourceContainer(_planInputs),
       videoTrack: player?.state.track.video,
       audioTrack: player?.state.track.audio,
       linkLabel: '${summary.label} - ${status.connectedPeersCount} peer'
@@ -5153,17 +5185,48 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return null;
   }
 
+  /// The container implied by the first candidate's MIME type, matching
+  /// [_sourceCodec]'s "first candidate describes the source file" reading
+  /// (the same one `FileShape.fromCandidates` relies on for the failure
+  /// memory's key).
+  ///
+  /// The base type before any `;` is one of the fixed set
+  /// `CodecString.build_mime_type/3` emits server-side
+  /// (`lib/mydia/streaming/codec_string.ex`), so this mirrors that mapping
+  /// rather than inventing one. `video/mp4` covers three source extensions
+  /// there (mp4, m4v, mov); the candidate does not say which one the file
+  /// actually was, so all three read as "mp4". Anything unrecognised (or
+  /// no plan at all) is null, which the Source row already omits
+  /// gracefully.
+  String? _sourceContainer(PlanInputs? inputs) {
+    if (inputs == null || inputs.candidates.isEmpty) return null;
+    final baseType = inputs.candidates.first.mime.split(';').first.trim();
+    return switch (baseType) {
+      'video/mp4' => 'mp4',
+      'video/x-matroska' => 'mkv',
+      'video/webm' => 'webm',
+      'video/mp2t' => 'ts',
+      'video/x-msvideo' => 'avi',
+      _ => null,
+    };
+  }
+
   Future<void> _copyStats(StatsSample sample, StatsContext stats) async {
     final version = ref.read(updateProvider).currentVersion;
-    await Clipboard.setData(
-      ClipboardData(
-        text: statsClipboardText(sample, stats, appVersion: version),
-      ),
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Stats copied')),
-    );
+    try {
+      await Clipboard.setData(
+        ClipboardData(
+          text: statsClipboardText(sample, stats, appVersion: version),
+        ),
+      );
+    } catch (e) {
+      // `onPressed` is fire-and-forget, so an uncaught failure here would
+      // reach nothing the viewer can see.
+      debugPrint('[PlayerScreen] Could not copy stats: $e');
+      _showPlaybackSnackBar('Could not copy stats');
+      return;
+    }
+    _showPlaybackSnackBar('Stats copied');
   }
 
   Widget _buildError() {

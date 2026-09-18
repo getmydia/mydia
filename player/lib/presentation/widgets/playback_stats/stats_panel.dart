@@ -7,8 +7,6 @@
 /// `stats_metrics.dart`.
 library;
 
-import 'dart:ui' show FontFeature;
-
 import 'package:flutter/material.dart';
 
 import '../../../core/playback/stats/playback_stats.dart';
@@ -295,8 +293,8 @@ class StatsPanel extends StatelessWidget {
         ],
       );
 
-  Widget _compactFootnote() => Padding(
-        padding: const EdgeInsets.only(top: 9),
+  Widget _compactFootnote() => const Padding(
+        padding: EdgeInsets.only(top: 9),
         child: Text(
           'Short height: source, decoder, audio and the graph move '
           'into Copy.',
@@ -332,7 +330,7 @@ class StatsPanel extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 9),
-            Expanded(
+            const Expanded(
               child: Text(
                 'then Stats for nerds, to hide this',
                 maxLines: 1,
