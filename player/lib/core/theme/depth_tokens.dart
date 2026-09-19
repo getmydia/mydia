@@ -203,185 +203,74 @@ abstract final class DepthTokens {
   static const Curve curveEmphasized = Curves.easeInOut;
 
   // ---------------------------------------------------------------------------
-  // Player chrome glass
+  // OSD material
   //
-  // A separate material from the browse-UI chrome tokens above. The playback
-  // panel sits over live video, which is the one backdrop that justifies a real
-  // BackdropFilter and can carry genuine transparency. Browse chrome sits over
-  // static artwork and keeps its denser fill, so these are additive: nothing
-  // above changes.
+  // The one material every on-screen-display surface uses: the playback
+  // panel, the top-bar pills, up next, skip segment, the stats panel, and the
+  // pickers opened from them. A dense dark card over a light frost, with a
+  // uniform hairline and a soft drop shadow, identical on every platform.
+  //
+  // The fill alone carries legibility. Over a pure-white frame it composites
+  // to ~#303030, where textSecondary measures ~4.6:1 (at 0.80 it would be
+  // ~3.8:1). `osd_legibility_test.dart` computes this from these tokens.
   // ---------------------------------------------------------------------------
 
-  /// Blur sigma for playback chrome. Far above [blurChrome] — at this strength
-  /// no high-frequency detail survives, only average luminance, which is what
-  /// makes the low fill opacity below legible.
-  static const double blurPlayerChrome = 28.0;
+  /// Tint of the OSD fill.
+  static const Color osdTint = AppColors.background;
 
-  /// Nominal fill opacity for playback chrome — the mean of the gradient
-  /// endpoints below, for reference only. **No production code reads this
-  /// token** — `GlassSurface.playerChrome` reads [playerChromeFillTopAlpha]
-  /// and [playerChromeFillBottomAlpha] directly, and the panel's actual,
-  /// rendered density is whichever of those two is in effect at a given
-  /// point, not their mean. Do not use this value to argue the panel clears
-  /// (or misses) [glassLegibilityFloor] — assert on [playerChromeFillTopAlpha]
-  /// directly (see `depth_tokens_test.dart`), since that is the dense end
-  /// that actually has to carry the claim.
-  static const double playerChromeFillOpacity = 0.47;
+  /// Opacity of the OSD fill.
+  static const double osdFillOpacity = 0.85;
 
-  /// Fill alpha at the top edge of the playback panel — the dense end.
-  ///
-  /// [ChromePanel] puts the control row (row 1: volume/transport/secondary)
-  /// at the top of the panel and the scrubber (row 2) below it, so density
-  /// follows the content that needs legibility most: the controls are here.
-  ///
-  /// Deliberately kept **under** [glassLegibilityFloor] (0.60) — the
-  /// redesign's whole differentiation from browse-UI chrome is that this
-  /// panel can afford more transparency, and a value at or above the floor
-  /// would quietly erase that. An earlier iteration pushed this to 0.68 to
-  /// make a single-point legibility test pass; that made the panel read as
-  /// dense as browse chrome and, per WCAG 2.1 SC 1.4.3 (text contrast,
-  /// 4.5:1) measured across the *edges* of row 1's icons (not just its
-  /// center), still didn't reliably clear 4.5:1 there without an even higher
-  /// fill — while failing the transparency claim outright. Icons/glyphs are
-  /// graphical objects, not text, so they're correctly held to WCAG 2.1 SC
-  /// 1.4.11 (non-text contrast, 3:1) instead — `glass_legibility_test`
-  /// verifies fill-alone clears 3:1 across row 1's full icon band at this
-  /// value, with real margin (not a near-miss).
-  ///
-  /// The row-2 timecodes (12–13px text, held to the stricter 4.5:1 text
-  /// standard) cannot clear that bar from fill alone at any value under the
-  /// floor — buying the rest of the way with more fill is exactly the
-  /// flat-slab look this redesign removes. Per the human-ruled direction,
-  /// that gap is closed with a small, targeted text shadow on the timecodes
-  /// only (not on any icon), implemented alongside the timecodes themselves
-  /// (`_ScrubberRow` in `playback_chrome.dart`) rather than here —
-  /// `glass_legibility_test`
-  /// models that shadow's contribution analytically so the combined
-  /// fill+shadow contract is locked in and verified even though the shadow
-  /// paint code lives elsewhere.
-  static const double playerChromeFillTopAlpha = 0.56;
+  /// Backdrop blur sigma. Light on purpose: the fill does the legibility
+  /// work, and the blur only turns the ~15% of video that shows through into
+  /// soft colour instead of faint detail.
+  static const double osdBlurSigma = 20.0;
 
-  /// Fill alpha at the bottom edge of the playback panel — the sheer end.
-  ///
-  /// The panel's bottom edge sits nearest the screen's own bottom edge (or,
-  /// in a smaller panel, under the scrubber only), so it can afford to stay
-  /// the most transparent part of the gradient.
-  static const double playerChromeFillBottomAlpha = 0.38;
+  /// Uniform hairline around every OSD surface (white @ ~0.10).
+  static const Color osdHairline = Color(0x1AFFFFFF);
 
-  /// Backdrop saturation multiplier. Real vibrancy boosts saturation before
-  /// blurring; without it, blurred video reads as grey mush rather than
-  /// transmitted colour.
-  static const double playerChromeSaturation = 1.8;
+  /// Divider between sections inside an OSD surface (white @ ~0.08).
+  static const Color osdDivider = Color(0x14FFFFFF);
 
-  /// Neutral near-black tint for the playback panel's fill.
-  ///
-  /// This was a separate literal (`#0B0E14`) only while [AppColors.background]
-  /// carried a blue cast that would have drained backdrop colour through the
-  /// fill. The ground is neutral now, so there is nothing left to work around
-  /// and the two are the same colour.
-  static const Color playerChromeTint = AppColors.background;
+  /// Elevation for panel-sized OSD surfaces: the control panel, up next, the
+  /// stats panel and dialogs.
+  static const List<BoxShadow> osdShadowPanel = <BoxShadow>[
+    BoxShadow(
+      color: Color(0x80000000), // black @ ~0.50
+      blurRadius: 36,
+      offset: Offset(0, 10),
+    ),
+  ];
 
-  /// Top-edge rim — a white highlight. Glass catches light on its upper edge.
-  static const Color playerRimTop = Color(0x24FFFFFF); // white @ ~0.14
+  /// Elevation for OSD pills (36-44px tall). The panel shadow would put a
+  /// dark cloud around something this small.
+  static const List<BoxShadow> osdShadowPill = <BoxShadow>[
+    BoxShadow(
+      color: Color(0x59000000), // black @ ~0.35
+      blurRadius: 16,
+      offset: Offset(0, 4),
+    ),
+  ];
 
-  /// Bottom-edge rim — a dark shade. Together with [playerRimTop] this reads as
-  /// a lit edge rather than a uniform border.
-  static const Color playerRimBottom = Color(0x33000000); // black @ 0.20
+  /// Corner radius for panel-sized OSD surfaces.
+  static const double radiusOsdPanel = 16.0;
 
-  /// Corner radius for the playback panel.
-  static const double radiusPlayerPanel = 16.0;
+  /// Corner radius for OSD pills, fully rounded at the 36px default height.
+  static const double radiusOsdPill = 18.0;
 
-  /// Corner radius for the 36px-tall top-bar pills (fully rounded).
-  static const double radiusPlayerPill = 18.0;
+  /// Corner radius for OSD bottom sheets (top corners) and dialogs.
+  static const double radiusOsdSheet = 20.0;
+}
 
-  // ---------------------------------------------------------------------------
-  // Player chrome lensing (iOS 26 / 27 material)
-  //
-  // Parameters for the refracting glass material behind
-  // `GlassSurface.playerChrome`. Everything above this block describes a
-  // surface that only *blurs* its backdrop; these describe one that also
-  // *bends* it, which is the difference between frosted plastic and glass.
-  //
-  // Deliberately expressed as bare doubles and Flutter types, never as
-  // `liquid_glass_widgets` enums, even where the underlying knob is an enum
-  // (specular sharpness). `glass_surface.dart` is the single file allowed to
-  // import that package (see the dependency's comment in `pubspec.yaml`), and
-  // that seam is what makes a rollback to a plain `BackdropFilter` a one-file
-  // revert. A package type in this module would quietly spread the dependency
-  // into the token layer and every test that reads it.
-  //
-  // These are inert on tiers that render no shader; see
-  // `GlassSurface.playerChrome`.
-  // ---------------------------------------------------------------------------
+/// How far an OSD surface lifts off the video.
+enum OsdElevation {
+  panel(DepthTokens.osdShadowPanel),
+  pill(DepthTokens.osdShadowPill),
 
-  /// Index of refraction for the panel's rim.
-  ///
-  /// 1.0 is a vacuum (no bending at all) and real glass is ~1.5. The package
-  /// defaults to 1.2, which barely reads at this panel's size. 1.4 sits near
-  /// real glass while stopping short of the fishbowl distortion that starts
-  /// to warp the control glyphs sitting on top of the lens.
-  static const double playerChromeRefractiveIndex = 1.4;
+  /// Bottom sheets: the modal barrier already separates them from the video.
+  none(<BoxShadow>[]);
 
-  /// Apparent thickness of the glass slab, in logical pixels.
-  ///
-  /// Governs how wide the refracted band at the panel's edge is. Held just
-  /// under [radiusPlayerPanel] (16) so the lensing stays inside the corner
-  /// curve and does not intrude on the control row, which begins
-  /// `ChromePanel.verticalPadding` (10px) in from the top edge.
-  static const double playerChromeThickness = 14.0;
+  const OsdElevation(this.shadows);
 
-  /// Per-channel dispersion at the refracted edge.
-  ///
-  /// Real lenses split colour slightly at their edges, and its total absence
-  /// is part of why a plain blur reads as synthetic. Kept at the package
-  /// default: this panel sits over video whose own colour is the subject, and
-  /// visible fringing on chrome would compete with it.
-  static const double playerChromeChromaticAberration = 0.01;
-
-  /// Specular highlight intensity along the lit edge.
-  ///
-  /// Raised well above the package default of 0.5, following the brighter
-  /// specular highlights iOS 27 introduced. This is the cue that survives on
-  /// the tiers that cannot refract, so it carries the material's read on web
-  /// as well as native.
-  static const double playerChromeLightIntensity = 0.8;
-
-  /// Direction of the virtual light, in radians, clockwise from +x.
-  ///
-  /// `-pi / 2` puts the source directly overhead, matching [playerRimTop]'s
-  /// premise that glass catches light on its upper edge. Kept consistent with
-  /// that rim rather than with the package default so the two treatments
-  /// agree about where the light is.
-  static const double playerChromeLightAngle = -1.5707963267948966; // -pi/2
-
-  /// Darkened outer edge, painted *outside* the panel silhouette (iOS 27).
-  ///
-  /// iOS 27 added a dark edge around glass elements for separation from busy
-  /// backdrops. This is ours to paint: `liquid_glass_widgets` exposes
-  /// `shadow`/`shadowElevation`, but both are documented "has no effect in
-  /// dark mode" in three places in `LiquidGlassSettings`, and this player's
-  /// theme is dark-only and never switches (see the note at the top of this
-  /// module). Passing them would silently do nothing.
-  ///
-  /// Tight and near-opaque rather than soft and wide: the goal is a defining
-  /// edge, not a floating drop shadow. [chrome] above is the latter, and this
-  /// panel deliberately does not use it.
-  ///
-  /// Expressed as a colour plus a blur sigma rather than a [BoxShadow],
-  /// because it is painted with `MaskFilter.blur(BlurStyle.outer, ...)` and
-  /// not by a [BoxDecoration]. That distinction is load-bearing rather than
-  /// stylistic: a [BoxShadow] paints *behind* its child, and this panel's
-  /// fill is translucent by design, so the shadow would show through and
-  /// darken it. That would silently shift the backdrop that
-  /// `glass_legibility_test.dart` models as uniform, moving the panel's
-  /// measured contrast without anything in that test changing.
-  /// [BlurStyle.outer] paints strictly outside the silhouette, so the fill is
-  /// untouched and the contrast contract holds.
-  static const Color playerChromeEdgeShadowColor = Color(0x4D000000); // 0.30
-
-  /// Blur sigma for [playerChromeEdgeShadowColor].
-  ///
-  /// Small on purpose. Wide enough and this stops reading as an edge and
-  /// starts reading as elevation, which is [chrome]'s job, not this one's.
-  static const double playerChromeEdgeShadowSigma = 2.0;
+  final List<BoxShadow> shadows;
 }

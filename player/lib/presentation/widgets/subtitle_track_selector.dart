@@ -4,8 +4,11 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../../core/player/subtitle_language_prefs.dart';
+import '../../core/theme/colors.dart';
+import '../../core/theme/depth_tokens.dart';
 import '../../domain/models/subtitle_candidate.dart';
 import '../../domain/models/subtitle_track.dart';
+import 'osd_sheet.dart';
 import 'subtitle_search_results.dart';
 
 /// What the subtitle sheet resolved to when it closed.
@@ -103,13 +106,9 @@ Future<SubtitleTrackSelection> showSubtitleTrackSelector(
   required Future<void> Function() onResetSubtitleDelay,
   required Future<void> Function() onSaveSubtitleDelay,
 }) async {
-  final result = await showModalBottomSheet<SubtitleTrackSelection>(
+  final result = await showOsdBottomSheet<SubtitleTrackSelection>(
     context: context,
-    backgroundColor: Colors.grey[900],
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (context) => SubtitleTrackSelectorSheet(
       tracks: tracks,
       currentTrack: currentTrack,
@@ -334,28 +333,31 @@ class _SubtitleTrackSelectorSheetState
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              'Subtitles',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'Subtitles',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Flexible(child: _buildBody(context)),
-        ],
+            const SizedBox(height: 16),
+            Flexible(child: _buildBody(context)),
+          ],
+        ),
       ),
     );
   }
@@ -380,7 +382,7 @@ class _SubtitleTrackSelectorSheetState
             isSelected: widget.currentTrack == null,
             onTap: () => Navigator.of(context).pop(const SubtitleTrackOff()),
           ),
-          const Divider(color: Colors.grey, height: 1),
+          const Divider(color: DepthTokens.osdDivider, height: 1),
           // The state a subtitle-less file now lands in every time, since the
           // button that opens this sheet is no longer gated on the track
           // count. A grey line stating the problem would be a dead end; the
@@ -403,7 +405,7 @@ class _SubtitleTrackSelectorSheetState
                   children: [
                     const Text(
                       'This file has no subtitles.',
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(color: AppColors.textSecondary),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
@@ -412,12 +414,12 @@ class _SubtitleTrackSelectorSheetState
                       onPressed: _search,
                       icon: const Icon(Icons.search),
                       label: const Text('Search online'),
-                      // Explicit colours, not the ambient theme: this sheet
-                      // sets its own `Colors.grey[900]` background and white
-                      // text, so a themed button inherits the wrong contrast.
+                      // Explicit colours, not the ambient theme: the sheet
+                      // sits on the dark OSD material, so a themed button
+                      // would inherit the wrong contrast.
                       style: FilledButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
+                        backgroundColor: AppColors.textPrimary,
+                        foregroundColor: AppColors.background,
                       ),
                     ),
                   ],
@@ -445,7 +447,7 @@ class _SubtitleTrackSelectorSheetState
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Divider(color: Colors.grey, height: 1),
+                  const Divider(color: DepthTokens.osdDivider, height: 1),
                   _SubtitleDelayRow(
                     delayMs: delayMs,
                     canSave: widget.canSaveDelay,
@@ -458,7 +460,7 @@ class _SubtitleTrackSelectorSheetState
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
                       child: Text(
                         _delayError!,
-                        style: const TextStyle(color: Colors.orangeAccent),
+                        style: const TextStyle(color: AppColors.warningText),
                       ),
                     ),
                 ],
@@ -469,12 +471,12 @@ class _SubtitleTrackSelectorSheetState
           // already the search affordance, and two in one sheet reads as two
           // different actions.
           if (widget.tracks.isNotEmpty) ...[
-            const Divider(color: Colors.grey, height: 1),
+            const Divider(color: DepthTokens.osdDivider, height: 1),
             ListTile(
-              leading: const Icon(Icons.search, color: Colors.grey),
+              leading: const Icon(Icons.search, color: AppColors.textSecondary),
               title: const Text(
                 'Search online',
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: AppColors.textPrimary),
               ),
               onTap: _search,
             ),
@@ -491,9 +493,9 @@ class _SubtitleTrackSelectorSheetState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(color: Colors.red),
+            const CircularProgressIndicator(color: AppColors.primary),
             const SizedBox(height: 16),
-            Text(label, style: const TextStyle(color: Colors.grey)),
+            Text(label, style: const TextStyle(color: AppColors.textSecondary)),
           ],
         ),
       ),
@@ -513,7 +515,8 @@ class _SubtitleTrackSelectorSheetState
             onPressed: () => setState(() => _mode = _SheetMode.tracks),
             icon: const Icon(Icons.arrow_back, size: 18),
             label: const Text('Back to tracks'),
-            style: TextButton.styleFrom(foregroundColor: Colors.grey),
+            style:
+                TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
           ),
         ),
         _buildLanguageChips(),
@@ -522,7 +525,7 @@ class _SubtitleTrackSelectorSheetState
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
             child: Text(
               _error!,
-              style: const TextStyle(color: Colors.orangeAccent),
+              style: const TextStyle(color: AppColors.warningText),
             ),
           ),
         const SizedBox(height: 12),
@@ -580,7 +583,8 @@ class _LanguageChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = SubtitleCandidate.languageNames[code] ?? code.toUpperCase();
     return Material(
-      color: isSelected ? Colors.red : Colors.grey[850],
+      color:
+          isSelected ? AppColors.primary : Colors.white.withValues(alpha: 0.06),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -590,7 +594,7 @@ class _LanguageChip extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: Colors.white,
+              color: isSelected ? AppColors.onPrimary : AppColors.textPrimary,
               fontSize: 13,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             ),
@@ -621,17 +625,18 @@ class _TrackTile extends StatelessWidget {
       title: Text(
         title,
         style: TextStyle(
-          color: Colors.white,
+          color: AppColors.textPrimary,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
         ),
       ),
       subtitle: subtitle != null
           ? Text(
               subtitle!,
-              style: const TextStyle(color: Colors.grey),
+              style: const TextStyle(color: AppColors.textSecondary),
             )
           : null,
-      trailing: isSelected ? const Icon(Icons.check, color: Colors.red) : null,
+      trailing:
+          isSelected ? const Icon(Icons.check, color: AppColors.primary) : null,
       onTap: onTap,
     );
   }
@@ -670,7 +675,7 @@ class _SubtitleDelayRow extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               'Subtitle delay',
-              style: TextStyle(color: Colors.grey, fontSize: 13),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
           ),
           Row(
@@ -679,7 +684,7 @@ class _SubtitleDelayRow extends StatelessWidget {
                 key: const ValueKey('subtitle-delay-decrement'),
                 icon: const Icon(
                   Icons.remove_circle_outline,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                 ),
                 tooltip: '-100 ms',
                 onPressed: () => onNudge(-100),
@@ -689,7 +694,7 @@ class _SubtitleDelayRow extends StatelessWidget {
                   child: Text(
                     '${delayMs >= 0 ? '+' : ''}$delayMs ms',
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -697,7 +702,10 @@ class _SubtitleDelayRow extends StatelessWidget {
               ),
               IconButton(
                 key: const ValueKey('subtitle-delay-increment'),
-                icon: const Icon(Icons.add_circle_outline, color: Colors.white),
+                icon: const Icon(
+                  Icons.add_circle_outline,
+                  color: AppColors.textPrimary,
+                ),
                 tooltip: '+100 ms',
                 onPressed: () => onNudge(100),
               ),

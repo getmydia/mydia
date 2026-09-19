@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/colors.dart';
+import '../../core/theme/depth_tokens.dart';
 import '../../domain/models/quality_delivery_subtitle.dart';
 import '../../domain/models/quality_rung.dart';
+import 'osd_dialog.dart';
 
 /// The stats row inside the quality sheet.
 const Key statsToggleKey = Key('quality-stats-toggle');
@@ -40,63 +43,75 @@ Future<QualityRung?> showQualityPicker(
   var statsValue = statsEnabled ?? false;
   return showDialog<QualityRung>(
     context: context,
-    builder: (context) => AlertDialog(
-      backgroundColor: Colors.grey[900],
-      title: const Text(
-        'Video Quality',
-        style: TextStyle(color: Colors.white),
-      ),
+    builder: (context) => OsdDialog(
+      title: const Text('Video Quality'),
       contentPadding: const EdgeInsets.symmetric(vertical: 12),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (clampNote != null)
-              Padding(
-                key: const Key('quality-clamp-note'),
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                child: Text(
-                  clampNote,
-                  style: TextStyle(color: Colors.amber[300], fontSize: 12),
+      content: Material(
+        type: MaterialType.transparency,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (clampNote != null)
+                Padding(
+                  key: const Key('quality-clamp-note'),
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                  child: Text(
+                    clampNote,
+                    style: const TextStyle(
+                      color: AppColors.warningText,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
-              ),
-            for (final rung in rungs)
-              _rungTile(context, rung, current, autoSubtitle, originalSubtitle),
-            if (statsEnabled != null && onStatsChanged != null) ...[
-              const Divider(height: 17, color: Color(0xFF2E2E33)),
-              StatefulBuilder(
-                builder: (context, setState) {
-                  return SwitchListTile(
-                    key: statsToggleKey,
-                    value: statsValue,
-                    title: const Text(
-                      'Stats for nerds',
-                      style: TextStyle(color: Colors.white, fontSize: 14.5),
-                    ),
-                    subtitle: const Text(
-                      'Also in Settings. Stays on after the controls fade.',
-                      style: TextStyle(color: Colors.grey, fontSize: 11.5),
-                    ),
-                    secondary: const Icon(
-                      Icons.speed,
-                      color: Colors.grey,
-                    ),
-                    onChanged: (next) {
-                      setState(() => statsValue = next);
-                      onStatsChanged(next);
-                    },
-                  );
-                },
-              ),
+              for (final rung in rungs)
+                _rungTile(
+                    context, rung, current, autoSubtitle, originalSubtitle),
+              if (statsEnabled != null && onStatsChanged != null) ...[
+                const Divider(height: 17, color: DepthTokens.osdDivider),
+                StatefulBuilder(
+                  builder: (context, setState) {
+                    return SwitchListTile(
+                      key: statsToggleKey,
+                      value: statsValue,
+                      title: const Text(
+                        'Stats for nerds',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14.5,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Also in Settings. Stays on after the controls fade.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                      secondary: const Icon(
+                        Icons.speed,
+                        color: AppColors.textSecondary,
+                      ),
+                      onChanged: (next) {
+                        setState(() => statsValue = next);
+                        onStatsChanged(next);
+                      },
+                    );
+                  },
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          child: const Text(
+            'Cancel',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
         ),
       ],
     ),
@@ -122,18 +137,18 @@ Widget _rungTile(
         : Key('quality-rung-${rung.label}'),
     leading: Icon(
       isSelected ? Icons.check_circle : Icons.circle_outlined,
-      color: isSelected ? Colors.red : Colors.grey,
+      color: isSelected ? AppColors.primary : AppColors.textSecondary,
     ),
     title: Text(
       rung.label,
       style: TextStyle(
-        color: isSelected ? Colors.white : Colors.grey[300],
+        color: AppColors.textPrimary,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
     ),
     subtitle: Text(
       subtitle,
-      style: const TextStyle(color: Colors.grey, fontSize: 12),
+      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
     ),
     onTap: () => Navigator.of(context).pop(rung),
   );

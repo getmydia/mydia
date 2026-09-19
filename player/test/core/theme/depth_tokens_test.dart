@@ -90,76 +90,52 @@ void main() {
     });
   });
 
-  group('player chrome glass', () {
-    test('is more transparent and more blurred than browse chrome', () {
-      // The player panel sits over live video, so it can afford real
-      // transparency; browse chrome sits over static art and cannot.
+  group('OSD material', () {
+    test('fill is the neutral background tint at 0.85', () {
+      expect(DepthTokens.osdTint, AppColors.background);
+      expect(DepthTokens.osdFillOpacity, 0.85);
       expect(
-        DepthTokens.playerChromeFillOpacity,
-        lessThan(DepthTokens.chromeFillOpacity),
-      );
-      expect(
-        DepthTokens.blurPlayerChrome,
-        greaterThan(DepthTokens.blurChrome),
+        DepthTokens.osdFillOpacity,
+        greaterThan(DepthTokens.chromeFillOpacity),
       );
     });
 
-    test('boosts backdrop saturation', () {
-      expect(DepthTokens.playerChromeSaturation, greaterThan(1.0));
-    });
-
-    test('fill gradient brackets the nominal opacity', () {
-      expect(
-        DepthTokens.playerChromeFillTopAlpha,
-        greaterThan(DepthTokens.playerChromeFillOpacity),
-      );
-      expect(
-        DepthTokens.playerChromeFillBottomAlpha,
-        lessThan(DepthTokens.playerChromeFillOpacity),
-      );
-      // Denser at the top, where the control row sits; sheer at the bottom,
-      // where only the scrubber track does.
-      expect(
-        DepthTokens.playerChromeFillTopAlpha,
-        greaterThan(DepthTokens.playerChromeFillBottomAlpha),
-      );
-    });
-
-    test(
-      'the dense end stays under the browse legibility floor — the '
-      'redesign\'s actual differentiation claim, guarded directly rather '
-      'than via playerChromeFillOpacity (which no production code reads)',
-      () {
-        expect(
-          DepthTokens.playerChromeFillTopAlpha,
-          lessThan(DepthTokens.glassLegibilityFloor),
-        );
-      },
-    );
-
-    test('rim is directional: light on top, dark on the bottom', () {
-      expect(DepthTokens.playerRimTop.a, greaterThan(0));
-      expect(DepthTokens.playerRimBottom.a, greaterThan(0));
-      // Top rim is a white highlight, bottom rim is a black shade.
-      expect(DepthTokens.playerRimTop.r, greaterThan(0.5));
-      expect(DepthTokens.playerRimBottom.r, lessThan(0.5));
-    });
-
-    test('tint is neutral — no colour cast to drain backdrop colour', () {
-      // Previously this compared the tint against a navy AppColors.background.
-      // The ground is neutral now, so the invariant is stated absolutely: the
-      // tint must carry no perceptible cast in any direction, otherwise the
-      // blurred, saturated backdrop behind the playback panel gets drained
-      // toward that hue instead of showing the video's own colour.
-      final t = DepthTokens.playerChromeTint;
+    test('tint is neutral, so it does not drain colour from the video', () {
+      final t = DepthTokens.osdTint;
       const tolerance = 2 / 255;
       expect((t.b - t.r).abs(), lessThanOrEqualTo(tolerance));
       expect((t.g - t.r).abs(), lessThanOrEqualTo(tolerance));
     });
 
-    test('exposes panel and pill radii', () {
-      expect(DepthTokens.radiusPlayerPanel, 16.0);
-      expect(DepthTokens.radiusPlayerPill, 18.0);
+    test('blurs at sigma 20', () {
+      expect(DepthTokens.osdBlurSigma, 20.0);
+    });
+
+    test('hairline and divider are faint white', () {
+      expect(DepthTokens.osdHairline, const Color(0x1AFFFFFF));
+      expect(DepthTokens.osdDivider, const Color(0x14FFFFFF));
+    });
+
+    test('the pill shadow is smaller and lighter than the panel shadow', () {
+      final panel = DepthTokens.osdShadowPanel.single;
+      final pill = DepthTokens.osdShadowPill.single;
+      expect(panel.blurRadius, 36);
+      expect(panel.offset, const Offset(0, 10));
+      expect(pill.blurRadius, lessThan(panel.blurRadius));
+      expect(pill.color.a, lessThan(panel.color.a));
+      expect(pill.offset.dy, lessThan(panel.offset.dy));
+    });
+
+    test('OsdElevation maps onto the shadow tokens', () {
+      expect(OsdElevation.panel.shadows, DepthTokens.osdShadowPanel);
+      expect(OsdElevation.pill.shadows, DepthTokens.osdShadowPill);
+      expect(OsdElevation.none.shadows, isEmpty);
+    });
+
+    test('exposes panel, pill and sheet radii', () {
+      expect(DepthTokens.radiusOsdPanel, 16.0);
+      expect(DepthTokens.radiusOsdPill, 18.0);
+      expect(DepthTokens.radiusOsdSheet, 20.0);
     });
   });
 

@@ -2,7 +2,6 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/player/platform_features.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -189,6 +188,137 @@ void main() {
     });
   });
 
+  group('GlassSurface.osd', () {
+    List<BoxDecoration> decorationsOf(WidgetTester tester) => tester
+        .widgetList<DecoratedBox>(
+          find.descendant(
+            of: find.byType(GlassSurface),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .map((box) => box.decoration)
+        .whereType<BoxDecoration>()
+        .toList();
+
+    testWidgets('blurs once at the OSD sigma, with no colour matrix',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(GlassSurface.osd(child: const SizedBox(width: 200, height: 60))),
+      );
+
+      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(
+        _backdropOf(tester).filter,
+        ImageFilter.blur(
+          sigmaX: DepthTokens.osdBlurSigma,
+          sigmaY: DepthTokens.osdBlurSigma,
+        ),
+      );
+    });
+
+    testWidgets('fills flat at 0.85 with a uniform hairline', (tester) async {
+      await tester.pumpWidget(_host(GlassSurface.osd(child: const SizedBox())));
+
+      final fill = _decoratedBoxOf(tester).decoration as BoxDecoration;
+      expect(
+        fill.color,
+        DepthTokens.osdTint.withValues(alpha: DepthTokens.osdFillOpacity),
+      );
+      expect(fill.gradient, isNull);
+      expect(
+        fill.border,
+        Border.all(
+          color: DepthTokens.osdHairline,
+          width: DepthTokens.rimWidth,
+        ),
+      );
+      expect(
+        fill.borderRadius,
+        const BorderRadius.all(Radius.circular(DepthTokens.radiusOsdPanel)),
+      );
+    });
+
+    testWidgets('paints the panel shadow outside the clip by default',
+        (tester) async {
+      await tester.pumpWidget(_host(GlassSurface.osd(child: const SizedBox())));
+
+      final shadowed =
+          decorationsOf(tester).where((d) => d.boxShadow != null).single;
+      expect(shadowed.boxShadow, DepthTokens.osdShadowPanel);
+      expect(
+        find.ancestor(
+          of: find.byType(ClipRRect),
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is DecoratedBox &&
+                (w.decoration as BoxDecoration).boxShadow != null,
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('pill elevation uses the pill shadow', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.osd(
+            elevation: OsdElevation.pill,
+            child: const SizedBox(),
+          ),
+        ),
+      );
+
+      expect(
+        tester.widget<GlassSurface>(find.byType(GlassSurface)).shadows,
+        DepthTokens.osdShadowPill,
+      );
+    });
+
+    testWidgets('none elevation paints no shadow', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.osd(
+            elevation: OsdElevation.none,
+            child: const SizedBox(),
+          ),
+        ),
+      );
+
+      expect(decorationsOf(tester).where((d) => d.boxShadow != null), isEmpty);
+    });
+
+    testWidgets('honors a custom borderRadius', (tester) async {
+      const radius = BorderRadius.vertical(
+        top: Radius.circular(DepthTokens.radiusOsdSheet),
+      );
+      await tester.pumpWidget(
+        _host(GlassSurface.osd(borderRadius: radius, child: const SizedBox())),
+      );
+
+      expect(
+        tester.widget<ClipRRect>(find.byType(ClipRRect)).borderRadius,
+        radius,
+      );
+    });
+
+    testWidgets('children remain hit-testable', (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.osd(
+            child: ElevatedButton(
+              onPressed: () => tapped = true,
+              child: const Text('play'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('play'));
+      expect(tapped, isTrue);
+    });
+  });
+
   group('grouped rendering', () {
     testWidgets(
         'a BackdropGroup wrapping two grouped surfaces builds and '
@@ -245,265 +375,6 @@ void main() {
         ),
         findsWidgets,
       );
-    });
-  });
-
-  group('saturationColorMatrix', () {
-    test('is the identity matrix at s = 1.0', () {
-      // This is the property that guarantees GlassSurface's saturation: 1.0
-      // default is a genuine no-op: at s=1.0 the composed ColorFilter.matrix
-      // would be indistinguishable from not applying one at all.
-      expect(
-        saturationColorMatrix(1.0),
-        const <double>[
-          1, 0, 0, 0, 0, //
-          0, 1, 0, 0, 0, //
-          0, 0, 1, 0, 0, //
-          0, 0, 0, 1, 0, //
-        ],
-      );
-    });
-
-    test('preserves luminance for arbitrary saturation values', () {
-      const lr = 0.2126, lg = 0.7152, lb = 0.0722;
-      const r = 0.62, g = 0.31, b = 0.87;
-      final lumaIn = lr * r + lg * g + lb * b;
-      for (final s in [
-        0.0,
-        0.5,
-        1.0,
-        DepthTokens.playerChromeSaturation,
-        2.5
-      ]) {
-        final m = saturationColorMatrix(s);
-        final rOut = m[0] * r + m[1] * g + m[2] * b + m[3] * 1 + m[4];
-        final gOut = m[5] * r + m[6] * g + m[7] * b + m[8] * 1 + m[9];
-        final bOut = m[10] * r + m[11] * g + m[12] * b + m[13] * 1 + m[14];
-        final lumaOut = lr * rOut + lg * gOut + lb * bOut;
-        expect(
-          lumaOut,
-          closeTo(lumaIn, 1e-9),
-          reason: 'luminance not preserved at s=$s',
-        );
-      }
-    });
-  });
-
-  group('GlassSurface.playerChrome', () {
-    Widget host(Widget child) => MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                const Positioned.fill(child: ColoredBox(color: Colors.white)),
-                Align(alignment: Alignment.bottomCenter, child: child),
-              ],
-            ),
-          ),
-        );
-
-    /// The panel's *fill* decoration.
-    ///
-    /// Identified by carrying a gradient rather than by being the first
-    /// [DecoratedBox] under the surface. The fill is the only decoration on
-    /// this surface with one, and position-based lookup is not stable: the
-    /// lensed path nests the fill inside the glass package's own widgets,
-    /// which contribute [DecoratedBox]es of their own ahead of it.
-    BoxDecoration decorationOf(WidgetTester tester) => tester
-        .widgetList<DecoratedBox>(
-          find.descendant(
-            of: find.byType(GlassSurface),
-            matching: find.byType(DecoratedBox),
-          ),
-        )
-        .map((box) => box.decoration)
-        .whereType<BoxDecoration>()
-        .firstWhere((decoration) => decoration.gradient != null);
-
-    testWidgets(
-        'full tier composes blur with a saturation matrix, at the token sigma',
-        (tester) async {
-      await tester.pumpWidget(
-        host(
-          GlassSurface.playerChrome(
-            tier: PlayerGlassTier.full,
-            child: const SizedBox(width: 200, height: 60),
-          ),
-        ),
-      );
-
-      // Pin the tokens directly on the widget instance, not just indirectly
-      // through the rendered filter.
-      final surface = tester.widget<GlassSurface>(find.byType(GlassSurface));
-      expect(surface.blurSigma, DepthTokens.blurPlayerChrome);
-      expect(surface.saturation, DepthTokens.playerChromeSaturation);
-
-      // Two backdrop passes, not one: the lensed material applies the blur
-      // and the saturation matrix as separate BackdropFilters rather than a
-      // single `ImageFilter.compose`. Both must be present — a bare blur
-      // with no matrix would mean the saturation token never reached the
-      // material.
-      final filters = tester
-          .widgetList<BackdropFilter>(find.byType(BackdropFilter))
-          .map((backdrop) => backdrop.filter)
-          .toList();
-
-      expect(
-        filters,
-        contains(ImageFilter.blur(
-          sigmaX: DepthTokens.blurPlayerChrome,
-          sigmaY: DepthTokens.blurPlayerChrome,
-        )),
-        reason: 'the blur pass must run at the player chrome sigma',
-      );
-      expect(
-        filters.any((f) => f is ColorFilter),
-        isTrue,
-        reason: 'the saturation token must reach the material as a matrix',
-      );
-
-      // This deliberately no longer pins the *exact* composed filter.
-      //
-      // It used to, because this file built it: `ImageFilter.compose` with
-      // `saturationColorMatrix`'s Rec.709 coefficients. On the lensed path
-      // `liquid_glass_widgets` composes the blur and the colour matrix
-      // itself, and its matrix uses Rec.601 luma coefficients
-      // (0.299/0.587/0.114) rather than Rec.709 (0.2126/0.7152/0.0722),
-      // despite a comment in that package naming Rec.709. Both preserve
-      // luminance under their own definition, so neutral backdrops are
-      // unaffected and only saturated ones shift slightly in hue.
-      //
-      // Reconstructing their matrix here to assert equality would hard-code
-      // a package internal into our suite and break on any version bump,
-      // which is worse coverage than none. What still matters is asserted
-      // above instead: the blur runs at our sigma, and a colour matrix is
-      // present at all rather than the saturation token being silently
-      // dropped.
-      //
-      // `saturationColorMatrix`'s own coefficients stay directly unit-tested
-      // in the group above; that function is still this app's reference
-      // implementation and what the non-lensed path would use on revert.
-    });
-
-    testWidgets('reduced tier uses a bare blur, no colour matrix',
-        (tester) async {
-      await tester.pumpWidget(
-        host(
-          GlassSurface.playerChrome(
-            tier: PlayerGlassTier.reduced,
-            child: const SizedBox(width: 200, height: 60),
-          ),
-        ),
-      );
-
-      final filter =
-          tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter;
-      expect(
-        filter,
-        ImageFilter.blur(
-          sigmaX: DepthTokens.blurPlayerChrome,
-          sigmaY: DepthTokens.blurPlayerChrome,
-        ),
-      );
-    });
-
-    testWidgets('faux tier renders no BackdropFilter', (tester) async {
-      await tester.pumpWidget(
-        host(
-          GlassSurface.playerChrome(
-            tier: PlayerGlassTier.faux,
-            child: const SizedBox(width: 200, height: 60),
-          ),
-        ),
-      );
-
-      expect(find.byType(BackdropFilter), findsNothing);
-    });
-
-    testWidgets('fill is a vertical gradient, denser at the top',
-        (tester) async {
-      await tester.pumpWidget(
-        host(
-          GlassSurface.playerChrome(
-            tier: PlayerGlassTier.full,
-            child: const SizedBox(width: 200, height: 60),
-          ),
-        ),
-      );
-
-      final gradient = decorationOf(tester).gradient! as LinearGradient;
-      expect(gradient.begin, Alignment.topCenter);
-      expect(gradient.end, Alignment.bottomCenter);
-      expect(gradient.colors.first.a, DepthTokens.playerChromeFillTopAlpha);
-      expect(gradient.colors.last.a, DepthTokens.playerChromeFillBottomAlpha);
-      // Dense at the top, where ChromePanel's control row sits; sheer at the
-      // bottom, under the scrubber's white track (see
-      // DepthTokens.playerChromeFillTopAlpha's doc comment).
-      expect(gradient.colors.first.a, greaterThan(gradient.colors.last.a));
-    });
-
-    testWidgets(
-        'rim is a directional gradient stroke tracing the rounded corners',
-        (tester) async {
-      await tester.pumpWidget(
-        host(
-          GlassSurface.playerChrome(
-            tier: PlayerGlassTier.full,
-            child: const SizedBox(width: 200, height: 60),
-          ),
-        ),
-      );
-
-      // The fill's own decoration carries no border: a Border cannot
-      // combine differing per-side colors with a non-zero borderRadius
-      // (Flutter's Border.paint rejects it), so the rim is painted
-      // separately by PlayerChromeRimPainter instead, which can trace the
-      // rounded corners continuously.
-      expect(decorationOf(tester).border, isNull);
-
-      // Selected by painter type, not by position. The lensed material adds
-      // a second CustomPaint above this one for the outer edge shadow (which
-      // uses `painter`, not `foregroundPainter`), so `.first` would return
-      // that one and read a null foregroundPainter.
-      final painter = tester
-          .widgetList<CustomPaint>(
-            find.descendant(
-              of: find.byType(GlassSurface),
-              matching: find.byType(CustomPaint),
-            ),
-          )
-          .map((paint) => paint.foregroundPainter)
-          .whereType<PlayerChromeRimPainter>()
-          .single;
-
-      expect(
-        painter.borderRadius,
-        const BorderRadius.all(Radius.circular(DepthTokens.radiusPlayerPanel)),
-      );
-      final gradient = painter.gradient as LinearGradient;
-      expect(gradient.begin, Alignment.topCenter);
-      expect(gradient.end, Alignment.bottomCenter);
-      expect(gradient.colors, [
-        DepthTokens.playerRimTop,
-        DepthTokens.playerRimBottom,
-      ]);
-    });
-
-    testWidgets('children remain hit-testable', (tester) async {
-      var tapped = false;
-      await tester.pumpWidget(
-        host(
-          GlassSurface.playerChrome(
-            tier: PlayerGlassTier.full,
-            child: ElevatedButton(
-              onPressed: () => tapped = true,
-              child: const Text('play'),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('play'));
-      expect(tapped, isTrue);
     });
   });
 }

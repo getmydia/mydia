@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/player/platform_features.dart';
 import '../../../domain/models/media_segment.dart';
 import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
@@ -64,7 +63,6 @@ class SkipSegmentButton extends StatelessWidget {
     required this.position,
     required this.onSkip,
     required this.metrics,
-    this.tier,
   });
 
   /// The segment this button offers to skip.
@@ -83,10 +81,6 @@ class SkipSegmentButton extends StatelessWidget {
   /// system.
   final PanelMetrics metrics;
 
-  /// Glass tier override, passed through to [GlassPill] so golden tests do not
-  /// vary with the host platform.
-  final PlayerGlassTier? tier;
-
   static const Key buttonKey = Key('skip-segment-button');
 
   @override
@@ -104,7 +98,6 @@ class SkipSegmentButton extends StatelessWidget {
         alignment: Alignment.bottomRight,
         child: GlassPill(
           key: buttonKey,
-          tier: tier,
           onTap: () => onSkip(segment),
           child: Row(
             mainAxisSize: MainAxisSize.min,

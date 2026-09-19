@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/player/platform_features.dart';
+import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 
 Widget _host(Widget child) => MaterialApp(
@@ -21,7 +22,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
-            tier: PlayerGlassTier.full,
             onBack: () => backed = true,
           ),
         ),
@@ -39,7 +39,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           const ChromeTopBar(
-            tier: PlayerGlassTier.full,
             title: 'Silo',
           ),
         ),
@@ -64,7 +63,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           const ChromeTopBar(
-            tier: PlayerGlassTier.full,
             title: 'Pride & Prejudice',
           ),
         ),
@@ -77,7 +75,7 @@ void main() {
     testWidgets('omits the title pill when no title is supplied',
         (tester) async {
       await tester.pumpWidget(
-        _host(const ChromeTopBar(tier: PlayerGlassTier.full)),
+        _host(const ChromeTopBar()),
       );
       expect(find.byKey(ChromeTopBar.titleKey), findsNothing);
     });
@@ -85,7 +83,7 @@ void main() {
     testWidgets('omits the cast pill when no action is supplied',
         (tester) async {
       await tester.pumpWidget(
-        _host(const ChromeTopBar(tier: PlayerGlassTier.full)),
+        _host(const ChromeTopBar()),
       );
       expect(find.byKey(ChromeTopBar.castKey), findsNothing);
     });
@@ -95,7 +93,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           const ChromeTopBar(
-            tier: PlayerGlassTier.full,
             castAction: Icon(Icons.cast_rounded),
           ),
         ),
@@ -112,7 +109,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
-            tier: PlayerGlassTier.full,
             castAction: const Icon(Icons.cast_rounded),
             onCastTap: () => casted = true,
           ),
@@ -128,7 +124,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           const ChromeTopBar(
-            tier: PlayerGlassTier.full,
             castAction: Icon(Icons.cast_rounded),
           ),
         ),
@@ -143,30 +138,10 @@ void main() {
       );
     });
 
-    testWidgets(
-        'title carries a small targeted shadow — measured (see '
-        'pill_legibility_test.dart) to be load-bearing at this pill height, '
-        'not a stylistic flourish', (tester) async {
-      await tester.pumpWidget(
-        _host(
-          const ChromeTopBar(
-            tier: PlayerGlassTier.full,
-            title: 'Silo',
-          ),
-        ),
-      );
-
-      final text = tester.widget<Text>(find.text('Silo'));
-      final shadows = text.style?.shadows;
-      expect(shadows, isNotNull);
-      expect(shadows, isNotEmpty);
-    });
-
     testWidgets('truncates a long title to one line', (tester) async {
       await tester.pumpWidget(
         _host(
           const ChromeTopBar(
-            tier: PlayerGlassTier.full,
             title: 'An Extremely Long Episode Title That Cannot Possibly Fit '
                 'Inside The Available Horizontal Space Without Truncation',
           ),
@@ -191,7 +166,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
-            tier: PlayerGlassTier.full,
             onBack: () {},
             title: 'Silo',
             castAction: const Icon(Icons.cast_rounded),
@@ -214,7 +188,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
-            tier: PlayerGlassTier.full,
             onBack: () {},
             title: 'Silo',
           ),
@@ -232,7 +205,7 @@ void main() {
     testWidgets('stays sane with no title, no onBack, no castAction',
         (tester) async {
       await tester.pumpWidget(
-        _host(const ChromeTopBar(tier: PlayerGlassTier.full)),
+        _host(const ChromeTopBar()),
       );
 
       expect(find.byKey(ChromeTopBar.backKey), findsOneWidget);
@@ -251,7 +224,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
-            tier: PlayerGlassTier.full,
             onBack: () {},
             title: 'Silo',
             castAction: const Icon(Icons.cast_rounded),
@@ -277,7 +249,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
-            tier: PlayerGlassTier.full,
             showBack: false,
             onBack: () {},
             title: 'Harbor Lights',
@@ -294,13 +265,43 @@ void main() {
   });
 
   group('GlassPill', () {
+    testWidgets('sits on the OSD material with the pill shadow',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const Align(
+            alignment: Alignment.topLeft,
+            child: GlassPill(child: Text('Back')),
+          ),
+        ),
+      );
+
+      final surface = tester.widget<GlassSurface>(find.byType(GlassSurface));
+      expect(surface.shadows, DepthTokens.osdShadowPill);
+      expect(
+        surface.borderRadius,
+        const BorderRadius.all(Radius.circular(DepthTokens.radiusOsdPill)),
+      );
+    });
+
+    testWidgets('pill text carries no shadow', (tester) async {
+      await tester.pumpWidget(_host(const ChromeTopBar(title: 'A Title')));
+
+      final paragraph = tester.widget<RichText>(
+        find.descendant(
+          of: find.byKey(ChromeTopBar.titleKey),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(paragraph.text.style?.shadows, isNull);
+    });
+
     testWidgets('is 36px tall', (tester) async {
       await tester.pumpWidget(
         _host(
           const Align(
             alignment: Alignment.topLeft,
             child: GlassPill(
-              tier: PlayerGlassTier.full,
               child: Text('Back'),
             ),
           ),
@@ -317,7 +318,6 @@ void main() {
           Align(
             alignment: Alignment.topLeft,
             child: GlassPill(
-              tier: PlayerGlassTier.full,
               onTap: () => tapped = true,
               child: const Text('Tap me'),
             ),
@@ -338,7 +338,6 @@ void main() {
             body: Center(
               child: GlassPill(
                 key: Key('default-pill'),
-                tier: PlayerGlassTier.faux,
                 child: Text('Back'),
               ),
             ),
@@ -359,7 +358,6 @@ void main() {
             body: Center(
               child: GlassPill(
                 key: Key('tall-pill'),
-                tier: PlayerGlassTier.faux,
                 height: 44,
                 child: Text('Next up'),
               ),

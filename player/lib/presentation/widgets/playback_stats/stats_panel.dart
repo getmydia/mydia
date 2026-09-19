@@ -13,6 +13,8 @@ import '../../../core/playback/stats/playback_stats.dart';
 import '../../../core/playback/stats/stats_metrics.dart';
 import '../../../core/playback/stats/stats_report.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/theme/depth_tokens.dart';
+import '../glass_surface.dart';
 import 'stats_sparkline.dart';
 
 class StatsPanel extends StatelessWidget {
@@ -39,74 +41,70 @@ class StatsPanel extends StatelessWidget {
 
   static Key rowKey(String label) => Key('stats-row-$label');
 
-  static const Color _good = Color(0xFF4FD8A8);
-  static const Color _warn = Color(0xFFE8B27C);
-
   @override
   Widget build(BuildContext buildContext) {
     final rows = statsRows(sample, context, metrics.density);
     final tv = metrics.density == StatsDensity.tv;
 
-    return Container(
+    return SizedBox(
       key: panelKey,
       width: metrics.width,
-      constraints: BoxConstraints(maxHeight: metrics.maxHeight),
-      padding: EdgeInsets.fromLTRB(
-        tv ? 22 : 15,
-        metrics.showButtons ? 6 : 18,
-        tv ? 22 : 15,
-        tv ? 20 : 14,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.background.withValues(alpha: 0.80),
-        borderRadius: BorderRadius.circular(tv ? 16 : 14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: tv ? 44 : 36,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _header(tv),
-          Container(
-            height: 1,
-            margin: EdgeInsets.only(bottom: tv ? 14 : 11),
-            color: Colors.white.withValues(alpha: 0.08),
-          ),
-          // The row set varies with what the platform knows, and the Why
-          // row's text length varies with the adaptation reason, so this
-          // region's natural height is not knowable ahead of time. It
-          // scrolls rather than overflows when it exceeds the space the
-          // header, divider and the pinned footer content below leave it.
-          // The tv tier never needs this: `StatsMetrics.tvMinHeight` is
-          // gated on the tv panel's full measured content height, so a
-          // television always has room to show it all without scrolling,
-          // which matters because a D-pad cannot scroll an unfocusable
-          // scroll view.
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final row in rows) ...[
-                    _row(row),
-                    if (row != rows.last) SizedBox(height: metrics.rowGap),
-                  ],
-                  if (metrics.showSparkline) _sparkline(tv),
-                ],
-              ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: metrics.maxHeight),
+        child: GlassSurface.osd(
+          child: Padding(
+            // The old Container counted its 1px border into its padding;
+            // GlassSurface's hairline takes no layout space. Adding it back
+            // keeps every measured height, StatsMetrics.tvMinHeight
+            // included, exactly as it was.
+            padding: EdgeInsets.fromLTRB(
+              (tv ? 22 : 15) + DepthTokens.rimWidth,
+              (metrics.showButtons ? 6 : 18) + DepthTokens.rimWidth,
+              (tv ? 22 : 15) + DepthTokens.rimWidth,
+              (tv ? 20 : 14) + DepthTokens.rimWidth,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _header(tv),
+                Container(
+                  height: 1,
+                  margin: EdgeInsets.only(bottom: tv ? 14 : 11),
+                  color: DepthTokens.osdDivider,
+                ),
+                // The row set varies with what the platform knows, and the Why
+                // row's text length varies with the adaptation reason, so this
+                // region's natural height is not knowable ahead of time. It
+                // scrolls rather than overflows when it exceeds the space the
+                // header, divider and the pinned footer content below leave it.
+                // The tv tier never needs this: `StatsMetrics.tvMinHeight` is
+                // gated on the tv panel's full measured content height, so a
+                // television always has room to show it all without scrolling,
+                // which matters because a D-pad cannot scroll an unfocusable
+                // scroll view.
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final row in rows) ...[
+                          _row(row),
+                          if (row != rows.last)
+                            SizedBox(height: metrics.rowGap),
+                        ],
+                        if (metrics.showSparkline) _sparkline(tv),
+                      ],
+                    ),
+                  ),
+                ),
+                if (metrics.density == StatsDensity.compact) _compactFootnote(),
+                if (tv) _remoteHint(),
+              ],
             ),
           ),
-          if (metrics.density == StatsDensity.compact) _compactFootnote(),
-          if (tv) _remoteHint(),
-        ],
+        ),
       ),
     );
   }
@@ -165,8 +163,8 @@ class StatsPanel extends StatelessWidget {
 
   Widget _row(StatsRow row) {
     final color = switch (row.tone) {
-      StatsTone.good => _good,
-      StatsTone.warn => _warn,
+      StatsTone.good => AppColors.successText,
+      StatsTone.warn => AppColors.warningText,
       StatsTone.normal => AppColors.textPrimary,
     };
     return Row(
@@ -239,7 +237,7 @@ class StatsPanel extends StatelessWidget {
             fontSize: metrics.density == StatsDensity.tv ? 11.5 : 9.5,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.7,
-            color: _warn,
+            color: AppColors.warningText,
           ),
         ),
       );
@@ -252,7 +250,7 @@ class StatsPanel extends StatelessWidget {
             Container(
               height: 1,
               margin: EdgeInsets.only(bottom: tv ? 9 : 7),
-              color: Colors.white.withValues(alpha: 0.08),
+              color: DepthTokens.osdDivider,
             ),
             Row(
               children: [
@@ -264,7 +262,7 @@ class StatsPanel extends StatelessWidget {
                   'last 60 s',
                   style: TextStyle(
                     fontSize: tv ? 12.5 : 10,
-                    color: AppColors.textDisabled,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -300,7 +298,7 @@ class StatsPanel extends StatelessWidget {
           'into Copy.',
           style: TextStyle(
             fontSize: 9.5,
-            color: AppColors.textDisabled,
+            color: AppColors.textSecondary,
             height: 1.4,
           ),
         ),

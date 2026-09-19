@@ -44,7 +44,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/player/platform_features.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
@@ -78,7 +77,6 @@ Widget _panel(double width, {bool quality = false, bool alwaysOnTop = false}) {
       body: Center(
         child: ChromePanel(
           metrics: metrics,
-          tier: PlayerGlassTier.full,
           transport: TransportSurface(
             isPlaying: true,
             onPreviousEpisode: () {},

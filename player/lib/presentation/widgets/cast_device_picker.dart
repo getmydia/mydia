@@ -9,6 +9,7 @@ import '../../core/cast/cast_providers.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
 import 'local_network_settings_button.dart';
+import 'osd_dialog.dart';
 
 /// Shows a dialog to pick a cast receiver.
 ///
@@ -48,7 +49,7 @@ class CastDevicePickerDialog extends ConsumerWidget {
     final connected = connection == CastConnection.connectedIdle ||
         connection == CastConnection.casting;
 
-    return AlertDialog(
+    return OsdDialog(
       title: const Row(
         children: [
           Icon(Icons.cast, size: 24),
@@ -56,28 +57,31 @@ class CastDevicePickerDialog extends ConsumerWidget {
           Text('Cast to Device'),
         ],
       ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: devicesAsync.when(
-          data: (devices) => _DeviceList(
-            devices: devices,
-            capabilities: capabilities,
-            currentDeviceId: chosenDevice?.id,
-            connected: connected,
-          ),
-          // Same widget as the empty-data case: the discovery stream emits
-          // nothing at all until the first device answers, so a distinct
-          // "loading" spinner here is what left a network with no receivers
-          // spinning forever with no terminal state.
-          loading: () => _DeviceList(
-            devices: const [],
-            capabilities: capabilities,
-            currentDeviceId: chosenDevice?.id,
-            connected: connected,
-          ),
-          error: (error, _) => _DiscoveryError(
-            error: error,
-            settingsAvailable: debugSettingsAvailableOverride,
+      content: Material(
+        type: MaterialType.transparency,
+        child: SizedBox(
+          width: double.maxFinite,
+          child: devicesAsync.when(
+            data: (devices) => _DeviceList(
+              devices: devices,
+              capabilities: capabilities,
+              currentDeviceId: chosenDevice?.id,
+              connected: connected,
+            ),
+            // Same widget as the empty-data case: the discovery stream emits
+            // nothing at all until the first device answers, so a distinct
+            // "loading" spinner here is what left a network with no receivers
+            // spinning forever with no terminal state.
+            loading: () => _DeviceList(
+              devices: const [],
+              capabilities: capabilities,
+              currentDeviceId: chosenDevice?.id,
+              connected: connected,
+            ),
+            error: (error, _) => _DiscoveryError(
+              error: error,
+              settingsAvailable: debugSettingsAvailableOverride,
+            ),
           ),
         ),
       ),

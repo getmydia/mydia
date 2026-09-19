@@ -37,7 +37,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/player/platform_features.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
@@ -73,8 +72,6 @@ Widget _panel(double width) {
             Center(
               child: ChromePanel(
                 metrics: metrics,
-                // Forced so images do not vary with the host platform.
-                tier: PlayerGlassTier.full,
                 // Episode nav wired unconditionally, matching real usage
                 // whenever adjacent episodes exist (`PlaybackChrome` now
                 // always passes both callbacks through — see its wiring
@@ -155,7 +152,7 @@ Widget _panel(double width) {
 ///     `_matchers_io.dart`), then rasterizes *that* ancestor's full
 ///     `paintBounds`. `ChromePanel`'s own outermost render object (a
 ///     `ConstrainedBox`) is not itself a repaint boundary — the one inside
-///     `GlassSurface.playerChrome` sits *below* it in the tree, so the
+///     `GlassSurface.osd` sits *below* it in the tree, so the
 ///     upward walk never reaches it and instead resolves to whatever much
 ///     larger ancestor boundary happens to exist above the panel (in
 ///     practice, something close to the full test viewport). Naively
@@ -169,13 +166,9 @@ Widget _panel(double width) {
 ///     scene for `toImage()`, with nothing painted before the
 ///     `BackdropFilter` inside `GlassSurface` — so it blurs a blank/
 ///     transparent canvas instead of the synthetic backdrop. The resulting
-///     image is the fill color alone, at the documented top/bottom alphas,
-///     over full transparency: confirmed by sampling the very first
-///     `--update-goldens` attempt with `magick`, which showed the tint's raw
-///     RGB (`(11,11,12)`, `DepthTokens.playerChromeTint`) at exactly
-///     alpha 142/255 (≈0.56) fading to 98/255 (≈0.38) top-to-bottom, with
-///     *zero* trace of the tan/navy backdrop underneath it — no live blur,
-///     no saturation boost visible, because there was nothing behind the
+///     image is the fill color alone over full transparency: the tint's raw
+///     RGB with no trace of the backdrop underneath it, no live blur, no
+///     saturation boost visible, because there was nothing behind the
 ///     filter to blur or saturate.
 ///
 /// Putting the `RepaintBoundary` around the backdrop *and* the panel
