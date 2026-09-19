@@ -46,7 +46,7 @@ class TvCanvas extends StatelessWidget {
     // app with a dead band, the opposite of what this class is for.
     // OverflowBox is the primitive for a child deliberately larger than its
     // parent: it sizes itself to the incoming constraints and hands the child
-    // exactly these. `seek_preview.dart` already uses the same idiom.
+    // exactly these.
     //
     // OverflowBox outermost, Transform innermost. The order is load-bearing
     // and not interchangeable: hit testing runs outside-in, and a

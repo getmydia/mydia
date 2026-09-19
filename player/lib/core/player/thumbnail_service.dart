@@ -1,7 +1,7 @@
-import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
-/// Represents a single thumbnail entry from the VTT file.
+/// One frame of a trickplay sprite sheet, as a WebVTT cue describes it.
 class ThumbnailCue {
   /// Start time in seconds
   final double startTime;
@@ -9,7 +9,7 @@ class ThumbnailCue {
   /// End time in seconds
   final double endTime;
 
-  /// Sprite sheet filename (checksum.jpg)
+  /// Sprite sheet filename as the VTT names it (the sheet's checksum)
   final String spriteFilename;
 
   /// X coordinate in the sprite sheet
@@ -40,122 +40,112 @@ class ThumbnailCue {
   }
 }
 
-/// Service for fetching and parsing thumbnail VTT files for video scrubbing.
+/// Fetches and reads the trickplay frames the server generates for a file.
+///
+/// The server writes one JPEG sheet per file (`sprite_generator.ex`: a 9x9
+/// grid of 160x90 frames) and a WebVTT file mapping time ranges to `#xywh=`
+/// regions of it. Both are served under `/api/v1/media/:id/` behind the
+/// ordinary access token, so this works over a direct HTTP connection only:
+/// the p2p local proxy forwards `/hls`, `/direct` and `/download` and nothing
+/// else.
 class ThumbnailService {
   final String serverUrl;
   final String authToken;
+  final http.Client _client;
 
-  /// Cache of parsed thumbnail data, keyed by file ID
+  /// Parsed cues per file id. An empty list means the file has none.
   final Map<String, List<ThumbnailCue>> _cache = {};
 
   ThumbnailService({
     required this.serverUrl,
     required this.authToken,
-  });
+    http.Client? client,
+  }) : _client = client ?? http.Client();
 
-  /// Fetch and parse the VTT file for a media file.
+  /// Headers the sprite image request must carry.
+  Map<String, String> get imageHeaders =>
+      {'Authorization': 'Bearer $authToken'};
+
+  /// The sprite sheet for [fileId].
   ///
-  /// Parameters:
-  ///   - fileId: The ID of the media file
+  /// The name the VTT gives the sheet is its checksum, which is not a path
+  /// the server serves; the sheet is always this endpoint.
+  String spriteUrl(String fileId) =>
+      '$serverUrl/api/v1/media/$fileId/thumbnails.jpg';
+
+  /// The cues for [fileId], or an empty list when there are none or the
+  /// request failed. Never throws.
   ///
-  /// Returns a list of thumbnail cues, or an empty list if unavailable.
+  /// A 404 is remembered, since the file has no sprites and asking again
+  /// would get the same answer. Any other failure is not.
   Future<List<ThumbnailCue>> fetchThumbnails(String fileId) async {
-    // Check cache first
-    if (_cache.containsKey(fileId)) {
-      return _cache[fileId]!;
-    }
+    final cached = _cache[fileId];
+    if (cached != null) return cached;
 
     try {
-      final url = '$serverUrl/api/v1/media/$fileId/thumbnails.vtt';
-      debugPrint('Fetching thumbnails from: $url');
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $authToken',
-          'Accept': 'text/vtt',
-        },
+      final response = await _client.get(
+        Uri.parse('$serverUrl/api/v1/media/$fileId/thumbnails.vtt'),
+        headers: {...imageHeaders, 'Accept': 'text/vtt'},
       );
-
       if (response.statusCode == 200) {
-        final cues = _parseVtt(response.body);
-        debugPrint('Parsed ${cues.length} thumbnail cues');
-
-        // Cache the result
-        _cache[fileId] = cues;
-
-        return cues;
-      } else if (response.statusCode == 404) {
-        debugPrint('No thumbnails available for file: $fileId');
-        // Cache empty result to avoid repeated requests
-        _cache[fileId] = [];
-        return [];
-      } else {
-        debugPrint('Failed to fetch thumbnails: ${response.statusCode}');
-        return [];
+        return _cache[fileId] = parseVtt(response.body);
       }
+      if (response.statusCode == 404) {
+        return _cache[fileId] = const [];
+      }
+      debugPrint(
+          '[ThumbnailService] thumbnails.vtt answered ${response.statusCode}');
+      return const [];
     } catch (e) {
-      debugPrint('Error fetching thumbnails: $e');
-      // Return empty list on error (graceful fallback)
-      return [];
+      debugPrint('[ThumbnailService] thumbnails.vtt failed: $e');
+      return const [];
     }
   }
 
-  /// Get the thumbnail cue for a specific timestamp.
-  ///
-  /// Returns null if no thumbnail is available for that timestamp.
-  ThumbnailCue? getThumbnailForTime(List<ThumbnailCue> cues, double timestamp) {
+  /// The cue covering [seconds], or the nearest one when [seconds] falls in a
+  /// gap. The generator skips the first and last 2% of the runtime, so the
+  /// ends of the bar would otherwise have no frame. Null only for no cues.
+  ThumbnailCue? cueFor(List<ThumbnailCue> cues, double seconds) {
+    ThumbnailCue? nearest;
+    var nearestDistance = double.infinity;
     for (final cue in cues) {
-      if (cue.contains(timestamp)) {
-        return cue;
+      if (cue.contains(seconds)) return cue;
+      final distance = seconds < cue.startTime
+          ? cue.startTime - seconds
+          : seconds - cue.endTime;
+      if (distance < nearestDistance) {
+        nearest = cue;
+        nearestDistance = distance;
       }
     }
-    return null;
+    return nearest;
   }
 
-  /// Build the URL for the sprite sheet image.
-  String getSpriteUrl(String spriteFilename) {
-    // The sprite filename is the checksum with .jpg extension
-    // Sprites are served from /generated/sprites/{tier1}/{tier2}/{checksum}.jpg
-    final checksum = spriteFilename.replaceAll('.jpg', '');
-    final tier1 = checksum.substring(0, 2);
-    final tier2 = checksum.substring(2, 4);
-
-    return '$serverUrl/generated/sprites/$tier1/$tier2/$spriteFilename';
-  }
-
-  /// Clear the cache
-  void clearCache() {
-    _cache.clear();
-  }
-
-  /// Parse WebVTT content into thumbnail cues.
+  /// Parses WebVTT content into thumbnail cues.
   ///
   /// Expected format:
   /// ```
   /// WEBVTT
   ///
   /// 00:00:00.000 --> 00:00:05.000
-  /// sprite.jpg#xywh=0,0,160,90
-  ///
-  /// 00:00:05.000 --> 00:00:10.000
-  /// sprite.jpg#xywh=160,0,160,90
+  /// 3f9a1c.jpg#xywh=0,0,160,90
   /// ```
-  List<ThumbnailCue> _parseVtt(String vttContent) {
+  @visibleForTesting
+  static List<ThumbnailCue> parseVtt(String vttContent) {
     final cues = <ThumbnailCue>[];
     final lines = vttContent.split('\n');
 
-    int i = 0;
+    var i = 0;
     while (i < lines.length) {
       final line = lines[i].trim();
 
-      // Skip WEBVTT header and empty lines
-      if (line.isEmpty || line.startsWith('WEBVTT') || line.startsWith('NOTE')) {
+      if (line.isEmpty ||
+          line.startsWith('WEBVTT') ||
+          line.startsWith('NOTE')) {
         i++;
         continue;
       }
 
-      // Look for timestamp line (contains -->)
       if (line.contains('-->')) {
         final parts = line.split('-->');
         if (parts.length != 2) {
@@ -166,20 +156,15 @@ class ThumbnailService {
         final startTime = _parseVttTime(parts[0].trim());
         final endTime = _parseVttTime(parts[1].trim());
 
-        // Next line should contain the sprite reference
+        // The next line holds the sprite reference.
         i++;
         if (i >= lines.length) break;
 
         final spriteLine = lines[i].trim();
-        if (spriteLine.isEmpty) {
-          continue;
-        }
+        if (spriteLine.isEmpty) continue;
 
-        // Parse sprite reference: sprite.jpg#xywh=0,0,160,90
         final cue = _parseSpriteLine(spriteLine, startTime, endTime);
-        if (cue != null) {
-          cues.add(cue);
-        }
+        if (cue != null) cues.add(cue);
       }
 
       i++;
@@ -188,10 +173,8 @@ class ThumbnailService {
     return cues;
   }
 
-  /// Parse VTT timestamp to seconds.
-  ///
-  /// Format: HH:MM:SS.mmm
-  double _parseVttTime(String timeStr) {
+  /// `HH:MM:SS.mmm` to seconds.
+  static double _parseVttTime(String timeStr) {
     final parts = timeStr.split(':');
     if (parts.length != 3) return 0.0;
 
@@ -199,46 +182,35 @@ class ThumbnailService {
     final minutes = int.tryParse(parts[1]) ?? 0;
     final secondsParts = parts[2].split('.');
     final seconds = int.tryParse(secondsParts[0]) ?? 0;
-    final millis = secondsParts.length > 1 ? int.tryParse(secondsParts[1]) ?? 0 : 0;
+    final millis =
+        secondsParts.length > 1 ? int.tryParse(secondsParts[1]) ?? 0 : 0;
 
     return hours * 3600.0 + minutes * 60.0 + seconds + millis / 1000.0;
   }
 
-  /// Parse sprite line to extract coordinates.
-  ///
-  /// Format: sprite.jpg#xywh=0,0,160,90
-  ThumbnailCue? _parseSpriteLine(
+  /// `name.jpg#xywh=0,0,160,90` to a cue, or null when malformed.
+  static ThumbnailCue? _parseSpriteLine(
     String spriteLine,
     double startTime,
     double endTime,
   ) {
-    try {
-      final hashIndex = spriteLine.indexOf('#xywh=');
-      if (hashIndex == -1) return null;
+    final hashIndex = spriteLine.indexOf('#xywh=');
+    if (hashIndex == -1) return null;
 
-      final spriteFilename = spriteLine.substring(0, hashIndex);
-      final coords = spriteLine.substring(hashIndex + 6); // Skip '#xywh='
+    final coords = spriteLine.substring(hashIndex + 6).split(',');
+    if (coords.length != 4) return null;
 
-      final parts = coords.split(',');
-      if (parts.length != 4) return null;
+    final values = coords.map(int.tryParse).toList();
+    if (values.contains(null)) return null;
 
-      final x = int.parse(parts[0]);
-      final y = int.parse(parts[1]);
-      final width = int.parse(parts[2]);
-      final height = int.parse(parts[3]);
-
-      return ThumbnailCue(
-        startTime: startTime,
-        endTime: endTime,
-        spriteFilename: spriteFilename,
-        x: x,
-        y: y,
-        width: width,
-        height: height,
-      );
-    } catch (e) {
-      debugPrint('Error parsing sprite line: $e');
-      return null;
-    }
+    return ThumbnailCue(
+      startTime: startTime,
+      endTime: endTime,
+      spriteFilename: spriteLine.substring(0, hashIndex),
+      x: values[0]!,
+      y: values[1]!,
+      width: values[2]!,
+      height: values[3]!,
+    );
   }
 }
