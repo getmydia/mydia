@@ -29,9 +29,9 @@ import '../../core/theme/depth_tokens.dart';
 /// [DepthTokens] (R2) rather than per-call literals.
 ///
 /// Use the named constructors ([GlassSurface.appBar], [GlassSurface.modal],
-/// [GlassSurface.hoverOverlay], [GlassSurface.faux]) to reproduce the
-/// established visual treatments; the unnamed constructor is available for
-/// bespoke surfaces.
+/// [GlassSurface.hoverOverlay], [GlassSurface.faux], [GlassSurface.osd]) to
+/// reproduce the established visual treatments; the unnamed constructor is
+/// available for bespoke surfaces.
 ///
 /// When several real-blur surfaces are visible at once, wrap them in a
 /// [BackdropGroup] and pass `grouped: true` so they share a single backdrop
@@ -94,6 +94,11 @@ class GlassSurface extends StatelessWidget {
   /// the device cannot afford one.
   final PlayerGlassTier? playerTier;
 
+  /// Drop shadow painted *outside* the clip, so it is not cut off. Empty
+  /// (the default for every constructor except [GlassSurface.osd]) paints
+  /// nothing and adds no widget.
+  final List<BoxShadow> shadows;
+
   final Widget? child;
 
   const GlassSurface({
@@ -108,6 +113,7 @@ class GlassSurface extends StatelessWidget {
     this.saturation = 1.0,
     this.rimGradient,
     this.playerTier,
+    this.shadows = const <BoxShadow>[],
     this.child,
   });
 
@@ -218,6 +224,40 @@ class GlassSurface extends StatelessWidget {
           child: child,
         );
 
+  /// The on-screen-display material: the playback panel, the top-bar pills,
+  /// up next, skip segment, the stats panel, and the pickers opened from
+  /// them.
+  ///
+  /// A dense dark card ([DepthTokens.osdFillOpacity]) over a light backdrop
+  /// blur, with a uniform hairline and a drop shadow sized by [elevation].
+  /// It renders the same on every platform: no quality tiers and no package
+  /// shaders.
+  ///
+  /// The shadow sits outside the clip and also beneath the translucent fill,
+  /// so it darkens the video the blur samples. That is part of the look;
+  /// `osd_legibility_test.dart` does not count on it.
+  GlassSurface.osd({
+    Key? key,
+    BorderRadius? borderRadius,
+    OsdElevation elevation = OsdElevation.panel,
+    Widget? child,
+  }) : this(
+          key: key,
+          blurSigma: DepthTokens.osdBlurSigma,
+          fillColor:
+              DepthTokens.osdTint.withValues(alpha: DepthTokens.osdFillOpacity),
+          borderRadius: borderRadius ??
+              const BorderRadius.all(
+                Radius.circular(DepthTokens.radiusOsdPanel),
+              ),
+          border: Border.all(
+            color: DepthTokens.osdHairline,
+            width: DepthTokens.rimWidth,
+          ),
+          shadows: elevation.shadows,
+          child: child,
+        );
+
   /// The playback chrome material.
   ///
   /// Unlike the browse-UI chrome, this sits over live video — the one backdrop
@@ -278,7 +318,17 @@ class GlassSurface extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _withShadow(_surface());
+
+  Widget _withShadow(Widget surface) {
+    if (shadows.isEmpty) return surface;
+    return DecoratedBox(
+      decoration: BoxDecoration(borderRadius: borderRadius, boxShadow: shadows),
+      child: surface,
+    );
+  }
+
+  Widget _surface() {
     // Faux-glass: no BackdropFilter at all (R8). Checked before [playerTier]
     // so PlayerGlassTier.faux keeps landing here rather than paying for a
     // refraction shader (see [playerTier]'s dartdoc).

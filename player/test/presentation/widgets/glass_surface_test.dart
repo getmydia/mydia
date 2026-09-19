@@ -189,6 +189,137 @@ void main() {
     });
   });
 
+  group('GlassSurface.osd', () {
+    List<BoxDecoration> decorationsOf(WidgetTester tester) => tester
+        .widgetList<DecoratedBox>(
+          find.descendant(
+            of: find.byType(GlassSurface),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .map((box) => box.decoration)
+        .whereType<BoxDecoration>()
+        .toList();
+
+    testWidgets('blurs once at the OSD sigma, with no colour matrix',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(GlassSurface.osd(child: const SizedBox(width: 200, height: 60))),
+      );
+
+      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(
+        _backdropOf(tester).filter,
+        ImageFilter.blur(
+          sigmaX: DepthTokens.osdBlurSigma,
+          sigmaY: DepthTokens.osdBlurSigma,
+        ),
+      );
+    });
+
+    testWidgets('fills flat at 0.85 with a uniform hairline', (tester) async {
+      await tester.pumpWidget(_host(GlassSurface.osd(child: const SizedBox())));
+
+      final fill = _decoratedBoxOf(tester).decoration as BoxDecoration;
+      expect(
+        fill.color,
+        DepthTokens.osdTint.withValues(alpha: DepthTokens.osdFillOpacity),
+      );
+      expect(fill.gradient, isNull);
+      expect(
+        fill.border,
+        Border.all(
+          color: DepthTokens.osdHairline,
+          width: DepthTokens.rimWidth,
+        ),
+      );
+      expect(
+        fill.borderRadius,
+        const BorderRadius.all(Radius.circular(DepthTokens.radiusOsdPanel)),
+      );
+    });
+
+    testWidgets('paints the panel shadow outside the clip by default',
+        (tester) async {
+      await tester.pumpWidget(_host(GlassSurface.osd(child: const SizedBox())));
+
+      final shadowed =
+          decorationsOf(tester).where((d) => d.boxShadow != null).single;
+      expect(shadowed.boxShadow, DepthTokens.osdShadowPanel);
+      expect(
+        find.ancestor(
+          of: find.byType(ClipRRect),
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is DecoratedBox &&
+                (w.decoration as BoxDecoration).boxShadow != null,
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('pill elevation uses the pill shadow', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.osd(
+            elevation: OsdElevation.pill,
+            child: const SizedBox(),
+          ),
+        ),
+      );
+
+      expect(
+        tester.widget<GlassSurface>(find.byType(GlassSurface)).shadows,
+        DepthTokens.osdShadowPill,
+      );
+    });
+
+    testWidgets('none elevation paints no shadow', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.osd(
+            elevation: OsdElevation.none,
+            child: const SizedBox(),
+          ),
+        ),
+      );
+
+      expect(decorationsOf(tester).where((d) => d.boxShadow != null), isEmpty);
+    });
+
+    testWidgets('honors a custom borderRadius', (tester) async {
+      const radius = BorderRadius.vertical(
+        top: Radius.circular(DepthTokens.radiusOsdSheet),
+      );
+      await tester.pumpWidget(
+        _host(GlassSurface.osd(borderRadius: radius, child: const SizedBox())),
+      );
+
+      expect(
+        tester.widget<ClipRRect>(find.byType(ClipRRect)).borderRadius,
+        radius,
+      );
+    });
+
+    testWidgets('children remain hit-testable', (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        _host(
+          GlassSurface.osd(
+            child: ElevatedButton(
+              onPressed: () => tapped = true,
+              child: const Text('play'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('play'));
+      expect(tapped, isTrue);
+    });
+  });
+
   group('grouped rendering', () {
     testWidgets(
         'a BackdropGroup wrapping two grouped surfaces builds and '
