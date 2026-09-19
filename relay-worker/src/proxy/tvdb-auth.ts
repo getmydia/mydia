@@ -16,6 +16,8 @@ interface StoredToken {
   exp: number;
 }
 
+// The settled token only, never an in-flight read or login: see `held` in
+// routing/config.ts for why a KV promise is never shared between requests.
 let held: { token: StoredToken; readAt: number } | undefined;
 
 export function parseJwtExpiry(token: string): number {

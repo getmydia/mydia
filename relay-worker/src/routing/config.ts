@@ -174,6 +174,11 @@ let memo: { raw: string | null; config: RoutingConfig } | undefined;
 // The config this isolate is serving and when it was read. A failed read is
 // held for the same window as a good one: once KV is refusing (an outage, or
 // the daily read cap), retrying it on every request cannot help.
+//
+// Only the settled value is shared, never the in-flight read. A KV promise
+// belongs to the request that started it, and the runtime drops its
+// continuations if that request ends first, so a request awaiting another's
+// read could hang. Requests that overlap an expiry each read once instead.
 let held: { config: RoutingConfig; readAt: number } | undefined;
 
 export async function loadRoutingConfig(env: Env, now: number = Date.now()): Promise<RoutingConfig> {
