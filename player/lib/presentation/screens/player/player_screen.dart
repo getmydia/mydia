@@ -20,7 +20,9 @@ import '../../../core/player/codec_support.dart';
 import '../../../core/player/player_orientation_lease_controller.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_stream_index.dart';
+import '../../../core/player/image_subtitle_sidecar.dart';
 import '../../../core/player/subtitle_delay.dart';
+import '../../../core/player/subtitle_render.dart';
 import '../../../core/player/video_output_config.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
@@ -570,7 +572,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Equal to the stored offset for a track fetched over `SubtitleContent`
   /// (`Delivery.content/3` applies it before returning); zero for an
   /// mpv-native track mpv read straight out of the container, which the
-  /// server never saw. See [effectiveSubtitleDelayMs].
+  /// server never saw, and for a bitmap sidecar, which it cannot shift. See
+  /// [bakedSubtitleOffsetMs] and [effectiveSubtitleDelayMs].
   int _bakedSubtitleOffsetMs = 0;
 
   /// The live, unsaved adjustment from the sheet's steppers or the
@@ -596,6 +599,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // Mapping from app model track IDs to media_kit track objects
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
   Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
+
+  /// Local copies of bitmap subtitle sidecars fetched during this screen's
+  /// life, deleted in [dispose]. mpv loads them from disk; see
+  /// [_fetchImageSubtitleTrack].
+  final List<String> _imageSidecarPaths = [];
 
   // Whether current playback is direct play (vs HLS)
   bool _isDirectPlay = false;
@@ -2074,6 +2082,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await _tracksSubscription?.cancel();
     _tracksSubscription = watchTracks(player.stream.tracks, _onTracksChanged);
 
+    // Once per `Player`, before `open`, so a default bitmap track mpv picks
+    // while opening is drawn too. See `subtitle_render.dart` for why mpv,
+    // not media_kit's overlay, has to draw those.
+    unawaited(watchSubtitleRendering(player));
+
     // Before `open`, deliberately: mpv chooses its audio track while loading
     // the file, so a preference applied afterwards does not reselect and the
     // viewer still starts on the wrong language. Without this, mpv falls
@@ -2452,9 +2465,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final track = _selectedSubtitleTrack;
     if (!keepNudge) _subtitleNudgeMs = 0;
     _bakedSubtitleOffsetMs =
-        track == null || isMpvNativeSubtitleTrackId(track.id)
-            ? 0
-            : (_subtitleOffsets[track.id] ?? 0);
+        bakedSubtitleOffsetMs(track: track, offsets: _subtitleOffsets);
     await _syncSubtitleDelay();
   }
 
@@ -2895,6 +2906,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       serverTracks: _serverSubtitleTracks,
       mpvTracks: mpvTracks,
       isDirectPlay: _isDirectPlay,
+      imageSidecars: !kIsWeb,
     );
 
     if (listEquals(derived, _subtitleTracks)) return;
@@ -3790,12 +3802,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // mid-fetch with nothing on screen -- precisely the blank-screen
       // condition that invites the re-tap `_canApplySubtitleSelection`
       // exists to guard against.
+      // A bitmap track's first pick waits on the server copying it out of
+      // the whole source, which can take minutes, so its indicator says so
+      // and stays up for as long as the fetch may take.
+      final preparingImage = !_isDirectPlay && isImageSubtitleTrack(selected);
       final loadingToast = Toaster.of(context).show(
-        'Loading subtitle...',
+        preparingImage ? kImageSubtitlePreparingMessage : 'Loading subtitle...',
         kind: ToastKind.progress,
+        duration: preparingImage ? kImageSidecarTimeLimit : null,
       );
 
-      final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
+      final resolved = await _resolveMediaKitSubtitleTrack(
+        selected,
+        generation: generation,
+      );
+      final mkTrack = resolved.track;
       // Unconditional: `ToastHandle.close` does not use this screen's
       // context (the layer lives above the route). Gating on `mounted` was
       // leftover from `SnackBar.close` and left the indicator up after the
@@ -3827,8 +3848,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // so it cannot itself prove `context` is safe to use here. This
         // repeats the same check directly so it can.
         if (!mounted) return generation;
-        showToast(context, 'Could not load that subtitle track. Try again.',
-            kind: ToastKind.error);
+        showToast(context, resolved.failureMessage, kind: ToastKind.error);
         return generation;
       }
 
@@ -4085,22 +4105,80 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
-  /// Resolve the media_kit track for [track], fetching its body over
-  /// GraphQL the first time a content-backed track is selected.
+  /// Resolve the media_kit track for [track], or say why it cannot be had.
   ///
   /// Embedded tracks the media_kit player already sees in the container (in
   /// direct play) are already in [_mediaKitSubtitleTrackMap] once
-  /// [_detectTracks] runs, at no fetch cost. Everything else — sidecar
-  /// subtitles, and any track streaming delivers as text — has no body until
-  /// this fetches one. That fetch happens here, at selection time, rather
-  /// than eagerly in [_detectTracks] for every selectable track: most
-  /// tracks a file offers are never selected in a given playback, and
-  /// resolving `content` server-side runs an ffmpeg extraction per track.
+  /// [_detectTracks] runs, at no fetch cost. Everything else has nothing to
+  /// load until this fetches it: a bitmap track on a streamed source as a
+  /// sidecar file ([_fetchImageSubtitleTrack]), and every other track as a
+  /// text body ([_fetchTextSubtitleTrack]). That fetch happens here, at
+  /// selection time, rather than eagerly in [_detectTracks] for every
+  /// selectable track: most tracks a file offers are never selected in a
+  /// given playback, and each one costs the server an ffmpeg run.
   ///
   /// The result is cached in [_mediaKitSubtitleTrackMap] so re-selecting the
   /// same track later in the same session (or the sync in
   /// [_showSubtitleSelector] finding it already selected) does not refetch.
-  Future<SubtitleTrack?> _resolveMediaKitSubtitleTrack(
+  Future<_ResolvedSubtitle> _resolveMediaKitSubtitleTrack(
+    app_models.SubtitleTrack track, {
+    required int generation,
+  }) async {
+    final cached = _mediaKitSubtitleTrackMap[track.id];
+    if (cached != null) return (track: cached, failureMessage: '');
+
+    if (isImageSubtitleTrack(track)) {
+      return _fetchImageSubtitleTrack(track, generation: generation);
+    }
+
+    final fetched = await _fetchTextSubtitleTrack(track);
+    return (track: fetched, failureMessage: kSubtitleLoadFailedMessage);
+  }
+
+  /// Fetches bitmap [track] as the sidecar the server copies out of the
+  /// source into the HLS session, and hands mpv the local copy.
+  ///
+  /// See `image_subtitle_sidecar.dart` for why mpv only ever gets a local
+  /// path, and why the first pick of a track can wait minutes. The poll
+  /// stops as soon as a newer pick or the screen going away makes
+  /// [generation] stale.
+  Future<_ResolvedSubtitle> _fetchImageSubtitleTrack(
+    app_models.SubtitleTrack track, {
+    required int generation,
+  }) async {
+    final source = _playback?.sessionFile(imageSidecarName(track.id));
+    if (source == null) {
+      return (track: null, failureMessage: kImageSubtitleUnavailableMessage);
+    }
+
+    final fetch = await fetchImageSidecar(
+      url: Uri.parse(source.url),
+      headers: source.probeHeaders ?? source.headers,
+      cancelled: () => !_canApplySubtitleSelection(generation),
+    );
+
+    switch (fetch) {
+      case SidecarReady(:final path):
+        _imageSidecarPaths.add(path);
+        final mkTrack = SubtitleTrack.uri(
+          path,
+          title: track.title,
+          language: track.language,
+        );
+        _mediaKitSubtitleTrackMap[track.id] = mkTrack;
+        return (track: mkTrack, failureMessage: '');
+      case SidecarCancelled():
+        return (track: null, failureMessage: '');
+      case SidecarUnsupported() || SidecarFailed():
+        debugPrint(
+            '[PlayerScreen] Bitmap subtitle ${track.id} unavailable: $fetch');
+        return (track: null, failureMessage: imageSidecarFailureMessage(fetch));
+    }
+  }
+
+  /// Fetches [track]'s text body over GraphQL and wraps it for media_kit.
+  /// Null when there is no body to be had.
+  Future<SubtitleTrack?> _fetchTextSubtitleTrack(
     app_models.SubtitleTrack track,
   ) async {
     final cached = _mediaKitSubtitleTrackMap[track.id];
@@ -4702,6 +4780,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _chromeVisibility.removeListener(_onChromeVisibilityChanged);
     _chromeVisibility.dispose();
     _subtitleDelayDisplay.dispose();
+    for (final path in _imageSidecarPaths) {
+      unawaited(discardImageSidecar(path));
+    }
     super.dispose();
   }
 
@@ -5776,6 +5857,10 @@ AudioTrackDetection detectAudioTracks(List<AudioTrack> mkTracks) {
 /// `player.stream.tracks` is a plain broadcast stream with no replay, so
 /// callers must subscribe before opening the media and still run a detection
 /// pass afterwards to cover anything emitted in between.
+/// A picked subtitle track made loadable, or null with the line to show the
+/// viewer instead. See `_resolveMediaKitSubtitleTrack`.
+typedef _ResolvedSubtitle = ({SubtitleTrack? track, String failureMessage});
+
 @visibleForTesting
 StreamSubscription<Tracks> watchTracks(
   Stream<Tracks> tracks,
