@@ -4,6 +4,9 @@ import 'package:player/core/playback/stream_urls.dart';
 
 class _FakeProxy extends Fake implements MediaProxy {
   @override
+  String get baseUrl => 'http://127.0.0.1:1';
+
+  @override
   String buildHlsUrl(String sessionId) =>
       'http://127.0.0.1:1/hls/$sessionId/index.m3u8';
 
@@ -25,6 +28,13 @@ void main() {
     test('hls goes through the proxy; the proxy handles auth', () {
       final source = urls.hls('sess-1');
       expect(source.url, 'http://127.0.0.1:1/hls/sess-1/index.m3u8');
+      expect(source.headers, isEmpty);
+      expect(source.probeHeaders, isNull);
+    });
+
+    test('a session file goes through the proxy next to the manifest', () {
+      final source = urls.hlsFile('sess-1', 'subs_3.mks');
+      expect(source.url, 'http://127.0.0.1:1/hls/sess-1/subs_3.mks');
       expect(source.headers, isEmpty);
       expect(source.probeHeaders, isNull);
     });
@@ -65,6 +75,18 @@ void main() {
       );
       final source = urls.hls('sess-1');
       expect(source.url, 'https://mydia.example/api/v1/hls/sess-1/index.m3u8');
+      expect(source.headers, isEmpty);
+      expect(source.probeHeaders, {'Authorization': 'Bearer jwt'});
+    });
+
+    test('a session file is fetched with the bearer, like the probe', () {
+      final urls = HttpStreamUrls(
+        serverUrl: 'https://mydia.example',
+        bearerToken: 'jwt',
+        mediaToken: () async => null,
+      );
+      final source = urls.hlsFile('sess-1', 'subs_3.mks');
+      expect(source.url, 'https://mydia.example/api/v1/hls/sess-1/subs_3.mks');
       expect(source.headers, isEmpty);
       expect(source.probeHeaders, {'Authorization': 'Bearer jwt'});
     });

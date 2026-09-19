@@ -44,6 +44,22 @@ defmodule Mydia.Subtitles.ExtractorStreamsTest do
     refute pgs.deliverable
   end
 
+  test "never offers a DVB or XSUB bitmap as deliverable text" do
+    media_file =
+      with_streams([
+        %StreamInfo{index: 4, type: :subtitle, codec: "dvb_subtitle", language: "ger"},
+        %StreamInfo{index: 5, type: :subtitle, codec: "xsub", language: "ita"}
+      ])
+
+    tracks = Extractor.list_subtitle_tracks(media_file)
+
+    assert [dvb, xsub] = Enum.filter(tracks, & &1.embedded)
+    assert dvb.format == "dvb_subtitle"
+    refute dvb.deliverable
+    assert xsub.format == "xsub"
+    refute xsub.deliverable
+  end
+
   test "falls back to ffprobe when the file was never analyzed" do
     media_file = MediaFixtures.media_file_fixture(%{metadata: nil}) |> Repo.preload(:library_path)
 

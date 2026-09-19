@@ -21,14 +21,19 @@ defmodule Mydia.Streaming.SessionSubtitles do
   exception rather than the rule, not a structural guarantee. This module only
   copies those bytes into the session directory, which is a few KB of write.
 
-  Image-based tracks (PGS, VobSub) never materialize. Enforcing that here
-  rather than in the player means no client can offer one by mistake.
+  Image-based tracks (PGS, VobSub, DVB, XSUB) never become WebVTT: a
+  `subs_<index>.vtt` request for one is refused, so no client can offer one
+  as text by mistake. The native player asks for `subs_<index>.mks`
+  instead, which `Mydia.Subtitles.ImageTrack` serves straight from its
+  cache. That copy can take minutes on a large source, so the request
+  answers `{:error, :pending}` until it is ready rather than waiting.
   """
 
   alias Mydia.Library
   alias Mydia.Streaming.SessionFiles
   alias Mydia.Subtitles.Delivery
   alias Mydia.Subtitles.Extractor
+  alias Mydia.Subtitles.ImageTrack
 
   require Logger
 
@@ -41,6 +46,10 @@ defmodule Mydia.Streaming.SessionSubtitles do
   # than `$`: in PCRE (what Elixir's Regex uses) a bare `$` also matches just
   # before a single trailing newline, so "subs_3.vtt\n" would otherwise pass.
   @filename_pattern ~r/^subs_([0-9]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.vtt\z/
+
+  # An embedded bitmap track's stream index, and only that: sidecar files on
+  # disk are always text. Anchored with `\z` for the reason given above.
+  @image_filename_pattern ~r/^subs_([0-9]+)\.mks\z/
 
   @doc "The session-relative filename for `track_id`."
   @spec filename(integer() | String.t()) :: String.t()
@@ -60,15 +69,54 @@ defmodule Mydia.Streaming.SessionSubtitles do
     end
   end
 
+  @doc "The session-relative filename for embedded bitmap stream `index`."
+  @spec image_filename(non_neg_integer()) :: String.t()
+  def image_filename(index) when is_integer(index), do: "subs_#{index}.mks"
+
   @doc """
-  Makes sure the subtitle file `name` exists in this session, extracting it if
-  it does not.
+  The stream index inside a bitmap subtitle filename, or `:error` when
+  `name` is not one.
+  """
+  @spec image_index_from_filename(String.t()) :: {:ok, non_neg_integer()} | :error
+  def image_index_from_filename(name) do
+    case Regex.run(@image_filename_pattern, name) do
+      [_, index] -> {:ok, String.to_integer(index)}
+      nil -> :error
+    end
+  end
+
+  @doc """
+  Makes sure the subtitle file `name` exists, extracting it if it does not.
+
+  A text track (`subs_<id>.vtt`) is materialized into the session
+  directory. A bitmap track (`subs_<index>.mks`) is served from
+  `Mydia.Subtitles.ImageTrack`'s cache, and answers `{:error, :pending}`
+  until its copy is ready.
 
   Returns `:not_subtitle` when `name` is not a subtitle filename, which is the
   signal for the caller to fall through to its ordinary segment handling.
   """
   @spec ensure(map(), String.t()) :: {:ok, String.t()} | {:error, term()} | :not_subtitle
-  def ensure(%{temp_dir: temp_dir, media_file_id: media_file_id}, name) do
+  def ensure(%{media_file_id: media_file_id} = info, name) do
+    case image_index_from_filename(name) do
+      {:ok, index} -> ensure_image(media_file_id, index)
+      :error -> ensure_text(info, name)
+    end
+  end
+
+  defp ensure_image(media_file_id, index) do
+    media_file = Library.get_media_file!(media_file_id, preload: [:library_path])
+
+    case ImageTrack.path(media_file, index) do
+      :pending -> {:error, :pending}
+      result -> result
+    end
+  rescue
+    Ecto.NoResultsError -> {:error, :media_file_not_found}
+    Ecto.Query.CastError -> {:error, :media_file_not_found}
+  end
+
+  defp ensure_text(%{temp_dir: temp_dir, media_file_id: media_file_id}, name) do
     with {:ok, track_id} <- track_id_from_filename(name),
          {:ok, path} <- SessionFiles.safe_path(temp_dir, name) do
       if File.exists?(path) do

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/player/image_subtitle_sidecar.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/screens/player/subtitle_track_builder.dart';
 
@@ -36,6 +37,15 @@ void main() {
     id: 'mk_1',
     language: 'eng',
     title: 'English',
+    embedded: true,
+  );
+
+  /// DVB from a server predating DVB in its image list, which reported it
+  /// as deliverable text.
+  const oldServerDvb = SubtitleTrack(
+    id: '4',
+    language: 'ger',
+    format: 'dvb_subtitle',
     embedded: true,
   );
 
@@ -83,6 +93,30 @@ void main() {
       expect(
         selectableTracks([embeddedTextTrack], isDirectPlay: false),
         contains(embeddedTextTrack),
+      );
+    });
+
+    test('offers an embedded bitmap track as a sidecar on native', () {
+      final tracks = selectableTracks(
+        [textTrack, imageTrack],
+        isDirectPlay: false,
+        imageSidecars: true,
+      );
+      expect(tracks, [textTrack, imageTrack]);
+    });
+
+    test('reads a bitmap from its format, not from deliverable', () {
+      expect(
+        selectableTracks([oldServerDvb], isDirectPlay: false),
+        isEmpty,
+      );
+      expect(
+        selectableTracks(
+          [oldServerDvb],
+          isDirectPlay: false,
+          imageSidecars: true,
+        ),
+        [oldServerDvb],
       );
     });
   });
@@ -158,6 +192,29 @@ void main() {
           );
 
       expect(listEquals(derive(), derive()), isTrue);
+    });
+
+    test('offers bitmap sidecars when streaming on native', () {
+      final tracks = resolveSubtitleTracks(
+        serverTracks: [textTrack, embeddedTextTrack, imageTrack],
+        mpvTracks: [mkTrack],
+        isDirectPlay: false,
+        imageSidecars: true,
+      );
+      expect(tracks, [textTrack, embeddedTextTrack, imageTrack]);
+    });
+
+    test('keeps bitmap tracks out of the direct-play fallback, even on native',
+        () {
+      // There is no HLS session to fetch a sidecar from in direct play;
+      // mpv's own list brings the bitmap tracks once it has probed.
+      final tracks = resolveSubtitleTracks(
+        serverTracks: [textTrack, imageTrack],
+        mpvTracks: const [],
+        isDirectPlay: true,
+        imageSidecars: true,
+      );
+      expect(tracks, [textTrack]);
     });
   });
 
@@ -817,6 +874,17 @@ void main() {
       );
     });
 
+    test('an image track is carried into a native transcode as a sidecar', () {
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentTrack(serverPgs),
+          tracks: const [sidecar, serverEnglish, serverPgs],
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreTrack>().having((r) => r.track, 'track', serverPgs),
+      );
+    });
+
     test('an image track is mpv\'s own track back in direct play', () {
       expect(
         resolveSubtitleIntent(
@@ -947,6 +1015,36 @@ void main() {
           selected: null,
         ),
         isTrue,
+      );
+    });
+  });
+
+  group('bakedSubtitleOffsetMs', () {
+    const offsets = {'uuid-1': 400, '3': 250, 'mk_1': 900};
+
+    test('is the stored offset for a text body the server shifted', () {
+      expect(bakedSubtitleOffsetMs(track: textTrack, offsets: offsets), 400);
+    });
+
+    test('is zero for no track, an mpv-native track, and a bitmap sidecar', () {
+      expect(bakedSubtitleOffsetMs(track: null, offsets: offsets), 0);
+      expect(bakedSubtitleOffsetMs(track: mkTrack, offsets: offsets), 0);
+      expect(bakedSubtitleOffsetMs(track: imageTrack, offsets: offsets), 0);
+    });
+  });
+
+  group('imageSidecarFailureMessage', () {
+    test('a server that cannot serve sidecars keeps the Original message', () {
+      expect(
+        imageSidecarFailureMessage(const SidecarUnsupported()),
+        kImageSubtitleUnavailableMessage,
+      );
+    });
+
+    test('anything else invites a retry', () {
+      expect(
+        imageSidecarFailureMessage(const SidecarFailed('HTTP 415')),
+        kSubtitleLoadFailedMessage,
       );
     });
   });

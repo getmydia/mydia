@@ -1,11 +1,19 @@
+import '../../../core/player/image_subtitle_sidecar.dart';
+import '../../../domain/models/subtitle_format.dart';
 import '../../../domain/models/subtitle_track.dart';
 
 /// Which subtitle tracks the user may pick from, given the delivery mode.
 ///
-/// Image-based tracks (PGS, VobSub) are bitmaps. In direct play the media
-/// engine reads them straight from the container and renders them natively,
-/// so they stay selectable. When streaming, the server can only hand back
-/// text, so only [SubtitleTrack.deliverable] tracks are offered.
+/// In direct play every track is offered: mpv reads them all from the
+/// container, bitmaps included, and `subtitle_render.dart` lets it draw
+/// them. When streaming, a text track is offered when the server can
+/// deliver it as text, and an embedded bitmap track (PGS, VobSub, DVB,
+/// XSUB) only when [imageSidecars] says this platform can fetch it as a
+/// sidecar and hand it to mpv: native, never web.
+///
+/// Bitmap-ness is read from the format ([isImageSubtitleTrack]), not from
+/// `deliverable`: a server predating DVB and XSUB in its image list reports
+/// those as deliverable text, and fetching them as text then fails.
 ///
 /// This filter runs before any subtitle body has been fetched: [content] is
 /// resolved lazily, once, when the viewer actually selects a track (see
@@ -15,11 +23,26 @@ import '../../../domain/models/subtitle_track.dart';
 List<SubtitleTrack> selectableTracks(
   List<SubtitleTrack> tracks, {
   required bool isDirectPlay,
+  bool imageSidecars = false,
 }) {
   if (isDirectPlay) return tracks;
 
-  return tracks.where((t) => t.deliverable).toList();
+  return tracks
+      .where((t) => isImageSubtitleTrack(t)
+          ? imageSidecars && isImageSidecarCandidate(t)
+          : t.deliverable)
+      .toList();
 }
+
+/// Whether [track] is a bitmap subtitle.
+bool isImageSubtitleTrack(SubtitleTrack track) =>
+    isImageSubtitleFormat(track.format);
+
+/// Whether the server can serve bitmap [track] as a sidecar: an embedded
+/// stream, whose id is its ffprobe stream index. A sidecar file on disk is
+/// always text.
+bool isImageSidecarCandidate(SubtitleTrack track) =>
+    track.embedded && int.tryParse(track.id) != null;
 
 /// The subtitle tracks to offer the viewer, given both places they can come
 /// from.
@@ -32,8 +55,9 @@ List<SubtitleTrack> selectableTracks(
 /// Three cases:
 ///
 ///  - **Streaming.** The server is the only source that means anything --
-///    every body arrives as text over GraphQL -- so media_kit's list is
-///    ignored and image tracks are filtered out.
+///    every text body arrives over GraphQL, and on native a bitmap track
+///    arrives as a sidecar ([imageSidecars]) -- so media_kit's list is
+///    ignored.
 ///  - **Direct play, media_kit has tracks.** Its tracks win: it reads them
 ///    from the container at no fetch cost, including image-based ones it
 ///    renders natively. Sidecars are not in the container, so those still
@@ -55,6 +79,7 @@ List<SubtitleTrack> resolveSubtitleTracks({
   required List<SubtitleTrack> serverTracks,
   required List<SubtitleTrack> mpvTracks,
   required bool isDirectPlay,
+  bool imageSidecars = false,
 }) {
   if (isDirectPlay && mpvTracks.isNotEmpty) {
     return [
@@ -63,7 +88,13 @@ List<SubtitleTrack> resolveSubtitleTracks({
     ];
   }
 
-  return selectableTracks(serverTracks, isDirectPlay: false);
+  // The direct-play fallback has no HLS session to fetch a sidecar from,
+  // so bitmap tracks wait there for mpv's own list.
+  return selectableTracks(
+    serverTracks,
+    isDirectPlay: false,
+    imageSidecars: imageSidecars && !isDirectPlay,
+  );
 }
 
 /// Whether an in-flight subtitle selection's result should still be applied
@@ -191,6 +222,24 @@ int effectiveSubtitleDelayMs({
   return storedOffsetMs - bakedOffsetMs + nudgeMs;
 }
 
+/// What the server already shifted into the loaded copy of [track], given
+/// the stored [offsets]. The stored offset for a text body fetched over
+/// `SubtitleContent`, which `Delivery.content/3` shifts before returning;
+/// zero for an mpv-native track, which the server never saw, and for a
+/// bitmap sidecar, whose timestamps a stored offset cannot rewrite. Both
+/// of those take the whole stored offset as live `sub-delay` instead.
+int bakedSubtitleOffsetMs({
+  required SubtitleTrack? track,
+  required Map<String, int> offsets,
+}) {
+  if (track == null ||
+      isMpvNativeSubtitleTrackId(track.id) ||
+      isImageSubtitleTrack(track)) {
+    return 0;
+  }
+  return offsets[track.id] ?? 0;
+}
+
 /// Whether [trackId] identifies a track media_kit read straight out of the
 /// container, rather than one the server has ever touched.
 ///
@@ -227,10 +276,28 @@ bool subtitleLanguagesCompatible(String a, String b) {
 const kSubtitleNotCarriedMessage =
     "Couldn't keep your subtitles at this quality. Pick them again.";
 
-/// Shown when the viewer's track is an image format (PGS, VobSub) and the
-/// new source is a transcode, which can only deliver text.
+/// Shown when the viewer's track is a bitmap (PGS, VobSub, DVB, XSUB) and
+/// the source cannot deliver it: a web transcode, or a server too old to
+/// serve bitmap sidecars.
 const kImageSubtitleUnavailableMessage =
     'Image-based subtitles only play at Original quality.';
+
+/// Shown when a picked track's text body or bitmap sidecar could not be
+/// fetched.
+const kSubtitleLoadFailedMessage =
+    'Could not load that subtitle track. Try again.';
+
+/// Shown while the server copies a bitmap track out of the source, which
+/// on a large file takes minutes the first time.
+const kImageSubtitlePreparingMessage = 'Preparing subtitles...';
+
+/// The line for a bitmap sidecar that could not be fetched. A 404 comes
+/// from a server that cannot serve sidecars, where the track plays only at
+/// Original; anything else is worth another try.
+String imageSidecarFailureMessage(SidecarFetch fetch) =>
+    fetch is SidecarUnsupported
+        ? kImageSubtitleUnavailableMessage
+        : kSubtitleLoadFailedMessage;
 
 /// The viewer's subtitle choice while a source switch carries it, in the
 /// server's id space, which every source can resolve.
@@ -325,8 +392,8 @@ final class RestoreUnavailable extends SubtitleRestore {
 /// A track still in [tracks] is applied as is. An embedded track missing
 /// from it is looked for among mpv's tracks by stream index, which is how a
 /// server-delivered stream comes back as mpv's own in direct play. An image
-/// track with no mpv tracks to match against is on a transcode, which
-/// cannot deliver it.
+/// track missing from [tracks] with no mpv tracks to match against is on a
+/// source that cannot deliver it: web streaming.
 SubtitleRestore resolveSubtitleIntent({
   required SubtitleIntent intent,
   required List<SubtitleTrack> tracks,
@@ -354,7 +421,7 @@ SubtitleRestore resolveSubtitleIntent({
 
         final onNativeSource =
             tracks.any((t) => isMpvNativeSubtitleTrackId(t.id));
-        if (!track.deliverable && !onNativeSource) {
+        if (isImageSubtitleTrack(track) && !onNativeSource) {
           return const RestoreUnavailable(kImageSubtitleUnavailableMessage);
         }
       }

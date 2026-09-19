@@ -167,8 +167,12 @@ away and `_restoreSubtitleIntent` applies it again once the switch lands. A
 sidecar comes back from the body already fetched. An embedded stream is
 matched across Original and a transcode by its ffprobe stream index, which is
 both the server's track id and mpv's `ff-index`, with the language tags as a
-cross-check. An image track (PGS, VobSub) cannot be delivered in a transcode,
-so subtitles turn off with a toast saying so. An explicit Off is applied
+cross-check. An image track (PGS, VobSub, DVB, XSUB) comes back on native as a
+bitmap sidecar: the server stream-copies it into `subs_<index>.mks` in the
+session, and the player polls through the server's 503s, saves the file and
+`sub-add`s the local copy (`image_subtitle_sidecar.dart`). On web, or against
+a server too old to serve one, subtitles turn off with a toast saying so.
+An explicit Off is applied
 again; a viewer who never touched subtitles gets no call at all, so mpv keeps
 the defaults it uses on a fresh open. Subtitle picks are ignored while a
 switch is in flight, the same way quality picks are.
@@ -320,3 +324,18 @@ One more thing worth knowing before trusting a height measured in
 whose glyphs run noticeably wider than the real ones. A layout that is
 text-driven, like this panel's rows before the scroll fix above, measures
 taller in a test than it ever renders on a device.
+
+## Who draws subtitles
+
+media_kit builds `Player()` with `libass: false`, which sets mpv's
+`sub-visibility=no`: mpv draws nothing, and media_kit_video's `SubtitleView`
+draws `sub-text` instead. `sub-text` is text, so a bitmap track (PGS, VobSub,
+DVB, XSUB) showed nothing, in direct play as much as when streaming.
+`subtitle_render.dart` watches mpv's own `current-tracks/sub/codec` and turns
+`sub-visibility` on while a bitmap track is active, off for text, so the two
+renderers never draw the same track and Android needs no libass font asset.
+
+It has to be mpv's property. media_kit's `stream.track` records a `sub-add`ed
+track exactly as the app handed it over, with no codec, and never hears about
+a default track mpv selects on its own when a file opens.
+

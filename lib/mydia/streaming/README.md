@@ -205,3 +205,33 @@ began at 30.00, 33.92 and 37.93.
 `hls_seek_alignment_integration_test.exs` re-measures all of this against the
 installed FFmpeg. It is tagged `:ffmpeg`, so run it with `--include ffmpeg`
 after any FFmpeg upgrade.
+
+## Image subtitles while streaming
+
+Bitmap subtitle tracks (PGS, VobSub, DVB, XSUB) cannot become text, and the
+HLS transcoder maps no subtitle streams. The native player gets them as a
+sidecar instead: `subs_<index>.mks` in the session, served by
+`Mydia.Streaming.SessionSubtitles` from `Mydia.Subtitles.ImageTrack`'s cache.
+That file is the one track stream-copied into a subtitle-only Matroska file.
+
+The copy costs almost no CPU, but ffmpeg demuxes the whole source to find one
+track's packets, so a cold copy of a large remux takes minutes. The first
+request starts it in the background, and every request answers 503 until the
+file exists (`Retry-After: 2` over HTTP; p2p carries only the status). A failed
+copy leaves a `.failed` marker, answered with 415, so polls do not restart the
+full read. The player reads a 404 as a server that predates sidecars. A codec
+the Matroska muxer cannot carry fails the same way as a broken source.
+
+The player downloads the file and hands mpv a local path. mpv reads an
+external subtitle file whole, inside `sub-add`, on its playback thread, so a
+sidecar fetched over the network there would freeze the picture for as long
+as the download took.
+
+mpv times an external subtitle file against its own clock, which it rebases to
+the stream's first timestamp, not against the source's PTS. Text sidecars
+fetched over `SubtitleContent` are loaded the same way, so both line up
+identically; a FULL session's playlist starts at zero, where both match the
+source.
+
+Web and Chromecast cannot draw a bitmap subtitle. Burning the track into the
+video during the transcode is their path, and nothing here stands in its way.

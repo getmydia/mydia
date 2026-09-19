@@ -72,6 +72,11 @@ abstract final class MediaRoutes {
   static String hlsBase(String base, String sessionId) =>
       '$base/hls/$sessionId/';
 
+  /// URL of a file inside a session other than its manifest, such as a
+  /// bitmap subtitle sidecar.
+  static String hlsFile(String base, String sessionId, String name) =>
+      '${hlsBase(base, sessionId)}$name';
+
   /// URL that streams a media file's own bytes, with no transcoding.
   static String directStream(String base, String fileId) =>
       '$base/direct/$fileId/stream';

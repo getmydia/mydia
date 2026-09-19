@@ -1,10 +1,13 @@
 defmodule Mydia.Streaming.SessionSubtitlesTest do
   use Mydia.DataCase, async: false
 
+  alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.StreamInfo
   alias Mydia.MediaFixtures
+  alias Mydia.Plugins.SingleFlight
   alias Mydia.Streaming.SessionSubtitles
+  alias Mydia.Subtitles.ImageTrack
   alias Mydia.Subtitles.Subtitle
 
   describe "filename/1" do
@@ -353,6 +356,84 @@ defmodule Mydia.Streaming.SessionSubtitlesTest do
       refute dir
              |> File.ls!()
              |> Enum.any?(&String.contains?(&1, ".tmp-"))
+    end
+  end
+
+  describe "image_filename/1 and image_index_from_filename/1" do
+    test "round-trip an embedded stream index" do
+      assert SessionSubtitles.image_filename(3) == "subs_3.mks"
+      assert {:ok, 3} = SessionSubtitles.image_index_from_filename("subs_3.mks")
+    end
+
+    test "reject anything but a bare stream index" do
+      assert :error = SessionSubtitles.image_index_from_filename("subs_3.vtt")
+
+      assert :error =
+               SessionSubtitles.image_index_from_filename(
+                 "subs_0f8fad5b-d9cb-469f-a165-70867728950e.mks"
+               )
+
+      assert :error = SessionSubtitles.image_index_from_filename("subs_3.mks\n")
+      assert :error = SessionSubtitles.image_index_from_filename("subs_../3.mks")
+    end
+
+    test "a .mks name is not a text subtitle name" do
+      assert :error = SessionSubtitles.track_id_from_filename("subs_3.mks")
+    end
+  end
+
+  describe "ensure/2 for a bitmap track" do
+    setup do
+      temp_dir =
+        Path.join(System.tmp_dir!(), "session_subs_image_#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(temp_dir)
+
+      media_file =
+        MediaFixtures.media_file_fixture(%{
+          metadata: %FileMetadata{
+            streams: [
+              %StreamInfo{index: 3, type: :subtitle, codec: "hdmv_pgs_subtitle", language: "spa"}
+            ]
+          }
+        })
+        |> Repo.preload(:library_path)
+
+      source = MediaFile.absolute_path(media_file)
+      File.mkdir_p!(Path.dirname(source))
+      File.write!(source, "placeholder")
+      {:ok, cached} = ImageTrack.cache_path(media_file, 3)
+
+      on_exit(fn ->
+        File.rm_rf(temp_dir)
+        File.rm_rf(media_file.library_path.path)
+        File.rm_rf(Path.dirname(cached))
+      end)
+
+      {:ok, info: %{temp_dir: temp_dir, media_file_id: media_file.id}, cached: cached}
+    end
+
+    test "answers :pending while the copy runs", %{info: info, cached: cached} do
+      :ok =
+        SingleFlight.acquire(ImageTrack.lock_slug(cached), :skip, Mydia.Streaming.SubtitleLock)
+
+      assert {:error, :pending} = SessionSubtitles.ensure(info, "subs_3.mks")
+    end
+
+    test "serves ImageTrack's cached copy, not a file in the session directory", %{
+      info: info,
+      cached: cached
+    } do
+      File.mkdir_p!(Path.dirname(cached))
+      File.write!(cached, "mks")
+
+      assert {:ok, ^cached} = SessionSubtitles.ensure(info, "subs_3.mks")
+      refute File.exists?(Path.join(info.temp_dir, "subs_3.mks"))
+    end
+
+    test "reports a media file that does not exist", %{info: info} do
+      info = %{info | media_file_id: Ecto.UUID.generate()}
+      assert {:error, :media_file_not_found} = SessionSubtitles.ensure(info, "subs_3.mks")
     end
   end
 end
