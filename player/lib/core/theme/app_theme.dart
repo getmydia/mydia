@@ -320,16 +320,6 @@ class AppTheme {
         linearTrackColor: AppColors.surfaceVariant,
       ),
 
-      // Snackbar - uses surface instead of neutral
-      snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.surface,
-        contentTextStyle: const TextStyle(color: AppColors.textPrimary),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusButton),
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-
       // Tooltip
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(

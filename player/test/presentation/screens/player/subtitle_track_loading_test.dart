@@ -474,24 +474,24 @@ void main() {
     });
   });
 
-  group('subtitleDelaySnackBarMessage', () {
+  group('subtitleDelayToastMessage', () {
     test('reports the delay plainly when it applies immediately', () {
       expect(
-        subtitleDelaySnackBarMessage(totalMs: 100, appliesImmediately: true),
+        subtitleDelayToastMessage(totalMs: 100, appliesImmediately: true),
         'Subtitle delay +100 ms',
       );
     });
 
     test('signs a negative total the same way', () {
       expect(
-        subtitleDelaySnackBarMessage(totalMs: -200, appliesImmediately: true),
+        subtitleDelayToastMessage(totalMs: -200, appliesImmediately: true),
         'Subtitle delay -200 ms',
       );
     });
 
     test('signs zero as positive', () {
       expect(
-        subtitleDelaySnackBarMessage(totalMs: 0, appliesImmediately: true),
+        subtitleDelayToastMessage(totalMs: 0, appliesImmediately: true),
         'Subtitle delay +0 ms',
       );
     });
@@ -503,7 +503,7 @@ void main() {
     // subtitleDelaySavedMessage below for why even Save does not make it
     // visible on web either.
     test('does not claim an immediate change when it does not apply yet', () {
-      final message = subtitleDelaySnackBarMessage(
+      final message = subtitleDelayToastMessage(
         totalMs: 100,
         appliesImmediately: false,
       );
@@ -548,7 +548,7 @@ void main() {
       // it, and the viewer taps T1 again. Before this fix, the second tap
       // compared its target against a pending value the first attempt
       // never cleared and was silently swallowed -- no fetch, no log, no
-      // snackbar, despite a snackbar having just told the viewer to retry.
+      // toast, despite a toast having just told the viewer to retry.
       const generation = 1;
 
       // 1. T1 requested: pending becomes T1 (mirrors

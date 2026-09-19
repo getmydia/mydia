@@ -70,6 +70,7 @@ import '../../widgets/tap_to_play_overlay.dart';
 import '../../widgets/video_controls/up_next_countdown.dart';
 import '../../widgets/video_controls/up_next_policy.dart';
 import '../../widgets/video_controls/up_next_prompt.dart';
+import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/quality_delivery_subtitle.dart';
@@ -492,7 +493,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [_resetPendingSubtitleSelection] on every exit that concludes without
   /// applying. Left un-reverted, a failed fetch stuck this at the track
   /// that had just failed, so re-tapping that exact track (the natural
-  /// response to a "could not load, try again" snackbar) matched this
+  /// response to a "could not load, try again" toast) matched this
   /// field and was silently swallowed by the no-op guard rather than
   /// starting a genuine retry. See [pendingSubtitleSelectionAfterFailure].
   ///
@@ -1015,9 +1016,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // outcome, but silently ignoring the chosen device is not, so say why.
     if (fileId == 'offline') {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Downloads cannot be cast — playing on this device.'),
-        ));
+        showToast(
+          context,
+          'Downloads cannot be cast — playing on this device.',
+        );
       }
       return false;
     }
@@ -1050,14 +1052,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Cast target failed, playing locally: $e');
       if (mounted) {
         if (e is CastBackendException) {
-          showCastErrorSnackBar(context, e,
+          showCastErrorToast(context, e,
               ref: ref,
               isMydiaTarget: target.protocol == CastProtocolKind.mydia);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Failed to start casting: $e'),
-            backgroundColor: Colors.red,
-          ));
+          showToast(context, 'Failed to start casting: $e',
+              kind: ToastKind.error);
         }
       }
       return false;
@@ -1804,7 +1804,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (generation != _subtitleSelectionGeneration) return;
 
     if (restore is RestoreUnavailable) {
-      _showPlaybackSnackBar(restore.message);
+      _showToast(restore.message);
       return;
     }
     if (subtitleRestoreConsumed(
@@ -1936,7 +1936,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // The choice stays the viewer's: `fallbackPlan` already honours it as
     // closely as this device allows. The stored default is never written
     // here either, since one file failing says nothing about the next.
-    _showPlaybackSnackBar(fallbackMessage(action.reason));
+    _showToast(fallbackMessage(action.reason));
     try {
       final switched = await _switchSource(plan, at: position);
       // For the panel's Why row, recorded only once the switch actually
@@ -1960,11 +1960,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  void _showPlaybackSnackBar(String message) {
+  void _showToast(String message, {ToastKind kind = ToastKind.info}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
+    showToast(context, message, kind: kind);
   }
 
   void _setLoadingMessage(String message) {
@@ -2490,16 +2488,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
-  /// Brief feedback for a subtitle delay nudge. This screen has no
-  /// dedicated on-screen-display toast, only `ScaffoldMessenger` -- see the
-  /// "Casting to ${device.name}" snackbar for the same short-lived pattern.
-  void _showSubtitleDelaySnackBar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
-  }
-
   /// Nudges the live subtitle delay by [deltaMs] and applies it immediately.
   /// Bound to the `z`/`shift+z` keys and the sheet's steppers.
   ///
@@ -2523,8 +2511,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // pre-baked from the SubtitleContent query. The nudge is still tracked
     // and still contributes to what Save persists, but the OSD must not
     // claim a visible change that has not happened yet.
-    _showSubtitleDelaySnackBar(
-      subtitleDelaySnackBarMessage(
+    _showToast(
+      subtitleDelayToastMessage(
         totalMs: total,
         appliesImmediately: !kIsWeb,
       ),
@@ -2588,7 +2576,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (result.hasException) {
         debugPrint(
             '[PlayerScreen] Could not save subtitle delay: ${result.exception}');
-        _showSubtitleDelaySnackBar('Could not save the subtitle delay');
+        _showToast('Could not save the subtitle delay', kind: ToastKind.error);
         return;
       }
 
@@ -2614,12 +2602,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // the old offset baked in, so nothing the viewer sees actually moves
       // yet. See subtitleDelaySavedMessage's dartdoc for why a refetch was
       // not built to close that gap.
-      _showSubtitleDelaySnackBar(
+      _showToast(
         subtitleDelaySavedMessage(appliesImmediately: !kIsWeb),
+        kind: ToastKind.success,
       );
     } catch (e) {
       debugPrint('[PlayerScreen] Could not save subtitle delay: $e');
-      _showSubtitleDelaySnackBar('Could not save the subtitle delay');
+      _showToast('Could not save the subtitle delay', kind: ToastKind.error);
     }
   }
 
@@ -3702,7 +3691,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// written once, up front, to whatever this call is requesting -- and a
   /// version that only ever wrote it and never reverted it left a failed
   /// attempt's target stuck there forever, so re-tapping the very track a
-  /// "could not load" snackbar had just told the viewer to retry was
+  /// "could not load" toast had just told the viewer to retry was
   /// silently swallowed by the sheet's no-op guard. See
   /// [pendingSubtitleSelectionAfterFailure]. Those calls are backstopped by
   /// a `finally` around the whole body, which is what also covers the two
@@ -3791,42 +3780,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _resetPendingSubtitleSelection(generation);
         return generation;
       }
-      // The controller this specific call gets back is captured and closed
-      // by itself below -- never `removeCurrentSnackBar()`/
-      // `hideCurrentSnackBar()` after the await, which act on whatever
-      // snackbar is current *at that later point*, not the one shown here.
-      // A second pick (B) started while this one (A) is still in flight
-      // passes `shouldStartSubtitleSelection` (different target) and shows
-      // its own indicator on top of A's; when A's fetch then resolves,
-      // `removeCurrentSnackBar()` would strip B's indicator while B is
-      // still running, leaving the viewer mid-fetch with nothing on
-      // screen -- precisely the blank-screen condition that invites the
-      // re-tap `_canApplySubtitleSelection` exists to guard against.
-      final loadingMessenger = ScaffoldMessenger.of(context);
-      loadingMessenger.hideCurrentSnackBar();
-      final loadingSnack = loadingMessenger.showSnackBar(
-        const SnackBar(
-          duration: Duration(seconds: 30),
-          content: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              SizedBox(width: 12),
-              Text('Loading subtitle...'),
-            ],
-          ),
-        ),
+      // The handle this specific call gets back is closed by itself below,
+      // never "whatever toast is current" after the await. A second pick (B)
+      // started while this one (A) is still in flight passes
+      // `shouldStartSubtitleSelection` (different target) and shows its own
+      // indicator, replacing A's. When A's fetch then resolves, closing A's
+      // handle is a no-op, so B's indicator stays up while B is still
+      // running. Closing the current toast instead would leave the viewer
+      // mid-fetch with nothing on screen -- precisely the blank-screen
+      // condition that invites the re-tap `_canApplySubtitleSelection`
+      // exists to guard against.
+      final loadingToast = Toaster.of(context).show(
+        'Loading subtitle...',
+        kind: ToastKind.progress,
       );
 
       final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
-      // `close()` is a no-op if this snackbar was already dismissed (its
-      // own 30 second timeout, or a later pick's `hideCurrentSnackBar()`
-      // above), so this is safe on every path.
-      if (mounted) loadingSnack.close();
+      // Unconditional: `ToastHandle.close` does not use this screen's
+      // context (the layer lives above the route). Gating on `mounted` was
+      // leftover from `SnackBar.close` and left the indicator up after the
+      // viewer left playback, until the 30s timeout. A no-op if this toast
+      // was already dismissed (its own timeout, or a later pick replacing
+      // it).
+      loadingToast.close();
 
       // Superseded while the fetch was in flight (a re-tap, "Off", or the
       // screen/player went away): drop this result silently rather than
@@ -3851,11 +3827,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // so it cannot itself prove `context` is safe to use here. This
         // repeats the same check directly so it can.
         if (!mounted) return generation;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not load that subtitle track. Try again.'),
-          ),
-        );
+        showToast(context, 'Could not load that subtitle track. Try again.',
+            kind: ToastKind.error);
         return generation;
       }
 
@@ -4341,7 +4314,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           return true;
         }
         debugPrint('[PlayerScreen] Quality change: ${plan.describe()}');
-        _showPlaybackSnackBar(isFallback
+        _showToast(isFallback
             ? 'Returning to ${rung.label}'
             : 'Switching to ${rung.label}');
         return _switchSource(plan, at: position);
@@ -4606,12 +4579,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         'Could not exit fullscreen',
       _ => 'Could not enter fullscreen',
     };
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    showToast(context, message, kind: ToastKind.error);
   }
 
   /// Toggle always-on-top across desktop platforms.
@@ -4745,7 +4713,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // (the same entry point the keyboard and gesture controls use), and
   // episode stepping reuses `_playNextEpisode`/`_playPreviousEpisode`. Track
   // selection is the one place this does less than the on-screen pickers —
-  // it applies a track by id directly and skips their loading-snackbar and
+  // it applies a track by id directly and skips their loading-toast and
   // remembered-language-preference side effects, which are UI concerns a
   // remote command has no use for.
   // ---------------------------------------------------------------------
@@ -5421,10 +5389,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // `onPressed` is fire-and-forget, so an uncaught failure here would
       // reach nothing the viewer can see.
       debugPrint('[PlayerScreen] Could not copy stats: $e');
-      _showPlaybackSnackBar('Could not copy stats');
+      _showToast('Could not copy stats', kind: ToastKind.error);
       return;
     }
-    _showPlaybackSnackBar('Stats copied');
+    _showToast('Stats copied', kind: ToastKind.success);
   }
 
   Widget _buildError() {
@@ -5528,26 +5496,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Casting to ${device.name}'),
-          duration: const Duration(seconds: 2),
-        ));
+        showToast(context, 'Casting to ${device.name}');
       }
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      showCastErrorSnackBar(context, e,
+      showCastErrorToast(context, e,
           ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
     } catch (e) {
       // Anything that isn't a CastBackendException: the session manager
       // itself resolving (Hive, GraphQL client), or a non-typed failure from
       // _setLanAccess/_store.save inside startCast. Without this, those
-      // failures would close the picker with no snackbar and no log.
+      // failures would close the picker with no toast and no log.
       debugPrint('[PlayerScreen] Unexpected error starting cast: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to start casting: $e'),
-        backgroundColor: Colors.red,
-      ));
+      showToast(context, 'Failed to start casting: $e', kind: ToastKind.error);
     }
   }
 
@@ -5912,7 +5874,7 @@ FlutterPlaybackState remoteControlPlaybackState({
 /// cost the viewer their place in a film: when [startCast] throws, [stopLocal]
 /// simply never runs, and whatever [_PlayerScreenState._player] was doing
 /// keeps doing it. The caller's own `catch` (see `_showCastDevicePicker`) is
-/// what turns that exception into a snackbar instead of a crash.
+/// what turns that exception into a toast instead of a crash.
 ///
 /// Extracted as a free function for the same reason as [applyQualityChoice]
 /// and [shouldRestartForSeek]: proving this ordering under `flutter test`

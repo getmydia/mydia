@@ -10,6 +10,7 @@ import '../../../core/player/stream_timeline.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/window_buttons_bridge.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../toast/toast_obstruction.dart';
 import 'buffering_indicator.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';
@@ -514,6 +515,54 @@ class ChromeSlide extends StatelessWidget {
   }
 }
 
+/// Keeps toasts above the control panel while it is shown.
+///
+/// The chrome hides by fading and sliding behind an `IgnorePointer` while
+/// staying mounted with its tickers running, so `ToastObstruction`'s
+/// `TickerMode` check cannot see it go. This follows the same show/hide
+/// animation [ChromeSlide] reads and withdraws the claim the moment a hide
+/// starts, so the toast moves alongside the panel rather than after it.
+/// With no [ChromeAnimation] above it, it always counts.
+class ChromeToastObstruction extends StatefulWidget {
+  const ChromeToastObstruction({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<ChromeToastObstruction> createState() => _ChromeToastObstructionState();
+}
+
+class _ChromeToastObstructionState extends State<ChromeToastObstruction> {
+  Animation<double>? _animation;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final animation = ChromeAnimation.maybeOf(context);
+    if (identical(animation, _animation)) return;
+    _animation?.removeStatusListener(_handleStatus);
+    _animation = animation;
+    _animation?.addStatusListener(_handleStatus);
+  }
+
+  @override
+  void dispose() {
+    _animation?.removeStatusListener(_handleStatus);
+    super.dispose();
+  }
+
+  void _handleStatus(AnimationStatus status) => setState(() {});
+
+  bool get _shown => _animation?.status.isForwardOrCompleted ?? true;
+
+  @override
+  Widget build(BuildContext context) => ToastObstruction(
+        edge: ToastEdge.bottom,
+        active: _shown,
+        child: widget.child,
+      );
+}
+
 /// All playback chrome: the top pill row and the bottom control panel.
 ///
 /// Replaces four independently-positioned floating elements — the top bar and
@@ -709,88 +758,92 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                       child: ChromeSlide(
                         hiddenOffsetY: 8,
                         child: Center(
-                          child: ChromePanel(
-                            metrics: metrics,
-                            transport: TransportCluster(
-                              player: widget.player,
-                              playPauseFocusNode: widget.playPauseFocusNode,
-                              onBack10: () =>
-                                  _seekBy(const Duration(seconds: -10)),
-                              onForward10: () =>
-                                  _seekBy(const Duration(seconds: 10)),
-                              onPreviousEpisode: widget.onPreviousEpisode,
-                              onNextEpisode: widget.onNextEpisode,
-                              // Below the mobile breakpoint the in-bar
-                              // transport is play/pause only (see
-                              // `TransportSurface.compact`'s dartdoc for the
-                              // full layout reasoning). `onPreviousEpisode`/
-                              // `onNextEpisode` above are still passed
-                              // through unconditionally — `compact` ignores
-                              // them regardless — rather than gated to null
-                              // here, so they reappear the moment the
-                              // breakpoint is crossed without this widget
-                              // needing to know why.
-                              //
-                              // NOTE, this is a real, currently-unresolved
-                              // gap: unlike ±10s seek (which has an explicit
-                              // gesture replacement, double-tap in
-                              // `gesture_controls.dart`), episode nav has no
-                              // touch-reachable equivalent once it's dropped
-                              // from the bar. `UpNextOverlay` only offers
-                              // *next*, and only near an episode's end; there
-                              // is no touch path to the *previous* episode at
-                              // all below this breakpoint. See this task's
-                              // report for the open follow-up; do not read
-                              // this comment as "handled".
-                              compact: metrics.compactTransport,
-                            ),
-                            // Null on the remote tier, which has no volume
-                            // control to show. Otherwise unconditional per
-                            // ChromePanel's `volume` dartdoc: it already gates
-                            // visibility internally via
-                            // Visibility(maintainState: true), so
-                            // VolumeCluster's `_lastVolume` survives a
-                            // breakpoint crossing only if it isn't also
-                            // rebuilt from scratch here. The tier itself never
-                            // changes at runtime, so the null branch loses no
-                            // state.
-                            volume: remote
-                                ? null
-                                : VolumeCluster(player: widget.player),
-                            secondary: SecondaryCluster(
-                              onSubtitleTap: widget.onSubtitleTap,
-                              onAudioTap: widget.onAudioTap,
-                              // Passed through `metrics.showQuality` rather
-                              // than bare, even though every tier shows it
-                              // today: see that field's dartdoc — it stays a
-                              // real per-tier lever for the tier that can't
-                              // absorb a future 5th control.
-                              onQualityTap: metrics.showQuality
-                                  ? widget.onQualityTap
-                                  : null,
-                              onFullscreenTap:
-                                  remote ? null : widget.onFullscreenTap,
-                              onAlwaysOnTopTap: PlatformFeatures.isDesktop &&
-                                      metrics.showAlwaysOnTop
-                                  ? widget.onAlwaysOnTopTap
-                                  : null,
-                              audioTrackCount: widget.audioTrackCount,
-                              selectedAudioLabel: widget.selectedAudioLabel,
-                              selectedSubtitleLabel:
-                                  widget.selectedSubtitleLabel,
-                              selectedQualityLabel: widget.selectedQualityLabel,
-                              isFullscreen: widget.isFullscreen,
-                              isAlwaysOnTop: widget.isAlwaysOnTop,
-                              gap: metrics.secondaryGap,
-                            ),
-                            scrubber: _ScrubberRow(
-                              player: widget.player,
-                              timeline: widget.timeline,
-                              onSeekToReal: widget.onSeekToReal,
-                              touchTargets: metrics.touchTargets,
-                              onSeekStart: () =>
-                                  setState(() => _seeking = true),
-                              onSeekEnd: () => setState(() => _seeking = false),
+                          child: ChromeToastObstruction(
+                            child: ChromePanel(
+                              metrics: metrics,
+                              transport: TransportCluster(
+                                player: widget.player,
+                                playPauseFocusNode: widget.playPauseFocusNode,
+                                onBack10: () =>
+                                    _seekBy(const Duration(seconds: -10)),
+                                onForward10: () =>
+                                    _seekBy(const Duration(seconds: 10)),
+                                onPreviousEpisode: widget.onPreviousEpisode,
+                                onNextEpisode: widget.onNextEpisode,
+                                // Below the mobile breakpoint the in-bar
+                                // transport is play/pause only (see
+                                // `TransportSurface.compact`'s dartdoc for the
+                                // full layout reasoning). `onPreviousEpisode`/
+                                // `onNextEpisode` above are still passed
+                                // through unconditionally — `compact` ignores
+                                // them regardless — rather than gated to null
+                                // here, so they reappear the moment the
+                                // breakpoint is crossed without this widget
+                                // needing to know why.
+                                //
+                                // NOTE, this is a real, currently-unresolved
+                                // gap: unlike ±10s seek (which has an explicit
+                                // gesture replacement, double-tap in
+                                // `gesture_controls.dart`), episode nav has no
+                                // touch-reachable equivalent once it's dropped
+                                // from the bar. `UpNextOverlay` only offers
+                                // *next*, and only near an episode's end; there
+                                // is no touch path to the *previous* episode at
+                                // all below this breakpoint. See this task's
+                                // report for the open follow-up; do not read
+                                // this comment as "handled".
+                                compact: metrics.compactTransport,
+                              ),
+                              // Null on the remote tier, which has no volume
+                              // control to show. Otherwise unconditional per
+                              // ChromePanel's `volume` dartdoc: it already gates
+                              // visibility internally via
+                              // Visibility(maintainState: true), so
+                              // VolumeCluster's `_lastVolume` survives a
+                              // breakpoint crossing only if it isn't also
+                              // rebuilt from scratch here. The tier itself never
+                              // changes at runtime, so the null branch loses no
+                              // state.
+                              volume: remote
+                                  ? null
+                                  : VolumeCluster(player: widget.player),
+                              secondary: SecondaryCluster(
+                                onSubtitleTap: widget.onSubtitleTap,
+                                onAudioTap: widget.onAudioTap,
+                                // Passed through `metrics.showQuality` rather
+                                // than bare, even though every tier shows it
+                                // today: see that field's dartdoc — it stays a
+                                // real per-tier lever for the tier that can't
+                                // absorb a future 5th control.
+                                onQualityTap: metrics.showQuality
+                                    ? widget.onQualityTap
+                                    : null,
+                                onFullscreenTap:
+                                    remote ? null : widget.onFullscreenTap,
+                                onAlwaysOnTopTap: PlatformFeatures.isDesktop &&
+                                        metrics.showAlwaysOnTop
+                                    ? widget.onAlwaysOnTopTap
+                                    : null,
+                                audioTrackCount: widget.audioTrackCount,
+                                selectedAudioLabel: widget.selectedAudioLabel,
+                                selectedSubtitleLabel:
+                                    widget.selectedSubtitleLabel,
+                                selectedQualityLabel:
+                                    widget.selectedQualityLabel,
+                                isFullscreen: widget.isFullscreen,
+                                isAlwaysOnTop: widget.isAlwaysOnTop,
+                                gap: metrics.secondaryGap,
+                              ),
+                              scrubber: _ScrubberRow(
+                                player: widget.player,
+                                timeline: widget.timeline,
+                                onSeekToReal: widget.onSeekToReal,
+                                touchTargets: metrics.touchTargets,
+                                onSeekStart: () =>
+                                    setState(() => _seeking = true),
+                                onSeekEnd: () =>
+                                    setState(() => _seeking = false),
+                              ),
                             ),
                           ),
                         ),

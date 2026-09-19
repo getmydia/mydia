@@ -41,6 +41,7 @@ import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/toast_harness.dart';
 
 /// Reports whatever [AsyncValue] it is built with — the auth status this
 /// screen sees is fixed for the lifetime of the test.
@@ -677,6 +678,7 @@ Future<void> pumpPlayerScreen(
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
+      builder: toastLayerBuilder,
       home: PlayerScreen(
         mediaId: mediaId,
         mediaType: mediaType,

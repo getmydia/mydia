@@ -42,7 +42,7 @@ void main() {
         ),
         throwsA(same(failure)),
         reason: 'the caller (_showCastDevicePicker) has to see this to show '
-            'its own error snackbar instead of silently swallowing it',
+            'its own error toast instead of silently swallowing it',
       );
 
       expect(stopLocalCalled, isFalse,

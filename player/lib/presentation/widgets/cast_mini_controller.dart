@@ -19,6 +19,8 @@ import '../screens/episode/episode_detail_controller.dart';
 import '../screens/movie/movie_detail_controller.dart';
 import 'cast_actions.dart';
 import 'cast_subtitle_sheet.dart';
+import 'toast/toast_obstruction.dart';
+import 'toast/toaster.dart';
 
 /// Mounts [CastMiniController] at the bottom of [child], floating above it.
 ///
@@ -141,7 +143,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     }
 
     if (content == null) return const SizedBox.shrink();
-    return SafeArea(top: false, child: content);
+    return ToastObstruction(
+      edge: ToastEdge.bottom,
+      child: SafeArea(top: false, child: content),
+    );
   }
 
   /// Shared chrome for the three text-only rows.
@@ -317,17 +322,11 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       await manager.connectTo(device);
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(castErrorMessage(e, ref: ref)),
-        backgroundColor: Colors.red,
-      ));
+      showToast(context, castErrorMessage(e, ref: ref), kind: ToastKind.error);
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error opening $name: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to open $name: $e'),
-        backgroundColor: Colors.red,
-      ));
+      showToast(context, 'Failed to open $name: $e', kind: ToastKind.error);
     }
   }
 
@@ -342,17 +341,11 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       await manager.connectTo(device);
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(castErrorMessage(e, ref: ref)),
-        backgroundColor: Colors.red,
-      ));
+      showToast(context, castErrorMessage(e, ref: ref), kind: ToastKind.error);
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to connect: $e'),
-        backgroundColor: Colors.red,
-      ));
+      showToast(context, 'Failed to connect: $e', kind: ToastKind.error);
     }
   }
 
@@ -596,9 +589,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       final intent =
           pulled == null ? null : loadContentIntentForPulledSession(pulled);
       if (intent == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Nothing to bring over yet.'),
-        ));
+        showToast(context, 'Nothing to bring over yet.');
         return;
       }
 
@@ -646,10 +637,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error pulling session: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to bring playback here: $e'),
-        backgroundColor: Colors.red,
-      ));
+      showToast(context, 'Failed to bring playback here: $e',
+          kind: ToastKind.error);
     }
   }
 
@@ -662,15 +651,12 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } on CastBackendException catch (e) {
       if (!mounted) return;
       final target = ref.read(castTargetProvider);
-      showCastErrorSnackBar(context, e,
+      showCastErrorToast(context, e,
           ref: ref, isMydiaTarget: target?.protocol == CastProtocolKind.mydia);
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting cast: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to reconnect: $e'),
-        backgroundColor: Colors.red,
-      ));
+      showToast(context, 'Failed to reconnect: $e', kind: ToastKind.error);
     }
   }
 
@@ -693,10 +679,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error stopping cast: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to stop casting: $e'),
-        backgroundColor: Colors.red,
-      ));
+      showToast(context, 'Failed to stop casting: $e', kind: ToastKind.error);
     }
   }
 

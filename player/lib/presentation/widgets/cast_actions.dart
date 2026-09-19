@@ -11,6 +11,7 @@ import '../../domain/models/cast_device.dart';
 import 'cast_button.dart';
 import 'cast_device_picker.dart';
 import 'local_network_settings_button.dart';
+import 'toast/toaster.dart';
 
 /// Turn a cast failure into something the user can act on.
 ///
@@ -73,12 +74,12 @@ String castErrorMessage(
 
 /// Show a cast failure, with a remedy attached when one exists.
 ///
-/// Four call sites built a byte-identical red SnackBar before this existed.
+/// Four call sites built a byte-identical red snackbar before this existed.
 /// Collapsing them is what gives the permission failures a single place to
 /// hang their Settings action.
 ///
 /// [canOpenSettings] overrides the platform check. Tests only.
-void showCastErrorSnackBar(
+void showCastErrorToast(
   BuildContext context,
   CastBackendException e, {
   WidgetRef? ref,
@@ -95,18 +96,20 @@ void showCastErrorSnackBar(
   final offerSettings =
       permissionDenied && (canOpenSettings ?? localNetworkSettingsAvailable());
 
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(castErrorMessage(e, ref: ref, isMydiaTarget: isMydiaTarget)),
-    backgroundColor: Colors.red,
-    duration: Duration(seconds: permissionDenied ? 8 : 4),
+  showToast(
+    context,
+    castErrorMessage(e, ref: ref, isMydiaTarget: isMydiaTarget),
+    kind: ToastKind.error,
+    // A permission failure carries an instruction the user has to go and
+    // follow, so it keeps its 8s even when no Settings button is offered.
+    duration: permissionDenied ? const Duration(seconds: 8) : null,
     action: offerSettings
-        ? SnackBarAction(
+        ? ToastAction(
             label: 'Settings',
-            textColor: Colors.white,
             onPressed: () => openLocalNetworkSettings(context),
           )
         : null,
-  ));
+  );
 }
 
 /// The shared "user tapped a cast affordance" entry point, for every screen
@@ -190,19 +193,16 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     );
   } on CastBackendException catch (e) {
     if (!context.mounted) return;
-    showCastErrorSnackBar(context, e,
+    showCastErrorToast(context, e,
         ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
   } catch (e) {
     // Anything that isn't a CastBackendException: the session manager itself
     // resolving (Hive, GraphQL client), or a non-typed failure from
     // _setLanAccess/_store.save inside startCast. Without this, those failures
-    // would close the picker with no snackbar and no log.
+    // would close the picker with no toast and no log.
     debugPrint('[cast_actions] Unexpected error starting cast: $e');
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Failed to start casting: $e'),
-      backgroundColor: Colors.red,
-    ));
+    showToast(context, 'Failed to start casting: $e', kind: ToastKind.error);
   }
 }
 
@@ -221,20 +221,17 @@ Future<void> _connectToDevice(
     await manager.connectTo(device);
   } on CastBackendException catch (e) {
     if (!context.mounted) return;
-    // Routed through the shared helper rather than a bare SnackBar so a
+    // Routed through the shared helper rather than a bare toast so a
     // denied local network permission still offers its Settings remedy.
     // That matters most here: connecting on select is now the first moment
     // the denial can surface at all, since choosing a device no longer
     // defers contact until playback starts.
-    showCastErrorSnackBar(context, e,
+    showCastErrorToast(context, e,
         ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
   } catch (e) {
     debugPrint('[cast_actions] Unexpected error connecting to device: $e');
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Failed to connect: $e'),
-      backgroundColor: Colors.red,
-    ));
+    showToast(context, 'Failed to connect: $e', kind: ToastKind.error);
   }
 }
 

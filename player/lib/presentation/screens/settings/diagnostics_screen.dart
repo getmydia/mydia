@@ -10,6 +10,7 @@ import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/update/update_provider.dart';
 import '../../widgets/connection_tone_color.dart';
+import '../../widgets/toast/toaster.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
 
@@ -133,9 +134,7 @@ class DiagnosticsScreen extends ConsumerWidget {
     await Clipboard.setData(ClipboardData(text: report));
 
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Diagnostics copied')),
-    );
+    showToast(context, 'Diagnostics copied', kind: ToastKind.success);
   }
 }
 

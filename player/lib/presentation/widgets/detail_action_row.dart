@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/colors.dart';
 import 'focus_highlight.dart';
+import 'toast/toaster.dart';
 
 /// Action row in the detail body, below the hero: mark watched/unwatched,
 /// favorite, download, open the trailer on YouTube when one exists, and open
@@ -24,7 +25,7 @@ class DetailActionRow extends StatelessWidget {
   /// Whether this title is already downloaded. Defaults to `false`; callers
   /// pass the current download state so the button reads as done (a filled
   /// check icon in the success colour) instead of inviting a download that
-  /// only produces an "Already downloaded" snackbar — the state the
+  /// only produces an "Already downloaded" toast — the state the
   /// pre-redesign app-bar download button used to show.
   final bool isDownloaded;
 
@@ -105,12 +106,7 @@ class DetailActionRow extends StatelessWidget {
 
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open trailer'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showToast(context, 'Could not open trailer', kind: ToastKind.error);
     }
   }
 }

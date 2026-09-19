@@ -6,6 +6,7 @@ import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../graphql/mutations/remove_from_continue_watching.graphql.dart';
+import '../../widgets/toast/toaster.dart';
 
 /// Hides a movie or show from Continue Watching, server-side.
 ///
@@ -50,7 +51,7 @@ Future<void> removeFromContinueWatching(Ref ref, String mediaItemId) async {
 /// action. Shared so the wording cannot drift between them.
 ///
 /// Success is silent on purpose. The card disappearing is the confirmation,
-/// and there is no undo to offer in a snackbar: hiding is reversed by playing
+/// and there is no undo to offer in a toast: hiding is reversed by playing
 /// the title, the way Plex does it.
 Future<void> reportRemovalFailure(
   BuildContext context,
@@ -59,16 +60,14 @@ Future<void> reportRemovalFailure(
   // Captured before the await. The card is being removed from under this
   // context, and on the home rail the widget it belongs to is gone by the time
   // the mutation answers.
-  final messenger = ScaffoldMessenger.of(context);
+  final toaster = Toaster.of(context);
 
   try {
     await remove();
   } catch (_) {
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Could not remove from Continue Watching'),
-        behavior: SnackBarBehavior.floating,
-      ),
+    toaster.show(
+      'Could not remove from Continue Watching',
+      kind: ToastKind.error,
     );
   }
 }

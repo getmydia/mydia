@@ -30,6 +30,7 @@ import '../../widgets/hero_play_control.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/watch_indicator.dart';
+import '../../widgets/toast/toaster.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the movie detail hero's breakpoint — see
@@ -692,12 +693,7 @@ class ShowDetailScreen extends ConsumerWidget {
 
     if (isDownloaded) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Already downloaded'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+        showToast(context, 'Already downloaded');
       }
     } else if (episode.files.isNotEmpty) {
       final selectedResolution = await showQualityDownloadDialog(
@@ -760,20 +756,18 @@ class ShowDetailScreen extends ConsumerWidget {
             );
 
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Download started'),
-                  duration: Duration(seconds: 2),
-                ),
+              showToast(
+                context,
+                'Download started',
+                kind: ToastKind.success,
               );
             }
           } catch (e) {
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Failed to start download: $e'),
-                  backgroundColor: AppColors.error,
-                ),
+              showToast(
+                context,
+                'Failed to start download: $e',
+                kind: ToastKind.error,
               );
             }
           }
@@ -1205,12 +1199,7 @@ class _BulkDownloadButton extends ConsumerWidget {
 
     if (allEpisodes.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No downloadable episodes found'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        showToast(context, 'No downloadable episodes found');
       }
       return;
     }
@@ -1233,11 +1222,10 @@ class _BulkDownloadButton extends ConsumerWidget {
     final downloadJobService = ref.read(unifiedDownloadJobServiceProvider);
     if (downloadJobService == null) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Download service not available'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        showToast(
+          context,
+          'Download service not available',
+          kind: ToastKind.error,
         );
       }
       return;
@@ -1277,27 +1265,12 @@ class _BulkDownloadButton extends ConsumerWidget {
 
     if (!context.mounted) return;
 
-    // Show result snackbar
+    // Show the result
     final message = _buildResultMessage(result);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              result.queued > 0
-                  ? Icons.download_rounded
-                  : Icons.info_outline_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor:
-            result.queued > 0 ? AppColors.primary : AppColors.textSecondary,
-        behavior: SnackBarBehavior.floating,
-      ),
+    showToast(
+      context,
+      message,
+      icon: result.queued > 0 ? Icons.download_rounded : null,
     );
   }
 
@@ -1395,11 +1368,10 @@ class _SeasonActionsButton extends ConsumerWidget {
       }
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update season watched status'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        showToast(
+          context,
+          'Could not update season watched status',
+          kind: ToastKind.error,
         );
       }
     }

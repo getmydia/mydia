@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/colors.dart';
+import 'toast/toaster.dart';
 
 /// Dialog that asks the user to trust a certificate on first connection.
 ///
@@ -79,11 +80,10 @@ class CertTrustDialog extends StatelessWidget {
                   tooltip: 'Copy fingerprint',
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: fingerprint));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Fingerprint copied to clipboard'),
-                        duration: Duration(seconds: 2),
-                      ),
+                    showToast(
+                      context,
+                      'Fingerprint copied to clipboard',
+                      kind: ToastKind.success,
                     );
                   },
                 ),

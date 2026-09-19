@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/player/platform_features.dart';
+import 'toast/toaster.dart';
 
 /// Whether this platform has a local-network permission pane worth linking to.
 ///
@@ -38,7 +39,7 @@ String localNetworkSettingsFallback({required bool isIOS}) => isIOS
 
 /// Opens the local-network permission pane, or explains how to reach it.
 ///
-/// Shared by [LocalNetworkSettingsButton] and by the cast error snackbar's
+/// Shared by [LocalNetworkSettingsButton] and by the cast error toast's
 /// action, so the deep link and its fallback have exactly one implementation.
 Future<void> openLocalNetworkSettings(BuildContext context) async {
   // Defence in depth. Nothing should offer this on a platform with no such
@@ -64,10 +65,12 @@ Future<void> openLocalNetworkSettings(BuildContext context) async {
 
   if (launched || !context.mounted) return;
 
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(localNetworkSettingsFallback(isIOS: isIOS)),
+  showToast(
+    context,
+    localNetworkSettingsFallback(isIOS: isIOS),
+    // Steps to follow by hand, so longer than the 3s default.
     duration: const Duration(seconds: 6),
-  ));
+  );
 }
 
 /// Button form of [openLocalNetworkSettings], for surfaces with room for one.

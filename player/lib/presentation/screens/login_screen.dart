@@ -13,6 +13,7 @@ import '../widgets/focus_highlight.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/pin_code_display.dart';
 import '../widgets/storage_unavailable_dialog.dart';
+import '../widgets/toast/toaster.dart';
 import '../widgets/tv_keypad.dart';
 import 'login/login_controller.dart';
 
@@ -146,15 +147,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         );
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isRelayUrlModified
-                ? 'Custom relay URL saved'
-                : 'Relay URL reset to default',
-          ),
-          duration: const Duration(seconds: 2),
-        ),
+      showToast(
+        context,
+        _isRelayUrlModified
+            ? 'Custom relay URL saved'
+            : 'Relay URL reset to default',
+        kind: ToastKind.success,
       );
     }
   }
@@ -208,11 +206,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final qrData = QrPairingData.tryParse(barcode.rawValue!);
     if (qrData == null) {
       // Not a valid Mydia QR code - show error briefly and continue scanning
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid QR code. Please scan a Mydia pairing code.'),
-          duration: Duration(seconds: 2),
-        ),
+      showToast(
+        context,
+        'Invalid QR code. Please scan a Mydia pairing code.',
+        kind: ToastKind.error,
       );
       return;
     }

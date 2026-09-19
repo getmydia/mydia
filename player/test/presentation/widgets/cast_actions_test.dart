@@ -15,6 +15,7 @@ import 'package:player/presentation/widgets/cast_actions.dart';
 import '../../core/cast/cast_session_manager_test.mocks.dart';
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
+import '../../test_utils/toast_harness.dart';
 
 const _device = CastDevice(
   id: 'device-1',
@@ -379,17 +380,18 @@ void main() {
     });
   });
 
-  group('showCastErrorSnackBar', () {
+  group('showCastErrorToast', () {
     Future<void> pumpAndShow(
       WidgetTester tester,
       CastFailureKind kind, {
       bool canOpenSettings = true,
     }) async {
       await tester.pumpWidget(MaterialApp(
+        builder: toastLayerBuilder,
         home: Scaffold(
           body: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showCastErrorSnackBar(
+              onPressed: () => showCastErrorToast(
                 context,
                 CastBackendException('raw', kind),
                 canOpenSettings: canOpenSettings,
@@ -408,7 +410,7 @@ void main() {
         (tester) async {
       await pumpAndShow(tester, CastFailureKind.localNetworkDenied);
 
-      expect(find.byType(SnackBarAction), findsOneWidget);
+      expect(find.byKey(const Key('toast-action')), findsOneWidget);
       expect(find.text('Settings'), findsOneWidget);
     });
 
@@ -416,14 +418,14 @@ void main() {
         (tester) async {
       await pumpAndShow(tester, CastFailureKind.discoveryDenied);
 
-      expect(find.byType(SnackBarAction), findsOneWidget);
+      expect(find.byKey(const Key('toast-action')), findsOneWidget);
     });
 
     testWidgets('offers no action for an unreachable receiver', (tester) async {
       await pumpAndShow(tester, CastFailureKind.unreachable);
 
-      expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.byType(SnackBarAction), findsNothing);
+      expect(find.byKey(const Key('toast-pill')), findsOneWidget);
+      expect(find.byKey(const Key('toast-action')), findsNothing);
     });
 
     testWidgets('offers no action for denied discovery off Apple platforms',
@@ -437,14 +439,14 @@ void main() {
         canOpenSettings: false,
       );
 
-      expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.byType(SnackBarAction), findsNothing);
+      expect(find.byKey(const Key('toast-pill')), findsOneWidget);
+      expect(find.byKey(const Key('toast-action')), findsNothing);
     });
 
     testWidgets('still explains the failure when no remedy is offered',
         (tester) async {
       // The message must survive the button being withheld, otherwise an
-      // Android user gets a bare snackbar with nothing actionable at all.
+      // Android user gets a bare toast with nothing actionable at all.
       await pumpAndShow(
         tester,
         CastFailureKind.discoveryDenied,
@@ -452,6 +454,30 @@ void main() {
       );
 
       expect(find.textContaining('local network'), findsOneWidget);
+    });
+
+    testWidgets('a permission failure stays 8s even without a remedy',
+        (tester) async {
+      await pumpAndShow(
+        tester,
+        CastFailureKind.discoveryDenied,
+        canOpenSettings: false,
+      );
+      await tester.pump(const Duration(seconds: 7));
+      expect(find.byKey(const Key('toast-pill')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byKey(const Key('toast-pill')), findsNothing);
+    });
+
+    testWidgets('any other cast failure takes the 5s error default',
+        (tester) async {
+      await pumpAndShow(tester, CastFailureKind.unreachable);
+      await tester.pump(const Duration(milliseconds: 4900));
+      expect(find.byKey(const Key('toast-pill')), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byKey(const Key('toast-pill')), findsNothing);
     });
   });
 }

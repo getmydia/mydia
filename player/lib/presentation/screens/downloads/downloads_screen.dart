@@ -9,6 +9,7 @@ import '../../widgets/cast_actions.dart';
 import '../../widgets/cast_button.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
+import '../../widgets/toast/toaster.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_queue_providers.dart';
 import '../../../core/downloads/storage_quota_providers.dart';
@@ -1405,9 +1406,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
     final totalCleanable = cleanupService.getTotalCleanableBytes();
 
     if (totalCleanable == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No downloads to clean up')),
-      );
+      showToast(context, 'No downloads to clean up');
       return;
     }
 
@@ -1442,10 +1441,10 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
         policy: _cleanupPolicy,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text('Freed ${StorageSettings.formatBytes(freedBytes)}')),
+        showToast(
+          context,
+          'Freed ${StorageSettings.formatBytes(freedBytes)}',
+          kind: ToastKind.success,
         );
         Navigator.of(context).pop();
       }
