@@ -356,8 +356,14 @@
           # Don't strip symbols (needed for Erlang NIFs)
           dontStrip = true;
 
-          # Set HOME to a writable directory for elixir_make cache
-          HOME = "/tmp";
+          # Environment variables for build and release phases. Under nixpkgs
+          # structuredAttrs, variables must be declared in `env` rather than as
+          # top-level derivation attributes.
+          env = {
+            HOME = "/tmp";
+          } // pkgs.lib.optionalAttrs (databaseType != null) {
+            DATABASE_TYPE = databaseType;
+          };
 
           # Remove dev/test dependencies from the build
           removeCookie = false;
@@ -499,16 +505,21 @@
             export RELEASE_DISTRIBUTION=none
             export SECRET_KEY_BASE=nix-install-check-not-a-real-secret-key-base-value
             export GUARDIAN_SECRET_KEY=nix-install-check-not-a-real-guardian-secret-key
-            export DATABASE_PATH=$RELEASE_TMP/install-check.db
+            ${if databaseType == "postgres" then "" else "export DATABASE_PATH=$RELEASE_TMP/install-check.db"}
             export MYDIA_DATA_DIR=$RELEASE_TMP
 
             echo "install check: booting the release to validate its configuration"
-            $out/bin/mydia eval ':ok'
+            $out/bin/mydia eval '
+              expected = ${if databaseType == "postgres" then "Ecto.Adapters.Postgres" else "Ecto.Adapters.SQLite3"}
+              actual = Application.fetch_env!(:mydia, :database_adapter)
+              if actual != expected do
+                IO.puts(:stderr, "FATAL: expected database adapter #{inspect(expected)}, got #{inspect(actual)}")
+                System.halt(1)
+              end
+            '
 
             runHook postInstallCheck
           '';
-        } // pkgs.lib.optionalAttrs (databaseType != null) {
-          DATABASE_TYPE = databaseType;
         });
 
       # SQLite variant (default)
