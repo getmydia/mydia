@@ -8,6 +8,7 @@ import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_device_picker.dart';
+import 'package:player/presentation/widgets/osd_dialog.dart';
 
 const _chromecast = CastDevice(
   id: 'cc-1',
@@ -339,5 +340,12 @@ void main() {
           reason: 'only the chosen device gets the accent colour');
       expect(tile.trailing, isNull);
     });
+  });
+
+  testWidgets('renders on the OSD material', (tester) async {
+    await pumpPicker(tester, devices: const AsyncValue.data([_chromecast]));
+
+    expect(find.byType(OsdDialog), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
   });
 }
