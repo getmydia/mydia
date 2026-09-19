@@ -365,7 +365,7 @@ class CastSessionManager {
   /// so both restart concurrently, and whichever call's `_adoptHlsSession`
   /// runs last tears down the session the other one just adopted — killing
   /// whatever actually ended up loaded on the receiver. Mirrors
-  /// `_PlayerScreenState`'s `_sourceSwitchInFlight` guard in
+  /// `_PlayerScreenState`'s `_switchGate` in
   /// player_screen.dart, which guards the equivalent local-playback source
   /// switch the same way.
   bool _isRestartingForSeek = false;
