@@ -16,7 +16,17 @@
 # - MYDIA_URL: URL of the Mydia server (for API calls)
 # - RELAY_URL: URL of the metadata-relay service
 
-FROM ghcr.io/cirruslabs/flutter:stable
+# The SDK comes from player/.fvmrc, the pin every other build reads, so this
+# image always matches the SDK pubspec.lock was resolved on and run-tests.sh
+# can pass --enforce-lockfile. It used to build on cirruslabs' floating
+# stable image, which stopped following releases and left E2E on an SDK
+# nothing else used.
+#
+# Never write a version number in these comments: ci-nix.yml's "Check /
+# Flutter Pin" job fails on any line that names Flutter next to one.
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 # Set pub cache location for caching
 ENV PUB_CACHE=/root/.pub-cache
@@ -24,12 +34,20 @@ ENV CARGO_HOME=/root/.cargo
 ENV RUSTUP_HOME=/root/.rustup
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install dependencies for Linux desktop Flutter + utilities
+# Linux desktop build dependencies, plus what the SDK itself shells out to
+# (git, curl, unzip, xz-utils, zip) and what xvfb-run needs (xauth). The Mesa
+# DRI, EGL and GLES packages give Impeller a software GL under Xvfb.
 RUN apt-get update -qq && \
     apt-get install -y -qq --no-install-recommends \
-        curl \
-        jq \
+        build-essential \
         ca-certificates \
+        curl \
+        git \
+        jq \
+        unzip \
+        xz-utils \
+        zip \
+        xauth \
         xvfb \
         clang \
         cmake \
@@ -49,6 +67,10 @@ RUN apt-get update -qq && \
         libxcursor-dev \
         libxi-dev \
         libgl1-mesa-dev \
+        libgl1-mesa-dri \
+        libegl1 \
+        libgles2 \
+        libglu1-mesa \
     && rm -rf /var/lib/apt/lists/*
 
 # Rust toolchain is required for building the mydia_player_p2p plugin. This
@@ -67,6 +89,20 @@ WORKDIR /workspace
 COPY rust-toolchain.toml ./
 RUN rustup toolchain install
 
+# Same install as the root Dockerfile's flutter-builder stage: a tagged git
+# checkout, whose first run fetches the matching Dart SDK. Keyed on .fvmrc
+# alone, so the SDK is re-fetched only when the pin moves. precache --linux
+# warms the desktop engine artifacts here instead of on every test run.
+COPY player/.fvmrc /tmp/.fvmrc
+RUN FLUTTER_VERSION="$(jq -r .flutter /tmp/.fvmrc)" && \
+    git clone --depth 1 --branch "$FLUTTER_VERSION" \
+      https://github.com/flutter/flutter.git /opt/flutter && \
+    git config --global --add safe.directory /opt/flutter && \
+    /opt/flutter/bin/flutter config --no-analytics && \
+    /opt/flutter/bin/flutter precache --linux
+
+ENV PATH="/opt/flutter/bin:${PATH}"
+
 RUN flutter config --enable-linux-desktop
 
 # Warm the pub cache using dependency manifests alone, so the expensive layer
@@ -74,13 +110,15 @@ RUN flutter config --enable-linux-desktop
 # runtime by compose, which is why nothing else is copied here.
 WORKDIR /warm
 COPY player/pubspec.yaml player/pubspec.lock ./
-# This is expected to fail: mydia_player_p2p is a path dependency
-# (rust_builder/), and only the pubspec files are present here, not the
-# package itself, so pub cannot resolve it. `|| true` masks only that
-# anticipated failure. The network fetch of every hosted (pub.dev)
-# dependency still happens and populates /root/.pub-cache before the
-# resolver gives up, which is the entire point of this layer.
-RUN flutter pub get || true
+# mydia_player_p2p is a path dependency (rust_builder/), and resolution reads
+# only a path dependency's manifest, so that manifest is all this layer needs
+# to resolve the whole graph. Its windows/, linux/ and cargokit/ sources are
+# not read until the plugin builds, against the bind-mounted tree.
+COPY player/rust_builder/pubspec.yaml ./rust_builder/pubspec.yaml
+# Enforced like every other `pub get` in CI and the release image: the lock
+# resolves on the .fvmrc SDK on a complete graph, so a mismatch is a failure
+# here rather than a silently re-resolved cache.
+RUN flutter pub get --enforce-lockfile
 
 # jq is used by scripts/e2e/run-tests.sh to parse GraphQL responses.
 WORKDIR /workspace/player

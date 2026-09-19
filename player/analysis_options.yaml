@@ -15,5 +15,12 @@ analyzer:
     - "**/*.freezed.dart"
     - "**/*.graphql.dart"
     - "rust_builder/cargokit/**"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
   errors:
     invalid_annotation_target: ignore

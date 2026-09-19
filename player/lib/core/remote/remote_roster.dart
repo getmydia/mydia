@@ -117,7 +117,7 @@ class RemoteRoster {
             '[RemoteRoster] server has no online field, scanning every device',
           );
           _onlineUnsupported = true;
-          return entries();
+          return await entries();
         }
         debugPrint('[RemoteRoster] online fetch failed: $error');
         return _lastOnline;

@@ -147,9 +147,8 @@ jobs:
       # --enforce-lockfile fails the job when pubspec.lock does not resolve on
       # the .fvmrc SDK, instead of quietly re-resolving and testing a different
       # tree. That is how a Dependabot PR resolved against a newer Flutter went
-      # green here while every local `pub get` rewrote its lock. Every CI and
-      # release `pub get` carries the flag except the E2E runner, whose image is
-      # not on the .fvmrc SDK (see scripts/e2e/run-tests.sh).
+      # green here while every local `pub get` rewrote its lock. Every CI,
+      # release and E2E `pub get` carries the flag.
       - name: Install dependencies
         if: needs.changes.outputs.player == 'true'
         run: flutter pub get --enforce-lockfile

@@ -83,10 +83,13 @@ and codegen is still the real validator.
 
 ## E2E harness layout
 
-The E2E server is built via `Dockerfile.e2e`, on an `erlang:27-alpine` runtime
-with ffmpeg added. The entrypoint script seeds test data through
-`su-exec mydia /app/bin/mydia rpc "..."`, using `rpc` rather than `eval` for the
-same reason production access does.
+The E2E server runs the production image built from the root `Dockerfile`.
+`scripts/e2e/server-entrypoint.sh` wraps the stock production entrypoint and,
+once the server reports healthy, runs `scripts/e2e/seed.sh`, which seeds test
+data through `su-exec mydia /app/bin/mydia rpc "..."`, using `rpc` rather than
+`eval` for the same reason production access does. The test runner is the
+toolbox image from `player/Dockerfile.test`, which installs Flutter from
+`player/.fvmrc`.
 
 Player E2E tests live in `player/integration_test/`, with streaming helpers in
 `player/integration_test/helpers/streaming_helpers.dart`. The compose file is
