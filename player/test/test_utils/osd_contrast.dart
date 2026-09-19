@@ -49,6 +49,12 @@ Color get osdWorstCaseBackground => compositeOver(
 
 /// Contrast of [foreground], which may be translucent, drawn on the OSD
 /// material over a pure-white frame.
+///
+/// This assumes the glyph sits directly on the OSD fill. A glyph on any
+/// other background (a dark label on a light button fill, say) has a
+/// different contrast pair and must not be checked here; [osdParagraphColors]
+/// takes a `skip` set so callers can exclude those spans and assert them
+/// against their actual fill instead.
 double osdContrast(Color foreground) {
   final bg = osdWorstCaseBackground;
   return contrastRatio(compositeOver(foreground, bg), bg);
@@ -56,7 +62,11 @@ double osdContrast(Color foreground) {
 
 /// Every colour OSD text may use. Each must clear WCAG SC 1.4.3 (4.5:1).
 /// [AppColors.textDisabled] and [AppColors.warning] are deliberately absent.
-final Set<Color> osdTextColors = {
+///
+/// Unmodifiable: this set is the legibility contract, so no test may
+/// weaken it by adding or removing a colour at runtime. It cannot be a
+/// const set because it holds `withValues` results.
+final Set<Color> osdTextColors = Set.unmodifiable({
   AppColors.textPrimary,
   AppColors.textSecondary,
   AppColors.primary,
@@ -65,7 +75,7 @@ final Set<Color> osdTextColors = {
   Colors.white,
   Colors.white.withValues(alpha: 0.80),
   Colors.white.withValues(alpha: 0.94),
-};
+});
 
 /// Colours used only for icons on the OSD material. Each must clear WCAG
 /// SC 1.4.11 (3:1).
@@ -73,7 +83,20 @@ final Set<Color> osdIconOnlyColors = {AppColors.error};
 
 /// The colour of every text run (and icon glyph, which is also a
 /// [RichText]) under [scope], as painted.
-List<Color> osdParagraphColors(WidgetTester tester, Finder scope) {
+///
+/// Every returned colour is assumed to sit on the OSD fill, so the results
+/// can go straight to [osdContrast]. Spans on a different background break
+/// that assumption: pass their colours in [skip] to exclude them, and
+/// assert each skipped colour against its actual fill instead (a button
+/// label's pair is the app theme's button pair, e.g. `AppColors.background`
+/// on `AppColors.textPrimary`, which the caller verifies with
+/// [contrastRatio]). Nothing is skipped by default; an unlisted span is
+/// always collected.
+List<Color> osdParagraphColors(
+  WidgetTester tester,
+  Finder scope, {
+  Set<Color> skip = const {},
+}) {
   final colors = <Color>[];
   final paragraphs = tester.renderObjectList<RenderParagraph>(
     find.descendant(of: scope, matching: find.byType(RichText)),
@@ -81,7 +104,7 @@ List<Color> osdParagraphColors(WidgetTester tester, Finder scope) {
   for (final paragraph in paragraphs) {
     paragraph.text.visitChildren((span) {
       final color = span.style?.color;
-      if (color != null) colors.add(color);
+      if (color != null && !skip.contains(color)) colors.add(color);
       return true;
     });
   }

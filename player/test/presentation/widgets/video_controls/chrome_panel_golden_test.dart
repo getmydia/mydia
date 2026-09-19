@@ -166,13 +166,9 @@ Widget _panel(double width) {
 ///     scene for `toImage()`, with nothing painted before the
 ///     `BackdropFilter` inside `GlassSurface` — so it blurs a blank/
 ///     transparent canvas instead of the synthetic backdrop. The resulting
-///     image is the fill color alone, at the documented top/bottom alphas,
-///     over full transparency: confirmed by sampling the very first
-///     `--update-goldens` attempt with `magick`, which showed the tint's raw
-///     RGB (`(11,11,12)`, the OSD tint) at exactly
-///     alpha 142/255 (≈0.56) fading to 98/255 (≈0.38) top-to-bottom, with
-///     *zero* trace of the tan/navy backdrop underneath it — no live blur,
-///     no saturation boost visible, because there was nothing behind the
+///     image is the fill color alone over full transparency: the tint's raw
+///     RGB with no trace of the backdrop underneath it, no live blur, no
+///     saturation boost visible, because there was nothing behind the
 ///     filter to blur or saturate.
 ///
 /// Putting the `RepaintBoundary` around the backdrop *and* the panel

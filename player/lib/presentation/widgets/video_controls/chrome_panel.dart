@@ -263,7 +263,7 @@ class ChromePanel extends StatelessWidget {
   static const double rowGap = 10.0;
 
   /// Vertical padding above row 1 and below row 2. Public so tests (e.g.
-  /// `glass_legibility_test`) can derive real panel-geometry fractions
+  /// `osd_legibility_test`) can derive real panel-geometry fractions
   /// instead of hand-rounded literals.
   static const double verticalPadding = 10.0;
 

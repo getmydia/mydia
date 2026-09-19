@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:player/core/player/subtitle_language_prefs.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/subtitle_candidate.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -112,8 +113,16 @@ Widget _host({
 void main() {
   testWidgets('opens on the OSD material with legible text', (tester) async {
     await tester.pumpWidget(_host(
-      onSearch: (_) async =>
-          const SubtitleSearchOutcome(results: [], providers: []),
+      onSearch: (_) async => const SubtitleSearchOutcome(
+        results: [_candidate, _hiCandidate],
+        providers: [
+          _quotaProvider,
+          SubtitleProviderStatus(
+            name: 'OpenSubtitles',
+            error: 'Daily quota exhausted',
+          ),
+        ],
+      ),
       onDownload: (_) async => _downloaded,
     ));
     await tester.tap(find.text('open'));
@@ -132,6 +141,61 @@ void main() {
     for (final color in colors) {
       expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
     }
+
+    // Results mode is where subtitle_search_results.dart's colours live;
+    // the track list above never renders them.
+    await tester.tap(find.text('Search online'));
+    await tester.pumpAndSettle();
+    expect(find.text('Exact match'), findsOneWidget);
+
+    // The selected language chip's label is AppColors.onPrimary on an
+    // AppColors.primary fill, not the OSD fill, so osdContrast would grade
+    // it against the wrong background. It is skipped here and asserted
+    // against its real fill below.
+    final resultColors = osdParagraphColors(
+      tester,
+      find.byType(SubtitleTrackSelectorSheet),
+      skip: {AppColors.onPrimary},
+    );
+    expect(resultColors, isNotEmpty);
+    for (final color in resultColors) {
+      expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
+    }
+    expect(
+      contrastRatio(AppColors.onPrimary, AppColors.primary),
+      greaterThanOrEqualTo(4.5),
+    );
+  });
+
+  testWidgets('empty state on the OSD material keeps legible text',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      tracks: const [],
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('This file has no subtitles.'), findsOneWidget);
+
+    // The empty-state FilledButton's label and icon are AppColors.background
+    // on an AppColors.textPrimary fill, not the OSD fill, so they are
+    // skipped here and asserted against their real fill below.
+    final colors = osdParagraphColors(
+      tester,
+      find.byType(SubtitleTrackSelectorSheet),
+      skip: {AppColors.background},
+    );
+    expect(colors, isNotEmpty);
+    for (final color in colors) {
+      expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
+    }
+    expect(
+      contrastRatio(AppColors.background, AppColors.textPrimary),
+      greaterThanOrEqualTo(4.5),
+    );
   });
 
   testWidgets('lists existing tracks and a search entry', (tester) async {
