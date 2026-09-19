@@ -36,6 +36,12 @@ class _Urls implements StreamUrls {
       url: 'hls://$sessionId',
       headers: const {},
       probeHeaders: const {'A': 'b'});
+
+  @override
+  ResolvedSource hlsFile(String sessionId, String name) => ResolvedSource(
+      url: 'hls://$sessionId/$name',
+      headers: const {},
+      probeHeaders: const {'A': 'b'});
 }
 
 Future<({int status, String body})> _readyProbe(
@@ -350,6 +356,27 @@ void main() {
       expect(source.timeline.startOffset, Duration.zero);
       expect(source.timeline.totalDuration, const Duration(seconds: 2400));
       expect(source.seekOnOpen, isTrue);
+    });
+  });
+
+  group('sessionFile', () {
+    test('is null in direct play, which has no session', () async {
+      final controller = _controller(_link(starts: const []));
+      await controller.open(_direct, fileId: 'file-1', startAt: Duration.zero);
+      expect(controller.sessionFile('subs_3.mks'), isNull);
+    });
+
+    test('addresses a file in the live session the way its playlist is',
+        () async {
+      final link = _link(starts: [
+        startStreamingSessionResponse(sessionId: 's1', playlistMode: 'FULL'),
+      ]);
+      final controller = _controller(link);
+      await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
+
+      final file = controller.sessionFile('subs_3.mks');
+      expect(file?.url, 'hls://s1/subs_3.mks');
+      expect(file?.probeHeaders, {'A': 'b'});
     });
   });
 

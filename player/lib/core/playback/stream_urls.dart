@@ -2,6 +2,7 @@
 library;
 
 import '../p2p/media_proxy.dart';
+import '../p2p/media_route.dart';
 
 class ResolvedSource {
   const ResolvedSource({
@@ -18,6 +19,10 @@ class ResolvedSource {
 abstract class StreamUrls {
   Future<ResolvedSource> directPlay(String fileId);
   ResolvedSource hls(String sessionId);
+
+  /// A file inside session [sessionId] other than its manifest, reached the
+  /// same way and with the same credentials as the manifest.
+  ResolvedSource hlsFile(String sessionId, String name);
 }
 
 class ProxyStreamUrls implements StreamUrls {
@@ -34,6 +39,12 @@ class ProxyStreamUrls implements StreamUrls {
   @override
   ResolvedSource hls(String sessionId) => ResolvedSource(
         url: _proxy.buildHlsUrl(sessionId),
+        headers: const {},
+      );
+
+  @override
+  ResolvedSource hlsFile(String sessionId, String name) => ResolvedSource(
+        url: MediaRoutes.hlsFile(_proxy.baseUrl, sessionId, name),
         headers: const {},
       );
 }
@@ -65,6 +76,13 @@ class HttpStreamUrls implements StreamUrls {
   @override
   ResolvedSource hls(String sessionId) => ResolvedSource(
         url: '$serverUrl/api/v1/hls/$sessionId/index.m3u8',
+        headers: const {},
+        probeHeaders: {'Authorization': 'Bearer $bearerToken'},
+      );
+
+  @override
+  ResolvedSource hlsFile(String sessionId, String name) => ResolvedSource(
+        url: '$serverUrl/api/v1/hls/$sessionId/$name',
         headers: const {},
         probeHeaders: {'Authorization': 'Bearer $bearerToken'},
       );

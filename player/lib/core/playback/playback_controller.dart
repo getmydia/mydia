@@ -149,6 +149,14 @@ class PlaybackController {
 
   String? get sessionId => _sessionId;
 
+  /// A file inside the live HLS session, addressed and authorized the way
+  /// its playlist is. Null while no session is live: direct play, or
+  /// between one session ending and the next starting.
+  ResolvedSource? sessionFile(String name) {
+    final sessionId = _sessionId;
+    return sessionId == null ? null : _urls.hlsFile(sessionId, name);
+  }
+
   /// True for the whole of [replaceSource], including while it awaits.
   bool get switching => _switching;
 
