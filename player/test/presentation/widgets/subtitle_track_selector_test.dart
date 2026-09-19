@@ -8,7 +8,10 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:player/core/player/subtitle_language_prefs.dart';
 import 'package:player/domain/models/subtitle_candidate.dart';
 import 'package:player/domain/models/subtitle_track.dart';
+import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
+
+import '../../test_utils/osd_contrast.dart';
 
 const _existing = SubtitleTrack(
   id: 'uuid-1',
@@ -107,6 +110,30 @@ Widget _host({
 }
 
 void main() {
+  testWidgets('opens on the OSD material with legible text', (tester) async {
+    await tester.pumpWidget(_host(
+      onSearch: (_) async =>
+          const SubtitleSearchOutcome(results: [], providers: []),
+      onDownload: (_) async => _downloaded,
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.ancestor(
+        of: find.text('Subtitles'),
+        matching: find.byType(GlassSurface),
+      ),
+      findsOneWidget,
+    );
+    final colors =
+        osdParagraphColors(tester, find.byType(SubtitleTrackSelectorSheet));
+    expect(colors, isNotEmpty);
+    for (final color in colors) {
+      expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
+    }
+  });
+
   testWidgets('lists existing tracks and a search entry', (tester) async {
     await tester.pumpWidget(_host(
       onSearch: (_) async =>
