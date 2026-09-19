@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
+import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_panel.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_sparkline.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
+
+import '../../../test_utils/osd_contrast.dart';
 
 const _sample = StatsSample(
   bufferedAhead: Duration(milliseconds: 18400),
@@ -283,5 +287,47 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(panelScrollable(tester).position.maxScrollExtent, 0);
+  });
+
+  testWidgets('sits on the OSD material', (tester) async {
+    await pumpPanel(tester, viewport: const Size(1280, 720));
+
+    final surface = tester.widget<GlassSurface>(
+      find.descendant(
+        of: find.byKey(StatsPanel.panelKey),
+        matching: find.byType(GlassSurface),
+      ),
+    );
+    expect(surface.blurSigma, DepthTokens.osdBlurSigma);
+    expect(surface.shadows, DepthTokens.osdShadowPanel);
+  });
+
+  testWidgets('every glyph holds 4.5:1 on the OSD material at every density',
+      (tester) async {
+    for (final probe in const [
+      (Size(1280, 720), false),
+      (Size(844, 390), false),
+      (Size(1920, 1080), true),
+    ]) {
+      await pumpPanel(
+        tester,
+        viewport: probe.$1,
+        tv: probe.$2,
+        sample: sampleWithHistory(),
+        onCopy: () {},
+        onClose: () {},
+      );
+
+      final colors =
+          osdParagraphColors(tester, find.byKey(StatsPanel.panelKey));
+      expect(colors, isNotEmpty);
+      for (final color in colors) {
+        expect(
+          osdContrast(color),
+          greaterThanOrEqualTo(4.5),
+          reason: '$color at ${probe.$1}',
+        );
+      }
+    }
   });
 }
