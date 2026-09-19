@@ -1075,5 +1075,41 @@ void main() {
         await tester.pump();
       }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
     });
+
+    testWidgets(
+        'a restore that starts while the pick\'s body is still fetching '
+        'shares that fetch', (tester) async {
+      await mockHttpResponse(() async {
+        final body = Completer<void>();
+        addTearDown(() {
+          if (!body.isCompleted) body.complete();
+        });
+        final (binding, decoder, link) = await mountStreaming(
+          tester,
+          withSubtitle: true,
+          holdSubtitleContent: body,
+        );
+
+        unawaited(binding.selectTrack(TrackKind.subtitle, '3'));
+        await pumpUntil(tester, () => link.subtitleContentSeen == 1);
+        await _switchAndLand(tester, binding, decoder, link);
+        // Room for the restore to reach the link, if it asks on its own.
+        await pumpUntil(tester, () => link.subtitleContentSeen > 1,
+            maxTries: 10);
+
+        body.complete();
+        await pumpUntil(tester, () => decoder.subtitleTracks.isNotEmpty);
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(link.subtitleContentSeen, 1,
+            reason: 'the restore joins the fetch the pick started instead of '
+                'asking the server to extract the same body again');
+        expect(decoder.subtitleTracks, hasLength(1));
+        expect(binding.describe(0).selectedSubtitle, '3');
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
   });
 }

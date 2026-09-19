@@ -598,6 +598,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
   Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
 
+  /// [_fetchSubtitleBody] calls still running, by server track id, so a
+  /// restore that starts while a pick's fetch is in flight joins it instead
+  /// of asking the server for a second extraction. An entry goes when its
+  /// fetch completes, success or not, so a retry fetches again.
+  final Map<String, Future<SubtitleTrack?>> _subtitleBodyFetches = {};
+
   // Whether current playback is direct play (vs HLS)
   bool _isDirectPlay = false;
 
@@ -4110,12 +4116,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The result is cached in [_mediaKitSubtitleTrackMap] so re-selecting the
   /// same track later in the same session (or the sync in
   /// [_showSubtitleSelector] finding it already selected) does not refetch.
+  ///
+  /// Two callers wanting the same body while it is still fetching share one
+  /// request; see [_subtitleBodyFetches].
   Future<SubtitleTrack?> _resolveMediaKitSubtitleTrack(
     app_models.SubtitleTrack track,
-  ) async {
+  ) {
     final cached = _mediaKitSubtitleTrackMap[track.id];
-    if (cached != null) return cached;
+    if (cached != null) return Future.value(cached);
+    return _subtitleBodyFetches[track.id] ??=
+        _fetchSubtitleBody(track).whenComplete(() {
+      _subtitleBodyFetches.remove(track.id);
+    });
+  }
 
+  /// Fetches [track]'s body over GraphQL and caches it in
+  /// [_mediaKitSubtitleTrackMap]. Null on any failure, never throws. Called
+  /// only from [_resolveMediaKitSubtitleTrack].
+  Future<SubtitleTrack?> _fetchSubtitleBody(
+    app_models.SubtitleTrack track,
+  ) async {
     try {
       final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
       final result = await graphqlClient.query(

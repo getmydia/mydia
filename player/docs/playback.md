@@ -180,7 +180,9 @@ to finish and then drops itself if the switch superseded it. The switch in turn
 waits for a subtitle call already running before it replaces the file, so
 neither reaches a player that is being disposed (web) or is opening another
 file (native). `SourceSwitchGate` holds both rules. A failed switch supersedes
-nothing, so a pick it held back still lands on the source that stayed.
+nothing, so a pick it held back still lands on the source that stayed. Two
+callers wanting the same subtitle body while it is still fetching share one
+request, so the server extracts it once.
 
 
 The quality picker offers Auto above Original, then the ladder
