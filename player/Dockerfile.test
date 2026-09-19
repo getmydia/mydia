@@ -110,13 +110,15 @@ RUN flutter config --enable-linux-desktop
 # runtime by compose, which is why nothing else is copied here.
 WORKDIR /warm
 COPY player/pubspec.yaml player/pubspec.lock ./
-# This is expected to fail: mydia_player_p2p is a path dependency
-# (rust_builder/), and only the pubspec files are present here, not the
-# package itself, so pub cannot resolve it. `|| true` masks only that
-# anticipated failure. The network fetch of every hosted (pub.dev)
-# dependency still happens and populates /root/.pub-cache before the
-# resolver gives up, which is the entire point of this layer.
-RUN flutter pub get || true
+# mydia_player_p2p is a path dependency (rust_builder/), and resolution reads
+# only a path dependency's manifest, so that manifest is all this layer needs
+# to resolve the whole graph. Its windows/, linux/ and cargokit/ sources are
+# not read until the plugin builds, against the bind-mounted tree.
+COPY player/rust_builder/pubspec.yaml ./rust_builder/pubspec.yaml
+# Enforced like every other `pub get` in CI and the release image: the lock
+# resolves on the .fvmrc SDK on a complete graph, so a mismatch is a failure
+# here rather than a silently re-resolved cache.
+RUN flutter pub get --enforce-lockfile
 
 # jq is used by scripts/e2e/run-tests.sh to parse GraphQL responses.
 WORKDIR /workspace/player
