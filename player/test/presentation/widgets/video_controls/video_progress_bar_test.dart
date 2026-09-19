@@ -238,4 +238,87 @@ void main() {
       expect(buffered.widthFactor, 0.0);
     });
   });
+
+  group('ProgressBarSurface scrub cursor', () {
+    testWidgets('draws no cursor without a scrub', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+
+      expect(find.byKey(ProgressBarSurface.scrubCursorKey), findsNothing);
+      expect(find.byKey(ProgressBarSurface.scrubSpanKey), findsNothing);
+    });
+
+    testWidgets('centres the cursor on the scrub fraction', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(
+          progress: 0.25,
+          buffered: 0.5,
+          scrubFraction: 0.75,
+        )),
+      );
+
+      final track = tester.getRect(find.byKey(ProgressBarSurface.trackKey));
+      final cursor =
+          tester.getRect(find.byKey(ProgressBarSurface.scrubCursorKey));
+      expect(
+        cursor.center.dx,
+        moreOrLessEquals(track.left + track.width * 0.75, epsilon: 0.5),
+      );
+      expect(cursor.width, VideoProgressBar.scrubCursorSize);
+    });
+
+    testWidgets('spans from the played position to the cursor', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(
+          progress: 0.25,
+          buffered: 0.5,
+          scrubFraction: 0.75,
+        )),
+      );
+
+      final track = tester.getRect(find.byKey(ProgressBarSurface.trackKey));
+      final span = tester.getRect(find.byKey(ProgressBarSurface.scrubSpanKey));
+      expect(span.left,
+          moreOrLessEquals(track.left + track.width * 0.25, epsilon: 0.5));
+      expect(span.width, moreOrLessEquals(track.width * 0.5, epsilon: 0.5));
+    });
+
+    testWidgets('spans backwards when the cursor is behind playback',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(
+          progress: 0.6,
+          buffered: 0.8,
+          scrubFraction: 0.2,
+        )),
+      );
+
+      final track = tester.getRect(find.byKey(ProgressBarSurface.trackKey));
+      final span = tester.getRect(find.byKey(ProgressBarSurface.scrubSpanKey));
+      expect(span.left,
+          moreOrLessEquals(track.left + track.width * 0.2, epsilon: 0.5));
+      expect(span.width, moreOrLessEquals(track.width * 0.4, epsilon: 0.5));
+    });
+
+    testWidgets('focus thickens the track and grows the thumb', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(
+          progress: 0.4,
+          buffered: 0.6,
+          focused: true,
+        )),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
+        8.0,
+      );
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
+        VideoProgressBar.activeThumbSize,
+      );
+    });
+  });
 }
