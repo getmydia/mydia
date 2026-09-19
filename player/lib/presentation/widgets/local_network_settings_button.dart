@@ -39,7 +39,7 @@ String localNetworkSettingsFallback({required bool isIOS}) => isIOS
 
 /// Opens the local-network permission pane, or explains how to reach it.
 ///
-/// Shared by [LocalNetworkSettingsButton] and by the cast error snackbar's
+/// Shared by [LocalNetworkSettingsButton] and by the cast error toast's
 /// action, so the deep link and its fallback have exactly one implementation.
 Future<void> openLocalNetworkSettings(BuildContext context) async {
   // Defence in depth. Nothing should offer this on a platform with no such

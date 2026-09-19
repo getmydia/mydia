@@ -221,7 +221,7 @@ Future<void> _connectToDevice(
     await manager.connectTo(device);
   } on CastBackendException catch (e) {
     if (!context.mounted) return;
-    // Routed through the shared helper rather than a bare SnackBar so a
+    // Routed through the shared helper rather than a bare toast so a
     // denied local network permission still offers its Settings remedy.
     // That matters most here: connecting on select is now the first moment
     // the denial can surface at all, since choosing a device no longer
