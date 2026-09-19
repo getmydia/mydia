@@ -1,8 +1,13 @@
 /// What this install has learned about playing files from each server.
 ///
-/// Two facts per server: shapes of file that failed to decode here, and a
-/// running estimate of throughput to that server. Both are advisory. A
-/// missing or unreadable box costs the memory and never the playback.
+/// Two facts per server: shapes of file that failed to decode here, and the
+/// latest bandwidth stall on each link path. Both are advisory. A missing or
+/// unreadable box costs the memory and never the playback.
+///
+/// There is deliberately no running throughput estimate. mpv's `cache-speed`
+/// during clean playback measures how fast playback consumes bytes, not what
+/// the link can carry, so an average of it converges on whatever Auto last
+/// played and then refuses direct play of files the link carries fine.
 library;
 
 import 'dart:async';
@@ -10,10 +15,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce/hive.dart';
 
+import 'link_path.dart';
 import 'playback_plan.dart';
 
 const Duration kFailureMemoryTtl = Duration(days: 14);
-const double kThroughputAlpha = 0.3;
+const Duration kStallMemoryTtl = Duration(hours: 1);
 
 enum FailureReason { decodeFailed, decodeTooSlow, bandwidth }
 
@@ -56,6 +62,18 @@ class FailureKey {
   String toString() => 'FailureKey($storageKey)';
 }
 
+/// A bandwidth fallback on one link path: the throughput that path was found
+/// to carry while the source stalled, and when.
+class StallRecord {
+  const StallRecord({required this.ceilingKbps, required this.at});
+
+  final int ceilingKbps;
+  final DateTime at;
+
+  @override
+  String toString() => 'StallRecord(${ceilingKbps}kbps at $at)';
+}
+
 abstract class PlaybackMemory {
   /// Shapes known to fail against [serverKey], expired entries excluded.
   Set<FailureKey> failuresFor(String serverKey, {required DateTime now});
@@ -67,21 +85,32 @@ abstract class PlaybackMemory {
     required DateTime now,
   });
 
-  int? throughputKbps(String serverKey);
+  /// The stall recorded on [path] against [serverKey], or null when there is
+  /// none or it is [kStallMemoryTtl] old or older.
+  StallRecord? recentStall(
+    String serverKey,
+    LinkPath path, {
+    required DateTime now,
+  });
 
-  /// Folds one measurement into the estimate: alpha 0.3, seeded by the first.
-  Future<void> observeThroughput(String serverKey, int kbps);
-
-  /// Records that throughput is at most [upperKbps]. Never raises the estimate.
-  Future<void> boundThroughput(String serverKey, int upperKbps);
+  /// Records a bandwidth fallback on [path], replacing any stall already
+  /// recorded there: the newest evidence wins.
+  Future<void> recordStall(
+    String serverKey,
+    LinkPath path,
+    int ceilingKbps, {
+    required DateTime now,
+  });
 }
 
 /// One server's record, as stored: a map so the Hive box needs no adapter.
 class _ServerRecord {
-  _ServerRecord({required this.failures, required this.throughputKbps});
+  _ServerRecord({
+    required this.failures,
+    required this.stalls,
+  });
 
-  factory _ServerRecord.empty() =>
-      _ServerRecord(failures: {}, throughputKbps: null);
+  factory _ServerRecord.empty() => _ServerRecord(failures: {}, stalls: {});
 
   factory _ServerRecord.fromMap(Map raw) {
     final failures = <String, DateTime>{};
@@ -95,23 +124,45 @@ class _ServerRecord {
         if (key is String && parsed != null) failures[key] = parsed;
       }
     }
-    final throughput = raw['throughputKbps'];
+    final stalls = <String, StallRecord>{};
+    final rawStalls = raw['stalls'];
+    if (rawStalls is Map) {
+      for (final entry in rawStalls.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        if (key is! String || value is! Map) continue;
+        final ceiling = value['ceilingKbps'];
+        final at = value['at'];
+        final parsed = at is String ? DateTime.tryParse(at) : null;
+        if (ceiling is int && parsed != null) {
+          stalls[key] = StallRecord(ceilingKbps: ceiling, at: parsed);
+        }
+      }
+    }
     return _ServerRecord(
       failures: failures,
-      throughputKbps: throughput is int ? throughput : null,
+      stalls: stalls,
     );
   }
 
   /// Storage key to the moment it was recorded.
   final Map<String, DateTime> failures;
-  int? throughputKbps;
+
+  /// [LinkPath.name] to the latest stall on that path.
+  final Map<String, StallRecord> stalls;
 
   Map<String, dynamic> toMap() => {
         'failures': {
           for (final entry in failures.entries)
             entry.key: {'at': entry.value.toUtc().toIso8601String()},
         },
-        'throughputKbps': throughputKbps,
+        'stalls': {
+          for (final entry in stalls.entries)
+            entry.key: {
+              'ceilingKbps': entry.value.ceilingKbps,
+              'at': entry.value.at.toUtc().toIso8601String(),
+            },
+        },
       };
 
   Set<FailureKey> liveFailures(DateTime now) => {
@@ -120,17 +171,10 @@ class _ServerRecord {
             if (FailureKey.parse(entry.key) case final key?) key,
       };
 
-  void observe(int kbps) {
-    final current = throughputKbps;
-    throughputKbps = current == null
-        ? kbps
-        : (kThroughputAlpha * kbps + (1 - kThroughputAlpha) * current).round();
-  }
-
-  void bound(int upperKbps) {
-    final current = throughputKbps;
-    throughputKbps =
-        current == null || upperKbps < current ? upperKbps : current;
+  StallRecord? liveStall(LinkPath path, DateTime now) {
+    final stall = stalls[path.name];
+    if (stall == null) return null;
+    return now.difference(stall.at) < kStallMemoryTtl ? stall : null;
   }
 }
 
@@ -182,17 +226,24 @@ class HivePlaybackMemory implements PlaybackMemory {
   }
 
   @override
-  int? throughputKbps(String serverKey) => _read(serverKey).throughputKbps;
+  StallRecord? recentStall(
+    String serverKey,
+    LinkPath path, {
+    required DateTime now,
+  }) =>
+      _read(serverKey).liveStall(path, now);
 
   @override
-  Future<void> observeThroughput(String serverKey, int kbps) async {
-    final record = _read(serverKey)..observe(kbps);
-    await _write(serverKey, record);
-  }
-
-  @override
-  Future<void> boundThroughput(String serverKey, int upperKbps) async {
-    final record = _read(serverKey)..bound(upperKbps);
+  Future<void> recordStall(
+    String serverKey,
+    LinkPath path,
+    int ceilingKbps, {
+    required DateTime now,
+  }) async {
+    final record = _read(serverKey);
+    record.stalls[path.name] = StallRecord(ceilingKbps: ceilingKbps, at: now);
+    debugPrint('[PlaybackMemory] $serverKey: stall on ${path.name}, '
+        'ceiling ${ceilingKbps}kbps');
     await _write(serverKey, record);
   }
 }
@@ -218,13 +269,21 @@ class InMemoryPlaybackMemory implements PlaybackMemory {
   }
 
   @override
-  int? throughputKbps(String serverKey) => _record(serverKey).throughputKbps;
+  StallRecord? recentStall(
+    String serverKey,
+    LinkPath path, {
+    required DateTime now,
+  }) =>
+      _record(serverKey).liveStall(path, now);
 
   @override
-  Future<void> observeThroughput(String serverKey, int kbps) async =>
-      _record(serverKey).observe(kbps);
-
-  @override
-  Future<void> boundThroughput(String serverKey, int upperKbps) async =>
-      _record(serverKey).bound(upperKbps);
+  Future<void> recordStall(
+    String serverKey,
+    LinkPath path,
+    int ceilingKbps, {
+    required DateTime now,
+  }) async {
+    _record(serverKey).stalls[path.name] =
+        StallRecord(ceilingKbps: ceilingKbps, at: now);
+  }
 }

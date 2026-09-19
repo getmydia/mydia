@@ -13,8 +13,9 @@ enum QualityChoiceKind { auto, original, fixed }
 
 /// The viewer's quality choice as the planner sees it.
 ///
-/// Auto is the default and respects remembered decode failures and remembered
-/// throughput. Original is always the viewer's own pick, which overrides both.
+/// Auto is the default and respects remembered decode failures and a recent
+/// stall on the current link path. Original is always the viewer's own pick,
+/// which overrides both.
 /// A fixed rung pins caps.
 class QualityChoice {
   const QualityChoice._(this.kind, this.rung);
@@ -113,7 +114,7 @@ enum PlanReason {
   copyAccepted,
   copyRejectedByMime,
   shapeKnownToFail,
-  bitrateExceedsThroughput,
+  recentStallOnPath,
   fixedRungRequested,
   noDirectPlayCandidate,
   noCopyCandidate,

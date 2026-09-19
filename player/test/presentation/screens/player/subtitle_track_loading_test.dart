@@ -581,4 +581,373 @@ void main() {
       );
     });
   });
+
+  // Tracks shaped like one file seen from both sides of a quality switch:
+  // the server's list (sidecar plus two embedded streams at ffprobe indices
+  // 3 and 5), and mpv's own list in direct play, where mpv numbers the same
+  // two streams 1 and 2.
+  const sidecar = SubtitleTrack(
+    id: 'uuid-sidecar',
+    language: 'eng',
+    title: 'English (SDH)',
+    format: 'srt',
+  );
+  const serverEnglish = SubtitleTrack(
+    id: '3',
+    language: 'eng',
+    title: 'English',
+    format: 'subrip',
+    embedded: true,
+  );
+  const serverPgs = SubtitleTrack(
+    id: '5',
+    language: 'fre',
+    title: 'French',
+    format: 'pgs',
+    embedded: true,
+    deliverable: false,
+  );
+  const mpvEnglish = SubtitleTrack(
+    id: 'mk_1',
+    language: 'eng',
+    title: 'English',
+    embedded: true,
+  );
+  const mpvFrench = SubtitleTrack(
+    id: 'mk_2',
+    language: 'fre',
+    title: 'French',
+    embedded: true,
+  );
+  const serverList = [sidecar, serverEnglish, serverPgs];
+  const streamingList = [sidecar, serverEnglish];
+  const directPlayList = [mpvEnglish, mpvFrench, sidecar];
+  const indices = {'1': 3, '2': 5};
+
+  group('mpvIdOfSubtitleTrack', () {
+    test('strips the prefix from an mpv-native id', () {
+      expect(mpvIdOfSubtitleTrack('mk_12'), '12');
+    });
+
+    test('is null for a server track id', () {
+      expect(mpvIdOfSubtitleTrack('3'), isNull);
+      expect(mpvIdOfSubtitleTrack('uuid-sidecar'), isNull);
+    });
+  });
+
+  group('subtitleLanguagesCompatible', () {
+    test('matches the same code regardless of case', () {
+      expect(subtitleLanguagesCompatible('eng', 'ENG'), isTrue);
+    });
+
+    test('rejects two different known languages', () {
+      expect(subtitleLanguagesCompatible('eng', 'fre'), isFalse);
+    });
+
+    test('lets an undetermined or missing language match anything', () {
+      expect(subtitleLanguagesCompatible('und', 'fre'), isTrue);
+      expect(subtitleLanguagesCompatible('eng', 'und'), isTrue);
+      expect(subtitleLanguagesCompatible('', 'eng'), isTrue);
+    });
+  });
+
+  group('subtitleIntentBeforeSwitch', () {
+    test('has nothing to carry when the viewer never chose', () {
+      // mpv keeps its own defaults across the switch, as on a fresh open.
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: null,
+          viewerChose: false,
+          selectedStreamIndex: null,
+          serverTracks: serverList,
+        ),
+        isNull,
+      );
+    });
+
+    test('carries an explicit Off', () {
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: null,
+          viewerChose: true,
+          selectedStreamIndex: null,
+          serverTracks: serverList,
+        ),
+        isA<IntentOff>(),
+      );
+    });
+
+    test('carries a server track as itself', () {
+      for (final track in [sidecar, serverEnglish]) {
+        expect(
+          subtitleIntentBeforeSwitch(
+            selected: track,
+            viewerChose: true,
+            selectedStreamIndex: null,
+            serverTracks: serverList,
+          ),
+          isA<IntentTrack>().having((i) => i.track, 'track', track),
+        );
+      }
+    });
+
+    test('translates an mpv track through its stream index', () {
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: mpvEnglish,
+          viewerChose: true,
+          selectedStreamIndex: 3,
+          serverTracks: serverList,
+        ),
+        isA<IntentTrack>().having((i) => i.track, 'track', serverEnglish),
+      );
+    });
+
+    test('cannot carry an mpv track whose index was not read', () {
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: mpvEnglish,
+          viewerChose: true,
+          selectedStreamIndex: null,
+          serverTracks: serverList,
+        ),
+        isA<IntentUnmappable>(),
+      );
+    });
+
+    test('cannot carry an mpv track with no server stream at that index', () {
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: mpvEnglish,
+          viewerChose: true,
+          selectedStreamIndex: 9,
+          serverTracks: serverList,
+        ),
+        isA<IntentUnmappable>(),
+      );
+    });
+
+    test('rejects an index match whose language disagrees', () {
+      // Index 3 is the English stream on the server; an mpv track tagged
+      // French claiming index 3 means the indices do not line up.
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: mpvFrench,
+          viewerChose: true,
+          selectedStreamIndex: 3,
+          serverTracks: serverList,
+        ),
+        isA<IntentUnmappable>(),
+      );
+    });
+
+    test('accepts an index match when mpv reports no language', () {
+      const untagged = SubtitleTrack(id: 'mk_1', language: 'und');
+      expect(
+        subtitleIntentBeforeSwitch(
+          selected: untagged,
+          viewerChose: true,
+          selectedStreamIndex: 3,
+          serverTracks: serverList,
+        ),
+        isA<IntentTrack>().having((i) => i.track, 'track', serverEnglish),
+      );
+    });
+  });
+
+  group('resolveSubtitleIntent', () {
+    test('an explicit Off stays off on any source', () {
+      for (final tracks in [streamingList, directPlayList]) {
+        expect(
+          resolveSubtitleIntent(
+            intent: const IntentOff(),
+            tracks: tracks,
+            streamIndexByMpvId: indices,
+          ),
+          isA<RestoreOff>(),
+        );
+      }
+    });
+
+    test('a sidecar is found again on either source', () {
+      for (final tracks in [streamingList, directPlayList]) {
+        expect(
+          resolveSubtitleIntent(
+            intent: const IntentTrack(sidecar),
+            tracks: tracks,
+            streamIndexByMpvId: indices,
+          ),
+          isA<RestoreTrack>().having((r) => r.track, 'track', sidecar),
+        );
+      }
+    });
+
+    test('an embedded text track is delivered by the server in a transcode',
+        () {
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentTrack(serverEnglish),
+          tracks: streamingList,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreTrack>().having((r) => r.track, 'track', serverEnglish),
+      );
+    });
+
+    test('an embedded track becomes mpv\'s own track in direct play', () {
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentTrack(serverEnglish),
+          tracks: directPlayList,
+          streamIndexByMpvId: indices,
+        ),
+        isA<RestoreTrack>().having((r) => r.track, 'track', mpvEnglish),
+      );
+    });
+
+    test('an image track cannot be carried into a transcode', () {
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentTrack(serverPgs),
+          tracks: streamingList,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreUnavailable>().having(
+            (r) => r.message, 'message', kImageSubtitleUnavailableMessage),
+      );
+    });
+
+    test('an image track is mpv\'s own track back in direct play', () {
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentTrack(serverPgs),
+          tracks: directPlayList,
+          streamIndexByMpvId: indices,
+        ),
+        isA<RestoreTrack>().having((r) => r.track, 'track', mpvFrench),
+      );
+    });
+
+    test('direct play with unreadable indices reports it plainly', () {
+      // Not the image message: the viewer is at Original, where the track
+      // would play if only it could be found.
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentTrack(serverPgs),
+          tracks: directPlayList,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreUnavailable>()
+            .having((r) => r.message, 'message', kSubtitleNotCarriedMessage),
+      );
+    });
+
+    test('direct play with no mpv tracks falls back to the server copy', () {
+      // Web, or mpv published nothing: the derived list is the server's.
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentTrack(serverEnglish),
+          tracks: streamingList,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreTrack>().having((r) => r.track, 'track', serverEnglish),
+      );
+    });
+
+    test('an unmappable intent turns subtitles off with a reason', () {
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentUnmappable(),
+          tracks: streamingList,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreUnavailable>()
+            .having((r) => r.message, 'message', kSubtitleNotCarriedMessage),
+      );
+    });
+
+    test('a track that vanished from the new list is reported', () {
+      const gone = SubtitleTrack(id: 'uuid-gone', language: 'eng');
+      expect(
+        resolveSubtitleIntent(
+          intent: const IntentTrack(gone),
+          tracks: streamingList,
+          streamIndexByMpvId: const {},
+        ),
+        isA<RestoreUnavailable>()
+            .having((r) => r.message, 'message', kSubtitleNotCarriedMessage),
+      );
+    });
+  });
+
+  group('shouldSyncSubtitleSelectionFromPlayer', () {
+    test('syncs only when no switch and no carried choice is pending', () {
+      expect(
+        shouldSyncSubtitleSelectionFromPlayer(
+            switchInFlight: false, intentPending: false),
+        isTrue,
+      );
+      expect(
+        shouldSyncSubtitleSelectionFromPlayer(
+            switchInFlight: true, intentPending: false),
+        isFalse,
+      );
+      expect(
+        shouldSyncSubtitleSelectionFromPlayer(
+            switchInFlight: false, intentPending: true),
+        isFalse,
+      );
+      expect(
+        shouldSyncSubtitleSelectionFromPlayer(
+            switchInFlight: true, intentPending: true),
+        isFalse,
+      );
+    });
+  });
+
+  group('shouldAcceptSubtitlePick', () {
+    test('ignores a pick while a switch is in flight', () {
+      expect(shouldAcceptSubtitlePick(switchInFlight: true), isFalse);
+      expect(shouldAcceptSubtitlePick(switchInFlight: false), isTrue);
+    });
+  });
+
+  group('subtitleRestoreConsumed', () {
+    test('keeps the intent after an unavailable restore', () {
+      expect(
+        subtitleRestoreConsumed(
+          restore: const RestoreUnavailable(kImageSubtitleUnavailableMessage),
+          selected: null,
+        ),
+        isFalse,
+      );
+    });
+
+    test('clears the intent once the track is actually selected', () {
+      expect(
+        subtitleRestoreConsumed(
+          restore: const RestoreTrack(sidecar),
+          selected: sidecar,
+        ),
+        isTrue,
+      );
+      expect(
+        subtitleRestoreConsumed(
+          restore: const RestoreTrack(sidecar),
+          selected: null,
+        ),
+        isFalse,
+      );
+    });
+
+    test('clears the intent once Off is actually applied', () {
+      expect(
+        subtitleRestoreConsumed(
+          restore: const RestoreOff(),
+          selected: null,
+        ),
+        isTrue,
+      );
+    });
+  });
 }

@@ -49,6 +49,8 @@ StatsContext buildStatsContext({
   required AudioTrack? audioTrack,
   required String? linkLabel,
   required bool linkHealthy,
+  StallRecord? recentStall,
+  DateTime? now,
 }) {
   final mode = _mode(plan, isDownloadedSource);
   // A fallback only explains the *active* plan when the active plan is
@@ -69,6 +71,8 @@ StatsContext buildStatsContext({
     knownFailures: knownFailures,
     sourceHeight: sourceHeight,
     sourceCodec: sourceCodec,
+    recentStall: recentStall,
+    now: now,
   );
 
   return StatsContext(
@@ -119,6 +123,8 @@ String? _why({
   required Set<FailureKey> knownFailures,
   required int? sourceHeight,
   required String? sourceCodec,
+  required StallRecord? recentStall,
+  required DateTime? now,
 }) {
   if (lastFallback != null) {
     return policy.fallbackMessage(lastFallback.reason);
@@ -141,8 +147,7 @@ String? _why({
         sourceHeight,
         sourceCodec,
       ),
-    PlanReason.bitrateExceedsThroughput =>
-      "Remembered connection speed doesn't fit this file",
+    PlanReason.recentStallOnPath => _recentStallMessage(recentStall, now),
     PlanReason.fixedRungRequested =>
       'Quality capped to ${selectedQuality.label}',
     // Both mean the server decided this file needs re-encoding for every
@@ -185,6 +190,14 @@ String _shapeKnownToFailMessage(
   return remembered == null
       ? 'Server is re-encoding for this device'
       : 'Remembered decode failure on $remembered';
+}
+
+/// The Why sentence for [PlanReason.recentStallOnPath]: how long ago the
+/// stall that capped this plan happened, when the record is at hand.
+String _recentStallMessage(StallRecord? stall, DateTime? now) {
+  if (stall == null || now == null) return 'Recent stall on this connection';
+  final minutes = now.difference(stall.at).inMinutes;
+  return 'Stalled on this connection ${minutes < 1 ? 1 : minutes} min ago';
 }
 
 String? _rememberedFailureCodec(

@@ -10,6 +10,7 @@ import 'package:player/core/playback/playback_memory_providers.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/graphql/queries/subtitle_content.graphql.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
@@ -80,14 +81,17 @@ class _Decoder extends PlatformPlayer {
     bufferingController.add(value);
   }
 
-  int subtitleTrackCalls = 0;
+  /// Every track the screen asked for, in order.
+  final subtitleTracks = <SubtitleTrack>[];
+
+  int get subtitleTrackCalls => subtitleTracks.length;
 
   /// Accepts the switch and emits nothing on `trackController`. That is how
   /// a switch looks to the monitor when media_kit's own track event arrives
   /// after mpv has already started rebuffering.
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {
-    subtitleTrackCalls++;
+    subtitleTracks.add(track);
   }
 
   /// `errorController` is `@protected` on `PlatformPlayer`: only reachable
@@ -105,8 +109,20 @@ class _Decoder extends PlatformPlayer {
   }
 }
 
-StubLink _server({required bool directPlay}) => StubLink((request, index) {
-      if (index == 0) return movieDetailResponse(positionSeconds: 0);
+/// A small WebVTT body, returned for any `SubtitleContent` request.
+const _vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello\n';
+
+StubLink _server({required bool directPlay, bool withSubtitle = false}) =>
+    StubLink((request, index) {
+      if (request.operation.document == documentNodeQuerySubtitleContent) {
+        return {'__typename': 'RootQueryType', 'subtitleContent': _vtt};
+      }
+      if (index == 0) {
+        return movieDetailResponse(
+          positionSeconds: 0,
+          files: withSubtitle ? [mediaFileWithSubtitle()] : null,
+        );
+      }
       if (index == 1) return movieSegmentsResponse();
       if (index == 2) return subtitleTrackSettingsResponse();
       if (index == 3) {
@@ -159,6 +175,40 @@ Future<void> _mount(
 /// lets exactly one sample see the decoder's current state.
 Future<void> _tick(WidgetTester tester) =>
     tester.pump(const Duration(seconds: 1));
+
+/// Seeks past the transcoded window, which switches sources the same way a
+/// quality change or a fallback does, and waits until the switch lands.
+///
+/// Two increasing positions, because `_awaitFirstAdvance` takes the first
+/// value it sees as the baseline and waits for one past it. The `runAsync`
+/// nudge is the same one "a fault on the incoming source during a switch is
+/// forgotten once the switch lands" needs: the switch's mutations go through
+/// real `dart:io` HTTP mocking, which plain pumps do not fully resolve.
+Future<void> _switchAndLand(
+  WidgetTester tester,
+  RemotePlayerBinding binding,
+  _Decoder decoder,
+  StubLink link,
+) async {
+  final opensBefore = decoder.opened.length;
+  var switchCompleted = false;
+  final switchFuture = binding
+      .seek(const Duration(seconds: 600))
+      .whenComplete(() => switchCompleted = true);
+  await pumpUntil(tester, () => decoder.opened.length == opensBefore + 1);
+  expect(decoder.opened, hasLength(opensBefore + 1),
+      reason: 'the seek must have switched sources');
+
+  decoder.advance(const Duration(seconds: 1));
+  await tester.pump();
+  decoder.advance(const Duration(seconds: 2));
+  await tester.pump();
+  await pumpUntil(tester,
+      () => link.requests.any((r) => r.variables.containsKey('sessionId')));
+  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  await pumpUntil(tester, () => switchCompleted);
+  await switchFuture;
+}
 
 void main() {
   testWidgets('casting stops verification of the local source', (tester) async {
@@ -648,5 +698,106 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
     }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  group('the subtitle choice across a source switch', () {
+    Future<(RemotePlayerBinding, _Decoder, StubLink)> mountStreaming(
+      WidgetTester tester, {
+      bool withSubtitle = false,
+    }) async {
+      final decoder = _Decoder();
+      final link = _server(directPlay: false, withSubtitle: withSubtitle);
+      final container = buildPlayerScreenContainer(
+        link: link,
+        connectionState: conn.ConnectionState.direct(),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
+      );
+      addTearDown(container.dispose);
+
+      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await pumpUntil(
+          tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
+      decoder.advance(const Duration(seconds: 15));
+      await tester.pump();
+      final binding =
+          tester.state(find.byType(PlayerScreen)) as RemotePlayerBinding;
+      return (binding, decoder, link);
+    }
+
+    int contentRequestCount(StubLink link) => link.requests
+        .where((r) => r.operation.document == documentNodeQuerySubtitleContent)
+        .length;
+
+    testWidgets('a picked subtitle is shown again once the switch lands',
+        (tester) async {
+      await mockHttpResponse(() async {
+        final (binding, decoder, link) =
+            await mountStreaming(tester, withSubtitle: true);
+
+        unawaited(binding.selectTrack(TrackKind.subtitle, '3'));
+        await pumpUntil(tester, () => decoder.subtitleTracks.isNotEmpty);
+        expect(decoder.subtitleTracks, hasLength(1));
+        final picked = decoder.subtitleTracks.single;
+        expect(picked.data, isTrue);
+        expect(binding.describe(0).selectedSubtitle, '3');
+
+        await _switchAndLand(tester, binding, decoder, link);
+
+        // mpv drops a `sub-add`ed track when it opens the new file, so the
+        // same body has to be added again, and the screen has to say so.
+        await pumpUntil(tester, () => decoder.subtitleTracks.length == 2);
+        expect(decoder.subtitleTracks, hasLength(2));
+        expect(decoder.subtitleTracks.last, picked);
+        expect(binding.describe(0).selectedSubtitle, '3');
+        expect(contentRequestCount(link), 1,
+            reason: 'the body fetched for the pick is reused, not fetched '
+                'again for the new source');
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+
+    testWidgets('an Off the viewer chose is applied again after the switch',
+        (tester) async {
+      await mockHttpResponse(() async {
+        final (binding, decoder, link) = await mountStreaming(tester);
+
+        unawaited(binding.selectTrack(TrackKind.subtitle, null));
+        await pumpUntil(tester, () => decoder.subtitleTracks.isNotEmpty);
+        expect(decoder.subtitleTracks.single, SubtitleTrack.no());
+
+        await _switchAndLand(tester, binding, decoder, link);
+
+        // Explicitly, so a subtitle mpv would pick on its own for the new
+        // file cannot appear over the viewer's Off.
+        await pumpUntil(tester, () => decoder.subtitleTracks.length == 2);
+        expect(decoder.subtitleTracks, hasLength(2));
+        expect(decoder.subtitleTracks.last, SubtitleTrack.no());
+        expect(binding.describe(0).selectedSubtitle, isNull);
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+
+    testWidgets('a viewer who never chose keeps mpv\'s own defaults',
+        (tester) async {
+      await mockHttpResponse(() async {
+        final (binding, decoder, link) =
+            await mountStreaming(tester, withSubtitle: true);
+
+        await _switchAndLand(tester, binding, decoder, link);
+        await tester.pump(const Duration(seconds: 1));
+
+        // Forcing Off here would hide a forced or default track mpv shows
+        // on a fresh open at Original.
+        expect(decoder.subtitleTracks, isEmpty);
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
   });
 }

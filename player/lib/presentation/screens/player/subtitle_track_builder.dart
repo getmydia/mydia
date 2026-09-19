@@ -203,6 +203,201 @@ int effectiveSubtitleDelayMs({
 /// kinds of track and membership alone no longer tells them apart.
 bool isMpvNativeSubtitleTrackId(String trackId) => trackId.startsWith('mk_');
 
+/// The mpv track id inside an mpv-native [trackId] (`'mk_2'` gives `'2'`),
+/// or null for a server track. The key `subtitleStreamIndices` uses.
+String? mpvIdOfSubtitleTrack(String trackId) =>
+    isMpvNativeSubtitleTrackId(trackId) ? trackId.substring(3) : null;
+
+/// Whether two tracks' language tags allow them to be the same stream.
+///
+/// Only a disagreement between two known tags rules a match out. `und`
+/// (ffprobe's "undetermined") or a missing tag carries no evidence either
+/// way, and container tags are the same ISO 639-2 codes on both sides.
+bool subtitleLanguagesCompatible(String a, String b) {
+  final left = a.trim().toLowerCase();
+  final right = b.trim().toLowerCase();
+  if (left.isEmpty || right.isEmpty || left == 'und' || right == 'und') {
+    return true;
+  }
+  return left == right;
+}
+
+/// Shown when a restore after a source switch cannot find the viewer's
+/// track on the new source.
+const kSubtitleNotCarriedMessage =
+    "Couldn't keep your subtitles at this quality. Pick them again.";
+
+/// Shown when the viewer's track is an image format (PGS, VobSub) and the
+/// new source is a transcode, which can only deliver text.
+const kImageSubtitleUnavailableMessage =
+    'Image-based subtitles only play at Original quality.';
+
+/// The viewer's subtitle choice while a source switch carries it, in the
+/// server's id space, which every source can resolve.
+///
+/// A source switch opens a new file. mpv drops a `sub-add`ed track when it
+/// does, and media_kit resets its own record of the selection, so neither
+/// can be asked afterwards what should be showing. This is that record.
+sealed class SubtitleIntent {
+  const SubtitleIntent();
+}
+
+/// The viewer chose "Off".
+final class IntentOff extends SubtitleIntent {
+  const IntentOff();
+}
+
+/// The viewer chose [track], a track from the server's list: a sidecar, a
+/// downloaded subtitle, or an embedded stream (whose id is its ffprobe
+/// stream index).
+final class IntentTrack extends SubtitleIntent {
+  final SubtitleTrack track;
+  const IntentTrack(this.track);
+}
+
+/// The viewer chose an mpv-native track that could not be matched to any
+/// server track, so no source but the one being left could show it.
+final class IntentUnmappable extends SubtitleIntent {
+  const IntentUnmappable();
+}
+
+/// What to carry across a source switch, given the latest pick.
+///
+/// [selected] is the pending selection (a pick still resolving counts). Null
+/// with [viewerChose] false means the viewer never touched subtitles this
+/// playback, and the answer is null: nothing to carry, so mpv keeps its own
+/// defaults exactly as on a fresh open. Forcing Off there would hide a
+/// forced or default track mpv shows on a fresh open at Original.
+///
+/// An mpv-native [selected] is translated through [selectedStreamIndex],
+/// its `ff-index`, read while its file was still loaded; the server's
+/// embedded track with that id is the same stream, provided the languages
+/// agree (see [subtitleLanguagesCompatible]).
+SubtitleIntent? subtitleIntentBeforeSwitch({
+  required SubtitleTrack? selected,
+  required bool viewerChose,
+  required int? selectedStreamIndex,
+  required List<SubtitleTrack> serverTracks,
+}) {
+  if (selected == null) return viewerChose ? const IntentOff() : null;
+  if (!isMpvNativeSubtitleTrackId(selected.id)) return IntentTrack(selected);
+  if (selectedStreamIndex == null) return const IntentUnmappable();
+
+  final match = serverTracks
+      .where((t) =>
+          t.embedded &&
+          int.tryParse(t.id) == selectedStreamIndex &&
+          subtitleLanguagesCompatible(t.language, selected.language))
+      .firstOrNull;
+  return match == null ? const IntentUnmappable() : IntentTrack(match);
+}
+
+/// What a restore after a source switch should apply.
+sealed class SubtitleRestore {
+  const SubtitleRestore();
+}
+
+/// Apply [track], a member of the new source's list.
+final class RestoreTrack extends SubtitleRestore {
+  final SubtitleTrack track;
+  const RestoreTrack(this.track);
+}
+
+/// Apply "Off".
+final class RestoreOff extends SubtitleRestore {
+  const RestoreOff();
+}
+
+/// Apply "Off" and tell the viewer [message]: their track cannot be shown
+/// on the new source.
+final class RestoreUnavailable extends SubtitleRestore {
+  final String message;
+  const RestoreUnavailable(this.message);
+}
+
+/// Finds [intent] on the source that just landed.
+///
+/// [tracks] is `_subtitleTracks` derived for the new source, so it holds
+/// mpv-native tracks only in native direct play, and otherwise the server's
+/// selectable tracks. [streamIndexByMpvId] is `subtitleStreamIndices` for
+/// the new file (empty when there is nothing to read).
+///
+/// A track still in [tracks] is applied as is. An embedded track missing
+/// from it is looked for among mpv's tracks by stream index, which is how a
+/// server-delivered stream comes back as mpv's own in direct play. An image
+/// track with no mpv tracks to match against is on a transcode, which
+/// cannot deliver it.
+SubtitleRestore resolveSubtitleIntent({
+  required SubtitleIntent intent,
+  required List<SubtitleTrack> tracks,
+  required Map<String, int> streamIndexByMpvId,
+}) {
+  switch (intent) {
+    case IntentOff():
+      return const RestoreOff();
+    case IntentUnmappable():
+      return const RestoreUnavailable(kSubtitleNotCarriedMessage);
+    case IntentTrack(:final track):
+      final same = tracks.where((t) => t.id == track.id).firstOrNull;
+      if (same != null) return RestoreTrack(same);
+
+      if (track.embedded) {
+        final streamIndex = int.tryParse(track.id);
+        final native = tracks.where((t) {
+          final mpvId = mpvIdOfSubtitleTrack(t.id);
+          return mpvId != null &&
+              streamIndex != null &&
+              streamIndexByMpvId[mpvId] == streamIndex &&
+              subtitleLanguagesCompatible(t.language, track.language);
+        }).firstOrNull;
+        if (native != null) return RestoreTrack(native);
+
+        final onNativeSource =
+            tracks.any((t) => isMpvNativeSubtitleTrackId(t.id));
+        if (!track.deliverable && !onNativeSource) {
+          return const RestoreUnavailable(kImageSubtitleUnavailableMessage);
+        }
+      }
+      return const RestoreUnavailable(kSubtitleNotCarriedMessage);
+  }
+}
+
+/// Whether [_restoreSubtitleIntent] should clear the carried choice after
+/// applying [restore] to [selected].
+///
+/// Unavailable restores apply Off for this source but keep the intent so a
+/// later switch back (for example PGS at Original) can still resolve it.
+bool subtitleRestoreConsumed({
+  required SubtitleRestore restore,
+  required SubtitleTrack? selected,
+}) =>
+    switch (restore) {
+      RestoreTrack(:final track) => selected?.id == track.id,
+      RestoreOff() => selected == null,
+      RestoreUnavailable() => false,
+    };
+
+/// Whether `_syncSelectedSubtitleTrack` may overwrite the selection with
+/// whatever media_kit reports.
+///
+/// Never while a switch is in flight or a carried choice is waiting to be
+/// restored: media_kit's `open()` resets its record to `auto`, so a sync
+/// then would wipe the viewer's choice before the restore reads it, and
+/// its generation bump would cancel a restore still fetching a body.
+bool shouldSyncSubtitleSelectionFromPlayer({
+  required bool switchInFlight,
+  required bool intentPending,
+}) =>
+    !switchInFlight && !intentPending;
+
+/// Whether a subtitle pick from the sheet or a remote may start now.
+///
+/// Not during a source switch, the same way the quality picker ignores a
+/// tap then: the switch is about to replace the file the pick would apply
+/// to, and it carries the current choice across itself.
+bool shouldAcceptSubtitlePick({required bool switchInFlight}) =>
+    !switchInFlight;
+
 /// Whether the subtitle sheet's Save button should be offered for
 /// [trackId]. `null` (no track selected) is never savable.
 ///
