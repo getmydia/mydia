@@ -214,6 +214,38 @@ labelled Original. Neither writes the stored default: one file failing here
 says nothing about the next. Auto does not change rung again on its own
 mid-session; that needs a server-side rendition switch, not built yet.
 
+## Which HLS engine plays it on web
+
+hls.js, always, whenever it can run. Not the browser's own HLS engine, and
+this is not a preference: a Mydia session is unplayable by one.
+
+A `:full` session publishes every segment of the file in its playlist before
+an encoder has reached them, answers `503` with `Retry-After` for one that is
+not ready (`hls_controller.ex`), and relocates its encoder mid-flight when the
+viewer resumes, so segments arrive from more than one FFmpeg run. hls.js and
+mpv retry and carry on. A browser's engine stops: measured on 2026-09-19, a
+session resumed at 4:23 froze within ten seconds and never recovered, on iOS
+Safari against production and in Chromium's own HLS locally, while the same
+file from 0:00 played fine and the same resumed session played straight
+through with hls.js in the path. The freeze reads as a stuck spinner with a
+full buffer, and progress keeps saving the resume position forever.
+
+media_kit chooses the browser's engine for anything answering
+`canPlayType('application/vnd.apple.mpegurl')` non-empty, which is every
+WebKit browser and desktop Chromium since 143, and it exposes no knob. So
+`core/player/hls_engine.dart` takes the knob: it loads a current hls.js from
+`web/hls/` (media_kit bundles 1.4.10, which predates `ManagedMediaSource` and
+therefore cannot run on iPhone at all) and then answers `''` for HLS content
+types, but only while `Hls.isSupported()` is true. On iOS Safari below 17.1,
+which has neither `MediaSource` nor `ManagedMediaSource`, nothing is hidden
+and the browser's engine stays the only path there is.
+
+Two consequences worth knowing. The `httpHeaders` media_kit is given only
+reach the wire on the hls.js path, through its `xhrSetup`; the browser's
+engine drops them and the session rides on the cookie instead. And
+`CodecSupport.prefersNativeHls` still reports what the browser claims, not
+what ends up playing it.
+
 ## Compatibility
 
 Old player, new server: unchanged, byte for byte. New player, old server:

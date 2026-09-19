@@ -17,6 +17,7 @@ import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
+import '../../../core/player/hls_engine.dart';
 import '../../../core/player/player_orientation_lease_controller.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_stream_index.dart';
@@ -2056,6 +2057,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _loadingMessage = null;
       });
     }
+
+    // Web: put hls.js in media_kit's path before it can choose the browser's
+    // own HLS engine, which cannot play a Mydia session (see
+    // `core/player/hls_engine.dart`). Ahead of the `Player` below, because
+    // media_kit makes that choice when the source opens and keeps it for the
+    // life of the session. A no-op on native, and on web when hls.js cannot
+    // run at all.
+    await prepareHlsEngine();
 
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();

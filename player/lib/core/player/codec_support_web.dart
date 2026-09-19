@@ -64,7 +64,15 @@ bool get hasHlsMediaSourceSupport => _hasMediaSource || _hasManagedMediaSource;
 /// manifest and its segment through the worker.
 ///
 /// See `CodecSupport.prefersNativeHls` for what may and may not be concluded
-/// from it. There is no media_kit knob to force hls.js either way.
+/// from it.
+///
+/// media_kit offers no knob to force hls.js, so `hls_engine.dart` answers the
+/// `canPlayType` question for it, hiding the claim wherever hls.js can run.
+/// This getter reads the same patched answer, which keeps it honest about the
+/// sentence above: once `prepareHlsEngine` has run in a browser that can host
+/// hls.js, media_kit no longer reaches for the browser's engine and this turns
+/// false. Before playback starts, and in a browser where hls.js cannot run, it
+/// still reports the browser's own claim.
 bool get prefersNativeHls {
   // Order matters: Android Chrome short-circuits before canPlayType, exactly
   // as media_kit does, so a change in Chrome's answer cannot flip this.
