@@ -6,11 +6,12 @@ defmodule Mydia.Subtitles.Format do
   of sidecar files with no process spawn. Anything else falls through to ffmpeg
   inside this module, so callers never branch on format.
 
-  Image formats (PGS, VobSub) are bitmaps and cannot become text. They are
-  rejected rather than silently mangled.
+  Image formats (PGS, VobSub, DVB, XSUB) are bitmaps and cannot become text.
+  They are rejected rather than silently mangled. `Mydia.Subtitles.ImageTrack`
+  serves them to the native player as bitmaps instead.
   """
 
-  @image_formats ~w(pgs vobsub dvd_subtitle hdmv_pgs_subtitle)
+  @image_formats ~w(pgs vobsub dvd_subtitle hdmv_pgs_subtitle dvb_subtitle xsub)
 
   # A provider states a format in its search results, but SubDL and the relay
   # both hardcode "srt" there because the real extension is only visible once

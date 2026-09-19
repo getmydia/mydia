@@ -163,6 +163,11 @@ defmodule Mydia.Subtitles.FormatTest do
       refute Format.image_format?("vtt")
       refute Format.image_format?("ass")
     end
+
+    test "classifies DVB and XSUB bitmaps as images" do
+      assert Format.image_format?("dvb_subtitle")
+      assert Format.image_format?("xsub")
+    end
   end
 
   describe "detect/1" do
