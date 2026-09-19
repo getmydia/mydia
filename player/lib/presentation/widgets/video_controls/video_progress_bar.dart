@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/theme/depth_tokens.dart';
 
@@ -30,6 +33,15 @@ class ProgressBarSurface extends StatefulWidget {
   /// Whether to use the 44px touch hit area instead of the 32px pointer one.
   final bool touchTarget;
 
+  /// Where a D-pad scrub's cursor sits, 0..1, or null when there is none.
+  /// Drawn as a larger thumb plus a lighter span back to the played fill.
+  final double? scrubFraction;
+
+  /// Whether the bar holds keyboard focus. A remote viewer is metres away,
+  /// so focus gets the same thicker track and larger thumb a pointer gets on
+  /// hover.
+  final bool focused;
+
   const ProgressBarSurface({
     super.key,
     required this.progress,
@@ -39,12 +51,16 @@ class ProgressBarSurface extends StatefulWidget {
     this.onSeekStart,
     this.onSeekEnd,
     this.touchTarget = false,
+    this.scrubFraction,
+    this.focused = false,
   });
 
   static const Key trackKey = Key('progress-track');
   static const Key bufferedKey = Key('progress-buffered');
   static const Key playedKey = Key('progress-played');
   static const Key thumbKey = Key('progress-thumb');
+  static const Key scrubCursorKey = Key('progress-scrub-cursor');
+  static const Key scrubSpanKey = Key('progress-scrub-span');
 
   @override
   State<ProgressBarSurface> createState() => _ProgressBarSurfaceState();
@@ -64,9 +80,12 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
 
   bool get _active => _seekable && (_hovering || _seeking);
 
-  double get _trackHeight => _active ? 8.0 : 6.0;
+  /// Hover, a drag, or keyboard focus: any of them draws the bar larger.
+  bool get _emphasized => _active || widget.focused;
 
-  double get _thumbSize => _active
+  double get _trackHeight => _emphasized ? 8.0 : 6.0;
+
+  double get _thumbSize => _emphasized
       ? VideoProgressBar.activeThumbSize
       : VideoProgressBar.restingThumbSize;
 
@@ -125,6 +144,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
   /// [build] puts around it differ.
   Widget _bar(double width) {
     final buffered = widget.buffered.clamp(0.0, 1.0);
+    final scrub = widget.scrubFraction?.clamp(0.0, 1.0);
 
     return SizedBox(
       width: double.infinity,
@@ -189,6 +209,23 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                   ),
                 ),
               ),
+              // Scrub span: what the committed seek would skip over, from the
+              // played position to the cursor in either direction. Positioned
+              // with no top or bottom, so the Stack's centerLeft alignment
+              // centres it vertically like the fills.
+              if (scrub != null)
+                Positioned(
+                  key: ProgressBarSurface.scrubSpanKey,
+                  left: width * math.min(scrub, _displayed),
+                  width: width * (scrub - _displayed).abs(),
+                  child: Container(
+                    height: _trackHeight,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(_trackHeight / 2),
+                    ),
+                  ),
+                ),
               // Thumb — always present, unlike the previous hover-only
               // implementation. Centered exactly on the progress fraction: at
               // the 0.0/1.0 extremes it bleeds half its own width past the
@@ -229,6 +266,31 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                   );
                 },
               ),
+              // Scrub cursor: larger than the thumb and ringed, so it reads as
+              // "where you are going" next to "where you are".
+              if (scrub != null)
+                Positioned(
+                  left: width * scrub - VideoProgressBar.scrubCursorSize / 2,
+                  child: Container(
+                    key: ProgressBarSurface.scrubCursorKey,
+                    width: VideoProgressBar.scrubCursorSize,
+                    height: VideoProgressBar.scrubCursorSize,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        width: 2,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x40000000), // black @ 0.25
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -266,6 +328,13 @@ class VideoProgressBar extends StatelessWidget {
   /// Whether to use the 44px touch hit area.
   final bool touchTarget;
 
+  /// D-pad scrub state to draw, on the remote tier. Null elsewhere, which
+  /// leaves the bar exactly as it was.
+  final ScrubController? scrub;
+
+  /// Whether the bar holds focus. See [ProgressBarSurface.focused].
+  final bool focused;
+
   const VideoProgressBar({
     super.key,
     required this.player,
@@ -275,6 +344,8 @@ class VideoProgressBar extends StatelessWidget {
     this.onSeekEnd,
     this.onSeekUpdate,
     this.touchTarget = false,
+    this.scrub,
+    this.focused = false,
   });
 
   /// Thumb diameter at rest.
@@ -282,6 +353,9 @@ class VideoProgressBar extends StatelessWidget {
 
   /// Thumb diameter while hovered or scrubbing.
   static const double activeThumbSize = 16.0;
+
+  /// Diameter of the D-pad scrub cursor.
+  static const double scrubCursorSize = 20.0;
 
   @override
   Widget build(BuildContext context) {
@@ -315,14 +389,24 @@ class VideoProgressBar extends StatelessWidget {
                 Duration at(double f) =>
                     Duration(milliseconds: (totalMs * f).round());
 
-                return ProgressBarSurface(
-                  progress: fraction(position),
-                  buffered: fraction(buffer),
-                  touchTarget: touchTarget,
-                  onSeekStart: onSeekStart,
-                  onSeekEnd: onSeekEnd,
-                  onSeekUpdate: (f) => onSeekUpdate?.call(at(f)),
-                  onSeekTo: (f) => onSeekToReal(at(f)),
+                ProgressBarSurface surface(double? scrubFraction) =>
+                    ProgressBarSurface(
+                      progress: fraction(position),
+                      buffered: fraction(buffer),
+                      touchTarget: touchTarget,
+                      onSeekStart: onSeekStart,
+                      onSeekEnd: onSeekEnd,
+                      onSeekUpdate: (f) => onSeekUpdate?.call(at(f)),
+                      onSeekTo: (f) => onSeekToReal(at(f)),
+                      scrubFraction: scrubFraction,
+                      focused: focused,
+                    );
+
+                final scrub = this.scrub;
+                if (scrub == null) return surface(null);
+                return ListenableBuilder(
+                  listenable: scrub,
+                  builder: (context, _) => surface(scrub.displayFraction),
                 );
               },
             );
