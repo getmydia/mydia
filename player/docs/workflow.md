@@ -142,8 +142,8 @@ isolation, confirm against CI rather than bisecting the suite.
 
 `test/presentation/widgets/video_controls/chrome_panel_golden_test.dart` is gated
 `@TestOn('mac-os')`, so it skips silently on Linux and on CI's ubuntu-latest.
-Changes to `DepthTokens.playerChromeTint` or anything feeding
-`GlassSurface.playerChrome` invalidate its committed goldens with no Linux run
+Changes to the OSD tokens in `DepthTokens` or anything feeding
+`GlassSurface.osd` invalidate its committed goldens with no Linux run
 noticing. Regenerate on a Mac with
 `cd player && flutter test --update-goldens <path>`.
 

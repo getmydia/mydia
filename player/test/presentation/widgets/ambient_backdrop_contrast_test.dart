@@ -153,7 +153,7 @@ void main() {
   });
 
   // The invariant the old hardcoded navy violated. Mirrors the
-  // `playerChromeTint` test in depth_tokens_test.dart: a scrim carrying a hue
+  // `osdTint` test in depth_tokens_test.dart: a scrim carrying a hue
   // drains the blurred poster behind it toward that hue instead of letting the
   // artwork's own colour through.
   group('AmbientBackdrop scrim base colour', () {
