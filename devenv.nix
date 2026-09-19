@@ -392,6 +392,24 @@ in
       execIfModified = [ "player/pubspec.yaml" "player/pubspec.lock" ];
       before = onEnterShell;
     };
+
+    # Override devenv's built-in git-hooks install task. Devenv's default task
+    # runs `prek install -c "$DEVENV_ROOT/.pre-commit-config.yaml" -t pre-commit`,
+    # which hardcodes `--config="<worktree-root>/.pre-commit-config.yaml"` into the
+    # shared `.git/hooks/pre-commit` file. In a multi-worktree repo, entering any
+    # worktree's shell rewrites that shared file, moves the previous hook to
+    # `pre-commit.legacy` (triggering prek refusal mode), and forces all other
+    # worktrees to run against the last-entered worktree's config.
+    # Running `prek install -t pre-commit` without `-c` generates a worktree-neutral
+    # hook shim that dynamically resolves the active worktree's git root and its
+    # `.pre-commit-config.yaml` at commit time, remaining 100% identical and
+    # idempotent across all worktrees.
+    "devenv:git-hooks:install".exec = lib.mkForce ''
+      if ! git rev-parse --git-dir &> /dev/null; then
+        exit 0
+      fi
+      ${pkgs.prek}/bin/prek install -t pre-commit
+    '';
   };
 
   # ── Git hooks (KTD7 / R17) ──────────────────────────────────────────────────
