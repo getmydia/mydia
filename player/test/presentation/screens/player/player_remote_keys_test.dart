@@ -1,7 +1,8 @@
 // On a remote, arrow keys have to mean two different things. With the OSD
-// hidden there is nothing focusable on screen, so left and right are the only
-// way to seek. With it visible, the same keys have to walk the transport
-// controls instead, or the focus rings the OSD renders are unreachable.
+// hidden there is nothing focusable on screen, so left and right start a
+// scrub and move focus onto the progress bar. With it visible, the same keys
+// have to walk the transport controls instead, or the focus rings the OSD
+// renders are unreachable.
 //
 // Up and down never touch volume on a television. That belongs to the remote
 // and the receiver, and binding it means one press changes two volumes.
@@ -19,17 +20,17 @@ void main() {
           chromeVisible: chromeVisible,
         );
 
-    test('left seeks back while the OSD is hidden', () {
+    test('left starts a scrub back while the OSD is hidden', () {
       expect(
         intent(LogicalKeyboardKey.arrowLeft, chromeVisible: false),
-        ArrowIntent.seekBackward,
+        ArrowIntent.scrubBackward,
       );
     });
 
-    test('right seeks forward while the OSD is hidden', () {
+    test('right starts a scrub forward while the OSD is hidden', () {
       expect(
         intent(LogicalKeyboardKey.arrowRight, chromeVisible: false),
-        ArrowIntent.seekForward,
+        ArrowIntent.scrubForward,
       );
     });
 

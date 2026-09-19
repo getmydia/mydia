@@ -24,6 +24,9 @@ import '../../../core/player/image_subtitle_sidecar.dart';
 import '../../../core/player/subtitle_delay.dart';
 import '../../../core/player/subtitle_render.dart';
 import '../../../core/player/video_output_config.dart';
+import '../../../core/player/scrub_controller.dart';
+import '../../../core/player/scrub_thumbnails.dart';
+import '../../../core/player/thumbnail_service.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
@@ -135,6 +138,12 @@ export '../../../core/player/resume_plan.dart'
 enum ArrowIntent {
   seekBackward,
   seekForward,
+
+  /// Start or continue a D-pad scrub: the directional-tier answer for left
+  /// and right with the OSD hidden. A remote has no pointer to drag the bar
+  /// with, so the press reveals the OSD and moves a cursor instead of seeking.
+  scrubBackward,
+  scrubForward,
   volumeUp,
   volumeDown,
 
@@ -147,6 +156,12 @@ enum ArrowIntent {
   /// controls. Returning this means the handler must report `ignored`.
   traverse,
 }
+
+/// What a Back press does in the player.
+///
+/// On a remote, Back is the only way out of anything, so it peels one layer
+/// at a time. Everywhere else it leaves the player.
+enum BackAction { cancelScrub, hideChrome, pop }
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String mediaId;
@@ -275,9 +290,13 @@ class PlayerScreen extends ConsumerStatefulWidget {
 
     switch (key) {
       case LogicalKeyboardKey.arrowLeft:
-        return ArrowIntent.seekBackward;
+        return directionalPrimary
+            ? ArrowIntent.scrubBackward
+            : ArrowIntent.seekBackward;
       case LogicalKeyboardKey.arrowRight:
-        return ArrowIntent.seekForward;
+        return directionalPrimary
+            ? ArrowIntent.scrubForward
+            : ArrowIntent.seekForward;
       case LogicalKeyboardKey.arrowUp:
         return directionalPrimary
             ? ArrowIntent.revealChrome
@@ -289,6 +308,23 @@ class PlayerScreen extends ConsumerStatefulWidget {
       default:
         return ArrowIntent.traverse;
     }
+  }
+
+  /// Resolves a Back press for this input tier and state.
+  ///
+  /// Pure and exposed for testing, like [resolveArrowIntent]. Cancelling a
+  /// scrub comes before hiding the OSD: the viewer is looking at the cursor,
+  /// and Back meaning "never mind" is what every television player does.
+  @visibleForTesting
+  static BackAction resolveBackAction({
+    required bool directionalPrimary,
+    required bool scrubActive,
+    required bool chromeBlocksBack,
+  }) {
+    if (!directionalPrimary) return BackAction.pop;
+    if (scrubActive) return BackAction.cancelScrub;
+    if (chromeBlocksBack) return BackAction.hideChrome;
+    return BackAction.pop;
   }
 }
 
@@ -762,6 +798,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// the key handler that reveals the chrome lives here and is the only caller
   /// that needs to move focus into it.
   final FocusNode _osdPlayPauseFocus = FocusNode(debugLabel: 'osd-play-pause');
+
+  /// Focus target for the OSD's scrub bar on the remote tier. Owned here for
+  /// the same reason as [_osdPlayPauseFocus]: the key handler that starts a
+  /// scrub from a hidden OSD is the caller that moves focus onto it.
+  final FocusNode _scrubberFocus = FocusNode(debugLabel: 'osd-scrubber');
+
+  /// D-pad scrub state. Reads the live player and timeline on every call,
+  /// so it survives player re-initialisation and source switches without
+  /// being rebuilt.
+  late final ScrubController _scrub = ScrubController(
+    position: () {
+      final player = _player;
+      return player == null
+          ? Duration.zero
+          : _timeline.toReal(player.state.position);
+    },
+    duration: () {
+      final player = _player;
+      return player == null
+          ? Duration.zero
+          : _timeline.resolveDuration(player.state.duration);
+    },
+    onCommit: seekToReal,
+  );
+
+  /// Trickplay frames for the scrub bubble, for the file that is playing.
+  /// Null over p2p and off the remote tier; see [_attachScrubThumbnails].
+  ScrubThumbnails? _scrubThumbnails;
 
   /// Wraps the whole OSD so the screen can ask "is focus anywhere in the
   /// chrome?" rather than "is it on play/pause?".
@@ -1426,6 +1490,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _memory = memory;
       _serverKey = serverKey;
       _playFileId = playFileId;
+      _attachScrubThumbnails(
+        serverUrl: serverUrl,
+        token: token,
+        fileId: playFileId,
+        isP2PMode: isP2PMode,
+      );
       // After an await: `ref` is only safe while mounted.
       final linkPath = mounted ? _currentLinkPath() : null;
 
@@ -1706,6 +1776,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final player = _player;
     final fileId = _playFileId;
     if (playback == null || player == null || fileId == null) return false;
+
+    // An active scrub must not commit into the stream being replaced. A
+    // settling target survives: when this switch is a seek restart, it is
+    // the very target the restart is heading for.
+    _scrub.cancel();
 
     // Closed from the progress save through the landing, so no subtitle call
     // reaches a player this is replacing. The restore starts only once the
@@ -4473,18 +4548,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     switch (arrow) {
       case ArrowIntent.seekBackward:
-        final currentPosition = _timeline.toReal(player.state.position);
-        final newPosition = currentPosition - const Duration(seconds: 10);
-        seekToReal(newPosition < Duration.zero ? Duration.zero : newPosition);
-        _chromeVisibility.show();
+        _skipBy(const Duration(seconds: -10));
         return KeyEventResult.handled;
 
       case ArrowIntent.seekForward:
-        final currentPosition = _timeline.toReal(player.state.position);
-        final duration = _timeline.resolveDuration(player.state.duration);
-        final newPosition = currentPosition + const Duration(seconds: 10);
-        seekToReal(newPosition > duration ? duration : newPosition);
-        _chromeVisibility.show();
+        _skipBy(const Duration(seconds: 10));
+        return KeyEventResult.handled;
+
+      case ArrowIntent.scrubBackward:
+      case ArrowIntent.scrubForward:
+        final forward = arrow == ArrowIntent.scrubForward;
+        final started = _scrub.step(
+          forward ? ScrubDirection.forward : ScrubDirection.backward,
+          isRepeat: false,
+        );
+        if (started) {
+          _chromeVisibility.show();
+          _scrubberFocus.requestFocus();
+        } else {
+          // Unknown runtime: a cursor has nothing to be a fraction of.
+          _skipBy(Duration(seconds: forward ? 10 : -10));
+        }
         return KeyEventResult.handled;
 
       case ArrowIntent.volumeUp:
@@ -4649,6 +4733,42 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  /// The arrow keys' plain skip: a relative seek, then the OSD.
+  ///
+  /// Clamps to the runtime only when the runtime is known. Clamping against
+  /// an unknown (zero) runtime turned every forward skip into a seek to the
+  /// start, and the scrub fallback above sends exactly that case here.
+  void _skipBy(Duration offset) {
+    final player = _player;
+    if (player == null) return;
+    final duration = _timeline.resolveDuration(player.state.duration);
+    var target = _timeline.toReal(player.state.position) + offset;
+    if (target < Duration.zero) target = Duration.zero;
+    if (duration > Duration.zero && target > duration) target = duration;
+    seekToReal(target);
+    _chromeVisibility.show();
+  }
+
+  /// Points the scrub bubble at [fileId]'s trickplay frames.
+  ///
+  /// Direct HTTP only: the p2p local proxy forwards `/hls`, `/direct` and
+  /// `/download` and nothing else, so over p2p the bubble shows the time
+  /// alone. Remote tier only, the one tier that draws the bubble.
+  void _attachScrubThumbnails({
+    required String serverUrl,
+    required String token,
+    required String fileId,
+    required bool isP2PMode,
+  }) {
+    _scrubThumbnails?.dispose();
+    _scrubThumbnails = null;
+    if (isP2PMode || !InputCapabilities.directionalPrimary) return;
+    _scrubThumbnails = ScrubThumbnails(
+      service: ThumbnailService(serverUrl: serverUrl, authToken: token),
+      fileId: fileId,
+    );
+  }
+
   /// Rebuilds so the chrome's fullscreen icon follows observed state, and so
   /// the button appears and disappears with the route. Cheap: both notifiers
   /// only fire on a real transition.
@@ -4803,6 +4923,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     player?.dispose();
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();
+    _scrub.dispose();
+    _scrubberFocus.dispose();
+    _scrubThumbnails?.dispose();
     _chromeFocusNode.dispose();
     _chromeVisibility.removeListener(_onChromeVisibilityChanged);
     _chromeVisibility.dispose();
@@ -5085,7 +5208,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // would need two back presses to leave the player in all of those states,
     // which is a regression against the behaviour before this screen took a
     // `PopScope` at all. A remote has no gesture to dismiss the OSD with, so
-    // only there does back need to do that job first.
+    // only there does back need to do that job first. An active D-pad scrub
+    // adds a layer in front of that: Back cancels the scrub first (see
+    // resolveBackAction).
     //
     // Wrapped in a `ListenableBuilder` rather than reading the controller
     // once: `_chromeVisibility` changes from deep inside the chrome widget
@@ -5094,14 +5219,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // notification or it goes stale and back either never exits or always
     // does.
     final frame = PlayerScreen.playerFrame(child: body);
+
+    BackAction backAction() => PlayerScreen.resolveBackAction(
+          directionalPrimary: InputCapabilities.directionalPrimary,
+          scrubActive: _scrub.active,
+          chromeBlocksBack: _chromeVisibility.blocksBack,
+        );
+
     return ListenableBuilder(
-      listenable: _chromeVisibility,
+      listenable: Listenable.merge([_chromeVisibility, _scrub]),
       builder: (context, _) => PopScope(
-        canPop: !(InputCapabilities.directionalPrimary &&
-            _chromeVisibility.blocksBack),
+        canPop: backAction() == BackAction.pop,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
-          _chromeVisibility.hide();
+          // Re-resolved rather than captured: state can change between the
+          // build that set `canPop` and the press that reaches here.
+          switch (backAction()) {
+            case BackAction.cancelScrub:
+              _scrub.cancel();
+            case BackAction.hideChrome:
+              _chromeVisibility.hide();
+            case BackAction.pop:
+              break;
+          }
         },
         child: frame,
       ),
@@ -5120,6 +5260,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `_stopStatsCollector` is idempotent, so calling it again here on a
   /// path that already stopped the collector is a no-op.
   Future<void> _disposePlayer() async {
+    _scrub.reset();
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     await _tracksSubscription?.cancel();
@@ -5222,6 +5363,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           chromeVisibility: _chromeVisibility,
           playPauseFocusNode: _osdPlayPauseFocus,
           chromeFocusNode: _chromeFocusNode,
+          // Remote tier only. Elsewhere the bar is pointer-driven and a
+          // cursor controller would only be something else to keep in sync.
+          scrub: InputCapabilities.directionalPrimary ? _scrub : null,
+          scrubberFocusNode: _scrubberFocus,
+          scrubThumbnails: _scrubThumbnails,
           onBack: () {
             if (context.canPop()) {
               context.pop();
