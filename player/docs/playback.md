@@ -243,8 +243,11 @@ and the browser's engine stays the only path there is.
 Two consequences worth knowing. The `httpHeaders` media_kit is given only
 reach the wire on the hls.js path, through its `xhrSetup`; the browser's
 engine drops them and the session rides on the cookie instead. And
-`CodecSupport.prefersNativeHls` still reports what the browser claims, not
-what ends up playing it.
+`CodecSupport.prefersNativeHls` reads the same patched `canPlayType`, so it
+reports the browser's own claim only before `prepareHlsEngine` has run, or in
+a browser where hls.js cannot run. Once the override is in place it answers
+false, which keeps it true to its name: media_kit is no longer reaching for
+the browser's engine.
 
 ## Compatibility
 
