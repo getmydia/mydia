@@ -173,6 +173,18 @@ again; a viewer who never touched subtitles gets no call at all, so mpv keeps
 the defaults it uses on a fresh open. Subtitle picks are ignored while a
 switch is in flight, the same way quality picks are.
 
+
+A subtitle call already on its way when a switch starts, such as the restore
+from the switch before or a pick still fetching its body, waits for the switch
+to finish and then drops itself if the switch superseded it. The switch in turn
+waits for a subtitle call already running before it replaces the file, so
+neither reaches a player that is being disposed (web) or is opening another
+file (native). `SourceSwitchGate` holds both rules. A failed switch supersedes
+nothing, so a pick it held back still lands on the source that stayed. Two
+callers wanting the same subtitle body while it is still fetching share one
+request, so the server extracts it once.
+
+
 The quality picker offers Auto above Original, then the ladder
 `deriveQualityLadder` builds for the source. Auto's subtitle names what it is
 doing right now: `Auto · Direct Play`, `Auto · Original, no re-encoding`, or

@@ -40,6 +40,7 @@ import '../../../core/playback/health_sample.dart';
 import '../../../core/playback/playback_monitor.dart';
 import '../../../core/playback/quality_choice.dart';
 import '../../../core/playback/seek_decision.dart';
+import '../../../core/playback/source_switch_gate.dart';
 import '../../../core/playback/playback_controller.dart';
 import '../../../core/playback/link_path.dart';
 import '../../../core/playback/playback_memory.dart';
@@ -597,6 +598,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
   Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
 
+  /// [_fetchSubtitleBody] calls still running, by server track id, so a
+  /// restore that starts while a pick's fetch is in flight joins it instead
+  /// of asking the server for a second extraction. An entry goes when its
+  /// fetch completes, success or not, so a retry fetches again.
+  final Map<String, Future<SubtitleTrack?>> _subtitleBodyFetches = {};
+
   // Whether current playback is direct play (vs HLS)
   bool _isDirectPlay = false;
 
@@ -615,11 +622,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The last fallback this session, for the panel's Why row.
   StatsFallback? _lastFallback;
 
-  /// Includes the progress save before the controller claims its switch.
-  bool _sourceSwitchInFlight = false;
+  /// Closed for the whole of [_switchSource], including the progress save
+  /// before the controller claims its switch. Subtitle calls pass through
+  /// it, so none reaches a player a switch is replacing; see
+  /// [SourceSwitchGate].
+  final _switchGate = SourceSwitchGate();
 
   bool get _switchingSource =>
-      _sourceSwitchInFlight || _playback?.switching == true;
+      _switchGate.closed || _playback?.switching == true;
 
   /// What is playing now and why. Null until the online branch plans, and
   /// on the offline and downloaded branches, which have nothing to plan.
@@ -1689,8 +1699,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final fileId = _playFileId;
     if (playback == null || player == null || fileId == null) return false;
 
-    _sourceSwitchInFlight = true;
-    try {
+    // Closed from the progress save through the landing, so no subtitle call
+    // reaches a player this is replacing. The restore starts only once the
+    // gate has reopened, since its own calls pass through it.
+    final landed = await _switchGate.closeWhile(() async {
       // Persist where the viewer actually is before the old source goes away.
       await _saveProgress();
       // Read while the old file is still loaded, since an mpv track's stream
@@ -1722,8 +1734,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!mounted || !identical(playback, _playback)) return false;
       _subtitleIntentAcrossSwitch = subtitleIntent;
       if (subtitleIntent != null) {
-        // Supersedes a pick still resolving: its target is the intent just
-        // captured, and applying it to the outgoing file would be lost.
+        // Supersedes a pick or restore still resolving, which is waiting at
+        // the gate for this switch: its target is the intent just captured,
+        // and the restore below applies that to the new file instead.
         _subtitleSelectionGeneration++;
       }
       setState(() {
@@ -1745,11 +1758,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (_subtitleIntentAcrossSwitch != null) _selectedSubtitleTrack = null;
       });
       _startVerification(plan);
-      unawaited(_restoreSubtitleIntent());
       return true;
-    } finally {
-      _sourceSwitchInFlight = false;
-    }
+    });
+    if (landed) unawaited(_restoreSubtitleIntent());
+    return landed;
   }
 
   /// What [_switchSource] carries to the new source: the latest pick,
@@ -1757,7 +1769,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// viewer never chose this playback, so mpv keeps its own defaults.
   ///
   /// An mpv-native pick is translated through its stream index, which has
-  /// to be read now, while the file it belongs to is still loaded.
+  /// to be read now, while the file it belongs to is still loaded. Read
+  /// directly, not through [_switchGate]: this runs inside the switch that
+  /// holds the gate, so a pass would wait for its own switch forever.
   Future<SubtitleIntent?> _captureSubtitleIntent(Player player) async {
     final selected = _pendingSubtitleSelection;
     final mpvId = selected == null ? null : mpvIdOfSubtitleTrack(selected.id);
@@ -1781,16 +1795,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// pick or another switch arriving meanwhile supersedes it cleanly.
   Future<void> _restoreSubtitleIntent() async {
     final intent = _subtitleIntentAcrossSwitch;
-    final player = _player;
-    if (intent == null || player == null || !mounted) return;
+    if (intent == null || _player == null || !mounted) return;
 
     // A viewer pick or a newer switch during the read below bumps this and
     // then owns the choice.
     final token = _subtitleSelectionGeneration;
-    final indices = _isDirectPlay
-        ? await subtitleStreamIndices(player)
-        : const <String, int>{};
-    if (!mounted || token != _subtitleSelectionGeneration) return;
+    bool stillCurrent() =>
+        mounted && token == _subtitleSelectionGeneration && _player != null;
+
+    var indices = const <String, int>{};
+    if (_isDirectPlay) {
+      // Through the gate: a stream index has to come from the file this
+      // restore is for, not from one a newer switch is opening.
+      final read = await _switchGate.pass(stillCurrent, () async {
+        final player = _player;
+        if (player != null) indices = await subtitleStreamIndices(player);
+      });
+      if (!read) return;
+    }
+    if (!stillCurrent()) return;
 
     final restore = resolveSubtitleIntent(
       intent: intent,
@@ -3552,10 +3575,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Switches the subtitle track, noting the switch first; see
   /// [_setAudioTrack].
-  Future<void> _setSubtitleTrack(Player player, SubtitleTrack track) {
-    _monitor?.noteInterruption();
-    return player.setSubtitleTrack(track);
-  }
+  ///
+  /// Goes through [_switchGate], so it never reaches a player a switch is
+  /// replacing, and returns whether it ran: false when the selection issued
+  /// under [generation] was superseded while it waited (see
+  /// [_canApplySubtitleSelection]). Reads `_player` only once let through,
+  /// since a web switch replaces the player.
+  Future<bool> _setSubtitleTrack(int generation, SubtitleTrack track) =>
+      _switchGate.pass(() => _canApplySubtitleSelection(generation), () {
+        final player = _player;
+        if (player == null) return Future<void>.value();
+        _monitor?.noteInterruption();
+        return player.setSubtitleTrack(track);
+      });
 
   /// Refreshes everything that reflects watched state. Deliberately not called
   /// from the 10-second progress sync: that would refetch Home hundreds of
@@ -3746,16 +3778,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // besides, recomputing the same value from the same inputs, so running
     // it a second time on an exit that already called it changes nothing.
     try {
-      final player = _player;
-      if (player == null) {
+      if (_player == null) {
         _resetPendingSubtitleSelection(generation);
         return generation;
       }
 
       if (selected == null) {
-        // "Off" - disable subtitles
-        await _setSubtitleTrack(player, SubtitleTrack.no());
-        if (!_canApplySubtitleSelection(generation)) {
+        // "Off" - disable subtitles. Nothing was sent when this was
+        // superseded while waiting at the gate for a switch.
+        if (!await _setSubtitleTrack(generation, SubtitleTrack.no()) ||
+            !_canApplySubtitleSelection(generation)) {
           _resetPendingSubtitleSelection(generation);
           return generation;
         }
@@ -3832,33 +3864,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return generation;
       }
 
-      // Captured fresh here, not reused from `player` above: that capture
-      // happened before the fetch's `await`, and `_restartLocalPlayback`
-      // and a web source switch clear `_player` (without unmounting the
-      // screen) while a fetch can still be in flight, so `player` could be
-      // stale by now.
+      // `_setSubtitleTrack` reads `_player` itself once the gate lets it
+      // through: `_restartLocalPlayback` and a web source switch replace it
+      // while a fetch can still be in flight. Nothing was sent when this
+      // was superseded while waiting for a switch.
       //
-      // `_canApplySubtitleSelection` just confirmed `_player != null` and
-      // nothing async has run since, so this cannot actually be null — but
-      // `_player` is a mutable field, and Dart's flow analysis does not
-      // promote non-null across a helper call the way it would a local
-      // variable, so the null check still has to be spelled out here rather
-      // than written as `_player!`.
-      final currentPlayer = _player;
-      if (currentPlayer == null) {
-        _resetPendingSubtitleSelection(generation);
-        return generation;
-      }
-
-      await _setSubtitleTrack(currentPlayer, mkTrack);
-
-      // Re-checked again, not only before this await: dispose() or
+      // Re-checked after the set as well: dispose() or
       // _restartLocalPlayback landing during *this specific* call is exactly
       // as possible as during the fetch above, and `setState` after unmount
-      // throws just as surely as calling into a disposed `Player` does. This
-      // is the check that was missing entirely before this fix — see the
-      // dartdoc above.
-      if (!_canApplySubtitleSelection(generation)) {
+      // throws just as surely as calling into a disposed `Player` does.
+      if (!await _setSubtitleTrack(generation, mkTrack) ||
+          !_canApplySubtitleSelection(generation)) {
         _resetPendingSubtitleSelection(generation);
         return generation;
       }
@@ -4100,12 +4116,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The result is cached in [_mediaKitSubtitleTrackMap] so re-selecting the
   /// same track later in the same session (or the sync in
   /// [_showSubtitleSelector] finding it already selected) does not refetch.
+  ///
+  /// Two callers wanting the same body while it is still fetching share one
+  /// request; see [_subtitleBodyFetches].
   Future<SubtitleTrack?> _resolveMediaKitSubtitleTrack(
     app_models.SubtitleTrack track,
-  ) async {
+  ) {
     final cached = _mediaKitSubtitleTrackMap[track.id];
-    if (cached != null) return cached;
+    if (cached != null) return Future.value(cached);
+    return _subtitleBodyFetches[track.id] ??=
+        _fetchSubtitleBody(track).whenComplete(() {
+      _subtitleBodyFetches.remove(track.id);
+    });
+  }
 
+  /// Fetches [track]'s body over GraphQL and caches it in
+  /// [_mediaKitSubtitleTrackMap]. Null on any failure, never throws. Called
+  /// only from [_resolveMediaKitSubtitleTrack].
+  Future<SubtitleTrack?> _fetchSubtitleBody(
+    app_models.SubtitleTrack track,
+  ) async {
     try {
       final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
       final result = await graphqlClient.query(

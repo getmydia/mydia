@@ -87,12 +87,18 @@ class _Decoder extends PlatformPlayer {
 
   int get subtitleTrackCalls => subtitleTracks.length;
 
+  /// When set, [setSubtitleTrack] records its track and then does not
+  /// return until this completes, so a test can start a switch while a set
+  /// is still running.
+  Completer<void>? holdSubtitleTrack;
+
   /// Accepts the switch and emits nothing on `trackController`. That is how
   /// a switch looks to the monitor when media_kit's own track event arrives
   /// after mpv has already started rebuffering.
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {
     subtitleTracks.add(track);
+    await holdSubtitleTrack?.future;
   }
 
   /// `errorController` is `@protected` on `PlatformPlayer`: only reachable
@@ -113,27 +119,49 @@ class _Decoder extends PlatformPlayer {
 /// A small WebVTT body, returned for any `SubtitleContent` request.
 const _vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello\n';
 
-/// Holds `SubtitleContent` until [gate] completes, so a test can unmount the
-/// player while the loading toast is still up.
-class _GatedSubtitleContentLink extends StubLink {
-  _GatedSubtitleContentLink(super.handler, this.gate);
+/// A [StubLink] that can hold `SubtitleContent` until [holdSubtitleContent]
+/// completes, and every `startStreamingSession` after the first (a switch's)
+/// until [holdSwitchStart] completes, so a test can pin how a subtitle
+/// fetch and a switch interleave.
+class _GatedLink extends StubLink {
+  _GatedLink(
+    super.handler, {
+    this.holdSubtitleContent,
+    this.holdSwitchStart,
+  });
 
-  final Completer<void> gate;
+  final Completer<void>? holdSubtitleContent;
+  final Completer<void>? holdSwitchStart;
+
+  /// `SubtitleContent` requests that have reached this link, held or not.
+  /// [requests] only records a request once its hold is released.
+  int subtitleContentSeen = 0;
+
+  /// `startStreamingSession` requests that have reached this link, held or
+  /// not. The first is the initial playback's.
+  int sessionStartsSeen = 0;
 
   @override
   Stream<Response> request(Request request, [NextLink? forward]) async* {
     if (request.operation.document == documentNodeQuerySubtitleContent) {
-      await gate.future;
+      subtitleContentSeen++;
+      await holdSubtitleContent?.future;
+    } else if (request.variables.containsKey('strategy')) {
+      sessionStartsSeen++;
+      if (sessionStartsSeen > 1) await holdSwitchStart?.future;
     }
     yield* super.request(request, forward);
   }
 }
 
-StubLink _server({
+_GatedLink _server({
   required bool directPlay,
   bool withSubtitle = false,
   Completer<void>? holdSubtitleContent,
+  Completer<void>? holdSwitchStart,
+  bool failSwitchStart = false,
 }) {
+  var sessionStarts = 0;
   Object handler(Request request, int index) {
     if (request.operation.document == documentNodeQuerySubtitleContent) {
       return {'__typename': 'RootQueryType', 'subtitleContent': _vtt};
@@ -156,6 +184,10 @@ StubLink _server({
     }
     final variables = request.variables;
     if (variables.containsKey('strategy')) {
+      sessionStarts++;
+      if (failSwitchStart && sessionStarts > 1) {
+        return graphqlErrorResponse('Could not start the encoder');
+      }
       return startStreamingSessionResponse(
         sessionId: 'sess-$index',
         startPosition: variables['startPosition'] as int? ?? 0,
@@ -171,8 +203,11 @@ StubLink _server({
     };
   }
 
-  if (holdSubtitleContent == null) return StubLink(handler);
-  return _GatedSubtitleContentLink(handler, holdSubtitleContent);
+  return _GatedLink(
+    handler,
+    holdSubtitleContent: holdSubtitleContent,
+    holdSwitchStart: holdSwitchStart,
+  );
 }
 
 Future<void> _mount(
@@ -208,38 +243,55 @@ Future<void> _mount(
 Future<void> _tick(WidgetTester tester) =>
     tester.pump(const Duration(seconds: 1));
 
-/// Seeks past the transcoded window, which switches sources the same way a
-/// quality change or a fallback does, and waits until the switch lands.
+/// End-session requests so far. `_landSwitch` waits for one more: a switch
+/// ends the old session only once the new source has advanced.
+int _endSessionRequests(StubLink link) =>
+    link.requests.where((r) => r.variables.containsKey('sessionId')).length;
+
+/// Seeks to [to], past the transcoded window, which switches sources the
+/// same way a quality change or a fallback does, and waits until the switch
+/// lands.
+Future<void> _switchAndLand(
+  WidgetTester tester,
+  RemotePlayerBinding binding,
+  _Decoder decoder,
+  StubLink link, {
+  Duration to = const Duration(seconds: 600),
+}) async {
+  final opensBefore = decoder.opened.length;
+  final endsBefore = _endSessionRequests(link);
+  final switchFuture = binding.seek(to);
+  await pumpUntil(tester, () => decoder.opened.length == opensBefore + 1);
+  expect(decoder.opened, hasLength(opensBefore + 1),
+      reason: 'the seek must have switched sources');
+  await _landSwitch(tester, decoder, link, switchFuture,
+      endsBefore: endsBefore);
+}
+
+/// Lands a switch whose new source is already open on [decoder].
 ///
 /// Two increasing positions, because `_awaitFirstAdvance` takes the first
 /// value it sees as the baseline and waits for one past it. The `runAsync`
 /// nudge is the same one "a fault on the incoming source during a switch is
 /// forgotten once the switch lands" needs: the switch's mutations go through
 /// real `dart:io` HTTP mocking, which plain pumps do not fully resolve.
-Future<void> _switchAndLand(
+Future<void> _landSwitch(
   WidgetTester tester,
-  RemotePlayerBinding binding,
   _Decoder decoder,
   StubLink link,
-) async {
-  final opensBefore = decoder.opened.length;
-  var switchCompleted = false;
-  final switchFuture = binding
-      .seek(const Duration(seconds: 600))
-      .whenComplete(() => switchCompleted = true);
-  await pumpUntil(tester, () => decoder.opened.length == opensBefore + 1);
-  expect(decoder.opened, hasLength(opensBefore + 1),
-      reason: 'the seek must have switched sources');
-
+  Future<void> switchFuture, {
+  required int endsBefore,
+}) async {
+  var completed = false;
+  final tracked = switchFuture.whenComplete(() => completed = true);
   decoder.advance(const Duration(seconds: 1));
   await tester.pump();
   decoder.advance(const Duration(seconds: 2));
   await tester.pump();
-  await pumpUntil(tester,
-      () => link.requests.any((r) => r.variables.containsKey('sessionId')));
+  await pumpUntil(tester, () => _endSessionRequests(link) > endsBefore);
   await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-  await pumpUntil(tester, () => switchCompleted);
-  await switchFuture;
+  await pumpUntil(tester, () => completed);
+  await tracked;
 }
 
 void main() {
@@ -733,10 +785,12 @@ void main() {
   });
 
   group('the subtitle choice across a source switch', () {
-    Future<(RemotePlayerBinding, _Decoder, StubLink)> mountStreaming(
+    Future<(RemotePlayerBinding, _Decoder, _GatedLink)> mountStreaming(
       WidgetTester tester, {
       bool withSubtitle = false,
       Completer<void>? holdSubtitleContent,
+      Completer<void>? holdSwitchStart,
+      bool failSwitchStart = false,
       ValueNotifier<bool>? playerVisible,
     }) async {
       final decoder = _Decoder();
@@ -744,6 +798,8 @@ void main() {
         directPlay: false,
         withSubtitle: withSubtitle,
         holdSubtitleContent: holdSubtitleContent,
+        holdSwitchStart: holdSwitchStart,
+        failSwitchStart: failSwitchStart,
       );
       final container = buildPlayerScreenContainer(
         link: link,
@@ -875,6 +931,181 @@ void main() {
         // Forcing Off here would hide a forced or default track mpv shows
         // on a fresh open at Original.
         expect(decoder.subtitleTracks, isEmpty);
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+    testWidgets(
+        'a restore still fetching when a second switch starts never reaches '
+        'the outgoing source', (tester) async {
+      await mockHttpResponse(() async {
+        final body = Completer<void>();
+        addTearDown(() {
+          if (!body.isCompleted) body.complete();
+        });
+        final (binding, decoder, link) = await mountStreaming(
+          tester,
+          withSubtitle: true,
+          holdSubtitleContent: body,
+        );
+
+        // The pick's body is held, so switch 1 lands with it still fetching
+        // and restore 1 has to wait for a body too.
+        unawaited(binding.selectTrack(TrackKind.subtitle, '3'));
+        await pumpUntil(tester, () => link.subtitleContentSeen == 1);
+        await _switchAndLand(tester, binding, decoder, link);
+        expect(decoder.subtitleTracks, isEmpty);
+
+        final opensBefore = decoder.opened.length;
+        final endsBefore = _endSessionRequests(link);
+        final second = binding.seek(const Duration(seconds: 1800));
+        await pumpUntil(tester, () => decoder.opened.length == opensBefore + 1);
+        expect(decoder.opened, hasLength(opensBefore + 1),
+            reason: 'the second seek must have switched sources');
+
+        // Switch 2 has opened its file and not landed: the body arriving
+        // now must not reach the player.
+        body.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(decoder.subtitleTracks, isEmpty,
+            reason: 'restore 1 waits for switch 2 instead of calling '
+                'setSubtitleTrack while the file is being replaced');
+
+        await _landSwitch(tester, decoder, link, second,
+            endsBefore: endsBefore);
+        await pumpUntil(tester, () => decoder.subtitleTracks.isNotEmpty);
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(decoder.subtitleTracks, hasLength(1),
+            reason: 'restore 1 backs off once switch 2 lands, and restore 2 '
+                'applies the choice once');
+        expect(decoder.subtitleTracks.single.data, isTrue);
+        expect(binding.describe(0).selectedSubtitle, '3');
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+
+    testWidgets(
+        'a subtitle call already running holds the switch until it returns',
+        (tester) async {
+      await mockHttpResponse(() async {
+        final (binding, decoder, link) = await mountStreaming(tester);
+        final set = Completer<void>();
+        addTearDown(() {
+          if (!set.isCompleted) set.complete();
+        });
+        decoder.holdSubtitleTrack = set;
+
+        unawaited(binding.selectTrack(TrackKind.subtitle, null));
+        await pumpUntil(tester, () => decoder.subtitleTracks.isNotEmpty);
+        expect(decoder.subtitleTracks.single, SubtitleTrack.no());
+
+        final opensBefore = decoder.opened.length;
+        final endsBefore = _endSessionRequests(link);
+        final switchFuture = binding.seek(const Duration(seconds: 600));
+        await pumpUntil(tester, () => decoder.opened.length > opensBefore);
+        expect(decoder.opened, hasLength(opensBefore),
+            reason: 'the switch must not replace the file while '
+                'setSubtitleTrack is still running on it');
+
+        set.complete();
+        await pumpUntil(tester, () => decoder.opened.length > opensBefore);
+        expect(decoder.opened, hasLength(opensBefore + 1));
+
+        await _landSwitch(tester, decoder, link, switchFuture,
+            endsBefore: endsBefore);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+
+    testWidgets(
+        'a pick waiting on a switch that fails still applies to the source '
+        'that stayed', (tester) async {
+      await mockHttpResponse(() async {
+        final body = Completer<void>();
+        final switchStart = Completer<void>();
+        addTearDown(() {
+          if (!body.isCompleted) body.complete();
+          if (!switchStart.isCompleted) switchStart.complete();
+        });
+        final (binding, decoder, link) = await mountStreaming(
+          tester,
+          withSubtitle: true,
+          holdSubtitleContent: body,
+          holdSwitchStart: switchStart,
+          failSwitchStart: true,
+        );
+
+        unawaited(binding.selectTrack(TrackKind.subtitle, '3'));
+        await pumpUntil(tester, () => link.subtitleContentSeen == 1);
+
+        final opensBefore = decoder.opened.length;
+        var switchDone = false;
+        unawaited(binding
+            .seek(const Duration(seconds: 600))
+            .whenComplete(() => switchDone = true));
+        await pumpUntil(tester, () => link.sessionStartsSeen == 2);
+
+        // The body arrives while the switch waits on its session start.
+        body.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(decoder.subtitleTracks, isEmpty,
+            reason: 'the pick waits at the gate while the switch is in '
+                'flight');
+
+        switchStart.complete();
+        await pumpUntil(tester, () => switchDone);
+        await pumpUntil(tester, () => decoder.subtitleTracks.isNotEmpty);
+
+        expect(decoder.opened, hasLength(opensBefore),
+            reason: 'the failed switch never attached a new source');
+        expect(decoder.subtitleTracks, hasLength(1));
+        expect(decoder.subtitleTracks.single.data, isTrue);
+        expect(binding.describe(0).selectedSubtitle, '3',
+            reason: 'a failed switch bumps no generation, so the pick it '
+                'held back lands on the source still playing');
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+
+    testWidgets(
+        'a restore that starts while the pick\'s body is still fetching '
+        'shares that fetch', (tester) async {
+      await mockHttpResponse(() async {
+        final body = Completer<void>();
+        addTearDown(() {
+          if (!body.isCompleted) body.complete();
+        });
+        final (binding, decoder, link) = await mountStreaming(
+          tester,
+          withSubtitle: true,
+          holdSubtitleContent: body,
+        );
+
+        unawaited(binding.selectTrack(TrackKind.subtitle, '3'));
+        await pumpUntil(tester, () => link.subtitleContentSeen == 1);
+        await _switchAndLand(tester, binding, decoder, link);
+        // Room for the restore to reach the link, if it asks on its own.
+        await pumpUntil(tester, () => link.subtitleContentSeen > 1,
+            maxTries: 10);
+
+        body.complete();
+        await pumpUntil(tester, () => decoder.subtitleTracks.isNotEmpty);
+        await tester.pump(const Duration(milliseconds: 250));
+
+        expect(link.subtitleContentSeen, 1,
+            reason: 'the restore joins the fetch the pick started instead of '
+                'asking the server to extract the same body again');
+        expect(decoder.subtitleTracks, hasLength(1));
+        expect(binding.describe(0).selectedSubtitle, '3');
 
         await tester.pumpWidget(const SizedBox());
         await tester.pump();
