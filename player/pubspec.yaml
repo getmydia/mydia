@@ -20,7 +20,7 @@ environment:
   # .fvmrc patch, because patches of one minor pin the same packages.
   # ci-nix.yml's "Check / Flutter Pin" job requires exactly
   # `>=<minor>.0 <<next minor>.0` for the .fvmrc minor: bump it with .fvmrc.
-  flutter: '>=3.44.0 <3.45.0'
+  flutter: '>=3.47.0 <3.48.0'
 
 dependencies:
   flutter:
