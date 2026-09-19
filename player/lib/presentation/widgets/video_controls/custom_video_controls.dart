@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../../core/player/scrub_controller.dart';
+import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/stream_timeline.dart';
 import 'playback_chrome.dart';
 
@@ -41,12 +43,18 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
   ChromeVisibilityController? chromeVisibility,
   FocusNode? playPauseFocusNode,
   FocusNode? chromeFocusNode,
+  ScrubController? scrub,
+  FocusNode? scrubberFocusNode,
+  ScrubThumbnails? scrubThumbnails,
 }) {
   return (VideoState state) => PlaybackChrome(
         player: state.widget.controller.player,
         chromeVisibility: chromeVisibility,
         playPauseFocusNode: playPauseFocusNode,
         chromeFocusNode: chromeFocusNode,
+        scrub: scrub,
+        scrubberFocusNode: scrubberFocusNode,
+        scrubThumbnails: scrubThumbnails,
         timeline: timeline,
         onSeekToReal: onSeekToReal,
         title: title,
