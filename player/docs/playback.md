@@ -168,7 +168,7 @@ sidecar comes back from the body already fetched. An embedded stream is
 matched across Original and a transcode by its ffprobe stream index, which is
 both the server's track id and mpv's `ff-index`, with the language tags as a
 cross-check. An image track (PGS, VobSub) cannot be delivered in a transcode,
-so subtitles turn off with a snackbar saying so. An explicit Off is applied
+so subtitles turn off with a toast saying so. An explicit Off is applied
 again; a viewer who never touched subtitles gets no call at all, so mpv keeps
 the defaults it uses on a fresh open. Subtitle picks are ignored while a
 switch is in flight, the same way quality picks are.

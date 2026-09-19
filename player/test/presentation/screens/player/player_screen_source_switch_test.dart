@@ -451,7 +451,7 @@ void main() {
 
       expect(find.textContaining('Playback failed'), findsOneWidget);
       expect(find.textContaining('Switched to transcoding'), findsNothing,
-          reason: 'a deferred-then-dropped fallback is the bug: no snackbar '
+          reason: 'a deferred-then-dropped fallback is the bug: no toast '
               'means the fault was not silently swallowed');
 
       await tester.pumpWidget(const SizedBox());

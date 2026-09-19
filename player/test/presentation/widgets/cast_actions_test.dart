@@ -446,7 +446,7 @@ void main() {
     testWidgets('still explains the failure when no remedy is offered',
         (tester) async {
       // The message must survive the button being withheld, otherwise an
-      // Android user gets a bare snackbar with nothing actionable at all.
+      // Android user gets a bare toast with nothing actionable at all.
       await pumpAndShow(
         tester,
         CastFailureKind.discoveryDenied,

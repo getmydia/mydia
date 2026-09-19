@@ -548,7 +548,7 @@ void main() {
       // it, and the viewer taps T1 again. Before this fix, the second tap
       // compared its target against a pending value the first attempt
       // never cleared and was silently swallowed -- no fetch, no log, no
-      // snackbar, despite a snackbar having just told the viewer to retry.
+      // toast, despite a toast having just told the viewer to retry.
       const generation = 1;
 
       // 1. T1 requested: pending becomes T1 (mirrors
