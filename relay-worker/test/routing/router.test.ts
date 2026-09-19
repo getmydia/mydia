@@ -2,7 +2,12 @@ import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { fetchMock } from "../support/fetch-mock";
 import { app } from "../../src/index";
-import { ROUTING_CONFIG_KEY } from "../../src/routing/config";
+import {
+  loadRoutingConfig,
+  resetRoutingConfigMemo,
+  ROUTING_CONFIG_KEY,
+  ROUTING_CONFIG_MEMO_MS,
+} from "../../src/routing/config";
 import { BACKEND_HEADER, routeRequest, splitBucket, type WorkerHandler } from "../../src/routing/router";
 import type { Env } from "../../src/env";
 
@@ -13,6 +18,7 @@ const routedEnv: Env = { ...env, TRAFFIC_HOSTNAME: HOST, TRAFFIC_ORIGIN: ORIGIN 
 
 async function setConfig(config: unknown): Promise<void> {
   await env.CACHE_KV.put(ROUTING_CONFIG_KEY, JSON.stringify(config));
+  resetRoutingConfigMemo();
 }
 
 function workerReplying(body: unknown, status = 200): ReturnType<typeof vi.fn<WorkerHandler>> {
@@ -52,9 +58,72 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await env.CACHE_KV.delete(ROUTING_CONFIG_KEY);
+  resetRoutingConfigMemo();
 });
 
 afterEach(() => fetchMock.assertNoPendingInterceptors());
+
+describe("loadRoutingConfig", () => {
+  // KV bills every get(), cached or not, so a read per request spent the free
+  // plan's daily allowance on bursts of TVDB traffic.
+  function countingEnv(get: () => Promise<string | null>): { env: Env; reads: () => number } {
+    let reads = 0;
+    const kv = {
+      get: async () => {
+        reads++;
+        return get();
+      },
+    } as unknown as KVNamespace;
+    return { env: { ...routedEnv, CACHE_KV: kv }, reads: () => reads };
+  }
+
+  it("reads KV once per window, however many requests arrive in it", async () => {
+    const t0 = 1_000_000;
+    const counted = countingEnv(async () => JSON.stringify({ groups: { tmdb: "worker" } }));
+
+    for (let i = 0; i < 50; i++) {
+      const config = await loadRoutingConfig(counted.env, t0 + i * 100);
+      expect(config.modes.tmdb).toEqual({ kind: "worker" });
+    }
+    expect(counted.reads()).toBe(1);
+  });
+
+  it("picks up a changed config once the window has passed", async () => {
+    const t0 = 1_000_000;
+    await setConfig({ groups: { tmdb: "worker" } });
+    expect((await loadRoutingConfig(routedEnv, t0)).modes.tmdb).toEqual({ kind: "worker" });
+
+    // Written behind the memo's back, as `wrangler kv key put` would be.
+    await env.CACHE_KV.put(ROUTING_CONFIG_KEY, JSON.stringify({ groups: { tmdb: "origin" } }));
+
+    expect((await loadRoutingConfig(routedEnv, t0 + ROUTING_CONFIG_MEMO_MS - 1)).modes.tmdb).toEqual({
+      kind: "worker",
+    });
+    expect((await loadRoutingConfig(routedEnv, t0 + ROUTING_CONFIG_MEMO_MS)).modes.tmdb).toEqual({
+      kind: "origin",
+    });
+  });
+
+  it("holds a failed read for the window too, sending everything to origin", async () => {
+    const t0 = 1_000_000;
+    const counted = countingEnv(async () => {
+      throw new Error("KV GET failed: 429 Too Many Requests");
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      for (let i = 0; i < 10; i++) {
+        const config = await loadRoutingConfig(counted.env, t0 + i * 100);
+        expect(config.modes.tvdb).toEqual({ kind: "origin" });
+      }
+      expect(counted.reads()).toBe(1);
+
+      await loadRoutingConfig(counted.env, t0 + ROUTING_CONFIG_MEMO_MS);
+      expect(counted.reads()).toBe(2);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
 
 describe("hostname gate", () => {
   it("lets the Worker answer everything when TRAFFIC_HOSTNAME is unset", async () => {

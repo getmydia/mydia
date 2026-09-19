@@ -1,10 +1,12 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { fetchMock } from "../support/fetch-mock";
+import { resetTvdbTokenMemo } from "../../src/proxy/tvdb-auth";
 
 beforeAll(async () => {
   fetchMock.activate();
   fetchMock.disableNetConnect();
+  resetTvdbTokenMemo();
   // Pre-seed a valid token so route tests do not each need a login interceptor.
   await env.CACHE_KV.put(
     "tvdb:jwt",
@@ -212,6 +214,7 @@ describe("TVDB routes", () => {
 
   it("maps a login failure to 502 rather than passing it off as a metadata error", async () => {
     await env.CACHE_KV.delete("tvdb:jwt");
+    resetTvdbTokenMemo();
     fetchMock
       .get("https://api4.thetvdb.com")
       .intercept({ method: "POST", path: "/v4/login" })
