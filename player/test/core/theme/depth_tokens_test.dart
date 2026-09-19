@@ -163,6 +163,55 @@ void main() {
     });
   });
 
+  group('OSD material', () {
+    test('fill is the neutral background tint at 0.85', () {
+      expect(DepthTokens.osdTint, AppColors.background);
+      expect(DepthTokens.osdFillOpacity, 0.85);
+      expect(
+        DepthTokens.osdFillOpacity,
+        greaterThan(DepthTokens.chromeFillOpacity),
+      );
+    });
+
+    test('tint is neutral, so it does not drain colour from the video', () {
+      final t = DepthTokens.osdTint;
+      const tolerance = 2 / 255;
+      expect((t.b - t.r).abs(), lessThanOrEqualTo(tolerance));
+      expect((t.g - t.r).abs(), lessThanOrEqualTo(tolerance));
+    });
+
+    test('blurs at sigma 20', () {
+      expect(DepthTokens.osdBlurSigma, 20.0);
+    });
+
+    test('hairline and divider are faint white', () {
+      expect(DepthTokens.osdHairline, const Color(0x1AFFFFFF));
+      expect(DepthTokens.osdDivider, const Color(0x14FFFFFF));
+    });
+
+    test('the pill shadow is smaller and lighter than the panel shadow', () {
+      final panel = DepthTokens.osdShadowPanel.single;
+      final pill = DepthTokens.osdShadowPill.single;
+      expect(panel.blurRadius, 36);
+      expect(panel.offset, const Offset(0, 10));
+      expect(pill.blurRadius, lessThan(panel.blurRadius));
+      expect(pill.color.a, lessThan(panel.color.a));
+      expect(pill.offset.dy, lessThan(panel.offset.dy));
+    });
+
+    test('OsdElevation maps onto the shadow tokens', () {
+      expect(OsdElevation.panel.shadows, DepthTokens.osdShadowPanel);
+      expect(OsdElevation.pill.shadows, DepthTokens.osdShadowPill);
+      expect(OsdElevation.none.shadows, isEmpty);
+    });
+
+    test('exposes panel, pill and sheet radii', () {
+      expect(DepthTokens.radiusOsdPanel, 16.0);
+      expect(DepthTokens.radiusOsdPill, 18.0);
+      expect(DepthTokens.radiusOsdSheet, 20.0);
+    });
+  });
+
   group('motion (R11)', () {
     test('exposes durations and curves', () {
       expect(DepthTokens.motionFast, isA<Duration>());

@@ -384,4 +384,76 @@ abstract final class DepthTokens {
   /// Small on purpose. Wide enough and this stops reading as an edge and
   /// starts reading as elevation, which is [chrome]'s job, not this one's.
   static const double playerChromeEdgeShadowSigma = 2.0;
+
+  // ---------------------------------------------------------------------------
+  // OSD material
+  //
+  // The one material every on-screen-display surface uses: the playback
+  // panel, the top-bar pills, up next, skip segment, the stats panel, and the
+  // pickers opened from them. A dense dark card over a light frost, with a
+  // uniform hairline and a soft drop shadow, identical on every platform.
+  //
+  // The fill alone carries legibility. Over a pure-white frame it composites
+  // to ~#303030, where textSecondary measures ~4.6:1 (at 0.80 it would be
+  // ~3.8:1). `osd_legibility_test.dart` computes this from these tokens.
+  // ---------------------------------------------------------------------------
+
+  /// Tint of the OSD fill.
+  static const Color osdTint = AppColors.background;
+
+  /// Opacity of the OSD fill.
+  static const double osdFillOpacity = 0.85;
+
+  /// Backdrop blur sigma. Light on purpose: the fill does the legibility
+  /// work, and the blur only turns the ~15% of video that shows through into
+  /// soft colour instead of faint detail.
+  static const double osdBlurSigma = 20.0;
+
+  /// Uniform hairline around every OSD surface (white @ ~0.10).
+  static const Color osdHairline = Color(0x1AFFFFFF);
+
+  /// Divider between sections inside an OSD surface (white @ ~0.08).
+  static const Color osdDivider = Color(0x14FFFFFF);
+
+  /// Elevation for panel-sized OSD surfaces: the control panel, up next, the
+  /// stats panel and dialogs.
+  static const List<BoxShadow> osdShadowPanel = <BoxShadow>[
+    BoxShadow(
+      color: Color(0x80000000), // black @ ~0.50
+      blurRadius: 36,
+      offset: Offset(0, 10),
+    ),
+  ];
+
+  /// Elevation for OSD pills (36-44px tall). The panel shadow would put a
+  /// dark cloud around something this small.
+  static const List<BoxShadow> osdShadowPill = <BoxShadow>[
+    BoxShadow(
+      color: Color(0x59000000), // black @ ~0.35
+      blurRadius: 16,
+      offset: Offset(0, 4),
+    ),
+  ];
+
+  /// Corner radius for panel-sized OSD surfaces.
+  static const double radiusOsdPanel = 16.0;
+
+  /// Corner radius for OSD pills, fully rounded at the 36px default height.
+  static const double radiusOsdPill = 18.0;
+
+  /// Corner radius for OSD bottom sheets (top corners) and dialogs.
+  static const double radiusOsdSheet = 20.0;
+}
+
+/// How far an OSD surface lifts off the video.
+enum OsdElevation {
+  panel(DepthTokens.osdShadowPanel),
+  pill(DepthTokens.osdShadowPill),
+
+  /// Bottom sheets: the modal barrier already separates them from the video.
+  none(<BoxShadow>[]);
+
+  const OsdElevation(this.shadows);
+
+  final List<BoxShadow> shadows;
 }
