@@ -179,6 +179,9 @@ class GlassSurface extends StatelessWidget {
   /// The shadow sits outside the clip and also beneath the translucent fill,
   /// so it darkens the video the blur samples. That is part of the look;
   /// `osd_legibility_test.dart` does not count on it.
+  ///
+  /// On web the video is an `HtmlElementView`, and this blur does not reach
+  /// it: web renders the unblurred card. Verified in Chromium on 2026-09-19.
   GlassSurface.osd({
     Key? key,
     BorderRadius? borderRadius,
