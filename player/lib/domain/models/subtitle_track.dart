@@ -33,8 +33,11 @@ class SubtitleTrack {
   /// here in `fromGraphQL`.
   final String? content;
 
-  /// False for image-based tracks (PGS, VobSub), which render only in direct
-  /// play where the client reads them from the container itself.
+  /// False for image-based tracks (PGS, VobSub, DVB, XSUB), which have no
+  /// text body. Native players still show them: from the container in
+  /// direct play, and as a bitmap sidecar when streaming. A server predating
+  /// DVB and XSUB in its image list reports those as true, so read
+  /// bitmap-ness from [format] (`isImageSubtitleFormat`), not from this.
   final bool deliverable;
 
   const SubtitleTrack({

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/media_stream.dart';
+import '../../../domain/models/subtitle_format.dart';
 import '../../../domain/models/subtitle_track.dart';
 import 'stream_formatters.dart';
 
@@ -387,17 +388,6 @@ class _StreamRow extends StatelessWidget {
   }
 }
 
-/// Subtitle codecs that carry bitmaps rather than text.
-const Set<String> _imageSubtitleCodecs = {
-  'hdmv_pgs_subtitle',
-  'dvd_subtitle',
-  'dvb_subtitle',
-  'xsub',
-};
-
-bool _isImageSubtitle(String? codec) =>
-    _imageSubtitleCodecs.contains(codec?.toLowerCase());
-
 /// Playback-affecting flags. Language is deliberately absent: it has its own
 /// column in [_StreamRow], unlike the video tile where it stays a chip.
 List<String> _rowFlags(MediaStream stream) => [
@@ -436,7 +426,7 @@ _StreamRow _subtitleRow(MediaStream stream) {
     index: stream.index?.toString(),
     codec: stream.codec ?? 'Unknown',
     language: languageName(stream.language),
-    detail: _isImageSubtitle(stream.codec) ? 'Image' : 'Text',
+    detail: isImageSubtitleFormat(stream.codec) ? 'Image' : 'Text',
     flags: _rowFlags(stream),
     extra: [if (stream.title != null) stream.title!],
   );
@@ -448,7 +438,7 @@ _StreamRow _externalSubtitleRow(SubtitleTrack track) {
     index: null,
     codec: track.format,
     language: languageName(track.language),
-    detail: _isImageSubtitle(track.format) ? 'Image' : 'Text',
+    detail: isImageSubtitleFormat(track.format) ? 'Image' : 'Text',
     flags: const ['External'],
     extra: [if (track.title != null) track.title!],
   );
