@@ -16,6 +16,10 @@ defmodule Mydia.Streaming.SessionFilesTest do
       assert SessionFiles.content_type("/tmp/hls/abc/subs_3.vtt") == "text/vtt"
     end
 
+    test "maps .mks, the bitmap subtitle sidecar, to Matroska" do
+      assert SessionFiles.content_type("subs_3.mks") == "application/x-matroska"
+    end
+
     test "falls back to octet-stream" do
       assert SessionFiles.content_type("mystery.xyz") == "application/octet-stream"
     end

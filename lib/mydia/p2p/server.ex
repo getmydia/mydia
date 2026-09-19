@@ -714,23 +714,10 @@ defmodule Mydia.P2p.Server do
               {:ok, file_path} ->
                 stream_hls_file(resource, stream_id, file_path, req)
 
-              {:error, :path_traversal} ->
-                Logger.warning("HLS path validation failed for #{req.path}")
-                send_hls_error(resource, stream_id, 403, "Forbidden")
-
-              {:error, :image_subtitle} ->
-                Logger.debug("HLS subtitle unavailable: image-based track #{req.path}")
-
-                send_hls_error(
-                  resource,
-                  stream_id,
-                  415,
-                  "Image-based subtitles cannot be converted to text"
-                )
-
               {:error, reason} ->
-                Logger.warning("HLS file unavailable: #{inspect(reason)}")
-                send_hls_error(resource, stream_id, 404, "Not found")
+                log_session_file_error(reason, req.path)
+                {status, message} = session_file_error(reason)
+                send_hls_error(resource, stream_id, status, message)
             end
 
           {:error, :timeout} ->
@@ -839,6 +826,39 @@ defmodule Mydia.P2p.Server do
       result -> result
     end
   end
+
+  @doc false
+  # The status and body a session file that cannot be served answers with,
+  # matching HlsController's. Public for its test: the stream path that
+  # sends them needs a live iroh connection to drive. p2p carries no
+  # headers, so a 503 here has no Retry-After and the player falls back to
+  # its own default interval.
+  @spec session_file_error(term()) :: {pos_integer(), String.t()}
+  def session_file_error(:path_traversal), do: {403, "Forbidden"}
+
+  def session_file_error(:image_subtitle),
+    do: {415, "Image-based subtitles cannot be converted to text"}
+
+  # A bitmap subtitle still being copied out of its source. The player
+  # polls through 503s; a 404 would read as a server that cannot serve one.
+  def session_file_error(:pending), do: {503, "Subtitle not ready"}
+
+  def session_file_error(:extraction_failed),
+    do: {415, "Subtitle track could not be extracted"}
+
+  def session_file_error(_reason), do: {404, "Not found"}
+
+  defp log_session_file_error(:path_traversal, path),
+    do: Logger.warning("HLS path validation failed for #{path}")
+
+  defp log_session_file_error(:image_subtitle, path),
+    do: Logger.debug("HLS subtitle unavailable: image-based track #{path}")
+
+  # Polled every couple of seconds for minutes; a line each time is noise.
+  defp log_session_file_error(:pending, _path), do: :ok
+
+  defp log_session_file_error(reason, _path),
+    do: Logger.warning("HLS file unavailable: #{inspect(reason)}")
 
   defp stream_hls_file(resource, stream_id, file_path, req) do
     try do
@@ -1044,6 +1064,8 @@ defmodule Mydia.P2p.Server do
       # immutable across sessions, and it is small enough that revalidation
       # costs nothing. Matches HlsController's cache_control_for/1.
       ".vtt" -> "no-cache"
+      # A bitmap subtitle copy: stable per source, replaced with the source.
+      ".mks" -> "no-cache"
       _ -> nil
     end
   end

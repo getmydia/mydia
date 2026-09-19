@@ -5,8 +5,8 @@ defmodule Mydia.Subtitles.Delivery do
   External sidecars are read from disk and converted. Embedded text tracks are
   extracted with ffmpeg and cached, because extracting from a large remux takes
   seconds and the player would otherwise wait on every selection. Image tracks
-  are refused: they play fine in direct mode, where the client renders them from
-  the container itself, but they cannot become text.
+  are refused here because they cannot become text; `Mydia.Subtitles.ImageTrack`
+  serves them to the native player as bitmaps instead.
 
   The cache lives under the system temp directory. That needs no new
   configuration, and losing it on reboot costs one re-extraction. `MYDIA_DATA_DIR`

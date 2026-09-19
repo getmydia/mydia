@@ -18,9 +18,12 @@ defmodule MydiaWeb.Api.HlsControllerTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.StreamInfo
+  alias Mydia.Plugins.SingleFlight
   alias Mydia.Streaming.HlsSessionStub
+  alias Mydia.Subtitles.ImageTrack
 
   setup do
     {_user, token} = create_user_and_token()
@@ -200,6 +203,101 @@ defmodule MydiaWeb.Api.HlsControllerTest do
         |> get("/api/v1/hls/#{session_id}/..%2F..%2Fetc/index.m3u8")
 
       assert conn.status == 403
+    end
+  end
+
+  describe "GET /api/v1/hls/:session_id/subs_<index>.mks" do
+    setup %{temp_dir: dir, session_id: session_id} do
+      media_file =
+        media_file_fixture(%{
+          metadata: %FileMetadata{
+            streams: [
+              %StreamInfo{index: 2, type: :subtitle, codec: "subrip", language: "eng"},
+              %StreamInfo{index: 3, type: :subtitle, codec: "hdmv_pgs_subtitle", language: "spa"}
+            ]
+          }
+        })
+        |> Mydia.Repo.preload(:library_path)
+
+      source = MediaFile.absolute_path(media_file)
+      File.mkdir_p!(Path.dirname(source))
+      File.write!(source, "placeholder")
+      {:ok, cached} = ImageTrack.cache_path(media_file, 3)
+
+      on_exit(fn ->
+        File.rm_rf(media_file.library_path.path)
+        File.rm_rf(Path.dirname(cached))
+      end)
+
+      register_session(session_id, dir, media_file.id)
+      {:ok, cached: cached}
+    end
+
+    test "a copied track returns 200 and is revalidated rather than cached for good", %{
+      conn: conn,
+      token: token,
+      session_id: session_id,
+      cached: cached
+    } do
+      File.mkdir_p!(Path.dirname(cached))
+      File.write!(cached, "mks bytes")
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/hls/#{session_id}/subs_3.mks")
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "cache-control") == ["no-cache"]
+      assert conn.resp_body == "mks bytes"
+    end
+
+    test "a track still being copied returns 503 with Retry-After", %{
+      conn: conn,
+      token: token,
+      session_id: session_id,
+      cached: cached
+    } do
+      :ok =
+        SingleFlight.acquire(ImageTrack.lock_slug(cached), :skip, Mydia.Streaming.SubtitleLock)
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/hls/#{session_id}/subs_3.mks")
+
+      assert conn.status == 503
+      assert get_resp_header(conn, "retry-after") == ["2"]
+    end
+
+    test "a failed copy returns 415", %{
+      conn: conn,
+      token: token,
+      session_id: session_id,
+      cached: cached
+    } do
+      File.mkdir_p!(Path.dirname(cached))
+      File.write!(ImageTrack.failed_marker(cached), "boom")
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/hls/#{session_id}/subs_3.mks")
+
+      assert conn.status == 415
+    end
+
+    test "a text stream asked for as a bitmap returns 404", %{
+      conn: conn,
+      token: token,
+      session_id: session_id
+    } do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> get("/api/v1/hls/#{session_id}/subs_2.mks")
+
+      assert conn.status == 404
     end
   end
 end

@@ -29,6 +29,8 @@ defmodule Mydia.Streaming.SessionFiles do
       ".mov" -> "video/quicktime"
       ".webm" -> "video/webm"
       ".vtt" -> "text/vtt"
+      # A bitmap subtitle track alone in a Matroska file, for the player's mpv.
+      ".mks" -> "application/x-matroska"
       _ -> "application/octet-stream"
     end
   end

@@ -351,6 +351,20 @@ defmodule MydiaWeb.Api.HlsController do
         |> put_status(:unsupported_media_type)
         |> json(%{error: "Image-based subtitles cannot be converted to text"})
 
+      {:error, :pending} ->
+        # A bitmap track still being copied out of its source. The player
+        # polls on Retry-After; a 404 would read as a server that cannot
+        # serve one at all.
+        conn
+        |> put_resp_header("retry-after", "2")
+        |> put_status(:service_unavailable)
+        |> json(%{error: "Subtitle not ready"})
+
+      {:error, :extraction_failed} ->
+        conn
+        |> put_status(:unsupported_media_type)
+        |> json(%{error: "Subtitle track could not be extracted"})
+
       {:error, _reason} ->
         conn
         |> put_status(:not_found)
@@ -372,10 +386,11 @@ defmodule MydiaWeb.Api.HlsController do
     end
   end
 
-  # A subtitle body is stable for the life of the session but not immutable
-  # across sessions, and it is small enough that revalidation costs nothing.
+  # A subtitle file is stable for the life of the session but not immutable
+  # across sessions: a stored offset rewrites a text body, and a replaced
+  # source gets a new bitmap copy. Revalidating costs little.
   defp cache_control_for(name) do
-    if String.ends_with?(name, ".vtt") do
+    if Path.extname(name) in [".vtt", ".mks"] do
       "no-cache"
     else
       "public, max-age=31536000, immutable"
