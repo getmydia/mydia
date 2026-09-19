@@ -41,10 +41,33 @@ class ToastController extends ChangeNotifier {
   bool _disposed = false;
   final Map<Object, ToastClaim> _claims = {};
 
+  /// True while the pointer rests on the pill. A deliberate pause outlives a
+  /// change of [accessibleNavigation]: the mode coming back off must not
+  /// restart a countdown the user stopped by hovering.
+  bool _paused = false;
+
   /// Mirrors `MediaQuery.accessibleNavigationOf` at the layer. When true, a
   /// toast with an action waits to be dismissed instead of timing out, since
   /// a screen-reader user may not reach its button in time.
-  bool accessibleNavigation = false;
+  bool get accessibleNavigation => _accessibleNavigation;
+  bool _accessibleNavigation = false;
+
+  /// Re-decides the countdown of the toast already on screen, so flipping the
+  /// mode mid-toast takes effect now rather than at the next `show`. A no-op
+  /// assignment changes nothing and notifies nobody.
+  set accessibleNavigation(bool value) {
+    if (_disposed || value == _accessibleNavigation) return;
+    _accessibleNavigation = value;
+    final entry = _current;
+    if (entry != null && entry.action != null) {
+      if (value) {
+        _cancelTimer();
+      } else if (!_paused) {
+        _startTimer(entry);
+      }
+    }
+    notifyListeners();
+  }
 
   /// The layer's own render box, set by `ToastLayer`. Obstructions measure
   /// themselves against it.
@@ -70,6 +93,7 @@ class ToastController extends ChangeNotifier {
     );
     if (_disposed) return entry;
     _current = entry;
+    _paused = false;
     _startTimer(entry);
     notifyListeners();
     return entry;
@@ -81,25 +105,29 @@ class ToastController extends ChangeNotifier {
     if (_disposed || _current?.id != id) return;
     _cancelTimer();
     _current = null;
+    _paused = false;
     notifyListeners();
   }
 
-  /// Stops [id]'s countdown while the pointer rests on it.
+  /// Stops [id]'s countdown while the pointer rests on it. The pause holds
+  /// until [resume], across any change of [accessibleNavigation].
   void pause(int id) {
     if (_disposed || _current?.id != id) return;
     _cancelTimer();
+    _paused = true;
   }
 
   /// Restarts [id]'s countdown at its full duration.
   void resume(int id) {
     final entry = _current;
     if (_disposed || entry == null || entry.id != id) return;
+    _paused = false;
     _startTimer(entry);
   }
 
   void _startTimer(ToastEntry entry) {
     _cancelTimer();
-    if (entry.action != null && accessibleNavigation) return;
+    if (entry.action != null && _accessibleNavigation) return;
     _timer = Timer(entry.duration, () => close(entry.id));
   }
 

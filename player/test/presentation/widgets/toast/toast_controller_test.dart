@@ -137,6 +137,109 @@ void main() {
       });
     });
 
+    test('turning accessibility on stops a live action countdown for good', () {
+      fakeAsync((async) {
+        final controller = ToastController();
+        // Error with an action: 8s.
+        final entry = controller.show('Denied',
+            kind: ToastKind.error,
+            action: ToastAction(label: 'Settings', onPressed: () {}));
+        async.elapse(const Duration(seconds: 2));
+        controller.accessibleNavigation = true;
+        async.elapse(const Duration(seconds: 7));
+        expect(controller.current?.id, entry.id,
+            reason: 'past the 8s it was shown with');
+        async.elapse(const Duration(minutes: 5));
+        expect(controller.current?.id, entry.id,
+            reason: 'nothing closes it on its own any more');
+        controller.dispose();
+      });
+    });
+
+    test('turning accessibility on leaves a plain toast on its own clock', () {
+      fakeAsync((async) {
+        final controller = ToastController();
+        controller.show('Saved');
+        async.elapse(const Duration(seconds: 2));
+        controller.accessibleNavigation = true;
+        async.elapse(const Duration(milliseconds: 999));
+        expect(controller.current?.message, 'Saved');
+        async.elapse(const Duration(milliseconds: 1));
+        expect(controller.current, isNull,
+            reason: 'only toasts with an action wait to be dismissed');
+        controller.dispose();
+      });
+    });
+
+    test('turning accessibility off restarts a waiting action countdown', () {
+      fakeAsync((async) {
+        final controller = ToastController()..accessibleNavigation = true;
+        final entry = controller.show('Denied',
+            action: ToastAction(label: 'Settings', onPressed: () {}));
+        async.elapse(const Duration(minutes: 1));
+        expect(controller.current?.id, entry.id);
+
+        controller.accessibleNavigation = false;
+        async.elapse(const Duration(seconds: 7, milliseconds: 999));
+        expect(controller.current?.id, entry.id,
+            reason: 'a full 8s, counted from the mode change');
+        async.elapse(const Duration(milliseconds: 1));
+        expect(controller.current, isNull);
+        controller.dispose();
+      });
+    });
+
+    test('turning accessibility off leaves a hover-paused toast paused', () {
+      fakeAsync((async) {
+        final controller = ToastController()..accessibleNavigation = true;
+        final entry = controller.show('Denied',
+            action: ToastAction(label: 'Settings', onPressed: () {}));
+        controller.pause(entry.id);
+        async.elapse(const Duration(seconds: 30));
+        expect(controller.current?.id, entry.id);
+
+        controller.accessibleNavigation = false;
+        async.elapse(const Duration(seconds: 30));
+        expect(controller.current?.id, entry.id,
+            reason: 'the pointer is still resting on the pill');
+
+        controller.resume(entry.id);
+        async.elapse(const Duration(seconds: 7, milliseconds: 999));
+        expect(controller.current?.id, entry.id);
+        async.elapse(const Duration(milliseconds: 1));
+        expect(controller.current, isNull);
+        controller.dispose();
+      });
+    });
+
+    test('assigning the same accessibility value is inert', () {
+      fakeAsync((async) {
+        final controller = ToastController();
+        var notified = 0;
+        controller.addListener(() => notified++);
+        controller.show('Saved');
+        expect(notified, 1);
+
+        async.elapse(const Duration(seconds: 2));
+        controller.accessibleNavigation = false;
+        controller.accessibleNavigation = false;
+        expect(notified, 1, reason: 'a no-op assignment does not notify');
+        async.elapse(const Duration(milliseconds: 999));
+        expect(controller.current?.message, 'Saved',
+            reason: 'a repeated assignment must not restart the countdown');
+        async.elapse(const Duration(milliseconds: 1));
+        expect(controller.current, isNull);
+        expect(notified, 2);
+
+        controller.accessibleNavigation = true;
+        expect(notified, 3, reason: 'a real change notifies');
+        controller.accessibleNavigation = true;
+        expect(notified, 3,
+            reason: 'inert even with nothing on screen to re-decide');
+        controller.dispose();
+      });
+    });
+
     test('dispose cancels the pending timer', () {
       fakeAsync((async) {
         final controller = ToastController();
@@ -242,8 +345,11 @@ void main() {
         expect(() => controller.pause(entry.id), returnsNormally);
         expect(() => controller.resume(entry.id), returnsNormally);
         expect(() => controller.show('late'), returnsNormally);
+        expect(() => controller.accessibleNavigation = true, returnsNormally);
         expect(async.pendingTimers, isEmpty,
             reason: 'a disposed controller reschedules no countdown');
+        expect(controller.accessibleNavigation, isFalse,
+            reason: 'and records no mode change either');
       });
     });
   });
