@@ -189,7 +189,7 @@
     "production": {
       "name": "mydia-relay",
       "vars": {
-        "RELAY_VERSION": "1.1.0",
+        "RELAY_VERSION": "1.1.1",
         "FEEDBACK_FROM": "metadata-relay@mydia.dev",
         "FEEDBACK_TO": "arsfeld@gmail.com",
         "TRAFFIC_HOSTNAME": "relay.mydia.dev",

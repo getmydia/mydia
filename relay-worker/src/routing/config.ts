@@ -6,12 +6,19 @@ import { ROUTE_GROUPS, type RouteGroup } from "./groups";
 //   {"default": "origin", "groups": {"tmdb": "shadow", "tvdb": "split:25"}}
 //
 // It is KV rather than a wrangler var so a ramp step or a rollback is one
-// `wrangler kv key put` and takes effect within ROUTING_CONFIG_CACHE_TTL
-// seconds, instead of a `relay-worker-v*` tag and a production deploy.
+// `wrangler kv key put` and takes effect within about a minute
+// (ROUTING_CONFIG_CACHE_TTL plus ROUTING_CONFIG_MEMO_MS), instead of a
+// `relay-worker-v*` tag and a production deploy.
 export const ROUTING_CONFIG_KEY = "routing:config";
 
 // KV's minimum cacheTtl. A write reaches every colo within about this long.
 export const ROUTING_CONFIG_CACHE_TTL = 30;
+
+// How long an isolate serves the config it last read before asking KV again.
+// KV bills every get(), including the ones cacheTtl answers from the colo, and
+// the free plan allows 100,000 a day. One read per request spent 35,000 of
+// them in a single hour of TVDB traffic, so an isolate reads once per window.
+export const ROUTING_CONFIG_MEMO_MS = 30_000;
 
 export type RoutingMode =
   // The Elixir relay answers.
@@ -161,10 +168,34 @@ export function parseRoutingConfig(raw: string | null): RoutingConfig {
 }
 
 // Parsing is memoized on the raw string, so a config that has not changed is
-// parsed, and its warnings logged, once per isolate rather than per request.
+// parsed, and its warnings logged, once per isolate rather than once per read.
 let memo: { raw: string | null; config: RoutingConfig } | undefined;
 
-export async function loadRoutingConfig(env: Env): Promise<RoutingConfig> {
+// The config this isolate is serving and when it was read. A failed read is
+// held for the same window as a good one: once KV is refusing (an outage, or
+// the daily read cap), retrying it on every request cannot help.
+//
+// Only the settled value is shared, never the in-flight read. A KV promise
+// belongs to the request that started it, and the runtime drops its
+// continuations if that request ends first, so a request awaiting another's
+// read could hang. Requests that overlap an expiry each read once instead.
+let held: { config: RoutingConfig; readAt: number } | undefined;
+
+export async function loadRoutingConfig(env: Env, now: number = Date.now()): Promise<RoutingConfig> {
+  if (held && now - held.readAt < ROUTING_CONFIG_MEMO_MS) return held.config;
+  const config = await readRoutingConfig(env);
+  held = { config, readAt: now };
+  return config;
+}
+
+// Test-only: forget what this isolate has read, so a test's KV write is seen
+// by the next load instead of up to ROUTING_CONFIG_MEMO_MS later.
+export function resetRoutingConfigMemo(): void {
+  memo = undefined;
+  held = undefined;
+}
+
+async function readRoutingConfig(env: Env): Promise<RoutingConfig> {
   let raw: string | null;
   try {
     raw = await env.CACHE_KV.get(ROUTING_CONFIG_KEY, { cacheTtl: ROUTING_CONFIG_CACHE_TTL });

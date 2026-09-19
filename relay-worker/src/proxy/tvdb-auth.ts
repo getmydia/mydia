@@ -5,10 +5,20 @@ const KV_KEY = "tvdb:jwt";
 const REFRESH_BEFORE_EXPIRY_SECONDS = 3600; // matches @refresh_before_expiry
 const FALLBACK_LIFETIME_SECONDS = 30 * 86400;
 
+// How long an isolate reuses the token it last read before reading KV again.
+// KV bills every get() and the free plan allows 100,000 a day, which one read
+// per TVDB request nearly halved in an hour. The token lasts a month, so this
+// window only bounds how long a token deleted or replaced in KV stays in use.
+export const TOKEN_MEMO_MS = 5 * 60 * 1000;
+
 interface StoredToken {
   token: string;
   exp: number;
 }
+
+// The settled token only, never an in-flight read or login: see `held` in
+// routing/config.ts for why a KV promise is never shared between requests.
+let held: { token: StoredToken; readAt: number } | undefined;
 
 export function parseJwtExpiry(token: string): number {
   const fallback = Math.floor(Date.now() / 1000) + FALLBACK_LIFETIME_SECONDS;
@@ -51,13 +61,17 @@ async function login(env: Env): Promise<StoredToken> {
 // idempotent and the window is an hour wide, so that is accepted. If duplicate
 // logins show up in the logs, serialise the refresh through a D1 row used as
 // a lock rather than reaching for a new primitive.
-export async function getTvdbToken(env: Env): Promise<string> {
+export async function getTvdbToken(env: Env, nowMs: number = Date.now()): Promise<string> {
   if (!env.TVDB_API_KEY) throw new Error("TVDB_API_KEY is not set");
 
-  const stored = await env.CACHE_KV.get<StoredToken>(KV_KEY, "json");
-  const now = Math.floor(Date.now() / 1000);
+  const now = Math.floor(nowMs / 1000);
+  if (held && nowMs - held.readAt < TOKEN_MEMO_MS && usable(held.token, now)) {
+    return held.token.token;
+  }
 
-  if (stored && stored.exp - now > REFRESH_BEFORE_EXPIRY_SECONDS) {
+  const stored = await env.CACHE_KV.get<StoredToken>(KV_KEY, "json");
+  if (usable(stored, now)) {
+    held = { token: stored, readAt: nowMs };
     return stored.token;
   }
 
@@ -65,5 +79,15 @@ export async function getTvdbToken(env: Env): Promise<string> {
   await env.CACHE_KV.put(KV_KEY, JSON.stringify(fresh), {
     expirationTtl: Math.max(fresh.exp - now, 60),
   });
+  held = { token: fresh, readAt: nowMs };
   return fresh.token;
+}
+
+// Test-only: forget the token this isolate holds, so the next call reads KV.
+export function resetTvdbTokenMemo(): void {
+  held = undefined;
+}
+
+function usable(token: StoredToken | null, now: number): token is StoredToken {
+  return token !== null && token.exp - now > REFRESH_BEFORE_EXPIRY_SECONDS;
 }
