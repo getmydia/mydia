@@ -23,7 +23,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
-import 'package:player/core/player/platform_features.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 
 const Key _videoSurfaceKey = Key('stand-in-video-surface');
@@ -64,7 +63,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
-            tier: PlayerGlassTier.full,
             onBack: () {},
           ),
         ),
@@ -82,7 +80,6 @@ void main() {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
-            tier: PlayerGlassTier.full,
             onBack: () {},
           ),
         ),

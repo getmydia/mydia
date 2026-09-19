@@ -197,7 +197,7 @@ class AmbientBackdropScrim extends StatelessWidget {
   /// Sourced from the palette rather than written as a literal. The previous
   /// hardcoded navy survived the move to the neutral palette precisely because
   /// nothing tied it to a token, and it tinted every Home backdrop blue. Same
-  /// arrangement as `DepthTokens.playerChromeTint`, for the same reason.
+  /// arrangement as `DepthTokens.osdTint`, for the same reason.
   static const Color baseColor = AppColors.background;
 
   /// Top-of-scrim dim alpha applied over the blurred artwork. Tuned in U8 so

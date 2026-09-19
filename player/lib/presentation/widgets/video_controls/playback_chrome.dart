@@ -6,6 +6,9 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
+import '../../../core/player/playback_time_format.dart';
+import '../../../core/player/scrub_controller.dart';
+import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/window_buttons_bridge.dart';
@@ -17,7 +20,9 @@ import 'chrome_panel.dart';
 import 'chrome_top_bar.dart';
 import 'panel_controls.dart';
 import 'playback_surface.dart';
+import 'scrub_bubble.dart';
 import 'transport_cluster.dart';
+import 'tv_scrubber.dart';
 import 'video_progress_bar.dart';
 
 /// External handle on the playback chrome's shown or hidden state.
@@ -636,6 +641,28 @@ class PlaybackChrome extends StatefulWidget {
   /// focused control.
   final FocusNode? chromeFocusNode;
 
+  /// D-pad scrub state, owned by the player screen. Null off the remote tier,
+  /// where the bar stays the pointer-only scrubber it has always been.
+  final ScrubController? scrub;
+
+  /// Externally-owned focus node for the remote tier's scrub bar, so the
+  /// player screen can move focus onto it when a hidden-OSD arrow starts a
+  /// scrub.
+  final FocusNode? scrubberFocusNode;
+
+  /// Trickplay frames for the scrub bubble. Null when the file has none the
+  /// player can reach (always, over p2p).
+  final ScrubThumbnails? scrubThumbnails;
+
+  /// Keys for the timecodes flanking the scrubber.
+  static const Key elapsedKey = Key('osd-elapsed');
+  static const Key remainingKey = Key('osd-remaining');
+
+  /// Timecode size on the remote tier. 12 logical px through `TvCanvas`'s
+  /// 1280x720 canvas is about 18 physical px on a 1080p panel, too small from
+  /// across a room; 18 logical is about 27.
+  static const double remoteTimeFontSize = 18;
+
   const PlaybackChrome({
     super.key,
     required this.player,
@@ -662,6 +689,9 @@ class PlaybackChrome extends StatefulWidget {
     this.chromeVisibility,
     this.playPauseFocusNode,
     this.chromeFocusNode,
+    this.scrub,
+    this.scrubberFocusNode,
+    this.scrubThumbnails,
   });
 
   @override
@@ -670,6 +700,38 @@ class PlaybackChrome extends StatefulWidget {
 
 class _PlaybackChromeState extends State<PlaybackChrome> {
   bool _seeking = false;
+
+  /// Mirrors `widget.scrub?.active`, updated only when it flips, so a held
+  /// key does not rebuild the whole chrome on every repeat.
+  bool _scrubbing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrubbing = widget.scrub?.active ?? false;
+    widget.scrub?.addListener(_onScrubChanged);
+  }
+
+  @override
+  void didUpdateWidget(PlaybackChrome old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.scrub, widget.scrub)) {
+      old.scrub?.removeListener(_onScrubChanged);
+      widget.scrub?.addListener(_onScrubChanged);
+      _scrubbing = widget.scrub?.active ?? false;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.scrub?.removeListener(_onScrubChanged);
+    super.dispose();
+  }
+
+  void _onScrubChanged() {
+    final scrubbing = widget.scrub?.active ?? false;
+    if (scrubbing != _scrubbing) setState(() => _scrubbing = scrubbing);
+  }
 
   void _seekBy(Duration offset) {
     final player = widget.player;
@@ -706,7 +768,9 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
             ChromeVisibility(
               controller: widget.chromeVisibility,
               isPlaying: snapshot.data ?? false,
-              isSeeking: _seeking,
+              // A D-pad scrub holds the OSD up for the same reason a drag
+              // does: the viewer is looking at the bar.
+              isSeeking: _seeking || _scrubbing,
               autoHide: remote
                   ? ChromeVisibility.remoteAutoHide
                   : ChromeVisibility.defaultAutoHide,
@@ -843,6 +907,11 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                     setState(() => _seeking = true),
                                 onSeekEnd: () =>
                                     setState(() => _seeking = false),
+                                remote: remote,
+                                scrub: widget.scrub,
+                                scrubberFocusNode: widget.scrubberFocusNode,
+                                thumbnails: widget.scrubThumbnails,
+                                onPlayPause: () => widget.player.playOrPause(),
                               ),
                             ),
                           ),
@@ -898,6 +967,14 @@ class _ScrubberRow extends StatelessWidget {
   final VoidCallback onSeekStart;
   final VoidCallback onSeekEnd;
 
+  /// Whether this is the remote tier, which draws larger timecodes and, when
+  /// [scrub] and [scrubberFocusNode] are both given, a focusable scrubber.
+  final bool remote;
+  final ScrubController? scrub;
+  final FocusNode? scrubberFocusNode;
+  final ScrubThumbnails? thumbnails;
+  final VoidCallback onPlayPause;
+
   const _ScrubberRow({
     required this.player,
     required this.timeline,
@@ -905,45 +982,60 @@ class _ScrubberRow extends StatelessWidget {
     required this.touchTargets,
     required this.onSeekStart,
     required this.onSeekEnd,
+    required this.remote,
+    required this.scrub,
+    required this.scrubberFocusNode,
+    required this.thumbnails,
+    required this.onPlayPause,
   });
 
-  /// Both timecodes share this style — deliberately identical. An earlier
+  /// Both timecodes share this style, deliberately identical. An earlier
   /// version styled elapsed at full white and remaining dimmer; that
-  /// asymmetry measured as the single worst-case contrast on the whole
-  /// panel (2.32:1) in an accessibility audit of this panel.
+  /// asymmetry measured as the single worst-case contrast on the whole panel
+  /// (2.32:1) in an accessibility audit.
   ///
-  /// `color` must stay fully opaque: `glass_legibility_test.dart` models the
-  /// contrast contract assuming an opaque foreground composited with this
-  /// shadow, and a translucent color (even a small drop, e.g. white @ 0.55)
-  /// composites with the fill/shadow behind it and measures under the WCAG
-  /// SC 1.4.3 text floor of 4.5:1 despite the test passing on the wrong
-  /// (opaque) model — see that file's CenterPlayButton/timecode cases for
-  /// why the drift went uncaught before.
-  ///
-  /// The shadow is load-bearing, not decorative: `glass_legibility_test.dart`
-  /// measures the fill alone at this row's height as under the WCAG SC 1.4.3
-  /// text floor of 4.5:1 — and comfortably above it with this exact shadow
-  /// composited in. Never apply this treatment to an icon; row 1's icons stay
-  /// unshadowed, held to the looser 3:1 non-text floor instead (see
-  /// `DepthTokens.playerChromeFillTopAlpha`'s doc comment).
+  /// No text shadow: the OSD fill alone holds white text at ~13:1 over a
+  /// pure-white frame (`osd_legibility_test.dart`).
   static const TextStyle _timeStyle = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w500,
     color: Colors.white,
     fontFeatures: [FontFeature.tabularFigures()],
-    shadows: [
-      Shadow(color: Color(0x99000000), blurRadius: 4), // black @ 0.6, 4px
-    ],
   );
 
-  static String _format(Duration d) {
-    final hours = d.inHours;
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:$minutes:$seconds';
-    }
-    return '$minutes:$seconds';
+  /// [_timeStyle] at television size. Same colour and shadow, so the
+  /// contrast reasoning above still holds.
+  static final TextStyle _remoteTimeStyle =
+      _timeStyle.copyWith(fontSize: PlaybackChrome.remoteTimeFontSize);
+
+  Widget _bar() {
+    VideoProgressBar progressBar(
+            {ScrubController? scrub, bool focused = false}) =>
+        VideoProgressBar(
+          player: player,
+          timeline: timeline,
+          onSeekToReal: onSeekToReal,
+          touchTarget: touchTargets,
+          onSeekStart: onSeekStart,
+          onSeekEnd: onSeekEnd,
+          scrub: scrub,
+          focused: focused,
+        );
+
+    final scrub = this.scrub;
+    final focusNode = scrubberFocusNode;
+    if (!remote || scrub == null || focusNode == null) return progressBar();
+
+    return TvScrubber(
+      scrub: scrub,
+      focusNode: focusNode,
+      onPlayPause: onPlayPause,
+      builder: (context, focused) => ScrubBubbleAnchor(
+        scrub: scrub,
+        thumbnails: thumbnails,
+        child: progressBar(scrub: scrub, focused: focused),
+      ),
+    );
   }
 
   @override
@@ -963,25 +1055,22 @@ class _ScrubberRow extends StatelessWidget {
               durationSnapshot.data ?? Duration.zero,
             );
             final remaining = duration - position;
+            final style = remote ? _remoteTimeStyle : _timeStyle;
 
             return Row(
               children: [
-                Text(_format(position), style: _timeStyle),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: VideoProgressBar(
-                    player: player,
-                    timeline: timeline,
-                    onSeekToReal: onSeekToReal,
-                    touchTarget: touchTargets,
-                    onSeekStart: onSeekStart,
-                    onSeekEnd: onSeekEnd,
-                  ),
+                Text(
+                  formatPlaybackTime(position),
+                  key: PlaybackChrome.elapsedKey,
+                  style: style,
                 ),
                 const SizedBox(width: 12),
+                Expanded(child: _bar()),
+                const SizedBox(width: 12),
                 Text(
-                  '-${_format(remaining.isNegative ? Duration.zero : remaining)}',
-                  style: _timeStyle,
+                  '-${formatPlaybackTime(remaining.isNegative ? Duration.zero : remaining)}',
+                  key: PlaybackChrome.remainingKey,
+                  style: style,
                 ),
               ],
             );

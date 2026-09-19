@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/quality_delivery_subtitle.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/presentation/widgets/hls_quality_selector.dart';
+import 'package:player/presentation/widgets/osd_dialog.dart';
+
+import '../../test_utils/osd_contrast.dart';
 
 Widget _host(void Function(BuildContext) onReady) {
   return MaterialApp(
@@ -257,5 +261,43 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result, QualityRung.auto);
+  });
+
+  testWidgets('opens on the OSD material with legible text', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        (context) => showQualityPicker(
+          context,
+          ladder,
+          QualityRung.original,
+          autoSubtitle: 'Auto · Direct Play',
+          originalSubtitle: kOriginalDirectPlaySubtitle,
+          clampNote: 'The server is limiting this stream.',
+          statsEnabled: false,
+          onStatsChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OsdDialog), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+
+    final selected = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(
+          Key('quality-rung-selected-${QualityRung.original.label}'),
+        ),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(selected.color, AppColors.primary);
+
+    final colors = osdParagraphColors(tester, find.byType(OsdDialog));
+    expect(colors, isNotEmpty);
+    for (final color in colors) {
+      expect(osdContrast(color), greaterThanOrEqualTo(4.5), reason: '$color');
+    }
   });
 }

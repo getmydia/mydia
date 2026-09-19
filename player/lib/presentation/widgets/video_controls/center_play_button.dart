@@ -33,7 +33,7 @@ class CenterPlayButton extends StatelessWidget {
   /// sky, a white title card) washes a plain white glyph out to 1:1
   /// contrast, on the one control mobile relies on most. Held to WCAG SC
   /// 1.4.11 (non-text, 3:1) against a worst-case pure-white frame — see
-  /// `glass_legibility_test.dart`'s `CenterPlayButton` case, which fails if
+  /// `osd_legibility_test.dart`'s `CenterPlayButton` case, which fails if
   /// this shadow is removed or weakened.
   static const Shadow glyphShadow = Shadow(
     color: Color(0x99000000), // black @ 0.6

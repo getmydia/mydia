@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/colors.dart';
 import '../../domain/models/subtitle_candidate.dart';
 
 /// The results list for an online subtitle search.
@@ -36,7 +37,8 @@ class SubtitleSearchResults extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
               child: Text(
                 '${provider.name}: ${provider.quotaLabel}',
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 12),
               ),
             ),
         for (final provider in failures)
@@ -45,7 +47,8 @@ class SubtitleSearchResults extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
             child: Text(
               '${provider.name}: ${provider.error}',
-              style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+              style:
+                  const TextStyle(color: AppColors.warningText, fontSize: 12),
             ),
           ),
         if (results.isEmpty)
@@ -54,7 +57,7 @@ class SubtitleSearchResults extends StatelessWidget {
             child: Text(
               'No subtitles found for ${languages.join(', ')}. '
               'Try adding another language.',
-              style: const TextStyle(color: Colors.grey),
+              style: const TextStyle(color: AppColors.textSecondary),
             ),
           )
         else
@@ -88,7 +91,7 @@ class _ResultTile extends StatelessWidget {
     return ListTile(
       title: Text(
         candidate.releaseName ?? candidate.displayLanguage,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: AppColors.textPrimary),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -98,33 +101,36 @@ class _ResultTile extends StatelessWidget {
         children: [
           Text(
             candidate.displayLanguage,
-            style: const TextStyle(color: Colors.grey),
+            style: const TextStyle(color: AppColors.textSecondary),
           ),
           if (candidate.hashMatch)
             const Text(
               'Exact match',
-              style: TextStyle(color: Colors.greenAccent, fontSize: 12),
+              style: TextStyle(color: AppColors.successText, fontSize: 12),
             ),
           if (candidate.rating != null)
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.star, size: 12, color: Colors.grey),
+                const Icon(Icons.star,
+                    size: 12, color: AppColors.textSecondary),
                 const SizedBox(width: 2),
                 Text(
                   candidate.rating!.toStringAsFixed(1),
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 12),
                 ),
               ],
             ),
           Text(
             candidate.providerName,
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
+            style:
+                const TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
         ],
       ),
       trailing: candidate.hearingImpaired
-          ? const Icon(Icons.hearing, color: Colors.grey, size: 18)
+          ? const Icon(Icons.hearing, color: AppColors.textSecondary, size: 18)
           : null,
       onTap: onTap,
     );

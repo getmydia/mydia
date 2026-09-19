@@ -2,7 +2,6 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/player/platform_features.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 
@@ -166,7 +165,6 @@ void main() {
                 const Positioned.fill(child: ColoredBox(color: Colors.white)),
                 ChromePanel(
                   metrics: metrics,
-                  tier: PlayerGlassTier.full,
                   transport: SizedBox(
                     key: const Key('t'),
                     width: transportWidth,
@@ -189,19 +187,13 @@ void main() {
     testWidgets('renders the player glass material', (tester) async {
       await tester.pumpWidget(host(PanelMetrics.forWidth(1600)));
 
-      // Not `findsOneWidget`: the lensed material runs the blur and the
-      // saturation matrix as separate backdrop passes. Assert on the sigma
-      // instead of the count, which is what actually distinguishes the
-      // player material from the browse chrome one.
-      final filters = tester
-          .widgetList<BackdropFilter>(find.byType(BackdropFilter))
-          .map((backdrop) => backdrop.filter);
+      expect(find.byType(BackdropFilter), findsOneWidget);
       expect(
-        filters,
-        contains(ImageFilter.blur(
-          sigmaX: DepthTokens.blurPlayerChrome,
-          sigmaY: DepthTokens.blurPlayerChrome,
-        )),
+        tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter,
+        ImageFilter.blur(
+          sigmaX: DepthTokens.osdBlurSigma,
+          sigmaY: DepthTokens.osdBlurSigma,
+        ),
       );
     });
 
@@ -211,23 +203,19 @@ void main() {
       expect(find.byKey(const Key('s')), findsOneWidget);
     });
 
-    testWidgets('clips to DepthTokens.radiusPlayerPanel', (tester) async {
+    testWidgets('clips to DepthTokens.radiusOsdPanel', (tester) async {
       await tester.pumpWidget(host(PanelMetrics.forWidth(1600)));
 
-      // Accepts either clip widget, and asserts the radius rather than the
-      // type. The contract here is the panel's corner geometry, not which
-      // primitive draws it: the lensed material clips with
-      // ClipRSuperellipse (an Apple-style squircle at the same radius),
-      // where the plain BackdropFilter path used ClipRRect.
-      final radii = <double>[
-        ...tester
-            .widgetList<ClipRSuperellipse>(find.byType(ClipRSuperellipse))
-            .map((clip) => clip.borderRadius.resolve(null).topLeft.x),
-        ...tester
-            .widgetList<ClipRRect>(find.byType(ClipRRect))
-            .map((clip) => clip.borderRadius.resolve(null).topLeft.x),
-      ];
-      expect(radii, contains(DepthTokens.radiusPlayerPanel));
+      final clip = tester.widget<ClipRRect>(
+        find.descendant(
+          of: find.byType(ChromePanel),
+          matching: find.byType(ClipRRect),
+        ),
+      );
+      expect(
+        clip.borderRadius,
+        const BorderRadius.all(Radius.circular(DepthTokens.radiusOsdPanel)),
+      );
     });
 
     testWidgets('omits the volume slot when not supplied', (tester) async {
@@ -311,7 +299,6 @@ void main() {
                   width: 300,
                   child: ChromePanel(
                     metrics: PanelMetrics.forWidth(1600),
-                    tier: PlayerGlassTier.full,
                     transport:
                         const SizedBox(key: Key('t'), width: 60, height: 48),
                     scrubber:

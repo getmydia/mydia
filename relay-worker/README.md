@@ -355,9 +355,12 @@ budgets and history on each side, so they move as a unit.
 
 ### Changing modes
 
-The config is JSON in `CACHE_KV` under `routing:config`. It is read with a
-30s `cacheTtl`, so a change is live everywhere within about 30 seconds and
-needs no deploy:
+The config is JSON in `CACHE_KV` under `routing:config`. Each isolate reads it
+at most once every 30 seconds, and KV's own 30s `cacheTtl` sits behind that, so
+a change is live everywhere within about a minute and needs no deploy. The
+read is rationed because KV bills every `get()`, colo-cached or not, and one
+read per request used over a third of the free plan's 100,000 daily reads in
+a single hour of TVDB traffic.
 
 ```bash
 cd relay-worker
@@ -372,7 +375,7 @@ to the Elixir relay. Rejected entries are logged once per isolate as
 `routing_config_warning`.
 
 **Rolling back any step is the same write with that group set back to
-`origin`.** It is live within about 30 seconds.
+`origin`.** It is live within about a minute.
 
 ### Seeing what happened
 
