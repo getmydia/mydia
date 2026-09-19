@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_memory.dart';
@@ -112,60 +113,91 @@ class _Decoder extends PlatformPlayer {
 /// A small WebVTT body, returned for any `SubtitleContent` request.
 const _vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello\n';
 
-StubLink _server({required bool directPlay, bool withSubtitle = false}) =>
-    StubLink((request, index) {
-      if (request.operation.document == documentNodeQuerySubtitleContent) {
-        return {'__typename': 'RootQueryType', 'subtitleContent': _vtt};
-      }
-      if (index == 0) {
-        return movieDetailResponse(
-          positionSeconds: 0,
-          files: withSubtitle ? [mediaFileWithSubtitle()] : null,
-        );
-      }
-      if (index == 1) return movieSegmentsResponse();
-      if (index == 2) return subtitleTrackSettingsResponse();
-      if (index == 3) {
-        return streamingCandidatesResponse(
-          directPlay: directPlay,
-          duration: 5400,
-          height: 1080,
-          bitrate: 8000000,
-        );
-      }
-      final variables = request.variables;
-      if (variables.containsKey('strategy')) {
-        return startStreamingSessionResponse(
-          sessionId: 'sess-$index',
-          startPosition: variables['startPosition'] as int? ?? 0,
-          duration: 5400,
-        );
-      }
-      if (variables.containsKey('sessionId')) {
-        return endStreamingSessionResponse();
-      }
-      return <String, dynamic>{
-        '__typename': 'RootMutationType',
-        'updateMovieProgress': null,
-      };
-    });
+/// Holds `SubtitleContent` until [gate] completes, so a test can unmount the
+/// player while the loading toast is still up.
+class _GatedSubtitleContentLink extends StubLink {
+  _GatedSubtitleContentLink(super.handler, this.gate);
+
+  final Completer<void> gate;
+
+  @override
+  Stream<Response> request(Request request, [NextLink? forward]) async* {
+    if (request.operation.document == documentNodeQuerySubtitleContent) {
+      await gate.future;
+    }
+    yield* super.request(request, forward);
+  }
+}
+
+StubLink _server({
+  required bool directPlay,
+  bool withSubtitle = false,
+  Completer<void>? holdSubtitleContent,
+}) {
+  Object handler(Request request, int index) {
+    if (request.operation.document == documentNodeQuerySubtitleContent) {
+      return {'__typename': 'RootQueryType', 'subtitleContent': _vtt};
+    }
+    if (index == 0) {
+      return movieDetailResponse(
+        positionSeconds: 0,
+        files: withSubtitle ? [mediaFileWithSubtitle()] : null,
+      );
+    }
+    if (index == 1) return movieSegmentsResponse();
+    if (index == 2) return subtitleTrackSettingsResponse();
+    if (index == 3) {
+      return streamingCandidatesResponse(
+        directPlay: directPlay,
+        duration: 5400,
+        height: 1080,
+        bitrate: 8000000,
+      );
+    }
+    final variables = request.variables;
+    if (variables.containsKey('strategy')) {
+      return startStreamingSessionResponse(
+        sessionId: 'sess-$index',
+        startPosition: variables['startPosition'] as int? ?? 0,
+        duration: 5400,
+      );
+    }
+    if (variables.containsKey('sessionId')) {
+      return endStreamingSessionResponse();
+    }
+    return <String, dynamic>{
+      '__typename': 'RootMutationType',
+      'updateMovieProgress': null,
+    };
+  }
+
+  if (holdSubtitleContent == null) return StubLink(handler);
+  return _GatedSubtitleContentLink(handler, holdSubtitleContent);
+}
 
 Future<void> _mount(
   WidgetTester tester,
   ProviderContainer container,
-  Player Function() createPlayer,
-) async {
+  Player Function() createPlayer, {
+  ValueNotifier<bool>? playerVisible,
+}) async {
+  final player = PlayerScreen(
+    mediaId: 'movie-1',
+    mediaType: 'movie',
+    fileId: 'file-1',
+    title: 'The Long Aurora',
+    createPlayer: createPlayer,
+  );
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
       builder: toastLayerBuilder,
-      home: PlayerScreen(
-        mediaId: 'movie-1',
-        mediaType: 'movie',
-        fileId: 'file-1',
-        title: 'The Long Aurora',
-        createPlayer: createPlayer,
-      ),
+      home: playerVisible == null
+          ? player
+          : ValueListenableBuilder<bool>(
+              valueListenable: playerVisible,
+              builder: (_, show, __) => show ? player : const SizedBox.shrink(),
+            ),
     ),
   ));
   await tester.pump();
@@ -704,9 +736,15 @@ void main() {
     Future<(RemotePlayerBinding, _Decoder, StubLink)> mountStreaming(
       WidgetTester tester, {
       bool withSubtitle = false,
+      Completer<void>? holdSubtitleContent,
+      ValueNotifier<bool>? playerVisible,
     }) async {
       final decoder = _Decoder();
-      final link = _server(directPlay: false, withSubtitle: withSubtitle);
+      final link = _server(
+        directPlay: false,
+        withSubtitle: withSubtitle,
+        holdSubtitleContent: holdSubtitleContent,
+      );
       final container = buildPlayerScreenContainer(
         link: link,
         connectionState: conn.ConnectionState.direct(),
@@ -715,7 +753,12 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      await _mount(tester, container, () => Player(platformPlayer: decoder));
+      await _mount(
+        tester,
+        container,
+        () => Player(platformPlayer: decoder),
+        playerVisible: playerVisible,
+      );
       await pumpUntil(
           tester, () => find.byType(PlaybackChrome).evaluate().isNotEmpty);
       decoder.advance(const Duration(seconds: 15));
@@ -779,6 +822,44 @@ void main() {
 
         await tester.pumpWidget(const SizedBox());
         await tester.pump();
+      }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    });
+
+    testWidgets(
+        'the loading toast closes after the screen unmounts during the fetch',
+        (tester) async {
+      await mockHttpResponse(() async {
+        final hold = Completer<void>();
+        addTearDown(() {
+          if (!hold.isCompleted) hold.complete();
+        });
+        final visible = ValueNotifier(true);
+        addTearDown(visible.dispose);
+        final (binding, decoder, link) = await mountStreaming(
+          tester,
+          withSubtitle: true,
+          holdSubtitleContent: hold,
+          playerVisible: visible,
+        );
+
+        unawaited(binding.selectTrack(TrackKind.subtitle, '3'));
+        await pumpUntil(tester,
+            () => find.text('Loading subtitle...').evaluate().isNotEmpty);
+        expect(find.text('Loading subtitle...'), findsOneWidget);
+
+        visible.value = false;
+        await tester.pump();
+        expect(find.byType(PlayerScreen), findsNothing);
+        expect(find.text('Loading subtitle...'), findsOneWidget,
+            reason: 'the layer outlives the player; the toast stays up '
+                'until the fetch returns and the handle closes');
+
+        hold.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.text('Loading subtitle...'), findsNothing,
+            reason: 'ToastHandle.close does not need the player screen to '
+                'still be mounted');
       }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
     });
 

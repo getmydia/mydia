@@ -3796,10 +3796,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
 
       final mkTrack = await _resolveMediaKitSubtitleTrack(selected);
-      // `close()` is a no-op if this toast was already dismissed (its own
-      // 30 second timeout, or a later pick replacing it), so this is safe
-      // on every path.
-      if (mounted) loadingToast.close();
+      // Unconditional: `ToastHandle.close` does not use this screen's
+      // context (the layer lives above the route). Gating on `mounted` was
+      // leftover from `SnackBar.close` and left the indicator up after the
+      // viewer left playback, until the 30s timeout. A no-op if this toast
+      // was already dismissed (its own timeout, or a later pick replacing
+      // it).
+      loadingToast.close();
 
       // Superseded while the fetch was in flight (a re-tap, "Off", or the
       // screen/player went away): drop this result silently rather than
