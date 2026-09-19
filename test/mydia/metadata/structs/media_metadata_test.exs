@@ -287,4 +287,35 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
       assert bad.external_ids.tvdb == nil
     end
   end
+
+  describe "alternative_titles" do
+    test "reads the movie shape" do
+      body = %{
+        "id" => 1,
+        "title" => "Glass Harbor",
+        "alternative_titles" => %{
+          "titles" => [%{"iso_3166_1" => "PL", "title" => "Szklany Port", "type" => ""}]
+        }
+      }
+
+      assert MediaMetadata.from_api_response(body, :movie, "1").alternative_titles ==
+               ["Szklany Port"]
+    end
+
+    test "reads the TV shape" do
+      body = %{
+        "id" => 2,
+        "name" => "Dark Lantern",
+        "alternative_titles" => %{
+          "results" => [
+            %{"iso_3166_1" => "DE", "title" => "Dunkle Laterne", "type" => ""},
+            %{"iso_3166_1" => "AT", "title" => "Dunkle Laterne", "type" => ""}
+          ]
+        }
+      }
+
+      assert MediaMetadata.from_api_response(body, :tv_show, "2").alternative_titles ==
+               ["Dunkle Laterne"]
+    end
+  end
 end

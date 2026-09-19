@@ -43,6 +43,11 @@ defmodule Mydia.Indexers.ReleaseRanker do
     each result is parsed with `ReleaseParser` and rejected if the parsed title has a Jaro distance
     below 0.7 from the expected title. Unparseable releases pass through (fail-open).
     Ignored when `nil` or empty/whitespace-only. (default: `nil`)
+  - `:identity_gate` - Which identity removal runs: `:legacy` (default), the `:expected_title`
+    Jaro gate, or `:exact`, `Mydia.Indexers.ReleaseIdentity` against `:identity_target`.
+    `:exact` exists so `Mydia.Indexers.IdentityShadow` can compare the two on live searches.
+  - `:identity_target` - `Mydia.Indexers.ReleaseIdentity.Target` the `:exact` gate checks
+    releases against. With no target the `:exact` gate removes nothing. (default: `nil`)
   - `:apply_source_exclusion` - Whether `:quality_profile`'s `:excluded_sources` list is enforced
     as a hard removal (default: `true`). The automatic search jobs leave this at the default.
     Manual search deliberately passes `false`: per spec R8, manual search and manual grab are the
@@ -66,6 +71,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
   require Logger
 
   alias Mydia.Downloads.ReleaseValidator
+  alias Mydia.Indexers.ReleaseIdentity
   alias Mydia.Indexers.{QualityParser, ReleaseLanguages, SearchResult, SearchScorer}
   alias Mydia.Indexers.Structs.{RankedResult, ScoreBreakdown}
   alias Mydia.Library.ReleaseParser
@@ -89,6 +95,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
           quality_profile: QualityProfile.t() | nil,
           media_type: :movie | :episode | nil,
           expected_title: String.t() | nil,
+          identity_gate: :legacy | :exact,
+          identity_target: ReleaseIdentity.Target.t() | nil,
           expected_season: non_neg_integer() | nil,
           expected_episode: non_neg_integer() | nil,
           min_post_age_minutes: non_neg_integer() | nil,
@@ -157,7 +165,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
     )
 
     search_query = Keyword.get(opts, :search_query)
-    expected_title = Keyword.get(opts, :expected_title)
 
     # Note: TV-pattern-in-movie-search is no longer a hard removal. A movie
     # search expects no season/episode, so a TV-pattern release is treated as an
@@ -169,7 +176,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       |> filter_acceptable(opts)
       |> reject_excluded_sources(opts)
       |> reject_below_min_resolution(opts)
-      |> reject_title_mismatches(expected_title)
+      |> reject_identity_mismatches(opts)
       |> Enum.map(fn result ->
         breakdown = calculate_score_breakdown(result, opts)
         RankedResult.new(%{result: result, score: breakdown.total, breakdown: breakdown})
@@ -570,6 +577,22 @@ defmodule Mydia.Indexers.ReleaseRanker do
   end
 
   ## Private Functions - Title Mismatch Filtering
+
+  # The legacy Jaro gate stays the default. The :exact gate lets
+  # Mydia.Indexers.IdentityShadow rank the same candidates under
+  # ReleaseIdentity and record where the two disagree.
+  defp reject_identity_mismatches(results, opts) do
+    case Keyword.get(opts, :identity_gate, :legacy) do
+      :legacy -> reject_title_mismatches(results, Keyword.get(opts, :expected_title))
+      :exact -> reject_release_identity_mismatches(results, Keyword.get(opts, :identity_target))
+    end
+  end
+
+  defp reject_release_identity_mismatches(results, nil), do: results
+
+  defp reject_release_identity_mismatches(results, %ReleaseIdentity.Target{} = target) do
+    Enum.filter(results, &(ReleaseIdentity.check(&1.title, target) == :match))
+  end
 
   # When an expected_title is provided, parse each result's release name to extract
   # the actual show/movie title, then reject results where the parsed title doesn't

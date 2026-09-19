@@ -147,6 +147,47 @@ defmodule Mydia.Library.Text do
 
   def title_token_coverage(_library_title, _release_title), do: 0.0
 
+  # Words that carry no identity in a title. Release names keep or drop them
+  # freely: "Salt & Cedar", "Salt and Cedar", "The Ledger", "Ledger".
+  @match_stopwords MapSet.new(~w(a an the and or of))
+
+  @doc """
+  Split a title or release name into the tokens `match_key/1` joins.
+
+  Downcases, converts whole-word Roman numerals II..X to digits, expands
+  German umlauts, folds accents, splits on every run of characters that are
+  neither letters nor digits, and drops the filler words `a`, `an`, `the`,
+  `and`, `or` and `of`.
+  """
+  @spec match_tokens(String.t()) :: [String.t()]
+  def match_tokens(text) when is_binary(text) do
+    text
+    |> String.downcase()
+    |> convert_roman_numerals()
+    |> expand_umlauts()
+    |> nfkd_normalize()
+    |> strip_combining_marks()
+    |> String.split(~r/[^\p{L}\p{N}]+/u, trim: true)
+    |> Enum.reject(&MapSet.member?(@match_stopwords, &1))
+  end
+
+  @doc """
+  The clean-title key two names must share to be the same title.
+
+  Joins `match_tokens/1` with no separator, the way Sonarr and Radarr compare
+  titles, so punctuation, spacing and filler words cannot make two names
+  differ: "Moth-Man: Far From Shore", "Moth Man Far From Shore" and
+  "Mothman Far From Shore" all key to `"mothmanfarfromshore"`. Returns `""`
+  when nothing identifying remains.
+
+  ## Examples
+
+      iex> Mydia.Library.Text.match_key("Salt & Cedar")
+      "saltcedar"
+  """
+  @spec match_key(String.t()) :: String.t()
+  def match_key(text) when is_binary(text), do: text |> match_tokens() |> Enum.join()
+
   # ---- Internals ----
 
   defp light_normalize(title) do

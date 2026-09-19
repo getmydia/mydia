@@ -161,6 +161,21 @@ defmodule Mydia.Indexers.RankingOptionsTest do
       refute Keyword.has_key?(opts, :preferred_qualities)
       refute Keyword.has_key?(opts, :min_ratio)
     end
+
+    test "threads identity_target through and omits it when nil" do
+      target = %Mydia.Indexers.ReleaseIdentity.Target{
+        type: :movie,
+        year: 2031,
+        keys: ["glassharbor"]
+      }
+
+      assert RankingOptions.build(%{media_type: :movie, identity_target: target})[
+               :identity_target
+             ] ==
+               target
+
+      refute Keyword.has_key?(RankingOptions.build(%{media_type: :movie}), :identity_target)
+    end
   end
 
   describe "preferred_qualities ordering" do

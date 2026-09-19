@@ -1583,6 +1583,42 @@ defmodule Mydia.Events do
   end
 
   @doc """
+  Records a search.identity_shadow event: the release identity check would
+  have picked a different release than the legacy title gate on this search.
+
+  Grabs are unaffected. The event exists so the two gates can be compared on
+  real searches before the identity check replaces the title gate.
+
+  ## Parameters
+    - `media_item` - The MediaItem being searched for
+    - `metadata` - Comparison details from `Mydia.Indexers.IdentityShadow`
+    - `opts` - Optional parameters:
+      - `:episode` - The Episode if this is a TV show episode search
+  """
+  def search_identity_shadow(media_item, metadata, opts \\ []) do
+    episode = opts[:episode]
+
+    base_metadata =
+      %{
+        "title" => media_item.title,
+        "media_type" => media_item.type
+      }
+      |> Map.merge(metadata)
+      |> maybe_add_episode_context(episode)
+
+    create_event_async(%{
+      category: "search",
+      type: "search.identity_shadow",
+      actor_type: :job,
+      actor_id: search_actor_id(media_item),
+      resource_type: resource_type_for_search(episode),
+      resource_id: resource_id_for_search(media_item, episode),
+      severity: :info,
+      metadata: base_metadata
+    })
+  end
+
+  @doc """
   Records a search.error event when a search encounters an error.
 
   ## Parameters

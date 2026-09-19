@@ -60,7 +60,7 @@ defmodule Mydia.Library.ReleaseParser.TargetContext do
       type: parse_type(item.type),
       title: item.title || "",
       year: item.year,
-      alt_titles: build_alt_titles(item),
+      alt_titles: alt_titles(item),
       known_seasons: extract_known_seasons(item.episodes),
       external_ids: %{tmdb: item.tmdb_id, tvdb: item.tvdb_id, imdb: item.imdb_id}
     }
@@ -70,7 +70,13 @@ defmodule Mydia.Library.ReleaseParser.TargetContext do
   defp parse_type("tv_show"), do: :tv_show
   defp parse_type(other), do: raise(ArgumentError, "unknown media_item.type: #{inspect(other)}")
 
-  defp build_alt_titles(%MediaItem{title: title, original_title: original, metadata: metadata}) do
+  @doc """
+  The titles, other than `media_item.title`, that name this item: its
+  original title and any stored alternative titles, deduplicated. Needs no
+  preloads.
+  """
+  @spec alt_titles(MediaItem.t()) :: [String.t()]
+  def alt_titles(%MediaItem{title: title, original_title: original, metadata: metadata}) do
     metadata_titles =
       case metadata do
         %MediaMetadata{alternative_titles: titles} when is_list(titles) -> titles

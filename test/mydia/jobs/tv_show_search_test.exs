@@ -2035,6 +2035,40 @@ defmodule Mydia.Jobs.TVShowSearchTest do
     end
   end
 
+  describe "identity shadow" do
+    test "an episode search grabs as before and records the disagreement", %{bypass: bypass} do
+      decoy = "Star.Harbor.Rising.S01E05.1080p.WEB-DL.x264-GROUP"
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          Map.put(IndexerMock.tv_episode_result(%{season: 1, episode: 5}), :title, decoy)
+        ]
+      )
+
+      show = media_item_fixture(%{type: "tv_show", title: "Star Harbor"})
+
+      episode =
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 5,
+          title: "Dusty Rag",
+          air_date: ~D[2025-01-20]
+        })
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "specific", "episode_id" => episode.id})
+
+      assert Enum.any?(Mydia.Downloads.list_downloads(), &(&1.title == decoy))
+
+      events = Mydia.Events.list_events(type: "search.identity_shadow")
+
+      assert Enum.any?(events, fn event ->
+               event.metadata["legacy_pick"] == decoy and
+                 event.metadata["episode_number"] == 5
+             end)
+    end
+  end
+
   # Overrides only the :downloads embed of the layered runtime config
   # (Mydia.Config.get().downloads), leaving the rest of the resolved config
   # (indexers, media, and so on) exactly as this suite's setup left it.

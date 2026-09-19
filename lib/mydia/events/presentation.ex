@@ -234,6 +234,12 @@ defmodule Mydia.Events.Presentation do
       title: "All results filtered out"
     },
     %{
+      type: "search.identity_shadow",
+      icon: "hero-scale",
+      color: "text-info",
+      title: "Identity check disagreed"
+    },
+    %{
       type: "search.error",
       icon: "hero-exclamation-circle",
       color: "text-error",
@@ -536,6 +542,11 @@ defmodule Mydia.Events.Presentation do
 
   def detail(%Event{type: "search.filtered_out", metadata: metadata}) do
     "#{search_subject(metadata)}, #{metadata["results_count"] || 0} rejected"
+  end
+
+  def detail(%Event{type: "search.identity_shadow", metadata: metadata}) do
+    "#{search_subject(metadata)}: title gate picked #{metadata["legacy_pick"] || "nothing"}, " <>
+      "identity check picked #{metadata["exact_pick"] || "nothing"}"
   end
 
   def detail(%Event{type: "search.error", metadata: metadata}) do

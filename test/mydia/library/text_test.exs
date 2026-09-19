@@ -199,4 +199,49 @@ defmodule Mydia.Library.TextTest do
       assert Text.title_token_coverage("Zephyr Station", nil) == 0.0
     end
   end
+
+  describe "match_key/1" do
+    test "punctuation and spacing cannot make two names differ" do
+      assert Text.match_key("Moth-Man: Far From Shore") == "mothmanfarfromshore"
+      assert Text.match_key("Moth Man Far From Shore") == "mothmanfarfromshore"
+      assert Text.match_key("Mothman.Far.From.Shore") == "mothmanfarfromshore"
+    end
+
+    test "drops filler words wherever they appear" do
+      assert Text.match_key("The Salt & the Cedar") == "saltcedar"
+      assert Text.match_key("Salt and Cedar") == "saltcedar"
+      assert Text.match_key("A Tale of Two Harbors") == "taletwoharbors"
+    end
+
+    test "keeps digits and treats an apostrophe as a separator" do
+      assert Text.match_key("Q-Force '97") == "qforce97"
+      assert Text.match_key("Q Force 97") == "qforce97"
+    end
+
+    test "folds accents and expands German umlauts" do
+      assert Text.match_key("Café Lumière") == "cafelumiere"
+      assert Text.match_key("Die Bäume") == "diebaeume"
+    end
+
+    test "converts whole-word Roman numerals" do
+      assert Text.match_key("Harbor Watch II") == "harborwatch2"
+      assert Text.match_key("Harbor.Watch.2") == "harborwatch2"
+    end
+
+    test "keeps non-Latin letters" do
+      assert Text.match_key("湖畔の家") == "湖畔の家"
+    end
+
+    test "is empty when nothing identifying remains" do
+      assert Text.match_key("The") == ""
+      assert Text.match_key("--") == ""
+    end
+  end
+
+  describe "match_tokens/1" do
+    test "returns the tokens match_key/1 joins, in order" do
+      assert Text.match_tokens("2031-05-12 Lantern Vale (Part 1)") ==
+               ["2031", "05", "12", "lantern", "vale", "part", "1"]
+    end
+  end
 end
