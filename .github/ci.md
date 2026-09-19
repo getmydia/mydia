@@ -281,12 +281,12 @@ shell entry whenever the lock changes, so the restore was itself the trigger.
 
 Two checks now hold the line:
 
-- `environment.flutter` must read `>=<minor>.0 <<next minor>.0` for the `.fvmrc`
-  minor, enforced by `Check / Flutter Pin`. Pub enforces only the lower bound of
-  that range (flutter/flutter#95472), so the upper bound constrains Dependabot
-  alone, and only that check notices when a `.fvmrc` bump leaves it behind. The
-  floor is `.0` rather than the `.fvmrc` patch because patches of one minor pin
-  the same packages.
+- `environment.flutter` must read `>=MAJOR.MINOR.0 <MAJOR.NEXT_MINOR.0` for the
+  `.fvmrc` minor, enforced by `Check / Flutter Pin`. Pub enforces only the lower
+  bound of that range (flutter/flutter#95472), so the upper bound constrains
+  Dependabot alone, and only that check notices when a `.fvmrc` bump leaves it
+  behind. The floor is `.0` rather than the `.fvmrc` patch because patches of one
+  minor pin the same packages.
 - Every CI, release and E2E `flutter pub get` passes `--enforce-lockfile`. A lock
   that does not resolve on the pinned SDK fails `Test / Player`, and the gate
   reports `BLOCKED`. The E2E toolbox (`player/Dockerfile.test`) installs the SDK

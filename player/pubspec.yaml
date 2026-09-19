@@ -18,7 +18,8 @@ environment:
   # bound constrains Dependabot alone. The floor is the minor's .0, not the
   # .fvmrc patch, because patches of one minor pin the same packages.
   # ci-nix.yml's "Check / Flutter Pin" job requires exactly
-  # `>=<minor>.0 <<next minor>.0` for the .fvmrc minor: bump it with .fvmrc.
+  # `>=MAJOR.MINOR.0 <MAJOR.NEXT_MINOR.0` for the .fvmrc minor: bump it
+  # with .fvmrc.
   flutter: '>=3.47.0 <3.48.0'
 
 dependencies:
