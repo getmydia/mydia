@@ -3,8 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/layout/breakpoints.dart';
-import '../../../core/player/platform_features.dart';
-import '../../../core/theme/depth_tokens.dart';
 import '../glass_surface.dart';
 
 /// Responsive sizing for the playback panel.
@@ -252,10 +250,6 @@ class ChromePanel extends StatelessWidget {
 
   final PanelMetrics metrics;
 
-  /// Forced glass tier. Defaults to [PlatformFeatures.playerGlassTier]; pass
-  /// explicitly in tests/goldens so images do not vary by host platform.
-  final PlayerGlassTier? tier;
-
   const ChromePanel({
     super.key,
     required this.transport,
@@ -263,7 +257,6 @@ class ChromePanel extends StatelessWidget {
     required this.metrics,
     this.volume,
     this.secondary,
-    this.tier,
   });
 
   /// Vertical gap between the controls row and the scrubber row.
@@ -278,11 +271,7 @@ class ChromePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: metrics.maxWidth),
-      child: GlassSurface.playerChrome(
-        tier: tier,
-        borderRadius: const BorderRadius.all(
-          Radius.circular(DepthTokens.radiusPlayerPanel),
-        ),
+      child: GlassSurface.osd(
         child: Padding(
           // Horizontal padding is now tier-dependent (see
           // `PanelMetrics.horizontalPadding`'s dartdoc); it used to be a

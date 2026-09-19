@@ -907,33 +907,18 @@ class _ScrubberRow extends StatelessWidget {
     required this.onSeekEnd,
   });
 
-  /// Both timecodes share this style — deliberately identical. An earlier
+  /// Both timecodes share this style, deliberately identical. An earlier
   /// version styled elapsed at full white and remaining dimmer; that
-  /// asymmetry measured as the single worst-case contrast on the whole
-  /// panel (2.32:1) in an accessibility audit of this panel.
+  /// asymmetry measured as the single worst-case contrast on the whole panel
+  /// (2.32:1) in an accessibility audit.
   ///
-  /// `color` must stay fully opaque: `glass_legibility_test.dart` models the
-  /// contrast contract assuming an opaque foreground composited with this
-  /// shadow, and a translucent color (even a small drop, e.g. white @ 0.55)
-  /// composites with the fill/shadow behind it and measures under the WCAG
-  /// SC 1.4.3 text floor of 4.5:1 despite the test passing on the wrong
-  /// (opaque) model — see that file's CenterPlayButton/timecode cases for
-  /// why the drift went uncaught before.
-  ///
-  /// The shadow is load-bearing, not decorative: `glass_legibility_test.dart`
-  /// measures the fill alone at this row's height as under the WCAG SC 1.4.3
-  /// text floor of 4.5:1 — and comfortably above it with this exact shadow
-  /// composited in. Never apply this treatment to an icon; row 1's icons stay
-  /// unshadowed, held to the looser 3:1 non-text floor instead (see
-  /// `DepthTokens.playerChromeFillTopAlpha`'s doc comment).
+  /// No text shadow: the OSD fill alone holds white text at ~13:1 over a
+  /// pure-white frame (`osd_legibility_test.dart`).
   static const TextStyle _timeStyle = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w500,
     color: Colors.white,
     fontFeatures: [FontFeature.tabularFigures()],
-    shadows: [
-      Shadow(color: Color(0x99000000), blurRadius: 4), // black @ 0.6, 4px
-    ],
   );
 
   static String _format(Duration d) {

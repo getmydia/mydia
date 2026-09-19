@@ -37,7 +37,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/player/platform_features.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
@@ -73,8 +72,6 @@ Widget _panel(double width) {
             Center(
               child: ChromePanel(
                 metrics: metrics,
-                // Forced so images do not vary with the host platform.
-                tier: PlayerGlassTier.full,
                 // Episode nav wired unconditionally, matching real usage
                 // whenever adjacent episodes exist (`PlaybackChrome` now
                 // always passes both callbacks through — see its wiring
@@ -155,7 +152,7 @@ Widget _panel(double width) {
 ///     `_matchers_io.dart`), then rasterizes *that* ancestor's full
 ///     `paintBounds`. `ChromePanel`'s own outermost render object (a
 ///     `ConstrainedBox`) is not itself a repaint boundary — the one inside
-///     `GlassSurface.playerChrome` sits *below* it in the tree, so the
+///     `GlassSurface.osd` sits *below* it in the tree, so the
 ///     upward walk never reaches it and instead resolves to whatever much
 ///     larger ancestor boundary happens to exist above the panel (in
 ///     practice, something close to the full test viewport). Naively

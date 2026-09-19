@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/player/input_capabilities.dart';
-import '../../../core/player/platform_features.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../glass_surface.dart';
 import '../shimmer_card.dart';
@@ -35,7 +34,6 @@ class UpNextPrompt extends StatefulWidget {
     required this.onPlayNow,
     required this.onDismiss,
     required this.onEngagedChanged,
-    this.tier,
   });
 
   final UpNextTarget target;
@@ -49,8 +47,6 @@ class UpNextPrompt extends StatefulWidget {
   /// countdown while it is true, so reaching for a control is itself enough
   /// to stop the clock.
   final ValueChanged<bool> onEngagedChanged;
-
-  final PlayerGlassTier? tier;
 
   static const Key pillKey = Key('up-next-pill');
   static const Key cardKey = Key('up-next-card');
@@ -144,7 +140,6 @@ class _UpNextPromptState extends State<UpNextPrompt> {
 
     return GlassPill(
       key: UpNextPrompt.pillKey,
-      tier: widget.tier,
       height: touch ? 44 : GlassPill.defaultHeight,
       onTap: () => _setExpanded(true),
       child: Row(
@@ -193,19 +188,14 @@ class _UpNextPromptState extends State<UpNextPrompt> {
         ? math.max(0.0, width - 32)
         : (width - 48).clamp(0.0, 320.0);
     final still = widget.target.thumbnailUrl;
-    final glassText = TextStyle(
-        color: Colors.white.withValues(alpha: .80),
-        shadows: GlassPill.textShadow);
+    final glassText = TextStyle(color: Colors.white.withValues(alpha: .80));
     return GestureDetector(
       key: UpNextPrompt.cardKey,
       behavior: HitTestBehavior.opaque,
       onTap: () => _setExpanded(false),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: cardWidth.toDouble()),
-        child: GlassSurface.playerChrome(
-          tier: widget.tier,
-          borderRadius: const BorderRadius.all(
-              Radius.circular(DepthTokens.radiusPlayerPanel)),
+        child: GlassSurface.osd(
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -242,8 +232,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                               style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.white.withValues(alpha: .94),
-                                  shadows: GlassPill.textShadow)),
+                                  color: Colors.white.withValues(alpha: .94))),
                         ])),
                   ]),
                   const SizedBox(height: 11),
@@ -258,7 +247,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                         // the pill, where it actually shows.
                         ringPadding: 2,
                         borderRadius: const BorderRadius.all(
-                          Radius.circular(DepthTokens.radiusPlayerPill + 2),
+                          Radius.circular(DepthTokens.radiusOsdPill + 2),
                         ),
                         child: Container(
                           height: 28,
@@ -266,7 +255,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: .92),
                             borderRadius: const BorderRadius.all(
-                              Radius.circular(DepthTokens.radiusPlayerPill),
+                              Radius.circular(DepthTokens.radiusOsdPill),
                             ),
                           ),
                           child: const Row(
