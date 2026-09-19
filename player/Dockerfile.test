@@ -16,7 +16,17 @@
 # - MYDIA_URL: URL of the Mydia server (for API calls)
 # - RELAY_URL: URL of the metadata-relay service
 
-FROM ghcr.io/cirruslabs/flutter:stable
+# The SDK comes from player/.fvmrc, the pin every other build reads, so this
+# image always matches the SDK pubspec.lock was resolved on and run-tests.sh
+# can pass --enforce-lockfile. It used to build on cirruslabs' floating
+# stable image, which stopped following releases and left E2E on an SDK
+# nothing else used.
+#
+# Never write a version number in these comments: ci-nix.yml's "Check /
+# Flutter Pin" job fails on any line that names Flutter next to one.
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 # Set pub cache location for caching
 ENV PUB_CACHE=/root/.pub-cache
@@ -24,12 +34,20 @@ ENV CARGO_HOME=/root/.cargo
 ENV RUSTUP_HOME=/root/.rustup
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install dependencies for Linux desktop Flutter + utilities
+# Linux desktop build dependencies, plus what the SDK itself shells out to
+# (git, curl, unzip, xz-utils, zip) and what xvfb-run needs (xauth). The Mesa
+# DRI, EGL and GLES packages give Impeller a software GL under Xvfb.
 RUN apt-get update -qq && \
     apt-get install -y -qq --no-install-recommends \
-        curl \
-        jq \
+        build-essential \
         ca-certificates \
+        curl \
+        git \
+        jq \
+        unzip \
+        xz-utils \
+        zip \
+        xauth \
         xvfb \
         clang \
         cmake \
@@ -49,6 +67,10 @@ RUN apt-get update -qq && \
         libxcursor-dev \
         libxi-dev \
         libgl1-mesa-dev \
+        libgl1-mesa-dri \
+        libegl1 \
+        libgles2 \
+        libglu1-mesa \
     && rm -rf /var/lib/apt/lists/*
 
 # Rust toolchain is required for building the mydia_player_p2p plugin. This
@@ -66,6 +88,20 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 WORKDIR /workspace
 COPY rust-toolchain.toml ./
 RUN rustup toolchain install
+
+# Same install as the root Dockerfile's flutter-builder stage: a tagged git
+# checkout, whose first run fetches the matching Dart SDK. Keyed on .fvmrc
+# alone, so the SDK is re-fetched only when the pin moves. precache --linux
+# warms the desktop engine artifacts here instead of on every test run.
+COPY player/.fvmrc /tmp/.fvmrc
+RUN FLUTTER_VERSION="$(jq -r .flutter /tmp/.fvmrc)" && \
+    git clone --depth 1 --branch "$FLUTTER_VERSION" \
+      https://github.com/flutter/flutter.git /opt/flutter && \
+    git config --global --add safe.directory /opt/flutter && \
+    /opt/flutter/bin/flutter config --no-analytics && \
+    /opt/flutter/bin/flutter precache --linux
+
+ENV PATH="/opt/flutter/bin:${PATH}"
 
 RUN flutter config --enable-linux-desktop
 

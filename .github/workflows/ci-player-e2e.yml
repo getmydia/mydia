@@ -125,7 +125,7 @@ jobs:
           # builds but is missing from `relevant` is unreachable on a PR that
           # touches only that path, which has been the root cause of two
           # separate bugs here (the production Dockerfile, then
-          # rust-toolchain.toml). player/pubspec.lock and
+          # rust-toolchain.toml). player/.fvmrc, player/pubspec.lock and
           # player/Dockerfile.test don't need their own entries: 'player/**'
           # already covers them.
           filters: |
@@ -156,6 +156,7 @@ jobs:
               - 'mix.lock'
               - 'Dockerfile'
             toolbox:
+              - 'player/.fvmrc'
               - 'player/pubspec.lock'
               - 'player/Dockerfile.test'
               - 'rust-toolchain.toml'
