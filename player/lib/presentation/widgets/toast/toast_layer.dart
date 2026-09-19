@@ -69,13 +69,25 @@ class _ToastLayerState extends State<ToastLayer> {
                   final bottom = insets.bottom > 0
                       ? insets.bottom + ToastMetrics.obstructionGap
                       : safeBottom + ToastMetrics.restingGap;
+                  // A claim can reach the layer's own far edge, and a gutter
+                  // on each side of one that wide asks `Padding` for more
+                  // width than the layer has, which deflates the pill to
+                  // nothing. A claim that leaves no room for the pill plus
+                  // both gutters degrades to the resting box: a gutter on
+                  // each side of the whole layer, overlapping the claim
+                  // rather than collapsing under it.
+                  final cleared = constraints.maxWidth -
+                      insets.left -
+                      2 * ToastMetrics.gutter;
                   final entry = _controller.current;
                   return AnimatedPadding(
                     duration:
                         reduceMotion ? Duration.zero : DepthTokens.motionMedium,
                     curve: DepthTokens.curveEmphasized,
                     padding: EdgeInsets.only(
-                      left: insets.left + ToastMetrics.gutter,
+                      left: cleared > 0
+                          ? insets.left + ToastMetrics.gutter
+                          : ToastMetrics.gutter,
                       right: ToastMetrics.gutter,
                       bottom: bottom,
                     ),

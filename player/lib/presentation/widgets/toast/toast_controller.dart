@@ -86,7 +86,7 @@ class ToastController extends ChangeNotifier {
 
   /// Stops [id]'s countdown while the pointer rests on it.
   void pause(int id) {
-    if (_current?.id != id) return;
+    if (_disposed || _current?.id != id) return;
     _cancelTimer();
   }
 

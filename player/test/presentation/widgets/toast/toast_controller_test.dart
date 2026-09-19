@@ -207,27 +207,44 @@ void main() {
       controller.dispose();
     });
 
-    test('re-setting an identical claim does not notify', () {
+    test('re-setting an equal claim does not notify', () {
       final controller = ToastController();
       var notified = 0;
       controller.addListener(() => notified++);
       const claim =
           ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83));
+      // A second instance carrying equal values, not the same object: two
+      // identical `const` literals canonicalise to one, which would let this
+      // pass on identity alone even if `ToastClaim` had no `==`.
+      final equal =
+          ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83));
+      expect(identical(claim, equal), isFalse);
       controller.setClaim(#dock, claim);
-      controller.setClaim(#dock, claim);
+      controller.setClaim(#dock, equal);
       expect(notified, 1);
       controller.dispose();
     });
 
     test('writes after dispose are ignored', () {
-      final controller = ToastController()..dispose();
-      expect(
-          () => controller.setClaim(#dock,
-              const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(0, 0, 1, 1))),
-          returnsNormally);
-      expect(() => controller.removeClaim(#dock), returnsNormally);
-      expect(() => controller.close(0), returnsNormally);
-      expect(() => controller.show('late'), returnsNormally);
+      fakeAsync((async) {
+        final controller = ToastController();
+        final entry = controller.show('Saved');
+        expect(async.pendingTimers, hasLength(1),
+            reason: 'a live countdown, so the check below can fail');
+        controller.dispose();
+        expect(async.pendingTimers, isEmpty);
+        expect(
+            () => controller.setClaim(#dock,
+                const ToastClaim(ToastEdge.bottom, Rect.fromLTWH(0, 0, 1, 1))),
+            returnsNormally);
+        expect(() => controller.removeClaim(#dock), returnsNormally);
+        expect(() => controller.close(entry.id), returnsNormally);
+        expect(() => controller.pause(entry.id), returnsNormally);
+        expect(() => controller.resume(entry.id), returnsNormally);
+        expect(() => controller.show('late'), returnsNormally);
+        expect(async.pendingTimers, isEmpty,
+            reason: 'a disposed controller reschedules no countdown');
+      });
     });
   });
 }

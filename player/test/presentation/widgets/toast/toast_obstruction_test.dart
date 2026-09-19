@@ -52,6 +52,27 @@ void main() {
     expect(pill.center.dx, closeTo((260 + 16 + 1400 - 16) / 2, 0.5));
   });
 
+  testWidgets('a claim as wide as the layer leaves the pill its resting box',
+      (tester) async {
+    await _pump(
+      tester,
+      Stack(children: [
+        const SizedBox.expand(key: _body),
+        const ToastObstruction(
+          edge: ToastEdge.left,
+          child: SizedBox(width: 1400, height: 900),
+        ),
+      ]),
+    );
+    final pill = await _showAndMeasure(tester);
+    // The claim reaches the layer's right edge, so a gutter on both sides of
+    // its inset cannot fit. The pill keeps the resting box, centred in the
+    // layer, instead of collapsing to nothing.
+    expect(pill.width, greaterThan(0));
+    expect(pill.center.dx, closeTo(700, 0.5));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the pill sits 16px above the tallest bottom obstruction',
       (tester) async {
     await _pump(

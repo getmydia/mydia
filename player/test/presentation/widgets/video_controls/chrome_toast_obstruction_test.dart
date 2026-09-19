@@ -41,6 +41,19 @@ void main() {
     expect(tester.getRect(_pill).bottom, closeTo(900 - 136, 0.5));
 
     chrome.reverse();
+    // Three frames, never a settle: the first starts the hide and queues
+    // `ToastObstruction`'s post-frame withdrawal, the second rebuilds the
+    // layer without it, and the third is the first the padding tween moves
+    // the pill on. The chrome is still mid-hide, so the pill leaving the
+    // claimed clearance here is what pins the claim to the start of the hide.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 48));
+    expect(chrome.status, AnimationStatus.reverse);
+    final hiding = tester.getRect(_pill).bottom;
+    expect(hiding, greaterThan(900 - 136));
+    expect(hiding, lessThan(900 - 24));
+
     await tester.pumpAndSettle();
     expect(tester.getRect(_pill).bottom, closeTo(900 - 24, 0.5));
 

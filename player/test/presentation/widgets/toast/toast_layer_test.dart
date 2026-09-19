@@ -45,8 +45,11 @@ void main() {
     final context = tester.element(find.byKey(_body));
     expect(
       () => Toaster.of(context),
-      throwsA(isA<FlutterError>().having(
-          (e) => e.message, 'message', contains('No ToastLayer found'))),
+      throwsA(isA<FlutterError>()
+          .having((e) => e.message, 'message', contains('No ToastLayer found'))
+          // The hint names the one builder that fixes the call: losing it
+          // would leave the reader with a complaint and no way out.
+          .having((e) => e.message, 'hint', contains('toastLayerBuilder'))),
     );
   });
 
