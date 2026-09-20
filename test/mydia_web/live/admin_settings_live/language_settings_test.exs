@@ -53,6 +53,8 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettingsTest do
     # instead let a YAML streaming.subtitle_language reassert itself on the next
     # reload, switching automatic subtitles back on for every show nobody has
     # chosen for.
+    original_runtime = Application.get_env(:mydia, :runtime_config)
+
     Application.put_env(:mydia, :runtime_config, %{
       Mydia.Config.Schema.defaults()
       | streaming: %{
@@ -61,7 +63,13 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettingsTest do
         }
     })
 
-    on_exit(fn -> Application.delete_env(:mydia, :runtime_config) end)
+    on_exit(fn ->
+      if original_runtime do
+        Application.put_env(:mydia, :runtime_config, original_runtime)
+      else
+        Application.delete_env(:mydia, :runtime_config)
+      end
+    end)
 
     assert {:ok, ["streaming.subtitle_language"]} =
              LanguageSettings.save(
