@@ -590,6 +590,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// revision landing after a viewer pick would silently undo it.
   bool _preferenceAppliedForPlayback = false;
 
+  /// Exposed for widget tests that assert per-file preference reset on a
+  /// reused State. See `player_screen_file_change_test.dart`.
+  @visibleForTesting
+  SubtitlePreference? get subtitlePreferenceForTesting => _subtitlePreference;
+
+  @visibleForTesting
+  bool get preferenceAppliedForTesting => _preferenceAppliedForPlayback;
+
   /// The viewer's choice while a source switch carries it to the new
   /// source, in the server's id space. See [SubtitleIntent].
   ///
