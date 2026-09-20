@@ -345,7 +345,7 @@ The metadata relay proxies requests to TVDB/TMDB and handles remote access relay
 | `SUBTITLE_LANGUAGE` | Legacy name for `DOWNLOAD_SUBTITLE_LANGUAGE` and still read as the same setting. It names what to acquire, as it always did; only the key it lives under moved | `en` |
 | `METADATA_LANGUAGE` | Language sent to TMDB/TVDB for titles, descriptions, and posters. Accepts ISO 639-1 codes (`de`) or BCP 47 tags (`de-DE`, `pt-BR`). | `en-US` |
 
-Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays. Subtitles split the same way: `DOWNLOAD_SUBTITLE_LANGUAGE` decides what gets fetched, `SUBTITLE_PLAYBACK_LANGUAGE` which track switches on. `SUBTITLE_LANGUAGE` keeps working and still means acquisition — its meaning never changed, only where the setting lives.
+Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays. Subtitles split the same way: `DOWNLOAD_SUBTITLE_LANGUAGE` decides what gets fetched, `SUBTITLE_PLAYBACK_LANGUAGE` which track switches on. `SUBTITLE_LANGUAGE` keeps working and still means acquisition: its meaning never changed, only where the setting lives.
 
 Every variable in this section can also be set from **Admin > System > Settings**, under **Language**. An environment variable overrides the database value and locks the field there. Playback audio and the default-track option appear only when the player is enabled.
 
