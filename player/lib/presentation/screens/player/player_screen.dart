@@ -1040,6 +1040,38 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  /// Re-arm the per-show subtitle preference when this State is handed a
+  /// different file.
+  ///
+  /// go_router keys `/player/:type/:id`'s page off the route *pattern* rather
+  /// than the resolved location (`go_router/lib/src/match.dart:231`:
+  /// `pageKey: ValueKey<String>(newMatchedPath)`, where `newMatchedPath` is
+  /// `concatenatePaths(matchedPath, route.path)`). So `_navigateToEpisode`'s
+  /// `context.go` updates this State in place instead of building a new one,
+  /// and [_initializePlayer], which is where every other per-file field is
+  /// cleared, is not re-entered.
+  ///
+  /// Deliberately narrow. It resets the three subtitle-preference fields and
+  /// nothing else, and it does not call [_initializePlayer]. Whether the rest
+  /// of this screen's per-file state survives the same reuse is a separate
+  /// question with a separate answer; see
+  /// `player_screen_file_change_test.dart`, which asserts both.
+  @override
+  void didUpdateWidget(PlayerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final previous = '${oldWidget.mediaType}:${oldWidget.mediaId}:'
+        '${oldWidget.fileId}';
+    final current = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
+    if (previous == current) return;
+
+    // The preference belongs to the show, not the file, but it is refetched
+    // per file, so the previous file's answer must not apply to this one.
+    _subtitlePreference = null;
+    _preferenceAppliedForPlayback = false;
+    _preferenceApplyRetries = 0;
+  }
+
   /// Read the auto-skip preference once at mount.
   ///
   /// Failure is not propagated: secure storage being unreadable is no reason
@@ -2919,11 +2951,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The clearing half is insurance, not a live path. go_router derives the
   /// page key for `/player/:type/:id` from the route *pattern* rather than the
   /// resolved location, so a next-episode navigation updates this State in
-  /// place instead of building a new one, and `PlayerScreen` has no
-  /// `didUpdateWidget` to notice the new parameters. [_initializePlayer] is
-  /// therefore never re-entered on that path and neither is this. It is
-  /// written to be correct if that gap is ever closed, and until then the
-  /// media key only ever transitions from null on first mount.
+  /// place instead of building a new one, and `PlayerScreen`'s
+  /// `didUpdateWidget` notices the new parameters only for the
+  /// subtitle-preference fields. [_initializePlayer] is therefore still never
+  /// re-entered on that path and neither is this. The page key is
+  /// `go_router/lib/src/match.dart:231`, if you want to check the claim.
   void _resetSegmentsIfMediaChanged() {
     final mediaKey = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
     if (_skipTrackerMediaKey == mediaKey) return;
