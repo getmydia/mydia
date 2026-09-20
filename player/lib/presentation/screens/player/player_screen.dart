@@ -87,12 +87,14 @@ import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../domain/models/download.dart';
+import '../../../graphql/schema.graphql.dart';
 import '../../../graphql/fragments/media_file_fragment.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
+import '../../../graphql/mutations/set_subtitle_preference.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../graphql/queries/subtitle_search.graphql.dart';
@@ -3905,6 +3907,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _subtitleChosenThisPlayback = true;
     _subtitleIntentAcrossSwitch = null;
     await _applySubtitleSelection(selected);
+    // After the apply, not before: a pick that fails to load should not be
+    // remembered as the show's preference.
+    unawaited(_rememberSubtitlePreference(selected));
   }
 
   /// Applies [selected] (null for "Off") to the player, and returns the
@@ -4548,6 +4553,129 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  /// Stores the picked subtitle against the show or film, so later episodes
+  /// open on it without another pick.
+  ///
+  /// Fire-and-forget from the viewer's perspective, the same trade
+  /// [_rememberAudioLanguage] makes: the track has already changed by the
+  /// time this runs, so a failure costs the preference and never the playback
+  /// the person is watching. A server too old to know the mutation answers
+  /// with a GraphQL validation error, which is a version gap rather than a
+  /// fault and stays silent.
+  ///
+  /// Called only for a pick the viewer made -- the sheet's tile, or a remote
+  /// `selectTrack` -- and always after [_applySubtitleSelection] has returned,
+  /// so a track that never loaded is not remembered as what this show opens
+  /// on. The preference applying itself from storage is deliberately not a
+  /// call site: that is a choice being restored, not a new one, and writing
+  /// it back would let one episode whose track list lacks the remembered
+  /// title degrade what is stored for the rest of the show.
+  ///
+  /// An mpv-native pick has no disposition flags of its own: media_kit
+  /// publishes a title and a language and nothing else. It is translated
+  /// through its stream index to the server's own track, which does have
+  /// them, by the same route [_captureSubtitleIntent] uses across a source
+  /// switch. A track that cannot be translated stores its language and title
+  /// with both flags false, which the matcher's title tiebreak still
+  /// resolves on the next episode.
+  Future<void> _rememberSubtitlePreference(
+      app_models.SubtitleTrack? track) async {
+    // The pick has to be the one actually showing. [_applySubtitleSelection]
+    // returns normally when a body never loaded, and when a later pick
+    // superseded this one, so a call site's "after the apply" ordering is only
+    // half the story -- this is the other half, and it is here rather than at
+    // each call site so neither can forget it. `SubtitleTrack.operator ==` is
+    // id-based, and null compares equal to null, which is exactly the "Off"
+    // case: an explicit Off is a selection like any other and is remembered as
+    // one.
+    if (_selectedSubtitleTrack != track) return;
+
+    if (widget.fileId == 'offline') return;
+
+    final graphqlClient = _graphqlClient;
+    if (graphqlClient == null) return;
+
+    final resolved =
+        track == null ? null : await _serverSideSubtitleTrack(track);
+
+    // A track with no usable language tag would pin the show to a preference
+    // that can never match anything on the next file, exactly as an 'und'
+    // audio track would. Better to remember nothing.
+    if (track != null && (resolved == null || !_hasUsableLanguage(resolved))) {
+      return;
+    }
+
+    try {
+      final result = await graphqlClient.mutate(
+        MutationOptions(
+          document: documentNodeMutationSetSubtitlePreference,
+          variables: Variables$Mutation$SetSubtitlePreference(
+            fileId: widget.fileId,
+            mode: resolved == null
+                ? Enum$SubtitlePreferenceMode.OFF
+                : Enum$SubtitlePreferenceMode.TRACK,
+            language: resolved?.language,
+            forced: resolved?.forced,
+            hearingImpaired: resolved?.hearingImpaired,
+            trackTitle: resolved?.title,
+          ).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint(
+            '[PlayerScreen] Could not remember subtitle preference: ${result.exception}');
+        return;
+      }
+
+      debugPrint('[PlayerScreen] Remembered subtitle preference');
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not remember subtitle preference: $e');
+    }
+  }
+
+  /// [track] as the server knows it, or null when it cannot be translated.
+  ///
+  /// A server track is already in the server's id space and is returned as
+  /// is. An mpv-native one is matched to the server's list through its
+  /// stream index, which has to be read while its file is still loaded.
+  Future<app_models.SubtitleTrack?> _serverSideSubtitleTrack(
+    app_models.SubtitleTrack picked,
+  ) async {
+    if (!isMpvNativeSubtitleTrackId(picked.id)) return picked;
+
+    final player = _player;
+    if (player == null) return null;
+
+    final mpvId = mpvIdOfSubtitleTrack(picked.id);
+    if (mpvId == null) return null;
+
+    final streamIndex = (await subtitleStreamIndices(player))[mpvId];
+    final intent = subtitleIntentBeforeSwitch(
+      selected: picked,
+      viewerChose: true,
+      selectedStreamIndex: streamIndex,
+      serverTracks: _serverSubtitleTracks,
+    );
+
+    return switch (intent) {
+      IntentTrack(:final track) => track,
+      // Unmappable: keep what mpv told us. The language and title still
+      // identify the track well enough for the next episode's list.
+      _ => picked,
+    };
+  }
+
+  /// Whether [track] names a language that can match a track on another file.
+  ///
+  /// `'und'` is ffprobe's "undetermined", which every untagged track reports,
+  /// so storing it would pin the show to a preference that nothing can
+  /// satisfy.
+  bool _hasUsableLanguage(app_models.SubtitleTrack track) {
+    final language = track.language.trim().toLowerCase();
+    return language.isNotEmpty && language != 'und';
+  }
+
   /// Shows the quality picker and switches sources at the current position.
   Future<void> _showQualitySelector() async {
     // A restart already in flight owns the player this would act on, exactly
@@ -5134,6 +5262,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _subtitleChosenThisPlayback = true;
         _subtitleIntentAcrossSwitch = null;
         await _applySubtitleSelection(track);
+        // Remotely or by hand, a pick is a pick: remembered for the show.
+        unawaited(_rememberSubtitlePreference(track));
     }
   }
 
