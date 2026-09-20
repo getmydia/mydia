@@ -2,6 +2,8 @@ import '../../../core/player/image_subtitle_sidecar.dart';
 import '../../../domain/models/subtitle_format.dart';
 import '../../../domain/models/subtitle_track.dart';
 
+import 'subtitle_selection_target.dart';
+
 /// Which subtitle tracks the user may pick from, given the delivery mode.
 ///
 /// In direct play every track is offered: mpv reads them all from the
@@ -144,15 +146,19 @@ bool shouldApplySubtitleSelection({
 /// — not against the applied value itself. A tap repeating an in-flight
 /// attempt's own target (a retry, or a cancel back to whatever's still
 /// displayed as current while that attempt resolves) is a no-op; a tap
-/// naming anything else, including a target that matches what's *already
-/// applied*, starts a fresh attempt.
+/// naming anything else starts a fresh attempt.
+///
+/// [pending] is null exactly when no attempt is in flight, which is what
+/// makes an Off tapped from a clean state a real tap rather than a repeat
+/// of nothing. See [SubtitleSelectionTarget] for why that needed a type
+/// rather than a nullable track.
 ///
 /// This is the other half of the fix [pendingSubtitleSelectionAfterFailure]
 /// is for: comparing against a pending value that a failed attempt never
 /// clears would make every retry of that attempt read as a no-op forever.
 bool shouldStartSubtitleSelection({
-  required SubtitleTrack? requested,
-  required SubtitleTrack? pending,
+  required SubtitleSelectionTarget requested,
+  required SubtitleSelectionTarget? pending,
   required bool mounted,
 }) {
   if (!mounted) return false;
@@ -170,7 +176,7 @@ bool shouldStartSubtitleSelection({
 /// clobber that newer attempt's own target with this, older one's.
 /// Otherwise this attempt is the one that set [currentPending] in the
 /// first place — nothing else could have without also bumping the
-/// generation — so this falls the tracker back to [appliedSelection],
+/// generation — so this falls the tracker back to [appliedTarget],
 /// what is actually true on the player right now, rather than leaving it
 /// pointed at a target this attempt never reached.
 ///
@@ -181,14 +187,14 @@ bool shouldStartSubtitleSelection({
 /// fetch (a dropped connection, a server error) left the pending target
 /// stuck at the track that just failed, so re-tapping it after the
 /// "could not load" toast was a silent no-op.
-SubtitleTrack? pendingSubtitleSelectionAfterFailure({
+SubtitleSelectionTarget? pendingSubtitleSelectionAfterFailure({
   required int requestGeneration,
   required int currentGeneration,
-  required SubtitleTrack? currentPending,
-  required SubtitleTrack? appliedSelection,
+  required SubtitleSelectionTarget? currentPending,
+  required SubtitleSelectionTarget? appliedTarget,
 }) {
   if (requestGeneration != currentGeneration) return currentPending;
-  return appliedSelection;
+  return appliedTarget;
 }
 
 /// The subtitle delay to hand mpv right now, in milliseconds.

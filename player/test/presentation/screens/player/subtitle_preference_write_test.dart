@@ -411,28 +411,19 @@ void main() {
     expect(written['hearingImpaired'], isFalse);
   });
 
-  testWidgets(
-      'a sheet Off with nothing applied is swallowed by the selection gate, so '
-      'nothing is written (known defect, pinned)', (tester) async {
+  testWidgets('a sheet Off with nothing applied is applied and remembered',
+      (tester) async {
     final link = _link();
     final player = _ProbedPlayer();
     await _mount(tester, link, player);
 
-    // KNOWN DEFECT, PINNED ON PURPOSE -- see the assertion at the end for what
-    // the fix flips this to.
-    //
-    // `shouldStartSubtitleSelection` (`subtitle_track_builder.dart`) drops a
-    // pick whose target equals `_pendingSubtitleSelection`, and with nothing
-    // applied that field is null -- the very value a tap on "Off" requests --
-    // so the tap never reaches `_applySubtitleSelection`, and therefore never
-    // reaches `_rememberSubtitlePreference` either. The remote-control Off
-    // path has no such gate, which is why the test above it can assert the Off
-    // write at all.
-    //
-    // Pre-existing selection semantics with their own tests, deliberately not
-    // changed by the subtitle-preference work, and parked for review rather
-    // than fixed here: this test records today's behaviour so the fix has a
-    // contract to flip instead of a silent gap.
+    // The contract this test used to record as a defect. With nothing applied
+    // and no attempt in flight, `_pendingSubtitleSelection` is null, meaning
+    // idle -- not `TargetOff()`, which is what this tap requests. The two are
+    // different values, so `shouldStartSubtitleSelection` lets the tap
+    // through, `_applySubtitleSelection` runs, and the write follows from it.
+    // The remote-control Off path, which never had this gate, has always
+    // written OFF; the two paths now agree.
     await tester.tap(find.byKey(SecondaryCluster.subtitlesKey));
     await pumpUntil(tester, () => _sheetCount() > 0);
     await tester.pump(const Duration(milliseconds: 400));
@@ -444,20 +435,13 @@ void main() {
     await tester.pump();
     await tester.tap(offTile);
 
-    // The sheet closes only once the tap has been handled by the screen, so
-    // its disappearance is the identified point this absence assertion stands
-    // on -- not an empty state that a missed tap would also satisfy.
     await pumpUntil(tester, () => _sheetCount() == 0);
-    await tester.pump(const Duration(seconds: 1));
+    await pumpUntil(tester, () => _writes(link).isNotEmpty);
 
-    expect(player.selectedSubtitleTracks, isEmpty,
-        reason: 'the Off never even reached the player: the gate drops it '
-            'before _applySubtitleSelection, which is the step the write '
+    expect(player.selectedSubtitleTracks, isNotEmpty,
+        reason: 'the Off reached the player, which is the step the write '
             'follows from');
-    expect(_writes(link), isEmpty,
-        reason: 'known defect: this tap is swallowed by '
-            'shouldStartSubtitleSelection, so the viewer who opened the sheet '
-            'purely to say "never subtitles for this show" stores nothing. '
-            'The fix makes this assertion `hasLength(1)` with mode OFF');
+    expect(_writes(link), hasLength(1));
+    expect(_writes(link).single.variables['mode'], 'OFF');
   });
 }

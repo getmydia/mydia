@@ -124,6 +124,7 @@ import '../settings/settings_controller.dart';
 import 'stats_context_builder.dart';
 import 'subtitle_content_query.dart';
 import 'subtitle_preference.dart';
+import 'subtitle_selection_target.dart';
 import 'subtitle_track_builder.dart';
 
 export '../../../core/player/resume_plan.dart'
@@ -528,9 +529,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// would mean a tap matching whatever is still displayed as current —
   /// because its own request hasn't resolved yet — is invisible to the
   /// guard and gets silently dropped instead of registering as a retry or
-  /// a cancel. `null` means "Off is the most recently requested state",
-  /// same as [_selectedSubtitleTrack]'s `null`; both start `null` because
-  /// nothing has been requested yet.
+  /// a cancel.
+  ///
+  /// `null` means no attempt is in flight, which is not the same as "Off is
+  /// the requested state": that is [TargetOff]. Conflating them is what let a
+  /// sheet Off tapped from a clean state be dropped before it could be
+  /// applied or remembered. See [SubtitleSelectionTarget].
   ///
   /// Written once, up front, to whatever a call is requesting, and — this
   /// is the part a second review round found missing — reverted by
@@ -548,7 +552,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// a UI concern for whichever task rebuilds this sheet with real
   /// loading states; this field only exists to make the *comparison*
   /// correct in the meantime.
-  app_models.SubtitleTrack? _pendingSubtitleSelection;
+  SubtitleSelectionTarget? _pendingSubtitleSelection;
 
   /// Bumped on every non-no-op call into [_showSubtitleSelector].
   ///
@@ -1886,7 +1890,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// directly, not through [_switchGate]: this runs inside the switch that
   /// holds the gate, so a pass would wait for its own switch forever.
   Future<SubtitleIntent?> _captureSubtitleIntent(Player player) async {
-    final selected = _pendingSubtitleSelection;
+    final pending = _pendingSubtitleSelection;
+    final selected = pending is TargetTrack ? pending.track : null;
     final mpvId = selected == null ? null : mpvIdOfSubtitleTrack(selected.id);
     final streamIndex =
         mpvId == null ? null : (await subtitleStreamIndices(player))[mpvId];
@@ -3040,7 +3045,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     _selectedSubtitleTrack = applied;
-    _pendingSubtitleSelection = applied;
+    // Adopting what mpv is already doing is not an attempt, so this reads as
+    // idle when nothing is applied and the viewer has not chosen.
+    _pendingSubtitleSelection = _appliedSubtitleTarget;
     _subtitleSelectionGeneration++;
   }
 
@@ -3901,9 +3908,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (outcome is SubtitleTrackSelectionCancelled) return;
 
     final selected = outcome is SubtitleTrackPicked ? outcome.track : null;
+    final requested =
+        selected == null ? const TargetOff() : TargetTrack(selected);
 
     if (!shouldStartSubtitleSelection(
-      requested: selected,
+      requested: requested,
       pending: _pendingSubtitleSelection,
       mounted: mounted,
     )) {
@@ -3974,7 +3983,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // instead of silently matching stale state. See
     // [_pendingSubtitleSelection]'s dartdoc for why the sheet's comparison
     // uses this field and not [_selectedSubtitleTrack].
-    _pendingSubtitleSelection = selected;
+    _pendingSubtitleSelection =
+        selected == null ? const TargetOff() : TargetTrack(selected);
 
     // See [_subtitleSelectionGeneration]'s dartdoc for why this is bumped
     // unconditionally, before the no-player bailout below, rather than
@@ -4296,6 +4306,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return fallback;
   }
 
+  /// [_pendingSubtitleSelection]'s value for "no attempt is in flight, and
+  /// here is what is actually on the player".
+  ///
+  /// The null case is the one that matters. Nothing applied is
+  /// [TargetOff] only when the viewer put it there; otherwise no attempt has
+  /// ever concluded and the tracker must read as idle, or the first Off tap
+  /// of a playback compares equal to it and is swallowed. That distinction is
+  /// exactly what [_subtitleChosenThisPlayback] exists to carry: see its own
+  /// dartdoc, which names the same two states this getter separates.
+  SubtitleSelectionTarget? get _appliedSubtitleTarget {
+    final applied = _selectedSubtitleTrack;
+    if (applied != null) return TargetTrack(applied);
+    return _subtitleChosenThisPlayback ? const TargetOff() : null;
+  }
+
   /// Whether a subtitle selection issued under [generation] is still the
   /// live one and safe to apply, right now.
   ///
@@ -4334,7 +4359,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       requestGeneration: generation,
       currentGeneration: _subtitleSelectionGeneration,
       currentPending: _pendingSubtitleSelection,
-      appliedSelection: _selectedSubtitleTrack,
+      appliedTarget: _appliedSubtitleTarget,
     );
   }
 

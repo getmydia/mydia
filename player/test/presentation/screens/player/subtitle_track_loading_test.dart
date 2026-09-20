@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/image_subtitle_sidecar.dart';
 import 'package:player/domain/models/subtitle_track.dart';
+import 'package:player/presentation/screens/player/subtitle_selection_target.dart';
 import 'package:player/presentation/screens/player/subtitle_track_builder.dart';
 
 void main() {
@@ -287,10 +288,16 @@ void main() {
   });
 
   group('shouldStartSubtitleSelection', () {
-    test('starts when the requested target differs from the pending one', () {
+    final trackX = SubtitleTrack(id: 'x', language: 'eng', embedded: true);
+    final trackY = SubtitleTrack(id: 'y', language: 'fra', embedded: true);
+
+    test('an Off tapped with no attempt in flight starts one', () {
+      // The whole point of the type. `null` pending means idle, not "Off is
+      // pending", so the viewer who opens the sheet purely to say "never
+      // subtitles for this show" is heard.
       expect(
         shouldStartSubtitleSelection(
-          requested: textTrack,
+          requested: const TargetOff(),
           pending: null,
           mounted: true,
         ),
@@ -298,23 +305,44 @@ void main() {
       );
     });
 
-    test('is a no-op when the requested target matches the pending one', () {
+    test('an Off repeating an in-flight Off is a no-op', () {
       expect(
         shouldStartSubtitleSelection(
-          requested: textTrack,
-          pending: textTrack,
+          requested: const TargetOff(),
+          pending: const TargetOff(),
           mounted: true,
         ),
         isFalse,
       );
     });
 
-    test(
-        'is a no-op when unmounted, even if requested differs from '
-        'pending', () {
+    test('re-picking the track already targeted is a no-op', () {
       expect(
         shouldStartSubtitleSelection(
-          requested: textTrack,
+          requested: TargetTrack(trackX),
+          pending: TargetTrack(trackX),
+          mounted: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('picking a different track from the one in flight starts an attempt',
+        () {
+      expect(
+        shouldStartSubtitleSelection(
+          requested: TargetTrack(trackY),
+          pending: TargetTrack(trackX),
+          mounted: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('an unmounted screen starts nothing', () {
+      expect(
+        shouldStartSubtitleSelection(
+          requested: const TargetOff(),
           pending: null,
           mounted: false,
         ),
@@ -331,8 +359,8 @@ void main() {
         pendingSubtitleSelectionAfterFailure(
           requestGeneration: 1,
           currentGeneration: 1,
-          currentPending: textTrack,
-          appliedSelection: null,
+          currentPending: TargetTrack(textTrack),
+          appliedTarget: null,
         ),
         isNull,
       );
@@ -343,10 +371,10 @@ void main() {
         pendingSubtitleSelectionAfterFailure(
           requestGeneration: 1,
           currentGeneration: 1,
-          currentPending: textTrack,
-          appliedSelection: embeddedTextTrack,
+          currentPending: TargetTrack(textTrack),
+          appliedTarget: TargetTrack(embeddedTextTrack),
         ),
-        embeddedTextTrack,
+        TargetTrack(embeddedTextTrack),
       );
     });
 
@@ -360,10 +388,10 @@ void main() {
         pendingSubtitleSelectionAfterFailure(
           requestGeneration: 1,
           currentGeneration: 2,
-          currentPending: embeddedTextTrack,
-          appliedSelection: null,
+          currentPending: TargetTrack(embeddedTextTrack),
+          appliedTarget: null,
         ),
-        embeddedTextTrack,
+        TargetTrack(embeddedTextTrack),
       );
     });
   });
@@ -610,7 +638,7 @@ void main() {
 
       // 1. T1 requested: pending becomes T1 (mirrors
       //    `_pendingSubtitleSelection = selected;` in _showSubtitleSelector).
-      SubtitleTrack? pending = textTrack;
+      SubtitleSelectionTarget? pending = TargetTrack(textTrack);
 
       // 2. The fetch fails. This attempt is still current (nothing else
       //    ran), so pending must fall back to what's actually applied
@@ -619,7 +647,7 @@ void main() {
         requestGeneration: generation,
         currentGeneration: generation,
         currentPending: pending,
-        appliedSelection: null,
+        appliedTarget: null,
       );
       expect(pending, isNull,
           reason: 'pending must not still be T1 after its own fetch failed');
@@ -628,7 +656,7 @@ void main() {
       //    attempt, not a no-op against the stale pending value from step 1.
       expect(
         shouldStartSubtitleSelection(
-          requested: textTrack,
+          requested: TargetTrack(textTrack),
           pending: pending,
           mounted: true,
         ),
