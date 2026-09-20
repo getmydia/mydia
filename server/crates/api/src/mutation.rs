@@ -15,7 +15,10 @@ use crate::types::auth::{
 };
 use crate::types::common::{PlaylistMode, StreamingStrategy};
 use crate::types::discovery::RemoveFromContinueWatchingResult;
-use crate::types::media::{Episode, Movie, Progress, SubtitleTrack, SubtitleTrackSetting, TvShow};
+use crate::types::media::{
+    Episode, Movie, Progress, SubtitlePreferenceMode, SubtitlePreferenceResult, SubtitleTrack,
+    SubtitleTrackSetting, TvShow,
+};
 use crate::types::streaming::{
     AudioLanguagePreferenceResult, CancelDownloadResult, DownloadJobStatus, DownloadOption,
     PrepareDownloadResult, StreamingSessionResult,
@@ -382,6 +385,36 @@ impl RootMutationType {
         _language: Option<String>,
     ) -> Result<Option<AudioLanguagePreferenceResult>> {
         Err(not_implemented("setAudioLanguagePreference"))
+    }
+
+    /// Remember which subtitle this viewer wants for a show or film
+    // Same as `start_streaming_session` above: the arity is the GraphQL
+    // contract's, not a design choice. Every parameter is an argument the
+    // Elixir schema declares, and this signature has to mirror it exactly or
+    // `sdl_parity` fails. Collecting them into a struct would change the
+    // emitted SDL, which is the one thing that must not happen here.
+    #[allow(clippy::too_many_arguments)]
+    async fn set_subtitle_preference(
+        &self,
+        _ctx: &Context<'_>,
+        // Any file of the show or film; the preference is stored against the
+        // item it belongs to, so a choice made on one episode applies to the
+        // rest. Mirrors `setSubtitlePreference` in
+        // lib/mydia_web/schema/mutation_types.ex.
+        _file_id: ID,
+        // TRACK to remember a subtitle, OFF to remember that there should be
+        // none.
+        _mode: SubtitlePreferenceMode,
+        // Required with TRACK, and must be omitted with OFF.
+        _language: Option<String>,
+        // Whether the picked track was a forced one.
+        _forced: Option<bool>,
+        // Whether the picked track was an SDH one.
+        _hearing_impaired: Option<bool>,
+        // The picked track's title, stored as a tiebreak for later matching.
+        _track_title: Option<String>,
+    ) -> Result<Option<SubtitlePreferenceResult>> {
+        Err(not_implemented("setSubtitlePreference"))
     }
 
     /// End an HLS streaming session

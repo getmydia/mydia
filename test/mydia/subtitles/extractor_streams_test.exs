@@ -14,6 +14,25 @@ defmodule Mydia.Subtitles.ExtractorStreamsTest do
     |> Repo.preload(:library_path)
   end
 
+  defp insert_sidecar(media_file, language, flags) do
+    {:ok, _subtitle} =
+      %Mydia.Subtitles.Subtitle{}
+      |> Mydia.Subtitles.Subtitle.changeset(
+        Map.merge(
+          %{
+            media_file_id: media_file.id,
+            language: language,
+            format: "srt",
+            subtitle_hash: "hash-#{language}-#{System.unique_integer([:positive])}",
+            file_path: "/tmp/#{language}.srt",
+            provider: "relay"
+          },
+          Map.new(flags)
+        )
+      )
+      |> Repo.insert()
+  end
+
   test "reads embedded subtitle tracks from stored streams without running ffprobe" do
     media_file =
       with_streams([
@@ -86,5 +105,83 @@ defmodule Mydia.Subtitles.ExtractorStreamsTest do
     assert [track] = Extractor.list_subtitle_tracks(media_file)
     refute track.embedded
     assert track.deliverable
+  end
+
+  test "carries forced and hearing_impaired from a stored sidecar row" do
+    media_file = with_streams([])
+
+    insert_sidecar(media_file, "en", forced: true, hearing_impaired: false)
+    insert_sidecar(media_file, "es", forced: false, hearing_impaired: true)
+
+    by_language =
+      media_file.id
+      |> Extractor.list_external_subtitle_tracks()
+      |> Map.new(&{&1.language, &1})
+
+    assert by_language["en"].forced == true
+    assert by_language["en"].hearing_impaired == false
+    assert by_language["es"].forced == false
+    assert by_language["es"].hearing_impaired == true
+  end
+
+  describe "disposition flags on embedded tracks" do
+    test "carries forced and hearing_impaired from the stored stream capture" do
+      media_file = %Mydia.Library.MediaFile{
+        id: Ecto.UUID.generate(),
+        metadata: %Mydia.Library.Structs.FileMetadata{
+          streams: [
+            %Mydia.Library.Structs.StreamInfo{
+              index: 2,
+              type: :subtitle,
+              codec: "subrip",
+              language: "eng",
+              title: "English (Signs & Songs)",
+              is_forced: true,
+              is_hearing_impaired: false
+            },
+            %Mydia.Library.Structs.StreamInfo{
+              index: 3,
+              type: :subtitle,
+              codec: "subrip",
+              language: "eng",
+              title: "English",
+              is_forced: false,
+              is_hearing_impaired: true
+            }
+          ]
+        }
+      }
+
+      [signs, dialogue] = Mydia.Subtitles.Extractor.list_subtitle_tracks(media_file)
+
+      assert signs.forced == true
+      assert signs.hearing_impaired == false
+      assert dialogue.forced == false
+      assert dialogue.hearing_impaired == true
+    end
+
+    test "defaults both flags to false when the capture leaves them nil" do
+      media_file = %Mydia.Library.MediaFile{
+        id: Ecto.UUID.generate(),
+        metadata: %Mydia.Library.Structs.FileMetadata{
+          streams: [
+            %Mydia.Library.Structs.StreamInfo{
+              index: 0,
+              type: :subtitle,
+              codec: "subrip",
+              language: "jpn",
+              title: nil,
+              is_forced: nil,
+              is_hearing_impaired: nil
+            }
+          ]
+        }
+      }
+
+      [track] = Mydia.Subtitles.Extractor.list_subtitle_tracks(media_file)
+
+      assert track.forced == false
+      assert track.hearing_impaired == false
+    end
   end
 end

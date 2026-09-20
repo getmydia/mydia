@@ -16,6 +16,15 @@ fragment MediaFileFragment on MediaFile {
     format
     embedded
     deliverable
+    forced
+    hearingImpaired
     url(format: VTT)
+  }
+  preferredSubtitle {
+    mode
+    language
+    forced
+    hearingImpaired
+    trackTitle
   }
 }

@@ -186,6 +186,27 @@ type RootMutationType {
     language: String
   ): AudioLanguagePreferenceResult
 
+  "Remember which subtitle this viewer wants for a show or film"
+  setSubtitlePreference(
+    "Any file of the show or film. The preference is stored against the item it belongs to, so a choice made on one episode applies to the rest."
+    fileId: ID!
+
+    "TRACK to remember a subtitle, OFF to remember that there should be none"
+    mode: SubtitlePreferenceMode!
+
+    "Required with TRACK, and must be omitted with OFF"
+    language: String
+
+    "Whether the picked track was a forced one"
+    forced: Boolean
+
+    "Whether the picked track was an SDH one"
+    hearingImpaired: Boolean
+
+    "The picked track's title, stored as a tiebreak for later matching"
+    trackTitle: String
+  ): SubtitlePreferenceResult
+
   "End an HLS streaming session"
   endStreamingSession(sessionId: String!): Boolean
 
@@ -839,6 +860,13 @@ type MediaFile {
   "Available subtitle tracks (embedded and external)"
   subtitles: [SubtitleTrack]
 
+  """
+  The subtitle this viewer should get, folding their own per-show choice
+  over the operator's streaming.subtitle_language. Null when neither has an
+  opinion, which means the client should leave subtitle selection alone.
+  """
+  preferredSubtitle: SubtitlePreference
+
   "Skippable segments (intro, credits). Empty when detection has not run or found nothing."
   segments: [MediaSegment!]!
 }
@@ -1314,6 +1342,49 @@ type AudioLanguagePreferenceResult {
   preferredAudioLanguages: [String!]
 }
 
+"Whether a remembered subtitle choice names a track or turns subtitles off"
+enum SubtitlePreferenceMode {
+  "The viewer turned subtitles off for this show or film"
+  OFF
+
+  "The viewer wants a track matching this descriptor"
+  TRACK
+}
+
+"""
+The subtitle a client should select for this file, described rather than
+named.
+
+A track id is an ffprobe stream index or a sidecar UUID and means nothing on
+the next episode, so this carries the language and disposition instead. The
+client matches it against whatever tracks the file actually offers, which in
+direct play is a list the server never sees.
+"""
+type SubtitlePreference {
+  mode: SubtitlePreferenceMode!
+
+  "Null exactly when mode is OFF"
+  language: String
+
+  "Prefer a track that subtitles only foreign dialogue and signs"
+  forced: Boolean!
+
+  "Prefer a track carrying sound descriptions (SDH)"
+  hearingImpaired: Boolean!
+
+  "The title of the track originally picked, used only to break a tie between candidates that already match on language and flags"
+  trackTitle: String
+}
+
+"Outcome of remembering a viewer's subtitle choice"
+type SubtitlePreferenceResult {
+  "The show or film the preference was stored against"
+  mediaItemId: ID!
+
+  "The choice now in effect for this item"
+  preference: SubtitlePreference
+}
+
 "Result of streaming candidates query"
 type StreamingCandidatesResult {
   "The resolved media file ID"
@@ -1345,6 +1416,12 @@ type SubtitleTrack {
 
   "Whether this track can be delivered as text. False for image-based subtitles (PGS, VobSub), which play only in direct mode"
   deliverable: Boolean!
+
+  "Whether this track subtitles only foreign dialogue and signs, rather than everything"
+  forced: Boolean!
+
+  "Whether this track includes sound descriptions for deaf and hard-of-hearing viewers (SDH)"
+  hearingImpaired: Boolean!
 
   "Subtitle body in the requested format. Null when the track is not deliverable"
   content(format: SubtitleFormat): String

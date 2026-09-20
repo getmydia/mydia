@@ -1,0 +1,26 @@
+mutation SetSubtitlePreference(
+  $fileId: ID!
+  $mode: SubtitlePreferenceMode!
+  $language: String
+  $forced: Boolean
+  $hearingImpaired: Boolean
+  $trackTitle: String
+) {
+  setSubtitlePreference(
+    fileId: $fileId
+    mode: $mode
+    language: $language
+    forced: $forced
+    hearingImpaired: $hearingImpaired
+    trackTitle: $trackTitle
+  ) {
+    mediaItemId
+    preference {
+      mode
+      language
+      forced
+      hearingImpaired
+      trackTitle
+    }
+  }
+}

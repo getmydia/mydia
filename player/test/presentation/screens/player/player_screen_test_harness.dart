@@ -395,6 +395,11 @@ Map<String, dynamic> mediaFileWithSubtitle({
   // `SubtitleTrack.fromDownload` leaves with no url of its own.
   String? url = '/api/player/v1/subtitles/file/file-1/3?format=vtt',
   bool deliverable = true,
+  bool forced = false,
+  bool hearingImpaired = false,
+  // The `preferredSubtitle` object, or null for a viewer with no preference.
+  // The key is always present because the fragment selects it.
+  Map<String, dynamic>? preferredSubtitle,
 }) {
   return {
     '__typename': 'MediaFile',
@@ -417,9 +422,33 @@ Map<String, dynamic> mediaFileWithSubtitle({
         'format': 'vtt',
         'embedded': false,
         'deliverable': deliverable,
+        'forced': forced,
+        'hearingImpaired': hearingImpaired,
         'url': url,
       },
     ],
+    'preferredSubtitle': preferredSubtitle,
+  };
+}
+
+/// A `preferredSubtitle` object for [mediaFileWithSubtitle].
+///
+/// `mode` is the wire form, uppercase, which is what the generated enum
+/// parses.
+Map<String, dynamic> preferredSubtitleObject({
+  required String mode,
+  String? language,
+  bool forced = false,
+  bool hearingImpaired = false,
+  String? trackTitle,
+}) {
+  return {
+    '__typename': 'SubtitlePreference',
+    'mode': mode,
+    'language': language,
+    'forced': forced,
+    'hearingImpaired': hearingImpaired,
+    'trackTitle': trackTitle,
   };
 }
 

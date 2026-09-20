@@ -206,6 +206,62 @@ began at 30.00, 33.92 and 37.93.
 installed FFmpeg. It is tagged `:ffmpeg`, so run it with `--include ffmpeg`
 after any FFmpeg upgrade.
 
+## Which subtitle a show opens on
+
+Two settings name subtitle languages and they are not the same setting:
+
+| key | decides | default | env |
+| --- | --- | --- | --- |
+| `downloads.subtitle_language` | what gets fetched, and what subtitle search starts from | `["en"]` | `DOWNLOAD_SUBTITLE_LANGUAGE`, with `SUBTITLE_LANGUAGE` still read as the same thing |
+| `streaming.subtitle_language` | the track switched on for a show nobody has chosen for | `[]` | `SUBTITLE_PLAYBACK_LANGUAGE` |
+
+The second one used to mean acquisition, because it lived in the `streaming`
+section and the streaming section was the only one there was. `Mydia.Config.Loader`
+moves a YAML file that still carries it there over to `downloads` and warns while
+it does, keyed on `downloads.subtitle_language` being absent so an operator who
+has already migrated keeps the new meaning. The default is `[]`: a viewer who has
+never picked a subtitle gets mpv's own answer, not an English track somebody
+decided they wanted.
+
+Neither key is the per-show choice. That one lives in
+`subtitle_language_preferences`, a row per `(user_id, media_item_id)` written by
+the player's `setSubtitlePreference` mutation and read back as `mediaFile.preferredSubtitle`.
+`Mydia.Streaming.SubtitlePreferences.resolve/2` folds the two levels strongest
+first: the viewer's row for this item, a track or an explicit off, and failing
+that the first `streaming.subtitle_language` entry the file actually carries a
+track for. The item id comes from `media_item_id_of/1`, delegated to
+`AudioPreferences` rather than reimplemented, because a TV `media_file` has a null
+`media_item_id` and reaches its show only through the episode; a second
+implementation that missed that would silently disable the feature for the whole
+TV library.
+
+**The stored preference is a descriptor, never a track id.** Track ids are
+file-specific: an ffprobe stream index for an embedded track, a sidecar UUID for
+an uploaded one, media_kit's own `mk_<n>` for anything mpv added. None of them
+means anything on the next episode, so a remembered id would at best select
+nothing and at worst select an unrelated track. What is stored is the language,
+the forced and hearing-impaired flags, and the title of the track that was picked.
+
+**`resolve/2` answers `nil` for an anonymous viewer on purpose**, even when the
+operator has a default. Without a user there is no row to store an override
+against, so a subtitle switched on for them could never be turned off; the
+operator's `[]` default, and mpv's own default-disposition pick, are better
+answers than a choice that cannot be revoked. A file attached to neither an item
+nor an episode returns `nil` for the same reason — there is no item to key a row
+on — which is why an unloaded `:episode` association yields `nil` rather than
+letting the operator default through.
+
+The operator's own default is narrowed to a language the file can satisfy
+(`Extractor.list_subtitle_tracks/1`) before it is returned, since an operator
+names languages, not tracks, and offering one the file does not carry would send
+the player hunting for a track that cannot exist. The viewer's row is not
+narrowed that way, and does not need to be: matching a descriptor to a track is
+the player's job, because in direct play the list on screen is mpv's, published
+asynchronously after `open()`, and the server has never seen it. A file whose
+stream capture has not run costs this playback its automatic subtitle and
+nothing else: the tracking query and the path probe it may need are rescued into
+a debug log rather than a failed playback.
+
 ## Image subtitles while streaming
 
 Bitmap subtitle tracks (PGS, VobSub, DVB, XSUB) cannot become text, and the

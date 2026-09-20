@@ -14,12 +14,33 @@ void main() {
         format: 'pgs',
         embedded: true,
         deliverable: false,
+        forced: false,
+        hearingImpaired: false,
         url: null,
       );
 
       final track = SubtitleTrack.fromGraphQL(sub);
 
       expect(track.deliverable, isFalse);
+    });
+
+    test('carries the fragment\'s forced and hearing-impaired flags', () {
+      final sub = Fragment$MediaFileFragment$subtitles(
+        trackId: 'trk-3',
+        language: 'eng',
+        title: 'English (Signs & Songs)',
+        format: 'srt',
+        embedded: true,
+        deliverable: true,
+        forced: true,
+        hearingImpaired: true,
+        url: null,
+      );
+
+      final track = SubtitleTrack.fromGraphQL(sub);
+
+      expect(track.forced, isTrue);
+      expect(track.hearingImpaired, isTrue);
     });
 
     test('leaves content null, since the fragment does not carry it', () {
@@ -30,6 +51,8 @@ void main() {
         format: 'srt',
         embedded: true,
         deliverable: true,
+        forced: false,
+        hearingImpaired: false,
         url: 'https://example.test/subtitle.vtt',
       );
 
@@ -47,6 +70,8 @@ void main() {
       String format = 'srt',
       bool embedded = false,
       bool deliverable = true,
+      bool forced = false,
+      bool hearingImpaired = false,
     }) {
       return Mutation$DownloadSubtitle$downloadSubtitle(
         trackId: trackId,
@@ -55,6 +80,8 @@ void main() {
         format: format,
         embedded: embedded,
         deliverable: deliverable,
+        forced: forced,
+        hearingImpaired: hearingImpaired,
       );
     }
 
@@ -86,6 +113,16 @@ void main() {
       final track = SubtitleTrack.fromDownload(result(deliverable: false));
 
       expect(track.deliverable, isFalse);
+    });
+
+    test('carries the mutation\'s forced and hearing-impaired flags', () {
+      final track = SubtitleTrack.fromDownload(result(
+        forced: true,
+        hearingImpaired: true,
+      ));
+
+      expect(track.forced, isTrue);
+      expect(track.hearingImpaired, isTrue);
     });
 
     test('leaves content null, so the body is fetched lazily on selection', () {

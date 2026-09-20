@@ -152,6 +152,19 @@ defmodule Mydia.Config.Schema do
       # streaming.audio_language, which picks the track that plays; see
       # Mydia.Media.AudioLanguagePolicy.
       field :audio_language, :string, default: "original"
+
+      # Which subtitle languages to go and get, most preferred first. Read by
+      # the season bulk fetch to decide what a file is missing, and by the
+      # search modal to seed its language chips.
+      #
+      # Unlike audio_language this takes no "original" sentinel. It names
+      # languages to acquire, and resolving "original" per item would make a
+      # bulk run's target set depend on metadata that may be absent.
+      #
+      # This is not streaming.subtitle_language, which picks the track that
+      # plays. The pairing mirrors downloads.audio_language against
+      # streaming.audio_language.
+      field :subtitle_language, {:array, :string}, default: ["en"]
     end
 
     embeds_one :upgrades, Upgrades, on_replace: :update, primary_key: false do
@@ -202,14 +215,19 @@ defmodule Mydia.Config.Schema do
       # reason.
       field :prefer_default_audio_track, :boolean, default: false
 
-      # Which subtitle languages to acquire, most preferred first. Read by the
-      # season bulk fetch to decide what a file is missing, and by the search
-      # modal to seed its language chips.
+      # Which subtitle language to switch on by default for a show nobody has
+      # made a choice for, most preferred first. The operator tier of
+      # Mydia.Streaming.SubtitlePreferences.resolve/2; a viewer's own per-show
+      # pick outranks it.
       #
-      # Unlike audio_language this takes no "original" sentinel. It names
-      # languages to go and get, and resolving "original" per item would make
-      # a bulk run's target set depend on metadata that may be absent.
-      field :subtitle_language, {:array, :string}, default: ["en"]
+      # Empty by default, which means no automatic subtitle. Most libraries
+      # are watched in their own language without subtitles, and switching
+      # them on for every show on upgrade would be a worse surprise than the
+      # setting is worth.
+      #
+      # This is not downloads.subtitle_language, which picks what gets
+      # acquired.
+      field :subtitle_language, {:array, :string}, default: []
 
       # Which hardware video backend to use. :auto probes and uses whatever
       # works; :off forces software even on a capable box; :vaapi names a
@@ -517,6 +535,13 @@ defmodule Mydia.Config.Schema do
     # rather than silently behaving like 0.
     |> validate_number(:min_seeders, greater_than_or_equal_to: 0)
     |> validate_download_audio_language()
+    # Same scoped cast and validator as streaming_changeset/2 below: the
+    # default empty_values would drop a stray "" from the array before
+    # validate_subtitle_language/1 could reject it, and this field shares that
+    # validator because the shape it accepts -- non-empty language codes -- is
+    # the same on both sides of the acquisition/playback split.
+    |> cast(attrs, [:subtitle_language], empty_values: [])
+    |> validate_subtitle_language()
   end
 
   # "original" or a language Mydia.Metadata.LanguageCode recognizes. nil passes
@@ -552,7 +577,8 @@ defmodule Mydia.Config.Schema do
     # is also why validate_audio_language/1's blank-entry branch below is
     # unreachable through this pipeline. Cast subtitle_language on its own
     # with empty_values disabled so a stray "" survives to be rejected
-    # in the below check rather than being silently dropped.
+    # in the below check rather than being silently dropped. downloads_changeset/2
+    # does the same for the acquisition key.
     |> cast(attrs, [:subtitle_language], empty_values: [])
     # Not validate_required: nil is the default and means "no ceiling". A
     # zero or negative ceiling would scale every transcode to nothing, so it
@@ -592,8 +618,10 @@ defmodule Mydia.Config.Schema do
     end
   end
 
-  # Same shape as validate_audio_language/1 above, for the language list a
-  # bulk subtitle fetch targets rather than the one playback selects among.
+  # Same shape as validate_audio_language/1 above, shared by
+  # streaming_changeset/2 and downloads_changeset/2: playback takes a list of
+  # languages to select among, acquisition a list to go and get, and both are
+  # most-preferred-first lists of non-empty codes.
   defp validate_subtitle_language(changeset) do
     case get_field(changeset, :subtitle_language) do
       nil ->

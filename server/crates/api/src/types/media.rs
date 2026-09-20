@@ -8,7 +8,8 @@
 //! SubtitleSearchPayload, SubtitleTrackSetting.
 
 use async_graphql::{
-    ComplexObject, InputValueError, InputValueResult, Scalar, ScalarType, SimpleObject, Value, ID,
+    ComplexObject, Enum, InputValueError, InputValueResult, Scalar, ScalarType, SimpleObject,
+    Value, ID,
 };
 use chrono::{DateTime, NaiveDate, Utc};
 
@@ -84,6 +85,8 @@ pub struct SubtitleTrack {
     pub title: String,
     pub format: String,
     pub embedded: bool,
+    pub forced: bool,
+    pub hearing_impaired: bool,
     /// The file this track belongs to. Not part of the contract; the URL
     /// resolver needs it. The Elixir resolver does the same thing by stuffing
     /// `_media_file_id` onto the track map (subtitle_resolver.ex:31).
@@ -190,6 +193,46 @@ pub struct SubtitleTrackSetting {
     pub offset_ms: i32,
 }
 
+/// Whether a remembered subtitle choice names a track or turns subtitles off.
+///
+/// common_types.ex:`:subtitle_preference_mode`. async-graphql spells enum
+/// values in SCREAMING_SNAKE_CASE, which is the spelling the contract uses
+/// (`OFF`, `TRACK`), so no rename attribute is needed.
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum SubtitlePreferenceMode {
+    Off,
+    Track,
+}
+
+/// The subtitle a client should select for a file, described rather than named.
+///
+/// Declared but never constructed: this server resolves no subtitle preference
+/// and `setSubtitlePreference` returns `not_implemented`, the same as the other
+/// streaming mutations. The type exists because GraphQL rejects a whole
+/// document that names an unknown field, so the shape has to match even where
+/// the behaviour does not.
+///
+/// `forced` and `hearing_impaired` are not `Option`: an explicit off carries no
+/// dispositions, and the Elixir resolver fills them with false rather than
+/// leaving them null, which the contract declares non-null.
+#[derive(SimpleObject)]
+pub struct SubtitlePreference {
+    pub mode: SubtitlePreferenceMode,
+    pub language: Option<String>,
+    pub forced: bool,
+    pub hearing_impaired: bool,
+    pub track_title: Option<String>,
+}
+
+/// Outcome of remembering a viewer's subtitle choice.
+///
+/// common_types.ex:`:subtitle_preference_result`.
+#[derive(SimpleObject)]
+pub struct SubtitlePreferenceResult {
+    pub media_item_id: ID,
+    pub preference: Option<SubtitlePreference>,
+}
+
 /// One elementary stream of a media file, as reported by ffprobe.
 ///
 /// Values are raw. Composing display strings ("HEVC Main 10", "7.1 (8 ch)") is
@@ -261,6 +304,13 @@ pub struct MediaFile {
     pub stream_url: Option<String>,
     pub direct_play_url: Option<String>,
     pub subtitles: Option<Vec<Option<SubtitleTrack>>>,
+    /// The subtitle this viewer should get, folding their own per-show choice
+    /// over the operator's `streaming.subtitle_language`. Null when neither
+    /// has an opinion, which means the client should leave subtitle selection
+    /// alone. Never constructed here: this server stores no per-viewer
+    /// preferences, so it answers null exactly as the Elixir field does for an
+    /// anonymous caller.
+    pub preferred_subtitle: Option<SubtitlePreference>,
     pub segments: Vec<MediaSegment>,
 }
 

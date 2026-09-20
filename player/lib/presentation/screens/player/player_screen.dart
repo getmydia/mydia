@@ -87,12 +87,14 @@ import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../domain/models/download.dart';
+import '../../../graphql/schema.graphql.dart';
 import '../../../graphql/fragments/media_file_fragment.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
+import '../../../graphql/mutations/set_subtitle_preference.graphql.dart';
 import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../graphql/queries/subtitle_search.graphql.dart';
@@ -121,6 +123,7 @@ import '../../widgets/playback_stats/stats_panel.dart';
 import '../settings/settings_controller.dart';
 import 'stats_context_builder.dart';
 import 'subtitle_content_query.dart';
+import 'subtitle_preference.dart';
 import 'subtitle_track_builder.dart';
 
 export '../../../core/player/resume_plan.dart'
@@ -575,6 +578,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// switch carries the first and leaves mpv to its own defaults for the
   /// second. Cleared by [_initializePlayer].
   bool _subtitleChosenThisPlayback = false;
+
+  /// What the server says this viewer wants for this show, folding their own
+  /// per-show pick over the operator default. Null means no opinion, and the
+  /// file is left to do whatever it would have done.
+  SubtitlePreference? _subtitlePreference;
+
+  /// Whether [_applySubtitlePreference] has already run for the file now
+  /// loaded. media_kit revises its track list several times per playback and
+  /// every revision reaches [_applySubtitleTracks], so without this a
+  /// revision landing after a viewer pick would silently undo it.
+  bool _preferenceAppliedForPlayback = false;
 
   /// The viewer's choice while a source switch carries it to the new
   /// source, in the server's id space. See [SubtitleIntent].
@@ -1167,6 +1181,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // this load replaces, and a fresh load starts with no choice made.
     _subtitleIntentAcrossSwitch = null;
     _subtitleChosenThisPlayback = false;
+    // The preference belongs to the show, not the file, so it is refetched
+    // with the new file's media-file document rather than carried. Clearing
+    // it here means a file whose query has not landed yet cannot apply the
+    // previous episode's answer to this one.
+    _subtitlePreference = null;
+    _preferenceAppliedForPlayback = false;
 
     try {
       setState(() {
@@ -1919,6 +1939,65 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         restore: restore, selected: _selectedSubtitleTrack)) {
       _subtitleIntentAcrossSwitch = null;
     }
+  }
+
+  /// Selects the subtitle this viewer already chose for this show, or turns
+  /// subtitles off if that is what they chose.
+  ///
+  /// Runs off the back of a track-list revision rather than from
+  /// `_initializePlayer`, because the list is what it matches against and in
+  /// direct play that list is mpv's, published asynchronously after `open()`.
+  ///
+  /// Nothing is consumed unless a selection can actually be made. A
+  /// `PreferTrack` that matches nothing does nothing at all, and shows no
+  /// toast: episode transitions are frequent, and a line on every episode of
+  /// a season that lacks the track is noise the viewer cannot act on. The
+  /// subtitle button is already on the OSD. Neither that case nor a call
+  /// arriving before there is a player spends
+  /// [_preferenceAppliedForPlayback], so the next revision still gets its
+  /// chance -- which is what stops a direct-play file whose track list is
+  /// already complete from losing the preference for the whole playback.
+  Future<void> _applySubtitlePreference() async {
+    final preference = _subtitlePreference;
+    if (preference == null) return;
+
+    if (!shouldApplySubtitlePreference(
+      viewerChose: _subtitleChosenThisPlayback,
+      switchInFlight: _switchingSource,
+      intentPending: _subtitleIntentAcrossSwitch != null,
+      alreadyApplied: _preferenceAppliedForPlayback,
+      hasTracks: _subtitleTracks.isNotEmpty,
+    )) {
+      return;
+    }
+
+    // Null is "Off", and Off is applied like any other selection rather than
+    // skipped: mpv switches on whichever track the container flagged default,
+    // so leaving it alone is exactly the behaviour the viewer turned off.
+    app_models.SubtitleTrack? target;
+    switch (preference) {
+      case PreferOff():
+        target = null;
+      case PreferTrack():
+        target = matchSubtitlePreference(preference, _subtitleTracks);
+        // Nothing to select, and nothing to say about it here; see the
+        // dartdoc above for why this stays quiet.
+        if (target == null) return;
+    }
+
+    // A selection with no player behind it goes nowhere: the fetch and the
+    // `setSubtitleTrack` are both behind `_applySubtitleSelection`'s own
+    // `_player == null` bailout. Spending the one-shot here would leave the
+    // preference permanently unapplied for a playback whose track list is
+    // already complete, so this waits for a revision that has one.
+    if (_player == null) return;
+
+    // Set before the await, not after: a second track-list revision can land
+    // while the selection below is still resolving, and two concurrent
+    // applies of the same preference would race each other's generation.
+    _preferenceAppliedForPlayback = true;
+
+    await _applySubtitleSelection(target);
   }
 
   /// Monitors a source and lets the policy decide when to replace it.
@@ -2755,6 +2834,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           debugPrint('Extracted ${_serverSubtitleTracks.length} subtitle '
               'tracks from GraphQL');
         }
+        // Read after the refresh above, not before it: the refresh publishes
+        // the server's list immediately, and in streaming that is a complete
+        // list with no mpv half to wait for, while in direct play the file's
+        // own tracks are not there yet. Reading first would let this
+        // preference be consumed by a rebuild that has no player behind it
+        // yet (`_applySubtitleSelection` is a no-op without one) and the
+        // apply that matters -- the one after `open()` -- would find it
+        // already spent.
+        final preferred = file.preferredSubtitle;
+        _subtitlePreference = subtitlePreferenceFrom(
+          mode: preferred?.mode.name,
+          language: preferred?.language,
+          forced: preferred?.forced,
+          hearingImpaired: preferred?.hearingImpaired,
+          trackTitle: preferred?.trackTitle,
+        );
         break;
       }
     }
@@ -2979,13 +3074,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Call inside a `setState`; this does not call one itself, so the audio
   /// and subtitle halves of [_onTracksChanged] share a single rebuild.
   ///
-  /// Returns early when the derived list is unchanged, which is
-  /// load-bearing rather than an optimisation: [_syncSelectedSubtitleTrack]
-  /// bumps [_subtitleSelectionGeneration], and a bump makes
-  /// [shouldApplySubtitleSelection] discard whatever selection the viewer
-  /// has in flight. media_kit revises its track list more than once per
-  /// playback, so an unguarded rebuild would swallow a tap every time it
-  /// did.
+  /// Returns early from the *rebuild* when the derived list is unchanged,
+  /// which is load-bearing rather than an optimisation:
+  /// [_syncSelectedSubtitleTrack] bumps [_subtitleSelectionGeneration], and a
+  /// bump makes [shouldApplySubtitleSelection] discard whatever selection the
+  /// viewer has in flight. media_kit revises its track list more than once per
+  /// playback, so an unguarded rebuild would swallow a tap every time it did.
+  /// [_applySubtitlePreference] is deliberately left outside that guard; see
+  /// its call site below.
   ///
   /// The comparison is by id, since `SubtitleTrack.operator ==` is
   /// id-based. That is the right granularity: the button's gate and every
@@ -3017,21 +3113,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       imageSidecars: !kIsWeb,
     );
 
-    if (listEquals(derived, _subtitleTracks)) return;
+    if (!listEquals(derived, _subtitleTracks)) {
+      _subtitleTracks = derived;
 
-    _subtitleTracks = derived;
+      // Only the `mk_` half of this map is media_kit's to republish. The rest
+      // is the lazily fetched `SubtitleTrack.data` bodies
+      // [_resolveMediaKitSubtitleTrack] caches by server track id. Assigning
+      // the whole map, as detection used to, would drop that cache and refetch
+      // -- re-running a server-side ffmpeg extraction -- for every track the
+      // viewer had already selected this session.
+      _mediaKitSubtitleTrackMap
+        ..removeWhere((id, _) => id.startsWith('mk_'))
+        ..addAll(mpvById);
 
-    // Only the `mk_` half of this map is media_kit's to republish. The rest
-    // is the lazily fetched `SubtitleTrack.data` bodies
-    // [_resolveMediaKitSubtitleTrack] caches by server track id. Assigning
-    // the whole map, as detection used to, would drop that cache and refetch
-    // -- re-running a server-side ffmpeg extraction -- for every track the
-    // viewer had already selected this session.
-    _mediaKitSubtitleTrackMap
-      ..removeWhere((id, _) => id.startsWith('mk_'))
-      ..addAll(mpvById);
+      _syncSelectedSubtitleTrack();
+    }
 
-    _syncSelectedSubtitleTrack();
+    // Outside the rebuild above and after it, not inside: this runs on every
+    // revision, including one that does not change the derived list. A
+    // revision that changes nothing is still the moment media_kit may have
+    // become live, and a direct-play file whose own track list is already
+    // complete never produces a second changed one -- so gating this on the
+    // comparison, as the rebuild is gated, is a preference that silently never
+    // applies. [_applySubtitlePreference] is idempotent past its own flag.
+    unawaited(_applySubtitlePreference());
   }
 
   /// Re-derive [_subtitleTracks] after the *server's* list changed, against
@@ -3802,6 +3907,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _subtitleChosenThisPlayback = true;
     _subtitleIntentAcrossSwitch = null;
     await _applySubtitleSelection(selected);
+    // After the apply, not before: a pick that fails to load should not be
+    // remembered as the show's preference.
+    unawaited(_rememberSubtitlePreference(selected));
   }
 
   /// Applies [selected] (null for "Off") to the player, and returns the
@@ -4445,6 +4553,129 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  /// Stores the picked subtitle against the show or film, so later episodes
+  /// open on it without another pick.
+  ///
+  /// Fire-and-forget from the viewer's perspective, the same trade
+  /// [_rememberAudioLanguage] makes: the track has already changed by the
+  /// time this runs, so a failure costs the preference and never the playback
+  /// the person is watching. A server too old to know the mutation answers
+  /// with a GraphQL validation error, which is a version gap rather than a
+  /// fault and stays silent.
+  ///
+  /// Called only for a pick the viewer made -- the sheet's tile, or a remote
+  /// `selectTrack` -- and always after [_applySubtitleSelection] has returned,
+  /// so a track that never loaded is not remembered as what this show opens
+  /// on. The preference applying itself from storage is deliberately not a
+  /// call site: that is a choice being restored, not a new one, and writing
+  /// it back would let one episode whose track list lacks the remembered
+  /// title degrade what is stored for the rest of the show.
+  ///
+  /// An mpv-native pick has no disposition flags of its own: media_kit
+  /// publishes a title and a language and nothing else. It is translated
+  /// through its stream index to the server's own track, which does have
+  /// them, by the same route [_captureSubtitleIntent] uses across a source
+  /// switch. A track that cannot be translated stores its language and title
+  /// with both flags false, which the matcher's title tiebreak still
+  /// resolves on the next episode.
+  Future<void> _rememberSubtitlePreference(
+      app_models.SubtitleTrack? track) async {
+    // The pick has to be the one actually showing. [_applySubtitleSelection]
+    // returns normally when a body never loaded, and when a later pick
+    // superseded this one, so a call site's "after the apply" ordering is only
+    // half the story -- this is the other half, and it is here rather than at
+    // each call site so neither can forget it. `SubtitleTrack.operator ==` is
+    // id-based, and null compares equal to null, which is exactly the "Off"
+    // case: an explicit Off is a selection like any other and is remembered as
+    // one.
+    if (_selectedSubtitleTrack != track) return;
+
+    if (widget.fileId == 'offline') return;
+
+    final graphqlClient = _graphqlClient;
+    if (graphqlClient == null) return;
+
+    final resolved =
+        track == null ? null : await _serverSideSubtitleTrack(track);
+
+    // A track with no usable language tag would pin the show to a preference
+    // that can never match anything on the next file, exactly as an 'und'
+    // audio track would. Better to remember nothing.
+    if (track != null && (resolved == null || !_hasUsableLanguage(resolved))) {
+      return;
+    }
+
+    try {
+      final result = await graphqlClient.mutate(
+        MutationOptions(
+          document: documentNodeMutationSetSubtitlePreference,
+          variables: Variables$Mutation$SetSubtitlePreference(
+            fileId: widget.fileId,
+            mode: resolved == null
+                ? Enum$SubtitlePreferenceMode.OFF
+                : Enum$SubtitlePreferenceMode.TRACK,
+            language: resolved?.language,
+            forced: resolved?.forced,
+            hearingImpaired: resolved?.hearingImpaired,
+            trackTitle: resolved?.title,
+          ).toJson(),
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint(
+            '[PlayerScreen] Could not remember subtitle preference: ${result.exception}');
+        return;
+      }
+
+      debugPrint('[PlayerScreen] Remembered subtitle preference');
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not remember subtitle preference: $e');
+    }
+  }
+
+  /// [track] as the server knows it, or null when it cannot be translated.
+  ///
+  /// A server track is already in the server's id space and is returned as
+  /// is. An mpv-native one is matched to the server's list through its
+  /// stream index, which has to be read while its file is still loaded.
+  Future<app_models.SubtitleTrack?> _serverSideSubtitleTrack(
+    app_models.SubtitleTrack picked,
+  ) async {
+    if (!isMpvNativeSubtitleTrackId(picked.id)) return picked;
+
+    final player = _player;
+    if (player == null) return null;
+
+    final mpvId = mpvIdOfSubtitleTrack(picked.id);
+    if (mpvId == null) return null;
+
+    final streamIndex = (await subtitleStreamIndices(player))[mpvId];
+    final intent = subtitleIntentBeforeSwitch(
+      selected: picked,
+      viewerChose: true,
+      selectedStreamIndex: streamIndex,
+      serverTracks: _serverSubtitleTracks,
+    );
+
+    return switch (intent) {
+      IntentTrack(:final track) => track,
+      // Unmappable: keep what mpv told us. The language and title still
+      // identify the track well enough for the next episode's list.
+      _ => picked,
+    };
+  }
+
+  /// Whether [track] names a language that can match a track on another file.
+  ///
+  /// `'und'` is ffprobe's "undetermined", which every untagged track reports,
+  /// so storing it would pin the show to a preference that nothing can
+  /// satisfy.
+  bool _hasUsableLanguage(app_models.SubtitleTrack track) {
+    final language = track.language.trim().toLowerCase();
+    return language.isNotEmpty && language != 'und';
+  }
+
   /// Shows the quality picker and switches sources at the current position.
   Future<void> _showQualitySelector() async {
     // A restart already in flight owns the player this would act on, exactly
@@ -5031,6 +5262,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _subtitleChosenThisPlayback = true;
         _subtitleIntentAcrossSwitch = null;
         await _applySubtitleSelection(track);
+        // Remotely or by hand, a pick is a pick: remembered for the show.
+        unawaited(_rememberSubtitlePreference(track));
     }
   }
 

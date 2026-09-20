@@ -33,7 +33,7 @@ defmodule Mydia.Jobs.SubtitleSearch do
   def perform(%Oban.Job{args: %{"mode" => "season"} = args}) do
     %{"media_item_id" => media_item_id, "season_number" => season_number} = args
 
-    wanted = Mydia.Settings.get_config([:streaming, :subtitle_language], ["en"])
+    wanted = Mydia.Settings.get_config([:downloads, :subtitle_language], ["en"])
 
     media_item_id
     |> season_media_files(season_number)

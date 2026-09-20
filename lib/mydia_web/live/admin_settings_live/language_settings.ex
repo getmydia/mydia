@@ -11,6 +11,11 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
   Download audio (`downloads.audio_language`) decides which releases search
   prefers. Playback audio (`streaming.audio_language`) decides which track
   plays. They are separate settings on purpose.
+
+  Download subtitles (`downloads.subtitle_language`) decides which subtitles
+  get fetched and seeds subtitle search. Playback subtitles
+  (`streaming.subtitle_language`) decides which track switches on for a show
+  nobody has chosen for. They are separate settings on purpose.
   """
 
   alias Mydia.Metadata.LanguageCode
@@ -20,8 +25,18 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
     "downloads.audio_language" => "DOWNLOAD_AUDIO_LANGUAGE",
     "streaming.audio_language" => "AUDIO_LANGUAGE",
     "streaming.prefer_default_audio_track" => "PREFER_DEFAULT_AUDIO_TRACK",
-    "streaming.subtitle_language" => "SUBTITLE_LANGUAGE",
+    "downloads.subtitle_language" => "DOWNLOAD_SUBTITLE_LANGUAGE",
+    "streaming.subtitle_language" => "SUBTITLE_PLAYBACK_LANGUAGE",
     "metadata.language" => "METADATA_LANGUAGE"
+  }
+
+  # The name downloads.subtitle_language shipped under while it lived in the
+  # streaming section. Mydia.Config.Loader still reads it and it still means
+  # acquisition, so the row it controls has to show the ENV badge and lock:
+  # otherwise the row would look editable while the variable silently
+  # outranks anything written from here.
+  @legacy_env_vars %{
+    "downloads.subtitle_language" => "SUBTITLE_LANGUAGE"
   }
 
   # An ISO 639-1 (2-letter) or 639-2 (3-letter) primary subtag, optionally
@@ -40,12 +55,23 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       "downloads.audio_language" => config.downloads.audio_language,
       "streaming.audio_language" => config.streaming.audio_language || [],
       "streaming.prefer_default_audio_track" => config.streaming.prefer_default_audio_track,
+      "downloads.subtitle_language" => config.downloads.subtitle_language || [],
       "streaming.subtitle_language" => config.streaming.subtitle_language || [],
       "metadata.language" => config.metadata.language
     }
     |> Map.new(fn {key, value} ->
-      {key, %{value: value, source: Settings.config_source(@env_vars[key], key, db_settings)}}
+      {key, %{value: value, source: source_for(key, db_settings)}}
     end)
+  end
+
+  # The layer a key's value comes from, for its badge and its edit lock. A key
+  # whose variable was renamed counts as environment-controlled under either
+  # name, because the loader reads both.
+  defp source_for(key, db_settings) do
+    case Settings.config_source(@env_vars[key], key, db_settings) do
+      :env -> :env
+      source -> if Settings.env_var_set?(@legacy_env_vars[key]), do: :env, else: source
+    end
   end
 
   @doc """
@@ -61,11 +87,15 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
 
   A key is written only when it is not locked by an environment variable and
   differs from its resolved value: a write that only repeats the value on
-  screen would pin a YAML or default value into the database layer. All the
-  writes from one call happen inside a single transaction: a value that
-  fails to parse, or a write that fails, rolls back everything else this
-  call would have written rather than leaving a partial save. Returns the
-  keys written, empty when nothing changed.
+  screen would pin a YAML or default value into the database layer. A field
+  whose value is now empty where empty is a real state (`:clear`) has its row
+  removed instead, so the schema default applies and no reader ever sees the
+  value decoded from an empty string — `Mydia.Config.Schema.Paths` casts `""`
+  to `nil`, and `nil` is not the `[]` that every list-shaped setting's
+  consumers expect. All the writes from one call happen inside a single
+  transaction: a value that fails to parse, or a write that fails, rolls back
+  everything else this call would have written rather than leaving a partial
+  save. Returns the keys written, empty when nothing changed.
   """
   @spec save(map(), binary() | nil) :: {:ok, [String.t()]} | {:error, String.t(), term()}
   def save(params, user_id) do
@@ -76,14 +106,21 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       |> submitted_fields()
       |> Enum.flat_map(fn field -> parse({field, Map.get(params, field)}, params) end)
       |> Enum.map(fn {key, value} -> {key, keep_order(key, settings[key].value, value)} end)
-      |> Enum.reject(fn {key, value} ->
-        settings[key].source == :env or settings[key].value == value
+      |> Enum.reject(fn
+        {key, :clear} -> settings[key].source == :env
+        {key, value} -> settings[key].source == :env or settings[key].value == value
       end)
 
     fn ->
       Enum.reduce(changes, [], fn
         {key, :invalid}, _written ->
           Mydia.Repo.rollback({key, :invalid})
+
+        {key, :clear}, written ->
+          case Settings.get_config_setting_by_key(key) do
+            nil -> written
+            setting -> delete_or_rollback(setting, key, written)
+          end
 
         {key, value}, written ->
           attrs = %{
@@ -106,6 +143,13 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
     end
   end
 
+  defp delete_or_rollback(setting, key, written) do
+    case Settings.delete_config_setting(setting) do
+      {:ok, _deleted} -> [key | written]
+      {:error, reason} -> Mydia.Repo.rollback({key, reason})
+    end
+  end
+
   # The field(s) a form change actually names. `_target`, when the browser
   # supplies it, is the changed field's name path (e.g. `["playback_audio",
   # "preferred"]` for a nested input named `playback_audio[preferred]`); its
@@ -120,10 +164,12 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
 
   # The "More languages" picker is a separate form field from the chip
   # checkboxes it feeds, so a change fired from it targets
-  # "subtitle_language_add" while the value it should parse lives under
-  # "subtitle_language". Route it there; every other target names its own
-  # field already.
+  # "subtitle_language_add" (or "subtitle_playback_language_add") while the
+  # value it should parse lives under "subtitle_language" (or
+  # "subtitle_playback_language"). Route it there; every other target names
+  # its own field already.
   defp field_for_target("subtitle_language_add"), do: "subtitle_language"
+  defp field_for_target("subtitle_playback_language_add"), do: "subtitle_playback_language"
   defp field_for_target(field), do: field
 
   @doc """
@@ -177,27 +223,58 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
   defp parse({"prefer_default_audio_track", flag}, _params) when flag in ["true", "false"],
     do: [{"streaming.prefer_default_audio_track", flag == "true"}]
 
-  defp parse({"subtitle_language", codes}, params) when is_list(codes) do
+  # Acquisition subtitles: the chips and picker that seed subtitle search,
+  # writing the downloads key. Playback subtitles below write the streaming
+  # key; each row submits under its own field names.
+  defp parse({"subtitle_language", codes}, params) when is_list(codes),
+    do:
+      parse_subtitle_languages(
+        codes,
+        params["subtitle_language_add"],
+        "downloads.subtitle_language",
+        :keep
+      )
+
+  defp parse({"subtitle_playback_language", codes}, params) when is_list(codes),
+    do:
+      parse_subtitle_languages(
+        codes,
+        params["subtitle_playback_language_add"],
+        "streaming.subtitle_language",
+        :clear
+      )
+
+  defp parse(_field, _params), do: []
+
+  # Shared by both subtitle rows: they differ only in the field names they
+  # submit under, the key they write, and what an empty selection means.
+  #
+  # `on_empty` is `:keep` where the setting must name a language — an empty
+  # list is then a no-op, so a row whose chips are all gone leaves the key
+  # alone rather than pinning "" into the database — and `:clear` where empty
+  # is a real state, so the row can write "no automatic subtitle" back.
+  defp parse_subtitle_languages(codes, added, key, on_empty) do
     languages =
-      (codes ++ List.wrap(params["subtitle_language_add"]))
+      (codes ++ List.wrap(added))
       |> Enum.reject(&(&1 in [nil, ""]))
       |> Enum.uniq()
 
     cond do
-      languages == [] -> []
-      Enum.all?(languages, &LanguageCode.known?/1) -> [{"streaming.subtitle_language", languages}]
-      true -> [{"streaming.subtitle_language", :invalid}]
+      languages == [] -> if on_empty == :clear, do: [{key, :clear}], else: []
+      Enum.all?(languages, &LanguageCode.known?/1) -> [{key, languages}]
+      true -> [{key, :invalid}]
     end
   end
-
-  defp parse(_field, _params), do: []
 
   defp audio_choice?(code), do: code == "original" or LanguageCode.known?(code)
 
   # Chips submit in display order, not preference order. Keep the configured
   # order for languages that stay and append new ones, so an unrelated change
   # on the form never rewrites a YAML or default list just by reordering it.
-  defp keep_order("streaming.subtitle_language", current, submitted) when is_list(submitted) do
+  # Both subtitle rows are chip rows, so both keys get this.
+  defp keep_order(key, current, submitted)
+       when key in ["downloads.subtitle_language", "streaming.subtitle_language"] and
+              is_list(submitted) do
     Enum.filter(current, &(&1 in submitted)) ++ Enum.reject(submitted, &(&1 in current))
   end
 

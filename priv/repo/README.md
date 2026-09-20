@@ -136,10 +136,10 @@ Sequential casts merge via `cast_merge/2`: changes are merged, `valid?` is ANDed
 errors concatenated, and the override does not leak to later calls. Setting
 `empty_values: []` on the shared cast would change every field in the embed.
 
-`streaming.subtitle_language` does this as of PR #592.
-`streaming.audio_language` has the identical latent gap, left unfixed as out of
-scope, and its `validate_audio_language/1` comment was corrected so the two no
-longer disagree.
+`streaming.subtitle_language` and `downloads.subtitle_language` do this as of
+PR #592. `streaming.audio_language` has the identical latent gap, left unfixed
+as out of scope, and its `validate_audio_language/1` comment was corrected so
+the two no longer disagree.
 
 ## SQLite foreign keys are already on
 

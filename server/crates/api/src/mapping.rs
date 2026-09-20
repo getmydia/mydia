@@ -116,6 +116,8 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
                         title: track.title,
                         format: track.format,
                         embedded: track.embedded,
+                        forced: false,
+                        hearing_impaired: false,
                         media_file_id: row.id.clone(),
                     })
                 })
@@ -133,6 +135,8 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
                     title: external_title(&sub.language),
                     format: sub.format.clone(),
                     embedded: false,
+                    forced: false,
+                    hearing_impaired: false,
                     media_file_id: row.id.clone(),
                 })
             })
@@ -181,6 +185,11 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
             row.id
         )),
         subtitles: Some(tracks),
+        // This server stores no per-viewer subtitle preference and folds no
+        // operator default, so it has nothing to report and answers null --
+        // the same answer the Elixir field gives an anonymous caller. The
+        // player treats null as "leave subtitle selection alone".
+        preferred_subtitle: None,
         // Slice 8.
         segments: Vec::new(),
     }

@@ -360,6 +360,61 @@ whose glyphs run noticeably wider than the real ones. A layout that is
 text-driven, like this panel's rows before the scroll fix above, measures
 taller in a test than it ever renders on a device.
 
+## The subtitle a show opens on
+
+The media-file document carries `preferredSubtitle`: mode `OFF` for an
+explicit off, `TRACK` with a language and its flags for a track to find, and
+nothing at all for no opinion. `subtitle_preference.dart` turns that into a
+preference, and `_applySubtitlePreference` runs off a track-list revision
+rather than from `_initializePlayer`, because the list is what it matches
+against and in direct play that list is mpv's, published asynchronously after
+`open()`. Nothing is spent when there is nothing to apply to: a descriptor
+that matches no track, or a revision arriving before there is a player, leaves
+`_preferenceAppliedForPlayback` unset so the next revision still gets its
+chance. It is set before the await rather than after, because media_kit
+revises its track list several times per playback and a revision landing
+mid-apply would otherwise race the first one.
+
+The match is ranked, not filtered. Language has to agree first —
+`subtitlePreferenceLanguageEquals`, which folds ISO 639-2/B against /T because
+Matroska writes one form and ffprobe the other, and which refuses `und` and an
+empty tag. Deliberately not `subtitleLanguagesCompatible` from the track
+builder: that one treats `und` as compatible with anything, which is right for
+carrying a known track across a quality switch and wrong here, where it would
+attach every untagged track to every preference. Then forced (+8),
+hearing-impaired (+4) and the remembered title (+2), with a non-forced track
+taking a tie (+1) so an unflagged list still resolves to the full-dialogue
+track rather than the signs-only one. Forced weighs most because it is the flag
+that decides whether the viewer sees the episode or only its foreign dialogue.
+
+Two things make a partial match normal rather than exceptional. An mpv-native
+track reports no disposition at all — media_kit publishes its language and
+title and nothing else — so a pick on one is translated through its stream
+index to the server's own track, which does have the flags, and a track that
+cannot be translated stores its language and title with both flags false; the
+title tiebreak is what resolves it on the next episode. And a season whose
+files disagree about SDH tagging should still keep showing the viewer's
+language, which it does.
+
+**An applied preference is not written back.** It is a choice being restored,
+not a new one, so only a pick the viewer made — the sheet's tile, or a remote
+`selectTrack` — reaches `_rememberSubtitlePreference`, and only once the apply
+has returned and the selection is still the one showing. Writing a restore
+back would let the first episode whose track list lacks the remembered title
+degrade what is stored for the rest of the show. An explicit Off is a
+selection like any other, but only from a path that gets to make one. Picked
+remotely, or from the sheet once a selection is in flight or already applied,
+it is remembered as OFF, and it has to be applied rather than left alone,
+since mpv's own default-disposition pick is exactly what switches a subtitle
+on unasked in direct play. An Off tapped on the sheet from a clean state —
+nothing applied, no attempt pending — is a known gap: a pre-existing selection
+guard reads it as a no-op, so nothing is stored. That guard is being followed
+up.
+
+The preference is refetched with each file's media-file document rather than
+carried in memory, so an episode change needs no handoff. A quality switch is
+a different case and does carry the current choice; see "The switch".
+
 ## Who draws subtitles
 
 media_kit builds `Player()` with `libass: false`, which sets mpv's

@@ -113,7 +113,10 @@ defmodule Mydia.Config.Loader do
           {:ok, %{}}
 
         {:ok, data} when is_map(data) ->
-          {:ok, normalize_yaml_keys(data)}
+          # normalize_yaml_keys/1 runs first: it downcases and atomizes every
+          # key, so the shim below reads :streaming and :downloads, matching
+          # the atom keys every other YAML consumer sees.
+          {:ok, data |> normalize_yaml_keys() |> migrate_legacy_subtitle_language()}
 
         {:ok, _other} ->
           {:error, "YAML file must contain a map at the root level"}
@@ -171,6 +174,44 @@ defmodule Mydia.Config.Loader do
   defp stringify_keys(map) when is_map(map) do
     Map.new(map, fn {key, value} -> {key |> to_string() |> String.downcase(), value} end)
   end
+
+  # A YAML file written before this key moved has streaming.subtitle_language
+  # meaning acquisition, which is the only meaning it has ever had. Move it,
+  # so an operator who has not edited their file keeps the subtitle languages
+  # they asked for instead of silently losing them.
+  #
+  # Presence of downloads.subtitle_language is the signal that the operator
+  # has migrated: from then on streaming.subtitle_language is taken at face
+  # value as the playback setting. Retire this shim one minor release after
+  # the one that introduces downloads.subtitle_language.
+  #
+  # The shape is checked rather than assumed: a `streaming:` entry that is not
+  # a map is left exactly as written, so schema validation reports it as an
+  # invalid embed instead of this shim raising on it, and an absent
+  # `downloads:` section means the move applies.
+  defp migrate_legacy_subtitle_language(%{streaming: streaming} = yaml) when is_map(streaming) do
+    downloads = Map.get(yaml, :downloads, %{})
+    legacy = Map.get(streaming, :subtitle_language)
+
+    if is_map(downloads) and is_list(legacy) and
+         not Map.has_key?(downloads, :subtitle_language) do
+      require Logger
+
+      Logger.warning(
+        "config: streaming.subtitle_language now selects the subtitle that plays. " <>
+          "Your value was read as downloads.subtitle_language, which is what it " <>
+          "meant before. Rename it in your YAML to silence this."
+      )
+
+      yaml
+      |> Map.put(:downloads, Map.put(downloads, :subtitle_language, legacy))
+      |> Map.put(:streaming, Map.delete(streaming, :subtitle_language))
+    else
+      yaml
+    end
+  end
+
+  defp migrate_legacy_subtitle_language(other), do: other
 
   defp load_database_config do
     # Load database configuration settings
@@ -293,6 +334,15 @@ defmodule Mydia.Config.Loader do
       &parse_integer/1
     )
     |> put_if_present(:audio_language, System.get_env("DOWNLOAD_AUDIO_LANGUAGE"))
+    |> put_if_present(
+      :subtitle_language,
+      # DOWNLOAD_SUBTITLE_LANGUAGE is the name that matches
+      # DOWNLOAD_AUDIO_LANGUAGE. SUBTITLE_LANGUAGE is the name this setting
+      # shipped under while it lived in the streaming section, and it keeps
+      # working: its meaning has not changed, only where the key lives.
+      System.get_env("DOWNLOAD_SUBTITLE_LANGUAGE") || System.get_env("SUBTITLE_LANGUAGE"),
+      &parse_string_list/1
+    )
   end
 
   defp load_upgrades_env do
@@ -324,7 +374,7 @@ defmodule Mydia.Config.Loader do
     )
     |> put_if_present(
       :subtitle_language,
-      System.get_env("SUBTITLE_LANGUAGE"),
+      System.get_env("SUBTITLE_PLAYBACK_LANGUAGE"),
       &parse_string_list/1
     )
     |> put_if_present(
