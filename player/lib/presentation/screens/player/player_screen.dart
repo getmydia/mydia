@@ -1942,14 +1942,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Selects the subtitle this viewer already chose for this show, or turns
   /// subtitles off if that is what they chose.
   ///
-  /// Runs off the back of the track list settling rather than from
+  /// Runs off the back of a track-list revision rather than from
   /// `_initializePlayer`, because the list is what it matches against and in
   /// direct play that list is mpv's, published asynchronously after `open()`.
   ///
-  /// A `PreferTrack` that matches nothing does nothing at all, and shows no
+  /// Nothing is consumed unless a selection can actually be made. A
+  /// `PreferTrack` that matches nothing does nothing at all, and shows no
   /// toast: episode transitions are frequent, and a line on every episode of
   /// a season that lacks the track is noise the viewer cannot act on. The
-  /// subtitle button is already on the OSD.
+  /// subtitle button is already on the OSD. Neither that case nor a call
+  /// arriving before there is a player spends
+  /// [_preferenceAppliedForPlayback], so the next revision still gets its
+  /// chance -- which is what stops a direct-play file whose track list is
+  /// already complete from losing the preference for the whole playback.
   Future<void> _applySubtitlePreference() async {
     final preference = _subtitlePreference;
     if (preference == null) return;
@@ -1964,22 +1969,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
 
+    // Null is "Off", and Off is applied like any other selection rather than
+    // skipped: mpv switches on whichever track the container flagged default,
+    // so leaving it alone is exactly the behaviour the viewer turned off.
+    app_models.SubtitleTrack? target;
+    switch (preference) {
+      case PreferOff():
+        target = null;
+      case PreferTrack():
+        target = matchSubtitlePreference(preference, _subtitleTracks);
+        // Nothing to select, and nothing to say about it here; see the
+        // dartdoc above for why this stays quiet.
+        if (target == null) return;
+    }
+
+    // A selection with no player behind it goes nowhere: the fetch and the
+    // `setSubtitleTrack` are both behind `_applySubtitleSelection`'s own
+    // `_player == null` bailout. Spending the one-shot here would leave the
+    // preference permanently unapplied for a playback whose track list is
+    // already complete, so this waits for a revision that has one.
+    if (_player == null) return;
+
     // Set before the await, not after: a second track-list revision can land
     // while the selection below is still resolving, and two concurrent
     // applies of the same preference would race each other's generation.
     _preferenceAppliedForPlayback = true;
 
-    switch (preference) {
-      case PreferOff():
-        // Explicit, not a no-op. mpv switches on whichever track the
-        // container flagged default, so leaving it alone is exactly the
-        // behaviour the viewer turned off.
-        await _applySubtitleSelection(null);
-      case PreferTrack():
-        final match = matchSubtitlePreference(preference, _subtitleTracks);
-        if (match == null) return;
-        await _applySubtitleSelection(match);
-    }
+    await _applySubtitleSelection(target);
   }
 
   /// Monitors a source and lets the policy decide when to replace it.
@@ -3056,13 +3072,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Call inside a `setState`; this does not call one itself, so the audio
   /// and subtitle halves of [_onTracksChanged] share a single rebuild.
   ///
-  /// Returns early when the derived list is unchanged, which is
-  /// load-bearing rather than an optimisation: [_syncSelectedSubtitleTrack]
-  /// bumps [_subtitleSelectionGeneration], and a bump makes
-  /// [shouldApplySubtitleSelection] discard whatever selection the viewer
-  /// has in flight. media_kit revises its track list more than once per
-  /// playback, so an unguarded rebuild would swallow a tap every time it
-  /// did.
+  /// Returns early from the *rebuild* when the derived list is unchanged,
+  /// which is load-bearing rather than an optimisation:
+  /// [_syncSelectedSubtitleTrack] bumps [_subtitleSelectionGeneration], and a
+  /// bump makes [shouldApplySubtitleSelection] discard whatever selection the
+  /// viewer has in flight. media_kit revises its track list more than once per
+  /// playback, so an unguarded rebuild would swallow a tap every time it did.
+  /// [_applySubtitlePreference] is deliberately left outside that guard; see
+  /// its call site below.
   ///
   /// The comparison is by id, since `SubtitleTrack.operator ==` is
   /// id-based. That is the right granularity: the button's gate and every
@@ -3094,22 +3111,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       imageSidecars: !kIsWeb,
     );
 
-    if (listEquals(derived, _subtitleTracks)) return;
+    if (!listEquals(derived, _subtitleTracks)) {
+      _subtitleTracks = derived;
 
-    _subtitleTracks = derived;
+      // Only the `mk_` half of this map is media_kit's to republish. The rest
+      // is the lazily fetched `SubtitleTrack.data` bodies
+      // [_resolveMediaKitSubtitleTrack] caches by server track id. Assigning
+      // the whole map, as detection used to, would drop that cache and refetch
+      // -- re-running a server-side ffmpeg extraction -- for every track the
+      // viewer had already selected this session.
+      _mediaKitSubtitleTrackMap
+        ..removeWhere((id, _) => id.startsWith('mk_'))
+        ..addAll(mpvById);
 
-    // Only the `mk_` half of this map is media_kit's to republish. The rest
-    // is the lazily fetched `SubtitleTrack.data` bodies
-    // [_resolveMediaKitSubtitleTrack] caches by server track id. Assigning
-    // the whole map, as detection used to, would drop that cache and refetch
-    // -- re-running a server-side ffmpeg extraction -- for every track the
-    // viewer had already selected this session.
-    _mediaKitSubtitleTrackMap
-      ..removeWhere((id, _) => id.startsWith('mk_'))
-      ..addAll(mpvById);
+      _syncSelectedSubtitleTrack();
+    }
 
-    _syncSelectedSubtitleTrack();
-
+    // Outside the rebuild above and after it, not inside: this runs on every
+    // revision, including one that does not change the derived list. A
+    // revision that changes nothing is still the moment media_kit may have
+    // become live, and a direct-play file whose own track list is already
+    // complete never produces a second changed one -- so gating this on the
+    // comparison, as the rebuild is gated, is a preference that silently never
+    // applies. [_applySubtitlePreference] is idempotent past its own flag.
     unawaited(_applySubtitlePreference());
   }
 

@@ -15,12 +15,9 @@
 // so without one the fetch under test can never happen however correct the
 // preference logic is.
 //
-// A published mpv track list, because the preference is applied off the back
-// of the rebuild that follows `open()`, not the one the detail response
-// produced: in direct play the file's own tracks arrive with mpv's probe, and
-// it is mpv's list, not the server's, that was never folded into the streaming
-// default server-side. A fixture whose derived list never changes after
-// `open()` therefore never reaches the apply at all.
+// A published mpv track list, because in direct play it is mpv's own list, not
+// the server's, that was never folded into the streaming default server-side:
+// the preference is what has to reconcile the two.
 
 import 'dart:async';
 
@@ -89,8 +86,19 @@ class _ProbedPlayer extends PlatformPlayer {
   /// again has to read.
   final selectedSubtitleTracks = <SubtitleTrack>[];
 
+  /// Whether the screen has opened a source on this player yet, so a test can
+  /// wait for the load to reach the point its own detection pass follows.
+  bool opened = false;
+
+  /// When set, [setSubtitleTrack] records its track and then waits for this,
+  /// so a test can land a track-list revision *while* a selection is still in
+  /// flight. That window is what `_preferenceAppliedForPlayback`'s placement
+  /// before the await exists for.
+  Completer<void>? holdSubtitleTrack;
+
   @override
   Future<void> open(Playable playable, {bool play = true}) async {
+    opened = true;
     state = state.copyWith(
       duration: const Duration(seconds: 90),
       position: Duration.zero,
@@ -113,6 +121,7 @@ class _ProbedPlayer extends PlatformPlayer {
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {
     selectedSubtitleTracks.add(track);
+    await holdSubtitleTrack?.future;
   }
 
   @override
@@ -177,11 +186,23 @@ StubLink _link({Map<String, dynamic>? preferredSubtitle}) {
 }
 
 /// Mounts the screen against [link] and waits for the load to settle.
+///
+/// "Settled" is an identified point, not a timeout: the player has been opened
+/// and the 500ms of fake time `_openPlayerAndStart` holds between `open()` and
+/// its own detection pass has elapsed, which is the last thing the load does.
+///
+/// [settled] then waits for whatever this test expects the preference to have
+/// produced -- a body fetch, or a selection on the player. It is how the
+/// absence assertions in the Off and no-preference cases stay off a timeout:
+/// the Off case waits for the selection that *should* be there, and the
+/// no-preference case has no positive effect to wait for at all, so it asserts
+/// on the state at that identified point instead.
 Future<void> _pump(
   WidgetTester tester,
   StubLink link,
-  _ProbedPlayer player,
-) async {
+  _ProbedPlayer player, {
+  bool Function()? settled,
+}) async {
   final container = buildPlayerScreenContainer(
     link: link,
     connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
@@ -195,21 +216,14 @@ Future<void> _pump(
     container,
     createPlayer: () => Player(platformPlayer: player),
   );
-  await pumpUntil(
-    tester,
-    () => link.requests.any(
-      (r) => _carries(r, documentNodeQueryStreamingCandidates),
-    ),
-  );
-  // The track list is published after the candidates land, and
-  // `_applySubtitlePreference` runs off the back of that.
-  await pumpUntil(tester, () => _subtitleContentRequests(link) > 0);
-  // Then let `_initializePlayer` finish. `_openPlayerAndStart` holds a 500ms
-  // fake-time delay before its own detection pass, and a test that returns
-  // while that is still pending fails Flutter's own pending-timer check --
-  // which is a failure of the fixture, not of what is under test.
+  await pumpUntil(tester, () => player.opened);
+  // Past `_openPlayerAndStart`'s own 500ms wait, so its detection pass has run.
+  // A test that returns while that timer is still pending fails Flutter's own
+  // pending-timer check, which would be a failure of the fixture rather than of
+  // what is under test.
   await tester.pump(const Duration(seconds: 1));
-  await tester.pump(const Duration(seconds: 1));
+
+  if (settled != null) await pumpUntil(tester, settled);
 }
 
 void main() {
@@ -220,7 +234,12 @@ void main() {
           preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
     );
 
-    await _pump(tester, link, _ProbedPlayer());
+    await _pump(
+      tester,
+      link,
+      _ProbedPlayer(),
+      settled: () => _subtitleContentRequests(link) > 0,
+    );
 
     expect(
       _subtitleContentRequests(link),
@@ -234,7 +253,12 @@ void main() {
     final player = _ProbedPlayer();
     final link = _link(preferredSubtitle: preferredSubtitleObject(mode: 'OFF'));
 
-    await _pump(tester, link, player);
+    await _pump(
+      tester,
+      link,
+      player,
+      settled: () => player.selectedSubtitleTracks.isNotEmpty,
+    );
 
     expect(
       _subtitleContentRequests(link),
@@ -277,10 +301,15 @@ void main() {
           preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
     );
 
-    await _pump(tester, link, player);
+    await _pump(
+      tester,
+      link,
+      player,
+      settled: () => _subtitleContentRequests(link) > 0,
+    );
     expect(
-      _subtitleContentRequests(link),
-      1,
+      player.selectedSubtitleTracks,
+      hasLength(1),
       reason: 'the preference has to have applied once for the revision below '
           'to be able to apply it a second time',
     );
@@ -303,14 +332,57 @@ void main() {
       reason: 'the preference must apply once per file, not once per track '
           'list revision',
     );
-    // The fetch count above cannot see the bug on its own: the body is cached
-    // per track id, so a second apply of the remembered track is not a second
-    // request. This is the assertion that pins the flag.
+    // Do not simplify this into the fetch count above. The fetched body is
+    // cached per track id, so a second apply of the remembered track is a
+    // cache hit and not a second request: with `_preferenceAppliedForPlayback`
+    // removed, the assertion above still passes and only this one fails.
     expect(
       player.selectedSubtitleTracks,
       hasLength(1),
       reason: 'the remembered track must reach the player exactly once, not '
           'once per track list revision',
+    );
+  });
+
+  testWidgets(
+      'a track list revised while a selection is still in flight applies it '
+      'once', (tester) async {
+    final hold = Completer<void>();
+    final player = _ProbedPlayer()..holdSubtitleTrack = hold;
+    final link = _link(preferredSubtitle: preferredSubtitleObject(mode: 'OFF'));
+
+    await _pump(
+      tester,
+      link,
+      player,
+      settled: () => player.selectedSubtitleTracks.isNotEmpty,
+    );
+    expect(
+      player.selectedSubtitleTracks,
+      [SubtitleTrack.no()],
+      reason: 'the Off has to have reached the player for the revision below '
+          'to be able to select a second time',
+    );
+
+    // The window `_preferenceAppliedForPlayback` exists for: a revision
+    // arriving while `_applySubtitleSelection` is still awaiting the player.
+    // `_setSubtitleTrack` is the await in `_applySubtitlePreference` for an
+    // Off, and it is held, so the selection is genuinely in flight here.
+    player.publishSubtitleTracks(const [
+      _mpvSubtitleTrack,
+      SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
+    ]);
+    await tester.pump();
+    hold.complete();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(
+      player.selectedSubtitleTracks,
+      [SubtitleTrack.no()],
+      reason: 'the Off must be applied once, not once per revision landing '
+          'while it is still in flight: the flag is set before that await '
+          'precisely so this second apply never starts',
     );
   });
 }
