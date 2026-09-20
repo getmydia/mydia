@@ -144,6 +144,29 @@ void main() {
     });
   });
 
+  group('subtitlePreferenceLanguageEquals', () {
+    test('matches the ISO 639-1 and 639-2 pairs the server knows', () {
+      // The player and the server both decide "is this the same language"
+      // about the same file: the server in SubtitlePreferences.operator_default/1
+      // via LanguageCode.matches?/2, the player here. Two tables of different
+      // sizes gave two answers.
+      expect(subtitlePreferenceLanguageEquals('sv', 'swe'), isTrue);
+      expect(subtitlePreferenceLanguageEquals('pl', 'pol'), isTrue);
+      expect(subtitlePreferenceLanguageEquals('da', 'dan'), isTrue);
+      expect(subtitlePreferenceLanguageEquals('he', 'heb'), isTrue);
+
+      // ISO 639-2/B against /T, which is the pair Matroska actually writes.
+      expect(subtitlePreferenceLanguageEquals('sq', 'alb'), isTrue);
+      expect(subtitlePreferenceLanguageEquals('mkd', 'mac'), isTrue);
+
+      // Still refused, on both sides: an untagged or undetermined track must
+      // not satisfy a request for a specific language.
+      expect(subtitlePreferenceLanguageEquals('und', 'eng'), isFalse);
+      expect(subtitlePreferenceLanguageEquals('', 'eng'), isFalse);
+      expect(subtitlePreferenceLanguageEquals('sv', 'nor'), isFalse);
+    });
+  });
+
   group('shouldApplySubtitlePreference', () {
     test('applies once, on a settled playback the viewer has not touched', () {
       expect(

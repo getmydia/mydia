@@ -288,6 +288,17 @@ defmodule Mydia.Metadata.LanguageCode do
   def equivalents(_), do: []
 
   @doc """
+  The ISO 639-1 to 639-2 table itself, for the parity gate that keeps the
+  player's Dart copy in step.
+
+  Not for matching. Use `matches?/2`, `canonical/1` or `equivalents/1`, which
+  handle region suffixes, three-letter input and the `und` case this raw map
+  says nothing about.
+  """
+  @spec equivalents_table() :: %{String.t() => [String.t()]}
+  def equivalents_table, do: @equivalents
+
+  @doc """
   Whether `code` names a language in the equivalence table, in any form
   `equivalents/1` accepts.
 
