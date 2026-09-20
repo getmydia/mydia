@@ -48,6 +48,7 @@ import 'package:player/graphql/queries/movie_detail.graphql.dart';
 import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
 import 'package:player/graphql/queries/subtitle_content.graphql.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
+import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
@@ -241,8 +242,20 @@ Future<ProviderContainer> _mount(
   return container;
 }
 
+/// How many subtitle sheets are on screen, which is 0 or 1.
+///
+/// Used as an identified point rather than a timeout: the sheet appears only
+/// after the chrome's button is tapped, and disappears only once a tile tap (or
+/// a dismissal) has been handled, so "it is gone" is proof the tap landed
+/// rather than an empty state a missed tap would also satisfy.
+int _sheetCount() => find.byType(SubtitleTrackSelectorSheet).evaluate().length;
+
 /// Asks the mounted screen for [trackId], the way the receiver would.
-void _pickRemotely(ProviderContainer container, String trackId) {
+///
+/// A null [trackId] is the wire form of "Off" -- see `TrackSelectionIntent`'s
+/// `trackId` dartdoc -- and is exactly what the remote's
+/// `SelectSubtitleTrack { id: null }` becomes.
+void _pickRemotely(ProviderContainer container, String? trackId) {
   container.read(remoteTargetControllerProvider).submit(
         TrackSelectionIntent(kind: TrackKind.subtitle, trackId: trackId),
       );
@@ -267,6 +280,38 @@ void main() {
     expect(written['forced'], isTrue);
     expect(written['hearingImpaired'], isFalse);
     expect(written['trackTitle'], _trackTitle);
+  });
+
+  testWidgets(
+      'a remote Off is written back as an Off, carrying nothing '
+      'over', (tester) async {
+    final player = _ProbedPlayer();
+    final link = _link();
+    final container = await _mount(tester, link, player);
+
+    // A track first, so the Off below cannot pass by writing an Off that
+    // happens to be empty anyway: there is a language, a title and two flags
+    // in the previous selection for it to leak out of.
+    _pickRemotely(container, _serverTrackId);
+    await pumpUntil(tester, () => _writes(link).isNotEmpty);
+
+    // Off is the one case where a wrong write is unrecoverable for the
+    // viewer: a missing Off means the next episode switches subtitles back
+    // on, which is the behaviour this whole feature exists to remove.
+    _pickRemotely(container, null);
+    await pumpUntil(tester, () => _writes(link).length >= 2);
+
+    expect(player.selectedSubtitleTracks.last, SubtitleTrack.no(),
+        reason: 'the Off has to have reached the player before it is worth '
+            'anything as a stored preference');
+    expect(_writes(link), hasLength(2),
+        reason: 'the track and then the Off, one write each');
+    final written = _writes(link).last.variables;
+    expect(written['mode'], 'OFF');
+    expect(written.keys.toSet(), {'fileId', 'mode'},
+        reason: 'an Off names no track at all: nothing of the previous '
+            'selection may be carried into it, since the server rejects an '
+            'Off that arrives with a language');
   });
 
   testWidgets('a track picked from the sheet is written back too',
@@ -364,5 +409,55 @@ void main() {
     expect(written['trackTitle'], 'Japanese');
     expect(written['forced'], isFalse);
     expect(written['hearingImpaired'], isFalse);
+  });
+
+  testWidgets(
+      'a sheet Off with nothing applied is swallowed by the selection gate, so '
+      'nothing is written (known defect, pinned)', (tester) async {
+    final link = _link();
+    final player = _ProbedPlayer();
+    await _mount(tester, link, player);
+
+    // KNOWN DEFECT, PINNED ON PURPOSE -- see the assertion at the end for what
+    // the fix flips this to.
+    //
+    // `shouldStartSubtitleSelection` (`subtitle_track_builder.dart`) drops a
+    // pick whose target equals `_pendingSubtitleSelection`, and with nothing
+    // applied that field is null -- the very value a tap on "Off" requests --
+    // so the tap never reaches `_applySubtitleSelection`, and therefore never
+    // reaches `_rememberSubtitlePreference` either. The remote-control Off
+    // path has no such gate, which is why the test above it can assert the Off
+    // write at all.
+    //
+    // Pre-existing selection semantics with their own tests, deliberately not
+    // changed by the subtitle-preference work, and parked for review rather
+    // than fixed here: this test records today's behaviour so the fix has a
+    // contract to flip instead of a silent gap.
+    await tester.tap(find.byKey(SecondaryCluster.subtitlesKey));
+    await pumpUntil(tester, () => _sheetCount() > 0);
+    await tester.pump(const Duration(milliseconds: 400));
+    final offTile = find.descendant(
+      of: find.byType(SubtitleTrackSelectorSheet),
+      matching: find.text('Off'),
+    );
+    await tester.ensureVisible(offTile);
+    await tester.pump();
+    await tester.tap(offTile);
+
+    // The sheet closes only once the tap has been handled by the screen, so
+    // its disappearance is the identified point this absence assertion stands
+    // on -- not an empty state that a missed tap would also satisfy.
+    await pumpUntil(tester, () => _sheetCount() == 0);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(player.selectedSubtitleTracks, isEmpty,
+        reason: 'the Off never even reached the player: the gate drops it '
+            'before _applySubtitleSelection, which is the step the write '
+            'follows from');
+    expect(_writes(link), isEmpty,
+        reason: 'known defect: this tap is swallowed by '
+            'shouldStartSubtitleSelection, so the viewer who opened the sheet '
+            'purely to say "never subtitles for this show" stores nothing. '
+            'The fix makes this assertion `hasLength(1)` with mode OFF');
   });
 }
