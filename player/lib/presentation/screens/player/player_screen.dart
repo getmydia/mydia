@@ -594,6 +594,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// file is left to do whatever it would have done.
   SubtitlePreference? _subtitlePreference;
 
+  /// The tail of the per-show preference write queue.
+  ///
+  /// The server's upsert is unconditional, so two writes handed to the
+  /// transport at once land in whatever order the network gives them and the
+  /// earlier pick can win. Chaining them keeps the order the viewer picked in.
+  /// Per screen is the right scope: the case that exists is one viewer tapping
+  /// twice.
+  Future<void> _subtitlePreferenceWrite = Future<void>.value();
+
   /// Whether [_applySubtitlePreference] has already run for the file now
   /// loaded. media_kit revises its track list several times per playback and
   /// every revision reaches [_applySubtitleTracks], so without this a
@@ -4753,8 +4762,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// switch. A track that cannot be translated stores its language and title
   /// with both flags false, which the matcher's title tiebreak still
   /// resolves on the next episode.
+  ///
+  /// Two picks in quick succession are queued rather than raced: see
+  /// [_subtitlePreferenceWrite].
   Future<void> _rememberSubtitlePreference(
       app_models.SubtitleTrack? track) async {
+    // Appended rather than started, so two picks land in the order they were
+    // made. `catchError` keeps a failed write from poisoning the tail: the
+    // body already swallows its own errors, and a queue that stops on the
+    // first exception would silently drop every later pick.
+    _subtitlePreferenceWrite = _subtitlePreferenceWrite
+        .then((_) => _writeSubtitlePreference(track))
+        .catchError((Object e) {
+      debugPrint('[PlayerScreen] Could not remember subtitle preference: $e');
+    });
+    return _subtitlePreferenceWrite;
+  }
+
+  /// The queued body of [_rememberSubtitlePreference], which is the only
+  /// caller: reaching this any other way would take the write back out of the
+  /// order that method exists to keep.
+  Future<void> _writeSubtitlePreference(app_models.SubtitleTrack? track) async {
     // The pick has to be the one actually showing. [_applySubtitleSelection]
     // returns normally when a body never loaded, and when a later pick
     // superseded this one, so a call site's "after the apply" ordering is only
@@ -4772,6 +4800,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final resolved =
         track == null ? null : await _serverSideSubtitleTrack(track);
+
+    // Re-checked after the await, not only before it. By now a later pick may
+    // have won, and its own queued write is behind this one: sending this
+    // would store a selection that is no longer showing.
+    if (_selectedSubtitleTrack != track) return;
 
     // A track with no usable language tag would pin the show to a preference
     // that can never match anything on the next file, exactly as an 'und'

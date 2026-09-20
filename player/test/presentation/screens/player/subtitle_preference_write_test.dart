@@ -151,20 +151,55 @@ class _ProbedPlayer extends PlatformPlayer {
   }
 }
 
+/// A [StubLink] that holds each `setSubtitlePreference` for a scripted delay
+/// before it answers.
+///
+/// A stubbed server that answers on receipt cannot reproduce the order this
+/// fixture exists to test: what matters to the real upsert is when a write
+/// *lands*, not when it was issued, and the unconditional upsert makes the
+/// last one to land the one the show is pinned to. Holding the first write
+/// past the second is what gives the landing order a chance to differ from
+/// the issuing order, and so a chance to be wrong.
+class _DelayedWriteLink extends StubLink {
+  _DelayedWriteLink(super.handler, this.mutationDelays);
+
+  /// How long the nth `setSubtitlePreference` is held before it answers. The
+  /// last entry repeats; an empty list holds nothing.
+  final List<Duration> mutationDelays;
+
+  int _writesStarted = 0;
+
+  @override
+  Stream<Response> request(Request request, [NextLink? forward]) async* {
+    if (mutationDelays.isNotEmpty &&
+        _carries(request, documentNodeMutationSetSubtitlePreference)) {
+      final started = _writesStarted++;
+      final delay = mutationDelays[started < mutationDelays.length
+          ? started
+          : mutationDelays.length - 1];
+      await Future<void>.delayed(delay);
+    }
+    yield* super.request(request, forward);
+  }
+}
+
 /// The scripted responses a direct-play movie load consumes, with one
 /// server-side subtitle track to pick.
 ///
 /// [rejectWrite] is the server refusing the mutation; [deliverContent] false
 /// is a pick whose body never arrives, which is the load failure the write
 /// must not outlive. [language]/[title] shape the picked track, so a test can
-/// make it untagged or give it a title.
+/// make it untagged or give it a title. [mutationDelays] is how long the nth
+/// write is held before it answers, for the tests that need two writes in the
+/// air at once; see [_DelayedWriteLink].
 StubLink _link({
   bool rejectWrite = false,
   bool deliverContent = true,
   String language = 'eng',
   String title = _trackTitle,
+  List<Duration> mutationDelays = const [],
 }) {
-  return StubLink((request, index) {
+  return _DelayedWriteLink((request, index) {
     if (_carries(request, documentNodeMutationSetSubtitlePreference)) {
       if (rejectWrite) {
         return graphqlErrorResponse('Invalid subtitle preference');
@@ -212,7 +247,7 @@ StubLink _link({
       '__typename': 'RootMutationType',
       'updateMovieProgress': null,
     };
-  });
+  }, mutationDelays);
 }
 
 /// Mounts the screen against [link] on [player] and waits for the load to
@@ -447,5 +482,40 @@ void main() {
             'follows from');
     expect(_writes(link), hasLength(1));
     expect(_writes(link).single.variables['mode'], 'OFF');
+  });
+
+  testWidgets('two picks in flight are written in the order they were made',
+      (tester) async {
+    // The server's upsert is unconditional, so whichever write lands last
+    // wins. Without a queue, a slow first write can land after a fast second
+    // one and pin the show to a choice the viewer already moved past: the
+    // hold below is what gives the first write that chance.
+    final link = _link(mutationDelays: [
+      const Duration(milliseconds: 300),
+      Duration.zero,
+    ]);
+    final player = _ProbedPlayer();
+    final container = await _mount(tester, link, player);
+
+    _pickRemotely(container, 'mk_${_mpvSubtitleTrack.id}');
+    // The second pick is issued only once the first has taken effect. Two
+    // picks submitted in the same turn are not two picks in flight: a
+    // selection a later one superseded is dropped whole, and the write that
+    // follows an apply it dropped is skipped, so the same-turn version of
+    // this test would never get two writes to order at all. Waiting on the
+    // player is the identified point that the first pick landed, and the pump
+    // after it is what lets its write reach the transport, where it is then
+    // held for its 300ms.
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    await tester.pump();
+
+    _pickRemotely(container, null);
+
+    // Both have landed: the second immediately, since it is the fast one.
+    await pumpUntil(tester, () => _writes(link).length >= 2);
+
+    expect(_writes(link).map((w) => w.variables['mode']).toList(),
+        ['TRACK', 'OFF'],
+        reason: 'the queue preserves the order the viewer picked in');
   });
 }
