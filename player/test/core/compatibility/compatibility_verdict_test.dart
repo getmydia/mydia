@@ -3,11 +3,21 @@ import 'package:player/core/compatibility/compatibility.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/update/version_comparator.dart';
 
-/// A server on 0.9.0 whose floors are both 0.9.0, matching the shipped baseline.
+/// The version both sides ship at now: the player's recommended server floor.
+///
+/// A default [server] and a player at [currentVersion] are a matching pair, so
+/// the parity tests below keep asserting "same version and same floors means no
+/// banner" as the floor moves. Spelling a literal version here instead makes
+/// them assert the old parity, which silently turns into a
+/// serverUpdateRecommended the moment the recommended floor passes it.
+const currentVersion = Compatibility.recommendedServerVersion;
+
+/// A server at [currentVersion] whose floors are both [currentVersion], so it
+/// sits exactly at the player's current recommended floor.
 ServerCompatibilityInfo server({
-  String version = '0.9.0',
-  String min = '0.9.0',
-  String recommended = '0.9.0',
+  String version = currentVersion,
+  String min = currentVersion,
+  String recommended = currentVersion,
 }) =>
     ServerCompatibilityInfo(
       version: version,
@@ -19,7 +29,7 @@ void main() {
   group('evaluateCompatibility', () {
     test('a matching pair is compatible', () {
       expect(
-        evaluateCompatibility(playerVersion: '0.9.0', server: server()),
+        evaluateCompatibility(playerVersion: currentVersion, server: server()),
         CompatibilityVerdict.compatible,
       );
     });
@@ -102,8 +112,8 @@ void main() {
     test('a prerelease player clears a matching floor', () {
       expect(
         evaluateCompatibility(
-          playerVersion: '0.9.0-rc1',
-          server: server(version: '0.9.0', min: '0.9.0'),
+          playerVersion: '$currentVersion-rc1',
+          server: server(),
         ),
         CompatibilityVerdict.compatible,
       );
@@ -112,8 +122,8 @@ void main() {
     test('a master-build server version parses', () {
       expect(
         evaluateCompatibility(
-          playerVersion: '0.9.0',
-          server: server(version: '0.9.0*abc1234'),
+          playerVersion: currentVersion,
+          server: server(version: '$currentVersion*abc1234'),
         ),
         CompatibilityVerdict.compatible,
       );
