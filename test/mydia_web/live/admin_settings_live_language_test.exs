@@ -222,14 +222,43 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
   end
 
   describe "subtitle languages" do
+    test "each subtitle row names the key it edits", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(view, "#language-row-subtitles")
+      assert has_element?(view, "#language-row-subtitle-playback")
+
+      acquisition = view |> element("#language-row-subtitles") |> render()
+      playback = view |> element("#language-row-subtitle-playback") |> render()
+
+      assert acquisition =~ "downloads.subtitle_language"
+      # The acquisition row must not still name the playback key, nor badge an
+      # env var that controls it.
+      refute acquisition =~ "streaming.subtitle_language"
+      assert playback =~ "streaming.subtitle_language"
+    end
+
+    test "a change on one subtitle row never writes the other's key", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{
+        "_target" => ["subtitle_playback_language"],
+        "subtitle_language" => ["en"],
+        "subtitle_playback_language" => ["de"]
+      })
+
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "de"
+      assert Settings.get_config_setting_by_key("downloads.subtitle_language") == nil
+    end
+
     test "checked chips save as a list", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
       change(view, %{"subtitle_language" => ["en", "es"]})
 
-      setting = Settings.get_config_setting_by_key("streaming.subtitle_language")
+      setting = Settings.get_config_setting_by_key("downloads.subtitle_language")
       assert setting.value == "en,es"
-      assert Mydia.Config.get().streaming.subtitle_language == ["en", "es"]
+      assert Mydia.Config.get().downloads.subtitle_language == ["en", "es"]
     end
 
     test "More languages adds one", %{conn: conn} do
@@ -237,22 +266,22 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
 
       change(view, %{"subtitle_language" => ["en"], "subtitle_language_add" => "th"})
 
-      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "en,th"
-      assert has_element?(view, "#language-subtitle-th[checked]")
+      assert Settings.get_config_setting_by_key("downloads.subtitle_language").value == "en,th"
+      assert has_element?(view, "#language-subtitle_language-th[checked]")
     end
 
     test "the last checked chip cannot be unchecked", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
-      assert has_element?(view, "#language-subtitle-en[disabled][checked]")
+      assert has_element?(view, "#language-subtitle_language-en[disabled][checked]")
     end
 
     test "an unrelated change never reorders a configured list", %{conn: conn} do
       {:ok, _} =
         Settings.upsert_config_setting(%{
-          key: "streaming.subtitle_language",
+          key: "downloads.subtitle_language",
           value: "es,en",
-          category: :streaming
+          category: :downloads
         })
 
       {:ok, _} = Mydia.Config.Loader.reload()
@@ -261,7 +290,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
       # Chips submit in display order (en before es), not preference order.
       change(view, %{"download_audio_language" => "ja", "subtitle_language" => ["en", "es"]})
 
-      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "es,en"
+      assert Settings.get_config_setting_by_key("downloads.subtitle_language").value == "es,en"
       assert Settings.get_config_setting_by_key("downloads.audio_language").value == "ja"
     end
 
@@ -274,15 +303,15 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
         "subtitle_language_add" => "th"
       })
 
-      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "en,th"
+      assert Settings.get_config_setting_by_key("downloads.subtitle_language").value == "en,th"
     end
 
     test "unchecking a chip saves", %{conn: conn} do
       {:ok, _} =
         Settings.upsert_config_setting(%{
-          key: "streaming.subtitle_language",
+          key: "downloads.subtitle_language",
           value: "en,es",
-          category: :streaming
+          category: :downloads
         })
 
       {:ok, _} = Mydia.Config.Loader.reload()
@@ -290,7 +319,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
 
       change(view, %{"_target" => ["subtitle_language"], "subtitle_language" => ["es"]})
 
-      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "es"
+      assert Settings.get_config_setting_by_key("downloads.subtitle_language").value == "es"
     end
 
     test "an unknown code is rejected without a write", %{conn: conn} do
@@ -298,8 +327,77 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
 
       html = change(view, %{"subtitle_language" => ["en", "xx"]})
 
-      assert html =~ "Invalid value for streaming.subtitle_language"
-      assert Settings.get_config_setting_by_key("streaming.subtitle_language") == nil
+      assert html =~ "Invalid value for downloads.subtitle_language"
+      assert Settings.get_config_setting_by_key("downloads.subtitle_language") == nil
+    end
+
+    test "DOWNLOAD_SUBTITLE_LANGUAGE locks the acquisition row, not the playback row",
+         %{conn: conn} do
+      System.put_env("DOWNLOAD_SUBTITLE_LANGUAGE", "en")
+
+      on_exit(fn -> System.delete_env("DOWNLOAD_SUBTITLE_LANGUAGE") end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(view, "#language-subtitle_language-es[disabled]")
+      refute has_element?(view, "#language-subtitle_playback_language-es[disabled]")
+    end
+
+    test "the legacy SUBTITLE_LANGUAGE still locks the acquisition row", %{conn: conn} do
+      System.put_env("SUBTITLE_LANGUAGE", "en")
+
+      on_exit(fn -> System.delete_env("SUBTITLE_LANGUAGE") end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(view, "#language-subtitle_language-es[disabled]")
+    end
+  end
+
+  describe "subtitle playback" do
+    test "its chips write the playback key", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"subtitle_playback_language" => ["de"]})
+
+      setting = Settings.get_config_setting_by_key("streaming.subtitle_language")
+      assert setting.value == "de"
+      assert setting.category == :streaming
+      assert Mydia.Config.get().streaming.subtitle_language == ["de"]
+      assert Settings.get_config_setting_by_key("downloads.subtitle_language") == nil
+    end
+
+    test "its More languages picker routes to its own field", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{
+        "_target" => ["subtitle_playback_language_add"],
+        "subtitle_playback_language" => ["de"],
+        "subtitle_playback_language_add" => "th"
+      })
+
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == "de,th"
+      assert Settings.get_config_setting_by_key("downloads.subtitle_language") == nil
+    end
+
+    test "SUBTITLE_PLAYBACK_LANGUAGE locks it, not the acquisition row", %{conn: conn} do
+      System.put_env("SUBTITLE_PLAYBACK_LANGUAGE", "de")
+
+      on_exit(fn -> System.delete_env("SUBTITLE_PLAYBACK_LANGUAGE") end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(view, "#language-subtitle_playback_language-de[disabled]")
+      refute has_element?(view, "#language-subtitle_language-es[disabled]")
+    end
+
+    test "is hidden with the player disabled, unlike the acquisition row", %{conn: conn} do
+      disable_player()
+
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      refute has_element?(view, "#language-row-subtitle-playback")
+      assert has_element?(view, "#language-row-subtitles")
     end
   end
 end

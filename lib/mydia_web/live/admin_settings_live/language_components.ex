@@ -54,12 +54,27 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           <.language_row
             id="language-row-subtitles"
             label="Subtitle languages"
-            key="streaming.subtitle_language"
-            source={@settings["streaming.subtitle_language"].source}
+            key="downloads.subtitle_language"
+            source={@settings["downloads.subtitle_language"].source}
             description="Subtitles fetched for your files, and the languages subtitle search starts with."
             stacked
           >
-            <.subtitle_languages_control setting={@settings["streaming.subtitle_language"]} />
+            <.subtitle_languages_control setting={@settings["downloads.subtitle_language"]} />
+          </.language_row>
+
+          <.language_row
+            :if={@player_enabled?}
+            id="language-row-subtitle-playback"
+            label="Playback subtitles"
+            key="streaming.subtitle_language"
+            source={@settings["streaming.subtitle_language"].source}
+            description="Subtitles switched on automatically for a show nobody has picked one for. Leave empty for none."
+            stacked
+          >
+            <.subtitle_languages_control
+              setting={@settings["streaming.subtitle_language"]}
+              field="subtitle_playback_language"
+            />
           </.language_row>
 
           <.language_row
@@ -227,11 +242,17 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
   end
 
   attr :setting, :map, required: true
+  attr :field, :string, default: "subtitle_language"
 
   # Same chip set as the subtitle search modal: the common languages plus any
   # selected one outside them, with the rest behind a picker. The last selected
   # chip is disabled so the list cannot become empty, and a hidden input still
   # submits it, since a disabled checkbox is never sent.
+  #
+  # `field` names the settings field this row submits under. The acquisition
+  # and playback rows render the same control over different keys, so the
+  # input names and ids derive from it; a hardcoded name would make the two
+  # rows overwrite each other's value.
   defp subtitle_languages_control(assigns) do
     selected = assigns.setting.value
     common = MydiaWeb.Languages.common()
@@ -262,14 +283,14 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
           <input
             :if={not @locked? and @selected == [code]}
             type="hidden"
-            name="subtitle_language[]"
+            name={"#{@field}[]"}
             value={code}
           />
           <input
-            id={"language-subtitle-#{code}"}
+            id={"language-#{@field}-#{code}"}
             class="btn btn-sm"
             type="checkbox"
-            name="subtitle_language[]"
+            name={"#{@field}[]"}
             value={code}
             aria-label={label}
             checked={code in @selected}
@@ -279,8 +300,8 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
       </div>
       <select
         :if={@more != []}
-        id="language-subtitle-add"
-        name="subtitle_language_add"
+        id={"language-#{@field}-add"}
+        name={"#{@field}_add"}
         class="select select-sm select-bordered w-40"
         disabled={@locked?}
       >
