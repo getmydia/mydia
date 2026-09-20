@@ -66,6 +66,7 @@ void main() {
       movieDetailResponse(positionSeconds: 2700),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400),
       startStreamingSessionResponse(startPosition: 2695),
       endStreamingSessionResponse(),
@@ -116,6 +117,7 @@ void main() {
       movieDetailResponse(positionSeconds: 2700),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400),
       // No `startPosition` key at all — the older-server case.
       startStreamingSessionResponse(startPosition: null),

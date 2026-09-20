@@ -37,6 +37,7 @@ void main() {
       movieDetailResponse(positionSeconds: 12),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 

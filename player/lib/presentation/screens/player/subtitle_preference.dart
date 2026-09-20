@@ -11,7 +11,11 @@
 /// tested without one.
 library;
 
+import '../../../core/language/language_equivalents.dart';
 import '../../../domain/models/subtitle_track.dart';
+
+export '../../../core/language/language_equivalents.dart'
+    show subtitlePreferenceLanguageEquals;
 
 /// What the server says should be showing, or null for "no opinion".
 sealed class SubtitlePreference {
@@ -69,59 +73,6 @@ SubtitlePreference? subtitlePreferenceFrom({
     default:
       return null;
   }
-}
-
-/// ISO 639-2/B codes against their /T counterparts. Matroska writes the /B
-/// form where ffprobe and most tooling write /T, so a preference stored as
-/// one has to match a track tagged the other.
-const Map<String, String> _languageAliases = {
-  'de': 'deu',
-  'ger': 'deu',
-  'fr': 'fra',
-  'fre': 'fra',
-  'en': 'eng',
-  'es': 'spa',
-  'it': 'ita',
-  'ja': 'jpn',
-  'ko': 'kor',
-  'pt': 'por',
-  'ru': 'rus',
-  'zh': 'zho',
-  'chi': 'zho',
-  'nl': 'nld',
-  'dut': 'nld',
-  'cs': 'ces',
-  'cze': 'ces',
-  'el': 'ell',
-  'gre': 'ell',
-  'is': 'isl',
-  'ice': 'isl',
-  'fa': 'fas',
-  'per': 'fas',
-  'ro': 'ron',
-  'rum': 'ron',
-  'sk': 'slk',
-  'slo': 'slk',
-};
-
-String _canonicalLanguage(String code) {
-  final trimmed = code.trim().toLowerCase().split(RegExp('[-_]')).first;
-  return _languageAliases[trimmed] ?? trimmed;
-}
-
-/// Whether two language tags name the same language.
-///
-/// Deliberately not `subtitleLanguagesCompatible` from
-/// `subtitle_track_builder.dart`. That one treats `und` and an empty tag as
-/// compatible with anything, which is right when carrying a known track
-/// across a quality switch and wrong here: it would attach an untagged track
-/// to any preference at all.
-bool subtitlePreferenceLanguageEquals(String a, String b) {
-  final left = _canonicalLanguage(a);
-  final right = _canonicalLanguage(b);
-  if (left.isEmpty || right.isEmpty) return false;
-  if (left == 'und' || right == 'und') return false;
-  return left == right;
 }
 
 /// The best track on [tracks] for [pref], or null when none carries the
@@ -183,4 +134,33 @@ bool shouldApplySubtitlePreference({
   if (viewerChose || switchInFlight || intentPending) return false;
   if (alreadyApplied || !hasTracks) return false;
   return true;
+}
+
+/// The `preferredSubtitle` for [fileId] in either root's generated shape.
+///
+/// The two queries differ only in their root field, and neither generated
+/// type shares a supertype with the other, so this reads the decoded JSON map
+/// rather than the generated classes. That keeps one function instead of two
+/// and keeps this file free of generated imports.
+///
+/// Returns null for a missing root, a missing file, or a file with no
+/// preference, which are the same answer to the caller: no opinion.
+Map<String, dynamic>? preferredSubtitleJsonForFile(
+  Map<String, dynamic> data, {
+  required String root,
+  required String fileId,
+}) {
+  final rootValue = data[root];
+  if (rootValue is! Map<String, dynamic>) return null;
+
+  final files = rootValue['files'];
+  if (files is! List) return null;
+
+  for (final file in files) {
+    if (file is! Map<String, dynamic>) continue;
+    if (file['id'] != fileId) continue;
+    final preferred = file['preferredSubtitle'];
+    return preferred is Map<String, dynamic> ? preferred : null;
+  }
+  return null;
 }

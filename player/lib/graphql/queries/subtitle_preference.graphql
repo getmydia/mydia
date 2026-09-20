@@ -1,0 +1,46 @@
+# The viewer's per-show subtitle choice, deliberately fetched on its own.
+#
+# DO NOT fold these selections back into MediaFileFragment as a tidy-up. An
+# unknown field is a *document* validation error in GraphQL, not a field-level
+# one, so a server that predates this field rejects the entire query it appears
+# in and returns no data at all. Inside MediaFileFragment that would cost the
+# resume position and the external subtitle list on every episode and movie
+# detail view, which is what it did before this document existed.
+#
+# That is the common path, not an edge case: the player auto-updates from an
+# app store while the server is upgraded by hand by the operator, sometimes
+# months later. Keeping the preference in its own document means an older
+# server costs exactly one thing, the remembered subtitle.
+#
+# The same reasoning, and the same shape, as media_segments.graphql.
+query MovieSubtitlePreference($id: ID!) {
+  movie(id: $id) {
+    id
+    files {
+      id
+      preferredSubtitle {
+        mode
+        language
+        forced
+        hearingImpaired
+        trackTitle
+      }
+    }
+  }
+}
+
+query EpisodeSubtitlePreference($id: ID!) {
+  episode(id: $id) {
+    id
+    files {
+      id
+      preferredSubtitle {
+        mode
+        language
+        forced
+        hearingImpaired
+        trackTitle
+      }
+    }
+  }
+}

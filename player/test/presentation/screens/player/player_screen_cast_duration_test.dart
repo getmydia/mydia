@@ -33,6 +33,7 @@ void main() {
       movieDetailResponse(files: [mediaFileWithSubtitle()]),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -107,6 +108,7 @@ void main() {
       ),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -154,6 +156,7 @@ void main() {
       movieDetailResponse(files: [mediaFileWithSubtitle(trackId: 'mk_0')]),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -191,6 +194,7 @@ void main() {
       movieDetailResponse(files: [mediaFileWithSubtitle(trackId: uuid)]),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 
@@ -229,6 +233,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400),
     ]);
 

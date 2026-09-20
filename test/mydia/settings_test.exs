@@ -2332,5 +2332,29 @@ defmodule Mydia.SettingsTest do
                Settings.list_config_settings()
                |> Enum.filter(&(&1.key == "flaresolverr.timeout"))
     end
+
+    test "an existing value can be cleared to an empty string" do
+      {:ok, _} =
+        Settings.upsert_config_setting(%{
+          key: "streaming.subtitle_language",
+          value: "en",
+          category: :streaming
+        })
+
+      {:ok, cleared} =
+        Settings.upsert_config_setting(%{
+          key: "streaming.subtitle_language",
+          value: "",
+          category: :streaming
+        })
+
+      # `cast/3` defaults to `empty_values: [""]`, so an empty value never
+      # reaches the changes: it is swapped for the field's own default, so an
+      # update that clears the row writes NULL where the row is meant to hold
+      # "". The scoped second cast in `ConfigSetting.changeset/2` makes "" a
+      # real value. Nothing else stores "", which is why this went unnoticed.
+      assert cleared.value == ""
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == ""
+    end
   end
 end

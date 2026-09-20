@@ -32,6 +32,14 @@ defmodule Mydia.Repo.Migrations.MoveSubtitleLanguageToDownloads do
   end
 
   def down do
+    # `up/0` freed this key for its new meaning, so an operator may since have
+    # written a playback value under it. That key does not mean "which subtitle
+    # plays" in the world this rolls back to, and the row would collide with
+    # the unique index on `key`, so it is dropped rather than merged.
+    #
+    # Delete before the rename, not after: the rename is what collides.
+    execute("DELETE FROM config_settings WHERE key = '#{@from}'")
+
     execute(
       "UPDATE config_settings SET key = '#{@from}', category = 'streaming' " <>
         "WHERE key = '#{@to}'"

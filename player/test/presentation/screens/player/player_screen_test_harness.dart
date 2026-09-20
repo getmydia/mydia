@@ -397,9 +397,6 @@ Map<String, dynamic> mediaFileWithSubtitle({
   bool deliverable = true,
   bool forced = false,
   bool hearingImpaired = false,
-  // The `preferredSubtitle` object, or null for a viewer with no preference.
-  // The key is always present because the fragment selects it.
-  Map<String, dynamic>? preferredSubtitle,
 }) {
   return {
     '__typename': 'MediaFile',
@@ -427,11 +424,10 @@ Map<String, dynamic> mediaFileWithSubtitle({
         'url': url,
       },
     ],
-    'preferredSubtitle': preferredSubtitle,
   };
 }
 
-/// A `preferredSubtitle` object for [mediaFileWithSubtitle].
+/// A `preferredSubtitle` object for [subtitlePreferenceResponse].
 ///
 /// `mode` is the wire form, uppercase, which is what the generated enum
 /// parses.
@@ -449,6 +445,41 @@ Map<String, dynamic> preferredSubtitleObject({
     'forced': forced,
     'hearingImpaired': hearingImpaired,
     'trackTitle': trackTitle,
+  };
+}
+
+/// A well-formed `MovieSubtitlePreference` response, or the `episode` one when
+/// [root] says so.
+///
+/// The preference is its own document rather than a field on
+/// `MediaFileFragment` -- see `subtitle_preference.graphql` for why -- so every
+/// ordered `StubLink.responses` script for this screen has to carry it in the
+/// slot right after [subtitleTrackSettingsResponse], and `index`-keyed handlers
+/// have to leave it one. The defaults are the movie all those scripts open on,
+/// with no stored choice on its one file, which is what every test that is not
+/// about the preference wants.
+///
+/// [preferences] maps a file id to its `preferredSubtitle` object; a file left
+/// out of it has no preference, which is the same answer as an explicit null.
+Map<String, dynamic> subtitlePreferenceResponse({
+  String root = 'movie',
+  String id = 'movie-1',
+  Map<String, Map<String, dynamic>?> preferences = const {'file-1': null},
+}) {
+  return {
+    '__typename': 'Query',
+    root: {
+      '__typename': root == 'movie' ? 'Movie' : 'Episode',
+      'id': id,
+      'files': [
+        for (final entry in preferences.entries)
+          {
+            '__typename': 'MediaFile',
+            'id': entry.key,
+            'preferredSubtitle': entry.value,
+          },
+      ],
+    },
   };
 }
 

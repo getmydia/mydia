@@ -64,6 +64,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 
@@ -102,10 +103,11 @@ void main() {
           'ranked for the media item',
     );
 
-    // Fourth scripted call, matching the response order above: detail,
-    // segments, subtitle offsets, candidates. `StubLink` is index-based, so
-    // this ordering is the same one every other PlayerScreen test relies on.
-    final candidatesVariables = link.requests[3].variables;
+    // Fifth scripted call, matching the response order above: detail,
+    // segments, subtitle offsets, the preference, candidates. `StubLink` is
+    // index-based, so this ordering is the same one every other PlayerScreen
+    // test relies on.
+    final candidatesVariables = link.requests[4].variables;
     expect(
       candidatesVariables['contentType'],
       'movie',
@@ -137,6 +139,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       graphqlErrorResponse('internal server error'),
     ]);
 

@@ -67,6 +67,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       graphqlErrorResponse('file not found'),
       streamingCandidatesResponse(
         duration: 5400,
@@ -105,14 +106,14 @@ void main() {
 
     // Pins the mechanism, not just the outcome: the first call has to ask
     // about the rejected file specifically, and only the retry may ask by
-    // media item. Fourth/fifth scripted calls, matching the response order
-    // above (detail, segments, subtitle offsets, then the two candidates
-    // calls) — `StubLink` is index-based, the same ordering every other
-    // PlayerScreen test relies on.
-    expect(link.requests[3].variables['contentType'], 'file');
-    expect(link.requests[3].variables['id'], 'file-old');
-    expect(link.requests[4].variables['contentType'], 'movie');
-    expect(link.requests[4].variables['id'], 'movie-1');
+    // media item. Fifth/sixth scripted calls, matching the response order
+    // above (detail, segments, subtitle offsets, the preference, then the two
+    // candidates calls) — `StubLink` is index-based, the same ordering every
+    // other PlayerScreen test relies on.
+    expect(link.requests[4].variables['contentType'], 'file');
+    expect(link.requests[4].variables['id'], 'file-old');
+    expect(link.requests[5].variables['contentType'], 'movie');
+    expect(link.requests[5].variables['id'], 'movie-1');
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -153,6 +154,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       // What the server says today, for the same file the cache answered.
       streamingCandidatesResponse(
         duration: 5400,

@@ -97,6 +97,16 @@ defmodule Mydia.Settings.ConfigSetting do
   def changeset(config_setting, attrs) do
     config_setting
     |> cast(attrs, [:key, :value, :category, :description, :updated_by_id])
+    # `cast/3` defaults to `empty_values: [""]`, so "" is dropped from the
+    # changes and replaced by the field's own default: a cleared row holds
+    # NULL, never the "" the schema documents. A second, scoped cast makes ""
+    # a real value for :value alone. `Mydia.Config.Schema` needed the same fix
+    # for the same reason; see `validate_subtitle_language/1`'s neighbours
+    # there.
+    #
+    # "" and nil both mean unset to `Paths.cast_value/2`, so a reader sees no
+    # difference between a row cleared this way and one that never had a value.
+    |> cast(attrs, [:value], empty_values: [])
     |> validate_required([:key, :category])
     |> validate_inclusion(:category, @categories)
     |> validate_known_key()

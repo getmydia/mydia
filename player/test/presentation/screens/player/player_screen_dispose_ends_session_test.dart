@@ -30,6 +30,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400),
       startStreamingSessionResponse(sessionId: 'sess-42'),
       endStreamingSessionResponse(),

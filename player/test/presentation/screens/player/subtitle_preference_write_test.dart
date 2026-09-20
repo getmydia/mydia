@@ -47,6 +47,7 @@ import 'package:player/graphql/queries/media_segments.graphql.dart';
 import 'package:player/graphql/queries/movie_detail.graphql.dart';
 import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
 import 'package:player/graphql/queries/subtitle_content.graphql.dart';
+import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
@@ -101,6 +102,12 @@ class _ProbedPlayer extends PlatformPlayer {
   /// an absence assertion about the write has to stand on.
   final selectedSubtitleTracks = <SubtitleTrack>[];
 
+  /// When set, [setSubtitleTrack] records its track and then waits for this,
+  /// so a test can hold a pick in flight at the player. That is the window a
+  /// supersession has to land in for a *queued* write to still be looking at
+  /// the superseded pick when its turn comes.
+  Completer<void>? holdSubtitleTrack;
+
   /// Whether the screen has opened a source on this player yet, so a test can
   /// wait for the load to reach the point its own detection pass follows.
   bool opened = false;
@@ -124,6 +131,7 @@ class _ProbedPlayer extends PlatformPlayer {
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {
     selectedSubtitleTracks.add(track);
+    await holdSubtitleTrack?.future;
   }
 
   @override
@@ -150,20 +158,55 @@ class _ProbedPlayer extends PlatformPlayer {
   }
 }
 
+/// A [StubLink] that holds each `setSubtitlePreference` for a scripted delay
+/// before it answers.
+///
+/// A stubbed server that answers on receipt cannot reproduce the order this
+/// fixture exists to test: what matters to the real upsert is when a write
+/// *lands*, not when it was issued, and the unconditional upsert makes the
+/// last one to land the one the show is pinned to. Holding the first write
+/// past the second is what gives the landing order a chance to differ from
+/// the issuing order, and so a chance to be wrong.
+class _DelayedWriteLink extends StubLink {
+  _DelayedWriteLink(super.handler, this.mutationDelays);
+
+  /// How long the nth `setSubtitlePreference` is held before it answers. The
+  /// last entry repeats; an empty list holds nothing.
+  final List<Duration> mutationDelays;
+
+  int _writesStarted = 0;
+
+  @override
+  Stream<Response> request(Request request, [NextLink? forward]) async* {
+    if (mutationDelays.isNotEmpty &&
+        _carries(request, documentNodeMutationSetSubtitlePreference)) {
+      final started = _writesStarted++;
+      final delay = mutationDelays[started < mutationDelays.length
+          ? started
+          : mutationDelays.length - 1];
+      await Future<void>.delayed(delay);
+    }
+    yield* super.request(request, forward);
+  }
+}
+
 /// The scripted responses a direct-play movie load consumes, with one
 /// server-side subtitle track to pick.
 ///
 /// [rejectWrite] is the server refusing the mutation; [deliverContent] false
 /// is a pick whose body never arrives, which is the load failure the write
 /// must not outlive. [language]/[title] shape the picked track, so a test can
-/// make it untagged or give it a title.
+/// make it untagged or give it a title. [mutationDelays] is how long the nth
+/// write is held before it answers, for the tests that need two writes in the
+/// air at once; see [_DelayedWriteLink].
 StubLink _link({
   bool rejectWrite = false,
   bool deliverContent = true,
   String language = 'eng',
   String title = _trackTitle,
+  List<Duration> mutationDelays = const [],
 }) {
-  return StubLink((request, index) {
+  return _DelayedWriteLink((request, index) {
     if (_carries(request, documentNodeMutationSetSubtitlePreference)) {
       if (rejectWrite) {
         return graphqlErrorResponse('Invalid subtitle preference');
@@ -201,6 +244,9 @@ StubLink _link({
     if (_carries(request, documentNodeQuerySubtitleTrackSettings)) {
       return subtitleTrackSettingsResponse();
     }
+    if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
+      return subtitlePreferenceResponse();
+    }
     if (_carries(request, documentNodeQueryStreamingCandidates)) {
       return streamingCandidatesResponse(duration: 5400, directPlay: true);
     }
@@ -208,7 +254,7 @@ StubLink _link({
       '__typename': 'RootMutationType',
       'updateMovieProgress': null,
     };
-  });
+  }, mutationDelays);
 }
 
 /// Mounts the screen against [link] on [player] and waits for the load to
@@ -411,28 +457,19 @@ void main() {
     expect(written['hearingImpaired'], isFalse);
   });
 
-  testWidgets(
-      'a sheet Off with nothing applied is swallowed by the selection gate, so '
-      'nothing is written (known defect, pinned)', (tester) async {
+  testWidgets('a sheet Off with nothing applied is applied and remembered',
+      (tester) async {
     final link = _link();
     final player = _ProbedPlayer();
     await _mount(tester, link, player);
 
-    // KNOWN DEFECT, PINNED ON PURPOSE -- see the assertion at the end for what
-    // the fix flips this to.
-    //
-    // `shouldStartSubtitleSelection` (`subtitle_track_builder.dart`) drops a
-    // pick whose target equals `_pendingSubtitleSelection`, and with nothing
-    // applied that field is null -- the very value a tap on "Off" requests --
-    // so the tap never reaches `_applySubtitleSelection`, and therefore never
-    // reaches `_rememberSubtitlePreference` either. The remote-control Off
-    // path has no such gate, which is why the test above it can assert the Off
-    // write at all.
-    //
-    // Pre-existing selection semantics with their own tests, deliberately not
-    // changed by the subtitle-preference work, and parked for review rather
-    // than fixed here: this test records today's behaviour so the fix has a
-    // contract to flip instead of a silent gap.
+    // The contract this test used to record as a defect. With nothing applied
+    // and no attempt in flight, `_pendingSubtitleSelection` is null, meaning
+    // idle -- not `TargetOff()`, which is what this tap requests. The two are
+    // different values, so `shouldStartSubtitleSelection` lets the tap
+    // through, `_applySubtitleSelection` runs, and the write follows from it.
+    // The remote-control Off path, which never had this gate, has always
+    // written OFF; the two paths now agree.
     await tester.tap(find.byKey(SecondaryCluster.subtitlesKey));
     await pumpUntil(tester, () => _sheetCount() > 0);
     await tester.pump(const Duration(milliseconds: 400));
@@ -444,20 +481,159 @@ void main() {
     await tester.pump();
     await tester.tap(offTile);
 
-    // The sheet closes only once the tap has been handled by the screen, so
-    // its disappearance is the identified point this absence assertion stands
-    // on -- not an empty state that a missed tap would also satisfy.
     await pumpUntil(tester, () => _sheetCount() == 0);
+    await pumpUntil(tester, () => _writes(link).isNotEmpty);
+
+    expect(player.selectedSubtitleTracks, isNotEmpty,
+        reason: 'the Off reached the player, which is the step the write '
+            'follows from');
+    expect(_writes(link), hasLength(1));
+    expect(_writes(link).single.variables['mode'], 'OFF');
+  });
+
+  testWidgets('two picks in flight are written in the order they were made',
+      (tester) async {
+    // The server's upsert is unconditional, so whichever write lands last
+    // wins. Without a queue, a slow first write can land after a fast second
+    // one and pin the show to a choice the viewer already moved past: the
+    // hold below is what gives the first write that chance.
+    final link = _link(mutationDelays: [
+      const Duration(milliseconds: 300),
+      Duration.zero,
+    ]);
+    final player = _ProbedPlayer();
+    final container = await _mount(tester, link, player);
+
+    _pickRemotely(container, 'mk_${_mpvSubtitleTrack.id}');
+    // The second pick is issued only once the first has taken effect. Two
+    // picks submitted in the same turn are not two picks in flight: a
+    // selection a later one superseded is dropped whole, and the write that
+    // follows an apply it dropped is skipped, so the same-turn version of
+    // this test would never get two writes to order at all. Waiting on the
+    // player is the identified point that the first pick landed, and the pump
+    // after it is what lets its write reach the transport, where it is then
+    // held for its 300ms.
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    await tester.pump();
+
+    _pickRemotely(container, null);
+
+    // Both have landed: the second immediately, since it is the fast one.
+    await pumpUntil(tester, () => _writes(link).length >= 2);
+
+    expect(_writes(link).map((w) => w.variables['mode']).toList(),
+        ['TRACK', 'OFF'],
+        reason: 'the queue preserves the order the viewer picked in');
+  });
+
+  testWidgets(
+      'a pick still waiting in the queue is not written against the file the '
+      'viewer moved to', (tester) async {
+    // The first write is held at the transport, so the second pick's write is
+    // still waiting in the queue -- not yet looked at -- when the State is
+    // handed a different file. That is the navigation go_router performs
+    // without rebuilding the State; see `player_screen_file_change_test.dart`
+    // for the reuse itself.
+    final link = _link(mutationDelays: [const Duration(milliseconds: 300)]);
+    final player = _ProbedPlayer();
+    final container = await _mount(tester, link, player);
+
+    // First pick: applied, and its write is now held by the transport.
+    _pickRemotely(container, 'mk_${_mpvSubtitleTrack.id}');
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    await tester.pump();
+
+    // Second pick: applied, and its write is chained behind the held one.
+    _pickRemotely(container, _serverTrackId);
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.length >= 2);
+    await tester.pump();
+    expect(_writes(link), isEmpty,
+        reason: 'the held write is what keeps the second one waiting, so this '
+            'is the queue state the test below depends on');
+
+    // The same State, a different file.
+    await pumpPlayerScreen(
+      tester,
+      container,
+      fileId: 'file-2',
+      createPlayer: () => Player(platformPlayer: player),
+    );
+
+    // Past the hold and past the second write's own turn: whatever was queued
+    // has been sent, or deliberately not.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(seconds: 1));
 
-    expect(player.selectedSubtitleTracks, isEmpty,
-        reason: 'the Off never even reached the player: the gate drops it '
-            'before _applySubtitleSelection, which is the step the write '
-            'follows from');
-    expect(_writes(link), isEmpty,
-        reason: 'known defect: this tap is swallowed by '
-            'shouldStartSubtitleSelection, so the viewer who opened the sheet '
-            'purely to say "never subtitles for this show" stores nothing. '
-            'The fix makes this assertion `hasLength(1)` with mode OFF');
+    expect(
+      _writes(link).map((w) => w.variables['fileId']).toSet(),
+      {'file-1'},
+      reason: 'a pick made on one file is not a preference for another: the '
+          'queued write names the file it was made on, or it is not sent at '
+          'all',
+    );
+  });
+
+  testWidgets('a pick superseded while it waited in the queue is not written',
+      (tester) async {
+    final link = _link(mutationDelays: [const Duration(milliseconds: 300)]);
+    final player = _ProbedPlayer();
+    final container = await _mount(tester, link, player);
+
+    // First pick: applied, and its write is held at the transport, so the
+    // queue tail below stays unresolved.
+    player.holdSubtitleTrack = Completer<void>();
+    _pickRemotely(container, 'mk_${_mpvSubtitleTrack.id}');
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    player.holdSubtitleTrack!.complete();
+    player.holdSubtitleTrack = null;
+    await tester.pump();
+
+    // Second pick: applied, and its write is queued behind the held first one.
+    player.holdSubtitleTrack = Completer<void>();
+    _pickRemotely(container, _serverTrackId);
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.length >= 2);
+    player.holdSubtitleTrack!.complete();
+    player.holdSubtitleTrack = null;
+    await tester.pump();
+
+    // Third pick, held while it reaches the player: it supersedes the second
+    // pick's generation at once, while the second pick's write is still
+    // waiting its turn behind the held first one. The hold stays open across
+    // that turn, so the superseded pick is still what everything on the player
+    // reads as showing -- which is exactly what a queued write judged by live
+    // state alone would trust.
+    player.holdSubtitleTrack = Completer<void>();
+    _pickRemotely(container, null);
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.length >= 3);
+
+    // The held first write answers, which is when the second write's turn
+    // comes.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(player.selectedSubtitleTracks, hasLength(3),
+        reason: 'the Off is still held at the player, which is what leaves the '
+            'superseded pick looking current');
+
+    // Released only now: the Off commits from here, and its own write is
+    // queued behind the one that was just turned away.
+    player.holdSubtitleTrack!.complete();
+    player.holdSubtitleTrack = null;
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(
+      _writes(link).map((w) => w.variables['mode']).toList(),
+      ['TRACK', 'OFF'],
+      reason: 'only the pick that is still the viewer\'s choice is stored: the '
+          'superseded second pick names a track nothing is showing',
+    );
+    expect(
+      _writes(link).map((w) => w.variables['language']).toList(),
+      ['jpn', null],
+      reason: 'the superseded pick is the one omitted, not the first: the '
+          'queue still keeps the order the two surviving picks were made in',
+    );
   });
 }

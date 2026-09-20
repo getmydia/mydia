@@ -241,6 +241,7 @@ void main() {
         movieDetailResponse(),
         movieSegmentsResponse(),
         subtitleTrackSettingsResponse(),
+        subtitlePreferenceResponse(),
       ]),
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),

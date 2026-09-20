@@ -144,6 +144,29 @@ void main() {
     });
   });
 
+  group('subtitlePreferenceLanguageEquals', () {
+    test('matches the ISO 639-1 and 639-2 pairs the server knows', () {
+      // The player and the server both decide "is this the same language"
+      // about the same file: the server in SubtitlePreferences.operator_default/1
+      // via LanguageCode.matches?/2, the player here. Two tables of different
+      // sizes gave two answers.
+      expect(subtitlePreferenceLanguageEquals('sv', 'swe'), isTrue);
+      expect(subtitlePreferenceLanguageEquals('pl', 'pol'), isTrue);
+      expect(subtitlePreferenceLanguageEquals('da', 'dan'), isTrue);
+      expect(subtitlePreferenceLanguageEquals('he', 'heb'), isTrue);
+
+      // ISO 639-2/B against /T, which is the pair Matroska actually writes.
+      expect(subtitlePreferenceLanguageEquals('sq', 'alb'), isTrue);
+      expect(subtitlePreferenceLanguageEquals('mkd', 'mac'), isTrue);
+
+      // Still refused, on both sides: an untagged or undetermined track must
+      // not satisfy a request for a specific language.
+      expect(subtitlePreferenceLanguageEquals('und', 'eng'), isFalse);
+      expect(subtitlePreferenceLanguageEquals('', 'eng'), isFalse);
+      expect(subtitlePreferenceLanguageEquals('sv', 'nor'), isFalse);
+    });
+  });
+
   group('shouldApplySubtitlePreference', () {
     test('applies once, on a settled playback the viewer has not touched', () {
       expect(
@@ -194,6 +217,65 @@ void main() {
             hasTracks: false),
       ]) {
         expect(blocked(), isFalse);
+      }
+    });
+  });
+
+  group('preferredSubtitleJsonForFile', () {
+    // The generated shape of `subtitle_preference.graphql`: a root field, its
+    // files, and each file's `preferredSubtitle`. Written as raw JSON because
+    // that is what the helper reads, for the reason its own dartdoc gives.
+    Map<String, dynamic> response(String root, List<Object?> files) => {
+          root: {'id': 'media-1', 'files': files},
+        };
+
+    Map<String, dynamic> file(String id, Object? preferred) => {
+          'id': id,
+          'preferredSubtitle': preferred,
+        };
+
+    const preferred = {'mode': 'TRACK', 'language': 'eng'};
+
+    test('reads the entry for the file id it was given, not the first one', () {
+      final data = response('movie', [
+        file('file-a', null),
+        file('file-b', preferred),
+      ]);
+
+      expect(
+        preferredSubtitleJsonForFile(data, root: 'movie', fileId: 'file-b'),
+        preferred,
+      );
+    });
+
+    test('the episode root carries the same shape', () {
+      final data = response('episode', [file('file-a', preferred)]);
+
+      expect(
+        preferredSubtitleJsonForFile(data, root: 'episode', fileId: 'file-a'),
+        preferred,
+      );
+    });
+
+    test('a missing root, file, or preference is no opinion', () {
+      // Junk entries are in the list because a response is decoded JSON, not a
+      // typed object: a file the query did not select for still has to be
+      // skipped rather than read as one.
+      final data = response('movie', [
+        null,
+        'not a file',
+        file('file-a', null),
+      ]);
+
+      for (final missing in [
+        preferredSubtitleJsonForFile({'episode': data['movie']},
+            root: 'movie', fileId: 'file-a'),
+        preferredSubtitleJsonForFile(data, root: 'movie', fileId: 'file-b'),
+        preferredSubtitleJsonForFile(data, root: 'movie', fileId: 'file-a'),
+        preferredSubtitleJsonForFile({'movie': 'not a root'},
+            root: 'movie', fileId: 'file-a'),
+      ]) {
+        expect(missing, isNull);
       }
     });
   });

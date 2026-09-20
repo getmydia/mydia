@@ -3,16 +3,22 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/core/compatibility/compatibility.dart';
 import 'package:player/core/compatibility/compatibility_provider.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 
 import '../../test_utils/stub_graphql_client.dart';
 
+/// A server at the player's current recommended floor, with both of its own
+/// floors at that same version: the parity case that draws no banner.
+///
+/// Spelling literal versions here would pin the old pair and turn the matching
+/// pair into a serverUpdateRecommended once the recommended floor moves.
 Map<String, dynamic> okResponse({
-  String version = '0.9.0',
-  String min = '0.9.0',
-  String recommended = '0.9.0',
+  String version = Compatibility.recommendedServerVersion,
+  String min = Compatibility.recommendedServerVersion,
+  String recommended = Compatibility.recommendedServerVersion,
 }) =>
     {
       '__typename': 'RootQueryType',
@@ -61,7 +67,7 @@ void main() {
   test('a matching pair produces no banner', () async {
     final box = await memoryBox();
     final container = harness(
-      playerVersion: '0.9.0',
+      playerVersion: Compatibility.recommendedServerVersion,
       response: okResponse(),
       box: box,
     );

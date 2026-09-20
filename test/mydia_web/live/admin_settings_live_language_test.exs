@@ -423,8 +423,20 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
         "subtitle_playback_language" => [""]
       })
 
-      assert Settings.get_config_setting_by_key("streaming.subtitle_language") == nil
-      assert Mydia.Config.get().streaming.subtitle_language == []
+      # The clear stores the empty override rather than deleting the row:
+      # deleting it let a YAML streaming.subtitle_language reassert itself on
+      # the next reload, switching automatic subtitles back on. A row holding
+      # "" is what reads back as no automatic subtitle.
+      setting = Settings.get_config_setting_by_key("streaming.subtitle_language")
+      refute is_nil(setting), "the override must be stored, not deleted"
+      assert setting.value == ""
+      # The stored "" is what `Paths.cast_value/2` reads as unset, so the raw
+      # merged field is nil rather than a list; it read [] here before only
+      # because the row was gone and the schema default applied. Every reader of
+      # this list-shaped key still hands back []: `get_config/2` through its
+      # default, `current/0` with `|| []`.
+      assert Mydia.Config.get().streaming.subtitle_language in [nil, []]
+      assert Mydia.Settings.get_config([:streaming, :subtitle_language], []) == []
       assert LanguageSettings.current()["streaming.subtitle_language"].value == []
     end
 
