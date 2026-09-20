@@ -6,5 +6,7 @@ mutation DownloadSubtitle($mediaFileId: ID!, $token: String!) {
     format
     embedded
     deliverable
+    forced
+    hearingImpaired
   }
 }

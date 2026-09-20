@@ -395,6 +395,8 @@ Map<String, dynamic> mediaFileWithSubtitle({
   // `SubtitleTrack.fromDownload` leaves with no url of its own.
   String? url = '/api/player/v1/subtitles/file/file-1/3?format=vtt',
   bool deliverable = true,
+  bool forced = false,
+  bool hearingImpaired = false,
 }) {
   return {
     '__typename': 'MediaFile',
@@ -417,6 +419,8 @@ Map<String, dynamic> mediaFileWithSubtitle({
         'format': 'vtt',
         'embedded': false,
         'deliverable': deliverable,
+        'forced': forced,
+        'hearingImpaired': hearingImpaired,
         'url': url,
       },
     ],

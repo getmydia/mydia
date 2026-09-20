@@ -40,6 +40,18 @@ class SubtitleTrack {
   /// bitmap-ness from [format] (`isImageSubtitleFormat`), not from this.
   final bool deliverable;
 
+  /// Whether this track subtitles only foreign dialogue and signs.
+  ///
+  /// False for an mpv-native track: media_kit reports a title and a language
+  /// but no disposition, so the flag is unknown rather than absent. The
+  /// preference matcher treats unknown as not-forced and leans on the title
+  /// tiebreak for those.
+  final bool forced;
+
+  /// Whether this track carries sound descriptions for deaf and hard-of-hearing
+  /// viewers. False for an mpv-native track, for the same reason as [forced].
+  final bool hearingImpaired;
+
   const SubtitleTrack({
     required this.id,
     required this.language,
@@ -50,6 +62,8 @@ class SubtitleTrack {
     this.embedded = false,
     this.content,
     this.deliverable = true,
+    this.forced = false,
+    this.hearingImpaired = false,
   });
 
   /// Create from GraphQL fragment
@@ -62,6 +76,8 @@ class SubtitleTrack {
       format: sub.format,
       embedded: sub.embedded,
       deliverable: sub.deliverable,
+      forced: sub.forced,
+      hearingImpaired: sub.hearingImpaired,
     );
   }
 
@@ -82,6 +98,8 @@ class SubtitleTrack {
       format: track.format,
       embedded: track.embedded,
       deliverable: track.deliverable,
+      forced: track.forced,
+      hearingImpaired: track.hearingImpaired,
     );
   }
 
