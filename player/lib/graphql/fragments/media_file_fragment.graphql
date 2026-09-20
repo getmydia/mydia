@@ -20,4 +20,11 @@ fragment MediaFileFragment on MediaFile {
     hearingImpaired
     url(format: VTT)
   }
+  preferredSubtitle {
+    mode
+    language
+    forced
+    hearingImpaired
+    trackTitle
+  }
 }

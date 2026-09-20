@@ -121,6 +121,7 @@ import '../../widgets/playback_stats/stats_panel.dart';
 import '../settings/settings_controller.dart';
 import 'stats_context_builder.dart';
 import 'subtitle_content_query.dart';
+import 'subtitle_preference.dart';
 import 'subtitle_track_builder.dart';
 
 export '../../../core/player/resume_plan.dart'
@@ -575,6 +576,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// switch carries the first and leaves mpv to its own defaults for the
   /// second. Cleared by [_initializePlayer].
   bool _subtitleChosenThisPlayback = false;
+
+  /// What the server says this viewer wants for this show, folding their own
+  /// per-show pick over the operator default. Null means no opinion, and the
+  /// file is left to do whatever it would have done.
+  SubtitlePreference? _subtitlePreference;
+
+  /// Whether [_applySubtitlePreference] has already run for the file now
+  /// loaded. media_kit revises its track list several times per playback and
+  /// every revision reaches [_applySubtitleTracks], so without this a
+  /// revision landing after a viewer pick would silently undo it.
+  bool _preferenceAppliedForPlayback = false;
 
   /// The viewer's choice while a source switch carries it to the new
   /// source, in the server's id space. See [SubtitleIntent].
@@ -1167,6 +1179,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // this load replaces, and a fresh load starts with no choice made.
     _subtitleIntentAcrossSwitch = null;
     _subtitleChosenThisPlayback = false;
+    // The preference belongs to the show, not the file, so it is refetched
+    // with the new file's media-file document rather than carried. Clearing
+    // it here means a file whose query has not landed yet cannot apply the
+    // previous episode's answer to this one.
+    _subtitlePreference = null;
+    _preferenceAppliedForPlayback = false;
 
     try {
       setState(() {
@@ -1918,6 +1936,49 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (subtitleRestoreConsumed(
         restore: restore, selected: _selectedSubtitleTrack)) {
       _subtitleIntentAcrossSwitch = null;
+    }
+  }
+
+  /// Selects the subtitle this viewer already chose for this show, or turns
+  /// subtitles off if that is what they chose.
+  ///
+  /// Runs off the back of the track list settling rather than from
+  /// `_initializePlayer`, because the list is what it matches against and in
+  /// direct play that list is mpv's, published asynchronously after `open()`.
+  ///
+  /// A `PreferTrack` that matches nothing does nothing at all, and shows no
+  /// toast: episode transitions are frequent, and a line on every episode of
+  /// a season that lacks the track is noise the viewer cannot act on. The
+  /// subtitle button is already on the OSD.
+  Future<void> _applySubtitlePreference() async {
+    final preference = _subtitlePreference;
+    if (preference == null) return;
+
+    if (!shouldApplySubtitlePreference(
+      viewerChose: _subtitleChosenThisPlayback,
+      switchInFlight: _switchingSource,
+      intentPending: _subtitleIntentAcrossSwitch != null,
+      alreadyApplied: _preferenceAppliedForPlayback,
+      hasTracks: _subtitleTracks.isNotEmpty,
+    )) {
+      return;
+    }
+
+    // Set before the await, not after: a second track-list revision can land
+    // while the selection below is still resolving, and two concurrent
+    // applies of the same preference would race each other's generation.
+    _preferenceAppliedForPlayback = true;
+
+    switch (preference) {
+      case PreferOff():
+        // Explicit, not a no-op. mpv switches on whichever track the
+        // container flagged default, so leaving it alone is exactly the
+        // behaviour the viewer turned off.
+        await _applySubtitleSelection(null);
+      case PreferTrack():
+        final match = matchSubtitlePreference(preference, _subtitleTracks);
+        if (match == null) return;
+        await _applySubtitleSelection(match);
     }
   }
 
@@ -2755,6 +2816,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           debugPrint('Extracted ${_serverSubtitleTracks.length} subtitle '
               'tracks from GraphQL');
         }
+        // Read after the refresh above, not before it: the refresh publishes
+        // the server's list immediately, and in streaming that is a complete
+        // list with no mpv half to wait for, while in direct play the file's
+        // own tracks are not there yet. Reading first would let this
+        // preference be consumed by a rebuild that has no player behind it
+        // yet (`_applySubtitleSelection` is a no-op without one) and the
+        // apply that matters -- the one after `open()` -- would find it
+        // already spent.
+        final preferred = file.preferredSubtitle;
+        _subtitlePreference = subtitlePreferenceFrom(
+          mode: preferred?.mode.name,
+          language: preferred?.language,
+          forced: preferred?.forced,
+          hearingImpaired: preferred?.hearingImpaired,
+          trackTitle: preferred?.trackTitle,
+        );
         break;
       }
     }
@@ -3032,6 +3109,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       ..addAll(mpvById);
 
     _syncSelectedSubtitleTrack();
+
+    unawaited(_applySubtitlePreference());
   }
 
   /// Re-derive [_subtitleTracks] after the *server's* list changed, against
