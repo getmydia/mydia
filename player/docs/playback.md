@@ -402,9 +402,14 @@ not a new one, so only a pick the viewer made — the sheet's tile, or a remote
 has returned and the selection is still the one showing. Writing a restore
 back would let the first episode whose track list lacks the remembered title
 degrade what is stored for the rest of the show. An explicit Off is a
-selection like any other and is remembered as one; it also has to be applied
-rather than left alone, since mpv's own default-disposition pick is exactly
-what switches a subtitle on unasked in direct play.
+selection like any other, but only from a path that gets to make one. Picked
+remotely, or from the sheet once a selection is in flight or already applied,
+it is remembered as OFF, and it has to be applied rather than left alone,
+since mpv's own default-disposition pick is exactly what switches a subtitle
+on unasked in direct play. An Off tapped on the sheet from a clean state —
+nothing applied, no attempt pending — is a known gap: a pre-existing selection
+guard reads it as a no-op, so nothing is stored. That guard is being followed
+up.
 
 The preference is refetched with each file's media-file document rather than
 carried in memory, so an episode change needs no handoff. A quality switch is

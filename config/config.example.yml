@@ -204,6 +204,17 @@ downloads:
   # This does not choose the track that plays; see streaming.audio_language.
   audio_language: original
 
+  # Subtitles to go and fetch, most preferred first. This is what a season
+  # fetch looks for and what subtitle search starts from.
+  # Environment variable: DOWNLOAD_SUBTITLE_LANGUAGE (comma-separated)
+  #
+  # SUBTITLE_LANGUAGE is still read as the same setting; the name it shipped
+  # under lives on, only the key moved.
+  #
+  # This does not choose the track that plays; see streaming.subtitle_language.
+  subtitle_language:
+    - en
+
 # Streaming Configuration
 # -----------------------
 streaming:
@@ -219,10 +230,10 @@ streaming:
   # Environment variable: PREFER_DEFAULT_AUDIO_TRACK
   prefer_default_audio_track: false
 
-  # Subtitle languages to fetch, most preferred first.
-  # Environment variable: SUBTITLE_LANGUAGE (comma-separated)
-  subtitle_language:
-    - en
+  # Subtitle track to switch on for a show nobody has chosen one for, most
+  # preferred first. Empty means no automatic subtitle.
+  # Environment variable: SUBTITLE_PLAYBACK_LANGUAGE (comma-separated)
+  subtitle_language: []
 
 # FlareSolverr Configuration
 # ---------------------------

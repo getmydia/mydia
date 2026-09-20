@@ -340,10 +340,12 @@ The metadata relay proxies requests to TVDB/TMDB and handles remote access relay
 | `DOWNLOAD_AUDIO_LANGUAGE` | Audio that automatic and manual search prefer when choosing a release: `original` for the show or film's own language, or a language code such as `en`, which prefers that dub and falls back to the original. Each show can override it from its page | `original` |
 | `AUDIO_LANGUAGE` | Audio track that plays, as a comma-separated list tried in order, for example `original,en`. When none matches, the track the file marks as default plays | `original,en` |
 | `PREFER_DEFAULT_AUDIO_TRACK` | Play the track the file marks as default and ignore `AUDIO_LANGUAGE` | `false` |
-| `SUBTITLE_LANGUAGE` | Subtitle languages to fetch, comma-separated, for example `en,es` | `en` |
+| `DOWNLOAD_SUBTITLE_LANGUAGE` | Subtitles to go and fetch, comma-separated, for example `en,es`. Decides what a season fetch looks for and what subtitle search starts from | `en` |
+| `SUBTITLE_PLAYBACK_LANGUAGE` | Subtitle track to switch on for a show nobody has chosen one for, as a comma-separated list tried in order. Empty means no automatic subtitle | (empty) |
+| `SUBTITLE_LANGUAGE` | Legacy name for `DOWNLOAD_SUBTITLE_LANGUAGE` and still read as the same setting. It names what to acquire, as it always did; only the key it lives under moved | `en` |
 | `METADATA_LANGUAGE` | Language sent to TMDB/TVDB for titles, descriptions, and posters. Accepts ISO 639-1 codes (`de`) or BCP 47 tags (`de-DE`, `pt-BR`). | `en-US` |
 
-Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays.
+Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays. Subtitles split the same way: `DOWNLOAD_SUBTITLE_LANGUAGE` decides what gets fetched, `SUBTITLE_PLAYBACK_LANGUAGE` which track switches on. `SUBTITLE_LANGUAGE` keeps working and still means acquisition — its meaning never changed, only where the setting lives.
 
 Every variable in this section can also be set from **Admin > System > Settings**, under **Language**. An environment variable overrides the database value and locks the field there. Playback audio and the default-track option appear only when the player is enabled.
 

@@ -14,6 +14,25 @@ defmodule Mydia.Subtitles.ExtractorStreamsTest do
     |> Repo.preload(:library_path)
   end
 
+  defp insert_sidecar(media_file, language, flags) do
+    {:ok, _subtitle} =
+      %Mydia.Subtitles.Subtitle{}
+      |> Mydia.Subtitles.Subtitle.changeset(
+        Map.merge(
+          %{
+            media_file_id: media_file.id,
+            language: language,
+            format: "srt",
+            subtitle_hash: "hash-#{language}-#{System.unique_integer([:positive])}",
+            file_path: "/tmp/#{language}.srt",
+            provider: "relay"
+          },
+          Map.new(flags)
+        )
+      )
+      |> Repo.insert()
+  end
+
   test "reads embedded subtitle tracks from stored streams without running ffprobe" do
     media_file =
       with_streams([
@@ -86,6 +105,23 @@ defmodule Mydia.Subtitles.ExtractorStreamsTest do
     assert [track] = Extractor.list_subtitle_tracks(media_file)
     refute track.embedded
     assert track.deliverable
+  end
+
+  test "carries forced and hearing_impaired from a stored sidecar row" do
+    media_file = with_streams([])
+
+    insert_sidecar(media_file, "en", forced: true, hearing_impaired: false)
+    insert_sidecar(media_file, "es", forced: false, hearing_impaired: true)
+
+    by_language =
+      media_file.id
+      |> Extractor.list_external_subtitle_tracks()
+      |> Map.new(&{&1.language, &1})
+
+    assert by_language["en"].forced == true
+    assert by_language["en"].hearing_impaired == false
+    assert by_language["es"].forced == false
+    assert by_language["es"].hearing_impaired == true
   end
 
   describe "disposition flags on embedded tracks" do
