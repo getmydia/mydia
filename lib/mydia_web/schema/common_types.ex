@@ -190,6 +190,15 @@ defmodule MydiaWeb.Schema.CommonTypes do
       resolve(&MydiaWeb.Schema.Resolvers.SubtitleResolver.list_subtitles/3)
     end
 
+    @desc """
+    The subtitle this viewer should get, folding their own per-show choice
+    over the operator's streaming.subtitle_language. Null when neither has an
+    opinion, which means the client should leave subtitle selection alone.
+    """
+    field :preferred_subtitle, :subtitle_preference do
+      resolve(&MydiaWeb.Schema.Resolvers.StreamingResolver.preferred_subtitle/3)
+    end
+
     @desc "Skippable segments (intro, credits). Empty when detection has not run or found nothing."
     field :segments, non_null(list_of(non_null(:media_segment))) do
       resolve(&MydiaWeb.Schema.Resolvers.MediaResolver.segments/3)
@@ -571,6 +580,46 @@ defmodule MydiaWeb.Schema.CommonTypes do
         "The full preference list now in effect for this item, most preferred " <>
           "first, with the new choice already folded in. A client can apply this " <>
           "directly rather than re-querying streamingCandidates."
+  end
+
+  @desc "Whether a remembered subtitle choice names a track or turns subtitles off"
+  enum :subtitle_preference_mode do
+    value(:off, description: "The viewer turned subtitles off for this show or film")
+    value(:track, description: "The viewer wants a track matching this descriptor")
+  end
+
+  @desc """
+  The subtitle a client should select for this file, described rather than
+  named.
+
+  A track id is an ffprobe stream index or a sidecar UUID and means nothing on
+  the next episode, so this carries the language and disposition instead. The
+  client matches it against whatever tracks the file actually offers, which in
+  direct play is a list the server never sees.
+  """
+  object :subtitle_preference do
+    field :mode, non_null(:subtitle_preference_mode)
+
+    field :language, :string, description: "Null exactly when mode is OFF"
+
+    field :forced, non_null(:boolean),
+      description: "Prefer a track that subtitles only foreign dialogue and signs"
+
+    field :hearing_impaired, non_null(:boolean),
+      description: "Prefer a track carrying sound descriptions (SDH)"
+
+    field :track_title, :string,
+      description:
+        "The title of the track originally picked, used only to break a tie " <>
+          "between candidates that already match on language and flags"
+  end
+
+  @desc "Outcome of remembering a viewer's subtitle choice"
+  object :subtitle_preference_result do
+    field :media_item_id, non_null(:id),
+      description: "The show or film the preference was stored against"
+
+    field :preference, :subtitle_preference, description: "The choice now in effect for this item"
   end
 
   @desc "Result of streaming candidates query"

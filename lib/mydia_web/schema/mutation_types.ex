@@ -196,6 +196,31 @@ defmodule MydiaWeb.Schema.MutationTypes do
       resolve(&StreamingResolver.set_audio_language_preference/3)
     end
 
+    @desc "Remember which subtitle this viewer wants for a show or film"
+    field :set_subtitle_preference, :subtitle_preference_result do
+      arg(:file_id, non_null(:id),
+        description:
+          "Any file of the show or film. The preference is stored against the " <>
+            "item it belongs to, so a choice made on one episode applies to the rest."
+      )
+
+      arg(:mode, non_null(:subtitle_preference_mode),
+        description: "TRACK to remember a subtitle, OFF to remember that there should be none"
+      )
+
+      arg(:language, :string, description: "Required with TRACK, and must be omitted with OFF")
+
+      arg(:forced, :boolean, description: "Whether the picked track was a forced one")
+
+      arg(:hearing_impaired, :boolean, description: "Whether the picked track was an SDH one")
+
+      arg(:track_title, :string,
+        description: "The picked track's title, stored as a tiebreak for later matching"
+      )
+
+      resolve(&StreamingResolver.set_subtitle_preference/3)
+    end
+
     @desc "End an HLS streaming session"
     field :end_streaming_session, :boolean do
       arg(:session_id, non_null(:string))

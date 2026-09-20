@@ -18,6 +18,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
   alias Mydia.Streaming.FfmpegHlsTranscoder
   alias Mydia.Streaming.HlsSessionSupervisor
   alias Mydia.Streaming.HlsSession
+  alias Mydia.Streaming.SubtitlePreferences
 
   @doc """
   Returns streaming candidates for a media item.
@@ -266,6 +267,118 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
           show_audio_language: AudioPreferences.for_media_file(user_id, media_file)
         )
     }
+  end
+
+  @doc """
+  The subtitle descriptor in effect for the current viewer and this file.
+
+  Null for an anonymous caller rather than an error: this is a field on every
+  media file, and a public or token-scoped query that reaches it should lose
+  the preference, not the whole document.
+  """
+  @spec preferred_subtitle(map(), map(), Absinthe.Resolution.t()) :: {:ok, map() | nil}
+  def preferred_subtitle(media_file, _args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:ok, nil}
+
+      user ->
+        descriptor =
+          SubtitlePreferences.resolve(user.id, preload_for_subtitle_preference(media_file))
+
+        {:ok, subtitle_preference_descriptor(descriptor)}
+    end
+  end
+
+  # `resolve/2` reports an explicit off as `%{mode: :off}` alone, and there is
+  # nothing else to report: a choice that names no track has no language and no
+  # dispositions. The schema promises a non-null Boolean for each flag
+  # regardless, so the descriptor is completed here rather than widening those
+  # fields to nullable and making every client handle a null it can never see.
+  # Both the field and the mutation run through this, which is what lets the
+  # mutation's echo be the same thing a later query returns.
+  defp subtitle_preference_descriptor(nil), do: nil
+
+  defp subtitle_preference_descriptor(%{mode: :off} = descriptor) do
+    Map.merge(
+      %{language: nil, forced: false, hearing_impaired: false, track_title: nil},
+      descriptor
+    )
+  end
+
+  defp subtitle_preference_descriptor(%{mode: :track} = descriptor), do: descriptor
+
+  # `resolve/2` reaches a TV file's show through the episode and probes the
+  # file's path for the operator default, so both associations have to be
+  # there. Parents hand this field bare rows -- `episode { files }` returns
+  # whatever `list_media_files/1` gave it -- and an unloaded episode would
+  # make the preference silently vanish for the whole TV library rather than
+  # fail loudly. Preloading here is what keeps that from happening; an
+  # already-loaded association costs no query.
+  defp preload_for_subtitle_preference(%MediaFile{} = media_file) do
+    Repo.preload(media_file, [:library_path, :episode])
+  end
+
+  defp preload_for_subtitle_preference(media_file), do: media_file
+
+  @doc """
+  Remembers this viewer's subtitle choice for a show or film.
+
+  Takes a file id rather than an item id because that is what the player holds
+  during playback, and resolves the item from it, exactly as
+  `set_audio_language_preference/3` does. A choice made on one episode is
+  therefore stored against the series.
+  """
+  @spec set_subtitle_preference(map(), map(), Absinthe.Resolution.t()) ::
+          {:ok, map()} | {:error, term()}
+  def set_subtitle_preference(_parent, %{file_id: file_id} = args, %{context: context}) do
+    case context[:current_user] do
+      nil ->
+        {:error, "Authentication required"}
+
+      user ->
+        with {:ok, media_file} <- load_media_file(file_id),
+             media_item_id when is_binary(media_item_id) <-
+               SubtitlePreferences.media_item_id_of(media_file) do
+          store_subtitle_preference(user.id, media_item_id, media_file, args)
+        else
+          {:error, :not_found} ->
+            {:error, "File not found"}
+
+          # Same reasoning as the audio mutation: a file belonging to neither
+          # an item nor an episode has nothing to hang a per-show preference
+          # on, and storing it somewhere unreadable is worse than saying so.
+          nil ->
+            {:error, "File is not attached to a show or film"}
+        end
+    end
+  end
+
+  defp store_subtitle_preference(user_id, media_item_id, media_file, args) do
+    attrs = %{
+      mode: args.mode,
+      language: args[:language],
+      forced: args[:forced] || false,
+      hearing_impaired: args[:hearing_impaired] || false,
+      track_title: args[:track_title]
+    }
+
+    case SubtitlePreferences.put(user_id, media_item_id, attrs) do
+      {:ok, _preference} ->
+        # The stored row is echoed back through `resolve/2` rather than
+        # returned raw, so a client applies exactly what a later query would
+        # hand it -- including the case where the row is somehow unreadable.
+        {:ok,
+         %{
+           media_item_id: media_item_id,
+           preference:
+             subtitle_preference_descriptor(SubtitlePreferences.resolve(user_id, media_file))
+         }}
+
+      {:error, changeset} ->
+        Logger.warning("Rejected subtitle preference: #{inspect(changeset.errors)}")
+        {:error, "Invalid subtitle preference"}
+    end
   end
 
   defp start_session_for_user(
