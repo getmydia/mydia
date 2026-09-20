@@ -7,6 +7,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
   import Mydia.AccountsFixtures
 
   alias Mydia.Settings
+  alias MydiaWeb.AdminSettingsLive.LanguageSettings
 
   setup %{conn: conn} do
     start_supervised!(Mydia.Indexers.Health)
@@ -398,6 +399,47 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageTest do
 
       refute has_element?(view, "#language-row-subtitle-playback")
       assert has_element?(view, "#language-row-subtitles")
+    end
+
+    test "its last chip is not locked, so empty is reachable", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"subtitle_playback_language" => ["de"]})
+
+      assert has_element?(view, "#language-subtitle_playback_language-de[checked]")
+      refute has_element?(view, "#language-subtitle_playback_language-de[disabled]")
+    end
+
+    test "unchecking every chip clears it to no automatic subtitle", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      change(view, %{"subtitle_playback_language" => ["de"]})
+      assert Mydia.Config.get().streaming.subtitle_language == ["de"]
+
+      # What the browser sends once the last chip is unchecked: only the
+      # control's always-present empty input.
+      change(view, %{
+        "_target" => ["subtitle_playback_language"],
+        "subtitle_playback_language" => [""]
+      })
+
+      assert Settings.get_config_setting_by_key("streaming.subtitle_language") == nil
+      assert Mydia.Config.get().streaming.subtitle_language == []
+      assert LanguageSettings.current()["streaming.subtitle_language"].value == []
+    end
+
+    test "each row is announced under its own name", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+      assert has_element?(
+               view,
+               "#language-row-subtitles [role='group'][aria-label='Subtitle languages']"
+             )
+
+      assert has_element?(
+               view,
+               "#language-row-subtitle-playback [role='group'][aria-label='Playback subtitles']"
+             )
     end
   end
 end

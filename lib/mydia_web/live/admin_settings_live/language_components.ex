@@ -74,6 +74,8 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
             <.subtitle_languages_control
               setting={@settings["streaming.subtitle_language"]}
               field="subtitle_playback_language"
+              label="Playback subtitles"
+              can_be_empty?
             />
           </.language_row>
 
@@ -243,16 +245,21 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
 
   attr :setting, :map, required: true
   attr :field, :string, default: "subtitle_language"
+  attr :label, :string, default: "Subtitle languages"
+  attr :can_be_empty?, :boolean, default: false
 
   # Same chip set as the subtitle search modal: the common languages plus any
-  # selected one outside them, with the rest behind a picker. The last selected
-  # chip is disabled so the list cannot become empty, and a hidden input still
-  # submits it, since a disabled checkbox is never sent.
+  # selected one outside them, with the rest behind a picker.
   #
   # `field` names the settings field this row submits under. The acquisition
   # and playback rows render the same control over different keys, so the
   # input names and ids derive from it; a hardcoded name would make the two
-  # rows overwrite each other's value.
+  # rows overwrite each other's value. `label` names the row for a screen
+  # reader, and `can_be_empty?` says whether an empty selection is a real
+  # state: acquisition must name a language for subtitle search to fetch, so
+  # its last selected chip is disabled and resubmitted by a hidden input
+  # (a disabled checkbox is never sent), while playback's empty default means
+  # "no automatic subtitle".
   defp subtitle_languages_control(assigns) do
     selected = assigns.setting.value
     common = MydiaWeb.Languages.common()
@@ -270,6 +277,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
       assigns
       |> assign(:selected, selected)
       |> assign(:chips, chips)
+      |> assign(:lock_last?, not assigns.can_be_empty?)
       |> assign(
         :more,
         Enum.reject(MydiaWeb.Languages.all(), fn {code, _} -> code in chip_codes end)
@@ -278,10 +286,13 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
 
     ~H"""
     <div class="flex flex-wrap items-center gap-2 justify-start">
-      <div class="filter" role="group" aria-label="Subtitle languages">
+      <div class="filter" role="group" aria-label={@label}>
+        <%!-- An empty selection is a state, not an absent field: without this
+        the browser sends no name at all and clearing could not be saved. --%>
+        <input :if={@can_be_empty? and not @locked?} type="hidden" name={"#{@field}[]"} value="" />
         <%= for {code, label} <- @chips do %>
           <input
-            :if={not @locked? and @selected == [code]}
+            :if={not @locked? and @lock_last? and @selected == [code]}
             type="hidden"
             name={"#{@field}[]"}
             value={code}
@@ -294,7 +305,7 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageComponents do
             value={code}
             aria-label={label}
             checked={code in @selected}
-            disabled={@locked? or @selected == [code]}
+            disabled={@locked? or (@lock_last? and @selected == [code])}
           />
         <% end %>
       </div>

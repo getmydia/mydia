@@ -87,11 +87,15 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
 
   A key is written only when it is not locked by an environment variable and
   differs from its resolved value: a write that only repeats the value on
-  screen would pin a YAML or default value into the database layer. All the
-  writes from one call happen inside a single transaction: a value that
-  fails to parse, or a write that fails, rolls back everything else this
-  call would have written rather than leaving a partial save. Returns the
-  keys written, empty when nothing changed.
+  screen would pin a YAML or default value into the database layer. A field
+  whose value is now empty where empty is a real state (`:clear`) has its row
+  removed instead, so the schema default applies and no reader ever sees the
+  value decoded from an empty string — `Mydia.Config.Schema.Paths` casts `""`
+  to `nil`, and `nil` is not the `[]` that every list-shaped setting's
+  consumers expect. All the writes from one call happen inside a single
+  transaction: a value that fails to parse, or a write that fails, rolls back
+  everything else this call would have written rather than leaving a partial
+  save. Returns the keys written, empty when nothing changed.
   """
   @spec save(map(), binary() | nil) :: {:ok, [String.t()]} | {:error, String.t(), term()}
   def save(params, user_id) do
@@ -102,14 +106,21 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       |> submitted_fields()
       |> Enum.flat_map(fn field -> parse({field, Map.get(params, field)}, params) end)
       |> Enum.map(fn {key, value} -> {key, keep_order(key, settings[key].value, value)} end)
-      |> Enum.reject(fn {key, value} ->
-        settings[key].source == :env or settings[key].value == value
+      |> Enum.reject(fn
+        {key, :clear} -> settings[key].source == :env
+        {key, value} -> settings[key].source == :env or settings[key].value == value
       end)
 
     fn ->
       Enum.reduce(changes, [], fn
         {key, :invalid}, _written ->
           Mydia.Repo.rollback({key, :invalid})
+
+        {key, :clear}, written ->
+          case Settings.get_config_setting_by_key(key) do
+            nil -> written
+            setting -> delete_or_rollback(setting, key, written)
+          end
 
         {key, value}, written ->
           attrs = %{
@@ -129,6 +140,13 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
     |> case do
       {:ok, written} -> {:ok, written}
       {:error, {key, reason}} -> {:error, key, reason}
+    end
+  end
+
+  defp delete_or_rollback(setting, key, written) do
+    case Settings.delete_config_setting(setting) do
+      {:ok, _deleted} -> [key | written]
+      {:error, reason} -> Mydia.Repo.rollback({key, reason})
     end
   end
 
@@ -213,7 +231,8 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       parse_subtitle_languages(
         codes,
         params["subtitle_language_add"],
-        "downloads.subtitle_language"
+        "downloads.subtitle_language",
+        :keep
       )
 
   defp parse({"subtitle_playback_language", codes}, params) when is_list(codes),
@@ -221,23 +240,27 @@ defmodule MydiaWeb.AdminSettingsLive.LanguageSettings do
       parse_subtitle_languages(
         codes,
         params["subtitle_playback_language_add"],
-        "streaming.subtitle_language"
+        "streaming.subtitle_language",
+        :clear
       )
 
   defp parse(_field, _params), do: []
 
   # Shared by both subtitle rows: they differ only in the field names they
-  # submit under and the key they write. An empty list writes nothing, so a
-  # row whose chips are all gone leaves its key unset rather than pinning ""
-  # into the database.
-  defp parse_subtitle_languages(codes, added, key) do
+  # submit under, the key they write, and what an empty selection means.
+  #
+  # `on_empty` is `:keep` where the setting must name a language — an empty
+  # list is then a no-op, so a row whose chips are all gone leaves the key
+  # alone rather than pinning "" into the database — and `:clear` where empty
+  # is a real state, so the row can write "no automatic subtitle" back.
+  defp parse_subtitle_languages(codes, added, key, on_empty) do
     languages =
       (codes ++ List.wrap(added))
       |> Enum.reject(&(&1 in [nil, ""]))
       |> Enum.uniq()
 
     cond do
-      languages == [] -> []
+      languages == [] -> if on_empty == :clear, do: [{key, :clear}], else: []
       Enum.all?(languages, &LanguageCode.known?/1) -> [{key, languages}]
       true -> [{key, :invalid}]
     end
