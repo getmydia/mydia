@@ -18,6 +18,7 @@ import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
 import '../../../core/player/hls_engine.dart';
+import '../../../core/player/subtitle_cues.dart';
 import '../../../core/player/player_orientation_lease_controller.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_stream_index.dart';
@@ -3610,6 +3611,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return player.setSubtitleTrack(track);
       });
 
+  /// Hands the browser the cues of whatever was just applied, or stops it
+  /// drawing when subtitles went off.
+  ///
+  /// Only ever called where a selection has actually taken effect on the
+  /// player, so it reads `_player` directly rather than going through
+  /// [_switchGate]: the gate has already let that call through, and a switch
+  /// arriving now replaces the element this would have touched anyway. A
+  /// no-op on native and whenever the player has gone.
+  void _showSubtitleCues({required bool enabled}) {
+    final player = _player;
+    if (player == null) return;
+    showSubtitleCues(player, enabled: enabled);
+  }
+
   /// Refreshes everything that reflects watched state. Deliberately not called
   /// from the 10-second progress sync: that would refetch Home hundreds of
   /// times per movie over what may be a p2p relay.
@@ -3813,6 +3828,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           return generation;
         }
         setState(() => _selectedSubtitleTrack = null);
+        _showSubtitleCues(enabled: false);
         await _onSubtitleTrackChanged(keepNudge: keepNudge);
         debugPrint('[PlayerScreen] Subtitles turned off');
         return generation;
@@ -3908,6 +3924,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return generation;
       }
       setState(() => _selectedSubtitleTrack = selected);
+      _showSubtitleCues(enabled: true);
       await _onSubtitleTrackChanged(keepNudge: keepNudge);
       debugPrint('[PlayerScreen] Set subtitle track: ${selected.displayName}');
     } finally {

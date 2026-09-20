@@ -374,3 +374,27 @@ It has to be mpv's property. media_kit's `stream.track` records a `sub-add`ed
 track exactly as the app handed it over, with no codec, and never hears about
 a default track mpv selects on its own when a file opens.
 
+### On web, the browser draws them
+
+None of the above applies in the browser, where there is no mpv and
+`SubtitleView` is fed by a handler that cannot work. media_kit attaches a
+picked track to the `<video>` as a `<track>` child, leaves it `hidden`, and
+pushes cues to Flutter from its own `cuechange` listener, which reads
+`activeCues.dartify` without calling it and throws `NoSuchMethodError` on
+every cue (its author marked it "UNTESTED"). Measured 2026-09-19: the track
+attaches, all 1080 cues parse, one is active at the right moment, and the
+screen stays blank.
+
+`subtitle_cues.dart` hands the drawing to the browser instead. After a pick
+takes effect it disables every text track on the element and shows the last
+one, which is the one media_kit just appended; after "Off" it disables them
+all. That second half is not symmetry for its own sake: media_kit does
+nothing at all for `SubtitleTrack.no()` on web, so without it subtitles could
+be turned on and never off again. It also drops media_kit's `cuechange`
+listener from the track it shows, which is what stops a `NoSuchMethodError`
+per cue reaching the console for the length of a film.
+
+Cues are drawn in the browser's own style, and the player has no subtitle
+appearance settings to honour, so nothing is lost there today. They sit at the
+bottom of the video, where the OSD covers them while it is up.
+
