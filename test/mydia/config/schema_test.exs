@@ -446,9 +446,37 @@ defmodule Mydia.Config.SchemaTest do
     end
   end
 
-  describe "streaming subtitle_language (SUBTITLE_LANGUAGE)" do
+  describe "downloads subtitle_language (DOWNLOAD_SUBTITLE_LANGUAGE)" do
     test "defaults to English" do
-      assert Schema.defaults().streaming.subtitle_language == ["en"]
+      assert Schema.defaults().downloads.subtitle_language == ["en"]
+    end
+
+    test "accepts a list of codes" do
+      changeset = Schema.changeset(%Schema{}, %{downloads: %{subtitle_language: ["en", "es"]}})
+      assert changeset.valid?
+
+      config = Ecto.Changeset.apply_changes(changeset)
+      assert config.downloads.subtitle_language == ["en", "es"]
+    end
+
+    test "rejects an empty code" do
+      changeset = Schema.changeset(%Schema{}, %{downloads: %{subtitle_language: ["en", ""]}})
+
+      refute changeset.valid?
+
+      assert "must contain only non-empty language codes" in errors_on(changeset).downloads.subtitle_language
+    end
+
+    test "rejects a non-list" do
+      changeset = Schema.changeset(%Schema{}, %{downloads: %{subtitle_language: "en"}})
+
+      refute changeset.valid?
+    end
+  end
+
+  describe "streaming subtitle_language (SUBTITLE_PLAYBACK_LANGUAGE)" do
+    test "defaults to an empty list, which means no automatic subtitle" do
+      assert Schema.defaults().streaming.subtitle_language == []
     end
 
     test "accepts a list of codes" do

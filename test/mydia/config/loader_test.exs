@@ -53,6 +53,8 @@ defmodule Mydia.Config.LoaderTest do
         "DOWNLOAD_AUDIO_LANGUAGE",
         "TRASH_RETENTION_DAYS",
         "SUBTITLE_LANGUAGE",
+        "DOWNLOAD_SUBTITLE_LANGUAGE",
+        "SUBTITLE_PLAYBACK_LANGUAGE",
         "DEFAULT_SEASON_MONITORING",
         "HWACCEL",
         "HWACCEL_DEVICE",
@@ -800,13 +802,15 @@ defmodule Mydia.Config.LoaderTest do
 
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
 
-      assert config.streaming.subtitle_language == ["en", "es", "pt"]
+      # The legacy variable keeps its meaning and now lands on the acquisition
+      # key; see the "subtitle language acquisition and playback keys" describe.
+      assert config.downloads.subtitle_language == ["en", "es", "pt"]
     end
 
     test "SUBTITLE_LANGUAGE drops blank entries from a stray comma instead of failing to boot" do
       # The schema's scoped cast for subtitle_language deliberately preserves
       # blanks so a YAML or DB value like ["en", ""] is rejected outright (see
-      # Mydia.Config.Schema's streaming_changeset/2) rather than silently
+      # Mydia.Config.Schema's downloads_changeset/2) rather than silently
       # dropped. An env var typo is a different kind of mistake -- a stray
       # comma should not take the whole server down at boot -- so the env
       # parser (parse_string_list/1, shared with AUDIO_LANGUAGE) filters
@@ -815,7 +819,7 @@ defmodule Mydia.Config.LoaderTest do
 
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
 
-      assert config.streaming.subtitle_language == ["en", "es"]
+      assert config.downloads.subtitle_language == ["en", "es"]
     end
 
     test "HWACCEL defaults to auto when the env var is absent" do
@@ -1351,6 +1355,95 @@ defmodule Mydia.Config.LoaderTest do
 
       assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
       assert config.remote_access.enabled == true
+    end
+  end
+
+  describe "subtitle language acquisition and playback keys" do
+    setup do
+      # Config settings left behind by another test would otherwise merge into
+      # this describe's loads.
+      Mydia.Repo.delete_all(Mydia.Settings.ConfigSetting)
+      :ok
+    end
+
+    test "DOWNLOAD_SUBTITLE_LANGUAGE sets the acquisition key" do
+      # The shared setup clears and restores this var, so a deployment that
+      # sets it does not lose it to this test.
+      System.put_env("DOWNLOAD_SUBTITLE_LANGUAGE", "en,ja")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.downloads.subtitle_language == ["en", "ja"]
+    end
+
+    test "the legacy SUBTITLE_LANGUAGE still sets the acquisition key" do
+      System.put_env("SUBTITLE_LANGUAGE", "de")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.downloads.subtitle_language == ["de"]
+      assert config.streaming.subtitle_language == []
+    end
+
+    test "DOWNLOAD_SUBTITLE_LANGUAGE wins over the legacy variable" do
+      System.put_env("SUBTITLE_LANGUAGE", "de")
+      System.put_env("DOWNLOAD_SUBTITLE_LANGUAGE", "fr")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.downloads.subtitle_language == ["fr"]
+    end
+
+    test "SUBTITLE_PLAYBACK_LANGUAGE sets the playback key only" do
+      System.put_env("SUBTITLE_PLAYBACK_LANGUAGE", "en")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.subtitle_language == ["en"]
+      assert config.downloads.subtitle_language == ["en"]
+    end
+
+    test "playback defaults to no auto-selection" do
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert config.streaming.subtitle_language == []
+    end
+
+    test "a YAML file written before the split keeps its value as acquisition" do
+      # streaming.subtitle_language only ever meant acquisition, so a file that
+      # predates the split must not silently lose the languages it names -- nor
+      # start playing subtitles nobody asked for.
+      File.mkdir_p!("test/fixtures")
+
+      File.write!(@test_yaml_path, """
+      streaming:
+        subtitle_language:
+          - de
+          - fr
+      """)
+
+      {:ok, config} = Loader.load(config_file: @test_yaml_path)
+
+      assert config.downloads.subtitle_language == ["de", "fr"]
+      assert config.streaming.subtitle_language == []
+    end
+
+    test "streaming.subtitle_language is taken as playback once downloads.subtitle_language is set" do
+      File.mkdir_p!("test/fixtures")
+
+      File.write!(@test_yaml_path, """
+      downloads:
+        subtitle_language:
+          - ja
+      streaming:
+        subtitle_language:
+          - en
+      """)
+
+      {:ok, config} = Loader.load(config_file: @test_yaml_path)
+
+      assert config.downloads.subtitle_language == ["ja"]
+      assert config.streaming.subtitle_language == ["en"]
     end
   end
 end
