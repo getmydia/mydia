@@ -4137,8 +4137,18 @@ before raising it. Also settable under <strong>Admin &gt; System &gt; Settings &
 <td><code>false</code></td>
 </tr>
 <tr>
+<td><code>DOWNLOAD_SUBTITLE_LANGUAGE</code></td>
+<td>Subtitles to go and fetch, comma-separated, for example <code>en,es</code>. Decides what a season fetch looks for and what subtitle search starts from</td>
+<td><code>en</code></td>
+</tr>
+<tr>
+<td><code>SUBTITLE_PLAYBACK_LANGUAGE</code></td>
+<td>Subtitle track to switch on for a show nobody has chosen one for, as a comma-separated list tried in order. Empty means no automatic subtitle</td>
+<td>(empty)</td>
+</tr>
+<tr>
 <td><code>SUBTITLE_LANGUAGE</code></td>
-<td>Subtitle languages to fetch, comma-separated, for example <code>en,es</code></td>
+<td>Legacy name for <code>DOWNLOAD_SUBTITLE_LANGUAGE</code> and still read as the same setting. It names what to acquire, as it always did; only the key it lives under moved</td>
 <td><code>en</code></td>
 </tr>
 <tr>
@@ -4148,7 +4158,7 @@ before raising it. Also settable under <strong>Admin &gt; System &gt; Settings &
 </tr>
 </tbody>
 </table>
-<p>Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays.</p>
+<p>Download audio and playback audio are separate settings. The first decides which release is downloaded, the second which of its tracks plays. Subtitles split the same way: <code>DOWNLOAD_SUBTITLE_LANGUAGE</code> decides what gets fetched, <code>SUBTITLE_PLAYBACK_LANGUAGE</code> which track switches on. <code>SUBTITLE_LANGUAGE</code> keeps working and still means acquisition: its meaning never changed, only where the setting lives.</p>
 <p>Every variable in this section can also be set from <strong>Admin &gt; System &gt; Settings</strong>, under <strong>Language</strong>. An environment variable overrides the database value and locks the field there. Playback audio and the default-track option appear only when the player is enabled.</p>
 <h2 id="flaresolverr">FlareSolverr</h2>
 <p>FlareSolverr is a proxy server used to bypass Cloudflare protection on indexer sites. Used by Cardigann indexers that require browser-based challenge solving.</p>
