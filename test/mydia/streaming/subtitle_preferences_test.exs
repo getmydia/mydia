@@ -217,11 +217,39 @@ defmodule Mydia.Streaming.SubtitlePreferencesTest do
          %{user: user} do
       put_operator_languages(["en"])
 
-      assert SubtitlePreferences.resolve(user.id, %Mydia.Library.MediaFile{
-               id: Ecto.UUID.generate(),
-               media_item_id: nil
-             }) == nil
+      assert SubtitlePreferences.resolve(user.id, orphan_file()) == nil
     end
+
+    test "returns nil for an orphan file even when it carries a matching track",
+         %{user: user} do
+      # The file's own tracks must not let the operator default through: with
+      # no item there is no row to store an override against, exactly as for an
+      # anonymous viewer, so a subtitle selected here could never be turned off.
+      orphan = orphan_file([subtitle_stream("eng")])
+
+      put_operator_languages(["en"])
+
+      assert SubtitlePreferences.resolve(user.id, orphan) == nil
+    end
+  end
+
+  # A file attached to neither an item nor an episode: a null media_item_id and
+  # no episode, which is how a file awaiting a match arrives.
+  defp orphan_file(streams \\ []) do
+    %Mydia.Library.MediaFile{
+      id: Ecto.UUID.generate(),
+      media_item_id: nil,
+      metadata: %Mydia.Library.Structs.FileMetadata{streams: streams}
+    }
+  end
+
+  defp subtitle_stream(language) do
+    %Mydia.Library.Structs.StreamInfo{
+      index: 2,
+      type: :subtitle,
+      codec: "subrip",
+      language: language
+    }
   end
 
   # The operator default is stored the way the admin settings page stores it:

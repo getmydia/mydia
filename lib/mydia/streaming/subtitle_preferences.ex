@@ -100,28 +100,44 @@ defmodule Mydia.Streaming.SubtitlePreferences do
 
   `nil` for an anonymous viewer even when the operator has a default. Without
   a user there is no row to store an override against, so a subtitle selected
-  here could never be turned off for that show.
+  here could never be turned off for that show. `nil` for a file attached to
+  neither an item nor an episode for the same reason: there is no item to key
+  a row on either.
+
+  Expects a real `Mydia.Library.MediaFile`, with the `:episode` association
+  preloaded for TV files, which have a null `media_item_id` and name their show
+  only through the episode. A file whose item cannot be determined is treated
+  as belonging to none, so an unloaded association returns `nil` rather than
+  letting the operator default through.
   """
   @spec resolve(binary() | nil, struct() | nil) :: map() | nil
   def resolve(nil, _media_file), do: nil
   def resolve(_user_id, nil), do: nil
 
   def resolve(user_id, media_file) do
-    case get(user_id, media_item_id_of(media_file)) do
-      %SubtitleLanguagePreference{mode: :off} ->
-        %{mode: :off}
-
-      %SubtitleLanguagePreference{mode: :track} = stored ->
-        %{
-          mode: :track,
-          language: stored.language,
-          forced: stored.forced,
-          hearing_impaired: stored.hearing_impaired,
-          track_title: stored.track_title
-        }
-
+    # The item id decides both levels below, so it is resolved once: a nil one
+    # means there is nowhere to store a choice, and nothing to fold onto.
+    case media_item_id_of(media_file) do
       nil ->
-        operator_default(media_file)
+        nil
+
+      media_item_id ->
+        case get(user_id, media_item_id) do
+          %SubtitleLanguagePreference{mode: :off} ->
+            %{mode: :off}
+
+          %SubtitleLanguagePreference{mode: :track} = stored ->
+            %{
+              mode: :track,
+              language: stored.language,
+              forced: stored.forced,
+              hearing_impaired: stored.hearing_impaired,
+              track_title: stored.track_title
+            }
+
+          nil ->
+            operator_default(media_file)
+        end
     end
   end
 
@@ -129,20 +145,28 @@ defmodule Mydia.Streaming.SubtitlePreferences do
   # can actually satisfy. Offering a language the file does not carry would
   # send the player hunting for a track that cannot exist.
   defp operator_default(media_file) do
-    wanted = Mydia.Settings.get_config([:streaming, :subtitle_language], [])
-    available = Extractor.list_subtitle_tracks(media_file)
+    case Mydia.Settings.get_config([:streaming, :subtitle_language], []) do
+      # The shipped default, and the common case: no reason to list the file's
+      # tracks -- a query, plus a path probe when the stream capture has never
+      # run -- to find nothing.
+      [] ->
+        nil
 
-    Enum.find_value(wanted, fn language ->
-      if Enum.any?(available, &LanguageCode.matches?(&1.language, language)) do
-        %{
-          mode: :track,
-          language: language,
-          forced: false,
-          hearing_impaired: false,
-          track_title: nil
-        }
-      end
-    end)
+      wanted ->
+        available = Extractor.list_subtitle_tracks(media_file)
+
+        Enum.find_value(wanted, fn language ->
+          if Enum.any?(available, &LanguageCode.matches?(&1.language, language)) do
+            %{
+              mode: :track,
+              language: language,
+              forced: false,
+              hearing_impaired: false,
+              track_title: nil
+            }
+          end
+        end)
+    end
   rescue
     # A file whose stream capture has not run, or whose row is malformed,
     # costs this playback its automatic subtitle and nothing else. Only the
