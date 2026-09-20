@@ -148,10 +148,40 @@ class _ProbedPlayer extends PlatformPlayer {
   }
 }
 
+/// A [StubLink] whose next subtitle-body fetch can be held open, so a test can
+/// land a track-list revision inside that window.
+///
+/// The window is what the revision cases below need: mpv publishes its probe
+/// results while the preference's own body fetch is still resolving, and
+/// embedded extraction can take seconds, so a revision lands mid-apply rather
+/// than before or after it. A gate makes that interleaving deterministic
+/// instead of a matter of microtask scheduling.
+class _GateableStubLink extends StubLink {
+  _GateableStubLink(super.handler);
+
+  /// Holds the next `SubtitleContent` request open until completed, then
+  /// clears itself: only the first body fetch is gated.
+  Completer<void>? holdSubtitleContent;
+
+  /// Whether a held body fetch has been taken and is waiting.
+  bool subtitleContentHeld = false;
+
+  @override
+  Stream<Response> request(Request request, [NextLink? forward]) async* {
+    final hold = holdSubtitleContent;
+    if (hold != null && _carries(request, documentNodeQuerySubtitleContent)) {
+      holdSubtitleContent = null;
+      subtitleContentHeld = true;
+      await hold.future;
+    }
+    yield* super.request(request, forward);
+  }
+}
+
 /// The scripted responses a direct-play movie load consumes, with
 /// [preferredSubtitle] hung off its one media file.
-StubLink _link({Map<String, dynamic>? preferredSubtitle}) {
-  return StubLink((request, index) {
+_GateableStubLink _link({Map<String, dynamic>? preferredSubtitle}) {
+  return _GateableStubLink((request, index) {
     if (_carries(request, documentNodeQuerySubtitleContent)) {
       return {
         '__typename': 'RootQueryType',
@@ -341,6 +371,61 @@ void main() {
       hasLength(1),
       reason: 'the remembered track must reach the player exactly once, not '
           'once per track list revision',
+    );
+  });
+
+  testWidgets(
+      'a track-list revision during the apply does not spend the preference',
+      (tester) async {
+    // The failure this pins: `_applySubtitlePreference` sets
+    // `_preferenceAppliedForPlayback` before awaiting the apply, and a
+    // revision landing during that await reaches `_syncSelectedSubtitleTrack`,
+    // which bumps `_subtitleSelectionGeneration`. The bump makes
+    // `shouldApplySubtitleSelection` discard the in-flight selection, so the
+    // preference never reaches the player while the flag records that it did.
+    // Embedded extraction can take 7-10s while mpv publishes probe results
+    // early, so the window is wide.
+    final link = _link(
+      preferredSubtitle:
+          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+    );
+    final hold = Completer<void>();
+    link.holdSubtitleContent = hold;
+    final player = _ProbedPlayer();
+
+    // The body fetch is held open, so the preferred track's apply is still
+    // resolving when the revision below lands. That is the window a spent flag
+    // turns into a lost preference.
+    await _pump(
+      tester,
+      link,
+      player,
+      settled: () => link.subtitleContentHeld,
+    );
+    expect(
+      player.selectedSubtitleTracks,
+      isEmpty,
+      reason: 'the hold is what keeps the apply in flight, so nothing can have '
+          'reached the player yet',
+    );
+
+    // The revision that used to steal the one-shot. It changes the derived
+    // list, which is what reaches `_syncSelectedSubtitleTrack` and bumps the
+    // generation the held apply is running under.
+    player.publishSubtitleTracks(const [
+      _mpvSubtitleTrack,
+      SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
+    ]);
+    await tester.pump();
+
+    hold.complete();
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+
+    expect(
+      player.selectedSubtitleTracks.last.language,
+      'eng',
+      reason: 'the preference must be applied against the list that '
+          'superseded the attempt, not lost with the spent flag',
     );
   });
 

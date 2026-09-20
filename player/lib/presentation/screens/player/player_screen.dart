@@ -134,6 +134,11 @@ export '../../../core/player/resume_plan.dart'
         kWatchedThreshold,
         shouldOfferResume;
 
+/// How many times a subtitle preference may retake a one-shot a track-list
+/// revision superseded. Three is well past any revision count media_kit
+/// produces in practice; it is a stop, not a budget.
+const int _maxPreferenceApplyRetries = 3;
+
 /// What an arrow key press means in the player.
 ///
 /// A remote's D-pad and a keyboard's arrows deliver the same key codes, so one
@@ -593,6 +598,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// every revision reaches [_applySubtitleTracks], so without this a
   /// revision landing after a viewer pick would silently undo it.
   bool _preferenceAppliedForPlayback = false;
+
+  /// How many times [_applySubtitlePreference] has retaken its one-shot after
+  /// a revision superseded the apply.
+  ///
+  /// The retry terminates on its own, because it only re-arms when another
+  /// real track-list revision supersedes it and revisions are finite. That
+  /// relies on mpv behaving, and this is the cheap insurance if it does not.
+  int _preferenceApplyRetries = 0;
 
   /// Exposed for widget tests that assert per-file preference reset on a
   /// reused State. See `player_screen_file_change_test.dart`.
@@ -1199,6 +1212,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // previous episode's answer to this one.
     _subtitlePreference = null;
     _preferenceAppliedForPlayback = false;
+    _preferenceApplyRetries = 0;
 
     try {
       setState(() {
@@ -2010,7 +2024,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // applies of the same preference would race each other's generation.
     _preferenceAppliedForPlayback = true;
 
-    await _applySubtitleSelection(target);
+    final generation = await _applySubtitleSelection(target);
+
+    // A revision landed mid-apply and bumped the generation, so
+    // `shouldApplySubtitleSelection` discarded the selection. Give the
+    // preference back its one shot and take it now, against the list that
+    // superseded it: waiting for another revision would lose the preference
+    // outright when this was the last one.
+    //
+    // Only when the target is not what is showing, which is what separates a
+    // discarded apply from a delivered one. A selection superseded after it
+    // reached the player -- the Off path is the one that can be -- has already
+    // been acted on, and re-sending it would double every such command. See
+    // `subtitle_preference_apply_test.dart`, whose two revision cases pin the
+    // two sides of that line.
+    if (generation != _subtitleSelectionGeneration &&
+        _selectedSubtitleTrack != target) {
+      if (_preferenceApplyRetries < _maxPreferenceApplyRetries) {
+        _preferenceApplyRetries++;
+        _preferenceAppliedForPlayback = false;
+        await _applySubtitlePreference();
+      } else {
+        debugPrint('[PlayerScreen] Gave up re-applying the subtitle '
+            'preference after $_preferenceApplyRetries retries');
+      }
+    }
   }
 
   /// Monitors a source and lets the policy decide when to replace it.
