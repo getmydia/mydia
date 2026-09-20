@@ -102,6 +102,12 @@ class _ProbedPlayer extends PlatformPlayer {
   /// an absence assertion about the write has to stand on.
   final selectedSubtitleTracks = <SubtitleTrack>[];
 
+  /// When set, [setSubtitleTrack] records its track and then waits for this,
+  /// so a test can hold a pick in flight at the player. That is the window a
+  /// supersession has to land in for a *queued* write to still be looking at
+  /// the superseded pick when its turn comes.
+  Completer<void>? holdSubtitleTrack;
+
   /// Whether the screen has opened a source on this player yet, so a test can
   /// wait for the load to reach the point its own detection pass follows.
   bool opened = false;
@@ -125,6 +131,7 @@ class _ProbedPlayer extends PlatformPlayer {
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {
     selectedSubtitleTracks.add(track);
+    await holdSubtitleTrack?.future;
   }
 
   @override
@@ -517,5 +524,116 @@ void main() {
     expect(_writes(link).map((w) => w.variables['mode']).toList(),
         ['TRACK', 'OFF'],
         reason: 'the queue preserves the order the viewer picked in');
+  });
+
+  testWidgets(
+      'a pick still waiting in the queue is not written against the file the '
+      'viewer moved to', (tester) async {
+    // The first write is held at the transport, so the second pick's write is
+    // still waiting in the queue -- not yet looked at -- when the State is
+    // handed a different file. That is the navigation go_router performs
+    // without rebuilding the State; see `player_screen_file_change_test.dart`
+    // for the reuse itself.
+    final link = _link(mutationDelays: [const Duration(milliseconds: 300)]);
+    final player = _ProbedPlayer();
+    final container = await _mount(tester, link, player);
+
+    // First pick: applied, and its write is now held by the transport.
+    _pickRemotely(container, 'mk_${_mpvSubtitleTrack.id}');
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    await tester.pump();
+
+    // Second pick: applied, and its write is chained behind the held one.
+    _pickRemotely(container, _serverTrackId);
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.length >= 2);
+    await tester.pump();
+    expect(_writes(link), isEmpty,
+        reason: 'the held write is what keeps the second one waiting, so this '
+            'is the queue state the test below depends on');
+
+    // The same State, a different file.
+    await pumpPlayerScreen(
+      tester,
+      container,
+      fileId: 'file-2',
+      createPlayer: () => Player(platformPlayer: player),
+    );
+
+    // Past the hold and past the second write's own turn: whatever was queued
+    // has been sent, or deliberately not.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(
+      _writes(link).map((w) => w.variables['fileId']).toSet(),
+      {'file-1'},
+      reason: 'a pick made on one file is not a preference for another: the '
+          'queued write names the file it was made on, or it is not sent at '
+          'all',
+    );
+  });
+
+  testWidgets('a pick superseded while it waited in the queue is not written',
+      (tester) async {
+    final link = _link(mutationDelays: [const Duration(milliseconds: 300)]);
+    final player = _ProbedPlayer();
+    final container = await _mount(tester, link, player);
+
+    // First pick: applied, and its write is held at the transport, so the
+    // queue tail below stays unresolved.
+    player.holdSubtitleTrack = Completer<void>();
+    _pickRemotely(container, 'mk_${_mpvSubtitleTrack.id}');
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    player.holdSubtitleTrack!.complete();
+    player.holdSubtitleTrack = null;
+    await tester.pump();
+
+    // Second pick: applied, and its write is queued behind the held first one.
+    player.holdSubtitleTrack = Completer<void>();
+    _pickRemotely(container, _serverTrackId);
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.length >= 2);
+    player.holdSubtitleTrack!.complete();
+    player.holdSubtitleTrack = null;
+    await tester.pump();
+
+    // Third pick, held while it reaches the player: it supersedes the second
+    // pick's generation at once, while the second pick's write is still
+    // waiting its turn behind the held first one. The hold stays open across
+    // that turn, so the superseded pick is still what everything on the player
+    // reads as showing -- which is exactly what a queued write judged by live
+    // state alone would trust.
+    player.holdSubtitleTrack = Completer<void>();
+    _pickRemotely(container, null);
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.length >= 3);
+
+    // The held first write answers, which is when the second write's turn
+    // comes.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(player.selectedSubtitleTracks, hasLength(3),
+        reason: 'the Off is still held at the player, which is what leaves the '
+            'superseded pick looking current');
+
+    // Released only now: the Off commits from here, and its own write is
+    // queued behind the one that was just turned away.
+    player.holdSubtitleTrack!.complete();
+    player.holdSubtitleTrack = null;
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(
+      _writes(link).map((w) => w.variables['mode']).toList(),
+      ['TRACK', 'OFF'],
+      reason: 'only the pick that is still the viewer\'s choice is stored: the '
+          'superseded second pick names a track nothing is showing',
+    );
+    expect(
+      _writes(link).map((w) => w.variables['language']).toList(),
+      ['jpn', null],
+      reason: 'the superseded pick is the one omitted, not the first: the '
+          'queue still keeps the order the two surviving picks were made in',
+    );
   });
 }

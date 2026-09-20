@@ -31,6 +31,7 @@ import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
 import 'package:player/graphql/queries/subtitle_content.graphql.dart';
 import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
+import 'package:player/presentation/screens/player/player_screen.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
@@ -263,6 +264,20 @@ Future<void> _pump(
   if (settled != null) await pumpUntil(tester, settled);
 }
 
+/// How many times the mounted screen has retaken its one-shot preference
+/// apply after a revision superseded it.
+///
+/// An `@visibleForTesting` getter on `_PlayerScreenState` is the only way to
+/// observe this across libraries: a bare `_field` dynamic access cannot reach
+/// library-private members in Dart. It is what separates an apply that
+/// delivered from one that had to be sent again, which the transport alone
+/// cannot show -- a retried apply of an already-fetched track is a cache hit
+/// and not a second `SubtitleContent` request.
+int _applyRetries(WidgetTester tester) {
+  final state = tester.state(find.byType(PlayerScreen)) as dynamic;
+  return state.preferenceApplyRetriesForTesting as int;
+}
+
 void main() {
   testWidgets('a remembered track is fetched without the viewer picking',
       (tester) async {
@@ -476,5 +491,85 @@ void main() {
           'while it is still in flight: the flag is set before that await '
           'precisely so this second apply never starts',
     );
+  });
+
+  testWidgets('revisions landing during an apply do not spend the retry budget',
+      (tester) async {
+    // Every revision below changes the derived track list, so every one of
+    // them used to reach `_syncSelectedSubtitleTrack` and bump the generation
+    // the held apply was running under. That apply is discarded on the way
+    // back and the preference has to retake its one-shot, which it can only do
+    // `_maxPreferenceApplyRetries` times -- against a list mpv keeps revising
+    // for as long as a slow fetch (embedded extraction takes seconds) is open.
+    final link = _link(
+      preferredSubtitle:
+          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+    );
+    final hold = Completer<void>();
+    link.holdSubtitleContent = hold;
+    final player = _ProbedPlayer();
+
+    await _pump(tester, link, player, settled: () => link.subtitleContentHeld);
+
+    for (var revision = 0; revision < 4; revision++) {
+      player.publishSubtitleTracks([
+        _mpvSubtitleTrack,
+        SubtitleTrack('${revision + 2}', 'Japanese (Signs $revision)', 'jpn'),
+      ]);
+      await tester.pump();
+    }
+
+    hold.complete();
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(_applyRetries(tester), 0,
+        reason: 'a revision is not a supersession: the apply it landed under '
+            'is still the live one, so there is nothing to retake');
+    expect(player.selectedSubtitleTracks.last.language, 'eng',
+        reason: 'and the preference is applied in place rather than retried '
+            'into position');
+  });
+
+  testWidgets(
+      'a selection a revision arrived alongside is reported as delivered, '
+      'not discarded', (tester) async {
+    // The distinction `_applySubtitlePreference`'s retry turns on: an apply
+    // that delivered and had the revision adopt it versus one the revision
+    // discarded. `_selectedSubtitleTrack` reads what the revision synced, not
+    // the target, so a revision landing while the selection is still reaching
+    // the player used to look like a discard -- and the retry sent the same
+    // selection to the player a second time.
+    final hold = Completer<void>();
+    final player = _ProbedPlayer()..holdSubtitleTrack = hold;
+    final link = _link(
+      preferredSubtitle:
+          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+    );
+
+    await _pump(
+      tester,
+      link,
+      player,
+      settled: () => player.selectedSubtitleTracks.isNotEmpty,
+    );
+
+    // The revision lands inside the apply's own await on the player.
+    player.publishSubtitleTracks(const [
+      _mpvSubtitleTrack,
+      SubtitleTrack('2', 'Japanese (Signs)', 'jpn'),
+    ]);
+    await tester.pump();
+    hold.complete();
+    player.holdSubtitleTrack = null;
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(_applyRetries(tester), 0,
+        reason: 'the apply the revision landed under is the one that list was '
+            'waiting for: nothing about it was discarded');
+    expect(player.selectedSubtitleTracks, hasLength(1),
+        reason: 'a revision that arrives as the selection is landing must not '
+            'make that selection be sent to the player twice');
   });
 }

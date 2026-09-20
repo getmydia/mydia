@@ -603,6 +603,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// twice.
   Future<void> _subtitlePreferenceWrite = Future<void>.value();
 
+  /// The identity of [screen]'s file: `'mediaType:mediaId:fileId'`.
+  ///
+  /// The route's three identity fields joined, because one file is what a
+  /// subtitle choice is made against and one file is what a preference write
+  /// names. [didUpdateWidget] compares one file's key against the next's to
+  /// tell whether this reused State has been handed a different file at all,
+  /// and a queued write carries the key it was made under so it can be
+  /// dropped once that key has moved on.
+  static String _mediaKeyOf(PlayerScreen screen) =>
+      '${screen.mediaType}:${screen.mediaId}:${screen.fileId}';
+
+  /// The key for the file now showing; see [_mediaKeyOf].
+  String get _mediaKey => _mediaKeyOf(widget);
+
   /// Whether [_applySubtitlePreference] has already run for the file now
   /// loaded. media_kit revises its track list several times per playback and
   /// every revision reaches [_applySubtitleTracks], so without this a
@@ -624,6 +638,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   @visibleForTesting
   bool get preferenceAppliedForTesting => _preferenceAppliedForPlayback;
+
+  /// Exposed so a widget test can tell a preference apply that delivered from
+  /// one the screen had to retake. See `subtitle_preference_apply_test.dart`.
+  @visibleForTesting
+  int get preferenceApplyRetriesForTesting => _preferenceApplyRetries;
 
   /// The viewer's choice while a source switch carries it to the new
   /// source, in the server's id space. See [SubtitleIntent].
@@ -1072,8 +1091,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final previous = '${oldWidget.mediaType}:${oldWidget.mediaId}:'
         '${oldWidget.fileId}';
-    final current = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
-    if (previous == current) return;
+    if (previous == _mediaKey) return;
 
     // The preference belongs to the show, not the file, but it is refetched
     // per file, so the previous file's answer must not apply to this one.
@@ -3159,17 +3177,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// is the same lie in the other direction. Streaming has no embedded
   /// tracks in the map at all, so it lands on null either way.
   ///
-  /// Bumps [_subtitleSelectionGeneration] so any selection still in flight
-  /// against the player being replaced backs off instead of applying its
-  /// result to the new one; [pendingSubtitleSelectionAfterFailure] leaves
-  /// the values set here alone when that superseded attempt unwinds.
+  /// Adopts what the player is showing, so that a revision that lands after a
+  /// viewer pick reports the pick rather than wiping it.
+  ///
+  /// Leaves [_subtitleSelectionGeneration] alone. That counter is bumped only
+  /// where a selection is genuinely superseded: [_applySubtitleSelection]
+  /// (every new attempt) and [_switchSource] (when it carries an intent). A
+  /// track-list revision is neither of those. media_kit revises its list
+  /// several times per playback, and a bump here used to discard whatever
+  /// selection happened to be in flight at that moment -- a tap whose fetch
+  /// was still resolving, or a preference apply, which could only answer by
+  /// spending one of its [_maxPreferenceApplyRetries]. The bump could not even
+  /// preempt anything on its own: this runs inside a `setState` body, so a
+  /// continuation it "cancelled" only observes the bumped value after that
+  /// callback has returned anyway. Leaving the generation alone is also what
+  /// makes an apply a revision merely re-adopted distinguishable from one that
+  /// was genuinely discarded, which [_applySubtitlePreference]'s retry has to
+  /// tell apart.
   ///
   /// Stands down while a source switch is in flight or its restore is still
   /// pending. media_kit's `open()` resets its record of the selection to
   /// `auto`, so a sync then would wipe the choice [_switchSource] is
-  /// carrying, and its generation bump would cancel a restore still
-  /// fetching a subtitle body. [_restoreSubtitleIntent] sets both fields
-  /// itself once the choice is back on screen.
+  /// carrying, and it would overwrite a restore still fetching a subtitle
+  /// body. [_restoreSubtitleIntent] sets both fields itself once the choice is
+  /// back on screen.
   void _syncSelectedSubtitleTrack() {
     final player = _player;
     if (player == null) return;
@@ -3197,9 +3228,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _selectedSubtitleTrack = applied;
     // Adopting what mpv is already doing is not an attempt, so this reads as
-    // idle when nothing is applied and the viewer has not chosen.
+    // idle when nothing is applied and the viewer has not chosen. The
+    // generation is deliberately not touched; see the dartdoc above.
     _pendingSubtitleSelection = _appliedSubtitleTarget;
-    _subtitleSelectionGeneration++;
   }
 
   /// Adopt a track list media_kit published, whether sampled directly after
@@ -3241,13 +3272,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// and subtitle halves of [_onTracksChanged] share a single rebuild.
   ///
   /// Returns early from the *rebuild* when the derived list is unchanged,
-  /// which is load-bearing rather than an optimisation:
-  /// [_syncSelectedSubtitleTrack] bumps [_subtitleSelectionGeneration], and a
-  /// bump makes [shouldApplySubtitleSelection] discard whatever selection the
-  /// viewer has in flight. media_kit revises its track list more than once per
-  /// playback, so an unguarded rebuild would swallow a tap every time it did.
-  /// [_applySubtitlePreference] is deliberately left outside that guard; see
-  /// its call site below.
+  /// which is load-bearing rather than an optimisation: the rebuild rewrites
+  /// [_selectedSubtitleTrack] through [_syncSelectedSubtitleTrack], and
+  /// replaces the `mk_` half of [_mediaKitSubtitleTrackMap]. media_kit revises
+  /// its track list more than once per playback and most of those revisions
+  /// change nothing, so an unguarded rebuild would re-derive the selection
+  /// against an unchanged list and drop the cached bodies of every track the
+  /// viewer had already fetched. [_applySubtitlePreference] is deliberately
+  /// left outside that guard; see its call site below.
   ///
   /// The comparison is by id, since `SubtitleTrack.operator ==` is
   /// id-based. That is the right granularity: the button's gate and every
@@ -4074,10 +4106,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _subtitleChosenThisPlayback = true;
     _subtitleIntentAcrossSwitch = null;
-    await _applySubtitleSelection(selected);
+    final generation = await _applySubtitleSelection(selected);
     // After the apply, not before: a pick that fails to load should not be
-    // remembered as the show's preference.
-    unawaited(_rememberSubtitlePreference(selected));
+    // remembered as the show's preference. The generation the apply ran
+    // under goes with it: a pick a later one superseded is not a choice
+    // worth storing, and its write is dropped rather than sent.
+    unawaited(_rememberSubtitlePreference(selected, generation: generation));
   }
 
   /// Applies [selected] (null for "Off") to the player, and returns the
@@ -4765,14 +4799,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   ///
   /// Two picks in quick succession are queued rather than raced: see
   /// [_subtitlePreferenceWrite].
+  ///
+  /// [generation] is the selection generation the pick ran under, which the
+  /// call sites pass straight back from [_applySubtitleSelection]. Omitted,
+  /// whatever generation is live now is used, which is only correct because
+  /// the call sites enqueue this immediately after their apply returned.
+  /// Either way the write is bound to it: see [_writeSubtitlePreference] for
+  /// why the queue cannot trust the state it reads once its turn comes.
   Future<void> _rememberSubtitlePreference(
-      app_models.SubtitleTrack? track) async {
+    app_models.SubtitleTrack? track, {
+    int? generation,
+  }) async {
+    final queued = (
+      track: track,
+      // Captured here, not read in the body: the queue can outlive both the
+      // file this pick was made on and the attempt that made it.
+      mediaKey: _mediaKey,
+      fileId: widget.fileId,
+      generation: generation ?? _subtitleSelectionGeneration,
+    );
     // Appended rather than started, so two picks land in the order they were
     // made. `catchError` keeps a failed write from poisoning the tail: the
     // body already swallows its own errors, and a queue that stops on the
     // first exception would silently drop every later pick.
     _subtitlePreferenceWrite = _subtitlePreferenceWrite
-        .then((_) => _writeSubtitlePreference(track))
+        .then((_) => _writeSubtitlePreference(queued))
         .catchError((Object e) {
       debugPrint('[PlayerScreen] Could not remember subtitle preference: $e');
     });
@@ -4782,7 +4833,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The queued body of [_rememberSubtitlePreference], which is the only
   /// caller: reaching this any other way would take the write back out of the
   /// order that method exists to keep.
-  Future<void> _writeSubtitlePreference(app_models.SubtitleTrack? track) async {
+  ///
+  /// [queued] is the whole of what this sends. A queued write belongs to the
+  /// file and the selection generation that made it, and it is dropped when
+  /// either has moved on rather than rebuilt from the state now showing: the
+  /// queue can outlive both. Navigating from one episode to the next reuses
+  /// this State (see [didUpdateWidget]), so a pick still waiting here when the
+  /// file changes would otherwise name the *new* file with the old file's
+  /// track, and a pick a later one superseded would store a choice the viewer
+  /// has already moved past. Both are invisible to a call site's own "after
+  /// the apply" ordering, which is why the check is here and not there.
+  ///
+  /// Resolving the track against the server happens after those checks, not
+  /// before: [_serverSideSubtitleTrack] reads the live player and the live
+  /// server track list, so running it for a pick that has already been
+  /// dropped would translate one file's track against another file's list.
+  Future<void> _writeSubtitlePreference(
+      _QueuedSubtitlePreference queued) async {
+    final track = queued.track;
+
     // The pick has to be the one actually showing. [_applySubtitleSelection]
     // returns normally when a body never loaded, and when a later pick
     // superseded this one, so a call site's "after the apply" ordering is only
@@ -4793,7 +4862,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // one.
     if (_selectedSubtitleTrack != track) return;
 
-    if (widget.fileId == 'offline') return;
+    // The rest of the identity, and only meaningful once the pick above is
+    // still what is showing: a queued write that lost its file or its
+    // generation is not a choice this screen can still speak for.
+    if (queued.mediaKey != _mediaKey) return;
+    if (queued.generation != _subtitleSelectionGeneration) return;
+
+    if (queued.fileId == 'offline') return;
 
     final graphqlClient = _graphqlClient;
     if (graphqlClient == null) return;
@@ -4803,8 +4878,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Re-checked after the await, not only before it. By now a later pick may
     // have won, and its own queued write is behind this one: sending this
-    // would store a selection that is no longer showing.
+    // would store a selection that is no longer showing. The file and the
+    // generation are re-checked with it, for the same reason: the await above
+    // is long enough for the viewer to have moved on to another episode.
     if (_selectedSubtitleTrack != track) return;
+    if (queued.mediaKey != _mediaKey) return;
+    if (queued.generation != _subtitleSelectionGeneration) return;
 
     // A track with no usable language tag would pin the show to a preference
     // that can never match anything on the next file, exactly as an 'und'
@@ -4818,7 +4897,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         MutationOptions(
           document: documentNodeMutationSetSubtitlePreference,
           variables: Variables$Mutation$SetSubtitlePreference(
-            fileId: widget.fileId,
+            // The captured file, never a fresh read of `widget.fileId`: by
+            // now this screen can be showing a different one.
+            fileId: queued.fileId,
             mode: resolved == null
                 ? Enum$SubtitlePreferenceMode.OFF
                 : Enum$SubtitlePreferenceMode.TRACK,
@@ -5469,9 +5550,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // The same routine as the sheet, so a remote pick gets the same
         _subtitleChosenThisPlayback = true;
         _subtitleIntentAcrossSwitch = null;
-        await _applySubtitleSelection(track);
-        // Remotely or by hand, a pick is a pick: remembered for the show.
-        unawaited(_rememberSubtitlePreference(track));
+        final generation = await _applySubtitleSelection(track);
+        // Remotely or by hand, a pick is a pick: remembered for the show,
+        // bound to the generation it ran under exactly as the sheet's is.
+        unawaited(_rememberSubtitlePreference(track, generation: generation));
     }
   }
 
@@ -6500,6 +6582,22 @@ AudioTrackDetection detectAudioTracks(List<AudioTrack> mkTracks) {
 /// A picked subtitle track made loadable, or null with the line to show the
 /// viewer instead. See `_resolveMediaKitSubtitleTrack`.
 typedef _ResolvedSubtitle = ({SubtitleTrack? track, String failureMessage});
+
+/// A viewer pick waiting in [_PlayerScreenState._subtitlePreferenceWrite] to
+/// be written back, together with everything that identifies the choice it
+/// is.
+///
+/// The track alone is not enough, because the queue can outlive the attempt
+/// that filled it. [mediaKey] is the file the pick was made on, [fileId] is
+/// the file the mutation has to name, and [generation] is the selection
+/// generation that pick ran under -- see `_writeSubtitlePreference`, which
+/// sends this only while all three still describe what is on screen.
+typedef _QueuedSubtitlePreference = ({
+  app_models.SubtitleTrack? track,
+  String mediaKey,
+  String fileId,
+  int generation,
+});
 
 @visibleForTesting
 StreamSubscription<Tracks> watchTracks(
