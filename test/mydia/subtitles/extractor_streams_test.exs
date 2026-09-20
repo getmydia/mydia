@@ -87,4 +87,65 @@ defmodule Mydia.Subtitles.ExtractorStreamsTest do
     refute track.embedded
     assert track.deliverable
   end
+
+  describe "disposition flags on embedded tracks" do
+    test "carries forced and hearing_impaired from the stored stream capture" do
+      media_file = %Mydia.Library.MediaFile{
+        id: Ecto.UUID.generate(),
+        metadata: %Mydia.Library.Structs.FileMetadata{
+          streams: [
+            %Mydia.Library.Structs.StreamInfo{
+              index: 2,
+              type: :subtitle,
+              codec: "subrip",
+              language: "eng",
+              title: "English (Signs & Songs)",
+              is_forced: true,
+              is_hearing_impaired: false
+            },
+            %Mydia.Library.Structs.StreamInfo{
+              index: 3,
+              type: :subtitle,
+              codec: "subrip",
+              language: "eng",
+              title: "English",
+              is_forced: false,
+              is_hearing_impaired: true
+            }
+          ]
+        }
+      }
+
+      [signs, dialogue] = Mydia.Subtitles.Extractor.list_subtitle_tracks(media_file)
+
+      assert signs.forced == true
+      assert signs.hearing_impaired == false
+      assert dialogue.forced == false
+      assert dialogue.hearing_impaired == true
+    end
+
+    test "defaults both flags to false when the capture leaves them nil" do
+      media_file = %Mydia.Library.MediaFile{
+        id: Ecto.UUID.generate(),
+        metadata: %Mydia.Library.Structs.FileMetadata{
+          streams: [
+            %Mydia.Library.Structs.StreamInfo{
+              index: 0,
+              type: :subtitle,
+              codec: "subrip",
+              language: "jpn",
+              title: nil,
+              is_forced: nil,
+              is_hearing_impaired: nil
+            }
+          ]
+        }
+      }
+
+      [track] = Mydia.Subtitles.Extractor.list_subtitle_tracks(media_file)
+
+      assert track.forced == false
+      assert track.hearing_impaired == false
+    end
+  end
 end

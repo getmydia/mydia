@@ -84,6 +84,8 @@ pub struct SubtitleTrack {
     pub title: String,
     pub format: String,
     pub embedded: bool,
+    pub forced: bool,
+    pub hearing_impaired: bool,
     /// The file this track belongs to. Not part of the contract; the URL
     /// resolver needs it. The Elixir resolver does the same thing by stuffing
     /// `_media_file_id` onto the track map (subtitle_resolver.ex:31).

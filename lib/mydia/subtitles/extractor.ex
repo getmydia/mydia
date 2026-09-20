@@ -85,7 +85,12 @@ defmodule Mydia.Subtitles.Extractor do
       format: format,
       embedded: true,
       origin: :embedded,
-      deliverable: not Format.image_format?(format)
+      deliverable: not Format.image_format?(format),
+      # ffprobe reports an absent disposition as nil rather than false, and a
+      # nil would reach the player as "unknown" where it means "not forced".
+      # Normalised here so every consumer sees a plain boolean.
+      forced: stream.is_forced == true,
+      hearing_impaired: stream.is_hearing_impaired == true
     }
   end
 
@@ -235,7 +240,9 @@ defmodule Mydia.Subtitles.Extractor do
         format: subtitle.format,
         embedded: false,
         origin: origin_atom(subtitle.origin),
-        deliverable: true
+        deliverable: true,
+        forced: subtitle.forced == true,
+        hearing_impaired: subtitle.hearing_impaired == true
       }
     end)
   end

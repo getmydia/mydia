@@ -605,6 +605,18 @@ defmodule MydiaWeb.Schema.CommonTypes do
       resolve(fn track, _args, _info -> {:ok, Map.get(track, :deliverable, true)} end)
     end
 
+    @desc "Whether this track subtitles only foreign dialogue and signs, rather than everything"
+    field :forced, non_null(:boolean) do
+      resolve(fn track, _args, _info -> {:ok, Map.get(track, :forced, false) == true} end)
+    end
+
+    @desc "Whether this track includes sound descriptions for deaf and hard-of-hearing viewers (SDH)"
+    field :hearing_impaired, non_null(:boolean) do
+      resolve(fn track, _args, _info ->
+        {:ok, Map.get(track, :hearing_impaired, false) == true}
+      end)
+    end
+
     @desc "Subtitle body in the requested format. Null when the track is not deliverable"
     field :content, :string do
       arg(:format, :subtitle_format, default_value: :vtt)

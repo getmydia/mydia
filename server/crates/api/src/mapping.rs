@@ -116,6 +116,8 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
                         title: track.title,
                         format: track.format,
                         embedded: track.embedded,
+                        forced: false,
+                        hearing_impaired: false,
                         media_file_id: row.id.clone(),
                     })
                 })
@@ -133,6 +135,8 @@ pub fn media_file_from(row: &MediaFileRow, external: &[ExternalSubtitleRow]) -> 
                     title: external_title(&sub.language),
                     format: sub.format.clone(),
                     embedded: false,
+                    forced: false,
+                    hearing_impaired: false,
                     media_file_id: row.id.clone(),
                 })
             })
