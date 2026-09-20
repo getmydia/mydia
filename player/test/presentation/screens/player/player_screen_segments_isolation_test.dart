@@ -50,6 +50,9 @@ StubLink _linkAnsweringSegmentsWith(Object segmentsOutcome) {
     if (_isQuery(request, 'SubtitleTrackSettings')) {
       return subtitleTrackSettingsResponse();
     }
+    if (_isQuery(request, 'MovieSubtitlePreference')) {
+      return subtitlePreferenceResponse();
+    }
     return streamingCandidatesResponse(duration: 5400, directPlay: true);
   });
 }

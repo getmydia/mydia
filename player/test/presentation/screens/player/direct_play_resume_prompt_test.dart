@@ -41,6 +41,7 @@ void main() {
       movieDetailResponse(positionSeconds: 2700),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 
@@ -82,6 +83,7 @@ void main() {
       movieDetailResponse(positionSeconds: 12),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400, directPlay: true),
     ]);
 

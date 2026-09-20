@@ -19,6 +19,7 @@ import 'package:player/graphql/queries/media_segments.graphql.dart';
 import 'package:player/graphql/queries/movie_detail.graphql.dart';
 import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
 import 'package:player/graphql/queries/subtitle_content.graphql.dart';
+import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/subtitle_preference.dart';
@@ -113,22 +114,23 @@ StubLink _link() {
     }
     if (_carries(request, documentNodeQueryMovieDetail)) {
       return movieDetailResponse(files: [
-        mediaFileWithSubtitle(
-          fileId: 'file-a',
-          preferredSubtitle: preferredSubtitleObject(
+        mediaFileWithSubtitle(fileId: 'file-a'),
+        mediaFileWithSubtitle(fileId: 'file-b'),
+      ]);
+    }
+    if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
+      return subtitlePreferenceResponse(
+        root: 'movie',
+        id: 'movie-1',
+        preferences: {
+          'file-a': preferredSubtitleObject(
             mode: 'TRACK',
             language: 'eng',
             trackTitle: _trackTitle,
           ),
-        ),
-        mediaFileWithSubtitle(
-          fileId: 'file-b',
-          preferredSubtitle: preferredSubtitleObject(
-            mode: 'TRACK',
-            language: 'jpn',
-          ),
-        ),
-      ]);
+          'file-b': preferredSubtitleObject(mode: 'TRACK', language: 'jpn'),
+        },
+      );
     }
     if (_carries(request, documentNodeQueryMovieSegments)) {
       return movieSegmentsResponse();

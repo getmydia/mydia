@@ -184,3 +184,32 @@ bool shouldApplySubtitlePreference({
   if (alreadyApplied || !hasTracks) return false;
   return true;
 }
+
+/// The `preferredSubtitle` for [fileId] in either root's generated shape.
+///
+/// The two queries differ only in their root field, and neither generated
+/// type shares a supertype with the other, so this reads the decoded JSON map
+/// rather than the generated classes. That keeps one function instead of two
+/// and keeps this file free of generated imports.
+///
+/// Returns null for a missing root, a missing file, or a file with no
+/// preference, which are the same answer to the caller: no opinion.
+Map<String, dynamic>? preferredSubtitleJsonForFile(
+  Map<String, dynamic> data, {
+  required String root,
+  required String fileId,
+}) {
+  final rootValue = data[root];
+  if (rootValue is! Map<String, dynamic>) return null;
+
+  final files = rootValue['files'];
+  if (files is! List) return null;
+
+  for (final file in files) {
+    if (file is! Map<String, dynamic>) continue;
+    if (file['id'] != fileId) continue;
+    final preferred = file['preferredSubtitle'];
+    return preferred is Map<String, dynamic> ? preferred : null;
+  }
+  return null;
+}

@@ -29,6 +29,7 @@ import 'package:player/graphql/queries/media_segments.graphql.dart';
 import 'package:player/graphql/queries/movie_detail.graphql.dart';
 import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
 import 'package:player/graphql/queries/subtitle_content.graphql.dart';
+import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
@@ -179,7 +180,8 @@ class _GateableStubLink extends StubLink {
 }
 
 /// The scripted responses a direct-play movie load consumes, with
-/// [preferredSubtitle] hung off its one media file.
+/// [preferredSubtitle] answered by the standalone preference query rather than
+/// by the detail response.
 _GateableStubLink _link({Map<String, dynamic>? preferredSubtitle}) {
   return _GateableStubLink((request, index) {
     if (_carries(request, documentNodeQuerySubtitleContent)) {
@@ -189,9 +191,14 @@ _GateableStubLink _link({Map<String, dynamic>? preferredSubtitle}) {
       };
     }
     if (_carries(request, documentNodeQueryMovieDetail)) {
-      return movieDetailResponse(files: [
-        mediaFileWithSubtitle(preferredSubtitle: preferredSubtitle),
-      ]);
+      return movieDetailResponse(files: [mediaFileWithSubtitle()]);
+    }
+    if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
+      return subtitlePreferenceResponse(
+        root: 'movie',
+        id: 'movie-1',
+        preferences: {'file-1': preferredSubtitle},
+      );
     }
     if (_carries(request, documentNodeQueryMovieSegments)) {
       return movieSegmentsResponse();

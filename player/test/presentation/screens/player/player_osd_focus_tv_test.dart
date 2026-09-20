@@ -115,7 +115,8 @@ Future<void> _mountPlayingScreen(WidgetTester tester) async {
       if (index == 0) return movieDetailResponse(positionSeconds: 0);
       if (index == 1) return movieSegmentsResponse();
       if (index == 2) return subtitleTrackSettingsResponse();
-      if (index == 3) {
+      if (index == 3) return subtitlePreferenceResponse();
+      if (index == 4) {
         return streamingCandidatesResponse(directPlay: true, duration: 5400);
       }
       final variables = request.variables;

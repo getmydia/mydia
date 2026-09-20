@@ -27,6 +27,12 @@
 /// - 0.9.0: initial baseline. The value is a no-op at ship time: only builds
 ///   carrying this feature ever send or answer the compatibility query, so
 ///   both floors are unreachable regardless of which version they name.
+/// - 0.16.0: recommended only. `preferredSubtitle` arrived in this release, so
+///   an older server cannot remember a viewer's per-show subtitle choice.
+///   Everything else works, which is what makes this the recommended floor
+///   rather than the required one. `VersionComparator.compareCore` ignores a
+///   prerelease suffix, so a 0.15.0-beta build reads as exactly 0.15.0; 0.16.0
+///   is the first core version that certainly carries the field.
 class Compatibility {
   const Compatibility._();
 
@@ -34,5 +40,5 @@ class Compatibility {
   static const minServerVersion = '0.9.0';
 
   /// The oldest server version this player would rather talk to.
-  static const recommendedServerVersion = '0.9.0';
+  static const recommendedServerVersion = '0.16.0';
 }

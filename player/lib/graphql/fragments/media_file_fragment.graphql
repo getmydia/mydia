@@ -9,6 +9,7 @@ fragment MediaFileFragment on MediaFile {
   directPlaySupported
   streamUrl
   directPlayUrl
+  # preferredSubtitle is NOT here on purpose. See subtitle_preference.graphql.
   subtitles {
     trackId
     language
@@ -19,12 +20,5 @@ fragment MediaFileFragment on MediaFile {
     forced
     hearingImpaired
     url(format: VTT)
-  }
-  preferredSubtitle {
-    mode
-    language
-    forced
-    hearingImpaired
-    trackTitle
   }
 }

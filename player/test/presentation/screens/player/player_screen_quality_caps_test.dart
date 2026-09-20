@@ -68,6 +68,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400, height: 2160),
       startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
       endStreamingSessionResponse(),
@@ -99,6 +100,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       // A 720p source: the 1080p rung would upscale, so it is not on this
       // file's ladder at all.
       streamingCandidatesResponse(duration: 5400, height: 720),
@@ -132,6 +134,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       // Direct play is on offer and would normally win on native, handing the
       // file over untouched — with no encoder to apply the cap to.
       streamingCandidatesResponse(
@@ -164,6 +167,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400, height: 2160),
       // Absinthe's verbatim text for an argument the schema does not declare.
       graphqlErrorResponse(
@@ -233,6 +237,9 @@ void main() {
       if (isOperation(request, 'SubtitleTrackSettings')) {
         return subtitleTrackSettingsResponse();
       }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
       if (isOperation(request, 'StreamingCandidates')) {
         return streamingCandidatesResponse(duration: 5400, height: 2160);
       }
@@ -283,6 +290,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400, height: 2160),
       startStreamingSessionResponse(),
       endStreamingSessionResponse(),
@@ -316,6 +324,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(duration: 5400, height: 2160),
       graphqlErrorResponse('Failed to start streaming session'),
       endStreamingSessionResponse(),
@@ -350,6 +359,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(
           duration: 5400, height: 1080, directPlay: true),
       startStreamingSessionResponse(),
@@ -404,6 +414,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       // 20000000 bps = 20000 kbps. 1080p needs 8000 * 1.3 = 10400 > 6000;
       // 720p needs 4000 * 1.3 = 5200 <= 6000.
       streamingCandidatesResponse(
@@ -448,6 +459,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       streamingCandidatesResponse(
           duration: 5400, height: 1080, directPlay: true),
       endStreamingSessionResponse(),
@@ -491,6 +503,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       // 11872000 bps = 11872 kbps, and 11872 * 1.3 = 15434 > 10685, so Auto
       // would not direct play this file.
       streamingCandidatesResponse(
@@ -543,6 +556,7 @@ void main() {
       movieDetailResponse(),
       movieSegmentsResponse(),
       subtitleTrackSettingsResponse(),
+      subtitlePreferenceResponse(),
       // 11700000 bps = 11700 kbps; 11700 * 1.3 = 15210 > 8000, so a stall
       // with this ceiling on the http path would stop Auto direct playing.
       streamingCandidatesResponse(

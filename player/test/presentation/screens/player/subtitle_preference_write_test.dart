@@ -47,6 +47,7 @@ import 'package:player/graphql/queries/media_segments.graphql.dart';
 import 'package:player/graphql/queries/movie_detail.graphql.dart';
 import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
 import 'package:player/graphql/queries/subtitle_content.graphql.dart';
+import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
@@ -200,6 +201,9 @@ StubLink _link({
     }
     if (_carries(request, documentNodeQuerySubtitleTrackSettings)) {
       return subtitleTrackSettingsResponse();
+    }
+    if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
+      return subtitlePreferenceResponse();
     }
     if (_carries(request, documentNodeQueryStreamingCandidates)) {
       return streamingCandidatesResponse(duration: 5400, directPlay: true);

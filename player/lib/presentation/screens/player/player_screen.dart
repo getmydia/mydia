@@ -99,6 +99,7 @@ import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../graphql/queries/subtitle_search.graphql.dart';
 import '../../../graphql/queries/subtitle_track_settings.graphql.dart';
+import '../../../graphql/queries/subtitle_preference.graphql.dart';
 import '../../../graphql/mutations/download_subtitle.graphql.dart';
 import '../../../graphql/mutations/set_subtitle_offset.graphql.dart';
 import '../../../core/p2p/media_proxy.dart';
@@ -2637,6 +2638,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // apart from MediaFileFragment for exactly the degrade-gracefully
     // property this relies on.
     await _loadSubtitleOffsets(client);
+
+    // And again for the per-show subtitle choice, which used to live in
+    // MediaFileFragment and took the resume position down with it on any
+    // server that did not know the field.
+    await _fetchSubtitlePreference(client);
   }
 
   /// Loads stored subtitle offsets for this media file.
@@ -2917,22 +2923,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           debugPrint('Extracted ${_serverSubtitleTracks.length} subtitle '
               'tracks from GraphQL');
         }
-        // Read after the refresh above, not before it: the refresh publishes
-        // the server's list immediately, and in streaming that is a complete
-        // list with no mpv half to wait for, while in direct play the file's
-        // own tracks are not there yet. Reading first would let this
-        // preference be consumed by a rebuild that has no player behind it
-        // yet (`_applySubtitleSelection` is a no-op without one) and the
-        // apply that matters -- the one after `open()` -- would find it
-        // already spent.
-        final preferred = file.preferredSubtitle;
-        _subtitlePreference = subtitlePreferenceFrom(
-          mode: preferred?.mode.name,
-          language: preferred?.language,
-          forced: preferred?.forced,
-          hearingImpaired: preferred?.hearingImpaired,
-          trackTitle: preferred?.trackTitle,
-        );
         break;
       }
     }
@@ -3022,6 +3012,88 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] ${_segments.length} skippable segment(s)');
     } catch (e) {
       debugPrint('[PlayerScreen] Error fetching segments: $e');
+    }
+  }
+
+  /// Load the viewer's per-show subtitle choice for the file now playing.
+  ///
+  /// Its own document rather than a field on `MediaFileFragment`, for the
+  /// reason `subtitle_preference.graphql` spells out: an unknown field fails
+  /// the whole document, and inside the fragment that cost the resume
+  /// position and the external subtitle list on every detail view against an
+  /// older server.
+  ///
+  /// Every failure lands on the same answer, no preference. A remembered
+  /// subtitle is additive and must never surface as a playback error.
+  ///
+  /// Applies the preference itself on success. The inline read this replaced
+  /// was deliberately sequenced after `_refreshSubtitleTracks`, so it could
+  /// not be consumed by a rebuild with no player behind it. Arriving later is
+  /// safe, but it opens the opposite gap: if this lands after the last
+  /// track-list revision, nothing else would trigger an apply.
+  /// [_applySubtitlePreference] is idempotent past its own one-shot, so this
+  /// costs nothing when a revision got there first.
+  Future<void> _fetchSubtitlePreference(GraphQLClient client) async {
+    final root = switch (widget.mediaType) {
+      'movie' => 'movie',
+      'episode' => 'episode',
+      _ => null,
+    };
+    if (root == null) return;
+
+    try {
+      final result = await client.query(
+        QueryOptions(
+          document: root == 'movie'
+              ? documentNodeQueryMovieSubtitlePreference
+              : documentNodeQueryEpisodeSubtitlePreference,
+          variables: root == 'movie'
+              ? Variables$Query$MovieSubtitlePreference(id: widget.mediaId)
+                  .toJson()
+              : Variables$Query$EpisodeSubtitlePreference(id: widget.mediaId)
+                  .toJson(),
+          // Same reason as `_loadSubtitleOffsets`: `client.query` defaults to
+          // `FetchPolicy.cacheFirst` over a persistent `HiveStore`, and a
+          // viewer who has played this file before would otherwise get the
+          // choice they had made last time rather than the current one.
+          fetchPolicy: FetchPolicy.networkOnly,
+        ),
+      );
+
+      if (result.hasException) {
+        debugPrint('[PlayerScreen] Subtitle preference unavailable: '
+            '${result.exception}');
+        return;
+      }
+
+      final data = result.data;
+      if (data == null) return;
+
+      // Matched on `widget.fileId`, never `playFileId`, for the same reason
+      // `_extractSubtitlesFromFiles` and `_fetchSegments` are: on the
+      // self-heal path the server re-ranked a different file, and looking up
+      // the id it just rejected finds nothing. The preference is silently
+      // dropped for that playback.
+      final preferred = preferredSubtitleJsonForFile(
+        data,
+        root: root,
+        fileId: widget.fileId,
+      );
+      if (!mounted) return;
+
+      _subtitlePreference = subtitlePreferenceFrom(
+        mode: preferred?['mode'] as String?,
+        language: preferred?['language'] as String?,
+        forced: preferred?['forced'] as bool?,
+        hearingImpaired: preferred?['hearingImpaired'] as bool?,
+        trackTitle: preferred?['trackTitle'] as String?,
+      );
+
+      // The track list may already be complete and settled, in which case no
+      // further revision is coming to trigger this.
+      await _applySubtitlePreference();
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error fetching subtitle preference: $e');
     }
   }
 
