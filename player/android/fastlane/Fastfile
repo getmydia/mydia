@@ -4,7 +4,7 @@ platform :android do
   desc "Build and upload to Play Store internal track"
   lane :internal do
     # The AAB should already be built by Flutter
-    aab_path = "../build/app/outputs/bundle/release/app-release.aab"
+    aab_path = File.expand_path("../../build/app/outputs/bundle/release/app-release.aab", __dir__)
 
     unless File.exist?(aab_path)
       UI.user_error!("AAB not found at #{aab_path}. Run 'flutter build appbundle --release' first.")

@@ -131,6 +131,13 @@ jobs:
       - name: Check AAB ABIs
         run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/bundle/release/app-release.aab
 
+      - name: "Upload artifact: APK"
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-android-apk
+          path: ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
       - name: Publish the dev build to R2
         if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
         env:
@@ -300,7 +307,7 @@ jobs:
           echo "Published ${NAME} (build ${VERSION_CODE})." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Ruby for Fastlane
-        if: ${{ inputs.upload_to_play_store && !inputs.dry_run }}
+        if: ${{ inputs.upload_to_play_store && !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
         env:
           PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
         uses: ruby/setup-ruby@v1
@@ -310,7 +317,7 @@ jobs:
           working-directory: ${{ env.PLAYER_PATH }}/android
 
       - name: Upload to Play Store
-        if: ${{ inputs.upload_to_play_store && !inputs.dry_run }}
+        if: ${{ inputs.upload_to_play_store && !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
         env:
           PLAY_STORE_CREDENTIALS: ${{ secrets.PLAY_STORE_CREDENTIALS }}
         working-directory: ${{ env.PLAYER_PATH }}/android
@@ -319,10 +326,3 @@ jobs:
           export GOOGLE_PLAY_JSON_KEY_PATH="$(pwd)/play-store-credentials.json"
           bundle exec fastlane ${{ inputs.play_store_track }}
           rm play-store-credentials.json
-
-      - name: "Upload artifact: APK"
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-android-apk
-          path: ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 30

@@ -442,7 +442,7 @@ jobs:
       sha: ${{ needs.prepare.outputs.sha }}
       version: ${{ needs.prepare.outputs.version }}
       version_code: ${{ needs.prepare.outputs.version_code }}
-      upload_to_play_store: true
+      upload_to_play_store: false
       play_store_track: "internal"
       dry_run: ${{ inputs.dry_run }}
     secrets:
