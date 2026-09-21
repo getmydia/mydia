@@ -251,11 +251,14 @@ Majors are ignored everywhere except actions, and every entry has a seven-day
 still open immediately, majors included. Take a major deliberately: bump it on
 a branch of your own.
 
-Some dependencies are ignored by name because their bumps need work nothing
+Some dependencies have their version updates ignored by name because their bumps need work nothing
 automates: `fine`, `lazy_html`, `wasmex` and `heroicons` (hand-pinned hashes
 in `nix/packages/flake-module.nix`), `tailwindcss` (pinned across npm, config
 and nix), and `flutter_rust_bridge` on both sides (needs a codegen run). The
-comments in `dependabot.yml` say what each one moves.
+comments in `dependabot.yml` say what each one moves. Their security updates
+still open; for `fine`, `wasmex`, `tailwindcss` and `flutter_rust_bridge` the
+freshness check then fails until the pin moves, so they wait for a person
+rather than merging.
 
 ### The fixup regenerates derived files
 

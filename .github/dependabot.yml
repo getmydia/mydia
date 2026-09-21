@@ -54,7 +54,8 @@ updates:
   # Each dependency ignored by name here moves a pin in
   # nix/packages/flake-module.nix that nothing regenerates, and CI / Nix does
   # not build on pull requests, so a bump would pass its PR and break master.
-  # Bump these by hand, together with the pin:
+  # Their version updates are ignored; bump them by hand, together with the pin.
+  # Security updates still open, and the freshness check holds most of them:
   #
   #   fine       fineVersion and its sha256; arrives through lazy_html
   #   lazy_html  the lexbor override copies into a directory named after the
@@ -69,9 +70,25 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
       - dependency-name: fine
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
       - dependency-name: lazy_html
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
       - dependency-name: wasmex
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
       - dependency-name: heroicons
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     cooldown:
       default-days: 7
 
@@ -86,6 +103,10 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
       - dependency-name: tailwindcss
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     cooldown:
       default-days: 7
 
@@ -128,7 +149,7 @@ updates:
   # flutter_rust_bridge is pinned on both the Dart and the Rust side and the
   # generated bindings carry its version; the app aborts at startup when they
   # disagree. A bump needs flutter_rust_bridge_codegen, which nothing here
-  # runs, so it is ignored on both sides and bumped by hand.
+  # runs, so its version updates are ignored on both sides and it is bumped by hand.
   - package-ecosystem: pub
     directory: /player
     multi-ecosystem-group: player
@@ -137,6 +158,10 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
       - dependency-name: flutter_rust_bridge
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     cooldown:
       default-days: 7
 
@@ -148,6 +173,10 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
       - dependency-name: flutter_rust_bridge
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     cooldown:
       default-days: 7
 
