@@ -172,6 +172,40 @@ void main() {
     );
   });
 
+  group('Flatpak with an unknown installed branch', () {
+    // currentTrack reads these as beta, which is fine for a label. A command
+    // built on that guess would skip the switch to beta, or uninstall a beta
+    // branch that may not exist.
+    for (final installed in <String?>['nightly', null]) {
+      for (final track in [UpdateTrack.beta, UpdateTrack.stable]) {
+        test(
+            'branch $installed, choosing ${track.wireName}, installs without '
+            'uninstalling', () async {
+          final backend = FlatpakUpdateBackend(
+            portal: _NoopPortal(),
+            releaseNotesUrl: 'https://example.invalid/releases',
+            branch: installed,
+          );
+          addTearDown(backend.dispose);
+
+          final outcome =
+              await backend.selectTrack(track) as TrackSwitchDeferred;
+          final commands = outcome.instructions
+              .split('\n')
+              .where((l) => l.startsWith('flatpak '))
+              .toList();
+
+          expect(commands, hasLength(2));
+          expect(commands.first, startsWith('flatpak remote-add'));
+          expect(
+            commands.last,
+            endsWith('dev.mydia.player//${track.wireName}'),
+          );
+        });
+      }
+    }
+  });
+
   test('Flatpak selecting the installed branch changes nothing', () async {
     final backend = FlatpakUpdateBackend(
       portal: _NoopPortal(),

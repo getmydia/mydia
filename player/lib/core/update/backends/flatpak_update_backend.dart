@@ -114,22 +114,35 @@ class FlatpakUpdateBackend implements UpdateBackend {
       );
     }
 
+    // Only a branch actually read from the install counts here. currentTrack
+    // reads an unknown or missing branch as beta, which is fine for a label
+    // but not for a command: it would skip a real switch to beta, or
+    // uninstall a beta branch that may not exist.
+    final installed = switch (_branch) {
+      'stable' => UpdateTrack.stable,
+      'beta' => UpdateTrack.beta,
+      _ => null,
+    };
     // Nothing to switch, and instructions here would tell the user to
     // uninstall a branch they do not have.
-    if (track == currentTrack) return const TrackSwitchApplied();
+    if (track == installed) return const TrackSwitchApplied();
 
-    final (remote, branch, installed) = track == UpdateTrack.beta
-        ? ('mydia-beta', 'beta', 'stable')
-        : ('mydia', 'stable', 'beta');
+    final (remote, branch) = track == UpdateTrack.beta
+        ? ('mydia-beta', 'beta')
+        : ('mydia', 'stable');
     // The remote may never have been added: a stable install knows nothing of
     // mydia-beta. Installing a branch makes it current, so the old one goes
     // last, and uninstalling it keeps the user's data in ~/.var/app.
+    final commands = [
+      'flatpak remote-add --if-not-exists --from $remote '
+          'https://flatpak.mydia.dev/$remote.flatpakrepo',
+      'flatpak install $remote dev.mydia.player//$branch',
+      if (installed != null)
+        'flatpak uninstall dev.mydia.player//${installed.wireName}',
+    ];
     return TrackSwitchDeferred(
       instructions: 'Flatpak branches are changed outside the app. Run:\n\n'
-          'flatpak remote-add --if-not-exists --from $remote '
-          'https://flatpak.mydia.dev/$remote.flatpakrepo\n'
-          'flatpak install $remote dev.mydia.player//$branch\n'
-          'flatpak uninstall dev.mydia.player//$installed',
+          '${commands.join('\n')}',
       url:
           'https://docs.mydia.dev/latest/using/how-to/install-player-linux/#beta',
     );
