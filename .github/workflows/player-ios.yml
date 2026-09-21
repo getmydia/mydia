@@ -215,7 +215,6 @@ jobs:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
           bundler-cache: true
           working-directory: ${{ env.PLAYER_PATH }}/ios
 

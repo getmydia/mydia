@@ -58,15 +58,16 @@ jobs:
             echo "No changes to player/${PLATFORM} fastlane files; nothing to load."
           fi
 
-      # Mirrors release.yml, which pins 3.2 with bundler-cache for both
-      # fastlane jobs. The lockfiles are resolved under 3.2 to match, because
-      # bundler discards a lockfile resolved under a newer Ruby and re-resolves
-      # on the runner.
+      # With no ruby-version input, setup-ruby reads player/<platform>/.ruby-version
+      # from working-directory, as the release lanes in player-android.yml and
+      # player-ios.yml do. Dependabot resolves Gemfile.lock on its own Ruby
+      # (at least 3.3: it picked excon 1.7.1, which requires that), so the Ruby
+      # here must not trail it, or a bump resolves for Dependabot and installs
+      # nowhere else.
       - name: Set up Ruby
         if: steps.changes.outputs.relevant == 'true'
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
           bundler-cache: true
           working-directory: player/${{ matrix.platform }}
 
