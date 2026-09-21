@@ -219,8 +219,9 @@ run unevaluated. Do not remove those guards.
 
 When the verdict is `BLOCKED`, the gate asks `dependabot-gate.sh reruns` for
 the Actions runs behind the failing contexts, reads each run's `run_attempt`,
-and re-runs the failed jobs of any run still on attempt 1. It logs `RETRY`
-instead of commenting, and the re-run's completion wakes the gate again. Only
+and re-runs the failed jobs of any run still on attempt 1. It logs `Retrying
+once before reporting PR #<n> as blocked.` instead of commenting, and the
+re-run's completion wakes the gate again. Only
 when every failing run is on attempt 2 or later, or the failure is not from
 Actions at all (CodeRabbit, CodeQL, osv-scanner), does the BLOCKED comment
 appear. With the App token it says the checks already failed twice; without it
@@ -259,7 +260,7 @@ comments in `dependabot.yml` say what each one moves.
 ### The fixup regenerates derived files
 
 `dependabot-fixup.yml` runs `scripts/regenerate-derived.sh` on every Dependabot
-pull request. The script rewrites `deps.nix` from `mix.lock` with `mix2nix`,
+pull request except github-actions bumps, which touch no manifest it regenerates from. The script rewrites `deps.nix` from `mix.lock` with `mix2nix`,
 refreshes every Cargo.lock listed in `scripts/lib/cargo-lock-dirs.sh`, and
 recomputes `npmDeps.hash` with `prefetch-npm-deps`, then runs
 `check-generated-freshness.sh`. Run it locally the same way.
