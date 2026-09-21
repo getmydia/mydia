@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://docs.mydia.dev/dev/using/how-to/sso-oidc/">
+        <link rel="canonical" href="https://docs.mydia.dev/dev/using/how-to/beta-builds/">
       
       
-        <link rel="prev" href="../manage-users/">
+        <link rel="prev" href="../remote-access/">
       
       
-        <link rel="next" href="../postgresql/">
+        <link rel="next" href="../../reference/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>SSO/OIDC Configuration - Mydia Documentation</title>
+        <title>Try beta builds - Mydia Documentation</title>
       
     
     
@@ -85,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#ssooidc-configuration" class="md-skip">
+        <a href="#try-beta-builds" class="md-skip">
           Skip to content
         </a>
       
@@ -123,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              SSO/OIDC Configuration
+              Try beta builds
             
           </span>
         </div>
@@ -1024,37 +1024,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SSO/OIDC Configuration
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../sso-oidc/" class="md-nav__link">
         
   
   
@@ -1070,292 +1043,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#supported-providers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Supported Providers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configuration
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Configuration">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Environment Variables
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#variable-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Variable Reference
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#provider-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Provider Setup
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Provider Setup">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#minimal-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Minimal Configuration
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#keycloak-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Keycloak Example
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#authelia-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Authelia Example
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#auth0-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Auth0 Example
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#google-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Google Example
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#user-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        User Management
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="User Management">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#first-user-promotion" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        First User Promotion
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#role-assignment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Role Assignment
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#combining-with-local-auth" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Combining with Local Auth
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#disabling-local-auth" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Disabling Local Auth
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#scopes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Scopes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#redirect-uri" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Redirect URI
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Troubleshooting
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Troubleshooting">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#login-fails" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Login Fails
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#user-not-created" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        User Not Created
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#session-issues" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Session Issues
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Testing
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1589,10 +1276,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../beta-builds/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Try beta builds
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1608,6 +1322,103 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#going-back-to-stable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Going back to stable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#android" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Android
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ios" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        iOS
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#macos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        macOS
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Windows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#linux" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linux
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#web" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Web
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -3163,10 +2974,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#supported-providers" class="md-nav__link">
+  <a href="#going-back-to-stable" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Supported Providers
+        Going back to stable
       
     </span>
   </a>
@@ -3174,182 +2985,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
+  <a href="#android" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Configuration">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Environment Variables
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#variable-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Variable Reference
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#provider-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Provider Setup
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Provider Setup">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#minimal-configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Minimal Configuration
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#keycloak-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Keycloak Example
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#authelia-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Authelia Example
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#auth0-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Auth0 Example
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#google-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Google Example
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#user-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        User Management
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="User Management">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#first-user-promotion" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        First User Promotion
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#role-assignment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Role Assignment
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#combining-with-local-auth" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Combining with Local Auth
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#disabling-local-auth" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Disabling Local Auth
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#scopes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Scopes
+        Android
       
     </span>
   </a>
@@ -3357,10 +2996,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#redirect-uri" class="md-nav__link">
+  <a href="#ios" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Redirect URI
+        iOS
       
     </span>
   </a>
@@ -3368,60 +3007,43 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
+  <a href="#macos" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Troubleshooting
+        macOS
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Troubleshooting">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#login-fails" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Login Fails
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#user-not-created" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        User Not Created
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#session-issues" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Session Issues
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
+  <a href="#windows" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Testing
+        Windows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#linux" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linux
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#web" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Web
       
     </span>
   </a>
@@ -3448,197 +3070,55 @@
   
 
 
-<h1 id="ssooidc-configuration">SSO/OIDC Configuration</h1>
-<p>Mydia supports OpenID Connect (OIDC) for single sign-on integration.</p>
-<h2 id="supported-providers">Supported Providers</h2>
-<p>Mydia works with any OIDC-compliant provider:</p>
-<ul>
-<li>Keycloak</li>
-<li>Authelia</li>
-<li>Auth0</li>
-<li>Okta</li>
-<li>Azure AD</li>
-<li>Google</li>
-<li>And more...</li>
-</ul>
-<h2 id="configuration">Configuration</h2>
-<h3 id="environment-variables">Environment Variables</h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">OIDC_ENABLED</span><span class="o">=</span><span class="nb">true</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://your-provider
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>mydia
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nv">OIDC_REDIRECT_URI</span><span class="o">=</span>http://localhost:4000/auth/oidc/callback
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nv">OIDC_SCOPES</span><span class="o">=</span>openid<span class="w"> </span>profile<span class="w"> </span>email
-</code></pre></div>
-<h3 id="variable-reference">Variable Reference</h3>
-<p>Every OIDC variable is listed in <a href="../../reference/environment-variables/#authentication">Environment variables</a>.</p>
-<h2 id="provider-setup">Provider Setup</h2>
-<h3 id="minimal-configuration">Minimal Configuration</h3>
-<p>Mydia uses standard OAuth2 authentication. Configure your provider with:</p>
-<ol>
-<li><strong>Client ID</strong> - Unique identifier for Mydia</li>
-<li><strong>Client Secret</strong> - Secret key for authentication</li>
-<li><strong>Redirect URI</strong> - <code>https://your-mydia-host/auth/oidc/callback</code></li>
-</ol>
-<p>No need to configure:</p>
-<ul>
-<li>Token endpoint auth methods</li>
-<li>Response modes</li>
-<li>JWT-based authentication</li>
-<li>PAR settings</li>
-</ul>
-<h3 id="keycloak-example">Keycloak Example</h3>
-<ol>
-<li>Create a new client in your realm</li>
-<li>Set client protocol to <code>openid-connect</code></li>
-<li>Set access type to <code>confidential</code></li>
-<li>Add redirect URI: <code>https://mydia.example.com/auth/oidc/callback</code></li>
-<li>Copy client ID and secret</li>
-</ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://keycloak.example.com/realms/myrealm
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>mydia
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
-</code></pre></div>
-<h3 id="authelia-example">Authelia Example</h3>
-<ol>
-<li>Add client configuration to Authelia:</li>
-</ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">identity_providers</span><span class="p">:</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">oidc</span><span class="p">:</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">clients</span><span class="p">:</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mydia</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">        </span><span class="nt">client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">your-client-secret</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">        </span><span class="nt">redirect_uris</span><span class="p">:</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://mydia.example.com/auth/oidc/callback</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">        </span><span class="nt">scopes</span><span class="p">:</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">openid</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">profile</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">email</span>
-</code></pre></div>
-<ol>
-<li>Configure Mydia:</li>
-</ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://authelia.example.com
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>mydia
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
-</code></pre></div>
-<h3 id="auth0-example">Auth0 Example</h3>
-<ol>
-<li>Create a new Regular Web Application</li>
-<li>Configure allowed callback URLs</li>
-<li>Copy domain, client ID, and secret</li>
-</ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://your-tenant.auth0.com
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>your-client-id
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
-</code></pre></div>
-<h3 id="google-example">Google Example</h3>
-<ol>
-<li>Create OAuth 2.0 credentials in Google Cloud Console</li>
-<li>Add authorized redirect URIs</li>
-<li>Copy client ID and secret</li>
-</ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">OIDC_ISSUER</span><span class="o">=</span>https://accounts.google.com
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nv">OIDC_CLIENT_ID</span><span class="o">=</span>your-client-id.apps.googleusercontent.com
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nv">OIDC_CLIENT_SECRET</span><span class="o">=</span>your-client-secret
-</code></pre></div>
-<h2 id="user-management">User Management</h2>
-<h3 id="first-user-promotion">First User Promotion</h3>
-<p>The first user to log in via OIDC is automatically promoted to admin role. Subsequent users are assigned guest role.</p>
-<h3 id="role-assignment">Role Assignment</h3>
-<p>Currently, role assignment is manual after first login:</p>
-<ol>
-<li>Admin logs in</li>
-<li>Navigates to Admin &gt; System &gt; Users</li>
-<li>Updates user role as needed</li>
-</ol>
-<h3 id="combining-with-local-auth">Combining with Local Auth</h3>
-<p>You can use both local and OIDC authentication:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">LOCAL_AUTH_ENABLED</span><span class="o">=</span><span class="nb">true</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nv">OIDC_ENABLED</span><span class="o">=</span><span class="nb">true</span>
-</code></pre></div>
-<p>Users see options for both on the login page.</p>
-<h3 id="disabling-local-auth">Disabling Local Auth</h3>
-<p>For OIDC-only authentication:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">LOCAL_AUTH_ENABLED</span><span class="o">=</span><span class="nb">false</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nv">OIDC_ENABLED</span><span class="o">=</span><span class="nb">true</span>
-</code></pre></div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>Ensure OIDC is working before disabling local auth to avoid lockout.</p>
-</div>
-<h2 id="scopes">Scopes</h2>
-<p>Default scopes:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nv">OIDC_SCOPES</span><span class="o">=</span>openid<span class="w"> </span>profile<span class="w"> </span>email
-</code></pre></div>
-<p>Required scopes:</p>
-<ul>
-<li><code>openid</code> - Required for OIDC</li>
-<li><code>profile</code> - User profile information</li>
-<li><code>email</code> - User email address</li>
-</ul>
-<h2 id="redirect-uri">Redirect URI</h2>
-<p>If you do not set one, Mydia derives the redirect URI from its own external URL,
-which a release build hardcodes to https on port 443:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>https://{PHX_HOST}/auth/oidc/callback
-</code></pre></div>
-<p><code>URL_SCHEME</code> does not enter into it. The variable exists and is validated, but
-nothing in a release reads it, so the scheme is always <code>https</code>.</p>
-<div class="admonition warning">
-<p class="admonition-title">Serving Mydia over plain http breaks OIDC login</p>
-<p>If your install is reachable at <code>http://mydia.example.com</code>, the auto-computed
-redirect URI is still <code>https://mydia.example.com/auth/oidc/callback</code>. Your
-provider will either reject it as an unregistered redirect URI or bounce the
-browser to an https address that nothing is listening on. Either way, login
-fails, and the error surfaces at the provider rather than in Mydia's logs,
-which makes it easy to misdiagnose.</p>
-<p>Fix it by setting the redirect URI explicitly to match how you actually serve
-Mydia:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nv">OIDC_REDIRECT_URI</span><span class="o">=</span>http://mydia.example.com/auth/oidc/callback
-</code></pre></div>
-<p>Register the same value with your identity provider. Putting Mydia behind a
-proxy that terminates TLS is the better answer where you have the choice.</p>
-</div>
-<p>Set it explicitly with:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nv">OIDC_REDIRECT_URI</span><span class="o">=</span>https://mydia.example.com/auth/oidc/callback
-</code></pre></div>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<h3 id="login-fails">Login Fails</h3>
-<ol>
-<li>Check discovery document URI is accessible</li>
-<li>Verify client ID and secret</li>
-<li>Check redirect URI matches provider configuration</li>
-<li>Review application logs for errors</li>
-</ol>
-<h3 id="user-not-created">User Not Created</h3>
-<ol>
-<li>Ensure required scopes are granted</li>
-<li>Check provider returns email claim</li>
-<li>Review application logs</li>
-</ol>
-<h3 id="session-issues">Session Issues</h3>
-<ol>
-<li>Check cookie settings</li>
-<li>Verify HTTPS configuration</li>
-<li>Check <code>PHX_HOST</code> matches your domain</li>
-</ol>
-<h2 id="testing">Testing</h2>
-<p>Verify the setup end to end before you rely on it:</p>
-<ol>
-<li>Start Mydia and check the logs. On boot it logs the issuer, client ID, and
-   redirect URI it will use, or <code>(auto-generated)</code> if you did not set one. Confirm
-   the redirect URI matches what you registered with your provider.</li>
-<li>Log out, then use the OIDC button on the login page. A successful round trip
-   lands you back on the dashboard with your provider account.</li>
-<li>Check <strong>Admin &gt; System &gt; Users</strong>. A first-time OIDC login creates the user. If no admin
-   account exists yet, that user is promoted to admin so an OIDC-only deployment
-   is not left with nobody who can administer it.</li>
-<li>Keep at least one working local admin account until you have confirmed OIDC
-   login works. <code>LOCAL_AUTH_ENABLED=false</code> with a broken OIDC setup locks you out
-   of the web interface entirely.</li>
-</ol>
-<p>If you do lock yourself out, <code>mydia-cli user</code> inside the container can create or
-reset a local account. See <a href="../manage-users/">User Management</a>.</p>
+<h1 id="try-beta-builds">Try beta builds</h1>
+<!-- Section ids are pinned: the download page (site/src/pages/download.astro)
+     links to each one by its card id. Rename a heading freely, but keep the id. -->
+
+<p>Beta builds are prereleases of Mydia Player, tagged <code>-beta.N</code> or <code>-rc.N</code>. They
+arrive a few weeks ahead of the stable release and get less testing, so expect
+the occasional rough edge. Every install starts on stable, and joining a beta
+is a choice you make on each device.</p>
+<p>If something breaks, <a href="https://github.com/getmydia/mydia/issues">open an issue</a>
+and include the version shown in Settings. A beta player can be newer than
+your Mydia server. When it needs a newer server than the one you run, the app
+tells you.</p>
+<h2 id="going-back-to-stable">Going back to stable</h2>
+<p>On Android, macOS, Windows and the Linux tarball, choose <strong>Stable</strong> in the same
+Release track setting you used to join. Nothing is downgraded: the beta you
+have stays installed until a stable release passes it. To leave the beta
+straight away, reinstall from the <a href="https://mydia.dev/download">download page</a>.
+iOS and the Flatpak work differently, and their sections below say how.</p>
+<h2 id="android">Android</h2>
+<p>Open <strong>Settings › Manage › Release track</strong> and choose <strong>Beta</strong>. Betas then
+arrive the same way stable updates do.</p>
+<p>This applies to the APK from the <a href="https://mydia.dev/download#android">download page</a>.
+A copy installed from Google Play has no Release track setting. The same list
+also offers <strong>Dev</strong>, built straight from development and rougher than beta.</p>
+<h2 id="ios">iOS</h2>
+<p>Betas and release candidates have their own TestFlight group. With the
+<a href="https://apps.apple.com/app/testflight/id899247664">TestFlight app</a> installed,
+join it here:</p>
+<p><a class="md-button" href="https://testflight.apple.com/join/XTvarNBK">Install pre-release builds</a></p>
+<p>Joining the pre-release group does not remove you from the stable one, so you
+end up a member of both. Leaving a group again is done from inside the
+TestFlight app, not from this link.</p>
+<h2 id="macos">macOS</h2>
+<p>Open <strong>Settings › Manage › Release track</strong> and choose <strong>Beta</strong>. The app offers
+betas alongside stable updates from then on.</p>
+<h2 id="windows">Windows</h2>
+<p>Open <strong>Settings › Manage › Release track</strong> and choose <strong>Beta</strong>.</p>
+<h2 id="linux">Linux</h2>
+<p>The Flatpak's beta lives on a separate remote, <code>mydia-beta</code>. Adding it,
+installing from it, and moving back to stable are covered in
+<a href="../install-player-linux/#beta">Install the player on Linux</a>.</p>
+<p>The tarball works like Windows: open <strong>Settings › Manage › Release track</strong> and
+choose <strong>Beta</strong>.</p>
+<h2 id="web">Web</h2>
+<p>The web player has no beta of its own. The copy at <code>/player</code> on your server is
+whatever version your Mydia server runs, so it becomes a beta when the server
+does. <a href="../update-mydia/#testing-pre-release-builds">Updating Mydia</a> covers the
+server's <code>:beta</code> image. The public web player at web.mydia.dev only ever runs
+stable.</p>
 
 
 
@@ -3676,7 +3156,7 @@ reset a local account. See <a href="../manage-users/">User Management</a>.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../manage-users/" class="md-footer__link md-footer__link--prev" aria-label="Previous: User Management">
+          <a href="../remote-access/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Remote Access">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3686,20 +3166,20 @@ reset a local account. See <a href="../manage-users/">User Management</a>.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                User Management
+                Remote Access
               </div>
             </div>
           </a>
         
         
           
-          <a href="../postgresql/" class="md-footer__link md-footer__link--next" aria-label="Next: PostgreSQL Support">
+          <a href="../../reference/" class="md-footer__link md-footer__link--next" aria-label="Next: Reference">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                PostgreSQL Support
+                Reference
               </div>
             </div>
             <div class="md-footer__button md-icon">
