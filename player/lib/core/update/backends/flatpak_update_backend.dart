@@ -114,12 +114,24 @@ class FlatpakUpdateBackend implements UpdateBackend {
       );
     }
 
-    final remote = track == UpdateTrack.beta ? 'mydia-beta' : 'mydia';
-    final branch = track == UpdateTrack.beta ? 'beta' : 'stable';
+    // Nothing to switch, and instructions here would tell the user to
+    // uninstall a branch they do not have.
+    if (track == currentTrack) return const TrackSwitchApplied();
+
+    final (remote, branch, installed) = track == UpdateTrack.beta
+        ? ('mydia-beta', 'beta', 'stable')
+        : ('mydia', 'stable', 'beta');
+    // The remote may never have been added: a stable install knows nothing of
+    // mydia-beta. Installing a branch makes it current, so the old one goes
+    // last, and uninstalling it keeps the user's data in ~/.var/app.
     return TrackSwitchDeferred(
       instructions: 'Flatpak branches are changed outside the app. Run:\n\n'
-          'flatpak install $remote dev.mydia.player//$branch',
-      url: 'https://docs.mydia.dev/latest/using/how-to/install-player-linux/',
+          'flatpak remote-add --if-not-exists --from $remote '
+          'https://flatpak.mydia.dev/$remote.flatpakrepo\n'
+          'flatpak install $remote dev.mydia.player//$branch\n'
+          'flatpak uninstall dev.mydia.player//$installed',
+      url:
+          'https://docs.mydia.dev/latest/using/how-to/install-player-linux/#beta',
     );
   }
 
