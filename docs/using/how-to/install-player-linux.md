@@ -18,22 +18,30 @@ be done in the app.
 
 ## Beta
 
-Beta tracks prereleases. It is the same application under a different remote,
-so pick one channel or the other rather than adding both.
+Beta tracks prereleases. It is the same application on a different remote and
+branch, so switch between the two rather than keeping both installed. Your
+settings and sign-in live outside the install and carry over either way.
+
+To switch to beta:
 
 ```bash
 flatpak remote-add --if-not-exists --from mydia-beta https://flatpak.mydia.dev/mydia-beta.flatpakrepo
-flatpak install mydia-beta dev.mydia.player
+flatpak install mydia-beta dev.mydia.player//beta
+flatpak uninstall dev.mydia.player//stable
 ```
 
 To move back to stable:
 
 ```bash
-flatpak uninstall dev.mydia.player
-flatpak remote-delete mydia-beta
 flatpak remote-add --if-not-exists --from mydia https://flatpak.mydia.dev/mydia.flatpakrepo
-flatpak install mydia dev.mydia.player
+flatpak install mydia dev.mydia.player//stable
+flatpak uninstall dev.mydia.player//beta
 ```
+
+Installing a branch makes it the one your desktop launches, which is why the
+old branch can go straight after. On a fresh install, stop after the second
+command. **Settings › Manage › Release track** in the app shows the same
+commands.
 
 ## Tarball
 

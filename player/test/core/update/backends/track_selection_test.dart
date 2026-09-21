@@ -92,6 +92,7 @@ void main() {
     final backend = FlatpakUpdateBackend(
       portal: _NoopPortal(),
       releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'stable',
     );
     addTearDown(backend.dispose);
 
@@ -104,6 +105,7 @@ void main() {
     final backend = FlatpakUpdateBackend(
       portal: _NoopPortal(),
       releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'stable',
     );
     addTearDown(backend.dispose);
 
@@ -114,10 +116,42 @@ void main() {
     expect(outcome.instructions, contains('//beta'));
   });
 
+  test(
+      'Flatpak selecting beta adds the beta remote first and removes stable '
+      'after', () async {
+    final backend = FlatpakUpdateBackend(
+      portal: _NoopPortal(),
+      releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'stable',
+    );
+    addTearDown(backend.dispose);
+
+    final outcome =
+        await backend.selectTrack(UpdateTrack.beta) as TrackSwitchDeferred;
+
+    // A stable install has never added the beta remote, so installing from
+    // it without remote-add fails. The old branch goes last, once the new one
+    // is installed and current.
+    expect(
+      outcome.instructions.split('\n').where((l) => l.startsWith('flatpak ')),
+      [
+        'flatpak remote-add --if-not-exists --from mydia-beta '
+            'https://flatpak.mydia.dev/mydia-beta.flatpakrepo',
+        'flatpak install mydia-beta dev.mydia.player//beta',
+        'flatpak uninstall dev.mydia.player//stable',
+      ],
+    );
+    expect(
+      outcome.url,
+      'https://docs.mydia.dev/latest/using/how-to/install-player-linux/#beta',
+    );
+  });
+
   test('Flatpak selecting stable names the stable remote and branch', () async {
     final backend = FlatpakUpdateBackend(
       portal: _NoopPortal(),
       releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'beta',
     );
     addTearDown(backend.dispose);
 
@@ -127,6 +161,65 @@ void main() {
     expect(outcome.instructions, contains('install mydia '));
     expect(outcome.instructions, isNot(contains('mydia-beta')));
     expect(outcome.instructions, contains('//stable'));
+    expect(
+      outcome.instructions.split('\n').where((l) => l.startsWith('flatpak ')),
+      [
+        'flatpak remote-add --if-not-exists --from mydia '
+            'https://flatpak.mydia.dev/mydia.flatpakrepo',
+        'flatpak install mydia dev.mydia.player//stable',
+        'flatpak uninstall dev.mydia.player//beta',
+      ],
+    );
+  });
+
+  group('Flatpak with an unknown installed branch', () {
+    // currentTrack reads these as beta, which is fine for a label. A command
+    // built on that guess would skip the switch to beta, or uninstall a beta
+    // branch that may not exist.
+    for (final installed in <String?>['nightly', null]) {
+      for (final track in [UpdateTrack.beta, UpdateTrack.stable]) {
+        test(
+            'branch $installed, choosing ${track.wireName}, installs without '
+            'uninstalling', () async {
+          final backend = FlatpakUpdateBackend(
+            portal: _NoopPortal(),
+            releaseNotesUrl: 'https://example.invalid/releases',
+            branch: installed,
+          );
+          addTearDown(backend.dispose);
+
+          final outcome =
+              await backend.selectTrack(track) as TrackSwitchDeferred;
+          final commands = outcome.instructions
+              .split('\n')
+              .where((l) => l.startsWith('flatpak '))
+              .toList();
+
+          expect(commands, hasLength(2));
+          expect(commands.first, startsWith('flatpak remote-add'));
+          expect(
+            commands.last,
+            endsWith('dev.mydia.player//${track.wireName}'),
+          );
+        });
+      }
+    }
+  });
+
+  test('Flatpak selecting the installed branch changes nothing', () async {
+    final backend = FlatpakUpdateBackend(
+      portal: _NoopPortal(),
+      releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'stable',
+    );
+    addTearDown(backend.dispose);
+
+    // Instructions here would tell the user to uninstall a branch they do
+    // not have.
+    expect(
+      await backend.selectTrack(UpdateTrack.stable),
+      isA<TrackSwitchApplied>(),
+    );
   });
 
   group('Flatpak currentTrack follows the installed branch, not a guess', () {
