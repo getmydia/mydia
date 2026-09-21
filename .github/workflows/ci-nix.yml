@@ -250,6 +250,20 @@ jobs:
       - name: Assert the scratch-docs guard holds its contract
         run: ./scripts/check-no-scratch-docs-test.sh
 
+  dependabot-gate:
+    name: Check / Dependabot Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The merge gate decides whether dependency bumps land on master
+      # unreviewed. Its verdict and re-run logic are pure functions of a
+      # rollup, tested from fixtures, so they can be held to that here.
+      - name: Assert the Dependabot merge gate against its fixtures
+        run: ./scripts/tests/dependabot-gate-test.sh
+
   # Both NixOS VM tests run on push only. They are the slowest and least
   # reliable jobs in CI, combining a QEMU boot with a full Nix build on top of
   # the FlakeHub cache 503s that can hit any Nix job, and breaking the NixOS

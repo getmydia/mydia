@@ -8,7 +8,7 @@
 # PR #613 auto-merged with seven red checks and broke the master Docker image.
 # This script exists to wait on the whole rollup instead.
 #
-# The verdict path takes JSON on stdin and touches no network, so it is tested
+# Both subcommands take JSON on stdin and touch no network, so they are tested
 # from fixtures in scripts/tests/.
 set -euo pipefail
 
@@ -25,6 +25,12 @@ usage:
     BLOCKED\t<name>=<state>... everything concluded, something is not acceptable
 
   Exit status is 0 for all three. Non-zero means the script itself failed.
+
+  dependabot-gate.sh reruns [--pr <number>]
+
+  Reads the same JSON and prints the ID of every GitHub Actions run that has a
+  failed job, one per line, each ID once. Prints nothing when no failure came
+  from Actions.
 USAGE
   exit 64
 }
@@ -92,17 +98,34 @@ verdict() {
   echo "MERGE"
 }
 
+# Failed Actions runs worth re-running, one run ID per line.
+#
+# Only a CheckRun whose detailsUrl points at an Actions job can be re-run, and
+# a re-run is per workflow run, so two failed jobs in one run yield one ID.
+# StatusContexts (CodeRabbit) and CheckRuns posted by other apps (CodeQL,
+# osv-scanner) yield nothing: there is no run to repeat.
+reruns() {
+  jq -r --argjson ok "$acceptable" '
+    [ (.statusCheckRollup // [])[]
+      | select(.__typename == "CheckRun" and .status == "COMPLETED")
+      | select((.conclusion // "") as $s | ($ok | index($s)) | not)
+      | (.detailsUrl // "")
+      | capture("/actions/runs/(?<run>[0-9]+)/job/")
+      | .run
+    ] | unique | .[]'
+}
+
 main() {
   [ $# -ge 1 ] || usage
   local cmd="$1"; shift
 
   case "$cmd" in
-    verdict)
+    verdict|reruns)
       if [ "${1:-}" = "--pr" ]; then
         [ -n "${2:-}" ] || usage
-        gh pr view "$2" --json statusCheckRollup | verdict
+        gh pr view "$2" --json statusCheckRollup | "$cmd"
       else
-        verdict
+        "$cmd"
       fi
       ;;
     *)

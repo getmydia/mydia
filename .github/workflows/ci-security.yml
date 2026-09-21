@@ -4,7 +4,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   schedule:
-    # Monday 12:30 UTC, ahead of the weekly Dependabot run.
+    # Mondays 12:30 UTC. Dependabot version updates run monthly, so this weekly
+    # scan is the advisory net between them.
     - cron: "30 12 * * 1"
   workflow_dispatch:
 

@@ -183,7 +183,7 @@ merges without human review. Merging that class by hand is the cheaper trade.
 
 ### The trigger, and why not `check_suite`
 
-`workflow_run` over the nine workflows that run on pull requests. `check_suite`
+`workflow_run` over the workflows that run on pull requests, including `Dependabot fixup`. `check_suite`
 was tried first and reverted. GitHub documents that it "does not trigger workflows
 if the check suite was created by GitHub Actions", which reads as though it never
 fires here -- but it does, for suites created by *other* apps. That is worse than
@@ -214,6 +214,87 @@ The gate script call, `gh pr merge`, and the comment API calls all use
 unguarded failure -- a 409 because someone merged by hand, or the workflow-file
 refusal above -- would abort the step and leave every later dependabot PR in that
 run unevaluated. Do not remove those guards.
+
+### A failed job is re-run once before BLOCKED
+
+When the verdict is `BLOCKED`, the gate asks `dependabot-gate.sh reruns` for
+the Actions runs behind the failing contexts, reads each run's `run_attempt`,
+and re-runs the failed jobs of any run still on attempt 1. It logs `Retrying
+once before reporting PR #<n> as blocked.` instead of commenting, and the
+re-run's completion wakes the gate again. Only
+when every failing run is on attempt 2 or later, or the failure is not from
+Actions at all (CodeRabbit, CodeQL, osv-scanner), does the BLOCKED comment
+appear. With the App token it says the checks already failed twice; without it
+the comment keeps the old advice to re-run by hand.
+
+The re-run goes through a GitHub App token, not `GITHUB_TOKEN`, because the
+completion has to fire `workflow_run` and events caused by `GITHUB_TOKEN`
+mostly start nothing. The token is minted with `continue-on-error`, so a gate
+without the App's secrets still works; it just never retries.
+
+## Dependabot: cadence, groups and the fixup
+
+`.github/dependabot.yml` runs monthly, in five multi-ecosystem groups plus
+actions:
+
+| Group | Covers |
+|---|---|
+| `backend` | mix `/`, npm `/assets` |
+| `relay` | mix and npm under `/metadata-relay`, npm `/relay-worker` |
+| `player` | pub, the player's Rust crate, both fastlane Gemfiles |
+| `rust` | `/server`, `native/*`, `plugins/*` |
+| `tooling` | `/site`, `/docs` |
+| `actions` | github-actions, alone because the gate cannot merge it (above) |
+
+Majors are ignored everywhere except actions, and every entry has a seven-day
+`cooldown`. Both settings apply to version updates only, so security updates
+still open immediately, majors included. Take a major deliberately: bump it on
+a branch of your own.
+
+Some dependencies have their version updates ignored by name because their bumps need work nothing
+automates: `fine`, `lazy_html`, `wasmex` and `heroicons` (hand-pinned hashes
+in `nix/packages/flake-module.nix`), `tailwindcss` (pinned across npm, config
+and nix), and `flutter_rust_bridge` on both sides (needs a codegen run). The
+comments in `dependabot.yml` say what each one moves. Their security updates
+still open; for `fine`, `wasmex`, `tailwindcss` and `flutter_rust_bridge` the
+freshness check then fails until the pin moves, so they wait for a person
+rather than merging.
+
+### The fixup regenerates derived files
+
+`dependabot-fixup.yml` runs `scripts/regenerate-derived.sh` on every Dependabot
+pull request except github-actions bumps, which touch no manifest it regenerates from. The script rewrites `deps.nix` from `mix.lock` with `mix2nix`,
+refreshes every Cargo.lock listed in `scripts/lib/cargo-lock-dirs.sh`, and
+recomputes `npmDeps.hash` with `prefetch-npm-deps`, then runs
+`check-generated-freshness.sh`. Run it locally the same way.
+
+If anything changed, the workflow pushes one commit,
+`chore(deps): regenerate derived files`, with the App token. A push made with
+`GITHUB_TOKEN` would start no CI, so the gate would never see the fixed
+commit. The App credentials are Dependabot secrets, the only secrets a
+Dependabot-triggered workflow can read, which keeps this on `pull_request`.
+
+After that push Dependabot no longer rebases the pull request. If it goes
+stale or conflicts, comment `@dependabot recreate`: Dependabot rebuilds it
+from scratch and the fixup runs again on the new commit.
+
+### The GitHub App
+
+One App, installed on this repository only, with repository permissions
+**Contents: read and write** (the fixup's push) and **Actions: read and write**
+(the gate's re-run), no webhook. Its client ID and private key are stored
+twice, as Actions secrets for the gate and as Dependabot secrets for the
+fixup:
+
+```
+gh secret set DEPENDABOT_APP_CLIENT_ID --repo getmydia/mydia --body <client id>
+gh secret set DEPENDABOT_APP_PRIVATE_KEY --repo getmydia/mydia < key.pem
+gh secret set DEPENDABOT_APP_CLIENT_ID --repo getmydia/mydia --app dependabot --body <client id>
+gh secret set DEPENDABOT_APP_PRIVATE_KEY --repo getmydia/mydia --app dependabot < key.pem
+```
+
+Rotating the key means generating a new one on the App's settings page and
+re-running the two `PRIVATE_KEY` lines.
 
 ## Dependabot: a stale base blocks a green PR forever
 
@@ -262,6 +343,10 @@ runtime versions match and aborts the app at startup when they do not, so mergin
 either alone reproduces the panic. They have to land together with a codegen
 regen. Dependabot's grouping does not know about cross-language version coupling
 and will keep splitting this.
+
+Once `dependabot-fixup.yml` has pushed to a pull request, `@dependabot rebase`
+is refused, because the branch has commits Dependabot did not make. Use
+`@dependabot recreate`.
 
 ## Dependabot resolves pubspec.lock with its own Flutter
 

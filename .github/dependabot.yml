@@ -1,155 +1,272 @@
 version: 2
 
-# Security updates were on, but version updates were not, so dependencies
-# drifted until the advisory fix was a major bump the security updater would
-# never offer. That is how 44 site alerts accumulated behind an Astro 5 tree
-# whose patches all landed in 6.x and 7.x. Everything here is grouped:
-# ungrouped, the site tree alone would open around thirty PRs.
+# Version updates arrive once a month, one pull request per area rather than
+# one per ecosystem, carrying minor and patch bumps only. Until September 2026
+# this file ran thirteen weekly entries, which opened six to nine pull
+# requests every Monday. On 2026-09-21 six were open at once, each parked by
+# one of three things that are now handled elsewhere:
+#
+# - Derived files Dependabot does not regenerate (deps.nix, Cargo.lock files
+#   sharing a path crate, npmDeps.hash). dependabot-fixup.yml regenerates them
+#   on the branch.
+# - Flaky checks unrelated to the change. The merge gate in
+#   dependabot-auto-merge.yml re-runs failed Actions jobs once.
+# - Majors that do not fit, such as vitest 5 against
+#   @cloudflare/vitest-pool-workers' peer range. Ignored below; take majors
+#   deliberately, by hand.
+#
+# Security updates are separate from all of this. They fire repository-wide
+# whether or not an ecosystem is listed, open immediately, and are not held
+# back by an `update-types` ignore or by `cooldown`, both of which apply to
+# version updates only. A security fix that happens to be a major still
+# arrives.
+#
+# Version updates matter even with security updates on. Without them a tree
+# drifts until the advisory fix is a major bump the security updater cannot
+# land cleanly. That is how 44 site alerts accumulated behind an Astro 5 tree
+# in August 2026, and how relay-worker's vitest went from 2.1.9 straight to
+# 5.0.0 in September.
+#
+# `cooldown` gives a release a week to be yanked, or for its peers to catch
+# up, before it is proposed. Entries in a multi-ecosystem group need
+# `patterns` and take their schedule from the group.
+
+multi-ecosystem-groups:
+  backend:
+    schedule:
+      interval: monthly
+  relay:
+    schedule:
+      interval: monthly
+  player:
+    schedule:
+      interval: monthly
+  rust:
+    schedule:
+      interval: monthly
+  tooling:
+    schedule:
+      interval: monthly
 
 updates:
-  # mix.lock and player/pubspec.lock have never produced a single Dependabot
-  # alert, while OSV-Scanner finds real advisories in mix.lock. Version
-  # updates for these ecosystems do work, so run them here and keep
-  # ci-security.yml as the advisory net.
+  # --- backend: the Phoenix app ---------------------------------------------
+  #
+  # Each dependency ignored by name here moves a pin in
+  # nix/packages/flake-module.nix that nothing regenerates, and CI / Nix does
+  # not build on pull requests, so a bump would pass its PR and break master.
+  # Their version updates are ignored; bump them by hand, together with the pin.
+  # Security updates still open, and the freshness check holds most of them:
+  #
+  #   fine       fineVersion and its sha256; arrives through lazy_html
+  #   lazy_html  the lexbor override copies into a directory named after the
+  #              commit lazy_html's Makefile expects
+  #   wasmex     wasmexVersion and four per-platform NIF hashes
+  #   heroicons  fetchFromGitHub rev and hash
   - package-ecosystem: mix
     directory: /
-    schedule:
-      interval: weekly
-    groups:
-      elixir:
-        patterns: ["*"]
+    multi-ecosystem-group: backend
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: fine
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+      - dependency-name: lazy_html
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+      - dependency-name: wasmex
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+      - dependency-name: heroicons
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+    cooldown:
+      default-days: 7
 
-  - package-ecosystem: mix
-    directory: /metadata-relay
-    schedule:
-      interval: weekly
-    groups:
-      metadata-relay:
-        patterns: ["*"]
-
-  - package-ecosystem: pub
-    directory: /player
-    schedule:
-      interval: weekly
-    groups:
-      player:
-        patterns: ["*"]
-
-  # The marketing site. Its tree drifted two majors behind and accounted for
-  # 44 of the 68 alerts in the August 2026 backlog.
-  - package-ecosystem: npm
-    directory: /site
-    schedule:
-      interval: weekly
-    groups:
-      site:
-        patterns: ["*"]
-
+  # tailwindcss is pinned in lockstep across assets/package.json,
+  # config/config.exs and tailwindVersion plus four binary hashes in
+  # nix/packages/flake-module.nix.
   - package-ecosystem: npm
     directory: /assets
-    schedule:
-      interval: weekly
-    groups:
-      assets:
-        patterns: ["*"]
+    multi-ecosystem-group: backend
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: tailwindcss
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+    cooldown:
+      default-days: 7
 
-  # metadata-relay is developed in this repo and deployed separately. Its
-  # asset tree is small but nothing updates it today.
+  # --- relay: metadata-relay (Elixir) and relay-worker (Cloudflare Worker) ---
+  #
+  # Two different services despite the names. relay-worker had no entry here
+  # until 2026-09-06, so nothing kept it current between advisories.
+  - package-ecosystem: mix
+    directory: /metadata-relay
+    multi-ecosystem-group: relay
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: npm
     directory: /metadata-relay/assets
-    schedule:
-      interval: weekly
-    groups:
-      metadata-relay-assets:
-        patterns: ["*"]
+    multi-ecosystem-group: relay
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
 
-  # relay-worker is the Cloudflare Worker, a different service from
-  # metadata-relay above despite the name. It had no entry here until
-  # 2026-09-06, which is the first half of how it broke.
-  #
-  # Security updates fire repository-wide whether or not an ecosystem is
-  # configured here, so the only effect of the omission was that nothing kept
-  # relay-worker CURRENT between advisories. Its vitest sat on 2.1.9 until an
-  # advisory arrived, at which point the security updater offered the jump it
-  # always offers -- the latest, 5.0.0 -- landing well outside
-  # @cloudflare/vitest-pool-workers's `2.0.x - 3.2.x` peer range and breaking
-  # `npm ci` outright. That is the same drift-then-major-bump failure this
-  # file's header describes for the site tree.
-  #
-  # The other half was the absent pull_request check, fixed in
-  # .github/workflows/ci-relay-worker.yml. Weekly version updates here reduce
-  # how often a bump is a major one; that workflow is what stops a broken one
-  # merging either way.
   - package-ecosystem: npm
     directory: /relay-worker
-    schedule:
-      interval: weekly
-    groups:
-      relay-worker:
-        patterns: ["*"]
+    multi-ecosystem-group: relay
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
 
-  - package-ecosystem: uv
-    directory: /docs
-    schedule:
-      interval: weekly
-    groups:
-      docs:
-        patterns: ["*"]
+  # --- player: the Flutter app and everything that ships inside it ----------
+  #
+  # flutter_rust_bridge is pinned on both the Dart and the Rust side and the
+  # generated bindings carry its version; the app aborts at startup when they
+  # disagree. A bump needs flutter_rust_bridge_codegen, which nothing here
+  # runs, so its version updates are ignored on both sides and it is bumped by hand.
+  - package-ecosystem: pub
+    directory: /player
+    multi-ecosystem-group: player
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: flutter_rust_bridge
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: cargo
+    directory: /player/rust/mydia_player_p2p
+    multi-ecosystem-group: player
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: flutter_rust_bridge
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: bundler
     directory: /player/ios
-    schedule:
-      interval: weekly
-    groups:
-      fastlane-ios:
-        patterns: ["*"]
+    multi-ecosystem-group: player
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: bundler
     directory: /player/android
-    schedule:
-      interval: weekly
-    groups:
-      fastlane-android:
-        patterns: ["*"]
+    multi-ecosystem-group: player
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
 
+  # --- rust: the server and the backend's native crates ---------------------
+  #
   # server/ is a workspace, so one entry covers every crate under crates/.
   - package-ecosystem: cargo
     directory: /server
-    schedule:
-      interval: weekly
-    groups:
-      server:
-        patterns: ["*"]
+    multi-ecosystem-group: rust
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
 
-  # The remaining shipped Cargo.lock files are separate workspaces.
-  # `directories` takes a list, which avoids one block per crate.
-  #
-  # Deliberately excluded, because updating them buys nothing and adds PR
-  # noise: native/mydia_plugin_sdk/examples/minimal is a documentation
+  # Separate workspaces. Deliberately excluded, because updating them buys
+  # nothing: native/mydia_plugin_sdk/examples/minimal is a documentation
   # example, and test/support/fixtures/plugins/{host_fns,host_test}_fixture
-  # are test fixtures whose whole purpose is a pinned, reproducible build.
-  # ci-security.yml still scans all three, so a real advisory in them
-  # surfaces even though nothing auto-bumps them.
+  # are test fixtures whose purpose is a pinned, reproducible build.
+  # ci-security.yml still scans all three.
   - package-ecosystem: cargo
     directories:
       - /native/mydia_p2p
       - /native/mydia_p2p_core
       - /native/mydia_plugin_sdk
-      - /player/rust/mydia_player_p2p
       - /plugins/simkl_sync
       - /plugins/webhook_notifier
-    schedule:
-      interval: weekly
-    groups:
-      rust:
-        patterns: ["*"]
+    multi-ecosystem-group: rust
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
 
-  # Nothing updates the action versions themselves. The repository is pinned
-  # at actions/checkout@v4 throughout.
+  # --- tooling: the marketing site and the docs site ------------------------
+  - package-ecosystem: npm
+    directory: /site
+    multi-ecosystem-group: tooling
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: uv
+    directory: /docs
+    multi-ecosystem-group: tooling
+    patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 7
+
+  # --- actions ----------------------------------------------------------------
+  #
+  # Not in a multi-ecosystem group. The merge gate's GITHUB_TOKEN may not land
+  # changes under .github/workflows/ (see .github/ci.md), so this pull request
+  # is always merged by hand; grouped with site and docs it would take them
+  # down with it. Majors stay on: action majors are mostly Node runtime bumps,
+  # and CI runs every action it bumps.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       actions:
         patterns: ["*"]
+    cooldown:
+      default-days: 7

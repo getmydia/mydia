@@ -1,0 +1,9 @@
+{"statusCheckRollup":[
+{"__typename":"CheckRun","conclusion":"FAILURE","detailsUrl":"https://github.com/getmydia/mydia/actions/runs/111/job/1001","name":"Test","status":"COMPLETED","workflowName":"CI"},
+{"__typename":"CheckRun","conclusion":"TIMED_OUT","detailsUrl":"https://github.com/getmydia/mydia/actions/runs/111/job/1002","name":"Test / PostgreSQL","status":"COMPLETED","workflowName":"CI"},
+{"__typename":"CheckRun","conclusion":"FAILURE","detailsUrl":"https://github.com/getmydia/mydia/actions/runs/222/job/2001","name":"Check / Generated Freshness","status":"COMPLETED","workflowName":"CI / Nix"},
+{"__typename":"CheckRun","conclusion":"SKIPPED","detailsUrl":"https://github.com/getmydia/mydia/actions/runs/222/job/2002","name":"Test / NixOS Module (SQLite)","status":"COMPLETED","workflowName":"CI / Nix"},
+{"__typename":"CheckRun","conclusion":"SUCCESS","detailsUrl":"https://github.com/getmydia/mydia/actions/runs/333/job/3001","name":"Site build","status":"COMPLETED","workflowName":"CI / Site"},
+{"__typename":"CheckRun","conclusion":"FAILURE","detailsUrl":"https://github.com/getmydia/mydia/runs/4001","name":"osv-scanner","status":"COMPLETED","workflowName":""},
+{"__typename":"StatusContext","context":"CodeRabbit","state":"FAILURE","targetUrl":"https://coderabbit.ai"}
+]}
