@@ -38,12 +38,15 @@ class _Decoder extends PlatformPlayer {
   @override
   Future<int> get handle => _handle.future;
 
+  /// Positions the new source at its [Media.start], as mpv's `start` option
+  /// does while it loads the file.
   @override
   Future<void> open(Playable playable, {bool play = true}) async {
-    opened.add(playable as Media);
+    final media = playable as Media;
+    opened.add(media);
     state = state.copyWith(
       duration: const Duration(seconds: 90),
-      position: Duration.zero,
+      position: media.start ?? Duration.zero,
       playing: false,
     );
     durationController.add(state.duration);
@@ -160,6 +163,7 @@ _GatedLink _server({
   Completer<void>? holdSubtitleContent,
   Completer<void>? holdSwitchStart,
   bool failSwitchStart = false,
+  String playlistMode = 'WINDOW',
 }) {
   var sessionStarts = 0;
   Object handler(Request request, int index) {
@@ -193,6 +197,7 @@ _GatedLink _server({
         sessionId: 'sess-$index',
         startPosition: variables['startPosition'] as int? ?? 0,
         duration: 5400,
+        playlistMode: playlistMode,
       );
     }
     if (variables.containsKey('sessionId')) {
@@ -216,6 +221,7 @@ Future<void> _mount(
   ProviderContainer container,
   Player Function() createPlayer, {
   ValueNotifier<bool>? playerVisible,
+  int? resumeSeconds,
 }) async {
   final player = PlayerScreen(
     mediaId: 'movie-1',
@@ -223,6 +229,7 @@ Future<void> _mount(
     fileId: 'file-1',
     title: 'The Long Aurora',
     createPlayer: createPlayer,
+    resumeSeconds: resumeSeconds,
   );
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
@@ -431,6 +438,59 @@ void main() {
       decoder.advance(const Duration(seconds: 1));
       await tester.pump();
       decoder.advance(const Duration(seconds: 2));
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+  });
+
+  // mpv rejects a `seek` until it has loaded the file, and `Player.open`
+  // returns before that. A resume sent as a seek after `open` therefore only
+  // landed when the source loaded faster than the screen's fixed wait, and
+  // otherwise played from zero. The position has to travel with the open.
+  testWidgets('a resume opens the source at the saved position',
+      (tester) async {
+    final decoder = _Decoder();
+    final container = buildPlayerScreenContainer(
+      link: _server(directPlay: true),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await _mount(tester, container, () => Player(platformPlayer: decoder),
+        resumeSeconds: 1200);
+    await pumpUntil(tester, () => decoder.opened.isNotEmpty);
+
+    expect(decoder.opened.single.start, const Duration(seconds: 1200));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('a switch into a full playlist opens it at the current position',
+      (tester) async {
+    final decoder = _Decoder(failFirstOpen: true);
+    final container = buildPlayerScreenContainer(
+      link: _server(directPlay: true, playlistMode: 'FULL'),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    await mockHttpResponse(() async {
+      await _mount(tester, container, () => Player(platformPlayer: decoder),
+          resumeSeconds: 1200);
+      await pumpUntil(tester, () => decoder.opened.length == 2);
+
+      expect(decoder.opened.last.uri, contains('/hls/'));
+      expect(decoder.opened.last.start, const Duration(seconds: 1200));
+
+      decoder.advance(const Duration(seconds: 1201));
+      await tester.pump();
+      decoder.advance(const Duration(seconds: 1202));
       await tester.pump();
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
