@@ -24,4 +24,6 @@ If you are starting from nothing, begin with a
 - [Updating Mydia](update-mydia.md) - update your installation or track a pre-release build
 - [Monitoring and logs](monitor-and-logs.md) - check health and view logs
 - [NixOS deployment](nixos.md) - deploy Mydia declaratively on NixOS
+- [Installing the player on Linux](install-player-linux.md) - install Mydia Player as a Flatpak or a tarball
 - [Remote access](remote-access.md) - connect the mobile app to your instance from anywhere
+- [Beta builds](beta-builds.md) - try player prereleases on any platform

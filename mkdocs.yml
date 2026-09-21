@@ -105,6 +105,7 @@ nav:
           - using/how-to/nixos.md
           - using/how-to/install-player-linux.md
           - using/how-to/remote-access.md
+          - using/how-to/beta-builds.md
       - Reference:
           - using/reference/index.md
           - using/reference/environment-variables.md
