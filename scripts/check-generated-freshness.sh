@@ -79,7 +79,9 @@ done
 # exactly the state a manifest-only bump leaves behind. The Nix build vendors
 # from these locks, so a stale one is a build failure there rather than here.
 if command -v cargo >/dev/null 2>&1; then
-  for d in native/mydia_p2p native/mydia_subsync plugins/webhook_notifier plugins/simkl_sync server player/rust/mydia_player_p2p; do
+  # shellcheck source=scripts/lib/cargo-lock-dirs.sh
+  source "$root/scripts/lib/cargo-lock-dirs.sh"
+  for d in "${cargo_lock_dirs[@]}"; do
     [ -f "$d/Cargo.lock" ] || continue
     if ! err="$(cd "$d" && cargo metadata --locked --format-version 1 2>&1 >/dev/null)"; then
       fail "$d/Cargo.lock does not satisfy its manifest:
