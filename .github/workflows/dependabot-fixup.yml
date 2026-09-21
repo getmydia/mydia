@@ -34,12 +34,15 @@ concurrency:
 jobs:
   regenerate:
     name: Regenerate derived files
+    # Dependabot's own pushes, plus a reopen by anyone. The App's push is
+    # neither, which is what stops this job re-running on its own commit.
     # github_actions bumps touch no manifest this job regenerates from.
     if: >-
-      github.actor == 'dependabot[bot]' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
+      (github.actor == 'dependabot[bot]' || github.event.action == 'reopened') &&
       !startsWith(github.head_ref, 'dependabot/github_actions/')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Mint a push token
