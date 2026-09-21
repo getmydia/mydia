@@ -410,6 +410,23 @@ in
       fi
       ${pkgs.prek}/bin/prek install -t pre-commit
     '';
+
+    # Keep the full hook suite off shell entry. devenv 2.3.1 added a third
+    # scheduling pass ("include every selected task's prerequisites") that pulls
+    # `devenv:enterTest` into the shell's task set; its prerequisite
+    # `devenv:git-hooks:run` then executes on every `devenv shell` and every
+    # direnv load, running prek over the whole tree (dart analyze across
+    # player/, four cargo crates, mix format) for ~60s before the prompt
+    # returns. 2.2.2 entered the same shell in 3s. Upstream:
+    # https://github.com/cachix/devenv/issues/3184
+    #
+    # Clearing the `before` edge takes `devenv:git-hooks:run` out of every
+    # graph that reaches it, so nothing schedules it implicitly. Hooks still
+    # run where they matter: prek at commit time via .git/hooks/pre-commit, and
+    # `mix precommit` / CI on demand. Nothing in this repo invokes
+    # `devenv test`, so losing the enterTest wiring costs nothing. Revisit once
+    # 3184 is fixed upstream.
+    "devenv:git-hooks:run".before = lib.mkForce [ ];
   };
 
   # ── Git hooks (KTD7 / R17) ──────────────────────────────────────────────────
