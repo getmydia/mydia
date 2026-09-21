@@ -1120,16 +1120,12 @@ defmodule Mydia.Jobs.MediaImportTest do
   end
 
   defp setup_runtime_config(download_clients) do
-    config = %Mydia.Config.Schema{
-      server: %Mydia.Config.Schema.Server{},
-      database: %Mydia.Config.Schema.Database{},
-      auth: %Mydia.Config.Schema.Auth{},
-      media: %Mydia.Config.Schema.Media{},
-      downloads: %Mydia.Config.Schema.Downloads{},
-      logging: %Mydia.Config.Schema.Logging{},
-      oban: %Mydia.Config.Schema.Oban{},
-      download_clients: download_clients
-    }
+    # Start from the full defaults. This module is async, so other tests read
+    # Mydia.Config.get() while this config is installed. A struct literal
+    # naming only the sections used here left the rest nil, :streaming
+    # included, and AudioTrackSelectorTest's resolved_languages/2 then returned
+    # [] on the PostgreSQL job.
+    config = %{Mydia.Config.Schema.defaults() | download_clients: download_clients}
 
     # Capture and restore the prior value. `:runtime_config` is global
     # Application state (test_helper.exs forces empty download_clients at boot);

@@ -83,6 +83,10 @@ defmodule Mydia.Playback.DismissalTest do
     # The unwatch at the end is a positive control. Event writes run
     # synchronously under the sandbox pool, so without it a broken
     # subscription would make the `refute_receive` pass for the wrong reason.
+    #
+    # Both match on this test's user and movie. The events topic is global,
+    # and on the PostgreSQL job concurrent modules broadcast unwatches of
+    # their own.
     test "emits no event, where an unwatch would", ctx do
       {:ok, _} =
         Playback.save_progress(
@@ -95,11 +99,26 @@ defmodule Mydia.Playback.DismissalTest do
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, ctx.movie.id)
 
-      refute_receive {:event_created, %{type: "playback.unwatched"}}, 100
+      user_id = ctx.user.id
+      movie_id = ctx.movie.id
+
+      refute_receive {:event_created,
+                      %{
+                        type: "playback.unwatched",
+                        actor_id: ^user_id,
+                        resource_id: ^movie_id
+                      }},
+                     100
 
       {:ok, _} = Playback.delete_progress(ctx.user.id, media_item_id: ctx.movie.id)
 
-      assert_receive {:event_created, %{type: "playback.unwatched"}}, 100
+      assert_receive {:event_created,
+                      %{
+                        type: "playback.unwatched",
+                        actor_id: ^user_id,
+                        resource_id: ^movie_id
+                      }},
+                     100
     end
   end
 end

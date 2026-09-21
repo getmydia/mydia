@@ -1,5 +1,12 @@
 defmodule Mydia.Jobs.DownloadMonitorTest do
-  use Mydia.DataCase, async: true
+  # Not async: `setup_runtime_config/1` replaces the global
+  # `:mydia, :runtime_config`, which the monitor reads live. On the PostgreSQL
+  # job another module's `setup_runtime_config([])` could land mid-poll, so
+  # "does NOT mark downloads missing when their client is unreachable" saw its
+  # only client vanish and recorded "no longer configured in Mydia". The other
+  # DownloadMonitor test files that call it are already async: false. See
+  # test/README.md, "Tests must not mutate global env".
+  use Mydia.DataCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
   import Ecto.Query
@@ -2542,16 +2549,12 @@ defmodule Mydia.Jobs.DownloadMonitorTest do
   end
 
   defp setup_runtime_config(download_clients) do
-    config = %Mydia.Config.Schema{
-      server: %Mydia.Config.Schema.Server{},
-      database: %Mydia.Config.Schema.Database{},
-      auth: %Mydia.Config.Schema.Auth{},
-      media: %Mydia.Config.Schema.Media{},
-      downloads: %Mydia.Config.Schema.Downloads{},
-      logging: %Mydia.Config.Schema.Logging{},
-      oban: %Mydia.Config.Schema.Oban{},
-      download_clients: download_clients
-    }
+    # Start from the full defaults. A struct literal naming only the sections
+    # this file uses left the rest nil, :streaming included, and any test
+    # reading Mydia.Config.get() meanwhile got nothing back:
+    # AudioTrackSelectorTest's resolved_languages/2 returned [] on the
+    # PostgreSQL job.
+    config = %{Mydia.Config.Schema.defaults() | download_clients: download_clients}
 
     # Capture and restore the prior value. `:runtime_config` is global
     # Application state (test_helper.exs forces empty download_clients at boot);
