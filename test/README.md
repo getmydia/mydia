@@ -546,22 +546,27 @@ safety net. Treat it as the specification and grow it adversarially, probing the
 space the change newly admits. Never read a green parity run or an unchanged
 corpus rate as evidence that such a feature works.
 
-## The promotion concurrency tests flake under load
+## The promotion concurrency test flakes on SQLite
 
-Two tests use real, unsandboxed database connections
-(`Ecto.Adapters.SQL.Sandbox.unboxed_run`) plus a hard `Task.await(task, 2_000)`
-to prove that competing promotions serialize:
+`Mydia.Library.CandidatePromotionTest`, "separate database connections
+serialize competing promotions at ownership", uses real, unsandboxed
+connections (`Ecto.Adapters.SQL.Sandbox.unboxed_run`) to prove that competing
+promotions serialize. Its sibling in `file_ingest_test.exs` was deleted on
+2026-09-03 for flaking the same way.
 
-- `Mydia.Library.CandidatePromotionTest`, "separate database connections
-  serialize competing promotions at ownership"
-- `Mydia.Library.FileIngestTest`, "a losing promotion failure cannot resurrect
-  the winner's deleted candidate" (`file_ingest_test.exs` around line 245)
+Its current failure is `(Exqlite.Error) database is locked` on
+`BEGIN IMMEDIATE`, thirty seconds in, and it is not load. It is the Exqlite
+statement-destructor stall that `patches/exqlite/` fixes in the Docker image
+only: while one connection busy-waits for the write lock, any process dropping
+a statement of that connection blocks until the wait ends, and when that
+process is the lock holder the two wait on each other for the whole
+`busy_timeout`. Dev and CI build upstream Exqlite, so this test keeps failing
+at a low rate until they build the patched NIF too. `.github/ci-flakes.md` has
+the evidence.
 
-The 2000ms is a timeout, not a sleep. Unloaded, both files together run 21 tests
-in 0.4s. Under contention they blow the deadline and fail as `** (EXIT) time out`
-on `Task.await/2`, which reads like a serialization regression.
-
-**That is not the only signature.** The same test also fails as
+Older signatures, now fixed, which still show up in old runs: an
+`** (EXIT) time out` on a `Task.await/2` budget that was once 2000ms, and
+this one, where the test bound task roles from arrival order:
 
 ```text
 Assertion failed, no matching message after 1000ms
@@ -571,24 +576,10 @@ pattern: {:ownership_attempt, ^first_pid}
 value:   {:ownership_attempt, #PID<0.44749.0>}
 ```
 
-where the mailbox shows the *other* process reached ownership first. The test
-pins `first_pid` and expects it to win, which is a scheduling assumption rather
-than something the locking guarantees. Match on the test name, not on the
-exception type: an `assert_receive` failure here is the same flake as the
-`Task.await` timeout, not a distinct defect. Observed on CI 2026-08-31, twice in
-a row on one commit, then green on the third re-run with no code change.
+where the mailbox shows the *other* process reached ownership first.
 
-Observed 2026-08-31: `./dev mix precommit` failed with exactly these two while
-the PostgreSQL devenv stack was still up and a PostgreSQL suite overlapped the
-run. Re-running both files on a quiet machine gave 21 tests / 0 failures, and a
-subsequent full precommit with the stack down was clean.
-
-These are the only tests combining real connections, cross-process task
-coordination and a fixed wall-clock deadline, so they break first when something
-competes for CPU or the SQLite writer lock. Before treating a failure as a real
-defect, check what else was running (`pgrep -f 'mix test'`, `./dev ps`, `uptime`)
-and re-run the two files alone. Do not run a PostgreSQL suite and a SQLite
-precommit concurrently; bring the stack down first with
+Locally, a PostgreSQL suite overlapping a SQLite precommit also fails it. Do
+not run the two concurrently; bring the stack down first with
 `DATABASE_TYPE=postgres ./dev down`. Note that a waiter written as
 `until ! pgrep -f 'mix test'; do ...` matches its own command string and never
 exits.
