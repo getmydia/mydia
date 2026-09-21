@@ -11,19 +11,19 @@
     "test:unit": "node --test test/unit/*.test.mjs"
   },
   "dependencies": {
-    "alpinejs": "^3.15.1",
-    "hls.js": "^1.5.15",
+    "alpinejs": "^3.17.3",
+    "hls.js": "^1.7.3",
     "phoenix": "file:../deps/phoenix",
     "phoenix_html": "file:../deps/phoenix_html",
     "phoenix_live_view": "file:../deps/phoenix_live_view"
   },
   "devDependencies": {
     "@catppuccin/daisyui": "^2.1.1",
-    "@playwright/test": "^1.56.1",
-    "@types/node": "^26.1.2",
-    "autoprefixer": "^10.4.16",
-    "daisyui": "^5.7.7",
-    "postcss": "^8.5.26",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.5.1",
+    "autoprefixer": "^10.6.0",
+    "daisyui": "^5.7.37",
+    "postcss": "^8.5.28",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3"
