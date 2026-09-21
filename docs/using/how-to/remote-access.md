@@ -8,18 +8,7 @@ The Mydia player is distributed through TestFlight. Install the [TestFlight app]
 
 [Install on iOS](https://testflight.apple.com/join/KFSYxaQP){ .md-button .md-button--primary }
 
-### Pre-release builds
-
-There is a second TestFlight track carrying release candidates and betas
-alongside every stable release, for anyone who wants to try changes early and
-report problems before they ship. It is the same opt-in as the Docker `:beta`
-tag and the Flatpak beta channel, and it moves faster and breaks more often.
-
-[Install pre-release builds](https://testflight.apple.com/join/XTvarNBK){ .md-button }
-
-Pick one. Joining the pre-release track does not remove you from the stable one,
-so opening both links leaves you a member of both. Leaving a track again is done
-from inside the TestFlight app, not from these links.
+Want betas and release candidates early? See [Try beta builds](beta-builds.md#ios).
 
 ## Configuration
 
