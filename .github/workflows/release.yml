@@ -857,7 +857,7 @@ jobs:
 
   docs:
     name: Deploy Docs
-    if: needs.prepare.outputs.is_prerelease == 'false' && !inputs.dry_run
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.prepare.outputs.is_prerelease == 'false' && !inputs.dry_run }}
     needs:
       - prepare
       - publish
@@ -899,7 +899,7 @@ jobs:
     # web.mydia.dev is a single public surface with no staging copy, so a
     # prerelease published there would reach every viewer with no way to opt
     # in. Betas stay on the installable builds, which a user chooses.
-    if: needs.prepare.outputs.is_prerelease == 'false' && !inputs.dry_run
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.prepare.outputs.is_prerelease == 'false' && !inputs.dry_run }}
     needs:
       - prepare
       - publish
@@ -929,6 +929,9 @@ jobs:
     name: Publish Flatpak
     # Needs `publish`, which carries !inputs.dry_run, so this is skipped
     # entirely on a rehearsal. No R2 traffic can happen during a dry run.
+    # Runs when publish and player-flatpak succeed, even if an unrelated platform
+    # failed and was waived.
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.player-flatpak.result == 'success' && !inputs.dry_run }}
     needs:
       - prepare
       - player-flatpak
@@ -1049,7 +1052,7 @@ jobs:
 
   appcast:
     name: Deploy Appcast
-    if: ${{ !inputs.dry_run }}
+    if: ${{ !cancelled() && needs.publish.result == 'success' && !inputs.dry_run }}
     needs:
       - prepare
       - publish

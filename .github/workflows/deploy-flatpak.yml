@@ -1,0 +1,121 @@
+name: Deploy Flatpak
+
+# Publishes a staged Flatpak build into the live channel repo on Cloudflare R2.
+#
+# release.yml runs this as part of the release pipeline, but if a publish
+# step fails, is skipped, or needs to be backfilled from an existing release run,
+# this workflow can be dispatched manually with the run ID containing the
+# flatpak-repo-staged artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Workflow run ID containing the flatpak-repo-staged artifact'
+        required: true
+        type: string
+      channel:
+        description: 'Flatpak channel to publish into (beta or stable)'
+        required: true
+        type: choice
+        default: beta
+        options:
+          - beta
+          - stable
+
+concurrency:
+  group: flatpak-publish-${{ inputs.channel }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    name: Publish Flatpak
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak ostree rclone
+
+      - name: Download staged repo
+        uses: actions/download-artifact@v8
+        with:
+          name: flatpak-repo-staged
+          path: staged-repo
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore the staged repo's empty directories
+        run: ./player/flatpak/ensure-skeleton.sh staged-repo
+
+      - name: Import the signing key
+        env:
+          FLATPAK_GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$FLATPAK_GPG_PRIVATE_KEY" ]; then
+            echo "::error::FLATPAK_GPG_PRIVATE_KEY is not set. See docs/contributing/releasing.md, 'Flatpak channels'." >&2
+            exit 1
+          fi
+          echo "$FLATPAK_GPG_PRIVATE_KEY" | base64 -d \
+            | gpg --batch --pinentry-mode loopback --import
+
+      - name: Configure rclone for R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = ${R2_ACCESS_KEY_ID}
+          secret_access_key = ${R2_SECRET_ACCESS_KEY}
+          endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+          acl = private
+          no_check_bucket = true
+          EOF
+
+      - name: Publish
+        env:
+          GPG_KEY_ID: ${{ secrets.FLATPAK_GPG_KEY_ID }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          ./player/flatpak/publish.sh "$CHANNEL" staged-repo "r2:mydia-flatpak/$CHANNEL"
+
+      - name: Publish the .flatpakrepo files
+        run: |
+          set -euo pipefail
+          ./player/flatpak/make-flatpakrepo.sh repofiles
+          rclone copy repofiles r2:mydia-flatpak --include '*.flatpakrepo'
+
+      - name: Verify the published repo end to end
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+          if [ "$CHANNEL" = "beta" ]; then
+            REPOFILE="https://flatpak.mydia.dev/mydia-beta.flatpakrepo"
+            REMOTE="mydia-beta"
+          else
+            REPOFILE="https://flatpak.mydia.dev/mydia.flatpakrepo"
+            REMOTE="mydia"
+          fi
+
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+
+          flatpak remote-add --user --if-not-exists --from "$REMOTE" "$REPOFILE"
+          flatpak install --user -y "$REMOTE" dev.mydia.player
+          flatpak info --user dev.mydia.player
+          echo "Verified: dev.mydia.player installs from $REPOFILE"
