@@ -5,6 +5,9 @@ repo_url: https://github.com/getmydia/mydia
 repo_name: getmydia/mydia
 docs_dir: docs
 site_dir: _site
+copyright: >-
+  This site sets no cookies. Visits are counted anonymously with
+  <a href="https://plausible.io/data-policy">Plausible</a>.
 
 # Planning artifacts live under docs/ but must never be published.
 # MkDocs builds every .md in docs_dir regardless of nav, so excluding
@@ -29,6 +32,9 @@ validation:
 theme:
   name: material
   custom_dir: docs/overrides
+  # Material loads Roboto from Google Fonts by default, which hands every
+  # visitor's IP to Google. System fonts also match the marketing site.
+  font: false
   palette:
     - scheme: default
       primary: deep purple

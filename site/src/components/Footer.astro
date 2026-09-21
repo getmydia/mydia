@@ -4,7 +4,19 @@
 
 <footer class="border-t border-base-300 py-8 px-4">
   <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-base-content/50">
-    <p>&copy; {new Date().getFullYear()} Mydia. Self-hosted media management.</p>
+    <div class="text-center sm:text-left">
+      <p>&copy; {new Date().getFullYear()} Mydia. Self-hosted media management.</p>
+      <p class="mt-1 text-xs">
+        This site sets no cookies. Visits are counted anonymously with
+        <a
+          href="https://plausible.io/data-policy"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="underline hover:text-base-content transition-colors"
+        >
+          Plausible</a>.
+      </p>
+    </div>
     <div class="flex items-center gap-4">
       <a href="/blog" class="hover:text-base-content transition-colors">Blog</a>
       <a href="/rss.xml" class="hover:text-base-content transition-colors">RSS</a>
