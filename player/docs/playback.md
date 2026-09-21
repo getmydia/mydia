@@ -214,6 +214,21 @@ labelled Original. Neither writes the stored default: one file failing here
 says nothing about the next. Auto does not change rung again on its own
 mid-session; that needs a server-side rendition switch, not built yet.
 
+## Where playback begins
+
+A resume, and a switch into a source that holds real positions (direct play,
+a `:full` session), opens the new `Media` with `start` set rather than seeking
+after `open`. `Player.open` returns once mpv has queued the file, not once it
+has loaded it, and mpv rejects a `seek` until playback is initialized.
+media_kit drops that rejection, so a seek sent after `open` only lands when
+the source loads faster than the caller waits. It used to wait a fixed 500ms,
+and a P2P or cold-transcode open is routinely slower: the resume played from
+zero, and the next progress sync saved over the position it had skipped.
+
+Web still seeks after `open`. media_kit ignores `start` for hls.js and clamps
+every reported position to it otherwise. `core/player/media_start.dart` makes
+the choice for both call sites.
+
 ## Which HLS engine plays it on web
 
 hls.js, always, whenever it can run. Not the browser's own HLS engine, and

@@ -18,6 +18,7 @@ import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
 import '../../../core/player/hls_engine.dart';
+import '../../../core/player/media_start.dart';
 import '../../../core/player/subtitle_cues.dart';
 import '../../../core/player/player_orientation_lease_controller.dart';
 import '../../../core/player/progress_service.dart';
@@ -1862,10 +1863,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         source.seekOnOpen ? source.timeline.toPlayer(at) : Duration.zero;
     _playbackAdvanced = false;
     _furthestPosition = playerTarget;
-    await player.open(Media(source.url, httpHeaders: source.headers),
-        play: false);
+    final opening = mediaStartingAt(
+      source.url,
+      httpHeaders: source.headers,
+      position: playerTarget,
+      isWeb: kIsWeb,
+    );
+    await player.open(opening.media, play: false);
     _detectTracks();
-    if (source.seekOnOpen) await player.seek(playerTarget);
+    if (opening.seekAfterOpen) await player.seek(playerTarget);
     await player.play();
     return player.stream.position;
   }
@@ -2410,11 +2416,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // message just set must survive into the replacement source.
     if (!isSourceSwitch) _lastFallback = null;
 
-    // Open media
-    await player.open(
-      Media(mediaSource, httpHeaders: httpHeaders),
-      play: false,
+    // Open media, already positioned at [plan] where the platform allows it.
+    // These paths hold the whole file, so the player's own coordinates
+    // already are the real ones and there is no session that could need
+    // restarting. A full-playlist HLS session reaches this too: the call site
+    // passes the real `plan` (not `ResumePlan.fromStart`) exactly when
+    // `source.seekOnOpen`, so this is already its resume.
+    final opening = mediaStartingAt(
+      mediaSource,
+      httpHeaders: httpHeaders,
+      position: plan.position,
+      isWeb: kIsWeb,
     );
+    await player.open(opening.media, play: false);
 
     // Wait for player to be ready
     await Future.delayed(const Duration(milliseconds: 500));
@@ -2436,15 +2450,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       await selectTrack(TrackKind.subtitle, widget.subtitleTrack);
     }
 
-    // A plain seek, not a `seekToReal`: these paths hold the whole file, so
-    // the player's own coordinates already are the real ones and there is no
-    // session that could need restarting. A full-playlist HLS session reaches
-    // this too: the call site passes the real `plan` (not
-    // `ResumePlan.fromStart`) exactly when `canDirect || _fullPlaylist`, so
-    // this is already the full-playlist resume seek -- do not add a second,
-    // `_fullPlaylist`-gated block here, it would just re-seek to the same
-    // position every time this one already fires.
-    if (plan.resumes) {
+    // Web only; see `mediaStartingAt`. A plain seek, not a `seekToReal`, for
+    // the same reason as the open above.
+    if (opening.seekAfterOpen) {
       await player.seek(plan.position);
     }
 
