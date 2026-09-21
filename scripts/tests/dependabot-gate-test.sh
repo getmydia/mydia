@@ -40,6 +40,19 @@ assert_blocked_names() {
   fi
 }
 
+assert_reruns() {
+  local fixture="$1" expected="$2" actual
+  actual="$("$gate" reruns < "$fixtures/$fixture" | sort | paste -sd, -)"
+  if [ "$actual" = "$expected" ]; then
+    echo "ok   $fixture reruns -> ${expected:-(none)}"
+  else
+    echo "FAIL $fixture reruns" >&2
+    echo "       expected: $expected" >&2
+    echo "       actual:   $actual" >&2
+    failures=$((failures + 1))
+  fi
+}
+
 assert_verdict rollup-merge.json   MERGE
 assert_verdict rollup-blocked.json BLOCKED
 assert_verdict rollup-pending.json WAIT
@@ -50,6 +63,17 @@ assert_verdict rollup-null.json    WAIT
 # one of them was visible and none of them was required.
 assert_blocked_names rollup-blocked.json \
   "Build / Android,Build / Linux,Build / Web,Build / Windows,Build / macOS,Flatpak / Build,Test / Player"
+
+assert_verdict rollup-blocked-mixed.json BLOCKED
+
+# A re-run is per workflow run: PR #613's seven red jobs were all in one run.
+assert_reruns rollup-blocked.json       33269791985
+# Two failed jobs in run 111 yield one ID; a skipped job does not count as a
+# failure; osv-scanner's CheckRun and CodeRabbit's StatusContext have no
+# Actions run to repeat.
+assert_reruns rollup-blocked-mixed.json 111,222
+assert_reruns rollup-merge.json         ""
+assert_reruns rollup-null.json          ""
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures test(s) failed" >&2
