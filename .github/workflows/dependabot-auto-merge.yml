@@ -227,13 +227,18 @@ jobs:
                   continue
                 fi
                 contexts="$(printf '%s' "$line" | cut -f2- | tr '\t' '\n' | sed 's/^/- `/; s/=/` — /')"
+                if [ -n "$RERUN_TOKEN" ]; then
+                  retry_sentence="Failed GitHub Actions jobs are re-run once automatically before this comment is posted, so these failed twice or cannot be re-run. Treat them as a real incompatibility unless you have reason to suspect a flake."
+                else
+                  retry_sentence="Re-run them if you believe they are flaky, or fix the incompatibility."
+                fi
                 comment_status=0
                 upsert_comment "$pr" "$marker
           This pull request is not being merged automatically. Every check has finished and these did not pass:
 
           $contexts
 
-          Failed GitHub Actions jobs are re-run once automatically before this comment is posted, so these failed twice or cannot be re-run. Treat them as a real incompatibility unless you have reason to suspect a flake. This comment is rewritten in place as the checks change." || comment_status=$?
+          $retry_sentence This comment is rewritten in place as the checks change." || comment_status=$?
                 if [ "$comment_status" -ne 0 ]; then
                   echo "  PR #$pr is blocked, but the comment could not be posted (exit $comment_status)." >&2
                 else
