@@ -53,12 +53,19 @@ on:
       - CI / Security
       - CI / Site
       - CI Server
+      # Regenerates derived files on Dependabot branches. Listed so a fixup
+      # that fails, which is then the last workflow to finish, still wakes
+      # the gate.
+      - Dependabot fixup
     types: [completed]
 
 permissions:
   contents: write
   pull-requests: write
   checks: read
+  # Reads run_attempt for the re-run decision. The re-run itself uses the App
+  # token minted below.
+  actions: read
 
 jobs:
   gate:
@@ -71,6 +78,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # A failed job is re-run once before the pull request is reported as
+      # blocked, and the re-run's completion has to fire workflow_run to wake
+      # this gate again. Events caused by GITHUB_TOKEN mostly start no
+      # workflows, so the re-run goes through a GitHub App token scoped to
+      # Actions. continue-on-error: without the App's secrets the gate still
+      # works, it just never retries.
+      - name: Mint a token for re-runs
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DEPENDABOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
+          permission-actions: write
+
       # Matching open dependabot pull requests on the triggering run's head SHA
       # is unconditional and needs no payload archaeology.
       #
@@ -80,6 +102,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RERUN_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -142,6 +165,45 @@ jobs:
             fi
           }
 
+          # A failed Actions job gets one automatic re-run before the pull
+          # request is reported as blocked: .github/ci-flakes.md is long, and
+          # one flaky context would otherwise park a dependency PR for good.
+          # Succeeds when at least one re-run was requested.
+          retry_failed_runs() {
+            local pr="$1" runs run attempt status requested=0
+            if [ -z "$RERUN_TOKEN" ]; then
+              echo "  No App token, so no automatic re-run."
+              return 1
+            fi
+            status=0
+            runs="$(./scripts/dependabot-gate.sh reruns --pr "$pr")" || status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "  Could not list failed runs for PR #$pr (exit $status); not retrying." >&2
+              return 1
+            fi
+            for run in $runs; do
+              status=0
+              attempt="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}" --jq .run_attempt)" || status=$?
+              if [ "$status" -ne 0 ]; then
+                echo "  Could not read run $run (exit $status); skipping it." >&2
+                continue
+              fi
+              if [ "$attempt" -ge 2 ]; then
+                echo "  Run $run is already on attempt $attempt; not retrying it."
+                continue
+              fi
+              status=0
+              GH_TOKEN="$RERUN_TOKEN" gh run rerun "$run" --failed --repo "$GITHUB_REPOSITORY" || status=$?
+              if [ "$status" -ne 0 ]; then
+                echo "  gh run rerun $run failed (exit $status)." >&2
+                continue
+              fi
+              echo "  Re-running the failed jobs of run $run."
+              requested=$((requested + 1))
+            done
+            [ "$requested" -gt 0 ]
+          }
+
           for pr in $prs; do
             # A failure evaluating one pull request must not abort the whole
             # step and leave every later pull request in this run unevaluated.
@@ -160,6 +222,10 @@ jobs:
                 echo "  Checks still running. Nothing to do."
                 ;;
               BLOCKED)
+                if retry_failed_runs "$pr"; then
+                  echo "  Retrying once before reporting PR #$pr as blocked."
+                  continue
+                fi
                 contexts="$(printf '%s' "$line" | cut -f2- | tr '\t' '\n' | sed 's/^/- `/; s/=/` — /')"
                 comment_status=0
                 upsert_comment "$pr" "$marker
@@ -167,7 +233,7 @@ jobs:
 
           $contexts
 
-          Re-run them if you believe they are flaky, or fix the incompatibility. This comment is rewritten in place as the checks change." || comment_status=$?
+          Failed GitHub Actions jobs are re-run once automatically before this comment is posted, so these failed twice or cannot be re-run. Treat them as a real incompatibility unless you have reason to suspect a flake. This comment is rewritten in place as the checks change." || comment_status=$?
                 if [ "$comment_status" -ne 0 ]; then
                   echo "  PR #$pr is blocked, but the comment could not be posted (exit $comment_status)." >&2
                 else
