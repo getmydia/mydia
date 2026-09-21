@@ -63,7 +63,7 @@ The `:master` tag:
 If you want pre-release builds on arm64, use `:beta` (or `:beta-pg`), which is
 published from tagged pre-releases and is multi-arch.
 
-Looking for player betas instead? [Try beta builds](beta-builds.md) covers every platform.
+Looking for player betas instead? See [Try beta builds](beta-builds.md), which covers every platform.
 
 ## Version Pinning
 
