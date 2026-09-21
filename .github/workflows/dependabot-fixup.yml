@@ -1,0 +1,90 @@
+name: Dependabot fixup
+
+# Dependabot edits manifests and lockfiles and nothing else, so a bump that
+# moves anything derived from them fails `Check / Generated Freshness`:
+# deps.nix behind mix.lock, a Cargo.lock behind a shared path crate,
+# npmDeps.hash behind assets/package-lock.json. This job regenerates them with
+# scripts/regenerate-derived.sh and pushes the result onto the Dependabot
+# branch.
+#
+# The push uses a GitHub App token. A push made with GITHUB_TOKEN starts no
+# workflows, so CI would never run on the fixed commit and the merge gate in
+# dependabot-auto-merge.yml would never see it. The App credentials are stored
+# as Dependabot secrets, the only secrets a Dependabot-triggered workflow can
+# read, which is what lets this run on `pull_request` rather than
+# `pull_request_target`.
+#
+# The App is the actor of the push it makes, so the `synchronize` event that
+# follows fails the actor check below and this job reports SKIPPED. No loop.
+#
+# Once anyone else has pushed to its branch, Dependabot stops rebasing the pull
+# request. `@dependabot recreate` rebuilds it from scratch, and this job runs
+# again on the new commit.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-fixup-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    name: Regenerate derived files
+    # github_actions bumps touch no manifest this job regenerates from.
+    if: >-
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      !startsWith(github.head_ref, 'dependabot/github_actions/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mint a push token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DEPENDABOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      # Credentials are not persisted: nothing before the push needs them, and
+      # the regeneration tools should not find a write token on disk.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      # rustup reads rust-toolchain.toml, as `Check / Generated Freshness` does.
+      - name: Install the pinned Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Regenerate
+        run: ./scripts/regenerate-derived.sh
+
+      - name: Push the regenerated files
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Derived files already agree with the manifests. Nothing to push."
+            exit 0
+          fi
+          git status --short
+          user_id="$(GH_TOKEN="$TOKEN" gh api "users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git commit -am "chore(deps): regenerate derived files"
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
