@@ -75,7 +75,7 @@ defmodule Mydia.Indexers.ReleaseIdentityTest do
              ) == :match
     end
 
-    test "matches a title with a word the parser strips as a language tag" do
+    test "matches a title containing a word that is also a language tag" do
       assert ReleaseIdentity.check(
                "The.Italian.Harbor.2031.1080p.WEB-DL.x264-GROUP",
                movie("The Italian Harbor", 2031)
