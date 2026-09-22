@@ -7,6 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Indexers
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.RankingOptions
+  alias Mydia.Indexers.ReleaseIdentity
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.SearchResult
   alias Mydia.Indexers.SearchScorer
@@ -362,7 +363,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       media_type: get_media_type(media_item),
       min_seeders: Map.get(assigns, :min_seeders),
       search_query: Map.get(assigns, :manual_search_query),
-      expected_title: media_item.title,
+      identity_target: ReleaseIdentity.Target.from_media_item(media_item),
       expected_season: expected_season,
       expected_episode: expected_episode
     })

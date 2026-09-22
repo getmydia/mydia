@@ -131,9 +131,8 @@ defmodule Mydia.Library.ReleaseParser do
   # `[ www.Torrenting.org ] `, `www.1TamilMV.world - `. Several trackers
   # stamp their domain onto every title they publish. Left in place the
   # tokenizer reads it as part of the show name ("Www Uindex Org Dark
-  # Matter"), which sinks the Jaro comparison in
-  # `ReleaseRanker.reject_title_mismatches/2` below its 0.7 threshold and
-  # hard-rejects an otherwise perfect release.
+  # Matter"), which `Mydia.Indexers.ReleaseIdentity` then hard-rejects as a
+  # different title from an otherwise perfect release.
   #
   # Anchored to a literal `www.` so it cannot bite a real title: no show or
   # film is named "www.something". Only the leading occurrence is removed;

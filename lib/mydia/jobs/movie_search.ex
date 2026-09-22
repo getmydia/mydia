@@ -35,7 +35,7 @@ defmodule Mydia.Jobs.MovieSearch do
 
   alias Mydia.{Repo, Media, Indexers, Downloads, Events, Search}
   alias Mydia.Downloads.{Blacklists, Download}
-  alias Mydia.Indexers.{IdentityShadow, RankingOptions, ReleaseIdentity}
+  alias Mydia.Indexers.{RankingOptions, ReleaseIdentity}
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Library
@@ -381,7 +381,6 @@ defmodule Mydia.Jobs.MovieSearch do
     # Mydia indexer name in a post-merge lookup.
     results = reject_blacklisted(results, movie: movie)
     ranking_opts = build_ranking_options(movie, args)
-    IdentityShadow.observe(movie, results, ranking_opts, %{"query" => query})
 
     case ReleaseRanker.select_best_result(results, ranking_opts) do
       nil ->
@@ -604,7 +603,6 @@ defmodule Mydia.Jobs.MovieSearch do
 
     ranking_opts = build_ranking_options(movie, args)
     resource_types = Keyword.get(opts, :backoff_resource_types, ["movie"])
-    IdentityShadow.observe(movie, candidates, ranking_opts, %{"query" => query})
 
     case ReleaseRanker.select_best_result(candidates, ranking_opts) do
       nil ->
@@ -685,7 +683,6 @@ defmodule Mydia.Jobs.MovieSearch do
       min_seeders: args.min_seeders || get_min_seeders(),
       size_range: args.size_range,
       search_query: build_search_query(movie),
-      expected_title: movie.title,
       identity_target: ReleaseIdentity.Target.from_media_item(movie),
       blocked_tags: merged_blocked_tags(args.blocked_tags),
       preferred_tags: args.preferred_tags

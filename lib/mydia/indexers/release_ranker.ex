@@ -39,15 +39,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
   - `:search_query` - Original search query to score title relevance
   - `:quality_profile` - QualityProfile struct for scoring (recommended)
   - `:media_type` - Either `:movie` or `:episode` (default: `nil`, TV filtering only applied when `:movie`)
-  - `:expected_title` - Expected show/movie title for pre-ranking title validation. When provided,
-    each result is parsed with `ReleaseParser` and rejected if the parsed title has a Jaro distance
-    below 0.7 from the expected title. Unparseable releases pass through (fail-open).
-    Ignored when `nil` or empty/whitespace-only. (default: `nil`)
-  - `:identity_gate` - Which identity removal runs: `:legacy` (default), the `:expected_title`
-    Jaro gate, or `:exact`, `Mydia.Indexers.ReleaseIdentity` against `:identity_target`.
-    `:exact` exists so `Mydia.Indexers.IdentityShadow` can compare the two on live searches.
-  - `:identity_target` - `Mydia.Indexers.ReleaseIdentity.Target` the `:exact` gate checks
-    releases against. With no target the `:exact` gate removes nothing. (default: `nil`)
+  - `:identity_target` - `Mydia.Indexers.ReleaseIdentity.Target` for the item being searched.
+    A result `Mydia.Indexers.ReleaseIdentity.check/2` does not match to it (a different title,
+    or for a movie a year more than one away) is removed before ranking. With no target nothing
+    is removed. (default: `nil`)
   - `:apply_source_exclusion` - Whether `:quality_profile`'s `:excluded_sources` list is enforced
     as a hard removal (default: `true`). The automatic search jobs leave this at the default.
     Manual search deliberately passes `false`: per spec R8, manual search and manual grab are the
@@ -94,8 +89,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
           search_query: String.t() | nil,
           quality_profile: QualityProfile.t() | nil,
           media_type: :movie | :episode | nil,
-          expected_title: String.t() | nil,
-          identity_gate: :legacy | :exact,
           identity_target: ReleaseIdentity.Target.t() | nil,
           expected_season: non_neg_integer() | nil,
           expected_episode: non_neg_integer() | nil,
@@ -109,7 +102,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
         ]
 
   @default_min_seeders 0
-  @title_match_threshold 0.7
 
   # Identity penalty: a large tier separator (not a nudge). It deliberately
   # exceeds the maximum achievable base score (quality·0.6 ≈ 60 + seeders ≈ 30
@@ -556,10 +548,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
   # anything else runs. This is the enforcement point for the validator: it only
   # *detects* bad releases, so without this stage a flagged release (e.g. a
   # malware torrent named "...h264-ETHEL.exe") still flows through scoring and
-  # can be selected and grabbed. The title-mismatch check below
-  # (parse_and_compare/2) parses with ReleaseParser and does not validate, so
-  # this stage is the sole validation gate for ranking. Reject here so a
-  # suspicious release never reaches a download client.
+  # can be selected and grabbed. The identity check below parses with
+  # ReleaseParser and does not validate, so this stage is the sole validation
+  # gate for ranking. Reject here so a suspicious release never reaches a
+  # download client.
   defp reject_invalid_releases(results) do
     Enum.filter(results, fn result ->
       case ReleaseValidator.validate_release(result.title) do
@@ -578,102 +570,36 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   ## Private Functions - Title Mismatch Filtering
 
-  # The legacy Jaro gate stays the default. The :exact gate lets
-  # Mydia.Indexers.IdentityShadow rank the same candidates under
-  # ReleaseIdentity and record where the two disagree.
+  # Removes every result that is not the searched item: a different title
+  # ("Claws S01E04 Fallout" for "Fallout", "Lantern Vale ..." for "Lantern"),
+  # or a movie whose year is more than one away. See ReleaseIdentity.
   defp reject_identity_mismatches(results, opts) do
-    case Keyword.get(opts, :identity_gate, :legacy) do
-      :legacy -> reject_title_mismatches(results, Keyword.get(opts, :expected_title))
-      :exact -> reject_release_identity_mismatches(results, Keyword.get(opts, :identity_target))
+    case Keyword.get(opts, :identity_target) do
+      nil ->
+        results
+
+      target ->
+        Enum.filter(results, fn result ->
+          case identity_mismatch_reason(result, target) do
+            nil ->
+              true
+
+            reason ->
+              Logger.info("[ReleaseRanker] Filtered out (#{reason}): #{result.title}")
+              false
+          end
+        end)
     end
   end
 
-  defp reject_release_identity_mismatches(results, nil), do: results
+  defp identity_mismatch_reason(_result, nil), do: nil
 
-  defp reject_release_identity_mismatches(results, %ReleaseIdentity.Target{} = target) do
-    Enum.filter(results, &(ReleaseIdentity.check(&1.title, target) == :match))
-  end
-
-  # When an expected_title is provided, parse each result's release name to extract
-  # the actual show/movie title, then reject results where the parsed title doesn't
-  # match the expected title. This prevents downloading wrong shows when an indexer
-  # returns results where the search term appears as an episode title rather than
-  # the show title (e.g., "Claws S01E04 Fallout" when searching for "Fallout").
-  defp reject_title_mismatches(results, nil), do: results
-  defp reject_title_mismatches(results, ""), do: results
-
-  defp reject_title_mismatches(results, expected_title) when is_binary(expected_title) do
-    trimmed = String.trim(expected_title)
-
-    if trimmed == "" do
-      results
-    else
-      normalized_expected = normalize_for_comparison(trimmed)
-
-      Enum.filter(results, fn result ->
-        case parse_and_compare(result, normalized_expected) do
-          {:mismatch, parsed_title, distance} ->
-            Logger.info(
-              "[ReleaseRanker] Filtered out (title mismatch): " <>
-                "parsed='#{parsed_title}' expected='#{trimmed}' " <>
-                "distance=#{Float.round(distance, 2)}: #{result.title}"
-            )
-
-            false
-
-          _ ->
-            true
-        end
-      end)
+  defp identity_mismatch_reason(%SearchResult{title: title}, %ReleaseIdentity.Target{} = target) do
+    case ReleaseIdentity.check(title, target) do
+      :match -> nil
+      {:mismatch, :title} -> "title_mismatch"
+      {:mismatch, :year} -> "year_mismatch"
     end
-  end
-
-  # Parse a result's title and compare against the pre-normalized expected title.
-  # Returns {:mismatch, parsed_title, distance} if below threshold, :ok otherwise.
-  #
-  # Calls ReleaseParser.parse/1 directly (not ReleaseIntake): reject_invalid_releases/1
-  # already ran the validator over the full result list upstream, so re-validating
-  # here would be a redundant double-pass. The two stages must be maintained
-  # together — if the upstream validator filter is removed, this path would need
-  # its own validation. A nil/unparseable title falls through to :ok (fail-open).
-  defp parse_and_compare(result, normalized_expected) do
-    case ReleaseParser.parse(result.title) do
-      %ParsedFileInfo{title: parsed_title} when is_binary(parsed_title) ->
-        distance =
-          String.jaro_distance(normalized_expected, normalize_for_comparison(parsed_title))
-
-        if distance < @title_match_threshold do
-          {:mismatch, parsed_title, distance}
-        else
-          :ok
-        end
-
-      _ ->
-        :ok
-    end
-  end
-
-  defp normalize_for_comparison(title) do
-    title
-    |> String.downcase()
-    |> normalize_unicode()
-    |> String.replace("_", " ")
-    |> String.replace(~r/[^\w\s]/u, "")
-    |> String.replace(~r/\b(the|a|an)\b/, "")
-    |> String.replace(~r/\s+/, " ")
-    |> String.trim()
-  end
-
-  # NFD decomposition strips accents universally: é → e, ñ → n, ç → c, etc.
-  # German transliterations (ä→ae, ß→ss) are applied first since NFD would just strip the umlaut.
-  defp normalize_unicode(str) do
-    str
-    |> String.replace("ä", "ae")
-    |> String.replace("ö", "oe")
-    |> String.replace("ü", "ue")
-    |> String.replace("ß", "ss")
-    |> then(&:unicode.characters_to_nfd_binary/1)
-    |> String.replace(~r/\p{Mn}/u, "")
   end
 
   ## Private Functions - Title Match Filtering
@@ -780,7 +706,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
   def score_all_with_reasons(results, opts \\ []) do
     blocked_tags = Keyword.get(opts, :blocked_tags, [])
     custom_formats = Keyword.get(opts, :custom_formats, [])
-    expected_title = Keyword.get(opts, :expected_title)
+    identity_target = Keyword.get(opts, :identity_target)
     floor_index = min_resolution_floor(opts, QualityProfile.valid_resolutions())
 
     results
@@ -805,7 +731,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       case get_rejection_reason(
              result,
              blocked_tags,
-             expected_title,
+             identity_target,
              excluded_sources(opts),
              custom_formats,
              floor_index
@@ -930,14 +856,14 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   # Returns a rejection reason string or nil if acceptable. The hard removals
   # are invalid releases (validator), blocked tags, excluded sources, rejecting
-  # custom formats, sub-floor resolutions, and wrong-show title mismatches.
+  # custom formats, sub-floor resolutions, and identity mismatches.
   # Size/seeders/ratio are no longer rejection reasons — they are soft
   # penalties on accepted results. The clause order mirrors the rank_all/2
   # pipeline so the Activity stats and the actual ranking agree.
   defp get_rejection_reason(
          result,
          blocked_tags,
-         expected_title,
+         identity_target,
          excluded,
          custom_formats,
          floor_index
@@ -958,8 +884,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
       below = below_min_resolution_reason(result, floor_index) ->
         below
 
-      expected_title_mismatch?(result, expected_title) ->
-        "title_mismatch"
+      mismatch = identity_mismatch_reason(result, identity_target) ->
+        mismatch
 
       true ->
         nil
@@ -993,19 +919,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
     case ReleaseValidator.validate_release(title) do
       {:ok, _name} -> nil
       {:error, reason} -> to_string(reason)
-    end
-  end
-
-  defp expected_title_mismatch?(_result, nil), do: false
-  defp expected_title_mismatch?(_result, ""), do: false
-
-  defp expected_title_mismatch?(result, expected_title) when is_binary(expected_title) do
-    trimmed = String.trim(expected_title)
-
-    if trimmed == "" do
-      false
-    else
-      match?({:mismatch, _, _}, parse_and_compare(result, normalize_for_comparison(trimmed)))
     end
   end
 

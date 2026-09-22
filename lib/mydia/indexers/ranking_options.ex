@@ -70,7 +70,6 @@ defmodule Mydia.Indexers.RankingOptions do
           optional(:min_seeders) => non_neg_integer() | nil,
           optional(:size_range) => {number() | nil, number() | nil} | nil,
           optional(:search_query) => String.t() | nil,
-          optional(:expected_title) => String.t() | nil,
           optional(:identity_target) => ReleaseIdentity.Target.t() | nil,
           optional(:expected_season) => non_neg_integer() | nil,
           optional(:expected_episode) => non_neg_integer() | nil,
@@ -99,7 +98,6 @@ defmodule Mydia.Indexers.RankingOptions do
       # apply; an explicit nil would break the seeder-minimum comparison.
       |> maybe_put(:size_range, Map.get(input, :size_range))
       |> maybe_put(:search_query, Map.get(input, :search_query))
-      |> maybe_put(:expected_title, Map.get(input, :expected_title))
       |> maybe_put(:identity_target, Map.get(input, :identity_target))
       |> maybe_put(:min_seeders, Map.get(input, :min_seeders))
       |> maybe_put(:expected_season, Map.get(input, :expected_season))

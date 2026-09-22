@@ -1013,10 +1013,8 @@ defmodule Mydia.Jobs.MovieSearchTest do
     end
   end
 
-  describe "identity shadow" do
-    test "grabs exactly as before and records the identity check's disagreement", %{
-      bypass: bypass
-    } do
+  describe "release identity" do
+    test "does not grab a release that only starts with the title", %{bypass: bypass} do
       junk = "2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv"
 
       IndexerMock.mock_prowlarr_all(bypass,
@@ -1028,16 +1026,10 @@ defmodule Mydia.Jobs.MovieSearchTest do
       assert :ok =
                perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
 
-      assert [download] = Mydia.Downloads.list_downloads()
-      assert download.title == junk
-
-      assert [event] = Mydia.Events.list_events(type: "search.identity_shadow")
-      assert event.metadata["query"] == "Lantern 2031"
-      assert event.metadata["legacy_pick"] == junk
-      assert event.metadata["exact_pick"] == nil
+      assert Mydia.Downloads.list_downloads() == []
     end
 
-    test "records nothing when the identity check agrees", %{bypass: bypass} do
+    test "grabs a release that is the movie", %{bypass: bypass} do
       IndexerMock.mock_prowlarr_all(bypass,
         results: [IndexerMock.movie_result(%{title: "Glass.Harbor", year: 2031, seeders: 40})]
       )
@@ -1048,7 +1040,6 @@ defmodule Mydia.Jobs.MovieSearchTest do
                perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
 
       assert [_download] = Mydia.Downloads.list_downloads()
-      assert Mydia.Events.list_events(type: "search.identity_shadow") == []
     end
   end
 

@@ -1780,8 +1780,8 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
     end
 
     test "fail-open: an unparseable title gets no identity penalty even with expected_episode" do
-      # No expected_title supplied, so no prior parse ran; the identity stage
-      # must parse and, finding nothing, fail open.
+      # No identity_target supplied, so no identity check ran; the identity
+      # penalty stage must parse and, finding nothing, fail open.
       results = [
         build_result(%{
           title: "1080p.x264.AAC",
@@ -2192,219 +2192,96 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
     end
   end
 
-  describe "title mismatch filtering" do
-    @gb 1024 * 1024 * 1024
+  describe "identity filtering" do
+    alias Mydia.Indexers.ReleaseIdentity.Target
 
-    test "rejects results where parsed title doesn't match expected title" do
-      # Real-world bug: searching for "Fallout S01E04" returned
-      # "Claws S01E04 Fallout 1080p..." because "Fallout" is the episode title,
-      # not the show title. ReleaseParser extracts "Claws" as the show title.
-      results = [
-        build_result(%{
-          title: "Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264-ViSUM",
-          size: round(3.0 * @gb),
-          seeders: 50,
-          quality: QualityParser.parse("Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264")
-        })
-      ]
+    @ember_show %Target{type: :tv_show, year: nil, keys: ["ember"]}
+    @lantern %Target{type: :movie, year: 2031, keys: ["lantern"]}
 
-      ranked =
-        ReleaseRanker.rank_all(results,
-          expected_title: "Fallout",
-          media_type: :episode,
-          search_query: "Fallout S01E04",
-          min_seeders: 0
-        )
+    defp identity_result(title, attrs \\ %{}),
+      do: build_result(Map.merge(%{title: title, quality: QualityParser.parse(title)}, attrs))
 
-      assert ranked == [],
-             "Result with parsed title 'Claws' should be rejected when expecting 'Fallout'"
+    defp rank_for(results, target, media_type) do
+      ReleaseRanker.rank_all(results,
+        identity_target: target,
+        media_type: media_type,
+        min_seeders: 0
+      )
     end
 
-    test "accepts results where parsed title matches expected title" do
-      results = [
-        build_result(%{
-          title: "Fallout.S01E04.1080p.AMZN.WEB-DL.DDP5.1.H.264-GROUP",
-          size: round(3.0 * @gb),
-          seeders: 50,
-          quality: QualityParser.parse("Fallout.S01E04.1080p.AMZN.WEB-DL.DDP5.1.H.264")
-        })
-      ]
-
-      ranked =
-        ReleaseRanker.rank_all(results,
-          expected_title: "Fallout",
-          media_type: :episode,
-          search_query: "Fallout S01E04",
-          min_seeders: 0
-        )
-
-      assert length(ranked) == 1
+    test "drops a show whose episode title is the searched show" do
+      # "Ember" is the episode title here; the show is "Claw Harbor".
+      assert rank_for(
+               [identity_result("Claw Harbor S01E04 Ember 1080p AMZN WEB-DL DDP 5.1 H 264-GRP")],
+               @ember_show,
+               :episode
+             ) == []
     end
 
-    test "accepts results with close title match" do
-      results = [
-        build_result(%{
-          title: "Dr.Who.S14E01.720p.WEB-DL.x264-GROUP",
-          size: round(2.0 * @gb),
-          seeders: 100,
-          quality: QualityParser.parse("Dr.Who.S14E01.720p.WEB-DL.x264")
-        })
-      ]
-
+    test "keeps the searched show over a better-seeded wrong one" do
       ranked =
-        ReleaseRanker.rank_all(results,
-          expected_title: "Doctor Who",
-          media_type: :episode,
-          search_query: "Doctor Who S14E01",
-          min_seeders: 0
+        rank_for(
+          [
+            identity_result("Claw Harbor S01E04 Ember 1080p AMZN WEB-DL DDP 5.1 H 264-GRP", %{
+              seeders: 200
+            }),
+            identity_result("Ember.S01E04.1080p.AMZN.WEB-DL.DDP5.1.H.264-GRP", %{seeders: 50})
+          ],
+          @ember_show,
+          :episode
         )
 
-      # "dr who" vs "doctor who" should be close enough to pass
-      assert length(ranked) == 1
+      assert [%{result: %{title: "Ember.S01E04" <> _}}] = ranked
     end
 
-    test "passes through release names with no extractable title (fail-open)" do
-      # ReleaseParser returns no title for this input, so the title-mismatch
-      # filter cannot compare and lets it through (fail-open). Note: ReleaseParser
-      # is more capable than the old parser — gibberish that DOES yield a title
-      # (e.g. "abc123def456") is now correctly extracted and filtered when it
-      # differs from the expected title.
-      # We omit search_query to avoid reject_zero_title_match catching it.
-      results = [
-        build_result(%{
-          title: "1080p.x264.AAC",
-          size: round(1.0 * @gb),
-          seeders: 10,
-          quality: nil
-        })
-      ]
-
-      ranked =
-        ReleaseRanker.rank_all(results,
-          expected_title: "Fallout",
-          min_seeders: 0
-        )
-
-      assert length(ranked) == 1,
-             "Releases with no extractable title should pass through (fail-open)"
+    test "drops an air-dated name that only starts with the title" do
+      assert rank_for(
+               [identity_result("2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv")],
+               @lantern,
+               :movie
+             ) == []
     end
 
-    test "skips filter when expected_title is empty string" do
-      results = [
-        build_result(%{
-          title: "Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264-ViSUM",
-          size: round(3.0 * @gb),
-          seeders: 50,
-          quality: QualityParser.parse("Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264")
-        })
-      ]
-
-      ranked =
-        ReleaseRanker.rank_all(results,
-          expected_title: "",
-          media_type: :episode,
-          search_query: "Fallout S01E04",
-          min_seeders: 0
-        )
-
-      assert length(ranked) == 1,
-             "Empty expected_title should bypass title mismatch filtering"
+    test "drops a movie from the wrong year" do
+      assert rank_for([identity_result("Lantern.1994.1080p.BluRay.x264-GRP")], @lantern, :movie) ==
+               []
     end
 
-    test "skips filter when expected_title is whitespace-only" do
-      results = [
-        build_result(%{
-          title: "Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264-ViSUM",
-          size: round(3.0 * @gb),
-          seeders: 50,
-          quality: QualityParser.parse("Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264")
-        })
-      ]
-
-      ranked =
-        ReleaseRanker.rank_all(results,
-          expected_title: "   ",
-          media_type: :episode,
-          search_query: "Fallout S01E04",
-          min_seeders: 0
-        )
-
-      assert length(ranked) == 1,
-             "Whitespace-only expected_title should bypass title mismatch filtering"
+    test "drops a name with no readable title" do
+      assert rank_for([identity_result("1080p.x264.AAC")], @lantern, :movie) == []
     end
 
-    test "skips filter when expected_title is not provided" do
-      results = [
-        build_result(%{
-          title: "Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264-ViSUM",
-          size: round(3.0 * @gb),
-          seeders: 50,
-          quality: QualityParser.parse("Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264")
-        })
-      ]
-
-      ranked =
-        ReleaseRanker.rank_all(results,
-          media_type: :episode,
-          search_query: "Fallout S01E04",
-          min_seeders: 0
-        )
-
-      # Without expected_title, the filter is skipped
-      assert length(ranked) == 1,
-             "Without expected_title, no title mismatch filtering should occur"
+    test "keeps a movie behind a leading group tag" do
+      title = "[Group Land] Lantern (2031) (BDRip 1080p HEVC) [3746D529].mkv"
+      assert [%{result: %{title: ^title}}] = rank_for([identity_result(title)], @lantern, :movie)
     end
 
-    test "rejects movie title mismatches" do
-      # Searching for "Inception" but indexer returns "Interstellar" (unrelated movie)
-      results = [
-        build_result(%{
-          title: "Interstellar.2014.1080p.BluRay.x264-GROUP",
-          size: round(8.0 * @gb),
-          seeders: 100,
-          quality: QualityParser.parse("Interstellar.2014.1080p.BluRay.x264")
-        })
-      ]
-
-      ranked =
-        ReleaseRanker.rank_all(results,
-          expected_title: "Inception",
-          media_type: :movie,
-          search_query: "Inception 2010",
-          min_seeders: 0
-        )
-
-      assert ranked == [],
-             "Movie with different parsed title should be rejected"
+    test "filters nothing without a target" do
+      assert [_] =
+               ReleaseRanker.rank_all(
+                 [identity_result("Claw Harbor S01E04 Ember 1080p WEB-DL-GRP")],
+                 media_type: :episode,
+                 min_seeders: 0
+               )
     end
 
-    test "filters correct result among mixed results" do
-      results = [
-        build_result(%{
-          title: "Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264-ViSUM",
-          size: round(3.0 * @gb),
-          seeders: 200,
-          quality: QualityParser.parse("Claws S01E04 Fallout 1080p AMZN WEB-DL DDP 5.1 H 264")
-        }),
-        build_result(%{
-          title: "Fallout.S01E04.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb",
-          size: round(3.0 * @gb),
-          seeders: 50,
-          quality: QualityParser.parse("Fallout.S01E04.1080p.AMZN.WEB-DL.DDP5.1.H.264")
-        })
-      ]
-
-      ranked =
-        ReleaseRanker.rank_all(results,
-          expected_title: "Fallout",
-          media_type: :episode,
-          search_query: "Fallout S01E04",
-          min_seeders: 0
+    test "score_all_with_reasons names the mismatch" do
+      rows =
+        ReleaseRanker.score_all_with_reasons(
+          [
+            identity_result("Lantern Vale 2031 1080p WEB-DL x264-GRP"),
+            identity_result("Lantern.1994.1080p.BluRay.x264-GRP"),
+            identity_result("Lantern.2031.1080p.WEB-DL.x264-GRP")
+          ],
+          identity_target: @lantern,
+          media_type: :movie
         )
 
-      # Only the correct Fallout result should remain, even though Claws had more seeders
-      assert length(ranked) == 1
-      assert String.contains?(List.first(ranked).result.title, "Fallout.S01E04")
+      assert rows |> Enum.map(&{&1.title, &1.rejection_reason}) |> Enum.sort() == [
+               {"Lantern Vale 2031 1080p WEB-DL x264-GRP", "title_mismatch"},
+               {"Lantern.1994.1080p.BluRay.x264-GRP", "year_mismatch"},
+               {"Lantern.2031.1080p.WEB-DL.x264-GRP", nil}
+             ]
     end
   end
 
@@ -2696,56 +2573,6 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       [row] = ReleaseRanker.score_all_with_reasons(results, custom_formats: [vfq])
       assert row.status == :rejected
       assert row.rejection_reason == "custom_format: VFQ"
-    end
-  end
-
-  describe "identity_gate" do
-    @lantern %Mydia.Indexers.ReleaseIdentity.Target{type: :movie, year: 2031, keys: ["lantern"]}
-    @junk "2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv"
-    @real "Lantern.2031.1080p.WEB-DL.x264-GROUP"
-
-    defp identity_result(title),
-      do: build_result(%{title: title, quality: QualityParser.parse(title)})
-
-    test "the legacy gate is the default and keeps a release with no parsed title" do
-      ranked =
-        ReleaseRanker.rank_all([identity_result(@junk)],
-          expected_title: "Lantern",
-          identity_target: @lantern,
-          media_type: :movie,
-          min_seeders: 0
-        )
-
-      assert [%{result: %{title: @junk}}] = ranked
-    end
-
-    test "the exact gate drops a release that is not the item" do
-      assert ReleaseRanker.rank_all([identity_result(@junk)],
-               expected_title: "Lantern",
-               identity_target: @lantern,
-               identity_gate: :exact,
-               media_type: :movie,
-               min_seeders: 0
-             ) == []
-    end
-
-    test "the exact gate keeps a release that is the item" do
-      assert [%{result: %{title: @real}}] =
-               ReleaseRanker.rank_all([identity_result(@real)],
-                 identity_target: @lantern,
-                 identity_gate: :exact,
-                 media_type: :movie,
-                 min_seeders: 0
-               )
-    end
-
-    test "the exact gate without a target filters nothing" do
-      assert [_] =
-               ReleaseRanker.rank_all([identity_result(@junk)],
-                 identity_gate: :exact,
-                 media_type: :movie,
-                 min_seeders: 0
-               )
     end
   end
 end

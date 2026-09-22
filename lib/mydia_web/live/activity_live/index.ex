@@ -470,7 +470,8 @@ defmodule MydiaWeb.ActivityLive.Index do
       # Hard removals only — size/seeders/ratio are penalties now, not rejections
       "blocked_tag" -> "Blocked"
       "invalid" -> "Invalid"
-      "title_mismatch" -> "Wrong show"
+      "title_mismatch" -> "Wrong title"
+      "year_mismatch" -> "Wrong year"
       _ -> String.replace(key, "_", " ") |> String.capitalize()
     end
   end
