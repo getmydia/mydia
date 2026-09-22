@@ -151,6 +151,53 @@ void main() {
     expect(_times(later), [5, 6]);
   });
 
+  test(
+      'a trailing partial line in the newest file is held for the next '
+      'write', () async {
+    final store = await open();
+    store.add(_record(1));
+    await store.flush();
+    final active = ndjsonFiles().single;
+    // Simulates a write that has not reached its terminating newline yet.
+    // Appended directly, bypassing the buffered writer, since the store
+    // itself always writes whole lines.
+    await active.writeAsString(jsonEncode(_record(2).toJson()),
+        mode: FileMode.append);
+
+    final batch = await store.read(maxBytes: 1 << 20);
+
+    expect(_times(batch), [1]);
+    expect(batch.gap, isFalse);
+    expect(batch.next.file, active.uri.pathSegments.last);
+    expect(batch.next.offset, utf8.encode(_record(1).toNdjsonLine()).length);
+  });
+
+  test(
+      'a trailing partial line in an older, already-rotated file is '
+      'skipped so later files are still read', () async {
+    final store = await open();
+    // An older, already-rotated file whose last line was never finished --
+    // the process was killed mid-write. Nothing will ever append to it
+    // again, so its dangling tail must not be held onto forever.
+    final older = File(
+        '${dir.path}${Platform.pathSeparator}0000000000001-sess0001-0000.ndjson');
+    await older.writeAsString(
+      '${_record(1).toNdjsonLine()}${jsonEncode(_record(2).toJson())}',
+    );
+    store.add(_record(3));
+    await store.flush();
+
+    final batch = await store.read(maxBytes: 1 << 20);
+
+    expect(_times(batch), [1, 3]);
+    expect(batch.gap, isFalse,
+        reason: 'a partial trailing line is not the same loss as a whole '
+            'rotated-away file, so it is not reported as a gap');
+    final newer = ndjsonFiles().last;
+    expect(batch.next.file, newer.uri.pathSegments.last);
+    expect(batch.next.offset, utf8.encode(_record(3).toNdjsonLine()).length);
+  });
+
   test('endCursor skips everything already written', () async {
     final store = await open();
     store.add(_record(1));

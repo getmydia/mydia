@@ -215,6 +215,98 @@ void main() {
             );
           }
         }
+
+        final requestsAtDeactivate = h.requests.length;
+        async.elapse(const Duration(minutes: 10));
+        expect(h.requests.length, requestsAtDeactivate,
+            reason: 'a stale drain must not keep sending after deactivate()');
+      });
+    });
+
+    test(
+        'deactivate() mid-drain with no logs_until stops further requests '
+        'and never sends a record written after it', () {
+      fakeAsync((async) {
+        late final _Harness h;
+        h = _Harness(
+          async,
+          maxBatchBytes: 100,
+          onRequest: (callIndex) {
+            if (callIndex == 0) {
+              h.uploader.deactivate();
+              // Written the instant sharing turns off, while the drain
+              // that started before that is still unwinding a multi-batch
+              // backlog. The consent copy promises this is never sent.
+              h.write(1, message: 'after-deactivate');
+            }
+          },
+        );
+        h.uploader.activate(until: null, resetCursor: true);
+        async.flushMicrotasks();
+        h.write(6);
+
+        async.elapse(const Duration(seconds: 61));
+        final requestsAtDeactivate = h.requests.length;
+
+        // If the loop still failed to re-check `_active`, it would keep
+        // draining the rest of the six-record backlog across these later
+        // ticks.
+        async.elapse(const Duration(minutes: 10));
+
+        expect(h.uploader.isActive, isFalse);
+        expect(h.requests.length, requestsAtDeactivate,
+            reason: 'deactivate() mid-drain must stop further requests');
+        final sent = [
+          for (var i = 0; i < h.requests.length; i++) ...h.messages(i),
+        ];
+        expect(
+          sent.any((m) => m.toString().startsWith('after-deactivate')),
+          isFalse,
+          reason: 'a record written after deactivate() must never be sent',
+        );
+      });
+    });
+
+    test(
+        'reactivating with a reset cursor after a mid-drain deactivate is '
+        'not overwritten by the stale drain, and skips what was written '
+        'while sharing was off', () {
+      fakeAsync((async) {
+        late final _Harness h;
+        h = _Harness(
+          async,
+          maxBatchBytes: 100,
+          onRequest: (callIndex) {
+            if (callIndex == 0) h.uploader.deactivate();
+          },
+        );
+        h.uploader.activate(until: null, resetCursor: true);
+        async.flushMicrotasks();
+        h.write(6);
+
+        async.elapse(const Duration(seconds: 61));
+        expect(h.uploader.isActive, isFalse);
+
+        // Written while sharing was off. The consent copy promises these
+        // never reach the relay, even once sharing is turned back on with
+        // a reset cursor meant to skip exactly this kind of backlog.
+        h.write(2, message: 'while-off');
+
+        h.uploader.activate(until: null, resetCursor: true);
+        async.flushMicrotasks();
+        h.write(1, message: 'after-reactivate');
+
+        async.elapse(const Duration(seconds: 61));
+
+        expect(h.uploader.isActive, isTrue);
+        final sent = [
+          for (var i = 0; i < h.requests.length; i++) ...h.messages(i),
+        ];
+        for (final message in sent) {
+          expect(message.toString(), isNot(startsWith('while-off')),
+              reason: 'nothing written while sharing was off may be sent');
+        }
+        expect(sent, contains('after-reactivate 8'));
       });
     });
 

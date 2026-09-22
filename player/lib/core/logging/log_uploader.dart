@@ -141,6 +141,16 @@ class LogUploader {
   DateTime? _notBefore;
   Duration _backoff = Duration.zero;
 
+  /// Bumped on [deactivate] and whenever the cursor is reset. [_drain]
+  /// snapshots this at entry and rechecks it before every send and cursor
+  /// save, so a drain already mid-flight when one of those happens notices
+  /// on its next check and stops immediately, rather than continuing to
+  /// upload after the user turned sharing off or persisting a stale cursor
+  /// over one [activate] just reset. `_busy` alone cannot catch this: it
+  /// only stops a *new* drain from starting while one is running, it does
+  /// nothing for a drain already in progress when [deactivate] runs.
+  int _generation = 0;
+
   bool get isActive => _active;
 
   @visibleForTesting
@@ -155,7 +165,14 @@ class LogUploader {
     required bool resetCursor,
   }) async {
     _until = until;
-    if (resetCursor) await _store.saveCursor(await _store.endCursor());
+    if (resetCursor) {
+      // Bump before the await below, not after: it closes the window where
+      // a drain already in flight (started before this call, from an
+      // earlier `activate` that never deactivated first) could still save
+      // its own, now-stale cursor after the fresh one lands.
+      _generation++;
+      await _store.saveCursor(await _store.endCursor());
+    }
     if (_active) return;
     _active = true;
     _unsent = 0;
@@ -166,6 +183,12 @@ class LogUploader {
   /// Stops continuous upload, after one last attempt when [finalAttempt].
   Future<void> deactivate({bool finalAttempt = false}) async {
     if (!_active) return;
+    // Bumped first, before the optional final tick: a drain already mid-
+    // flight from an earlier timer tick snapshotted the previous
+    // generation, so this immediately marks it stale. The final-attempt
+    // drain started below reads the generation fresh when it begins, so
+    // this bump does not cancel the very drain it is about to ask for.
+    _generation++;
     _timer?.cancel();
     _timer = null;
     _store.onFlushed = null;
@@ -265,6 +288,14 @@ class LogUploader {
   }
 
   Future<void> _drain() async {
+    // Snapshotted once: a later `deactivate` or cursor-resetting `activate`
+    // bumps `_generation` while this loop is mid-flight (it runs across
+    // several awaited sends), and `_stale` below compares against that
+    // snapshot, not the live value, so this drain notices the change
+    // instead of racing it.
+    final generation = _generation;
+    bool stale() => generation != _generation || !_active;
+
     final meta = (await _loadMeta()).toJson(kind: 'stream');
     // Snapshotted once: deactivate() can null out _until while this loop is
     // mid-flight (it runs across several awaited sends), and a later batch
@@ -279,12 +310,19 @@ class LogUploader {
         untilMs: untilMs,
       );
       if (batch.isEmpty && !batch.gap) {
+        // Stale here too: `stale()` becoming true while this read was in
+        // flight must stop the cursor from being pushed to `batch.next`.
+        if (stale()) return;
         if (batch.next != cursor) await _store.saveCursor(batch.next);
         _backoff = Duration.zero;
         _notBefore = null;
         _unsent = 0;
         return;
       }
+      // Checked right before the network call: once sharing is off (or the
+      // cursor was reset), nothing already-read may go out, even if it was
+      // read before the user's choice changed.
+      if (stale()) return;
       final lines = [if (batch.gap) _gapLine(), ...batch.lines];
       switch (await _send(meta, lines, budget: budget)) {
         case _Sent():
@@ -299,6 +337,12 @@ class LogUploader {
           budget = _shrinkBudget(budget);
           continue;
       }
+      // Checked before the save too: a batch that was already sent (and
+      // possibly already accepted) while this drain went stale still must
+      // not overwrite a cursor an `activate(resetCursor: true)` in the
+      // meantime moved on to skip everything, including what this batch
+      // just delivered.
+      if (stale()) return;
       cursor = batch.next;
       await _store.saveCursor(cursor);
     }

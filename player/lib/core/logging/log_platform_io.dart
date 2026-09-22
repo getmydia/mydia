@@ -279,11 +279,16 @@ class FileLogStore implements LogStore {
       final file = files[index];
       final int length;
       List<int>? chunk;
+      var reachedEof = false;
       try {
         length = await file.length();
         if (offset < length) {
-          chunk =
-              await _readRange(file, offset, math.min(budget, length - offset));
+          final toRead = math.min(budget, length - offset);
+          // Computed from the lengths, before the read: whether this
+          // request reaches all the way to the file's current end, as
+          // opposed to stopping short only because the byte budget ran out.
+          reachedEof = toRead == length - offset;
+          chunk = await _readRange(file, offset, toRead);
         }
       } on FileSystemException {
         // The file was rotated away or became unreadable between the
@@ -310,8 +315,25 @@ class FileLogStore implements LogStore {
         offset += start;
         budget -= start;
         cursor = LogCursor(_nameOf(file), offset);
-        // Out of budget mid-file, or a last line still waiting for its newline.
-        if (offset < length) break;
+        if (offset < length) {
+          // Either the byte budget ran out before the rest of this file was
+          // even read (more of it is still unread, `reachedEof` is false),
+          // or the whole remainder was read and it ends in a line with no
+          // trailing newline yet. The latter is right to wait on for the
+          // newest file -- it may still be mid-append -- but wrong for an
+          // older, already-rotated one: nothing ever appends to it again,
+          // so a partial tail there is permanent (typically the process
+          // was killed mid-write), and parking the cursor on it would stop
+          // every file after this one from ever being read again.
+          if (!reachedEof || index == files.length - 1) break;
+          // Not reported through the batch's `gap` flag: `gap` means a
+          // whole file disappeared with lines still unread, a loss worth
+          // telling the relay about. This drops at most the one dangling
+          // record a crash mid-write left behind, so it is skipped
+          // silently and reading moves on to the next file.
+          offset = length;
+          cursor = LogCursor(_nameOf(file), offset);
+        }
       }
       if (index == files.length - 1) break;
       index++;
