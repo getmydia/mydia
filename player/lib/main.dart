@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
+import 'core/auth/device_info_service.dart';
+import 'core/crash_reporting/crash_app_context.dart';
 import 'core/downloads/download_service.dart';
 import 'core/crash_reporting/crash_report.dart';
 import 'core/crash_reporting/crash_reporter.dart';
@@ -12,6 +14,9 @@ import 'core/crash_reporting/crash_reporter_provider.dart';
 import 'package:flutter/services.dart';
 
 import 'core/graphql/watch/fetch_log.dart';
+import 'core/logging/log_platform.dart';
+import 'core/logging/log_sink.dart';
+import 'core/logging/log_store.dart';
 import 'core/player/input_capabilities.dart';
 import 'core/navigation/sidebar_layout_providers.dart';
 import 'core/storage/app_hive.dart';
@@ -54,6 +59,11 @@ const kWebP2pEnabled = bool.fromEnvironment('MYDIA_WEB_P2P');
 const _rustInitTimeout = Duration(seconds: 60);
 
 void main() async {
+  // Records every debugPrint for the local log files and, when the user
+  // shares them, the relay. First, so nothing logged at startup is missed.
+  // See core/logging/log_sink.dart.
+  final logSink = kIsWeb ? null : LogSink.install();
+
   // Presents and logs every Flutter framework error, as this spot always has,
   // and reports it to the relay once the user opts in. See
   // core/crash_reporting/crash_reporter.dart.
@@ -74,7 +84,7 @@ void main() async {
         yield LicenseEntryWithLineBreaks(<String>['Inter'], license);
       });
 
-      await _startApp(crashReporter);
+      await _startApp(crashReporter, logSink);
     },
     (error, stack) {
       // `_startApp` guarantees `runApp` has already run by the time control
@@ -85,6 +95,7 @@ void main() async {
       // fatal startup failure, silently leaving the window black.
       debugPrint('Caught error: $error');
       debugPrint('Stack trace: $stack');
+      logSink?.recordError(error, stack);
       unawaited(crashReporter.report(error, stack, capture: CrashCapture.zone));
     },
   );
@@ -100,7 +111,11 @@ void main() async {
 /// app pointed at the same user-data directory will otherwise leave the
 /// window completely black forever with no indication why (the bug this
 /// function exists to fix).
-Future<void> _startApp(CrashReporter crashReporter) async {
+Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
+  // Point the log sink at its files first, so the rest of startup is on disk.
+  // Never throws; see _attachLogStore.
+  await _attachLogStore(logSink);
+
   // Initialize the Rust bridge. This MUST complete before any p2p code runs.
   //
   // On native there is no reasonable degraded mode without it, so a failure
@@ -248,4 +263,45 @@ Future<void> _startApp(CrashReporter crashReporter) async {
       child: const MyApp(),
     ),
   );
+}
+
+/// Opens the on-disk log and points [sink] at it.
+///
+/// Never throws: logs are diagnostics, never a reason to fail startup. Null
+/// when there is no sink (web) or the store could not be opened, in which case
+/// the sink keeps its first [LogSink.maxPending] records in memory and drops
+/// the rest.
+Future<LogStore?> _attachLogStore(LogSink? sink) async {
+  if (sink == null) return null;
+  try {
+    final store = await openLogStore(
+      sessionId: sink.sessionId,
+      onDisabled: (reason) =>
+          sink.consoleOnly('[LogStore] Disk logging stopped: $reason'),
+    );
+    if (store == null) return null;
+    sink.attach(store);
+    unawaited(_recordSession(sink));
+    return store;
+  } catch (e) {
+    debugPrint('[LogSink] Could not open the log store: $e');
+    return null;
+  }
+}
+
+/// The `Session` record every launch starts with.
+Future<void> _recordSession(LogSink sink) async {
+  try {
+    final context = await loadCrashAppContext();
+    final deviceName = await DeviceInfoService().getDeviceName();
+    sink.recordSession({
+      'version': context.version,
+      'build': context.buildNumber,
+      'platform': context.platform,
+      'os': context.osVersion,
+      'device': deviceName,
+    });
+  } catch (e) {
+    debugPrint('[LogSink] Could not describe the session: $e');
+  }
 }

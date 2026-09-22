@@ -4,6 +4,7 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../logging/log_sink.dart';
 import '../relay/relay_api_client.dart' show metadataRelayBaseUrl;
 import '../settings/settings_service.dart';
 import 'crash_app_context.dart';
@@ -118,6 +119,7 @@ class CrashReporter {
     debugPrint('Stack trace: ${details.stack}');
     // Flutter marks environmental failures, image loads among them, silent.
     if (details.silent) return;
+    LogSink.instance?.recordError(details.exception, details.stack);
     unawaited(
       report(
         details.exception,
@@ -131,6 +133,7 @@ class CrashReporter {
   bool handlePlatformError(Object error, StackTrace stack) {
     debugPrint('Platform error: $error');
     debugPrint('Stack trace: $stack');
+    LogSink.instance?.recordError(error, stack);
     unawaited(report(error, stack, capture: CrashCapture.platformDispatcher));
     return true;
   }
