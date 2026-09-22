@@ -46,6 +46,22 @@ final _authorization = RegExp(
   caseSensitive: false,
 );
 
+// An unquoted token-family assignment: `token:`, `access_token=`,
+// `refresh_token = `, `auth_token:`, optionally with a quoted key. The
+// mandatory `[:=]` is what keeps this from matching prose that merely
+// mentions the word, like "Access token refreshed" -- there is no separator
+// to require there, so it never matches. A quoted value under these same
+// key names is already gone by the time this runs, redacted whole by
+// `_quotedCredential` above; a `?token=`/`&token=` value is already gone
+// too, redacted by `_credentialParam`. Excluding `&` from the value here
+// keeps this rule from re-absorbing the rest of a query string that rule
+// already redacted, so re-matching an already-redacted value is a harmless
+// no-op rather than a second bite out of the line.
+final _unquotedToken = RegExp(
+  r'''(["']?(?:access_token|refresh_token|auth_token|token)["']?\s*[:=]\s*)[^\s"',}&]+''',
+  caseSensitive: false,
+);
+
 String redactLogMessage(String input) {
   var out = input.replaceAllMapped(
     _quotedCredential,
@@ -54,6 +70,7 @@ String redactLogMessage(String input) {
   out = out.replaceAllMapped(_userinfo, (m) => '${m[1]}[REDACTED]@');
   out = out.replaceAllMapped(_credentialParam, (m) => '${m[1]}[REDACTED]');
   out = out.replaceAllMapped(_authorization, (m) => '${m[1]}[REDACTED]');
+  out = out.replaceAllMapped(_unquotedToken, (m) => '${m[1]}[REDACTED]');
   out = out.replaceAll(bearerPattern, 'Bearer [REDACTED]');
   out = out.replaceAll(jwtPattern, '[REDACTED]');
   out = out.replaceAll(passwordPattern, 'password: [REDACTED]');

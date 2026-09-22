@@ -23,6 +23,10 @@ void main() {
           'login failed: {"username":"sam","password: [REDACTED]"}',
       "retry with {secret: 'two words here'}": 'retry with {secret: [REDACTED]',
       'headers: {"token": "abc def"}': 'headers: {"token": "[REDACTED]"}',
+      'token: sk_live_abc123': 'token: [REDACTED]',
+      'token=abc123 and more text': 'token=[REDACTED] and more text',
+      'refresh_token = xyz789': 'refresh_token = [REDACTED]',
+      '{"token": abc}': '{"token": [REDACTED]}',
     };
 
     for (final MapEntry(key: input, value: expected) in cases.entries) {
@@ -37,6 +41,9 @@ void main() {
       'GET https://mydia.example:4443/api/graphql?operation=Library',
       'https://x.example/a?monkey=3&keyframe=12',
       'Relay connected: https://cae1-1.relay.mydia.dev',
+      '[AuthService] Access token refreshed',
+      '[P2pGraphQLLink] Access token rejected, refreshing',
+      'Token refresh completed successfully',
     ];
 
     for (final line in kept) {
