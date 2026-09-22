@@ -37,6 +37,20 @@ final AsyncNotifierProvider<DiagnosticsController, DiagnosticsState>
 class DiagnosticsController extends AsyncNotifier<DiagnosticsState> {
   Timer? _expiry;
 
+  // Serializes select() and the expiry timer's own write, so their storage
+  // writes, crash-reporter consent and uploader state can never interleave.
+  // Each call chains onto this future and replaces it with one that resolves
+  // once that call is done, success or failure, so a failed call never
+  // wedges the queue behind it, while _enqueue still hands the caller the
+  // original error.
+  Future<void> _pending = Future<void>.value();
+
+  Future<T> _enqueue<T>(Future<T> Function() work) {
+    final result = _pending.then((_) => work());
+    _pending = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
   DateTime _now() => ref.read(diagnosticsClockProvider)().toUtc();
 
   @override
@@ -54,7 +68,16 @@ class DiagnosticsController extends AsyncNotifier<DiagnosticsState> {
 
   /// Stores [choice] and applies it. Throws when it could not be stored,
   /// leaving the previous choice in force.
-  Future<void> select(DiagnosticsChoice choice) async {
+  Future<void> select(DiagnosticsChoice choice) =>
+      _enqueue(() => _select(choice));
+
+  Future<void> _select(DiagnosticsChoice choice) async {
+    // build() may still be awaiting its own load() when this call was made.
+    // Waiting for it here, rather than reading `state` immediately, means
+    // this selection is layered on top of the state build() loaded instead
+    // of being silently clobbered when build() later completes and Riverpod
+    // assigns its return value to state.
+    await future;
     final now = _now();
     final wasSharing = state.value?.logsActiveAt(now) ?? false;
     final next = DiagnosticsState.chosen(choice, now);
@@ -92,14 +115,31 @@ class DiagnosticsController extends AsyncNotifier<DiagnosticsState> {
 
     final until = next.logsUntil;
     if (sharing && until != null) {
-      _expiry = Timer(until.difference(now), () => unawaited(_expire()));
+      // The choice and end time this timer is armed for, so a stale firing
+      // (a newer selection already applied while this was waiting, or while
+      // it waited its turn in _pending) can recognize itself as stale and do
+      // nothing instead of undoing that newer selection.
+      _expiry = Timer(
+        until.difference(now),
+        () => unawaited(_enqueue(() => _expire(next.choice, until))),
+      );
     }
   }
 
-  Future<void> _expire() async {
+  Future<void> _expire(
+      DiagnosticsChoice armedChoice, DateTime armedUntil) async {
+    final current = state.value;
+    if (current == null ||
+        current.choice != armedChoice ||
+        current.logsUntil != armedUntil) {
+      // The user already chose something newer; this expiry is stale.
+      return;
+    }
     await ref.read(logUploaderProvider)?.deactivate(finalAttempt: true);
     try {
-      await select(DiagnosticsChoice.crashes);
+      // Not select(): this already holds the turn _enqueue granted it, and
+      // select() would enqueue behind itself and deadlock.
+      await _select(DiagnosticsChoice.crashes);
     } catch (e) {
       debugPrint('[Diagnostics] Could not store the end of log sharing: $e');
     }
