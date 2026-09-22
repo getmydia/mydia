@@ -104,6 +104,10 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
     # re-matched as a unit). Computed per-tab in the LiveView; nil when not
     # evaluated (e.g. queue/issues rows, where the action isn't offered).
     :rematch_eligible?,
+    # Whether this row's media item has used up its automatic rejections (see
+    # `Mydia.Downloads.AutoRejectCap`), so a stall will not be acted on.
+    # Stamped by the Downloads LiveView; nil when not evaluated.
+    :auto_reject_capped?,
     # Operator-requested removal, mirrored from the Download row. See
     # `Mydia.Downloads.Removal`.
     :removal_requested_at,
@@ -168,6 +172,7 @@ defmodule Mydia.Downloads.Structs.EnrichedDownload do
           client_config_state: :present | :disabled | :removed | nil,
           adoptable_client: String.t() | nil,
           rematch_eligible?: boolean() | nil,
+          auto_reject_capped?: boolean() | nil,
           removal_requested_at: DateTime.t() | nil,
           removal_kind: String.t() | nil,
           removal_delete_files: boolean() | nil,

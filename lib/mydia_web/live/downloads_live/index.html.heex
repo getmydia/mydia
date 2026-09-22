@@ -293,11 +293,17 @@
             <%= if soft_stalled?(download) and not removing?(download) do %>
               <div class="text-xs text-warning flex flex-wrap items-center gap-1.5 mt-0.5">
                 <.icon name="hero-clock" class="size-3 shrink-0" />
-                <span>
-                  No progress for {format_duration(stall_elapsed_seconds(download))}. If nothing changes in the next {format_duration(
-                    stall_remaining_seconds(download, @stall_grace_map)
-                  )}, Mydia will remove it and search for a different release.
-                </span>
+                <%= if download.auto_reject_capped? do %>
+                  <span id={"stall-capped-#{download.id}"}>
+                    No progress for {format_duration(stall_elapsed_seconds(download))}. Mydia has stopped replacing stalled releases for this title. Cancelling will block this release.
+                  </span>
+                <% else %>
+                  <span>
+                    No progress for {format_duration(stall_elapsed_seconds(download))}. If nothing changes in the next {format_duration(
+                      stall_remaining_seconds(download, @stall_grace_map)
+                    )}, Mydia will remove it and search for a different release.
+                  </span>
+                <% end %>
                 <button
                   type="button"
                   id={"stall-reject-#{download.id}"}

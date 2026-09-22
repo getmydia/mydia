@@ -1,6 +1,7 @@
 defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
+  alias Mydia.Downloads.AutoRejectCap
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.ExternalTorrents
@@ -1201,6 +1202,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
           |> Enum.drop(offset)
           |> Enum.take(@items_per_page)
           |> annotate_rematch_eligibility(tab)
+          |> annotate_auto_reject_cap()
 
         has_more = length(all_downloads) > offset + @items_per_page
 
@@ -1484,6 +1486,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     Downloads.list_downloads_with_status(filter: filter, bounded: true)
     |> apply_sorting(socket.assigns.sort_by)
     |> annotate_rematch_eligibility(socket.assigns.active_tab)
+    |> annotate_auto_reject_cap()
   end
 
   # Stamps `rematch_eligible?` on completed-tab rows: a row is eligible only when
@@ -1503,6 +1506,20 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp annotate_rematch_eligibility(downloads, _tab), do: downloads
+
+  # Stamps `auto_reject_capped?` so a stalled row whose title has used up its
+  # automatic rejections says so, instead of counting down to a removal that
+  # DownloadMonitor will not make. One query for the whole page.
+  defp annotate_auto_reject_cap(downloads) do
+    capped =
+      downloads
+      |> Enum.map(& &1.media_item_id)
+      |> AutoRejectCap.exhausted_ids()
+
+    Enum.map(downloads, fn download ->
+      %{download | auto_reject_capped?: MapSet.member?(capped, download.media_item_id)}
+    end)
+  end
 
   # Sorts the enriched download list by the active `sort_by` selection. Runs in
   # the LiveView (not the DB) because real-time keys (progress, speeds, ETA,

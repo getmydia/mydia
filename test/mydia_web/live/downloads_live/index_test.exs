@@ -601,6 +601,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       assert html =~ "search for a different release"
       assert has_element?(view, "#stall-keep-waiting-#{download.id}")
       assert has_element?(view, "#stall-reject-#{download.id}")
+      refute has_element?(view, "#stall-capped-#{download.id}")
     end
 
     test "keep waiting resets the stall clock", %{conn: conn} do
@@ -623,6 +624,27 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       updated = Mydia.Downloads.get_download!(download.id)
       assert is_nil(updated.stalled_since)
       assert DateTime.diff(DateTime.utc_now(), updated.last_progress_at, :second) < 60
+    end
+
+    test "a capped title says Mydia has stopped replacing its releases", %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Fictional Stuck Harbor"})
+
+      for _ <- 1..3 do
+        Mydia.Search.record_failure("auto_reject", media_item.id, "stalled")
+      end
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          last_progress_at: DateTime.add(DateTime.utc_now(), -300 * 60, :second),
+          stalled_since: DateTime.add(DateTime.utc_now(), -30 * 60, :second)
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(view, "#stall-capped-#{download.id}", "stopped replacing")
+      assert has_element?(view, "#stall-reject-#{download.id}")
+      assert has_element?(view, "#stall-keep-waiting-#{download.id}")
     end
   end
 
