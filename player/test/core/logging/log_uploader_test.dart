@@ -298,6 +298,82 @@ void main() {
       });
     });
 
+    test('a 413 at the smallest batch is rejected, not shrunk forever', () {
+      fakeAsync((async) {
+        // A relay that answers 413 no matter what is sent. 20 short lines
+        // total well under even the shrink floor, so every read at every
+        // budget level returns all of them: the batch never becomes a
+        // single line on its own, only the floor check can stop the loop.
+        final h = _Harness(
+          async,
+          statuses: [413],
+          maxBatchBytes: 1024 * 1024,
+        );
+        h.uploader.activate(until: null, resetCursor: true);
+        async.flushMicrotasks();
+        h.write(20);
+
+        // If this elapse call returns at all, the drain finished instead
+        // of spinning forever inside the timer callback.
+        async.elapse(const Duration(seconds: 61));
+
+        // 1 MiB halves to the 64 KiB floor in exactly 4 steps (1024K,
+        // 512K, 256K, 128K, then 64K), so there are 4 _Shrink outcomes
+        // followed by exactly one _Rejected outcome at the floor: 5
+        // requests total, never more, however long the relay keeps
+        // answering 413.
+        expect(h.requests, hasLength(5));
+        expect(h.store.savedCursor, const LogCursor('mem', 20));
+      });
+    });
+
+    test(
+        'a partial acceptance followed by a failure never resends what '
+        'already landed', () {
+      fakeAsync((async) {
+        // 6 lines, each just over 20 KB. All 6 add up to well under
+        // sizeTrigger (256 KiB), so writing them does not itself kick
+        // off an early tick; a single shrink clamps straight to the 64
+        // KiB floor (half of the total is already under it), and the
+        // floor holds exactly 3 of the 6, so the first accepted request
+        // covers only part of the batch. That is the shape that
+        // duplicated lines under the old split-and-recurse code: accept
+        // the first half, then fail the rest before the cursor moves
+        // past it.
+        final h = _Harness(
+          async,
+          statuses: [413, 204, 429, 204],
+          maxBatchBytes: 120510,
+        );
+        h.uploader.activate(until: null, resetCursor: true);
+        async.flushMicrotasks();
+        h.write(6, message: 'x' * 20000);
+        final written = [for (var i = 0; i < 6; i++) '${'x' * 20000} $i'];
+
+        async.elapse(const Duration(seconds: 61));
+        expect(h.requests, hasLength(3),
+            reason: '413 shrinks, the shrunk batch is accepted, '
+                'the remainder gets a 429');
+        expect(h.messages(1), written.sublist(0, 3),
+            reason: 'the shrunk batch the relay actually accepted');
+        expect(h.store.savedCursor, const LogCursor('mem', 3),
+            reason: 'the accepted half must be durable even though the '
+                'request as a whole is still in progress');
+
+        async.elapse(const Duration(seconds: 60));
+        expect(h.requests, hasLength(4));
+        expect(h.store.savedCursor, const LogCursor('mem', 6));
+
+        // The proof: every line the relay ever returned a 2xx for, in
+        // the order it was sent, with nothing repeated. Under the old
+        // split-and-recurse code the first half (already accepted here)
+        // would be resent whole alongside the second half once the
+        // retry succeeds, so this fails against that code with 9
+        // entries instead of 6, lines 0 through 2 doubled.
+        expect(h.deliveredMessages(), written);
+      });
+    });
+
     test(
         'a failed retry after a 413 shrink never duplicates a line once a '
         'later attempt succeeds', () {

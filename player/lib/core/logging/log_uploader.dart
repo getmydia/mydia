@@ -226,6 +226,7 @@ class LogUploader {
           meta.toJson(
               kind: 'report', report: code, note: code == null ? note : null),
           batch.lines,
+          budget: budget,
         );
         if (outcome is _Shrink) {
           budget = _shrinkBudget(budget);
@@ -285,7 +286,7 @@ class LogUploader {
         return;
       }
       final lines = [if (batch.gap) _gapLine(), ...batch.lines];
-      switch (await _send(meta, lines)) {
+      switch (await _send(meta, lines, budget: budget)) {
         case _Sent():
           budget = maxBatchBytes;
         case _Rejected():
@@ -311,7 +312,11 @@ class LogUploader {
         sessionId: _sessionId,
       ).toJson());
 
-  Future<_Outcome> _send(Map<String, Object?> meta, List<String> lines) async {
+  Future<_Outcome> _send(
+    Map<String, Object?> meta,
+    List<String> lines, {
+    required int budget,
+  }) async {
     final response = await _post(meta, lines);
     final status = response.statusCode;
     if (status >= 200 && status < 300) return _Sent(_codeOf(response));
@@ -319,7 +324,18 @@ class LogUploader {
     // from the same cursor, never a split-and-send: the cursor only moves
     // past what one whole request got a full answer for, so a partial
     // success can never be silently resent as a duplicate.
-    if (status == 413 && lines.length > 1) return const _Shrink();
+    //
+    // Only shrink while there is room to shrink. A 413 at the smallest
+    // batch we are willing to build means the batch itself is unsendable,
+    // not that trying smaller would help: _shrinkBudget clamps to the same
+    // floor forever, so without this check a relay that keeps answering
+    // 413 would keep _drain/sendReport returning _Shrink and their
+    // `while (true)` would neither send nor advance the cursor, spinning
+    // forever inside a timer callback on the user's device. Reject it
+    // instead, the same as an already-single-line batch.
+    if (status == 413 && lines.length > 1 && budget > _minBatchBytes) {
+      return const _Shrink();
+    }
     if (status == 400 || status == 413) return const _Rejected();
     if (status == 429) return _Wait(_now().add(_retryAfter(response)));
     if (status == 404) return _Wait(_now().add(missingEndpointBackoff));
