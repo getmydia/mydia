@@ -77,6 +77,15 @@ class FileLogStore implements LogStore {
   static const _flushAtRecords = 100;
   static const _newline = 0x0A;
 
+  /// How old a file written by another session must be before this store
+  /// will prune it. A second instance of the app shares this directory and
+  /// is named in the file list the same way, so pruning by raw file count
+  /// without this grace period lets one instance delete the active file a
+  /// live sibling is still appending to. Stale foreign files still get
+  /// collected past the grace period so the directory stays bounded once
+  /// that sibling is gone.
+  static const _foreignFileGrace = Duration(hours: 1);
+
   final Directory _dir;
   final String _sessionId;
   final DateTime Function() _now;
@@ -113,6 +122,11 @@ class FileLogStore implements LogStore {
   Future<void> _flushBuffer() async {
     if (_disabled || _buffered == 0) return;
     final bytes = utf8.encode(_buffer.toString());
+    // Cleared before the write is attempted, and dropped rather than
+    // requeued on failure: holding a failed batch in memory while the disk
+    // keeps failing risks unbounded growth, which is worse for a
+    // diagnostics feature than losing a few lines. failureLimit disables
+    // the store once losses repeat.
     _buffer.clear();
     _buffered = 0;
     try {
@@ -145,6 +159,10 @@ class FileLogStore implements LogStore {
 
   static String _nameOf(File file) => file.uri.pathSegments.last;
 
+  /// True when [file]'s name carries this store's own session ID, per the
+  /// `<stamp>-<session>-<seq>.ndjson` naming scheme.
+  bool _isOwnFile(File file) => _nameOf(file).contains('-$_sessionId-');
+
   Future<List<File>> _files() async {
     final files = <File>[];
     await for (final entity in _dir.list()) {
@@ -156,19 +174,34 @@ class FileLogStore implements LogStore {
 
   Future<void> _prune() async {
     try {
-      final older =
+      final others =
           (await _files()).where((f) => f.path != _active.path).toList();
-      // The active file counts against maxFiles too.
-      while (older.length > _maxFiles - 1) {
-        final oldest = older.removeAt(0);
-        try {
-          await oldest.delete();
-        } on FileSystemException {
-          // Already gone.
+      final own = others.where(_isOwnFile).toList();
+      final foreignCutoff = _now().toUtc().subtract(_foreignFileGrace);
+      final staleForeign = <File>[];
+      for (final file in others) {
+        if (_isOwnFile(file)) continue;
+        if ((await file.lastModified()).toUtc().isBefore(foreignCutoff)) {
+          staleForeign.add(file);
         }
+      }
+      // The active file counts against maxFiles too.
+      while (own.length > _maxFiles - 1) {
+        await _tryDelete(own.removeAt(0));
+      }
+      for (final file in staleForeign) {
+        await _tryDelete(file);
       }
     } on FileSystemException {
       // The directory itself is unreadable; the next write says so.
+    }
+  }
+
+  Future<void> _tryDelete(File file) async {
+    try {
+      await file.delete();
+    } on FileSystemException {
+      // Already gone.
     }
   }
 
@@ -244,10 +277,23 @@ class FileLogStore implements LogStore {
     reading:
     while (budget > 0) {
       final file = files[index];
-      final length = await file.length();
-      if (offset < length) {
-        final chunk =
-            await _readRange(file, offset, math.min(budget, length - offset));
+      final int length;
+      List<int>? chunk;
+      try {
+        length = await file.length();
+        if (offset < length) {
+          chunk =
+              await _readRange(file, offset, math.min(budget, length - offset));
+        }
+      } on FileSystemException {
+        // The file was rotated away or became unreadable between the
+        // directory listing above and here (the periodic flush timer can
+        // prune a file mid-read). Stop and hand back what was gathered so
+        // far; [cursor] still names this file at its last known offset, so
+        // the next read rediscovers it is gone and reports the gap itself.
+        break reading;
+      }
+      if (chunk != null) {
         var start = 0;
         for (var i = 0; i < chunk.length; i++) {
           if (chunk[i] != _newline) continue;

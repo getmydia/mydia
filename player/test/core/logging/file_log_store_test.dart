@@ -54,6 +54,13 @@ void main() {
       .where((f) => f.path.endsWith('.ndjson'))
       .length;
 
+  List<File> ndjsonFiles() => dir
+      .listSync()
+      .whereType<File>()
+      .where((f) => f.path.endsWith('.ndjson'))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
+
   test('reads back what it wrote, oldest first', () async {
     final store = await open();
     for (var t = 1; t <= 3; t++) {
@@ -198,5 +205,53 @@ void main() {
     }
 
     expect(reasons, hasLength(1));
+  });
+
+  test(
+      'a file that becomes unreadable mid-read ends the read gracefully, '
+      'keeping a resumable cursor', () async {
+    final store = await open(maxFileBytes: _lineBytes(), maxFiles: 10);
+    for (var t = 1; t <= 3; t++) {
+      store.add(_record(t));
+      await store.flush();
+    }
+    final files = ndjsonFiles();
+    expect(files, hasLength(3));
+    // Simulates a file that the periodic flush timer prunes between the
+    // directory listing and the per-file read: the entry stays visible to
+    // `_files()` (it is not removed), but can no longer be opened. A plain
+    // delete would instead vanish from that listing entirely, so it would
+    // never reach the guarded per-file read at all.
+    final chmod = Process.runSync('chmod', ['000', files[1].path]);
+    expect(chmod.exitCode, 0);
+    addTearDown(() => Process.runSync('chmod', ['600', files[1].path]));
+
+    final batch = await store.read(maxBytes: 1 << 20);
+
+    expect(_times(batch), [1]);
+    expect(batch.gap, isFalse);
+    expect(batch.next.file, files[1].uri.pathSegments.last);
+    expect(batch.next.offset, 0);
+  });
+
+  test('a foreign session file is spared until it goes stale', () async {
+    final store = await open(maxFileBytes: _lineBytes(), maxFiles: 3);
+    final foreign = File(
+        '${dir.path}${Platform.pathSeparator}0000000000001-foreign1-0000.ndjson');
+    foreign.writeAsStringSync('foreign\n');
+
+    for (var t = 1; t <= 4; t++) {
+      store.add(_record(t));
+      await store.flush();
+    }
+
+    expect(foreign.existsSync(), isTrue);
+
+    foreign
+        .setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 2)));
+    store.add(_record(5));
+    await store.flush();
+
+    expect(foreign.existsSync(), isFalse);
   });
 }
