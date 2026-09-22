@@ -113,6 +113,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     {assignments, demoted_tokens} =
       tokens
       |> per_token_best()
+      |> reclaim_title_words(boundary)
       |> resolve_singleton_conflicts()
 
     assignments_map = group_assignments_by_token(assignments)
@@ -178,6 +179,101 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
        do: true
 
   defp drop_weak_vocab?(_), do: false
+
+  # ---- Title-word reclamation ----
+  #
+  # A title word that is also a tag ("Italian", "Multi", "Opus") has only
+  # its vocab label left after per_token_best/1: the classifier gives a
+  # title fallback only to tokens no vocabulary matched, and the title-zone
+  # penalty leaves these above @vocab_min_confidence. A lone vocab word
+  # followed by a plain title word is part of the title
+  # ("The.Italian.Harbor"), and so is a single vocab word that is the whole
+  # title zone ("French.2031"). Reclaiming runs before singleton
+  # resolution, so a reclaimed word reports no language or audio and cannot
+  # displace a real tag. A tag at the end of the title zone
+  # ("Show.S01.FRENCH.1080p") and every word of a tag run
+  # ("MULTi.BluRay.x264") stay tags.
+  #
+  # One more shape needs the same treatment: a vocab word at the tail of a
+  # multi-word zone, immediately preceded by a plain title word, when the
+  # zone ends right at a YEAR ("Quiet.Opus.2031"). A source/language tag
+  # sitting directly before a resolution or episode marker
+  # ("Series.HDTV.1080p") is an ordinary scene-tag position and must stay a
+  # tag; a title word running straight into a bare year is not, because
+  # scene names don't normally put a tag between the title and the year, so
+  # that placement is real evidence the word belongs to the title. This is
+  # why the tail case is gated on the zone's boundary being a year
+  # specifically, not any anchor.
+
+  @reclaimed_fallback_confidence 0.3
+
+  defp reclaim_title_words(per_token, boundary) do
+    {title_zone, rest} =
+      Enum.split_while(per_token, fn {token, _} -> in_title_zone?(token, boundary) end)
+
+    reclaim_zone(title_zone, boundary, year_boundary?(rest)) ++ rest
+  end
+
+  defp year_boundary?([{_token, cands} | _]), do: Enum.any?(cands, &(&1.label == :year))
+  defp year_boundary?([]), do: false
+
+  defp reclaim_zone([{token, cands}], boundary, _year_boundary?) when boundary != :infinity do
+    case slate_kind(cands) do
+      :vocab -> [{token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}]
+      _ -> [{token, cands}]
+    end
+  end
+
+  defp reclaim_zone(title_zone, boundary, year_boundary?) do
+    kinds = Enum.map(title_zone, fn {_, cands} -> slate_kind(cands) end)
+    previous_kinds = [nil | kinds]
+    next_entries = Enum.drop(title_zone, 1) ++ [nil]
+
+    [title_zone, kinds, previous_kinds, next_entries]
+    |> Enum.zip()
+    |> Enum.map(&maybe_reclaim(&1, boundary, year_boundary?))
+  end
+
+  defp maybe_reclaim({{token, cands}, :vocab, previous_kind, {_, next_cands}}, _boundary, _year?)
+       when previous_kind != :vocab do
+    if slate_kind(next_cands) == :plain,
+      do: {token, [reclaimed_candidate(neighbor_confidence(next_cands))]},
+      else: {token, cands}
+  end
+
+  # Tail of the title zone: no next token to look forward to, but the
+  # word immediately before it is a real title word and the zone ends
+  # right at a year. Mirrors the forward case by looking backward instead;
+  # confidence is halved from its own, same as the whole-zone singleton
+  # case, since there's no neighbor to borrow from.
+  defp maybe_reclaim({{token, cands}, :vocab, :plain, nil}, boundary, true)
+       when boundary != :infinity do
+    {token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}
+  end
+
+  defp maybe_reclaim({entry, _kind, _previous_kind, _next}, _boundary, _year?), do: entry
+
+  defp in_title_zone?(_token, :infinity), do: true
+  defp in_title_zone?(%Token{byte_offset: offset}, boundary), do: offset < boundary
+
+  defp slate_kind([]), do: :plain
+
+  defp slate_kind(cands) do
+    cond do
+      Enum.any?(cands, &(&1.label == :title_candidate)) -> :plain
+      Enum.all?(cands, &(&1.label in @vocab_filtered_labels)) -> :vocab
+      true -> :other
+    end
+  end
+
+  defp reclaimed_candidate(confidence) do
+    %Candidate{label: :title_candidate, value: nil, confidence: confidence, zone: :title}
+  end
+
+  defp neighbor_confidence([]), do: @reclaimed_fallback_confidence
+  defp neighbor_confidence(cands), do: max_confidence(cands)
+
+  defp max_confidence(cands), do: cands |> Enum.map(& &1.confidence) |> Enum.max()
 
   # ---- Singleton-conflict resolution ----
   #

@@ -1,10 +1,10 @@
 alias Mydia.Library.ReleaseParser.VocabularyEntry
 
 # Language and language-status tokens. Mined from V2's noise pattern plus
-# the common scene/p2p set. These are usually metadata-zone tokens; when
-# they sit before the earliest anchor (a movie title that happens to be
-# the word "FRENCH", say) we still want the title interpretation to win,
-# hence the modest title-zone penalty.
+# the common scene/p2p set. These are usually metadata-zone tokens. One that
+# sits inside the title ("The.Italian.Harbor") is reclaimed as a title word
+# by Resolver.reclaim_title_words/2; the title-zone penalty only keeps it
+# below a metadata-zone tag of the same label.
 
 [
   %VocabularyEntry{
