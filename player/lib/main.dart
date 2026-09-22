@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/auth/device_info_service.dart';
@@ -13,12 +14,16 @@ import 'core/crash_reporting/crash_reporter.dart';
 import 'core/crash_reporting/crash_reporter_provider.dart';
 import 'package:flutter/services.dart';
 
+import 'core/diagnostics/diagnostics_provider.dart';
+import 'core/diagnostics/diagnostics_settings.dart';
 import 'core/graphql/watch/fetch_log.dart';
 import 'core/logging/log_platform.dart';
 import 'core/logging/log_sink.dart';
 import 'core/logging/log_store.dart';
+import 'core/logging/log_uploader.dart';
 import 'core/player/input_capabilities.dart';
 import 'core/navigation/sidebar_layout_providers.dart';
+import 'core/relay/relay_api_client.dart' show metadataRelayBaseUrl;
 import 'core/storage/app_hive.dart';
 import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
@@ -114,7 +119,7 @@ void main() async {
 Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
   // Point the log sink at its files first, so the rest of startup is on disk.
   // Never throws; see _attachLogStore.
-  await _attachLogStore(logSink);
+  final logStore = await _attachLogStore(logSink);
 
   // Initialize the Rust bridge. This MUST complete before any p2p code runs.
   //
@@ -259,6 +264,9 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
         crashReporterProvider.overrideWithValue(crashReporter),
         fetchLogProvider.overrideWithValue(fetchLog),
         sidebarLayoutStoreProvider.overrideWithValue(sidebarLayoutStore),
+        logUploaderProvider.overrideWithValue(
+          _buildLogUploader(logSink, logStore),
+        ),
       ],
       child: const MyApp(),
     ),
@@ -304,4 +312,31 @@ Future<void> _recordSession(LogSink sink) async {
   } catch (e) {
     debugPrint('[LogSink] Could not describe the session: $e');
   }
+}
+
+/// The uploader behind the Diagnostics choice, or null without a log store.
+LogUploader? _buildLogUploader(LogSink? sink, LogStore? store) {
+  if (sink == null || store == null) return null;
+  final settings = DiagnosticsSettings();
+  LogUploadMeta? meta;
+  return LogUploader(
+    client: http.Client(),
+    endpoint: Uri.parse('$metadataRelayBaseUrl/player-logs'),
+    store: store,
+    sessionId: sink.sessionId,
+    compress: gzipBytes,
+    loadMeta: () async => meta ??= await _describeInstall(settings),
+  );
+}
+
+Future<LogUploadMeta> _describeInstall(DiagnosticsSettings settings) async {
+  final context = await loadCrashAppContext();
+  return LogUploadMeta(
+    deviceId: await settings.deviceId(),
+    deviceName: await DeviceInfoService().getDeviceName(),
+    platform: context.platform,
+    osVersion: context.osVersion,
+    appVersion: context.version,
+    build: context.buildNumber,
+  );
 }
