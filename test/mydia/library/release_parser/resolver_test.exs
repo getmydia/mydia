@@ -283,10 +283,18 @@ defmodule Mydia.Library.ReleaseParser.ResolverTest do
     end
 
     test "an audio word in the title is not reported as audio" do
-      result = resolve("Quiet.Opus.2031.1080p.WEB-DL.x264")
+      result = resolve("Quiet.Opus.Harbor.2031.1080p.WEB-DL.x264")
 
-      assert result.title == "Quiet Opus"
+      assert result.title == "Quiet Opus Harbor"
       refute Enum.any?(result.quality_tokens, &(&1.label == :audio))
+    end
+
+    test "a vocab word that ends the title zone stays a tag, even before a year" do
+      assert resolve("Quiet.Opus.2031.1080p.WEB-DL.x264").title == "Quiet"
+
+      result = resolve("Der.Film.Lantern.German.2031.PAL.DVDR")
+      assert result.title == "Der Film Lantern"
+      assert result.language == "German"
     end
 
     test "a title-zone word does not displace a metadata-zone tag of its label" do

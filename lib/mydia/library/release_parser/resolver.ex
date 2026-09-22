@@ -193,17 +193,6 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   # displace a real tag. A tag at the end of the title zone
   # ("Show.S01.FRENCH.1080p") and every word of a tag run
   # ("MULTi.BluRay.x264") stay tags.
-  #
-  # One more shape needs the same treatment: a vocab word at the tail of a
-  # multi-word zone, immediately preceded by a plain title word, when the
-  # zone ends right at a YEAR ("Quiet.Opus.2031"). A source/language tag
-  # sitting directly before a resolution or episode marker
-  # ("Series.HDTV.1080p") is an ordinary scene-tag position and must stay a
-  # tag; a title word running straight into a bare year is not, because
-  # scene names don't normally put a tag between the title and the year, so
-  # that placement is real evidence the word belongs to the title. This is
-  # why the tail case is gated on the zone's boundary being a year
-  # specifically, not any anchor.
 
   @reclaimed_fallback_confidence 0.3
 
@@ -211,47 +200,34 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     {title_zone, rest} =
       Enum.split_while(per_token, fn {token, _} -> in_title_zone?(token, boundary) end)
 
-    reclaim_zone(title_zone, boundary, year_boundary?(rest)) ++ rest
+    reclaim_zone(title_zone, boundary) ++ rest
   end
 
-  defp year_boundary?([{_token, cands} | _]), do: Enum.any?(cands, &(&1.label == :year))
-  defp year_boundary?([]), do: false
-
-  defp reclaim_zone([{token, cands}], boundary, _year_boundary?) when boundary != :infinity do
+  defp reclaim_zone([{token, cands}], boundary) when boundary != :infinity do
     case slate_kind(cands) do
       :vocab -> [{token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}]
       _ -> [{token, cands}]
     end
   end
 
-  defp reclaim_zone(title_zone, boundary, year_boundary?) do
+  defp reclaim_zone(title_zone, _boundary) do
     kinds = Enum.map(title_zone, fn {_, cands} -> slate_kind(cands) end)
     previous_kinds = [nil | kinds]
     next_entries = Enum.drop(title_zone, 1) ++ [nil]
 
     [title_zone, kinds, previous_kinds, next_entries]
     |> Enum.zip()
-    |> Enum.map(&maybe_reclaim(&1, boundary, year_boundary?))
+    |> Enum.map(&maybe_reclaim/1)
   end
 
-  defp maybe_reclaim({{token, cands}, :vocab, previous_kind, {_, next_cands}}, _boundary, _year?)
+  defp maybe_reclaim({{token, cands}, :vocab, previous_kind, {_, next_cands}})
        when previous_kind != :vocab do
     if slate_kind(next_cands) == :plain,
       do: {token, [reclaimed_candidate(neighbor_confidence(next_cands))]},
       else: {token, cands}
   end
 
-  # Tail of the title zone: no next token to look forward to, but the
-  # word immediately before it is a real title word and the zone ends
-  # right at a year. Mirrors the forward case by looking backward instead;
-  # confidence is halved from its own, same as the whole-zone singleton
-  # case, since there's no neighbor to borrow from.
-  defp maybe_reclaim({{token, cands}, :vocab, :plain, nil}, boundary, true)
-       when boundary != :infinity do
-    {token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}
-  end
-
-  defp maybe_reclaim({entry, _kind, _previous_kind, _next}, _boundary, _year?), do: entry
+  defp maybe_reclaim({entry, _kind, _previous_kind, _next}), do: entry
 
   defp in_title_zone?(_token, :infinity), do: true
   defp in_title_zone?(%Token{byte_offset: offset}, boundary), do: offset < boundary

@@ -346,7 +346,7 @@ defmodule Mydia.Library.ReleaseParserTest do
             {"French.Harbor.2031.1080p.WEB-DL.x264-GROUP", "French Harbor"},
             {"German.Lantern.2031.1080p.WEB-DL.x264-GROUP", "German Lantern"},
             {"Multi.Harbor.2031.1080p.WEB-DL.x264-GROUP", "Multi Harbor"},
-            {"Quiet.Opus.2031.1080p.WEB-DL.x264-GROUP", "Quiet Opus"},
+            {"Quiet.Opus.Harbor.2031.1080p.WEB-DL.x264-GROUP", "Quiet Opus Harbor"},
             {"French.2031.1080p.WEB-DL.x264-GROUP", "French"}
           ] do
         assert %ParsedFileInfo{title: ^title} = ReleaseParser.parse(input), input
