@@ -398,10 +398,12 @@ query cache replacing an entry) blocks on that mutex until the wait gives up.
 When the blocked process is the lock holder, nothing moves for thirty seconds.
 Reproduced deterministically on one scheduler (`+S 1:1`): a lock holder that
 queries and garbage-collects while another connection busy-waits stalls for
-the rest of `busy_timeout`, and does not once the patch is applied. The patch
-ships
-only in the Docker image; dev and CI build upstream Exqlite, so this test
-keeps flaking until they use the patched NIF too.
+the rest of `busy_timeout`, and does not once the patch is applied.
+
+**Fixed 2026-09-21 by building the patched Exqlite in dev and CI too.** Until
+then only the Docker image had it. `mix deps.get` now applies
+`patches/exqlite/`, and `test/mydia/repo/exqlite_patch_test.exs` fails any run
+on the unpatched NIF. If this signature comes back, check that test first.
 
 **`Mydia.Library.FileIngestTest`, "a losing promotion failure cannot resurrect
 the winner's deleted candidate"** (`file_ingest_test.exs:178`). **Deleted

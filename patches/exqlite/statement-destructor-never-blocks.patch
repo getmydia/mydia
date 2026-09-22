@@ -1,10 +1,21 @@
 Exqlite 0.40.0: never block a scheduler in the statement destructor.
 
-Applied by the Dockerfile to deps/exqlite before `mix deps.compile`, then
-checked by patches/exqlite/destructor_probe.exs. Dev, CI and the Nix package
-run upstream Exqlite unpatched; the canary test
-test/mydia/repo/exqlite_destructor_canary_test.exs watches for upstream fixing
-this, at which point this directory, its Dockerfile steps and the canary go.
+Applied to deps/exqlite by `mix deps.patch` (@dep_patches in mix.exs), which
+runs after every `mix deps.get`, so dev, CI and the Docker image all build it.
+The Dockerfile checks the result with patches/exqlite/destructor_probe.exs, and
+test/mydia/repo/exqlite_patch_test.exs fails any test run on the unpatched
+NIF. The Nix package still builds upstream Exqlite.
+
+Dev and CI ran upstream until 2026-09-21. There the stall was the cause of
+SQLite `database is locked` flakes (.github/ci-flakes.md,
+CandidatePromotionTest), because a lock holder that drops a statement of a
+waiting connection waits as long as the waiter does.
+
+Retiring it. A bump stops `mix deps.get` at the version pin, leaving the new,
+unpatched release in deps/exqlite. Run
+`mix test test/mydia/repo/exqlite_patch_test.exs` against it. If that passes,
+upstream fixed the destructor: delete this directory, its @dep_patches entry
+and its Dockerfile step. If it fails, rebase this patch and move the pin.
 
 The bug. statement_type_destructor locks the connection mutex before
 finalizing. Destructors run on whichever scheduler drops the last reference,

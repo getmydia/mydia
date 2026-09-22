@@ -554,15 +554,16 @@ connections (`Ecto.Adapters.SQL.Sandbox.unboxed_run`) to prove that competing
 promotions serialize. Its sibling in `file_ingest_test.exs` was deleted on
 2026-09-03 for flaking the same way.
 
-Its current failure is `(Exqlite.Error) database is locked` on
-`BEGIN IMMEDIATE`, thirty seconds in, and it is not load. It is the Exqlite
-statement-destructor stall that `patches/exqlite/` fixes in the Docker image
-only: while one connection busy-waits for the write lock, any process dropping
-a statement of that connection blocks until the wait ends, and when that
-process is the lock holder the two wait on each other for the whole
-`busy_timeout`. Dev and CI build upstream Exqlite, so this test keeps failing
-at a low rate until they build the patched NIF too. `.github/ci-flakes.md` has
-the evidence.
+Its last failure mode was `(Exqlite.Error) database is locked` on
+`BEGIN IMMEDIATE`, thirty seconds in, and it was not load. It was the Exqlite
+statement-destructor stall `patches/exqlite/` fixes: while one connection
+busy-waits for the write lock, any process dropping a statement of that
+connection blocks until the wait ends, and when that process is the lock
+holder the two wait on each other for the whole `busy_timeout`. Only the
+Docker image was patched until 2026-09-21. Now every `mix deps.get` applies
+the patch, and `test/mydia/repo/exqlite_patch_test.exs` fails if the NIF under
+test is not the patched one. After switching branches across that change, run
+`mix deps.get` if that test fails.
 
 Older signatures, now fixed, which still show up in old runs: an
 `** (EXIT) time out` on a `Task.await/2` budget that was once 2000ms, and

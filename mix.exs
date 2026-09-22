@@ -267,6 +267,9 @@ defmodule Mydia.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
+      # Every fetch re-applies the local dependency patches; see patch_deps/1.
+      "deps.get": ["deps.get", "deps.patch"],
+      "deps.patch": &patch_deps/1,
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
@@ -295,5 +298,98 @@ defmodule Mydia.MixProject do
         "test"
       ]
     ]
+  end
+
+  # Dependencies built from locally patched source, as {app, version, patch}.
+  # A version bump stops at the pin rather than silently dropping the fix:
+  # whoever bumps rebases the patch or retires it. patches/exqlite/ explains
+  # its patch, and how to tell whether upstream still needs it.
+  @dep_patches [
+    {:exqlite, "0.40.0", "patches/exqlite/statement-destructor-never-blocks.patch"}
+  ]
+
+  # Runs after every `mix deps.get`, so dev, CI and the Docker image all build
+  # the same patched source, and is safe to repeat. The Dockerfile's
+  # `mix deps.get` layer copies only mix.exs and mix.lock, so the patch file is
+  # absent there and this skips; the Dockerfile runs `mix deps.patch` itself
+  # once patches/ is copied in.
+  defp patch_deps(_args), do: Enum.each(@dep_patches, &patch_dep/1)
+
+  defp patch_dep({app, version, patch}) do
+    dir = Path.join(Mix.Project.deps_path(), Atom.to_string(app))
+    patch = Path.expand(patch)
+
+    cond do
+      not File.regular?(patch) or not File.dir?(dir) ->
+        :ok
+
+      patch_applies?(dir, patch, ["-R"]) ->
+        :ok
+
+      true ->
+        fetched = hex_version(dir)
+
+        if fetched != version do
+          Mix.raise(
+            "deps/#{app} is #{fetched}, but #{Path.relative_to_cwd(patch)} targets #{version}. " <>
+              "Rebase the patch onto #{fetched} and update @dep_patches in mix.exs, " <>
+              "or retire it if upstream fixed the bug."
+          )
+        end
+
+        # A dependency carrying an older revision of the patch takes neither
+        # direction, so fetch it clean once before giving up. CI restores deps/
+        # from a cache, which makes that the normal case after a patch edit.
+        unless patch_applies?(dir, patch, []) do
+          File.rm_rf!(dir)
+          Mix.Tasks.Deps.Get.run([])
+        end
+
+        unless patch_applies?(dir, patch, []) do
+          Mix.raise("#{Path.relative_to_cwd(patch)} does not apply to deps/#{app}")
+        end
+
+        run_patch!(dir, patch, [])
+
+        # A build from the unpatched source would otherwise be kept, and
+        # Exqlite's may be the precompiled NIF the patch exists to replace.
+        Mix.Project.build_path()
+        |> Path.dirname()
+        |> Path.join("*/lib/#{app}")
+        |> Path.wildcard()
+        |> Enum.each(&File.rm_rf!/1)
+
+        Mix.shell().info("* patched #{app} with #{Path.relative_to_cwd(patch)}")
+    end
+  end
+
+  defp patch_applies?(dir, patch, flags) do
+    match?({_, 0}, patch_cmd(dir, patch, ["--dry-run" | flags]))
+  end
+
+  defp run_patch!(dir, patch, flags) do
+    case patch_cmd(dir, patch, flags) do
+      {_, 0} -> :ok
+      {output, _} -> Mix.raise("patch failed on #{dir}:\n#{output}")
+    end
+  end
+
+  # --force stops patch asking whether a patch that looks reversed should be
+  # applied anyway, which would hang a non-interactive run.
+  defp patch_cmd(dir, patch, flags) do
+    executable = System.find_executable("patch") || Mix.raise("patching deps needs `patch`")
+
+    System.cmd(executable, ["-p1", "--force", "-d", dir, "-i", patch | flags],
+      stderr_to_stdout: true
+    )
+  end
+
+  defp hex_version(dir) do
+    with {:ok, metadata} <- :file.consult(Path.join(dir, "hex_metadata.config")),
+         {_, version} <- List.keyfind(metadata, "version", 0) do
+      version
+    else
+      _ -> "an unknown version"
+    end
   end
 end
