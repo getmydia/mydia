@@ -33,15 +33,24 @@ defmodule MetadataRelayWeb.LogsLiveTest do
   end
 
   test "lists devices, marks one that streamed recently, and lists reports" do
+    report_only_id = "0b7d3c2e-1a4f-4e6b-9c8d-2f3e4a5b6c7d"
+
     {:ok, :stream} = PlayerLogs.ingest(batch())
 
     {:ok, {:report, code}} =
       PlayerLogs.ingest(batch(meta: [kind: "report", note: "Audio drifts"]))
 
+    {:ok, {:report, _code}} =
+      PlayerLogs.ingest(
+        batch(meta: [device_id: report_only_id, device_name: "Living Room TV", kind: "report"])
+      )
+
     {:ok, view, _html} = live(authed_conn(), "/logs")
 
     assert has_element?(view, "#log-device-#{device_id()}")
     assert has_element?(view, "#log-device-#{device_id()} .badge-success")
+    assert has_element?(view, "#log-device-#{report_only_id}")
+    refute has_element?(view, "#log-device-#{report_only_id} .badge-success")
     assert has_element?(view, "#log-report-#{code}")
     assert has_element?(view, "#log-report-#{code} a[href='/logs/raw?code=#{code}']")
   end
