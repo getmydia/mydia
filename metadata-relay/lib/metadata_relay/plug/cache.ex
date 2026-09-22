@@ -22,6 +22,8 @@ defmodule MetadataRelay.Plug.Cache do
     hours for episode data still being filled in (see
     `MetadataRelay.Cache.Settling`)
   - Skips caching for every other request and for errors
+  - Marks cached GET responses public for Cloudflare's edge, with the
+    entry's remaining TTL as max-age (see public_cache_control/1)
   """
 
   import Plug.Conn
@@ -53,6 +55,13 @@ defmodule MetadataRelay.Plug.Cache do
   # search the user triggered by hand, so an empty result is kept only long
   # enough to absorb a retry loop.
   @empty_result_ttl :timer.hours(1)
+
+  # Cloudflare serves a stale copy for a day while it refetches in the
+  # background, and for a week while the relay is erroring or down. Both only
+  # work with `max-age`: Cloudflare treats `s-maxage` as `proxy-revalidate`,
+  # which forbids serving stale at all.
+  @stale_while_revalidate_s 86_400
+  @stale_if_error_s 604_800
 
   @behaviour Plug
 
@@ -123,12 +132,23 @@ defmodule MetadataRelay.Plug.Cache do
     Cache.build_key("POST", @cacheable_post, "v#{version}:#{fingerprint}")
   end
 
+  @doc """
+  The `cache-control` for a response every install may share, fresh for
+  `max_age_seconds`. Anything not given this header is made
+  `private, no-store` by `MetadataRelayWeb.Plug.PrivateByDefault`.
+  """
+  @spec public_cache_control(non_neg_integer()) :: String.t()
+  def public_cache_control(max_age_seconds) do
+    "public, max-age=#{max_age_seconds}, " <>
+      "stale-while-revalidate=#{@stale_while_revalidate_s}, stale-if-error=#{@stale_if_error_s}"
+  end
+
   ## Private Functions
 
   defp serve_or_cache(conn, cache_key) do
     case Cache.get(cache_key) do
       {:ok, cached_response} ->
-        serve_cached_response(conn, cached_response)
+        serve_cached_response(conn, cached_response, cache_key)
 
       {:error, :not_found} ->
         # Continue with request and cache the response
@@ -173,7 +193,7 @@ defmodule MetadataRelay.Plug.Cache do
 
   defp canonicalize(value), do: value
 
-  defp serve_cached_response(conn, cached_response) do
+  defp serve_cached_response(conn, cached_response, cache_key) do
     MetadataRelay.Metrics.inc("metadata_relay_cache_hits_total")
 
     case service_from_path(conn.request_path) do
@@ -188,9 +208,28 @@ defmodule MetadataRelay.Plug.Cache do
 
     conn
     |> merge_resp_headers(headers)
+    |> put_public_header(remaining_ttl_ms(cached_response, cache_key))
     |> send_resp(status, body)
     |> halt()
   end
+
+  # An entry written before `:ttl_ms` existed has no age to subtract from, so
+  # it advertises the route's full TTL: at worst the edge keeps it that much
+  # longer than the relay would, once.
+  defp remaining_ttl_ms(%{ttl_ms: ttl_ms, stored_at_ms: stored_at_ms}, _cache_key) do
+    max(ttl_ms - (System.system_time(:millisecond) - stored_at_ms), 0)
+  end
+
+  defp remaining_ttl_ms(_legacy_entry, cache_key), do: Cache.ttl_for(cache_key)
+
+  # Only GETs are shared at the edge. The cached subtitle search is a POST,
+  # which Cloudflare does not cache anyway, and it is left to the private
+  # default.
+  defp put_public_header(%Plug.Conn{method: "GET"} = conn, ttl_ms) do
+    put_resp_header(conn, "cache-control", public_cache_control(div(ttl_ms, 1000)))
+  end
+
+  defp put_public_header(conn, _ttl_ms), do: conn
 
   defp service_from_path("/tmdb/" <> _), do: "tmdb"
   defp service_from_path("/tvdb/" <> _), do: "tvdb"
@@ -200,22 +239,29 @@ defmodule MetadataRelay.Plug.Cache do
   defp service_from_path(_), do: nil
 
   defp cache_response(conn, cache_key) do
-    # Only cache successful GET responses
+    # Only successful responses are cached, here and at the edge. An error
+    # gets no public header, so the endpoint default makes it no-store and
+    # one transient upstream failure is never replayed from a cache the relay
+    # cannot purge.
     if conn.status in 200..299 do
       MetadataRelay.Metrics.inc("metadata_relay_cache_misses_total")
 
       body = extract_resp_body(conn)
+      ttl_ms = Cache.ttl_for(cache_key, put_opts(conn, cache_key, body))
 
       cached_response = %{
         status: conn.status,
         headers: filter_headers(conn.resp_headers),
-        body: body
+        body: body,
+        ttl_ms: ttl_ms,
+        stored_at_ms: System.system_time(:millisecond)
       }
 
-      Cache.put(cache_key, cached_response, put_opts(conn, cache_key, body))
+      Cache.put(cache_key, cached_response, ttl: ttl_ms)
+      put_public_header(conn, ttl_ms)
+    else
+      conn
     end
-
-    conn
   end
 
   defp put_opts(%Plug.Conn{method: "POST", request_path: @cacheable_post}, _cache_key, body) do
@@ -237,10 +283,10 @@ defmodule MetadataRelay.Plug.Cache do
   defp filter_headers(headers) do
     # Keep only relevant headers for cached responses. content-disposition is
     # here because a cached response that drops it changes how the client
-    # handles the body: nothing cached carries one today, and this keeps it
-    # that way if a file-serving route is ever made cacheable.
+    # handles the body. cache-control is not: it is computed on every hit
+    # from the entry's remaining lifetime.
     Enum.filter(headers, fn {name, _value} ->
-      name in ["content-type", "content-disposition", "cache-control", "etag"]
+      name in ["content-type", "content-disposition", "etag"]
     end)
   end
 
