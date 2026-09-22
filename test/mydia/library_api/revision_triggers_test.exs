@@ -367,7 +367,7 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
 
     listed = marker!(show.id)
 
-    {:ok, _deleted, 0} = Media.delete_media_item(show)
+    {:ok, _deleted, %Mydia.Media.DiskRemoval{files_failed: 0}} = Media.delete_media_item(show)
 
     tombstone = assert_advanced(show.id, listed)
     assert tombstone.deleted

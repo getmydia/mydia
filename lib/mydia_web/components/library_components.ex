@@ -393,11 +393,15 @@ defmodule MydiaWeb.LibraryComponents do
               checked={@delete_files}
             />
             <div>
-              <div class="font-medium mb-1">Delete files from disk</div>
+              <div class="font-medium mb-1">Delete from disk</div>
               <div class="text-sm opacity-75 flex items-center gap-1">
                 <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
                 <span>Permanently deletes all files - cannot be undone</span>
               </div>
+              <p id={"#{@id}-disk-note"} class="text-sm opacity-75 mt-1">
+                Deletes each item's folder and everything in it. A folder that also holds
+                other media is kept, and only the item's files are removed from it.
+              </p>
             </div>
           </label>
         </div>

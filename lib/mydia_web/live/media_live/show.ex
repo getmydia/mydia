@@ -77,6 +77,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_delete_confirm, false)
      |> assign(:timeline_expanded, false)
      |> assign(:delete_files, false)
+     |> assign(:delete_preview, nil)
      |> assign(:quality_profiles, quality_profiles)
      |> assign(:default_quality_profile_name, default_quality_profile_name)
      |> assign(:show_file_delete_confirm, false)
@@ -917,6 +918,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_async(:load_season_order_info, result, socket),
     do: MediaItemEvents.handle_season_order_info_result(result, socket)
+
+  def handle_async(:delete_preview, result, socket),
+    do: MediaItemEvents.handle_delete_preview_result(result, socket)
 
   def handle_async({:add_recommendation, tmdb_id}, result, socket),
     do: RecommendationEvents.handle_add_result(tmdb_id, result, socket)

@@ -10,6 +10,7 @@ defmodule Mydia.Media do
 
   alias Mydia.Media.{
     AvailabilityStatus,
+    DiskRemoval,
     MediaItem,
     Episode,
     EpisodePlaceholder,
@@ -654,18 +655,22 @@ defmodule Mydia.Media do
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
     - `:delete_files` - Whether to delete physical files from disk (default: false)
 
-  When `:delete_files` is true, will delete all associated media files from disk
-  before removing the database records. When false (default), only removes database
-  records and preserves files on disk.
+  When `:delete_files` is true, the database records go first, then the
+  item's files, the subtitles beside them and every folder of the item that
+  holds nothing else are removed from disk. See `Mydia.Media.DiskRemoval`.
+  When false (default), only the database records go and every file stays.
 
   For a TV show, a `:delete_files` of false also demotes every episode's
   files into `import_candidates` first, so they surface again as answerable
   import work if the show is re-added. When `:delete_files` is true, no
   candidates are created for them -- the files are about to be gone, so
   there is nothing left to import.
+
+  The third element describes what happened on disk; it is an empty
+  `%DiskRemoval{}` when `:delete_files` is false.
   """
   @spec delete_media_item(MediaItem.t(), keyword()) ::
-          {:ok, MediaItem.t(), non_neg_integer()} | {:error, Ecto.Changeset.t()}
+          {:ok, MediaItem.t(), DiskRemoval.t()} | {:error, Ecto.Changeset.t()}
   def delete_media_item(%MediaItem{} = media_item, opts \\ []) do
     delete_files = Keyword.get(opts, :delete_files, false)
 
@@ -675,23 +680,11 @@ defmodule Mydia.Media do
       delete_files: delete_files
     )
 
-    # Load all media files (movie files + episode files) into memory *before*
-    # deleting the record, so their paths stay resolvable after the cascade
-    # delete. We remove them from disk only after the record delete succeeds:
-    # a failed DB delete then leaves the disk untouched (nothing lost).
-    all_media_files =
-      if delete_files do
-        media_item_with_files =
-          MediaItem
-          |> where([m], m.id == ^media_item.id)
-          |> preload(media_files: :library_path, episodes: [media_files: :library_path])
-          |> Repo.one!()
-
-        media_item_with_files.media_files ++
-          Enum.flat_map(media_item_with_files.episodes, & &1.media_files)
-      else
-        []
-      end
+    # Plan the disk removal *before* deleting the record, while the rows that
+    # name the files, their subtitles and their episodes still exist. The disk
+    # is touched only after the delete commits: a failed DB delete then
+    # leaves it untouched (nothing lost).
+    plan = if delete_files, do: DiskRemoval.plan([media_item.id])
 
     # Track event before deletion (we need the media_item data)
     actor_type = Keyword.get(opts, :actor_type, :system)
@@ -723,36 +716,21 @@ defmodule Mydia.Media do
       end)
 
     case result do
-      {:ok, deleted} ->
-        {:ok, deleted, delete_files_from_disk(delete_files, all_media_files, media_item)}
-
-      {:error, changeset} ->
-        {:error, changeset}
+      {:ok, deleted} -> {:ok, deleted, remove_from_disk(plan)}
+      {:error, changeset} -> {:error, changeset}
     end
   end
 
-  # Removes the given media files from disk after the record delete succeeded.
-  # Returns the number of files that could not be removed (0 when not deleting
-  # files), which callers surface to the user.
-  defp delete_files_from_disk(false, _media_files, _media_item), do: 0
+  defp remove_from_disk(nil), do: %DiskRemoval{}
+  defp remove_from_disk(%DiskRemoval.Plan{} = plan), do: DiskRemoval.run(plan)
 
-  defp delete_files_from_disk(true, media_files, media_item) do
-    Logger.info("Attempting to delete physical files",
-      media_item_id: media_item.id,
-      file_count: length(media_files),
-      file_paths: Enum.map(media_files, & &1.path)
-    )
-
-    {:ok, success_count, error_count} =
-      Mydia.Library.delete_media_files_from_disk(media_files)
-
-    Logger.info("Deleted #{success_count} files from disk (#{error_count} errors)",
-      media_item_id: media_item.id,
-      title: media_item.title
-    )
-
-    error_count
-  end
+  @doc """
+  What `delete_media_item(media_item, delete_files: true)` would remove from
+  disk, for the delete dialog. Read-only and advisory: the delete checks every
+  folder again. See `Mydia.Media.DiskRemoval.preview/1`.
+  """
+  @spec preview_disk_removal(MediaItem.t()) :: DiskRemoval.Preview.t()
+  def preview_disk_removal(%MediaItem{} = media_item), do: DiskRemoval.preview(media_item)
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking media item changes.
@@ -927,36 +905,28 @@ defmodule Mydia.Media do
   ## Options
     - `:delete_files` - Whether to delete physical files from disk (default: false)
 
-  Returns `{:ok, count}` where count is the number of deleted items,
-  or `{:error, reason}` if the transaction fails.
+  Returns `{:ok, count, %DiskRemoval{}}`, where count is the number of deleted
+  items, or `{:error, reason}` if the transaction fails.
 
-  When `:delete_files` is true, the database records are deleted first and the
-  associated files are removed from disk afterwards (so a failed delete leaves
-  the disk untouched). When false (default), only removes database records and
-  preserves files on disk.
+  When `:delete_files` is true, the database records are deleted first and
+  the items' files and folders are removed from disk after the commit (so a
+  failed delete leaves the disk untouched). See `Mydia.Media.DiskRemoval`.
+  When false (default), only removes database records and preserves files on
+  disk.
   """
   @spec delete_media_items([binary()], keyword()) ::
-          {:ok, non_neg_integer(), non_neg_integer()} | {:error, term()}
+          {:ok, non_neg_integer(), DiskRemoval.t()} | {:error, term()}
   def delete_media_items(ids, opts \\ []) when is_list(ids) do
     delete_files = Keyword.get(opts, :delete_files, false)
 
+    # One plan for every item, run once after the commit. Finishing folders
+    # item by item would let a second item's not-yet-deleted files keep a
+    # folder the two share. See `delete_media_item/2` for why the plan comes
+    # before the delete.
+    plan = if delete_files, do: DiskRemoval.plan(ids)
+
     result =
       Repo.transaction(fn ->
-        # Load all media files into memory before deleting the records so their
-        # paths stay resolvable after the cascade delete.
-        all_media_files =
-          if delete_files do
-            MediaItem
-            |> where([m], m.id in ^ids)
-            |> preload(media_files: :library_path, episodes: [media_files: :library_path])
-            |> Repo.all()
-            |> Enum.flat_map(fn item ->
-              item.media_files ++ Enum.flat_map(item.episodes, & &1.media_files)
-            end)
-          else
-            []
-          end
-
         # See the comment in `delete_media_item/2`: demoting into
         # `import_candidates` when the files are about to be deleted from
         # disk anyway would leave phantom candidates pointing at paths that
@@ -973,34 +943,14 @@ defmodule Mydia.Media do
         end
 
         # Delete the media items (and cascade delete all related DB records).
-        count =
-          MediaItem
-          |> where([m], m.id in ^ids)
-          |> Repo.delete_all()
-          |> elem(0)
-
-        # Only after the records are gone do we remove the files from disk.
-        # error_count is the number of files that could not be removed.
-        error_count =
-          if delete_files do
-            {:ok, success_count, error_count} =
-              Mydia.Library.delete_media_files_from_disk(all_media_files)
-
-            Logger.info(
-              "Batch deleted #{success_count} files from disk (#{error_count} errors)",
-              media_item_count: count
-            )
-
-            error_count
-          else
-            0
-          end
-
-        {count, error_count}
+        MediaItem
+        |> where([m], m.id in ^ids)
+        |> Repo.delete_all()
+        |> elem(0)
       end)
 
     case result do
-      {:ok, {count, error_count}} -> {:ok, count, error_count}
+      {:ok, count} -> {:ok, count, remove_from_disk(plan)}
       {:error, reason} -> {:error, reason}
     end
   end

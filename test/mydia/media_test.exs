@@ -5,6 +5,7 @@ defmodule Mydia.MediaTest do
   alias Mydia.Media
 
   describe "media_items" do
+    alias Mydia.Media.DiskRemoval
     alias Mydia.Media.MediaItem
 
     import Mydia.MediaFixtures
@@ -116,7 +117,7 @@ defmodule Mydia.MediaTest do
 
     test "delete_media_item/1 deletes the media item" do
       media_item = media_item_fixture()
-      assert {:ok, %MediaItem{}, 0} = Media.delete_media_item(media_item)
+      assert {:ok, %MediaItem{}, %DiskRemoval{}} = Media.delete_media_item(media_item)
       assert_raise Ecto.NoResultsError, fn -> Media.get_media_item!(media_item.id) end
     end
 
@@ -2773,6 +2774,7 @@ defmodule Mydia.MediaTest do
 
   describe "file deletion return shape" do
     alias Mydia.Library
+    alias Mydia.Media.DiskRemoval
     alias Mydia.Media.MediaItem
 
     import Mydia.MediaFixtures
@@ -2806,7 +2808,9 @@ defmodule Mydia.MediaTest do
       item = movie_with_file(lp, "movie.mkv", "data")
       abs = Path.join(lp.path, "movie.mkv")
 
-      assert {:ok, %MediaItem{}, 0} = Media.delete_media_item(item, delete_files: true)
+      assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
+               Media.delete_media_item(item, delete_files: true)
+
       refute File.exists?(abs)
     end
 
@@ -2825,7 +2829,9 @@ defmodule Mydia.MediaTest do
           size: 1
         })
 
-      assert {:ok, %MediaItem{}, 1} = Media.delete_media_item(media_item, delete_files: true)
+      assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 1}} =
+               Media.delete_media_item(media_item, delete_files: true)
+
       assert_raise Ecto.NoResultsError, fn -> Media.get_media_item!(media_item.id) end
     end
 
@@ -2833,7 +2839,7 @@ defmodule Mydia.MediaTest do
       item1 = movie_with_file(lp, "a.mkv", "data")
       item2 = movie_with_file(lp, "b.mkv", "data")
 
-      assert {:ok, 2, 0} =
+      assert {:ok, 2, %DiskRemoval{files_failed: 0}} =
                Media.delete_media_items([item1.id, item2.id], delete_files: true)
     end
 
@@ -2841,13 +2847,15 @@ defmodule Mydia.MediaTest do
       item = movie_with_file(lp, "keep.mkv", "data")
       abs = Path.join(lp.path, "keep.mkv")
 
-      assert {:ok, 1, 0} = Media.delete_media_items([item.id])
+      assert {:ok, 1, %DiskRemoval{} = removal} = Media.delete_media_items([item.id])
+      assert removal == %DiskRemoval{}
       assert File.exists?(abs)
     end
   end
 
   describe "deleting a tv show gates episode file demotion on delete_files" do
     alias Mydia.Library.ImportCandidate
+    alias Mydia.Media.DiskRemoval
     alias Mydia.Media.MediaItem
     alias Mydia.Repo
 
@@ -2892,7 +2900,9 @@ defmodule Mydia.MediaTest do
       {media_item, file} = show_with_episode_file(lp, "Show/S01E01.mkv", "data")
       abs = Path.join(lp.path, "Show/S01E01.mkv")
 
-      assert {:ok, %MediaItem{}, 0} = Media.delete_media_item(media_item, delete_files: true)
+      assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
+               Media.delete_media_item(media_item, delete_files: true)
+
       refute File.exists?(abs)
       refute candidate_for(file)
     end
@@ -2903,7 +2913,9 @@ defmodule Mydia.MediaTest do
       {media_item, file} = show_with_episode_file(lp, "Show/S01E02.mkv", "data")
       abs = Path.join(lp.path, "Show/S01E02.mkv")
 
-      assert {:ok, %MediaItem{}, 0} = Media.delete_media_item(media_item)
+      assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
+               Media.delete_media_item(media_item)
+
       assert File.exists?(abs)
       assert candidate_for(file)
     end
@@ -2912,7 +2924,9 @@ defmodule Mydia.MediaTest do
          %{library_path: lp} do
       {media_item, file} = show_with_episode_file(lp, "Show/S01E03.mkv", "data")
 
-      assert {:ok, 1, 0} = Media.delete_media_items([media_item.id], delete_files: true)
+      assert {:ok, 1, %DiskRemoval{files_failed: 0}} =
+               Media.delete_media_items([media_item.id], delete_files: true)
+
       refute candidate_for(file)
     end
 
@@ -2921,8 +2935,145 @@ defmodule Mydia.MediaTest do
     } do
       {media_item, file} = show_with_episode_file(lp, "Show/S01E04.mkv", "data")
 
-      assert {:ok, 1, 0} = Media.delete_media_items([media_item.id])
+      assert {:ok, 1, %DiskRemoval{files_failed: 0}} = Media.delete_media_items([media_item.id])
       assert candidate_for(file)
+    end
+  end
+
+  describe "delete_files: true removes the item's folder (#890)" do
+    alias Mydia.Library
+    alias Mydia.Media.DiskRemoval
+    alias Mydia.Media.MediaItem
+    alias Mydia.Repo
+    alias Mydia.Subtitles.Subtitle
+
+    import Mydia.MediaFixtures
+    import Mydia.SettingsFixtures
+
+    @describetag :tmp_dir
+
+    setup %{tmp_dir: tmp} do
+      root = Path.join(tmp, "lib")
+      File.mkdir_p!(root)
+      %{root: root, lp: library_path_fixture(%{path: root, type: "mixed"})}
+    end
+
+    defp place_movie(lp, rel, title) do
+      item = media_item_fixture(%{type: "movie", title: title})
+      absolute = Path.join(lp.path, rel)
+      File.mkdir_p!(Path.dirname(absolute))
+      File.write!(absolute, "video")
+
+      {:ok, file} =
+        Library.create_scanned_media_file(%{
+          relative_path: rel,
+          library_path_id: lp.id,
+          media_item_id: item.id,
+          size: 5
+        })
+
+      {item, file}
+    end
+
+    test "a movie folder with artwork and a subtitle is removed entirely", %{root: root, lp: lp} do
+      {item, file} =
+        place_movie(lp, "Harbor Lights (2011)/Harbor Lights (2011).mkv", "Harbor Lights")
+
+      folder = Path.join(root, "Harbor Lights (2011)")
+      File.write!(Path.join(folder, "poster.jpg"), "art")
+      srt = Path.join(folder, "Harbor Lights (2011).en.srt")
+      File.write!(srt, "1\n")
+
+      %Subtitle{}
+      |> Subtitle.changeset(%{
+        media_file_id: file.id,
+        language: "en",
+        provider: "test",
+        subtitle_hash: "hash-harbor",
+        file_path: srt,
+        format: "srt"
+      })
+      |> Repo.insert!()
+
+      assert {:ok, %MediaItem{},
+              %DiskRemoval{files_failed: 0, folders_removed: [^folder], folders_kept: []}} =
+               Media.delete_media_item(item, delete_files: true)
+
+      refute File.exists?(folder)
+      assert File.dir?(root)
+    end
+
+    test "a show folder with its NFOs and season folders is removed entirely", %{
+      root: root,
+      lp: lp
+    } do
+      show = media_item_fixture(%{type: "tv_show", title: "Tin Kettle", tvdb_id: 4321})
+
+      for {season, rel} <- [
+            {1, "Tin Kettle/Season 01/Tin Kettle S01E01.mkv"},
+            {2, "Tin Kettle/Season 02/Tin Kettle S02E01.mkv"}
+          ] do
+        episode =
+          episode_fixture(media_item_id: show.id, season_number: season, episode_number: 1)
+
+        File.mkdir_p!(Path.dirname(Path.join(root, rel)))
+        File.write!(Path.join(root, rel), "video")
+        media_file_fixture(episode_id: episode.id, library_path_id: lp.id, relative_path: rel)
+      end
+
+      File.write!(Path.join(root, "Tin Kettle/tvshow.nfo"), "<tvshow/>")
+      File.write!(Path.join(root, "Tin Kettle/Season 01/season.nfo"), "<season/>")
+
+      assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0, folders_kept: []}} =
+               Media.delete_media_item(show, delete_files: true)
+
+      refute File.exists?(Path.join(root, "Tin Kettle"))
+    end
+
+    test "a folder shared with another item is kept, with the other item's file", %{
+      root: root,
+      lp: lp
+    } do
+      {item, _} = place_movie(lp, "Shared Reels/Reel One.mkv", "Reel One")
+      place_movie(lp, "Shared Reels/Reel Two.mkv", "Reel Two")
+      folder = Path.join(root, "Shared Reels")
+
+      assert {:ok, %MediaItem{},
+              %DiskRemoval{
+                folders_removed: [],
+                folders_kept: [
+                  {^folder, {:blocked, [{:media_file, "Shared Reels/Reel Two.mkv"}]}}
+                ]
+              }} = Media.delete_media_item(item, delete_files: true)
+
+      refute File.exists?(Path.join(folder, "Reel One.mkv"))
+      assert File.exists?(Path.join(folder, "Reel Two.mkv"))
+    end
+
+    test "a file that cannot be deleted keeps its folder", %{root: root, lp: lp} do
+      {item, _} = place_movie(lp, "Locked Reel/Locked Reel.mkv", "Locked Reel")
+      folder = Path.join(root, "Locked Reel")
+      File.chmod!(folder, 0o555)
+      on_exit(fn -> File.chmod(folder, 0o755) end)
+
+      assert {:ok, %MediaItem{},
+              %DiskRemoval{
+                files_failed: 1,
+                folders_kept: [{^folder, {:blocked, [{:video, "Locked Reel/Locked Reel.mkv"}]}}]
+              }} = Media.delete_media_item(item, delete_files: true)
+
+      assert File.exists?(Path.join(folder, "Locked Reel.mkv"))
+    end
+
+    test "a bulk delete of every item in a shared folder removes it", %{root: root, lp: lp} do
+      {one, _} = place_movie(lp, "Shared Reels/Reel One.mkv", "Reel One")
+      {two, _} = place_movie(lp, "Shared Reels/Reel Two.mkv", "Reel Two")
+      folder = Path.join(root, "Shared Reels")
+
+      assert {:ok, 2, %DiskRemoval{files_failed: 0, folders_removed: [^folder]}} =
+               Media.delete_media_items([one.id, two.id], delete_files: true)
+
+      refute File.exists?(folder)
     end
   end
 

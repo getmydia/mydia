@@ -36,6 +36,7 @@ defmodule Mydia.Library.FileOrganizer do
 
   require Logger
 
+  alias Mydia.Library.Dirs
   alias Mydia.Library.MediaFile
   alias Mydia.Media.MediaItem
   alias Mydia.Settings.LibraryPath
@@ -418,7 +419,7 @@ defmodule Mydia.Library.FileOrganizer do
             case update_media_file_path(media_file, new_relative_path) do
               {:ok, _} ->
                 # Clean up empty source directories
-                cleanup_empty_directories(Path.dirname(source_path), library_path.path)
+                Dirs.prune_empty(Path.dirname(source_path), library_path.path)
 
                 {:ok,
                  %{
@@ -507,25 +508,6 @@ defmodule Mydia.Library.FileOrganizer do
     media_file
     |> Ecto.Changeset.change(%{relative_path: new_relative_path})
     |> Repo.update()
-  end
-
-  defp cleanup_empty_directories(dir, library_root) do
-    # Don't delete the library root itself
-    if dir != library_root and String.starts_with?(dir, library_root) do
-      case File.ls(dir) do
-        {:ok, []} ->
-          # Directory is empty, remove it
-          File.rmdir(dir)
-          # Recursively check parent
-          cleanup_empty_directories(Path.dirname(dir), library_root)
-
-        _ ->
-          # Directory is not empty or couldn't be read, stop
-          :ok
-      end
-    else
-      :ok
-    end
   end
 
   defp build_media_folder(%MediaItem{type: "movie", title: title, year: year}) do

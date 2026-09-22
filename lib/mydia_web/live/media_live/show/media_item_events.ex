@@ -5,9 +5,12 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   import Phoenix.LiveView, only: [put_flash: 3, push_navigate: 2, start_async: 3, connected?: 1]
 
   alias Mydia.Media
+  alias Mydia.Media.DiskRemoval
   alias Mydia.Media.SeasonOrder
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.MediaLive.DiskRemovalFlash
   alias MydiaWeb.MediaLive.Show.Loaders
+  alias Phoenix.LiveView.AsyncResult
 
   import MydiaWeb.MediaLive.Show.Helpers, only: [media_type_path: 1]
 
@@ -23,14 +26,42 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
     {:noreply,
      socket
      |> assign(:show_delete_confirm, true)
-     |> assign(:delete_files, true)}
+     |> assign(:delete_files, true)
+     |> start_delete_preview()}
   end
 
   def hide_delete_confirm(_params, socket) do
     {:noreply,
      socket
      |> assign(:show_delete_confirm, false)
-     |> assign(:delete_files, false)}
+     |> assign(:delete_files, false)
+     |> assign(:delete_preview, nil)}
+  end
+
+  # The preview walks the item's folders, which on a network share can take a
+  # moment, so the dialog opens at once and fills in. The disconnected render
+  # never shows the dialog, so it never pays for the walk.
+  defp start_delete_preview(socket) do
+    if connected?(socket) do
+      media_item = socket.assigns.media_item
+
+      socket
+      |> assign(:delete_preview, AsyncResult.loading())
+      |> start_async(:delete_preview, fn -> Media.preview_disk_removal(media_item) end)
+    else
+      assign(socket, :delete_preview, nil)
+    end
+  end
+
+  @doc "Stores the delete dialog's disk preview, or marks it failed."
+  def handle_delete_preview_result({:ok, preview}, socket) do
+    {:noreply, assign(socket, :delete_preview, AsyncResult.ok(preview))}
+  end
+
+  def handle_delete_preview_result({:exit, reason}, socket) do
+    Logger.warning("Delete preview failed: #{inspect(reason)}")
+
+    {:noreply, assign(socket, :delete_preview, AsyncResult.failed(AsyncResult.loading(), reason))}
   end
 
   def toggle_delete_files(%{"delete_files" => value}, socket) do
@@ -51,27 +82,12 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
       )
 
       case Media.delete_media_item(media_item, delete_files: delete_files) do
-        {:ok, _item, 0} ->
-          message =
-            if delete_files do
-              "#{media_item.title} deleted successfully (including files)"
-            else
-              "#{media_item.title} removed from library (files preserved)"
-            end
+        {:ok, _item, %DiskRemoval{} = removal} ->
+          {kind, message} = DiskRemovalFlash.for_item(media_item.title, delete_files, removal)
 
           {:noreply,
            socket
-           |> put_flash(:info, message)
-           |> push_navigate(to: media_type_path(media_item.type))}
-
-        {:ok, _item, error_count} ->
-          {:noreply,
-           socket
-           |> put_flash(
-             :error,
-             "#{media_item.title} removed, but #{error_count} #{pluralize_files(error_count)} " <>
-               "could not be deleted from disk. Check permissions and remove them manually."
-           )
+           |> put_flash(kind, message)
            |> push_navigate(to: media_type_path(media_item.type))}
 
         {:error, _changeset} ->
@@ -84,9 +100,6 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
-
-  defp pluralize_files(1), do: "file"
-  defp pluralize_files(_), do: "files"
 
   # Season ordering
 

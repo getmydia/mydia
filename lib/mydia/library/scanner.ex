@@ -25,6 +25,12 @@ defmodule Mydia.Library.Scanner do
   def extensions_for_library_type(_), do: @video_extensions
 
   @doc """
+  Every extension the scanner treats as a video file, lowercase with the dot.
+  """
+  @spec video_extensions() :: [String.t()]
+  def video_extensions, do: @video_extensions
+
+  @doc """
   Scans a directory for media files.
 
   Returns `{:ok, scan_result}` with details about the scan, or `{:error, reason}`.

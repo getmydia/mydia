@@ -1135,32 +1135,6 @@ defmodule Mydia.Library do
   end
 
   @doc """
-  Deletes physical files from disk for a list of media files.
-
-  Returns a tuple `{:ok, success_count, error_count}` with counts of
-  successfully deleted and failed deletions.
-  """
-  @spec delete_media_files_from_disk([MediaFile.t()]) ::
-          {:ok, non_neg_integer(), non_neg_integer()}
-  def delete_media_files_from_disk(media_files) when is_list(media_files) do
-    results =
-      Enum.map(media_files, fn file ->
-        delete_media_file_from_disk(file)
-      end)
-
-    success_count = Enum.count(results, &(&1 == :ok))
-    error_count = Enum.count(results, &match?({:error, _}, &1))
-
-    Logger.info("Bulk file deletion from disk completed",
-      success: success_count,
-      errors: error_count,
-      total: length(media_files)
-    )
-
-    {:ok, success_count, error_count}
-  end
-
-  @doc """
   Returns an `%Ecto.Changeset{}` for tracking media file changes.
   """
   @spec change_media_file(MediaFile.t(), map()) :: Ecto.Changeset.t()
