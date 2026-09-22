@@ -377,11 +377,11 @@ defmodule Mydia.Jobs.MediaImportTest do
           download_client_id: "test123"
         })
 
-      # Setup runtime config with test client
-      setup_runtime_config([build_test_client_config()])
-
       # Note: This test would need proper mocking of the download client adapter
-      # to actually work. For now, it demonstrates the test structure.
+      # to actually work. For now, it demonstrates the test structure. When it
+      # does, configure the client in the database (as "returns error if no
+      # library path is configured" does), not in the global runtime config:
+      # this module is async.
       #
       # In a full implementation, we'd mock:
       # - Client.get_status to return %{save_path: video_file, ...}
@@ -416,9 +416,6 @@ defmodule Mydia.Jobs.MediaImportTest do
           download_client: "TestClient",
           download_client_id: "test123"
         })
-
-      # Setup runtime config with test client
-      setup_runtime_config([build_test_client_config()])
 
       # Note: This test would need proper mocking of the download client adapter
       # Skip full execution for now
@@ -1117,43 +1114,6 @@ defmodule Mydia.Jobs.MediaImportTest do
     {:ok, path_record} = Settings.create_library_path(attrs)
 
     path_record
-  end
-
-  defp setup_runtime_config(download_clients) do
-    # Start from the full defaults. This module is async, so other tests read
-    # Mydia.Config.get() while this config is installed. A struct literal
-    # naming only the sections used here left the rest nil, :streaming
-    # included, and AudioTrackSelectorTest's resolved_languages/2 then returned
-    # [] on the PostgreSQL job.
-    config = %{Mydia.Config.Schema.defaults() | download_clients: download_clients}
-
-    # Capture and restore the prior value. `:runtime_config` is global
-    # Application state (test_helper.exs forces empty download_clients at boot);
-    # leaving an enabled client here leaks into later tests, e.g. DownloadsLive,
-    # whose queue-tab filter then hides the completed downloads they seed.
-    previous = Application.get_env(:mydia, :runtime_config)
-    Application.put_env(:mydia, :runtime_config, config)
-
-    on_exit(fn ->
-      case previous do
-        nil -> Application.delete_env(:mydia, :runtime_config)
-        value -> Application.put_env(:mydia, :runtime_config, value)
-      end
-    end)
-  end
-
-  defp build_test_client_config do
-    %{
-      name: "TestClient",
-      type: :qbittorrent,
-      host: "localhost",
-      port: 8080,
-      username: "test",
-      password: "test",
-      enabled: true,
-      priority: 1,
-      use_ssl: false
-    }
   end
 
   describe "idempotency" do

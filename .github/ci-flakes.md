@@ -592,8 +592,10 @@ fail together, each asserting a list and getting `[]`, or `nil` from
 `media_import_test.exs` and `download_monitor_test.exs`, both async, which
 installed a `Mydia.Config.Schema` literal naming only eight sections. Every
 other section, `:streaming` included, was `nil` while it was installed, so
-`configured()` fell through to its `{[], false}` fallback. Both helpers now
-start from `Mydia.Config.Schema.defaults()`. The same leak explains a one-off
+`configured()` fell through to its `{[], false}` fallback. The DownloadMonitor
+helper now starts from `Mydia.Config.Schema.defaults()` in a sync module, and
+`media_import_test.exs` no longer writes the global at all: its only callers
+were two placeholder tests that asserted nothing. The same leak explains a one-off
 `BadMapError` on `.streaming` in the since-deleted
 `MediaItemAudioLanguagesTest`. Confirmed flaky on PR #488, a player-only Dart
 diff with zero Elixir.

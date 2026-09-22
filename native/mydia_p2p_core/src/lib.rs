@@ -3327,16 +3327,27 @@ mod tests {
 
         let (server, _server_id) = Host::new(test_config());
         let (client_one, client_id) = Host::new(client_config());
-        let (client_two, _) = Host::new(client_config());
         spawn_event_drain(&client_one);
-        spawn_event_drain(&client_two);
         let disconnects = spawn_disconnect_counter(&server, client_id.clone());
 
         let server_addr = wait_for_addr(&server).await;
+        wait_for_addr(&client_one).await;
         client_one
             .dial(server_addr.clone())
             .await
             .expect("first dial should succeed");
+        wait_until(
+            || async { server.get_network_stats().await.connected_peers == 1 },
+            std::time::Duration::from_secs(10),
+            "the server to observe the first connection",
+        )
+        .await;
+
+        // As in the test above, the second client under the shared key starts
+        // only once the first is connected.
+        let (client_two, _) = Host::new(client_config());
+        spawn_event_drain(&client_two);
+        wait_for_addr(&client_two).await;
         client_two
             .dial(server_addr)
             .await
