@@ -16,7 +16,7 @@ defmodule MetadataRelay.PlayerLogs do
 
   import Ecto.Query
 
-  alias MetadataRelay.PlayerLogs.{Batch, Chunk, Device, Meta, Report, Store}
+  alias MetadataRelay.PlayerLogs.{Batch, Chunk, Device, Meta, Report, SessionSummary, Store}
   alias MetadataRelay.Repo
 
   @daily_quota_bytes 50 * 1024 * 1024
@@ -113,6 +113,51 @@ defmodule MetadataRelay.PlayerLogs do
     end)
     |> order_by([c], asc: c.first_t, asc: c.id)
     |> Repo.all()
+  end
+
+  @spec list_devices() :: [Device.t()]
+  def list_devices, do: Repo.all(from(d in Device, order_by: [desc: d.last_seen_at]))
+
+  @spec list_recent_reports(pos_integer()) :: [Report.t()]
+  def list_recent_reports(limit \\ 50) do
+    Repo.all(from(r in Report, order_by: [desc: r.inserted_at], limit: ^limit))
+  end
+
+  @doc "IDs of the devices that sent a stream batch since `since`."
+  @spec active_device_ids(DateTime.t()) :: MapSet.t(String.t())
+  def active_device_ids(since) do
+    since = DateTime.truncate(since, :second)
+
+    from(c in Chunk,
+      where: c.kind == "stream" and c.inserted_at > ^since,
+      distinct: true,
+      select: c.device_id
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc "A device's sessions across its newest `limit` chunks, newest first."
+  @spec device_sessions(String.t(), pos_integer()) :: [SessionSummary.t()]
+  def device_sessions(device_id, limit \\ 500) do
+    from(c in Chunk,
+      where: c.device_id == ^device_id,
+      order_by: [desc: c.last_t],
+      limit: ^limit,
+      select: c.sessions
+    )
+    |> Repo.all()
+    |> Enum.flat_map(&Jason.decode!/1)
+    |> Enum.group_by(& &1["sid"])
+    |> Enum.map(fn {sid, parts} ->
+      %SessionSummary{
+        sid: sid,
+        first_t: parts |> Enum.map(& &1["first"]) |> Enum.min(),
+        last_t: parts |> Enum.map(& &1["last"]) |> Enum.max(),
+        lines: parts |> Enum.map(& &1["n"]) |> Enum.sum()
+      }
+    end)
+    |> Enum.sort_by(& &1.last_t, :desc)
   end
 
   @spec new_report_code() :: String.t()
