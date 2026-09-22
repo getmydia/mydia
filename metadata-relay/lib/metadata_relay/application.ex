@@ -30,6 +30,8 @@ defmodule MetadataRelay.Application do
         MetadataRelay.PairingStore,
         # Rate limiter for crash reports and pairing
         MetadataRelay.RateLimiter,
+        # Hourly retention and disk cap for uploaded player logs
+        MetadataRelay.PlayerLogs.Sweeper,
         # Metrics collector
         MetadataRelay.Metrics
       ] ++

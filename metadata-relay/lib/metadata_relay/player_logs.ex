@@ -22,6 +22,12 @@ defmodule MetadataRelay.PlayerLogs do
   @daily_quota_bytes 50 * 1024 * 1024
   @report_follow_up_seconds 600
   @code_alphabet ~c"0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+  @stream_retention_seconds 14 * 86_400
+  @report_retention_seconds 90 * 86_400
+  @device_retention_seconds 90 * 86_400
+  @orphan_age_seconds 3_600
+  @sweep_batch 500
+  @evict_batch 200
 
   @type ingest_result ::
           {:ok, :stream}
@@ -119,9 +125,127 @@ defmodule MetadataRelay.PlayerLogs do
     "LOG-" <> suffix
   end
 
-  @doc "Keeps the logs directory under `player_logs.max_bytes`. See Task 5."
+  @doc """
+  The hourly retention pass: expired stream chunks, expired reports with
+  their chunks, idle devices with nothing left, orphaned files, then the disk
+  cap. Files go before rows, so a crash in between leaves an orphan row the
+  raw endpoint skips rather than an orphan file nothing will ever find.
+  """
+  @spec sweep(DateTime.t()) :: :ok
+  def sweep(now \\ DateTime.utc_now()) do
+    from(c in Chunk,
+      where: c.kind == "stream" and c.inserted_at < ^ago(now, @stream_retention_seconds),
+      order_by: c.id,
+      limit: @sweep_batch
+    )
+    |> Repo.all()
+    |> delete_chunks()
+
+    expire_reports(now)
+    delete_idle_devices(now)
+    remove_orphans(now)
+    enforce_cap()
+  end
+
+  @doc """
+  When the stored files add up to more than `player_logs.max_bytes`, deletes
+  the oldest stream chunks, then the oldest report chunks, until they are
+  under 90% of it.
+  """
   @spec enforce_cap() :: :ok
-  def enforce_cap, do: :ok
+  def enforce_cap do
+    max = config(:max_bytes)
+    total = total_bytes()
+
+    if total > max do
+      target = trunc(max * 0.9)
+      total = evict("stream", total, target)
+      _total = evict("report", total, target)
+    end
+
+    :ok
+  end
+
+  @spec total_bytes() :: non_neg_integer()
+  def total_bytes, do: Repo.aggregate(Chunk, :sum, :bytes) || 0
+
+  defp ago(now, seconds), do: now |> DateTime.add(-seconds) |> DateTime.truncate(:second)
+
+  defp delete_chunks([]), do: :ok
+
+  defp delete_chunks(chunks) do
+    Enum.each(chunks, &Store.delete(&1.path))
+    ids = Enum.map(chunks, & &1.id)
+    Repo.delete_all(from(c in Chunk, where: c.id in ^ids))
+    :ok
+  end
+
+  defp expire_reports(now) do
+    codes =
+      Repo.all(
+        from(r in Report,
+          where: r.inserted_at < ^ago(now, @report_retention_seconds),
+          select: r.code,
+          limit: @sweep_batch
+        )
+      )
+
+    if codes != [] do
+      delete_chunks(Repo.all(from(c in Chunk, where: c.report_code in ^codes)))
+      Repo.delete_all(from(r in Report, where: r.code in ^codes))
+    end
+  end
+
+  defp delete_idle_devices(now) do
+    Repo.delete_all(
+      from(d in Device,
+        as: :device,
+        where:
+          d.last_seen_at < ^ago(now, @device_retention_seconds) and
+            not exists(
+              from(c in Chunk, where: c.device_id == parent_as(:device).device_id, select: 1)
+            )
+      )
+    )
+  end
+
+  defp remove_orphans(now) do
+    known = MapSet.new(Repo.all(from(c in Chunk, select: c.path)))
+
+    (DateTime.to_unix(now) - @orphan_age_seconds)
+    |> Store.files_older_than()
+    |> Enum.reject(&MapSet.member?(known, &1))
+    |> Enum.each(&Store.delete/1)
+  end
+
+  defp evict(_kind, total, target) when total <= target, do: total
+
+  defp evict(kind, total, target) do
+    oldest =
+      Repo.all(
+        from(c in Chunk,
+          where: c.kind == ^kind,
+          order_by: [asc: c.inserted_at, asc: c.id],
+          limit: @evict_batch
+        )
+      )
+
+    {victims, remaining} =
+      Enum.reduce_while(oldest, {[], total}, fn chunk, {acc, bytes} ->
+        if bytes <= target,
+          do: {:halt, {acc, bytes}},
+          else: {:cont, {[chunk | acc], bytes - chunk.bytes}}
+      end)
+
+    case victims do
+      [] ->
+        total
+
+      _ ->
+        delete_chunks(victims)
+        evict(kind, remaining, target)
+    end
+  end
 
   @doc false
   def config(key), do: Application.fetch_env!(:metadata_relay, :player_logs) |> Keyword.get(key)
