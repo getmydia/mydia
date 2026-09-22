@@ -46,6 +46,48 @@ defmodule Mydia.Indexers.ReleaseIdentityTest do
                show("Smoke Cat")
              ) == :match
     end
+
+    test "matches either side of an AKA" do
+      target = movie("The Harbor's Edge", 2031)
+
+      assert ReleaseIdentity.check(
+               "The Harbor's Edge AKA Gang feng bian (2031)_1080p.mkv",
+               target
+             ) == :match
+
+      assert ReleaseIdentity.check(
+               "Gang.Feng.Bian.aka.The.Harbors.Edge.2031.1080p.WEB-DL-GROUP",
+               target
+             ) == :match
+    end
+
+    test "matches past a leading title in another script" do
+      assert ReleaseIdentity.check(
+               "港风边.The.Harbor's.Edge.2031.2160p.WEB-DL.DDP5.1.H265-GROUP",
+               movie("The Harbor's Edge", 2031)
+             ) == :match
+    end
+
+    test "matches past a trailing title in another script" do
+      assert ReleaseIdentity.check(
+               "The.Harbor's.Edge.港风边.2031.1080p.WEB-DL.x264-GROUP",
+               movie("The Harbor's Edge", 2031)
+             ) == :match
+    end
+
+    test "still rejects an AKA whose sides are both other titles" do
+      assert ReleaseIdentity.check(
+               "Lantern Vale AKA Lantern Heaven (2031)_1080p.mkv",
+               movie("Lantern", 2031)
+             ) == {:mismatch, :title}
+    end
+
+    test "still rejects a Latin title that only starts with the item's" do
+      assert ReleaseIdentity.check(
+               "港风边.Lantern.Vale.2031.1080p.WEB-DL.x264-GROUP",
+               movie("Lantern", 2031)
+             ) == {:mismatch, :title}
+    end
   end
 
   describe "check/2 without a parsed title" do
