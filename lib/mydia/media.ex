@@ -725,6 +725,14 @@ defmodule Mydia.Media do
   defp remove_from_disk(%DiskRemoval.Plan{} = plan), do: DiskRemoval.run(plan)
 
   @doc """
+  What `delete_media_item(media_item, delete_files: true)` would remove from
+  disk, for the delete dialog. Read-only and advisory: the delete checks every
+  folder again. See `Mydia.Media.DiskRemoval.preview/1`.
+  """
+  @spec preview_disk_removal(MediaItem.t()) :: DiskRemoval.Preview.t()
+  def preview_disk_removal(%MediaItem{} = media_item), do: DiskRemoval.preview(media_item)
+
+  @doc """
   Returns an `%Ecto.Changeset{}` for tracking media item changes.
   """
   @spec change_media_item(MediaItem.t(), map()) :: Ecto.Changeset.t()

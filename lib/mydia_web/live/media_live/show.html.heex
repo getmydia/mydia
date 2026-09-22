@@ -130,6 +130,7 @@
                 <% end %>
                 <div class="tooltip tooltip-bottom" data-tip="Delete">
                   <button
+                    id="delete-media-button"
                     type="button"
                     phx-click="show_delete_confirm"
                     class="btn btn-ghost btn-sm btn-square text-base-content/50 hover:text-error"
@@ -353,7 +354,11 @@
 
   <%!-- Modals --%>
   <%= if @show_delete_confirm do %>
-    <Modals.delete_confirm_modal media_item={@media_item} delete_files={@delete_files} />
+    <Modals.delete_confirm_modal
+      media_item={@media_item}
+      delete_files={@delete_files}
+      delete_preview={@delete_preview}
+    />
   <% end %>
   <%= if @show_file_delete_confirm && @file_to_delete do %>
     <Modals.file_delete_confirm_modal

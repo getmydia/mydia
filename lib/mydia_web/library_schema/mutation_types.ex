@@ -32,7 +32,11 @@ defmodule MydiaWeb.LibrarySchema.MutationTypes do
   @desc "A media item to remove"
   input_object :remove_media_item_input do
     field :id, non_null(:id)
-    field :delete_files, :boolean, default_value: false
+
+    field :delete_files, :boolean,
+      default_value: false,
+      description:
+        "Also delete the item's files from disk, and its folder when nothing else lives in it"
   end
 
   object :library_mutations do

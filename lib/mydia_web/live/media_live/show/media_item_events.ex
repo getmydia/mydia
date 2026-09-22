@@ -10,6 +10,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.MediaLive.DiskRemovalFlash
   alias MydiaWeb.MediaLive.Show.Loaders
+  alias Phoenix.LiveView.AsyncResult
 
   import MydiaWeb.MediaLive.Show.Helpers, only: [media_type_path: 1]
 
@@ -25,14 +26,42 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
     {:noreply,
      socket
      |> assign(:show_delete_confirm, true)
-     |> assign(:delete_files, true)}
+     |> assign(:delete_files, true)
+     |> start_delete_preview()}
   end
 
   def hide_delete_confirm(_params, socket) do
     {:noreply,
      socket
      |> assign(:show_delete_confirm, false)
-     |> assign(:delete_files, false)}
+     |> assign(:delete_files, false)
+     |> assign(:delete_preview, nil)}
+  end
+
+  # The preview walks the item's folders, which on a network share can take a
+  # moment, so the dialog opens at once and fills in. The disconnected render
+  # never shows the dialog, so it never pays for the walk.
+  defp start_delete_preview(socket) do
+    if connected?(socket) do
+      media_item = socket.assigns.media_item
+
+      socket
+      |> assign(:delete_preview, AsyncResult.loading())
+      |> start_async(:delete_preview, fn -> Media.preview_disk_removal(media_item) end)
+    else
+      assign(socket, :delete_preview, nil)
+    end
+  end
+
+  @doc "Stores the delete dialog's disk preview, or marks it failed."
+  def handle_delete_preview_result({:ok, preview}, socket) do
+    {:noreply, assign(socket, :delete_preview, AsyncResult.ok(preview))}
+  end
+
+  def handle_delete_preview_result({:exit, reason}, socket) do
+    Logger.warning("Delete preview failed: #{inspect(reason)}")
+
+    {:noreply, assign(socket, :delete_preview, AsyncResult.failed(AsyncResult.loading(), reason))}
   end
 
   def toggle_delete_files(%{"delete_files" => value}, socket) do

@@ -15,21 +15,27 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
 
   alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
+  alias Mydia.Media.DiskRemoval.Preview
 
   @doc """
-  Delete confirmation modal for removing media item from library.
-  Allows user to choose whether to delete files from disk.
+  Delete confirmation modal for removing a media item.
+
+  Lets the user choose between removing the item from the library and
+  deleting it from disk. For the latter, `delete_preview` (an `AsyncResult`
+  of `Mydia.Media.DiskRemoval.Preview`, or nil before the socket connects)
+  names the folders that will go and the ones that will stay.
   """
   attr :media_item, :map, required: true
   attr :delete_files, :boolean, required: true
+  attr :delete_preview, :any, default: nil
 
   def delete_confirm_modal(assigns) do
     ~H"""
-    <div class="modal modal-open">
+    <div id="delete-media-modal" class="modal modal-open">
       <div class="modal-box max-w-lg">
         <h3 class="font-bold text-lg mb-4">Delete {@media_item.title}?</h3>
 
-        <form phx-change="toggle_delete_files">
+        <form id="delete-media-form" phx-change="toggle_delete_files">
           <div class="space-y-2.5 mb-5">
             <label class={[
               "flex items-start gap-3 p-3.5 rounded-lg border-2 cursor-pointer transition-all hover:shadow-sm",
@@ -62,7 +68,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 checked={@delete_files}
               />
               <div>
-                <div class="font-medium mb-1">Delete files from disk</div>
+                <div class="font-medium mb-1">Delete from disk</div>
                 <div class="text-sm opacity-75 flex items-center gap-1">
                   <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
                   <span>Permanently deletes all files - cannot be undone</span>
@@ -72,11 +78,33 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           </div>
         </form>
 
+        <div
+          :if={@delete_files && @delete_preview}
+          id="delete-preview"
+          class="mb-5 rounded-lg bg-base-200 p-3.5 text-sm"
+        >
+          <.async_result :let={preview} assign={@delete_preview}>
+            <:loading>
+              <div id="delete-preview-loading" class="flex items-center gap-2 opacity-75">
+                <span class="loading loading-spinner loading-xs"></span>
+                <span>Checking folders…</span>
+              </div>
+            </:loading>
+            <:failed :let={_reason}>
+              <p id="delete-preview-failed" class="opacity-75">
+                Couldn't check folders. Folders are removed only if nothing else is in them.
+              </p>
+            </:failed>
+            <.delete_preview_body preview={preview} />
+          </.async_result>
+        </div>
+
         <div class="modal-action">
           <button type="button" phx-click="hide_delete_confirm" class="btn btn-ghost">
             Cancel
           </button>
           <button
+            id="delete-media-confirm"
             type="button"
             phx-click="delete_media"
             class={["btn", (@delete_files && "btn-error") || "btn-warning"]}
@@ -90,6 +118,65 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
     </div>
     """
   end
+
+  attr :preview, Preview, required: true
+
+  defp delete_preview_body(assigns) do
+    ~H"""
+    <div class="space-y-3">
+      <p
+        :if={@preview.remove == [] and @preview.keep == [] and @preview.loose_files == 0}
+        id="delete-preview-empty"
+        class="opacity-75"
+      >
+        This item has no files on disk.
+      </p>
+
+      <div :if={@preview.remove != []}>
+        <p class="font-medium mb-1">Deletes these folders and everything in them:</p>
+        <ul class="space-y-0.5">
+          <li
+            :for={{path, index} <- Enum.with_index(@preview.remove)}
+            id={"delete-preview-folder-#{index}"}
+            class="font-mono text-xs break-all"
+          >
+            {path}
+          </li>
+        </ul>
+      </div>
+
+      <p
+        :for={{{path, blockers}, index} <- Enum.with_index(@preview.keep)}
+        id={"delete-preview-kept-#{index}"}
+      >
+        Keeps <span class="font-mono text-xs break-all">{path}</span>: it also holds other
+        media ({blocker_summary(blockers)}). Only this item's files are removed there.
+      </p>
+
+      <p :if={@preview.loose_files > 0} id="delete-preview-loose">
+        {loose_sentence(@preview)}
+      </p>
+    </div>
+    """
+  end
+
+  defp blocker_summary([first | rest]) do
+    if rest == [], do: blocker_name(first), else: "#{blocker_name(first)} and others"
+  end
+
+  defp blocker_name({:unreadable, rel}), do: "#{Path.basename(rel)} (unreadable)"
+  defp blocker_name({_kind, rel}), do: Path.basename(rel)
+
+  defp loose_sentence(%Preview{remove: [], keep: [], loose_files: 1}),
+    do: "Deletes 1 file. It sits directly in a library folder, so no folder is removed."
+
+  defp loose_sentence(%Preview{remove: [], keep: [], loose_files: n}),
+    do: "Deletes #{n} files. They sit directly in a library folder, so no folder is removed."
+
+  defp loose_sentence(%Preview{loose_files: 1}), do: "Also deletes 1 file outside these folders."
+
+  defp loose_sentence(%Preview{loose_files: n}),
+    do: "Also deletes #{n} files outside these folders."
 
   @doc """
   Provider re-identification picker.
