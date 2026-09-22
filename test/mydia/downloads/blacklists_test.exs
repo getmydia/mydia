@@ -83,6 +83,23 @@ defmodule Mydia.Downloads.BlacklistsTest do
 
       assert length(Repo.all(ReleaseBlacklist)) == 1
     end
+
+    test "stores the infohash lowercased" do
+      {:ok, row} =
+        Blacklists.add("bitmagnet", "hash-1", "T", "x",
+          info_hash: "3B245504CF5F11BBDBE1201CEA6A6BF45AEE1BC0"
+        )
+
+      assert row.info_hash == "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+    end
+
+    test "an upsert without a hash keeps the stored one" do
+      hash = "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+      {:ok, _} = Blacklists.add("bitmagnet", "hash-2", "T", "x", info_hash: hash)
+      {:ok, _} = Blacklists.add("bitmagnet", "hash-2", "T", "y")
+
+      assert Repo.get_by!(ReleaseBlacklist, guid: "hash-2").info_hash == hash
+    end
   end
 
   describe "blacklisted?/2" do
@@ -297,6 +314,66 @@ defmodule Mydia.Downloads.BlacklistsTest do
 
       assert "sha256:c9283b621de8b5f024da89b600a87a5093c206a295d6bab9b107f8911068bf4e" =
                Blacklists.release_guid(result)
+    end
+  end
+
+  describe "download_info_hash/1" do
+    @hash "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+
+    test "reads the btih of a magnet download url" do
+      download = download_fixture(%{download_url: "magnet:?xt=urn:btih:#{@hash}&dn=x"})
+
+      assert Blacklists.download_info_hash(download) == @hash
+    end
+
+    test "falls back to a client id that is an infohash" do
+      download =
+        download_fixture(%{
+          download_url: "https://example.test/torrent/1",
+          download_client_id: String.upcase(@hash)
+        })
+
+      assert Blacklists.download_info_hash(download) == @hash
+    end
+
+    test "is nil when neither carries one" do
+      download =
+        download_fixture(%{
+          download_url: "https://example.test/torrent/1",
+          download_client_id: "SABnzbd_nzo_abc"
+        })
+
+      assert is_nil(Blacklists.download_info_hash(download))
+    end
+  end
+
+  describe "active_by_info_hash/1" do
+    @hash "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+
+    test "finds a ban recorded under any indexer" do
+      {:ok, _} = Blacklists.add("bitmagnet", @hash, "T", "stalled", info_hash: @hash)
+
+      assert %ReleaseBlacklist{indexer: "bitmagnet"} = Blacklists.active_by_info_hash(@hash)
+    end
+
+    test "prefers a forever ban over a dated one" do
+      {:ok, _} = Blacklists.add("a", "dated", "T", "stalled", ttl_days: 1, info_hash: @hash)
+
+      {:ok, _} =
+        Blacklists.add("b", "forever", "T", "rejected_by_user", expires_at: nil, info_hash: @hash)
+
+      assert %ReleaseBlacklist{guid: "forever"} = Blacklists.active_by_info_hash(@hash)
+    end
+
+    test "ignores an expired ban" do
+      past = DateTime.add(DateTime.utc_now(), -3600, :second)
+      {:ok, _} = Blacklists.add("a", "old", "T", "stalled", expires_at: past, info_hash: @hash)
+
+      assert is_nil(Blacklists.active_by_info_hash(@hash))
+    end
+
+    test "is nil for nil" do
+      assert is_nil(Blacklists.active_by_info_hash(nil))
     end
   end
 

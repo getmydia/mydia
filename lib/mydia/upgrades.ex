@@ -884,7 +884,9 @@ defmodule Mydia.Upgrades do
   defp do_blacklist(new_file, %Download{} = download) do
     with guid when is_binary(guid) and guid != "" <- get_in(download.metadata || %{}, ["guid"]),
          indexer when is_binary(indexer) and indexer != "" <- download.indexer do
-      case Blacklists.add(indexer, guid, download.title || "Unknown release", "upgrade_rejected") do
+      case Blacklists.add(indexer, guid, download.title || "Unknown release", "upgrade_rejected",
+             info_hash: Blacklists.download_info_hash(download)
+           ) do
         {:ok, _row} ->
           true
 

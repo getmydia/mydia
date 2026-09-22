@@ -724,6 +724,25 @@ defmodule Mydia.Downloads.QueueTest do
       row = Repo.get_by(ReleaseBlacklist, indexer: "1337x", guid: "guid-custom")
       assert row.failure_reason == "no_importable_files"
     end
+
+    test "records the torrent's infohash from the client id" do
+      media_item = media_item_fixture()
+      hash = "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          indexer: "1337x",
+          download_url: "https://example.test/torrent/1",
+          download_client_id: String.upcase(hash),
+          metadata: %{"indexer" => "1337x", "guid" => "guid-hash"}
+        })
+
+      assert {:ok, :rejected} = Queue.reject_release(download)
+
+      row = Repo.get_by(ReleaseBlacklist, indexer: "1337x", guid: "guid-hash")
+      assert row.info_hash == hash
+    end
   end
 
   describe "select_and_add_to_client/2 — trackerless .torrent files" do
