@@ -41,11 +41,17 @@ export function pathSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
+// Fetch options, or a function that builds them only once the request is
+// going upstream. TVDB passes a function, so a cache hit or a throttled
+// request never waits on (or fails with) a TVDB login. The function may
+// return a Response instead, which is sent as is.
+export type UpstreamInit = RequestInit | (() => Promise<RequestInit | Response>);
+
 export async function proxyJson(
   c: Context<{ Bindings: Env }>,
   upstreamUrl: string,
   cacheKey: string,
-  init?: RequestInit,
+  init?: UpstreamInit,
 ): Promise<Response> {
   const env = c.env;
   const hit = await cacheGet(env, cacheKey);
@@ -63,7 +69,10 @@ export async function proxyJson(
   const throttled = await throttleUpstream(c, "PROXY_LIMITER");
   if (throttled) return throttled;
 
-  const upstream = await fetch(upstreamUrl, init);
+  const options = typeof init === "function" ? await init() : init;
+  if (options instanceof Response) return options;
+
+  const upstream = await fetch(upstreamUrl, options);
   const body = await upstream.text();
   const ok = upstream.status >= 200 && upstream.status < 300;
 
