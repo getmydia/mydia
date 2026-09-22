@@ -287,10 +287,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
   For the `:quality` sort mode this routes through `ReleaseRanker.rank_all/2`,
   so the manual top result equals what automatic search would select (R2),
-  with two deliberate exceptions: `quality_sort_via_ranker/2` passes
-  `apply_source_exclusion: false` and `apply_resolution_floor: false`, so
-  neither a profile's `:excluded_sources` list nor its `:min_resolution` floor
-  is enforced here. Per spec R8, manual search and manual grab are the
+  with three deliberate exceptions: `quality_sort_via_ranker/2` passes
+  `apply_source_exclusion: false`, `apply_resolution_floor: false` and
+  `apply_identity_removal: false`, so neither a profile's `:excluded_sources`
+  list nor its `:min_resolution` floor is enforced here, and a release that is
+  not the item stays listed below every release that is. Per spec R8, manual search and manual grab are the
   operator's explicit escape hatch and must stay unaffected by removals the
   automatic path applies — silently dropping a release from the manual
   dialog, recoverable only by switching sort mode, would remove that escape
@@ -314,10 +315,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   # order. When no quality profile is set, fall back to a seeders sort (matching
   # the legacy no-profile behavior).
   #
-  # apply_source_exclusion: false and apply_resolution_floor: false are both
-  # load-bearing (R8): this is the manual search dialog, and manual search/grab
-  # must never silently drop a release because of a profile's
-  # :excluded_sources list or its :min_resolution floor, even though a resolved
+  # apply_source_exclusion, apply_resolution_floor and apply_identity_removal
+  # false are all load-bearing (R8): this is the manual search dialog, and
+  # manual search/grab must never silently drop a release because of a
+  # profile's :excluded_sources list, its :min_resolution floor, or an identity
+  # mismatch the operator may know better about, even though a resolved
   # profile IS passed through for scoring/sorting. The opt-outs are explicit
   # flags rather than "no profile present" so they can't be defeated by the
   # profile the manual dialog legitimately does pass.
@@ -331,6 +333,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
           ranking_opts
           |> Keyword.put(:apply_source_exclusion, false)
           |> Keyword.put(:apply_resolution_floor, false)
+          |> Keyword.put(:apply_identity_removal, false)
 
         results
         |> ReleaseRanker.rank_all(opts)

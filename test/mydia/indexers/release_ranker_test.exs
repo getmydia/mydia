@@ -2256,6 +2256,25 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       assert [%{result: %{title: ^title}}] = rank_for([identity_result(title)], @lantern, :movie)
     end
 
+    test "with apply_identity_removal: false keeps a mismatch below every match" do
+      ranked =
+        ReleaseRanker.rank_all(
+          [
+            identity_result("Lantern Vale 2031 2160p WEB-DL x265-GRP", %{seeders: 500}),
+            identity_result("Lantern.2031.720p.WEB-DL.x264-GRP", %{seeders: 5})
+          ],
+          identity_target: @lantern,
+          apply_identity_removal: false,
+          media_type: :movie,
+          min_seeders: 0
+        )
+
+      assert Enum.map(ranked, & &1.result.title) == [
+               "Lantern.2031.720p.WEB-DL.x264-GRP",
+               "Lantern Vale 2031 2160p WEB-DL x265-GRP"
+             ]
+    end
+
     test "filters nothing without a target" do
       assert [_] =
                ReleaseRanker.rank_all(

@@ -43,6 +43,9 @@ defmodule Mydia.Indexers.ReleaseRanker do
     A result `Mydia.Indexers.ReleaseIdentity.check/2` does not match to it (a different title,
     or for a movie a year more than one away) is removed before ranking. With no target nothing
     is removed. (default: `nil`)
+  - `:apply_identity_removal` - Whether an `:identity_target` mismatch is removed (default:
+    `true`). Manual search passes `false`, for the same R8 reason as `:apply_source_exclusion`:
+    the mismatch stays visible, ranked below every release that matches.
   - `:apply_source_exclusion` - Whether `:quality_profile`'s `:excluded_sources` list is enforced
     as a hard removal (default: `true`). The automatic search jobs leave this at the default.
     Manual search deliberately passes `false`: per spec R8, manual search and manual grab are the
@@ -96,6 +99,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
           now: DateTime.t() | nil,
           apply_source_exclusion: boolean() | nil,
           apply_resolution_floor: boolean() | nil,
+          apply_identity_removal: boolean() | nil,
           custom_formats: [map()],
           audio_policy: AudioLanguagePolicy.t() | nil,
           episode_count: pos_integer() | nil
@@ -175,6 +179,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       end)
       |> reject_zero_title_match(search_query)
       |> sort_by_score_and_preferences(preferred_qualities)
+      |> sink_identity_mismatches(opts)
 
     # Log the top 5 results after sorting
     top_5 = Enum.take(ranked, 5)
@@ -574,7 +579,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
   # ("Claws S01E04 Fallout" for "Fallout", "Lantern Vale ..." for "Lantern"),
   # or a movie whose year is more than one away. See ReleaseIdentity.
   defp reject_identity_mismatches(results, opts) do
-    case Keyword.get(opts, :identity_target) do
+    case identity_removal_target(opts) do
       nil ->
         results
 
@@ -589,6 +594,26 @@ defmodule Mydia.Indexers.ReleaseRanker do
               false
           end
         end)
+    end
+  end
+
+  defp identity_removal_target(opts) do
+    if Keyword.get(opts, :apply_identity_removal, true),
+      do: Keyword.get(opts, :identity_target)
+  end
+
+  # With removal switched off (manual search, R8) a mismatch stays in the
+  # list, below every release that matches, in its own ranked order.
+  defp sink_identity_mismatches(ranked, opts) do
+    target = Keyword.get(opts, :identity_target)
+
+    if target && !Keyword.get(opts, :apply_identity_removal, true) do
+      {matches, mismatches} =
+        Enum.split_with(ranked, &is_nil(identity_mismatch_reason(&1.result, target)))
+
+      matches ++ mismatches
+    else
+      ranked
     end
   end
 

@@ -334,6 +334,35 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     end
   end
 
+  describe "sort_search_results_with_opts/3 does not remove identity mismatches (R8)" do
+    test "a release that is not the item stays listed, below the one that is" do
+      mismatch = "Lantern Vale 2031 2160p WEB-DL x265-GRP"
+      match = "Lantern.2031.720p.WEB-DL.x264-GRP"
+
+      results =
+        for {title, seeders} <- [{mismatch, 500}, {match, 5}] do
+          build_result(%{title: title, seeders: seeders, quality: QualityParser.parse(title)})
+        end
+
+      opts =
+        RankingOptions.build(%{
+          quality_profile: %QualityProfile{name: "Any", quality_standards: %{}},
+          media_type: :movie,
+          identity_target: %Mydia.Indexers.ReleaseIdentity.Target{
+            type: :movie,
+            year: 2031,
+            keys: ["lantern"]
+          }
+        })
+
+      # The automatic path removes the mismatch.
+      assert [%{result: %{title: ^match}}] = ReleaseRanker.rank_all(results, opts)
+
+      sorted = SearchHelpers.sort_search_results_with_opts(results, :quality, opts)
+      assert Enum.map(sorted, & &1.title) == [match, mismatch]
+    end
+  end
+
   describe "profile_score_breakdown/2 unified breakdown (U6)" do
     test "returns a ScoreBreakdown struct with a real 0-10 title_match" do
       profile = build_quality_profile()
