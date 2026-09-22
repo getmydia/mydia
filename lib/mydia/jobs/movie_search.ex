@@ -117,7 +117,7 @@ defmodule Mydia.Jobs.MovieSearch do
   # the layered runtime config (schema default < YAML < settings UI/DB <
   # AUTO_SEARCH_MIN_SEEDERS).
   #
-  # See DownloadMonitor.auto_reject_limit/0 for why this reads
+  # See Mydia.Downloads.AutoRejectCap.limit/0 for why this reads
   # `Mydia.Config.get()` rather than a flat
   # `Application.get_env(:mydia, :auto_search)[:min_seeders]` key: nothing
   # explodes the resolved Config.Schema struct back out to flat top-level

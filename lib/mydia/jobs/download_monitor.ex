@@ -52,6 +52,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   require Logger
   alias Mydia.Downloads
+  alias Mydia.Downloads.AutoRejectCap
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Client
@@ -556,23 +557,12 @@ defmodule Mydia.Jobs.DownloadMonitor do
 
   defp reject_bad_content(download_map) do
     with_download(download_map, :reject_bad_content, [preload: [:media_item]], fn download ->
-      if auto_reject_exhausted?(download.media_item_id) do
+      if AutoRejectCap.exhausted?(download.media_item_id) do
         suppress_auto_reject(download, download_map)
       else
         do_reject_bad_content(download, download_map)
       end
     end)
-  end
-
-  # A media item with no id (an unbound download) has no counter to consult,
-  # so it is never capped.
-  defp auto_reject_exhausted?(nil), do: false
-
-  defp auto_reject_exhausted?(media_item_id) do
-    case Mydia.Search.get_backoff_info("auto_reject", media_item_id) do
-      %{failure_count: count} -> count >= auto_reject_limit()
-      _ -> false
-    end
   end
 
   # The torrent is left completely untouched. Writing `import_failure_reason`
@@ -588,7 +578,7 @@ defmodule Mydia.Jobs.DownloadMonitor do
       download_id: download_map.id,
       title: download_map.title,
       media_item_id: download.media_item_id,
-      limit: auto_reject_limit()
+      limit: AutoRejectCap.limit()
     )
 
     Events.download_auto_reject_suppressed(download, media_item: download.media_item)
@@ -706,17 +696,6 @@ defmodule Mydia.Jobs.DownloadMonitor do
         )
 
         :ok
-    end
-  end
-
-  # See UpgradeSweep.enabled?/0 for why this reads through the layered runtime
-  # config rather than a flat Application.get_env key: nothing explodes the
-  # resolved Config.Schema struct back out to flat top-level keys, so a flat
-  # read would silently ignore both the env var and the settings UI.
-  defp auto_reject_limit do
-    case Mydia.Config.get() do
-      %{downloads: %{auto_reject_limit: limit}} when is_integer(limit) and limit > 0 -> limit
-      _ -> 3
     end
   end
 
@@ -1221,15 +1200,15 @@ defmodule Mydia.Jobs.DownloadMonitor do
   # delete the row, queue a replacement. The old behaviour wrote two import
   # fields and left the torrent running, which read to operators as "Mydia
   # says this failed but it is still downloading".
-  defp apply_progress_decision(download, {:escalate, error_message, _at}, _now) do
+  defp apply_progress_decision(download, {:escalate, error_message, at}, _now) do
     case Downloads.get_download(download.id, preload: [:media_item]) do
       # Already gone — the escalation has nothing left to reject (issue #281).
       nil ->
         0
 
       db_download ->
-        if auto_reject_exhausted?(db_download.media_item_id) do
-          suppress_stall_reject(db_download, error_message)
+        if AutoRejectCap.exhausted?(db_download.media_item_id) do
+          suppress_stall_reject(db_download, error_message, at)
         else
           do_reject_stalled(db_download, error_message)
         end
@@ -1284,36 +1263,30 @@ defmodule Mydia.Jobs.DownloadMonitor do
   # truth is that our detector is wrong, so the right outcome is that this
   # download finishes and imports.
   #
-  # Unlike that one, this resets the stall clock rather than touching nothing.
-  # A suppressed download stays past the escalation threshold, so every poll
-  # re-enters this branch and re-emits the event — a burst every 15s while the
-  # fast-followup chain is running, until the observation-gap reset happens to
-  # clear `stalled_since` as a side effect. Leaning on that accident is fragile;
-  # resetting the clock explicitly gives one event per full grace+escalation
-  # cycle. This is the same reset the operator's "Keep waiting" performs.
-  defp suppress_stall_reject(download, error_message) do
+  # The download stays marked stalled. Clearing `stalled_since` here hid the
+  # Stalled badge on a torrent that had not moved, so it read as merely slow;
+  # the operator cancelled it, and the next search grabbed the same release
+  # straight back. Moving `stalled_since` to this poll restarts the escalation
+  # window instead, which still limits the suppression to one event per window
+  # rather than one per poll. `last_progress_at` keeps the time a byte last
+  # moved, so the page's "No progress for" stays true.
+  defp suppress_stall_reject(download, error_message, at) do
     Logger.warning("Auto-reject limit reached, leaving stalled download alone",
       download_id: download.id,
       title: download.title,
       media_item_id: download.media_item_id,
-      limit: auto_reject_limit(),
+      limit: AutoRejectCap.limit(),
       error: error_message
     )
 
     Events.download_auto_reject_suppressed(download, media_item: download.media_item)
 
-    now = DateTime.utc_now()
-
-    case Downloads.update_download(download, %{
-           stalled_since: nil,
-           last_progress_at: now,
-           last_observed_at: now
-         }) do
+    case Downloads.update_download(download, %{stalled_since: at, last_observed_at: at}) do
       {:ok, _updated} ->
         :ok
 
       {:error, changeset} ->
-        Logger.error("Failed to reset the stall clock on a suppressed download",
+        Logger.error("Failed to restart the stall window on a suppressed download",
           download_id: download.id,
           errors: inspect(changeset.errors)
         )
