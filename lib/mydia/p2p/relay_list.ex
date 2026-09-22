@@ -5,7 +5,7 @@ defmodule Mydia.P2p.RelayList do
   The relay hostname used to be compiled in, so moving it meant shipping a new
   server image and waiting for every install to upgrade. This reads the list
   from the metadata relay's `/client-config` at boot instead, so a relay move
-  is a relay deploy.
+  is a configuration change on the metadata relay.
 
   Precedence, highest first:
 

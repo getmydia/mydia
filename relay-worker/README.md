@@ -97,7 +97,7 @@ route itself regressed.
 | `RESEND_API_KEY` | secret | `wrangler secret put` | Feedback notification emails. Absent = notifications silently skipped, ingest still works |
 | `RELAY_VERSION` | var | `wrangler.jsonc` | Reported by `/health` and `/stats` |
 | `FEEDBACK_FROM` / `FEEDBACK_TO` | var | `wrangler.jsonc` | Sender/recipient for feedback notification emails |
-| `CACHE_KV` | KV namespace | `wrangler kv namespace create CACHE_KV` | TVDB JWT cache and the SubDL search response cache. Everything else caches in the Cache API only |
+| `CACHE_KV` | KV namespace | `wrangler kv namespace create CACHE_KV` | TVDB JWT cache and the SubDL search response cache, plus two keys an operator writes: routing:config and client-config:relays. Everything else caches in the Cache API only |
 | `DB` | D1 database | `wrangler d1 create mydia-relay` | Pairing claims, crash reports/occurrences, feedback submissions, the two rate-limit bucket tables |
 | `PROXY_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Per-client-IP budget of upstream calls (cache misses only) for the TMDB/TVDB/music/openlibrary routes, 5000/min |
 | `SUBTITLE_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | The same for SubDL search and download, 300/min, kept apart for SubDL's shared 2000/day key |
@@ -375,6 +375,50 @@ to the Elixir relay. Rejected entries are logged once per isolate as
 **Rolling back any step is the same write with that group set back to
 `origin`.** It is live within about a minute.
 
+### Changing the relay list
+
+`GET /client-config` tells every install which iroh relays mydia operates.
+Installs read it at boot, so adding, moving or retiring a relay is a KV write:
+no deploy, no server image, no player build. The list is a JSON array in
+`CACHE_KV` under `client-config:relays`, read on the same 30 second windows as
+`routing:config`, so a write is served within about a minute. Each install
+adopts it at its next boot.
+
+Staging first, checked on its workers.dev hostname (the Worker answers
+everything there, whatever the routing config says):
+
+```bash
+cd relay-worker
+npx wrangler kv key put --env staging --binding CACHE_KV --remote \
+  client-config:relays '["https://cae1-1.relay.mydia.dev","https://cae1-2.relay.mydia.dev"]'
+curl -sS -D - https://mydia-relay-staging.arsfeld.workers.dev/client-config | grep -iE 'x-relay-list-source|relays'
+```
+
+Then production:
+
+```bash
+npx wrangler kv key put --env production --binding CACHE_KV --remote \
+  client-config:relays '["https://cae1-1.relay.mydia.dev","https://cae1-2.relay.mydia.dev"]'
+npx wrangler kv key get --env production --binding CACHE_KV --remote client-config:relays
+curl -sS -D - https://relay.mydia.dev/client-config | grep -iE 'x-relay-list-source|relays'
+# expect: x-relay-list-source: kv, and the list you wrote
+```
+
+The value must be a non-empty array of distinct `https://` URLs with a host,
+the same rule installs apply. One bad entry rejects the whole value: the
+Worker serves the built-in `DEFAULT_RELAY_URLS` from
+`src/config/client_config.ts`, answers `x-relay-list-source: default`, and
+logs `client_config_warning` once per isolate. Deleting the key
+(`npx wrangler kv key delete ... client-config:relays`) serves the built-in
+list without a warning.
+
+Order does not pin anyone to a relay: clients pick a home relay by latency
+across this list plus iroh's public relays.
+
+Set the Elixir relay's `CLIENT_CONFIG_RELAYS` to the same list
+(`metadata-relay/README.md`, "Changing the relay list"), or the contract diff
+reports `/client-config` as a mismatch.
+
 ### Seeing what happened
 
 - Every response on the routed hostname carries `x-relay-backend: origin`,
@@ -419,6 +463,7 @@ relay-worker/
 ├── src/
 │   ├── index.ts          # Hono app, route registration, scheduled() entrypoint
 │   ├── env.ts             # Env interface (bindings + secrets)
+│   ├── config/             # /client-config, and the once-per-window KV reader both it and routing use
 │   ├── proxy/              # tmdb/tvdb/subdl/passthrough (music, openlibrary) handlers
 │   ├── cache/              # cache key derivation + get/put over Cache API + KV
 │   ├── pairing/            # remote-access pairing claims
