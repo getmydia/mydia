@@ -176,4 +176,62 @@ defmodule MetadataRelay.PlayerLogs.HandlerTest do
     conn = post_logs(gz_body(good_lines))
     assert conn.status == 201
   end
+
+  describe "concurrent report budget reservations" do
+    # A large enough batch that the real gzip decode and file write between
+    # ReportBudget.reserve/3 and PlayerLogs.ingest/1 completing give
+    # concurrent uploads room to interleave.
+    defp wide_report_lines(device_id) do
+      now_ms = System.os_time(:millisecond)
+      records = for i <- 1..8_000, do: record_map(%{"t" => now_ms + i})
+      [meta_map(%{"kind" => "report", "device_id" => device_id}) | records]
+    end
+
+    defp post_logs_concurrently(body) do
+      parent = self()
+
+      Task.async(fn ->
+        Ecto.Adapters.SQL.Sandbox.allow(Repo, parent, self())
+        post_logs(body)
+      end)
+    end
+
+    test "concurrent report uploads never jointly exceed the remaining budget" do
+      count = 10
+      size = decompressed_size(wide_report_lines(Ecto.UUID.generate()))
+      put_logs_config(:report_budget_bytes, size * 2)
+
+      bodies = for _ <- 1..count, do: gz_body(wide_report_lines(Ecto.UUID.generate()))
+
+      results =
+        bodies
+        |> Enum.map(&post_logs_concurrently/1)
+        |> Enum.map(&Task.await(&1, 10_000))
+
+      statuses = Enum.map(results, & &1.status)
+      accepted = Enum.count(statuses, &(&1 == 201))
+      rejected = Enum.count(statuses, &(&1 == 429))
+
+      assert accepted + rejected == count
+
+      # The budget covers exactly two batches of `size` bytes. A check read
+      # before another upload's charge lands lets more than two through,
+      # which is exactly the bug this guards against.
+      assert accepted == 2,
+             "a stale-read check let more than 2 reports fit a 2x-size budget: got #{accepted}"
+    end
+
+    test "a failed ingest releases the report budget reservation" do
+      lines = [meta_map(%{"kind" => "report", "report" => "LOG-000000"}), record_map()]
+      put_logs_config(:report_budget_bytes, decompressed_size(lines) + 100)
+
+      assert post_logs(gz_body(lines)).status == 400
+
+      # If ingest's failure hadn't released the reservation, the address's
+      # tally would still read the batch's size instead of having been put
+      # back to zero.
+      assert :ets.lookup(:player_logs_report_budget, "127.0.0.1") ==
+               [{"127.0.0.1", Date.utc_today(), 0}]
+    end
+  end
 end

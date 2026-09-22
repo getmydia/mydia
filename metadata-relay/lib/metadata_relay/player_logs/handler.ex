@@ -28,9 +28,12 @@ defmodule MetadataRelay.PlayerLogs.Handler do
   (streams are evicted first by `MetadataRelay.PlayerLogs.enforce_cap/0`)
   but can't touch the report store.
 
-  The report budget is checked here, right before storage, and charged only
-  after `PlayerLogs.ingest/1` reports success -- the same split the daily
-  device quota uses, so a batch that fails to store never bills the address.
+  The report budget is reserved here, right before storage, as a single
+  atomic check-and-increment inside `ReportBudget`'s `GenServer` -- unlike a
+  separate check then charge, two concurrent report uploads can't both read
+  "room left" and both land. The reservation is released if
+  `PlayerLogs.ingest/1` then fails, so a batch that never stored is never
+  billed.
   """
 
   import Plug.Conn
@@ -55,29 +58,43 @@ defmodule MetadataRelay.PlayerLogs.Handler do
          {:ok, body, conn} <- read_limited(conn),
          {:ok, batch} <- Ingest.decode(body, @max_decompressed_bytes),
          :ok <- limit("player_logs:device:#{batch.meta.device_id}", @device_limit),
-         :ok <- check_report_budget(batch, address, now),
-         {:ok, result} <- PlayerLogs.ingest(batch) do
+         :ok <- reserve_report_budget(batch, address, now),
+         {:ok, result} <- ingest(batch, address, now) do
       Metrics.inc("metadata_relay_player_logs_batches_total", kind: batch.meta.kind)
-      charge_report_budget(batch, address, now)
       respond(conn, result)
     else
       {:error, reason} -> reject(conn, reason)
     end
   end
 
-  defp check_report_budget(%Batch{meta: %Meta{kind: "report"}} = batch, address, now) do
-    case ReportBudget.check(address, batch.size, now) do
+  # PlayerLogs.ingest/1 has its own reserve-then-release for the per-device
+  # quota; this releases the per-address report budget the same way when
+  # ingest fails, so a batch that never stored is never billed against
+  # either.
+  defp ingest(batch, address, now) do
+    case PlayerLogs.ingest(batch) do
+      {:ok, _result} = ok ->
+        ok
+
+      {:error, _reason} = error ->
+        release_report_budget(batch, address, now)
+        error
+    end
+  end
+
+  defp reserve_report_budget(%Batch{meta: %Meta{kind: "report"}} = batch, address, now) do
+    case ReportBudget.reserve(address, batch.size, now) do
       :ok -> :ok
       {:error, seconds} -> {:error, {:report_budget_exceeded, seconds}}
     end
   end
 
-  defp check_report_budget(%Batch{}, _address, _now), do: :ok
+  defp reserve_report_budget(%Batch{}, _address, _now), do: :ok
 
-  defp charge_report_budget(%Batch{meta: %Meta{kind: "report"}} = batch, address, now),
-    do: ReportBudget.charge(address, batch.size, now)
+  defp release_report_budget(%Batch{meta: %Meta{kind: "report"}} = batch, address, now),
+    do: ReportBudget.release(address, batch.size, now)
 
-  defp charge_report_budget(%Batch{}, _address, _now), do: :ok
+  defp release_report_budget(%Batch{}, _address, _now), do: :ok
 
   defp limit(key, max) do
     case RateLimiter.check_rate_limit(key, limit: max, window_ms: @window_ms) do

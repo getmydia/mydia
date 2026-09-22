@@ -44,26 +44,46 @@ defmodule MetadataRelay.PlayerLogs do
           | {:error, {:storage, term()}}
 
   @doc """
-  Stores one decoded batch: checks the device's daily quota, resolves or
-  creates its report, writes the file, indexes it, records the usage against
-  the quota, then applies the disk cap.
+  Stores one decoded batch: charges the device's daily quota, resolves or
+  creates its report, writes the file, then indexes it and applies the disk
+  cap.
 
-  The quota check and the quota write are deliberately separate steps. A
-  device is only charged once the file is written and indexed, so a storage
-  failure never burns part of a device's daily allowance for bytes that were
-  never actually stored. The write itself is a single atomic upsert (see
-  `record_usage/3`), so two concurrent uploads from the same device both
-  count rather than one clobbering the other.
+  Charging comes first now, not last. `charge_quota/3` and the guard that
+  rejects an over-quota device are the same SQL statement (see
+  `charge_today_query/4`), so two uploads that each read "room left" a
+  moment apart can no longer both pass and both land -- the database
+  decides, against the live row, not Elixir against a value read earlier.
+  If resolving the report or writing the chunk then fails, `refund_quota/3`
+  gives the bytes back, so a batch that was never actually stored never
+  leaves the device billed for it.
+
+  This does leave one gap: a hard crash between the charge and the refund
+  (not a handled error -- those refund) leaves the device over-billed by up
+  to this batch's size until the day rolls over. That is the right way
+  round. The alternative -- charging after the write, as an earlier version
+  did -- is exactly the race this replaces, letting concurrent uploads blow
+  through the quota outright rather than merely over-count it briefly.
   """
   @spec ingest(Batch.t(), DateTime.t()) :: ingest_result()
   def ingest(%Batch{meta: meta} = batch, now \\ DateTime.utc_now()) do
     now = DateTime.truncate(now, :second)
 
-    with :ok <- check_quota(meta, batch.size, now),
-         {:ok, code} <- resolve_report(meta, now),
-         {:ok, _chunk} <- store_chunk(batch, code, now),
-         :ok <- record_usage(meta, batch.size, now) do
-      enforce_cap()
+    with :ok <- charge_quota(meta, batch.size, now) do
+      case resolve_and_store(batch, now) do
+        {:ok, _} = ok ->
+          enforce_cap()
+          ok
+
+        {:error, _} = error ->
+          refund_quota(meta, batch.size, now)
+          error
+      end
+    end
+  end
+
+  defp resolve_and_store(%Batch{meta: meta} = batch, now) do
+    with {:ok, code} <- resolve_report(meta, now),
+         {:ok, _chunk} <- store_chunk(batch, code, now) do
       {:ok, if(code, do: {:report, code}, else: :stream)}
     end
   end
@@ -350,41 +370,115 @@ defmodule MetadataRelay.PlayerLogs do
   @doc false
   def config(key), do: Application.fetch_env!(:metadata_relay, :player_logs) |> Keyword.get(key)
 
-  defp check_quota(%Meta{} = meta, size, now) do
+  # How many times charge_quota/3 retries when it lands in charge_fresh/4 and
+  # loses a race to create or reset the device row (see charge_fresh/4). Each
+  # retry re-reads the row, so this only needs to cover genuine contention on
+  # a brand new device or the exact instant a day rolls over, not sustained
+  # load.
+  @quota_charge_attempts 5
+
+  # Charges `size` bytes against the device's daily quota, or rejects
+  # without touching the row when that would exceed it. Which branch a
+  # device is in (already charged today vs. a new device or day) is decided
+  # by a plain read, but the charge itself is never based on that read: it
+  # is a single guarded SQL statement (charge_today_query/4, or a static
+  # `size <= quota` comparison for a fresh day) evaluated against the row's
+  # live value, so two concurrent charges can't both see "room left" and
+  # both land. See `ingest/2`'s moduledoc for the trade-off this creates.
+  defp charge_quota(meta, size, now), do: charge_quota(meta, size, now, @quota_charge_attempts)
+
+  defp charge_quota(_meta, _size, now, 0) do
+    Logger.error(
+      "[PlayerLogs] Gave up charging the daily quota after #{@quota_charge_attempts} attempts under contention"
+    )
+
+    {:error, {:quota_exceeded, seconds_until_midnight(now)}}
+  end
+
+  defp charge_quota(%Meta{device_id: device_id} = meta, size, now, attempts) do
     today = DateTime.to_date(now)
 
-    used =
-      case Repo.get(Device, meta.device_id) do
-        %Device{bytes_day: ^today, bytes_today: bytes_today} -> bytes_today
-        _ -> 0
-      end
-
-    if used + size > @daily_quota_bytes do
-      {:error, {:quota_exceeded, seconds_until_midnight(now)}}
-    else
-      :ok
+    case Repo.get(Device, device_id) do
+      %Device{bytes_day: ^today} -> charge_today(meta, size, today, now)
+      _ -> charge_fresh(meta, size, today, now, attempts)
     end
   end
 
-  # Charges `size` bytes to the device's daily usage as one atomic upsert:
-  # `bytes_today` becomes `bytes_today + size` when `bytes_day` is already
-  # today, or resets to `size` otherwise. Doing the add in SQL (rather than
-  # reading `bytes_today` in Elixir and writing `read_value + size` back, as
-  # `check_quota/3` does for its cheap pre-check) means two concurrent
-  # uploads from the same device both count, instead of the second silently
-  # overwriting the first's charge. It also means two concurrent first
-  # uploads from a brand new device both land as one insert and one update
-  # (`conflict_target: :device_id`) rather than the second raising on the
-  # primary key.
-  #
-  # The description fields (name, platform, os_version, app_version) update
-  # as before: a field left blank in this batch's meta does not clobber
-  # whatever the device already has on file. `first_seen_at` is only ever
-  # set by the initial insert.
-  defp record_usage(%Meta{} = meta, size, now) do
-    today = DateTime.to_date(now)
+  # The device already has a row for today: the only way to charge it is to
+  # add to that row, and the only atomic way to decide "does this fit" is to
+  # make the addition and the guard the same UPDATE. Zero rows changed can
+  # only mean the guard failed -- the row's `device_id` and `bytes_day`
+  # trivially still match what we just read -- so it means the quota is
+  # spent, not a race to retry.
+  defp charge_today(%Meta{} = meta, size, today, now) do
+    {count, _} = Repo.update_all(charge_today_query(meta, size, today, now), [])
+    if count == 1, do: :ok, else: {:error, {:quota_exceeded, seconds_until_midnight(now)}}
+  end
 
-    device = %Device{
+  defp charge_today_query(%Meta{device_id: device_id} = meta, size, today, now) do
+    from(d in Device,
+      where:
+        d.device_id == ^device_id and d.bytes_day == ^today and
+          d.bytes_today + ^size <= ^@daily_quota_bytes,
+      update: [
+        set: [
+          last_seen_at: ^now,
+          name: fragment("COALESCE(?, ?)", ^meta.device_name, d.name),
+          platform: fragment("COALESCE(?, ?)", ^meta.platform, d.platform),
+          os_version: fragment("COALESCE(?, ?)", ^meta.os_version, d.os_version),
+          app_version: fragment("COALESCE(?, ?)", ^meta.app_version, d.app_version)
+        ],
+        inc: [bytes_today: ^size]
+      ]
+    )
+  end
+
+  # A brand new device, or one whose last charge was a previous UTC day.
+  # Either way today's charge starts the day at zero, so a single batch can
+  # only ever fail the quota on its own size -- a plain comparison, not a
+  # database condition.
+  #
+  # Getting the bytes onto the row is then a race between two writes that
+  # can't share one guarded statement the way charge_today_query/4 does: a
+  # reset (the row exists, dated a previous day) and a fresh insert (the row
+  # doesn't exist at all) are different SQL statements, and either one can
+  # lose to a concurrent charge for the same device landing in between. When
+  # both come back empty, that concurrent charge already moved the row to
+  # today, so charge_quota/4 is retried from the top, where the read now
+  # sees today and takes the charge_today/4 path instead.
+  defp charge_fresh(meta, size, today, now, attempts) do
+    if size > @daily_quota_bytes do
+      {:error, {:quota_exceeded, seconds_until_midnight(now)}}
+    else
+      {reset_count, _} = Repo.update_all(reset_query(meta, size, today, now), [])
+
+      cond do
+        reset_count == 1 -> :ok
+        insert_fresh_device(meta, size, today, now) -> :ok
+        true -> charge_quota(meta, size, now, attempts - 1)
+      end
+    end
+  end
+
+  defp reset_query(%Meta{device_id: device_id} = meta, size, today, now) do
+    from(d in Device,
+      where: d.device_id == ^device_id and (is_nil(d.bytes_day) or d.bytes_day != ^today),
+      update: [
+        set: [
+          last_seen_at: ^now,
+          bytes_day: ^today,
+          bytes_today: ^size,
+          name: fragment("COALESCE(?, ?)", ^meta.device_name, d.name),
+          platform: fragment("COALESCE(?, ?)", ^meta.platform, d.platform),
+          os_version: fragment("COALESCE(?, ?)", ^meta.os_version, d.os_version),
+          app_version: fragment("COALESCE(?, ?)", ^meta.app_version, d.app_version)
+        ]
+      ]
+    )
+  end
+
+  defp insert_fresh_device(%Meta{} = meta, size, today, now) do
+    fields = %{
       device_id: meta.device_id,
       name: meta.device_name,
       platform: meta.platform,
@@ -396,35 +490,29 @@ defmodule MetadataRelay.PlayerLogs do
       bytes_day: today
     }
 
-    on_conflict =
-      from(d in Device,
-        update: [
-          set: [
-            name: fragment("COALESCE(?, ?)", ^meta.device_name, d.name),
-            platform: fragment("COALESCE(?, ?)", ^meta.platform, d.platform),
-            os_version: fragment("COALESCE(?, ?)", ^meta.os_version, d.os_version),
-            app_version: fragment("COALESCE(?, ?)", ^meta.app_version, d.app_version),
-            last_seen_at: ^now,
-            bytes_day: ^today,
-            bytes_today:
-              fragment(
-                "CASE WHEN ? = ? THEN ? + ? ELSE ? END",
-                d.bytes_day,
-                ^today,
-                d.bytes_today,
-                ^size,
-                ^size
-              )
-          ]
-        ]
-      )
-
-    device
-    |> Repo.insert(on_conflict: on_conflict, conflict_target: :device_id)
-    |> case do
-      {:ok, _device} -> :ok
-      {:error, changeset} -> {:error, {:storage, changeset}}
+    case Repo.insert_all(Device, [fields], on_conflict: :nothing, conflict_target: :device_id) do
+      {1, _} -> true
+      {0, _} -> false
     end
+  end
+
+  # Gives back bytes charge_quota/3 added when the rest of ingest/2 then
+  # fails, so a batch that was never actually stored never leaves the device
+  # billed for it. Floors at zero and does nothing once the day has rolled
+  # over (the charge it is undoing no longer applies to today's row anyway).
+  # Mirrors ReportBudget.release/3.
+  defp refund_quota(%Meta{device_id: device_id}, size, now) do
+    today = DateTime.to_date(now)
+
+    Repo.update_all(
+      from(d in Device,
+        where: d.device_id == ^device_id and d.bytes_day == ^today,
+        update: [set: [bytes_today: fragment("MAX(0, ? - ?)", d.bytes_today, ^size)]]
+      ),
+      []
+    )
+
+    :ok
   end
 
   @doc false

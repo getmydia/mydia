@@ -99,19 +99,25 @@ defmodule MetadataRelay.PlayerLogsTest do
              PlayerLogs.ingest(batch(meta: [kind: "report", report: "LOG-000000"]))
   end
 
-  test "a failed write leaves no index row", %{logs_dir: dir} do
+  test "a failed write leaves no index row and refunds the quota charge", %{logs_dir: dir} do
     File.mkdir_p!(Path.dirname(dir))
     File.write!(dir, "a file where the directory should be")
 
     assert {:error, {:storage, _reason}} = PlayerLogs.ingest(batch())
     assert Repo.all(Chunk) == []
-    assert Repo.get(Device, device_id()) == nil
+
+    # The charge now happens before the write, so a brand new device's row
+    # exists (created by the charge) even though nothing was stored --
+    # `Repo.get!` raises if it doesn't, which is the tell that an unfixed
+    # version never charged (and so never created the row) in the first
+    # place. What must hold either way is that the failed batch left no
+    # lasting charge.
+    assert Repo.get!(Device, device_id()).bytes_today == 0
   end
 
   describe "concurrent usage charges" do
     # A large enough batch that store_chunk's real file I/O and gzip work
-    # (between check_quota's read and record_usage's write) gives both
-    # concurrent ingest/2 calls room to interleave.
+    # gives concurrent ingest/2 calls room to interleave.
     defp wide_records(count), do: for(i <- 1..count, do: record_map(%{"t" => 1_000 + i}))
 
     defp ingest_concurrently(id, records, size) do
@@ -154,6 +160,43 @@ defmodule MetadataRelay.PlayerLogsTest do
 
       device = Repo.get!(Device, id)
       assert device.bytes_today == 2_000
+    end
+  end
+
+  describe "concurrent quota charges at the boundary" do
+    test "several uploads racing the same near-quota device never push it over" do
+      id = Ecto.UUID.generate()
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      remaining = 100
+      charge = 60
+
+      Repo.insert!(%Device{
+        device_id: id,
+        first_seen_at: now,
+        last_seen_at: now,
+        bytes_today: 50 * 1024 * 1024 - remaining,
+        bytes_day: DateTime.to_date(now)
+      })
+
+      records = wide_records(2_000)
+      tasks = for _ <- 1..5, do: ingest_concurrently(id, records, charge)
+      results = Enum.map(tasks, &Task.await(&1, 10_000))
+
+      successes = Enum.count(results, &match?({:ok, :stream}, &1))
+      failures = Enum.count(results, &match?({:error, {:quota_exceeded, _}}, &1))
+
+      assert successes + failures == 5
+
+      # Only one 60-byte charge fits in the 100 bytes left before the quota:
+      # a check computed from a read taken before the write lets every racer
+      # see room and land, which is exactly the bug this guards against.
+      assert successes == 1,
+             "a stale-read check let more than one charge land on a shared allowance: " <>
+               "got #{successes} successes"
+
+      device = Repo.get!(Device, id)
+      assert device.bytes_today == 50 * 1024 * 1024 - remaining + successes * charge
+      assert device.bytes_today <= 50 * 1024 * 1024
     end
   end
 end

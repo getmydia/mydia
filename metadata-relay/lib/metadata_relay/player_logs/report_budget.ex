@@ -36,23 +36,28 @@ defmodule MetadataRelay.PlayerLogs.ReportBudget do
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   @doc """
-  Whether `size` more report bytes from `address` today would stay within
-  the daily budget. Charges nothing; call `charge/3` once the batch the
-  check was for has actually been stored.
+  Reserves `size` report bytes against `address`'s daily budget, or refuses
+  without reserving anything when that would exceed it. The check and the
+  increment run inside the same `handle_call/3`, so they cannot interleave
+  with another reservation the way two separate `check` and `charge` calls
+  could: concurrent uploads no longer both read "room left" and both land.
+
+  Call `release/3` to give the bytes back if the batch this reservation was
+  for then fails to store.
   """
-  @spec check(String.t(), non_neg_integer(), DateTime.t()) :: :ok | {:error, pos_integer()}
-  def check(address, size, now) do
-    if used(address, now) + size > budget() do
-      {:error, MetadataRelay.PlayerLogs.seconds_until_midnight(now)}
-    else
-      :ok
-    end
+  @spec reserve(String.t(), non_neg_integer(), DateTime.t()) :: :ok | {:error, pos_integer()}
+  def reserve(address, size, now) do
+    GenServer.call(__MODULE__, {:reserve, address, size, DateTime.to_date(now), now})
   end
 
-  @doc "Adds `size` bytes to `address`'s tally for today, resetting it first if the day rolled over."
-  @spec charge(String.t(), non_neg_integer(), DateTime.t()) :: :ok
-  def charge(address, size, now) do
-    GenServer.call(__MODULE__, {:charge, address, size, DateTime.to_date(now)})
+  @doc """
+  Gives back `size` bytes reserved for `address`, flooring at zero. A no-op
+  if the day has already rolled over, since the reservation it would undo no
+  longer applies to today's tally anyway.
+  """
+  @spec release(String.t(), non_neg_integer(), DateTime.t()) :: :ok
+  def release(address, size, now) do
+    GenServer.call(__MODULE__, {:release, address, size, DateTime.to_date(now)})
   end
 
   @doc false
@@ -78,14 +83,31 @@ defmodule MetadataRelay.PlayerLogs.ReportBudget do
   end
 
   @impl true
-  def handle_call({:charge, address, size, today}, _from, state) do
-    new_bytes =
+  def handle_call({:reserve, address, size, today, now}, _from, state) do
+    used =
       case :ets.lookup(@table, address) do
-        [{^address, ^today, bytes}] -> bytes + size
-        _ -> size
+        [{^address, ^today, bytes}] -> bytes
+        _ -> 0
       end
 
-    :ets.insert(@table, {address, today, new_bytes})
+    if used + size > budget() do
+      {:reply, {:error, MetadataRelay.PlayerLogs.seconds_until_midnight(now)}, state}
+    else
+      :ets.insert(@table, {address, today, used + size})
+      {:reply, :ok, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:release, address, size, today}, _from, state) do
+    case :ets.lookup(@table, address) do
+      [{^address, ^today, bytes}] -> :ets.insert(@table, {address, today, max(bytes - size, 0)})
+      # No entry, or one from a previous day: today's tally is already zero
+      # (or about to be reset by the next reserve), so there is nothing to
+      # give back.
+      _ -> :ok
+    end
+
     {:reply, :ok, state}
   end
 end
