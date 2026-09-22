@@ -14,6 +14,14 @@ defmodule Mydia.Downloads.Blacklists do
     * `cleanup_expired/0` — purge rows whose `expires_at` is in the past;
       driven by `Mydia.Jobs.BlacklistCleanup`.
 
+  ## Infohash
+
+  A row can also carry the torrent's v1 infohash. The same torrent listed by
+  two indexers has two unrelated `(indexer, guid)` keys, so the hash is what
+  lets a ban recorded on one indexer apply to the other.
+  `download_info_hash/1` reads it off a download when a row is written, and
+  `active_by_info_hash/1` looks a torrent up by it.
+
   ## Guid plumbing
 
   The blacklist key is `(indexer, guid)`. Some indexers return a stable
@@ -27,6 +35,7 @@ defmodule Mydia.Downloads.Blacklists do
 
   alias Ecto.Changeset
   alias Mydia.Downloads.ReleaseBlacklist
+  alias Mydia.Downloads.TorrentHash
   alias Mydia.Repo
 
   require Logger
@@ -35,7 +44,8 @@ defmodule Mydia.Downloads.Blacklists do
 
   @type add_opts :: [
           expires_at: DateTime.t() | nil,
-          ttl_days: non_neg_integer() | nil
+          ttl_days: non_neg_integer() | nil,
+          info_hash: String.t() | nil
         ]
 
   @doc """
@@ -69,6 +79,39 @@ defmodule Mydia.Downloads.Blacklists do
   end
 
   @doc """
+  Returns the lowercase v1 infohash in a magnet link, or `nil` for anything
+  else (an HTTP link, a malformed magnet, `nil`).
+  """
+  @spec info_hash_from_url(String.t() | nil) :: String.t() | nil
+  def info_hash_from_url("magnet:" <> _ = magnet) do
+    case TorrentHash.extract({:magnet, magnet}, case: :lower) do
+      {:ok, hash} -> hash
+      {:error, _reason} -> nil
+    end
+  end
+
+  def info_hash_from_url(_url), do: nil
+
+  @doc """
+  Returns the lowercase v1 infohash a download was grabbed as, or `nil`.
+
+  Read from the magnet it was grabbed from, else from its client id when that
+  is a bare 40-character hex string: Transmission, qBittorrent, rTorrent and
+  the blackhole client all identify a torrent by its infohash. Debrid and
+  usenet ids never take that shape.
+  """
+  @spec download_info_hash(Mydia.Downloads.Download.t()) :: String.t() | nil
+  def download_info_hash(download) do
+    info_hash_from_url(download.download_url) || hex_info_hash(download.download_client_id)
+  end
+
+  defp hex_info_hash(value) when is_binary(value) do
+    if String.match?(value, ~r/\A[0-9a-fA-F]{40}\z/), do: String.downcase(value)
+  end
+
+  defp hex_info_hash(_value), do: nil
+
+  @doc """
   Pulls the `(indexer, guid)` blacklist key off a download.
 
   The indexer is read from the column first and falls back to the copy stored
@@ -97,6 +140,8 @@ defmodule Mydia.Downloads.Blacklists do
     * `:ttl_days` — number of days until expiry. Defaults to the configured
       `release_blacklist_default_ttl_days` (30 if unset). Ignored when
       `:expires_at` is supplied.
+    * `:info_hash` — the torrent's v1 infohash, when known. An upsert without
+      one keeps the hash already stored.
 
   Returns `{:ok, %ReleaseBlacklist{}}` on success.
   """
@@ -108,6 +153,7 @@ defmodule Mydia.Downloads.Blacklists do
     now = DateTime.utc_now()
 
     expires_at = resolve_expires_at(now, opts)
+    info_hash = ReleaseBlacklist.normalize_info_hash(Keyword.get(opts, :info_hash))
 
     attrs = %{
       indexer: indexer,
@@ -115,22 +161,44 @@ defmodule Mydia.Downloads.Blacklists do
       title: title,
       failure_reason: failure_reason,
       expires_at: expires_at,
+      info_hash: info_hash,
       inserted_at: now
     }
+
+    # A write that does not know the hash must not erase one an earlier write
+    # recorded, so the column is only set when this write has a value.
+    hash_update = if info_hash, do: [info_hash: info_hash], else: []
 
     %ReleaseBlacklist{}
     |> ReleaseBlacklist.changeset(attrs)
     |> Repo.insert(
       on_conflict: [
-        set: [
-          title: title,
-          failure_reason: failure_reason,
-          expires_at: expires_at,
-          inserted_at: now
-        ]
+        set:
+          [
+            title: title,
+            failure_reason: failure_reason,
+            expires_at: expires_at,
+            inserted_at: now
+          ] ++ hash_update
       ],
       conflict_target: [:indexer, :guid]
     )
+  end
+
+  @doc """
+  The configured default ban length in days
+  (`release_blacklist_default_ttl_days`, 30 when unset).
+  """
+  @spec default_ttl_days() :: pos_integer()
+  def default_ttl_days do
+    case Application.get_env(:mydia, :runtime_config) do
+      %{downloads: %{release_blacklist_default_ttl_days: days}}
+      when is_integer(days) and days > 0 ->
+        days
+
+      _ ->
+        @default_ttl_days
+    end
   end
 
   @doc """
@@ -163,14 +231,61 @@ defmodule Mydia.Downloads.Blacklists do
   def blacklisted?(_, _), do: false
 
   @doc """
-  Filters out results whose `(indexer, guid)` is currently blacklisted, in
-  one DB roundtrip regardless of result-list size.
+  Returns the active ban on `info_hash` that lasts longest (a forever ban wins),
+  or `nil` when no indexer has the torrent banned.
+  """
+  @spec active_by_info_hash(String.t() | nil) :: ReleaseBlacklist.t() | nil
+  def active_by_info_hash(info_hash) when is_binary(info_hash) do
+    normalized = ReleaseBlacklist.normalize_info_hash(info_hash)
+    now = DateTime.utc_now()
+
+    from(b in ReleaseBlacklist,
+      where: b.info_hash == ^normalized,
+      where: is_nil(b.expires_at) or b.expires_at > ^now
+    )
+    |> Repo.all()
+    |> Enum.max_by(&expiry_rank/1, fn -> nil end)
+  end
+
+  def active_by_info_hash(_info_hash), do: nil
+
+  @doc """
+  Copies `ban` onto a search result's own `(indexer, guid)` key, keeping the
+  ban's failure reason and expiry, so the next search filters that result
+  before ranking.
+
+  Used when a result's torrent turns out to be banned only once its link
+  resolves at grab time. Best effort: the caller refuses the grab whatever
+  this returns.
+  """
+  @spec alias_ban(ReleaseBlacklist.t(), map(), String.t()) ::
+          {:ok, ReleaseBlacklist.t()} | {:error, term()}
+  def alias_ban(%ReleaseBlacklist{} = ban, result, info_hash) do
+    add(result.indexer, release_guid(result), result.title, ban.failure_reason,
+      expires_at: ban.expires_at,
+      info_hash: info_hash
+    )
+  rescue
+    error -> {:error, error}
+  end
+
+  # A forever ban (nil expiry) outranks every dated one: atoms sort after
+  # integers in Erlang term order.
+  defp expiry_rank(%ReleaseBlacklist{expires_at: nil}), do: :forever
+  defp expiry_rank(%ReleaseBlacklist{expires_at: at}), do: DateTime.to_unix(at, :microsecond)
+
+  @doc """
+  Filters out results that are currently blacklisted, matched by
+  `(indexer, guid)` key or by magnet infohash, in at most two queries
+  regardless of result-list size.
 
   Each search result is expected to expose `:indexer`, and `:guid` or the
   `:title` and `:size` that `release_guid/1` falls back to. Results with no
-  indexer are kept (no blacklist key to compare). Rejected
-  rows are logged at `:info` along with the supplied `log_context` keyword
-  list so callers can attach episode/movie ids for traceability.
+  indexer have no blacklist key to compare. A result whose `:download_url` is
+  a magnet is also dropped when its infohash is banned under any indexer.
+  Rejected rows are logged at `:info` with `matched_by: :key | :info_hash` and
+  the supplied `log_context` keyword list, so callers can attach episode/movie
+  ids for traceability.
 
   ## Examples
 
@@ -179,29 +294,40 @@ defmodule Mydia.Downloads.Blacklists do
   """
   @spec reject_blacklisted([map()], Keyword.t()) :: [map()]
   def reject_blacklisted(results, log_context \\ []) when is_list(results) do
-    blacklisted = batch_blacklisted(results)
+    keyed =
+      Enum.map(results, fn result ->
+        {result, blacklist_key(result), info_hash_from_url(Map.get(result, :download_url))}
+      end)
 
-    Enum.filter(results, fn result ->
-      pair = blacklist_key(result)
+    banned_keys = keyed |> Enum.map(&elem(&1, 1)) |> batch_blacklisted()
+    banned_hashes = keyed |> Enum.map(&elem(&1, 2)) |> active_info_hashes()
 
-      if pair && MapSet.member?(blacklisted, pair) do
-        Logger.info(
-          "Rejected blacklisted release",
-          [indexer: result.indexer, guid: elem(pair, 1), title: Map.get(result, :title)] ++
-            log_context
-        )
+    keyed
+    |> Enum.filter(fn {result, key, hash} ->
+      case match_ban(key, hash, banned_keys, banned_hashes) do
+        nil ->
+          true
 
-        false
-      else
-        true
+        matched_by ->
+          Logger.info(
+            "Rejected blacklisted release",
+            [
+              indexer: Map.get(result, :indexer),
+              guid: key && elem(key, 1),
+              title: Map.get(result, :title),
+              matched_by: matched_by
+            ] ++ log_context
+          )
+
+          false
       end
     end)
+    |> Enum.map(&elem(&1, 0))
   end
 
-  defp batch_blacklisted(results) do
+  defp batch_blacklisted(keys) do
     pairs =
-      results
-      |> Enum.map(&blacklist_key/1)
+      keys
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
@@ -235,6 +361,33 @@ defmodule Mydia.Downloads.Blacklists do
         Repo.all(query)
         |> MapSet.new()
         |> MapSet.intersection(candidate)
+    end
+  end
+
+  defp active_info_hashes(hashes) do
+    case hashes |> Enum.reject(&is_nil/1) |> Enum.uniq() do
+      [] ->
+        MapSet.new()
+
+      hashes ->
+        now = DateTime.utc_now()
+
+        from(b in ReleaseBlacklist,
+          where: b.info_hash in ^hashes,
+          where: is_nil(b.expires_at) or b.expires_at > ^now,
+          distinct: true,
+          select: b.info_hash
+        )
+        |> Repo.all()
+        |> MapSet.new()
+    end
+  end
+
+  defp match_ban(key, hash, banned_keys, banned_hashes) do
+    cond do
+      key && MapSet.member?(banned_keys, key) -> :key
+      hash && MapSet.member?(banned_hashes, hash) -> :info_hash
+      true -> nil
     end
   end
 
@@ -378,17 +531,6 @@ defmodule Mydia.Downloads.Blacklists do
       :error ->
         days = Keyword.get(opts, :ttl_days) || default_ttl_days()
         DateTime.add(now, days * 24 * 60 * 60, :second)
-    end
-  end
-
-  defp default_ttl_days do
-    case Application.get_env(:mydia, :runtime_config) do
-      %{downloads: %{release_blacklist_default_ttl_days: days}}
-      when is_integer(days) and days > 0 ->
-        days
-
-      _ ->
-        @default_ttl_days
     end
   end
 end

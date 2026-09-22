@@ -117,7 +117,7 @@ defmodule Mydia.Jobs.MovieSearch do
   # the layered runtime config (schema default < YAML < settings UI/DB <
   # AUTO_SEARCH_MIN_SEEDERS).
   #
-  # See DownloadMonitor.auto_reject_limit/0 for why this reads
+  # See Mydia.Downloads.AutoRejectCap.limit/0 for why this reads
   # `Mydia.Config.get()` rather than a flat
   # `Application.get_env(:mydia, :auto_search)[:min_seeders]` key: nothing
   # explodes the resolved Config.Schema struct back out to flat top-level
@@ -698,7 +698,10 @@ defmodule Mydia.Jobs.MovieSearch do
     after_grab = Keyword.get(opts, :after_grab, fn download, _result -> {:ok, download} end)
 
     with {:ok, download} <-
-           Downloads.initiate_download(result, [media_item_id: movie.id] ++ grab_opts),
+           Downloads.initiate_download(
+             result,
+             [media_item_id: movie.id, enforce_blacklist: true] ++ grab_opts
+           ),
          {:ok, _updated} <- after_grab.(download, result) do
       Logger.info("Successfully initiated download for movie",
         media_item_id: movie.id,

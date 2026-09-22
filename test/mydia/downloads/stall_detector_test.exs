@@ -259,4 +259,38 @@ defmodule Mydia.Downloads.StallDetectorTest do
       assert StallDetector.escalation_minutes(1440) == 4320
     end
   end
+
+  describe "soft_stalled?/1" do
+    test "a stall with no terminal state is a soft-stall" do
+      assert StallDetector.soft_stalled?(%{
+               stalled_since: @base_time,
+               import_failed_at: nil,
+               completed_at: nil
+             })
+    end
+
+    test "a download that is not stalled is not" do
+      refute StallDetector.soft_stalled?(%{
+               stalled_since: nil,
+               import_failed_at: nil,
+               completed_at: nil
+             })
+    end
+
+    test "a terminal import failure is not a soft-stall" do
+      refute StallDetector.soft_stalled?(%{
+               stalled_since: @base_time,
+               import_failed_at: @base_time,
+               completed_at: nil
+             })
+    end
+
+    test "a download that completed after stalling is not" do
+      refute StallDetector.soft_stalled?(%{
+               stalled_since: @base_time,
+               import_failed_at: nil,
+               completed_at: @base_time
+             })
+    end
+  end
 end

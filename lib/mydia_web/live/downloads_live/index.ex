@@ -1,6 +1,7 @@
 defmodule MydiaWeb.DownloadsLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Downloads
+  alias Mydia.Downloads.AutoRejectCap
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.ExternalTorrents
@@ -1136,7 +1137,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
         case Downloads.request_removal(download, kind, opts) do
           {:ok, _pending} ->
-            {:noreply, load_downloads(socket)}
+            {:noreply, socket |> removal_flash(kind, download) |> load_downloads()}
 
           {:error, :not_found} ->
             {:noreply, download_vanished(socket)}
@@ -1161,6 +1162,23 @@ defmodule MydiaWeb.DownloadsLive.Index do
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
+
+  # A cancel on a stalled download also blacklists the release (see
+  # Mydia.Downloads.Queue.cancel_bans_release?/1), so the operator is told.
+  defp removal_flash(socket, "cancel", download) do
+    if Downloads.cancel_bans_release?(download) do
+      put_flash(
+        socket,
+        :info,
+        "Cancelling. This release was stalled, so Mydia won't grab it again for " <>
+          "#{Blacklists.default_ttl_days()} days."
+      )
+    else
+      socket
+    end
+  end
+
+  defp removal_flash(socket, _kind, _download), do: socket
 
   defp maybe_add_opt(opts, _key, nil), do: opts
   defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)
@@ -1201,6 +1219,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
           |> Enum.drop(offset)
           |> Enum.take(@items_per_page)
           |> annotate_rematch_eligibility(tab)
+          |> annotate_auto_reject_cap()
 
         has_more = length(all_downloads) > offset + @items_per_page
 
@@ -1484,6 +1503,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
     Downloads.list_downloads_with_status(filter: filter, bounded: true)
     |> apply_sorting(socket.assigns.sort_by)
     |> annotate_rematch_eligibility(socket.assigns.active_tab)
+    |> annotate_auto_reject_cap()
   end
 
   # Stamps `rematch_eligible?` on completed-tab rows: a row is eligible only when
@@ -1503,6 +1523,20 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   defp annotate_rematch_eligibility(downloads, _tab), do: downloads
+
+  # Stamps `auto_reject_capped?` so a stalled row whose title has used up its
+  # automatic rejections says so, instead of counting down to a removal that
+  # DownloadMonitor will not make. One query for the whole page.
+  defp annotate_auto_reject_cap(downloads) do
+    capped =
+      downloads
+      |> Enum.map(& &1.media_item_id)
+      |> AutoRejectCap.exhausted_ids()
+
+    Enum.map(downloads, fn download ->
+      %{download | auto_reject_capped?: MapSet.member?(capped, download.media_item_id)}
+    end)
+  end
 
   # Sorts the enriched download list by the active `sort_by` selection. Runs in
   # the LiveView (not the DB) because real-time keys (progress, speeds, ETA,
@@ -1719,8 +1753,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # cleared while the download is observed downloading, so it can linger on a row
   # that has since moved on.
   defp soft_stalled?(download) do
-    download.status == "downloading" and
-      not is_nil(download.stalled_since) and is_nil(download.import_failed_at)
+    download.status == "downloading" and StallDetector.soft_stalled?(download)
   end
 
   # Seconds since this download last moved a byte. Falls back to stalled_since

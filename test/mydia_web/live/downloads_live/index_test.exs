@@ -516,7 +516,8 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
                  status: "downloading",
                  stalled_since: now,
                  import_failed_at: nil,
-                 import_last_error: nil
+                 import_last_error: nil,
+                 completed_at: nil
                })
     end
 
@@ -526,7 +527,8 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
                  status: "downloading",
                  stalled_since: nil,
                  import_failed_at: nil,
-                 import_last_error: nil
+                 import_last_error: nil,
+                 completed_at: nil
                })
     end
 
@@ -541,7 +543,8 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
                  status: "completed",
                  stalled_since: now,
                  import_failed_at: nil,
-                 import_last_error: nil
+                 import_last_error: nil,
+                 completed_at: nil
                })
     end
   end
@@ -601,6 +604,7 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       assert html =~ "search for a different release"
       assert has_element?(view, "#stall-keep-waiting-#{download.id}")
       assert has_element?(view, "#stall-reject-#{download.id}")
+      refute has_element?(view, "#stall-capped-#{download.id}")
     end
 
     test "keep waiting resets the stall clock", %{conn: conn} do
@@ -623,6 +627,51 @@ defmodule MydiaWeb.DownloadsLive.IndexTest do
       updated = Mydia.Downloads.get_download!(download.id)
       assert is_nil(updated.stalled_since)
       assert DateTime.diff(DateTime.utc_now(), updated.last_progress_at, :second) < 60
+    end
+
+    test "a capped title says Mydia has stopped replacing its releases", %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Fictional Stuck Harbor"})
+
+      for _ <- 1..3 do
+        Mydia.Search.record_failure("auto_reject", media_item.id, "stalled")
+      end
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          last_progress_at: DateTime.add(DateTime.utc_now(), -300 * 60, :second),
+          stalled_since: DateTime.add(DateTime.utc_now(), -30 * 60, :second)
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      assert has_element?(view, "#stall-capped-#{download.id}", "stopped replacing")
+      assert has_element?(view, "#stall-reject-#{download.id}")
+      assert has_element?(view, "#stall-keep-waiting-#{download.id}")
+    end
+
+    test "cancelling a stalled download says the release is blocked", %{conn: conn} do
+      media_item = media_item_fixture(%{title: "Fictional Quiet Signal"})
+
+      download =
+        download_fixture(%{
+          media_item_id: media_item.id,
+          indexer: "fictional-indexer",
+          metadata: %{"guid" => "queue-stalled-cancel-guid"},
+          last_progress_at: DateTime.add(DateTime.utc_now(), -90 * 60, :second),
+          stalled_since: DateTime.add(DateTime.utc_now(), -30 * 60, :second)
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/downloads")
+
+      render_click(view, "cancel_download", %{"id" => download.id})
+
+      assert has_element?(view, "#flash-info", "grab it again")
+
+      assert Mydia.Downloads.Blacklists.blacklisted?(
+               "fictional-indexer",
+               "queue-stalled-cancel-guid"
+             )
     end
   end
 

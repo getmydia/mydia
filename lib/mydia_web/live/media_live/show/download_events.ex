@@ -5,6 +5,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Mydia.Downloads
+  alias Mydia.Downloads.Blacklists
   alias Mydia.Indexers.SearchResult
   alias MydiaWeb.Live.Authorization
 
@@ -74,7 +75,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
            socket
            |> assign(:show_download_cancel_confirm, false)
            |> assign(:download_to_cancel, nil)
-           |> put_flash(:info, "Cancelling the download")
+           |> put_flash(:info, cancel_flash(download))
            |> refresh_downloads()}
 
         {:error, _changeset} ->
@@ -85,6 +86,17 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
            |> assign(:download_to_cancel, nil)}
       end
     end)
+  end
+
+  # A cancel on a stalled download also blacklists the release (see
+  # Mydia.Downloads.Queue.cancel_bans_release?/1), so the operator is told.
+  defp cancel_flash(download) do
+    if Downloads.cancel_bans_release?(download) do
+      "Cancelling. This release was stalled, so Mydia won't grab it again for " <>
+        "#{Blacklists.default_ttl_days()} days."
+    else
+      "Cancelling the download"
+    end
   end
 
   def show_download_delete_confirm(%{"download-id" => download_id}, socket) do
