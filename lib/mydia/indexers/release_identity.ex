@@ -21,6 +21,8 @@ defmodule Mydia.Indexers.ReleaseIdentity do
   @leading_tags ~r/^\s*(\[[^\]]*\]\s*)+/
   @year_token ~r/^(19|20)\d{2}$/
   @aka ~r/\s+a\.?k\.?a\.?\s+/i
+  # Year, S01 / S01E02 / 1x02, or resolution: where a release's title ends.
+  @title_end ~r/^((19|20)\d{2}|s\d{1,2}(e\d+)?|\d{1,2}x\d+|\d{3,4}p)$/
 
   @spec check(String.t(), Target.t()) :: verdict()
   def check(release_title, %Target{} = target) when is_binary(release_title) do
@@ -28,13 +30,24 @@ defmodule Mydia.Indexers.ReleaseIdentity do
 
     case ReleaseParser.parse(name) do
       %ParsedFileInfo{title: title, year: year} when is_binary(title) and title != "" ->
-        if Enum.any?(title_keys(title), &(&1 in target.keys)),
+        if Enum.any?(title_keys(title) ++ title_keys(raw_title(name)), &(&1 in target.keys)),
           do: check_year(year, target),
           else: {:mismatch, :title}
 
       _ ->
         check_leading_tokens(Text.match_tokens(name), target)
     end
+  end
+
+  # Every word before the first year, season or resolution marker. The parser
+  # strips words it takes for language tags wherever they sit ("The Italian
+  # Harbor" parses as "The Harbor", "Multi Season Show" as "Season Show"), so
+  # the name's own leading words are a second candidate beside its title.
+  defp raw_title(name) do
+    name
+    |> Text.match_tokens()
+    |> Enum.take_while(&(not (&1 =~ @title_end)))
+    |> Enum.join(" ")
   end
 
   # The keys a parsed title may be known by. A release names a film twice in

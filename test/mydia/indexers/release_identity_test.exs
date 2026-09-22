@@ -75,6 +75,18 @@ defmodule Mydia.Indexers.ReleaseIdentityTest do
              ) == :match
     end
 
+    test "matches a title with a word the parser strips as a language tag" do
+      assert ReleaseIdentity.check(
+               "The.Italian.Harbor.2031.1080p.WEB-DL.x264-GROUP",
+               movie("The Italian Harbor", 2031)
+             ) == :match
+
+      assert ReleaseIdentity.check(
+               "Multi Season Show.S01.COMPLETE.1080p.WEB-DL.x264-GROUP",
+               show("Multi Season Show")
+             ) == :match
+    end
+
     test "still rejects an AKA whose sides are both other titles" do
       assert ReleaseIdentity.check(
                "Lantern Vale AKA Lantern Heaven (2031)_1080p.mkv",
