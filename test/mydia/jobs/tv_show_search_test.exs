@@ -2101,8 +2101,8 @@ defmodule Mydia.Jobs.TVShowSearchTest do
     end
   end
 
-  describe "identity shadow" do
-    test "an episode search grabs as before and records the disagreement", %{bypass: bypass} do
+  describe "release identity" do
+    test "an episode search does not grab a different show", %{bypass: bypass} do
       decoy = "Star.Harbor.Rising.S01E05.1080p.WEB-DL.x264-GROUP"
 
       IndexerMock.mock_prowlarr_all(bypass,
@@ -2124,14 +2124,7 @@ defmodule Mydia.Jobs.TVShowSearchTest do
 
       assert :ok = perform_job(TVShowSearch, %{"mode" => "specific", "episode_id" => episode.id})
 
-      assert Enum.any?(Mydia.Downloads.list_downloads(), &(&1.title == decoy))
-
-      events = Mydia.Events.list_events(type: "search.identity_shadow")
-
-      assert Enum.any?(events, fn event ->
-               event.metadata["legacy_pick"] == decoy and
-                 event.metadata["episode_number"] == 5
-             end)
+      refute Enum.any?(Mydia.Downloads.list_downloads(), &(&1.title == decoy))
     end
   end
 

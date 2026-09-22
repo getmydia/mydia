@@ -959,28 +959,6 @@ defmodule Mydia.EventsTest do
       assert event.metadata["episode_number"] == 3
     end
 
-    test "search_identity_shadow/3 records both picks" do
-      media_item = %Mydia.Media.MediaItem{
-        id: Ecto.UUID.generate(),
-        title: "Lantern",
-        type: "movie"
-      }
-
-      Events.search_identity_shadow(media_item, %{
-        "query" => "Lantern 2031",
-        "legacy_pick" => "2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv",
-        "exact_pick" => nil
-      })
-
-      [event] = Events.list_events(type: "search.identity_shadow")
-      assert event.category == "search"
-      assert event.severity == :info
-      assert event.metadata["title"] == "Lantern"
-      assert event.metadata["query"] == "Lantern 2031"
-      assert event.metadata["legacy_pick"] =~ "Lantern Vale"
-      assert event.metadata["exact_pick"] == nil
-    end
-
     test "search_error/4 creates correct event" do
       media_item = %Mydia.Media.MediaItem{
         id: Ecto.UUID.generate(),

@@ -78,7 +78,10 @@ defmodule Mydia.Indexers.ReleaseRankerResolutionFloorTest do
         preferred_qualities: ["1080p"],
         size_range: {1024, 7680},
         search_query: "Example Show (2024) S02E01",
-        expected_title: "Example Show (2024)",
+        identity_target: %Mydia.Indexers.ReleaseIdentity.Target{
+          type: :tv_show,
+          keys: ["exampleshow"]
+        },
         expected_season: 2,
         expected_episode: 1,
         custom_formats: []

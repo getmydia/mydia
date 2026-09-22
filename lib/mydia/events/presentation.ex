@@ -233,6 +233,8 @@ defmodule Mydia.Events.Presentation do
       color: "text-warning",
       title: "All results filtered out"
     },
+    # Recorded only by v0.15.x, which ran the identity check in shadow beside
+    # the old title gate. Nothing records it now; kept so those rows render.
     %{
       type: "search.identity_shadow",
       icon: "hero-scale",

@@ -2,7 +2,10 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.{QualityParser, ReleaseRanker, SearchResult}
+  alias Mydia.Indexers.ReleaseIdentity.Target
   alias Mydia.Settings.QualityProfile
+
+  @target %Target{type: :movie, year: 2026, keys: ["odyssey"]}
 
   defp telesync do
     SearchResult.new(
@@ -60,7 +63,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
       # stay wanted rather than take the cam.
       assert ReleaseRanker.select_best_result([telesync()],
                quality_profile: profile_excluding(["Telesync"]),
-               expected_title: "The Odyssey"
+               identity_target: @target
              ) == nil
     end
 
@@ -71,7 +74,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
 
       assert ReleaseRanker.select_best_result([telesync_with_quality()],
                quality_profile: profile_excluding(["Telesync"]),
-               expected_title: "The Odyssey"
+               identity_target: @target
              ) == nil
     end
 
@@ -79,7 +82,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
       result =
         ReleaseRanker.select_best_result([telesync(), bluray()],
           quality_profile: profile_excluding(["Telesync"]),
-          expected_title: "The Odyssey"
+          identity_target: @target
         )
 
       refute is_nil(result)
@@ -90,7 +93,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
       result =
         ReleaseRanker.select_best_result([telesync()],
           quality_profile: profile_excluding([]),
-          expected_title: "The Odyssey"
+          identity_target: @target
         )
 
       refute is_nil(result), "an empty exclusion list must not filter anything"
@@ -103,7 +106,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
       result =
         ReleaseRanker.select_best_result([telesync()],
           quality_profile: profile,
-          expected_title: "The Odyssey"
+          identity_target: @target
         )
 
       refute is_nil(result)
@@ -113,7 +116,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
       result =
         ReleaseRanker.select_best_result([telesync()],
           quality_profile: nil,
-          expected_title: "The Odyssey"
+          identity_target: @target
         )
 
       refute is_nil(result)
@@ -134,7 +137,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
       result =
         ReleaseRanker.select_best_result([unknown],
           quality_profile: profile_excluding(["Telesync", "CAM"]),
-          expected_title: "The Odyssey"
+          identity_target: @target
         )
 
       refute is_nil(result)
@@ -152,7 +155,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
         ReleaseRanker.select_best_result([telesync()],
           quality_profile: profile_excluding(["Telesync"]),
           apply_source_exclusion: false,
-          expected_title: "The Odyssey"
+          identity_target: @target
         )
 
       refute is_nil(result), "apply_source_exclusion: false must disable the hard filter"
@@ -167,7 +170,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
       result =
         ReleaseRanker.select_best_result([telesync()],
           quality_profile: profile_excluding(["Telesync"]),
-          expected_title: "The Odyssey"
+          identity_target: @target
         )
 
       assert result == nil
@@ -178,7 +181,7 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
         ReleaseRanker.select_best_result([telesync()],
           quality_profile: profile_excluding(["Telesync"]),
           apply_source_exclusion: true,
-          expected_title: "The Odyssey"
+          identity_target: @target
         )
 
       assert result == nil

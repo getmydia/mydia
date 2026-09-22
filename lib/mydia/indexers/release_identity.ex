@@ -20,6 +20,9 @@ defmodule Mydia.Indexers.ReleaseIdentity do
   # ReleaseParser keeps a leading "[Group]" tag in the title it returns.
   @leading_tags ~r/^\s*(\[[^\]]*\]\s*)+/
   @year_token ~r/^(19|20)\d{2}$/
+  @aka ~r/\s+a\.?k\.?a\.?\s+/i
+  # Year, S01 / S01E02 / 1x02, or resolution: where a release's title ends.
+  @title_end ~r/^((19|20)\d{2}|s\d{1,2}(e\d+)?|\d{1,2}x\d+|\d{3,4}p)$/
 
   @spec check(String.t(), Target.t()) :: verdict()
   def check(release_title, %Target{} = target) when is_binary(release_title) do
@@ -27,7 +30,7 @@ defmodule Mydia.Indexers.ReleaseIdentity do
 
     case ReleaseParser.parse(name) do
       %ParsedFileInfo{title: title, year: year} when is_binary(title) and title != "" ->
-        if Text.match_key(title) in target.keys,
+        if Enum.any?(title_keys(title) ++ title_keys(raw_title(name)), &(&1 in target.keys)),
           do: check_year(year, target),
           else: {:mismatch, :title}
 
@@ -35,6 +38,46 @@ defmodule Mydia.Indexers.ReleaseIdentity do
         check_leading_tokens(Text.match_tokens(name), target)
     end
   end
+
+  # Every word before the first year, season or resolution marker. The parser
+  # strips words it takes for language tags wherever they sit ("The Italian
+  # Harbor" parses as "The Harbor", "Multi Season Show" as "Season Show"), so
+  # the name's own leading words are a second candidate beside its title.
+  defp raw_title(name) do
+    name
+    |> Text.match_tokens()
+    |> Enum.take_while(&(not (&1 =~ @title_end)))
+    |> Enum.join(" ")
+  end
+
+  # The keys a parsed title may be known by. A release names a film twice in
+  # two ways: "Title AKA Other Title", and a title in another script beside
+  # the Latin one ("港风边.The.Harbor's.Edge"). Each AKA side is a candidate,
+  # and so is each with its non-Latin words trimmed from both ends. The whole
+  # of a candidate still has to equal a target key, so trimming never lets a
+  # Latin name that merely starts with the title through.
+  defp title_keys(title) do
+    title
+    |> String.split(@aka, trim: true)
+    |> Enum.flat_map(fn side ->
+      tokens = Text.match_tokens(side)
+      [tokens, trim_non_latin(tokens)]
+    end)
+    |> Enum.map(&Enum.join/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp trim_non_latin(tokens) do
+    tokens
+    |> Enum.drop_while(&(not latin?(&1)))
+    |> Enum.reverse()
+    |> Enum.drop_while(&(not latin?(&1)))
+    |> Enum.reverse()
+  end
+
+  # match_tokens/1 has already folded accents, so a Latin word keeps a-z.
+  defp latin?(token), do: token =~ ~r/[a-z0-9]/
 
   # With no parsed title the parser usually read the title itself as the year
   # ("2043.2031.1080p" parses with year 2043), so the name is matched on its

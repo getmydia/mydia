@@ -26,7 +26,6 @@ defmodule Mydia.Indexers.RankingOptionsTest do
         min_seeders: 5,
         size_range: {100, 20_000},
         search_query: "Some Title",
-        expected_title: "Some Title",
         blocked_tags: ["CAM"],
         preferred_tags: ["PROPER"]
       }
@@ -38,7 +37,6 @@ defmodule Mydia.Indexers.RankingOptionsTest do
             :min_seeders,
             :size_range,
             :search_query,
-            :expected_title,
             :blocked_tags,
             :preferred_tags,
             :preferred_qualities
