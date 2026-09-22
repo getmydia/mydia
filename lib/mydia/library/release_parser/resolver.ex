@@ -191,12 +191,12 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
   # whole title zone ("French.2031"). Reclaiming runs before singleton
   # resolution, so a reclaimed word reports no language and cannot displace
   # a real tag. A tag at the end of the title zone ("Show.S01.FRENCH.1080p")
-  # and every word of a tag run ("MULTi.BluRay.x264") stay tags.
+  # and words of a tag run ("MULTi.BluRay.x264") are not reclaimed here.
   #
   # Only language words are reclaimed, not the other vocab-derived labels
   # (source, codec, hdr, audio, streaming_service, release_group). A
   # quality word ("HDTV", "DVD", "x264") sitting next to a title word is
-  # usually not part of the title — it's release noise the parser has no
+  # usually not part of the title. It's release noise the parser has no
   # vocabulary for ("Series.10910.hdtv-lol"), and reclaiming it folded that
   # noise straight into already-wrong titles with no corresponding fix
   # anywhere else.
@@ -222,6 +222,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     previous_kinds = [nil | kinds]
     next_entries = Enum.drop(title_zone, 1) ++ [nil]
 
+    # Enum.zip/1 truncates to the shortest list, aligning each token with its kind, prior kind, and next entry.
     [title_zone, kinds, previous_kinds, next_entries]
     |> Enum.zip()
     |> Enum.map(&maybe_reclaim/1)
