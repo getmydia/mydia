@@ -7,6 +7,11 @@ defmodule MetadataRelay.PlayerLogs.SweepTest do
   alias MetadataRelay.{PlayerLogs, Repo}
   alias MetadataRelay.PlayerLogs.{Chunk, Device, Report, Store}
 
+  # Mirrors the @sweep_batch module attribute in MetadataRelay.PlayerLogs. It
+  # is a fixed constant there, not read from config, so these tests seed past
+  # it directly rather than lowering it.
+  @sweep_batch 500
+
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)
     use_tmp_logs_dir()
@@ -23,6 +28,30 @@ defmodule MetadataRelay.PlayerLogs.SweepTest do
   end
 
   defp file_exists?(chunk), do: File.exists?(Path.join(Store.root(), chunk.path))
+
+  defp insert_extra_chunks(code, count) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    entries =
+      for i <- 1..count do
+        %{
+          device_id: device_id(),
+          kind: "report",
+          path: "reports/#{code}/extra-#{i}.ndjson.gz",
+          first_t: 0,
+          last_t: 0,
+          line_count: 1,
+          bytes: 10,
+          sessions: "[]",
+          report_code: code,
+          inserted_at: now
+        }
+      end
+
+    Repo.insert_all(Chunk, entries)
+  end
+
+  defp touch_old(path, seconds_old), do: File.touch!(path, System.os_time(:second) - seconds_old)
 
   test "deletes stream chunks older than 14 days, with their files" do
     {:ok, :stream} = PlayerLogs.ingest(batch())
@@ -110,5 +139,55 @@ defmodule MetadataRelay.PlayerLogs.SweepTest do
 
     assert {:ok, :stream} = PlayerLogs.ingest(batch())
     assert Repo.all(Chunk) == []
+  end
+
+  test "expired report chunks are deleted in batches, keeping the report row until they are gone" do
+    {:ok, {:report, code}} = PlayerLogs.ingest(batch(meta: [kind: "report"]))
+    insert_extra_chunks(code, @sweep_batch + 10)
+    Repo.update_all(from(r in Report, where: r.code == ^code), set: [inserted_at: days_ago(91)])
+
+    total_before = Repo.aggregate(from(c in Chunk, where: c.report_code == ^code), :count)
+    assert total_before == @sweep_batch + 11
+
+    :ok = PlayerLogs.sweep()
+
+    remaining_after_first =
+      Repo.aggregate(from(c in Chunk, where: c.report_code == ^code), :count)
+
+    assert remaining_after_first > 0
+    assert remaining_after_first < total_before
+    assert Repo.get(Report, code) != nil, "the report row survives while chunks remain"
+
+    :ok = PlayerLogs.sweep()
+
+    assert PlayerLogs.chunks_for_report(code) == []
+    assert Repo.get(Report, code) == nil
+  end
+
+  test "orphan removal is capped per sweep, converging to zero across repeated sweeps" do
+    extra = @sweep_batch + 5
+
+    for i <- 1..extra do
+      path = "stream/orphan-batch/2026-01-01/#{i}-filler.ndjson.gz"
+      {:ok, _bytes} = Store.write(path, ["{}\n"])
+      touch_old(Path.join(Store.root(), path), 7_200)
+    end
+
+    orphan_count = fn ->
+      Store.root()
+      |> Path.join("stream/orphan-batch/**/*.gz")
+      |> Path.wildcard()
+      |> length()
+    end
+
+    assert orphan_count.() == extra
+
+    :ok = PlayerLogs.sweep()
+    remaining_after_first = orphan_count.()
+    assert remaining_after_first > 0
+    assert remaining_after_first < extra
+
+    :ok = PlayerLogs.sweep()
+    assert orphan_count.() == 0
   end
 end

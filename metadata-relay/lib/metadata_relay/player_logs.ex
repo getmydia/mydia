@@ -191,8 +191,25 @@ defmodule MetadataRelay.PlayerLogs do
       )
 
     if codes != [] do
-      delete_chunks(Repo.all(from(c in Chunk, where: c.report_code in ^codes)))
-      Repo.delete_all(from(r in Report, where: r.code in ^codes))
+      chunks =
+        Repo.all(from(c in Chunk, where: c.report_code in ^codes, limit: @sweep_batch))
+
+      delete_chunks(chunks)
+
+      remaining_codes =
+        Repo.all(
+          from(c in Chunk,
+            where: c.report_code in ^codes,
+            select: c.report_code,
+            distinct: true
+          )
+        )
+
+      finished_codes = codes -- remaining_codes
+
+      if finished_codes != [] do
+        Repo.delete_all(from(r in Report, where: r.code in ^finished_codes))
+      end
     end
   end
 
@@ -215,6 +232,7 @@ defmodule MetadataRelay.PlayerLogs do
     (DateTime.to_unix(now) - @orphan_age_seconds)
     |> Store.files_older_than()
     |> Enum.reject(&MapSet.member?(known, &1))
+    |> Enum.take(@sweep_batch)
     |> Enum.each(&Store.delete/1)
   end
 
