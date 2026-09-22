@@ -1,42 +1,53 @@
 defmodule MetadataRelay.ClientConfigTest do
   use ExUnit.Case, async: true
 
-  # Plug 1.18 deprecates `use Plug.Test`, and this suite is on 1.20.3, so
-  # follow the rest of it: call Plug.Test.conn/2 fully qualified and import
-  # only what is needed from Plug.Conn.
-  import Plug.Conn, only: [get_resp_header: 2]
-
   alias MetadataRelay.ClientConfig
 
-  describe "relay_urls/0" do
-    test "lists the mydia-operated iroh relays" do
-      urls = ClientConfig.relay_urls()
+  @cae1_1 "https://cae1-1.relay.mydia.dev"
+  @cae1_2 "https://cae1-2.relay.mydia.dev"
 
-      assert is_list(urls)
-      assert "https://cae1-1.relay.mydia.dev" in urls
+  describe "parse/1" do
+    test "nil and blank are unset" do
+      assert ClientConfig.parse(nil) == :unset
+      assert ClientConfig.parse("") == :unset
+      assert ClientConfig.parse("   ") == :unset
     end
 
-    test "every entry is an https URL with a host" do
-      for url <- ClientConfig.relay_urls() do
-        uri = URI.parse(url)
-        assert uri.scheme == "https", "#{url} is not https"
-        assert is_binary(uri.host) and uri.host != "", "#{url} has no host"
+    test "accepts one relay" do
+      assert ClientConfig.parse(@cae1_1) == {:ok, [@cae1_1]}
+    end
+
+    test "accepts several, in order, ignoring spaces and a trailing comma" do
+      assert ClientConfig.parse(" #{@cae1_2} , #{@cae1_1},") == {:ok, [@cae1_2, @cae1_1]}
+    end
+
+    test "rejects a value that lists no relays" do
+      assert ClientConfig.parse(",,") == {:error, "no relays listed"}
+    end
+
+    for {label, bad} <- [
+          {"an http URL", "http://relay.example.test"},
+          {"a bare hostname", "relay.example.test"},
+          {"an empty host", "https:///path"},
+          {"a bare scheme", "https://"}
+        ] do
+      @bad bad
+      test "rejects #{label}, even beside a good relay" do
+        assert {:error, reason} = ClientConfig.parse(@cae1_1 <> "," <> @bad)
+        assert reason =~ "not an https URL with a host"
       end
+    end
+
+    test "rejects a duplicate" do
+      assert {:error, reason} = ClientConfig.parse("#{@cae1_1},#{@cae1_1}")
+      assert reason =~ "listed twice"
     end
   end
 
-  describe "GET /client-config" do
-    test "returns the p2p relay list as JSON" do
-      conn = MetadataRelay.Router.call(Plug.Test.conn(:get, "/client-config"), [])
-
-      assert conn.status == 200
-      assert conn.state == :sent
-
-      assert ["application/json" <> _] = get_resp_header(conn, "content-type")
-
-      body = Jason.decode!(conn.resp_body)
-      assert %{"p2p" => %{"relays" => relays}} = body
-      assert relays == MetadataRelay.ClientConfig.relay_urls()
+  describe "default_relay_urls/0" do
+    test "passes its own rules" do
+      defaults = ClientConfig.default_relay_urls()
+      assert ClientConfig.parse(Enum.join(defaults, ",")) == {:ok, defaults}
     end
   end
 end
