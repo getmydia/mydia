@@ -7,6 +7,7 @@ use mydia_p2p_core::{
     PairingRequest, PeerConnectionType, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
     RemoteControlResponse, TargetCapabilities, TrackInfo,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
@@ -112,6 +113,14 @@ pub struct P2pHost {
     /// Inbound control requests, routed here by the same `init` dispatcher.
     /// Drained by `remote_control_stream`.
     control_rx: Arc<Mutex<mpsc::Receiver<FlutterInboundControlRequest>>>,
+    /// How many `Event::Log` entries are currently sitting on
+    /// `generic_event_rx`, waiting for `event_stream` to drain them.
+    ///
+    /// Shared with the dispatcher spawned in `init`, which owns the only
+    /// increment (gated by `MAX_QUEUED_LOG_EVENTS`); `event_stream` owns the
+    /// only decrement. See `run_event_dispatcher` for why only log events are
+    /// counted here.
+    queued_log_events: Arc<AtomicUsize>,
 }
 
 pub struct FlutterPairingRequest {
@@ -683,6 +692,26 @@ impl From<PlaybackSnapshot> for FlutterPlaybackSnapshot {
     }
 }
 
+/// How many `Event::Log` entries `run_event_dispatcher` will admit onto the
+/// unbounded `generic_tx` channel before it starts dropping new ones.
+///
+/// Logs are diagnostics and may be dropped under pressure; a connection or
+/// control event may not be, which is why only the `Event::Log` arm in
+/// `run_event_dispatcher` is gated by this and every other event keeps its
+/// existing unbounded path. Without this cap, a Dart subscriber that stops
+/// draining `event_stream` (its loop exits whenever `sink.add` fails, and a
+/// subscription can be cancelled while the host is still alive) would let
+/// log events from every dependency at info level accumulate on `generic_tx`
+/// forever.
+const MAX_QUEUED_LOG_EVENTS: usize = 1000;
+
+/// The gate's decision, factored out of `run_event_dispatcher` so it can be
+/// unit tested without driving channels: forward while under the cap, drop
+/// once at or over it.
+fn should_forward_log_event(queued: usize, cap: usize) -> bool {
+    queued < cap
+}
+
 /// Drains `event_rx`, routing an inbound `RemoteControl` request onto
 /// `control_tx` and every other event onto `generic_tx`. Spawned once,
 /// unconditionally, by `P2pHost::init` — see the comment at that call site
@@ -702,10 +731,17 @@ impl From<PlaybackSnapshot> for FlutterPlaybackSnapshot {
 /// thing operationally — nobody is currently able to receive this control
 /// request — so both are handled the same way: the request is dropped and
 /// logged, and the loop moves on to keep draining `event_rx`.
+///
+/// `queued_log_events` is shared with `event_stream`, which owns the only
+/// decrement; this function owns the only increment, made just before a log
+/// event is actually sent. Relaxed ordering is enough on both sides: this is
+/// a coarse back pressure gate on one counter, not a synchronization
+/// primitive protecting other memory.
 async fn run_event_dispatcher(
     event_rx: Arc<Mutex<mpsc::Receiver<Event>>>,
     control_tx: mpsc::Sender<FlutterInboundControlRequest>,
     generic_tx: mpsc::UnboundedSender<Event>,
+    queued_log_events: Arc<AtomicUsize>,
 ) {
     let mut event_rx = event_rx.lock().await;
     while let Some(event) = event_rx.recv().await {
@@ -730,6 +766,16 @@ async fn run_event_dispatcher(
                     };
                     tracing::warn!("Dropping inbound control request: {reason}");
                 }
+            }
+            event @ Event::Log { .. } => {
+                let queued = queued_log_events.load(Ordering::Relaxed);
+                if should_forward_log_event(queued, MAX_QUEUED_LOG_EVENTS) {
+                    queued_log_events.fetch_add(1, Ordering::Relaxed);
+                    let _ = generic_tx.send(event);
+                }
+                // Else: drop it. A dropped log is a log, not a bug; the
+                // counter is only ever incremented on a successful send here,
+                // so a persistently full queue never runs away.
             }
             other => {
                 // An error here just means no `event_stream` subscriber is
@@ -831,10 +877,20 @@ impl P2pHost {
         // for why admission onto it has to be non-blocking despite that.
         let (generic_tx, generic_rx) = mpsc::unbounded_channel::<Event>();
         let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+        // See `MAX_QUEUED_LOG_EVENTS` and the doc comment on the struct
+        // field: the dispatcher increments this, `event_stream` decrements
+        // it, and it is what keeps `generic_tx` from growing without bound
+        // when nobody is currently draining log events off it.
+        let queued_log_events = Arc::new(AtomicUsize::new(0));
 
         let event_rx = host.event_rx.clone();
         let _guard = runtime::enter();
-        runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+        runtime::spawn(run_event_dispatcher(
+            event_rx,
+            control_tx,
+            generic_tx,
+            queued_log_events.clone(),
+        ));
 
         (
             P2pHost {
@@ -842,6 +898,7 @@ impl P2pHost {
                 hls_requester,
                 generic_event_rx: Arc::new(Mutex::new(generic_rx)),
                 control_rx: Arc::new(Mutex::new(control_rx)),
+                queued_log_events,
             },
             node_id,
         )
@@ -886,6 +943,7 @@ impl P2pHost {
     pub fn event_stream(&self, sink: StreamSink<String>) -> anyhow::Result<()> {
         tracing::info!("P2pHost::event_stream() called");
         let rx = self.generic_event_rx.clone();
+        let queued_log_events = self.queued_log_events.clone();
 
         // Entering the core's runtime rather than spawning a thread with a
         // runtime of its own: this is called from the Dart isolate thread,
@@ -932,6 +990,11 @@ impl P2pHost {
                         target,
                         message,
                     } => {
+                        // Balances the increment in `run_event_dispatcher`,
+                        // done before this event is formatted or sent so the
+                        // count reflects what is still queued, not what has
+                        // been delivered.
+                        queued_log_events.fetch_sub(1, Ordering::Relaxed);
                         // Sent without the `event_stream received` line below:
                         // that line is a tracing event itself, and forwarding it
                         // would echo every log line back through here.
@@ -1461,9 +1524,15 @@ mod event_dispatcher_tests {
             // to reproduce a full channel.
             let (control_tx, mut control_rx) = mpsc::channel::<FlutterInboundControlRequest>(2);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+            let queued_log_events = Arc::new(AtomicUsize::new(0));
 
             let _guard = runtime::enter();
-            runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+            runtime::spawn(run_event_dispatcher(
+                event_rx,
+                control_tx,
+                generic_tx,
+                queued_log_events,
+            ));
 
             // Fill the control channel past capacity without ever draining
             // `control_rx` — the "Dart never subscribed" scenario the
@@ -1514,9 +1583,15 @@ mod event_dispatcher_tests {
             let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
             drop(control_rx);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+            let queued_log_events = Arc::new(AtomicUsize::new(0));
 
             let _guard = runtime::enter();
-            runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+            runtime::spawn(run_event_dispatcher(
+                event_rx,
+                control_tx,
+                generic_tx,
+                queued_log_events,
+            ));
 
             event_tx.send(control_event("req-1")).await.unwrap();
             event_tx.send(Event::RelayConnected).await.unwrap();
@@ -1560,5 +1635,22 @@ mod log_event_tests {
             decode(&format_log_event(LogLevel::Debug, "t", "m"))["l"],
             "debug"
         );
+    }
+
+    #[test]
+    fn should_forward_log_event_gates_at_the_cap() {
+        assert!(should_forward_log_event(0, MAX_QUEUED_LOG_EVENTS));
+        assert!(should_forward_log_event(
+            MAX_QUEUED_LOG_EVENTS - 1,
+            MAX_QUEUED_LOG_EVENTS
+        ));
+        assert!(!should_forward_log_event(
+            MAX_QUEUED_LOG_EVENTS,
+            MAX_QUEUED_LOG_EVENTS
+        ));
+        assert!(!should_forward_log_event(
+            MAX_QUEUED_LOG_EVENTS + 1,
+            MAX_QUEUED_LOG_EVENTS
+        ));
     }
 }
