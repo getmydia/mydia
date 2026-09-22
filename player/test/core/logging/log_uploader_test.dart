@@ -31,10 +31,16 @@ class _Harness {
     List<int> statuses = const [204],
     Map<String, String> headers = const {},
     int maxBatchBytes = 2 * 1024 * 1024,
+    void Function(int callIndex)? onRequest,
+    bool throwOnRequest = false,
   }) {
     var call = 0;
     uploader = LogUploader(
       client: MockClient((request) async {
+        onRequest?.call(call);
+        if (throwOnRequest) {
+          throw const SocketException('network unreachable');
+        }
         final text = utf8.decode(gzip.decode(request.bodyBytes));
         final lines = const LineSplitter().convert(text);
         requests.add((
@@ -46,6 +52,7 @@ class _Harness {
         ));
         final status =
             statuses[call < statuses.length ? call : statuses.length - 1];
+        statusesSent.add(status);
         call++;
         return http.Response(
           status == 201 ? '{"code":"LOG-7K2QX9"}' : '',
@@ -70,6 +77,9 @@ class _Harness {
   late final LogUploader uploader;
   final requests = <_Request>[];
 
+  /// The status returned for each request, in the same order as [requests].
+  final statusesSent = <int>[];
+
   void write(int count, {DateTime? at, String message = 'line'}) {
     for (var i = 0; i < count; i++) {
       store.add(LogRecord(
@@ -84,6 +94,14 @@ class _Harness {
 
   List<Object?> messages(int request) =>
       [for (final line in requests[request].lines) line['msg']];
+
+  /// Every message from a request the relay actually accepted (2xx), in
+  /// the order the requests were sent. Used to check nothing the relay
+  /// stored was ever sent again in a later request.
+  List<Object?> deliveredMessages() => [
+        for (var i = 0; i < requests.length; i++)
+          if (statusesSent[i] >= 200 && statusesSent[i] < 300) ...messages(i),
+      ];
 }
 
 void main() {
@@ -163,6 +181,43 @@ void main() {
       });
     });
 
+    test(
+        'turning sharing off mid-drain cannot leak a record past the '
+        'original logs_until', () {
+      fakeAsync((async) {
+        late final _Harness h;
+        h = _Harness(
+          async,
+          maxBatchBytes: 100,
+          onRequest: (callIndex) {
+            // Simulates the Diagnostics choice being turned off (or the
+            // window expiring) while a multi-batch drain is still in
+            // flight: deactivate() nulls _until as a side effect.
+            if (callIndex == 0) h.uploader.deactivate();
+          },
+        );
+        final until = _Harness.start.add(const Duration(seconds: 30));
+        h.uploader.activate(until: until, resetCursor: true);
+        async.flushMicrotasks();
+        h.write(2, at: _Harness.start.add(const Duration(seconds: 10)));
+        h.write(1, at: _Harness.start.add(const Duration(seconds: 40)));
+
+        async.elapse(const Duration(seconds: 61));
+
+        expect(h.uploader.isActive, isFalse);
+        expect(h.requests, isNotEmpty);
+        for (final request in h.requests) {
+          for (final line in request.lines) {
+            expect(
+              line['t'],
+              lessThanOrEqualTo(until.millisecondsSinceEpoch),
+              reason: 'a line after logs_until must never be uploaded',
+            );
+          }
+        }
+      });
+    });
+
     test('a failed batch is retried, then the cursor advances', () {
       fakeAsync((async) {
         final h = _Harness(async, statuses: [503, 204]);
@@ -212,17 +267,63 @@ void main() {
       });
     });
 
-    test('413 splits the batch in half', () {
+    test('413 shrinks the batch and retries from the same cursor', () {
       fakeAsync((async) {
-        final h = _Harness(async, statuses: [413, 204]);
+        // Big enough that all 4 lines fit in one read (triggering the
+        // 413), and small enough that half that budget only fits 2.
+        final h = _Harness(
+          async,
+          statuses: [413, 204],
+          maxBatchBytes: 200340,
+        );
         h.uploader.activate(until: null, resetCursor: true);
         async.flushMicrotasks();
-        h.write(4);
+        h.write(4, message: 'x' * 50000);
+        final written = [for (var i = 0; i < 4; i++) '${'x' * 50000} $i'];
 
         async.elapse(const Duration(seconds: 61));
 
-        expect(h.requests.map((r) => r.lines.length), [4, 2, 2]);
+        expect(h.requests, hasLength(3));
+        expect(h.messages(0), written, reason: 'the rejected attempt');
+        expect(h.messages(1), written.sublist(0, 2));
+        expect(h.messages(2), written.sublist(2, 4));
         expect(h.store.savedCursor, const LogCursor('mem', 4));
+
+        // The 413 attempt was never accepted, so only what the 204s
+        // actually carried should ever have landed on the relay, each
+        // line exactly once.
+        final delivered = h.deliveredMessages();
+        expect(delivered.length, written.length);
+        expect(delivered.toSet(), written.toSet());
+      });
+    });
+
+    test(
+        'a failed retry after a 413 shrink never duplicates a line once a '
+        'later attempt succeeds', () {
+      fakeAsync((async) {
+        final h = _Harness(
+          async,
+          statuses: [413, 503, 204],
+          maxBatchBytes: 200340,
+        );
+        h.uploader.activate(until: null, resetCursor: true);
+        async.flushMicrotasks();
+        h.write(4, message: 'x' * 50000);
+        final written = [for (var i = 0; i < 4; i++) '${'x' * 50000} $i'];
+
+        async.elapse(const Duration(seconds: 61));
+        expect(h.requests, hasLength(2), reason: '413 then the 503 throws');
+        expect(h.store.savedCursor, const LogCursor('mem', 0),
+            reason: 'nothing was ever accepted, so the cursor must not move');
+
+        async.elapse(const Duration(seconds: 60));
+        expect(h.requests, hasLength(3));
+        expect(h.store.savedCursor, const LogCursor('mem', 4));
+
+        final delivered = h.deliveredMessages();
+        expect(delivered.length, written.length);
+        expect(delivered.toSet(), written.toSet());
       });
     });
 
@@ -362,6 +463,26 @@ void main() {
         async.flushMicrotasks();
 
         expect(error, isA<LogUploadException>());
+      });
+    });
+
+    test('a network failure becomes a readable LogUploadException', () {
+      fakeAsync((async) {
+        final h = _Harness(async, throwOnRequest: true);
+        h.write(1);
+
+        Object? error;
+        h.uploader.sendReport().catchError((Object e) {
+          error = e;
+          return '';
+        });
+        async.flushMicrotasks();
+
+        expect(error, isA<LogUploadException>());
+        expect(
+          (error as LogUploadException).message,
+          'Could not reach the relay. Check the connection and try again.',
+        );
       });
     });
   });

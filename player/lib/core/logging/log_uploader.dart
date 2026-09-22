@@ -86,6 +86,12 @@ final class _Wait extends _Outcome {
   final DateTime until;
 }
 
+/// The batch was too large for the relay; retry the same cursor with a
+/// smaller byte budget.
+final class _Shrink extends _Outcome {
+  const _Shrink();
+}
+
 class LogUploader {
   LogUploader({
     required http.Client client,
@@ -110,6 +116,9 @@ class LogUploader {
   static const maxBackoff = Duration(minutes: 30);
   static const missingEndpointBackoff = Duration(hours: 1);
   static const requestTimeout = Duration(seconds: 30);
+
+  /// Floor for the byte budget a 413 shrinks toward.
+  static const _minBatchBytes = 64 * 1024;
 
   final Duration interval;
 
@@ -203,34 +212,47 @@ class LogUploader {
   /// upload. Records written after the call started are left out, so a busy
   /// log cannot keep it running.
   Future<String> sendReport({String? note}) async {
-    final meta = await _loadMeta();
-    final untilMs = _now().millisecondsSinceEpoch;
-    String? code;
-    LogCursor? from;
-    while (true) {
-      final batch = await _store.read(
-          from: from, maxBytes: maxBatchBytes, untilMs: untilMs);
-      if (batch.lines.isEmpty) break;
-      final outcome = await _send(
-        meta.toJson(
-            kind: 'report', report: code, note: code == null ? note : null),
-        batch.lines,
-      );
-      if (outcome is! _Sent) {
-        throw LogUploadException(outcome is _Wait
-            ? 'The relay is busy. Try again in a minute.'
-            : 'The relay did not accept these logs.');
+    try {
+      final meta = await _loadMeta();
+      final untilMs = _now().millisecondsSinceEpoch;
+      String? code;
+      LogCursor? from;
+      var budget = maxBatchBytes;
+      while (true) {
+        final batch =
+            await _store.read(from: from, maxBytes: budget, untilMs: untilMs);
+        if (batch.lines.isEmpty) break;
+        final outcome = await _send(
+          meta.toJson(
+              kind: 'report', report: code, note: code == null ? note : null),
+          batch.lines,
+        );
+        if (outcome is _Shrink) {
+          budget = _shrinkBudget(budget);
+          continue;
+        }
+        if (outcome is! _Sent) {
+          throw LogUploadException(outcome is _Wait
+              ? 'The relay is busy. Try again in a minute.'
+              : 'The relay did not accept these logs.');
+        }
+        budget = maxBatchBytes;
+        code ??= outcome.code;
+        if (code == null) {
+          throw const LogUploadException('The relay did not return a code.');
+        }
+        from = batch.next;
       }
-      code ??= outcome.code;
       if (code == null) {
-        throw const LogUploadException('The relay did not return a code.');
+        throw const LogUploadException('There are no logs on this device yet.');
       }
-      from = batch.next;
+      return code;
+    } on LogUploadException {
+      rethrow;
+    } catch (_) {
+      throw const LogUploadException(
+          'Could not reach the relay. Check the connection and try again.');
     }
-    if (code == null) {
-      throw const LogUploadException('There are no logs on this device yet.');
-    }
-    return code;
   }
 
   void _onFlushed(int bytes) {
@@ -243,12 +265,17 @@ class LogUploader {
 
   Future<void> _drain() async {
     final meta = (await _loadMeta()).toJson(kind: 'stream');
+    // Snapshotted once: deactivate() can null out _until while this loop is
+    // mid-flight (it runs across several awaited sends), and a later batch
+    // must still honor the bound the caller activated with.
+    final untilMs = _until?.millisecondsSinceEpoch;
     var cursor = await _store.loadCursor() ?? await _store.endCursor();
+    var budget = maxBatchBytes;
     while (true) {
       final batch = await _store.read(
         from: cursor,
-        maxBytes: maxBatchBytes,
-        untilMs: _until?.millisecondsSinceEpoch,
+        maxBytes: budget,
+        untilMs: untilMs,
       );
       if (batch.isEmpty && !batch.gap) {
         if (batch.next != cursor) await _store.saveCursor(batch.next);
@@ -260,12 +287,16 @@ class LogUploader {
       final lines = [if (batch.gap) _gapLine(), ...batch.lines];
       switch (await _send(meta, lines)) {
         case _Sent():
-          break;
+          budget = maxBatchBytes;
         case _Rejected():
           debugPrint('[LogUploader] The relay rejected a batch; skipping it');
+          budget = maxBatchBytes;
         case _Wait(:final until):
           _notBefore = until;
           return;
+        case _Shrink():
+          budget = _shrinkBudget(budget);
+          continue;
       }
       cursor = batch.next;
       await _store.saveCursor(cursor);
@@ -284,20 +315,20 @@ class LogUploader {
     final response = await _post(meta, lines);
     final status = response.statusCode;
     if (status >= 200 && status < 300) return _Sent(_codeOf(response));
-    if (status == 413 && lines.length > 1) {
-      final middle = lines.length ~/ 2;
-      final first = await _send(meta, lines.sublist(0, middle));
-      if (first is! _Sent) return first;
-      final followUp = first.code == null
-          ? meta
-          : {...meta, 'report': first.code, 'note': null};
-      final second = await _send(followUp, lines.sublist(middle));
-      return second is _Sent ? _Sent(first.code ?? second.code) : second;
-    }
+    // A batch that is still too large after this is a smaller-budget retry
+    // from the same cursor, never a split-and-send: the cursor only moves
+    // past what one whole request got a full answer for, so a partial
+    // success can never be silently resent as a duplicate.
+    if (status == 413 && lines.length > 1) return const _Shrink();
     if (status == 400 || status == 413) return const _Rejected();
     if (status == 429) return _Wait(_now().add(_retryAfter(response)));
     if (status == 404) return _Wait(_now().add(missingEndpointBackoff));
     throw LogUploadException('The relay answered HTTP $status');
+  }
+
+  static int _shrinkBudget(int budget) {
+    final half = budget ~/ 2;
+    return half < _minBatchBytes ? _minBatchBytes : half;
   }
 
   Future<http.Response> _post(Map<String, Object?> meta, List<String> lines) {
