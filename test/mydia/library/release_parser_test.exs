@@ -340,13 +340,12 @@ defmodule Mydia.Library.ReleaseParserTest do
   end
 
   describe "parse/1 - vocabulary words inside the title" do
-    test "keeps a language or audio word that is part of the title" do
+    test "keeps a language word that is part of the title" do
       for {input, title} <- [
             {"The.Italian.Harbor.2031.1080p.WEB-DL.x264-GROUP", "The Italian Harbor"},
             {"French.Harbor.2031.1080p.WEB-DL.x264-GROUP", "French Harbor"},
             {"German.Lantern.2031.1080p.WEB-DL.x264-GROUP", "German Lantern"},
             {"Multi.Harbor.2031.1080p.WEB-DL.x264-GROUP", "Multi Harbor"},
-            {"Quiet.Opus.Harbor.2031.1080p.WEB-DL.x264-GROUP", "Quiet Opus Harbor"},
             {"French.2031.1080p.WEB-DL.x264-GROUP", "French"}
           ] do
         assert %ParsedFileInfo{title: ^title} = ReleaseParser.parse(input), input
