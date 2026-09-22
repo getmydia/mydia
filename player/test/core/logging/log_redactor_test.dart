@@ -19,6 +19,10 @@ void main() {
           'login failed: {"username":"sam","password: [REDACTED]"}',
       'api_key=live_4f9a': 'api_key: [REDACTED]',
       'jwt eyJhbGciOi.eyJzdWIi.c2lnbmF0dXJl here': 'jwt [REDACTED] here',
+      'login failed: {"username":"sam","password":"hunter 2 words"}':
+          'login failed: {"username":"sam","password: [REDACTED]"}',
+      "retry with {secret: 'two words here'}": 'retry with {secret: [REDACTED]',
+      'headers: {"token": "abc def"}': 'headers: {"token": "[REDACTED]"}',
     };
 
     for (final MapEntry(key: input, value: expected) in cases.entries) {

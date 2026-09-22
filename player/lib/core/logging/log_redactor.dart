@@ -5,9 +5,30 @@
 /// the Diagnostics screen tells the user they are shared. The crash
 /// sanitizer's 32+ character token rule in particular would erase every node
 /// ID and hash.
+///
+/// A quoted credential value is redacted whole, however many words it has:
+/// the closing quote, not whitespace, ends the match, so `"password":
+/// "hunter 2 words"` loses every word of it. An unquoted value
+/// (`password: hunter 2 words`, no quotes anywhere) is still cut at the
+/// first space. That is deliberate, not an oversight: without a quote
+/// marking where the value ends, the only way to redact the secret without
+/// also eating the rest of the line is to stop at whitespace, and the rest
+/// of the line is the context a log line exists to keep.
 library;
 
 import 'secret_patterns.dart';
+
+// A credential key whose value is quoted: the quotes, not whitespace, end
+// the value, so a secret with spaces in it cannot survive in fragments. Runs
+// before every other rule, including the shared patterns, so the value is
+// already gone by the time they see the line. The replacement keeps the
+// value's own quote character (rather than a bare marker) so the shared
+// patterns that still run afterward see the same shape a short, unquoted
+// match would have left them, instead of tripping over a stray bracket.
+final _quotedCredential = RegExp(
+  r'''(["']?(?:password|passwd|secret|api_key|apikey|token)["']?\s*[:=]\s*)("[^"]*"|'[^']*')''',
+  caseSensitive: false,
+);
 
 // user:pass@ in a URL's authority.
 final _userinfo =
@@ -26,7 +47,11 @@ final _authorization = RegExp(
 );
 
 String redactLogMessage(String input) {
-  var out = input.replaceAllMapped(_userinfo, (m) => '${m[1]}[REDACTED]@');
+  var out = input.replaceAllMapped(
+    _quotedCredential,
+    (m) => '${m[1]}${m[2]![0]}[REDACTED]${m[2]![0]}',
+  );
+  out = out.replaceAllMapped(_userinfo, (m) => '${m[1]}[REDACTED]@');
   out = out.replaceAllMapped(_credentialParam, (m) => '${m[1]}[REDACTED]');
   out = out.replaceAllMapped(_authorization, (m) => '${m[1]}[REDACTED]');
   out = out.replaceAll(bearerPattern, 'Bearer [REDACTED]');
