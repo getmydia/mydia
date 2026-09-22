@@ -5,8 +5,10 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
   import Phoenix.LiveView, only: [put_flash: 3, push_navigate: 2, start_async: 3, connected?: 1]
 
   alias Mydia.Media
+  alias Mydia.Media.DiskRemoval
   alias Mydia.Media.SeasonOrder
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.MediaLive.DiskRemovalFlash
   alias MydiaWeb.MediaLive.Show.Loaders
 
   import MydiaWeb.MediaLive.Show.Helpers, only: [media_type_path: 1]
@@ -51,27 +53,12 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
       )
 
       case Media.delete_media_item(media_item, delete_files: delete_files) do
-        {:ok, _item, 0} ->
-          message =
-            if delete_files do
-              "#{media_item.title} deleted successfully (including files)"
-            else
-              "#{media_item.title} removed from library (files preserved)"
-            end
+        {:ok, _item, %DiskRemoval{} = removal} ->
+          {kind, message} = DiskRemovalFlash.for_item(media_item.title, delete_files, removal)
 
           {:noreply,
            socket
-           |> put_flash(:info, message)
-           |> push_navigate(to: media_type_path(media_item.type))}
-
-        {:ok, _item, error_count} ->
-          {:noreply,
-           socket
-           |> put_flash(
-             :error,
-             "#{media_item.title} removed, but #{error_count} #{pluralize_files(error_count)} " <>
-               "could not be deleted from disk. Check permissions and remove them manually."
-           )
+           |> put_flash(kind, message)
            |> push_navigate(to: media_type_path(media_item.type))}
 
         {:error, _changeset} ->
@@ -84,9 +71,6 @@ defmodule MydiaWeb.MediaLive.Show.MediaItemEvents do
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
-
-  defp pluralize_files(1), do: "file"
-  defp pluralize_files(_), do: "files"
 
   # Season ordering
 

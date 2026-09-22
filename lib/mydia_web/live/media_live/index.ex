@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Accounts
   alias Mydia.Media
   alias Mydia.Media.AvailabilityStatus
+  alias Mydia.Media.DiskRemoval
   alias Mydia.Media.LibraryListing
   alias Mydia.Media.LibraryRow
   alias Mydia.Settings
@@ -13,6 +14,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Search
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
+  alias MydiaWeb.MediaLive.DiskRemovalFlash
 
   import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.GridDensityComponents
@@ -453,26 +455,12 @@ defmodule MydiaWeb.MediaLive.Index do
     delete_files = socket.assigns.delete_files
 
     case Media.delete_media_items(selected_ids, delete_files: delete_files) do
-      {:ok, count, error_count} ->
-        message =
-          cond do
-            error_count > 0 ->
-              "#{count} #{pluralize_items(count)} deleted, but #{error_count} " <>
-                "#{pluralize_files(error_count)} could not be removed from disk. " <>
-                "Check permissions and remove them manually."
-
-            delete_files ->
-              "#{count} #{pluralize_items(count)} deleted successfully (including files)"
-
-            true ->
-              "#{count} #{pluralize_items(count)} removed from library (files preserved)"
-          end
-
-        flash_kind = if error_count > 0, do: :error, else: :info
+      {:ok, count, %DiskRemoval{} = removal} ->
+        {kind, message} = DiskRemovalFlash.for_items(count, delete_files, removal)
 
         {:noreply,
          socket
-         |> put_flash(flash_kind, message)
+         |> put_flash(kind, message)
          |> assign(:selection_mode, false)
          |> assign(:selected_ids, MapSet.new())
          |> assign(:show_delete_modal, false)
@@ -922,9 +910,6 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp pluralize_items(1), do: "item"
   defp pluralize_items(_), do: "items"
-
-  defp pluralize_files(1), do: "file"
-  defp pluralize_files(_), do: "files"
 
   defp auto_search_flash(0, 0), do: "Nothing to search"
 
