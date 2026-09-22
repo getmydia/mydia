@@ -249,6 +249,26 @@ defmodule Mydia.Downloads.Blacklists do
 
   def active_by_info_hash(_info_hash), do: nil
 
+  @doc """
+  Copies `ban` onto a search result's own `(indexer, guid)` key, keeping the
+  ban's failure reason and expiry, so the next search filters that result
+  before ranking.
+
+  Used when a result's torrent turns out to be banned only once its link
+  resolves at grab time. Best effort: the caller refuses the grab whatever
+  this returns.
+  """
+  @spec alias_ban(ReleaseBlacklist.t(), map(), String.t()) ::
+          {:ok, ReleaseBlacklist.t()} | {:error, term()}
+  def alias_ban(%ReleaseBlacklist{} = ban, result, info_hash) do
+    add(result.indexer, release_guid(result), result.title, ban.failure_reason,
+      expires_at: ban.expires_at,
+      info_hash: info_hash
+    )
+  rescue
+    error -> {:error, error}
+  end
+
   # A forever ban (nil expiry) outranks every dated one: atoms sort after
   # integers in Erlang term order.
   defp expiry_rank(%ReleaseBlacklist{expires_at: nil}), do: :forever

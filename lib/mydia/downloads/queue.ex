@@ -11,6 +11,7 @@ defmodule Mydia.Downloads.Queue do
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
   alias Mydia.Downloads.Priority
+  alias Mydia.Downloads.ReleaseBlacklist
   alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Downloads.Structs.ExternalTorrent
@@ -1026,7 +1027,8 @@ defmodule Mydia.Downloads.Queue do
     # First, prepare the torrent/nzb input (download file if needed)
     # Pass the indexer name for authentication
     with {:ok, torrent_input_result} <-
-           prepare_torrent_input(search_result.download_url, search_result.indexer) do
+           prepare_torrent_input(search_result.download_url, search_result.indexer),
+         :ok <- refuse_banned_info_hash(torrent_input_result, search_result, opts) do
       # Extract detected type from the downloaded content
       detected_type =
         case torrent_input_result do
@@ -1383,6 +1385,52 @@ defmodule Mydia.Downloads.Queue do
       incomplete_grace_minutes: Map.get(config, :incomplete_grace_minutes)
     }
   end
+
+  # Automatic grabs only: the search jobs pass `enforce_blacklist: true`, and a
+  # release the operator picks by hand is an explicit override. An indexer that
+  # links to a landing page reveals its torrent only once the link resolves, so
+  # search time cannot match it by infohash. The ban it hits is copied onto the
+  # result's own key, so the next search filters it before ranking and picks
+  # another release.
+  defp refuse_banned_info_hash(torrent_input, search_result, opts) do
+    with true <- Keyword.get(opts, :enforce_blacklist, false),
+         hash when is_binary(hash) <- prepared_info_hash(torrent_input),
+         %ReleaseBlacklist{} = ban <- Blacklists.active_by_info_hash(hash) do
+      Logger.info("Blocked grab: infohash is blacklisted",
+        indexer: search_result.indexer,
+        title: search_result.title,
+        info_hash: hash,
+        banned_indexer: ban.indexer,
+        failure_reason: ban.failure_reason
+      )
+
+      case Blacklists.alias_ban(ban, search_result, hash) do
+        {:ok, _row} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("Could not record the ban under this indexer",
+            indexer: search_result.indexer,
+            reason: inspect(reason)
+          )
+      end
+
+      {:error, :blacklisted}
+    else
+      _not_banned -> :ok
+    end
+  end
+
+  defp prepared_info_hash({:magnet, magnet}), do: Blacklists.info_hash_from_url(magnet)
+
+  defp prepared_info_hash({:file, body, :torrent}) do
+    case TorrentHash.extract({:file, body}, case: :lower) do
+      {:ok, hash} -> hash
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp prepared_info_hash(_torrent_input), do: nil
 
   defp prepare_torrent_input(url, indexer_name) do
     result =

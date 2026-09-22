@@ -1539,7 +1539,11 @@ defmodule Mydia.Jobs.TVShowSearch do
     with {:ok, download} <-
            Downloads.initiate_download(
              result,
-             [media_item_id: episode.media_item_id, episode_id: episode.id] ++ grab_opts
+             [
+               media_item_id: episode.media_item_id,
+               episode_id: episode.id,
+               enforce_blacklist: true
+             ] ++ grab_opts
            ),
          {:ok, _updated} <- after_grab.(download, result) do
       Logger.info("Successfully initiated download for episode",
@@ -1591,7 +1595,7 @@ defmodule Mydia.Jobs.TVShowSearch do
     with {:ok, download} <-
            Downloads.initiate_download(
              result_with_metadata,
-             [media_item_id: media_item.id] ++ grab_opts
+             [media_item_id: media_item.id, enforce_blacklist: true] ++ grab_opts
            ),
          {:ok, _updated} <- after_grab.(download, result) do
       Logger.info("Successfully initiated season pack download",

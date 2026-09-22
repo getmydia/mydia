@@ -10,6 +10,7 @@ defmodule Mydia.Downloads.QueueTest do
   use Oban.Testing, repo: Mydia.Repo
 
   alias Mydia.Downloads.Queue
+  alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.ReleaseBlacklist
@@ -807,6 +808,88 @@ defmodule Mydia.Downloads.QueueTest do
       # survive enrichment untouched.
       assert TorrentHash.extract_from_file(body) ==
                TorrentHash.extract_from_file(@trackerless_torrent)
+    end
+  end
+
+  describe "select_and_add_to_client/2 with enforce_blacklist" do
+    @describetag :tmp_dir
+
+    setup %{tmp_dir: tmp_dir} do
+      Mydia.Downloads.register_clients()
+
+      watch = Path.join(tmp_dir, "watch")
+      completed = Path.join(tmp_dir, "completed")
+      File.mkdir_p!(watch)
+      File.mkdir_p!(completed)
+
+      download_client_config_fixture(%{
+        type: "blackhole",
+        connection_settings: %{"watch_folder" => watch, "completed_folder" => completed}
+      })
+
+      bypass = Bypass.open()
+
+      Bypass.stub(bypass, "HEAD", "/download", &Plug.Conn.resp(&1, 200, ""))
+
+      Bypass.stub(bypass, "GET", "/download", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/x-bittorrent")
+        |> Plug.Conn.resp(200, @trackerless_torrent)
+      end)
+
+      {:ok, hash} = TorrentHash.extract({:file, @trackerless_torrent}, case: :lower)
+
+      search_result = %SearchResult{
+        title: "Fictional.Lantern.Coast.S01E02.1080p.WEB-DL",
+        indexer: "LandingPageIndexer",
+        guid: "landing-guid-1",
+        download_url: "http://localhost:#{bypass.port}/download",
+        size: 835_673_131,
+        seeders: 12,
+        leechers: 1,
+        download_protocol: :torrent
+      }
+
+      %{watch: watch, hash: hash, search_result: search_result}
+    end
+
+    test "refuses a torrent banned under another indexer and bans it under this one", ctx do
+      expires_at = DateTime.add(DateTime.utc_now(), 10, :day)
+
+      {:ok, _} =
+        Blacklists.add("bitmagnet", ctx.hash, "Fictional Lantern Coast", "cancelled_stalled",
+          expires_at: expires_at,
+          info_hash: ctx.hash
+        )
+
+      assert {:error, :blacklisted} =
+               Queue.select_and_add_to_client(ctx.search_result, enforce_blacklist: true)
+
+      assert File.ls!(ctx.watch) == []
+
+      alias_row =
+        Repo.get_by!(ReleaseBlacklist, indexer: "landingpageindexer", guid: "landing-guid-1")
+
+      assert alias_row.failure_reason == "cancelled_stalled"
+      assert alias_row.info_hash == ctx.hash
+      assert DateTime.compare(alias_row.expires_at, expires_at) == :eq
+    end
+
+    test "a grab without enforce_blacklist still goes through", ctx do
+      {:ok, _} =
+        Blacklists.add("bitmagnet", ctx.hash, "Fictional Lantern Coast", "rejected_by_user",
+          info_hash: ctx.hash
+        )
+
+      assert {:ok, _config, _client_id, :torrent} =
+               Queue.select_and_add_to_client(ctx.search_result, [])
+
+      assert [_written] = File.ls!(ctx.watch)
+    end
+
+    test "an unbanned torrent goes through with enforce_blacklist", ctx do
+      assert {:ok, _config, _client_id, :torrent} =
+               Queue.select_and_add_to_client(ctx.search_result, enforce_blacklist: true)
     end
   end
 end

@@ -313,6 +313,72 @@ defmodule Mydia.Jobs.TVShowSearchTest do
     end
   end
 
+  describe "infohash bans at grab time" do
+    @banned_torrent "d7:comment28:dynamic metainfo from client" <>
+                      "10:created by10:go.torrent13:creation datei1786573608e" <>
+                      "4:infod5:filesld6:lengthi835673131e4:pathl8:test.mkveee" <>
+                      "4:name8:test.mkv12:piece lengthi16384e6:pieces0:ee"
+
+    test "refuses an episode release whose resolved torrent is banned", %{bypass: bypass} do
+      Bypass.stub(bypass, "HEAD", "/fixture.torrent", &Plug.Conn.resp(&1, 200, ""))
+
+      Bypass.stub(bypass, "GET", "/fixture.torrent", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/x-bittorrent")
+        |> Plug.Conn.resp(200, @banned_torrent)
+      end)
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          Map.merge(
+            IndexerMock.tv_episode_result(%{
+              title: "Fictional Tidewater",
+              season: 1,
+              episode: 1,
+              seeders: 100
+            }),
+            %{
+              magnet_url: nil,
+              download_url: "http://localhost:#{bypass.port}/fixture.torrent",
+              guid: "tv-landing-page-guid"
+            }
+          )
+        ]
+      )
+
+      {:ok, hash} =
+        Mydia.Downloads.TorrentHash.extract({:file, @banned_torrent}, case: :lower)
+
+      {:ok, _} =
+        Mydia.Downloads.Blacklists.add(
+          "bitmagnet",
+          hash,
+          "Fictional Tidewater S01E01",
+          "cancelled_stalled",
+          info_hash: hash
+        )
+
+      tv_show = media_item_fixture(%{type: "tv_show", title: "Fictional Tidewater"})
+
+      episode =
+        episode_fixture(%{
+          media_item_id: tv_show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: ~D[2020-01-10]
+        })
+
+      perform_job(TVShowSearch, %{"mode" => "specific", "episode_id" => episode.id})
+
+      assert Mydia.Downloads.list_downloads() == []
+
+      assert Mydia.Repo.get_by(Mydia.Downloads.ReleaseBlacklist,
+               indexer: "test indexer",
+               guid: "tv-landing-page-guid"
+             )
+    end
+  end
+
   describe "perform/1 - season mode" do
     test "returns error when media item does not exist" do
       fake_id = Ecto.UUID.generate()

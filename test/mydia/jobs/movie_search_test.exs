@@ -428,6 +428,65 @@ defmodule Mydia.Jobs.MovieSearchTest do
     end
   end
 
+  describe "infohash bans at grab time" do
+    @banned_torrent "d7:comment28:dynamic metainfo from client" <>
+                      "10:created by10:go.torrent13:creation datei1786573608e" <>
+                      "4:infod5:filesld6:lengthi835673131e4:pathl8:test.mkveee" <>
+                      "4:name8:test.mkv12:piece lengthi16384e6:pieces0:ee"
+
+    test "refuses a release whose resolved torrent is banned under another indexer", %{
+      bypass: bypass
+    } do
+      Bypass.stub(bypass, "HEAD", "/fixture.torrent", &Plug.Conn.resp(&1, 200, ""))
+
+      Bypass.stub(bypass, "GET", "/fixture.torrent", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/x-bittorrent")
+        |> Plug.Conn.resp(200, @banned_torrent)
+      end)
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          Map.merge(
+            IndexerMock.movie_result(%{
+              title: "Fictional Harbor Lights",
+              year: 2021,
+              seeders: 100
+            }),
+            %{
+              magnet_url: nil,
+              download_url: "http://localhost:#{bypass.port}/fixture.torrent",
+              guid: "landing-page-guid"
+            }
+          )
+        ]
+      )
+
+      {:ok, hash} =
+        Mydia.Downloads.TorrentHash.extract({:file, @banned_torrent}, case: :lower)
+
+      {:ok, _} =
+        Mydia.Downloads.Blacklists.add(
+          "bitmagnet",
+          hash,
+          "Fictional Harbor Lights",
+          "cancelled_stalled",
+          info_hash: hash
+        )
+
+      movie = media_item_fixture(%{type: "movie", title: "Fictional Harbor Lights", year: 2021})
+
+      perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      assert Mydia.Downloads.list_downloads() == []
+
+      assert Repo.get_by(Mydia.Downloads.ReleaseBlacklist,
+               indexer: "test indexer",
+               guid: "landing-page-guid"
+             )
+    end
+  end
+
   describe "default quality profile fallback" do
     test "an unstamped movie ranks with the configured default profile", %{bypass: bypass} do
       default =

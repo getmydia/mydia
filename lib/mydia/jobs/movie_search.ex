@@ -698,7 +698,10 @@ defmodule Mydia.Jobs.MovieSearch do
     after_grab = Keyword.get(opts, :after_grab, fn download, _result -> {:ok, download} end)
 
     with {:ok, download} <-
-           Downloads.initiate_download(result, [media_item_id: movie.id] ++ grab_opts),
+           Downloads.initiate_download(
+             result,
+             [media_item_id: movie.id, enforce_blacklist: true] ++ grab_opts
+           ),
          {:ok, _updated} <- after_grab.(download, result) do
       Logger.info("Successfully initiated download for movie",
         media_item_id: movie.id,
