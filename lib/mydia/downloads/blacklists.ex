@@ -275,8 +275,9 @@ defmodule Mydia.Downloads.Blacklists do
   defp expiry_rank(%ReleaseBlacklist{expires_at: at}), do: DateTime.to_unix(at, :microsecond)
 
   @doc """
-  Filters out results whose `(indexer, guid)` is currently blacklisted, in
-  one DB roundtrip regardless of result-list size.
+  Filters out results that are currently blacklisted, matched by
+  `(indexer, guid)` key or by magnet infohash, in at most two queries
+  regardless of result-list size.
 
   Each search result is expected to expose `:indexer`, and `:guid` or the
   `:title` and `:size` that `release_guid/1` falls back to. Results with no

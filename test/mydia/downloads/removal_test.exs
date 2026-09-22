@@ -291,6 +291,14 @@ defmodule Mydia.Downloads.RemovalTest do
 
       refute Blacklists.blacklisted?("fictional-indexer", "fictional-stalled-guid")
     end
+
+    test "a stalled download with no blacklist key can be cancelled and writes no ban" do
+      download = stalled_download(%{indexer: nil, metadata: %{}})
+
+      assert {:ok, %Download{}} = Downloads.request_removal(download, "cancel")
+
+      assert Repo.aggregate(ReleaseBlacklist, :count) == 0
+    end
   end
 
   describe "request_clear_all_completed/1" do

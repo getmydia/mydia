@@ -206,8 +206,20 @@ defmodule Mydia.Downloads.Queue do
   end
 
   @doc """
-  Blacklists the release when `download` is stalled right now (see
-  `StallDetector.soft_stalled?/1`), and does nothing otherwise.
+  Whether cancelling `download` now blacklists its release: it is stalled
+  right now (see `StallDetector.soft_stalled?/1`) and carries the
+  `(indexer, guid)` key a ban is recorded under. A download with no key, such
+  as an adopted torrent or a manual grab, is cancelled without one.
+  """
+  @spec cancel_bans_release?(Download.t()) :: boolean()
+  def cancel_bans_release?(%Download{} = download) do
+    StallDetector.soft_stalled?(download) and
+      match?({:ok, _indexer, _guid}, Blacklists.extract_key(download))
+  end
+
+  @doc """
+  Blacklists the release when `cancel_bans_release?/1` returns true, and does
+  nothing otherwise.
 
   A cancel is a plain stop, except on a stalled download: the operator has
   looked at a torrent that is not moving and given up on it, the same judgement
@@ -216,7 +228,7 @@ defmodule Mydia.Downloads.Queue do
   """
   @spec blacklist_if_stalled(Download.t()) :: :ok
   def blacklist_if_stalled(%Download{} = download) do
-    if StallDetector.soft_stalled?(download) do
+    if cancel_bans_release?(download) do
       blacklist_release(download, failure_reason: "cancelled_stalled")
     else
       :ok

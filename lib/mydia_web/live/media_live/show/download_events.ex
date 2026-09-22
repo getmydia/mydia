@@ -6,7 +6,6 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
 
   alias Mydia.Downloads
   alias Mydia.Downloads.Blacklists
-  alias Mydia.Downloads.StallDetector
   alias Mydia.Indexers.SearchResult
   alias MydiaWeb.Live.Authorization
 
@@ -90,9 +89,9 @@ defmodule MydiaWeb.MediaLive.Show.DownloadEvents do
   end
 
   # A cancel on a stalled download also blacklists the release (see
-  # Mydia.Downloads.Queue.blacklist_if_stalled/1), so the operator is told.
+  # Mydia.Downloads.Queue.cancel_bans_release?/1), so the operator is told.
   defp cancel_flash(download) do
-    if StallDetector.soft_stalled?(download) do
+    if Downloads.cancel_bans_release?(download) do
       "Cancelling. This release was stalled, so Mydia won't grab it again for " <>
         "#{Blacklists.default_ttl_days()} days."
     else

@@ -1164,9 +1164,9 @@ defmodule MydiaWeb.DownloadsLive.Index do
   end
 
   # A cancel on a stalled download also blacklists the release (see
-  # Mydia.Downloads.Queue.blacklist_if_stalled/1), so the operator is told.
+  # Mydia.Downloads.Queue.cancel_bans_release?/1), so the operator is told.
   defp removal_flash(socket, "cancel", download) do
-    if StallDetector.soft_stalled?(download) do
+    if Downloads.cancel_bans_release?(download) do
       put_flash(
         socket,
         :info,

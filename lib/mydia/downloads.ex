@@ -475,6 +475,14 @@ defmodule Mydia.Downloads do
   defdelegate request_reject(download, opts \\ []), to: Mydia.Downloads.Removal
 
   @doc """
+  Whether cancelling `download` now blacklists its release.
+
+  See `Mydia.Downloads.Queue.cancel_bans_release?/1`.
+  """
+  @spec cancel_bans_release?(Download.t()) :: boolean()
+  defdelegate cancel_bans_release?(download), to: Mydia.Downloads.Queue
+
+  @doc """
   Requests a `"clear"` removal for every imported download not already pending.
   """
   @spec request_clear_all_completed(keyword()) :: {:ok, non_neg_integer()}

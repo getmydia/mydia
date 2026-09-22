@@ -892,4 +892,39 @@ defmodule Mydia.Downloads.QueueTest do
                Queue.select_and_add_to_client(ctx.search_result, enforce_blacklist: true)
     end
   end
+
+  describe "cancel_bans_release?/1" do
+    test "a stalled download with a blacklist key returns true" do
+      download =
+        download_fixture(%{
+          indexer: "1337x",
+          metadata: %{"guid" => "cancel-bans-release-guid"},
+          stalled_since: DateTime.utc_now()
+        })
+
+      assert Queue.cancel_bans_release?(download)
+    end
+
+    test "a stalled download with no blacklist key returns false" do
+      download =
+        download_fixture(%{
+          indexer: nil,
+          metadata: %{},
+          stalled_since: DateTime.utc_now()
+        })
+
+      refute Queue.cancel_bans_release?(download)
+    end
+
+    test "a healthy download with a blacklist key returns false" do
+      download =
+        download_fixture(%{
+          indexer: "1337x",
+          metadata: %{"guid" => "cancel-bans-release-guid"},
+          stalled_since: nil
+        })
+
+      refute Queue.cancel_bans_release?(download)
+    end
+  end
 end

@@ -54,4 +54,26 @@ defmodule MydiaWeb.MediaLive.Show.DownloadCancelTest do
              "media-page-stalled-guid"
            )
   end
+
+  test "cancelling a stalled download with no blacklist key does not promise a ban", %{
+    conn: conn
+  } do
+    movie = media_item_fixture(%{type: "movie", title: "Fictional Adopted Lantern", year: 2023})
+
+    download =
+      download_fixture(%{
+        media_item_id: movie.id,
+        indexer: nil,
+        metadata: %{},
+        stalled_since: DateTime.add(DateTime.utc_now(), -30 * 60, :second)
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+
+    render_click(view, "show_download_cancel_confirm", %{"download-id" => download.id})
+    render_click(view, "cancel_download", %{})
+
+    assert has_element?(view, "#flash-info", "Cancelling the download")
+    refute has_element?(view, "#flash-info", "grab it again")
+  end
 end
