@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import type { Env } from "../env";
 import { buildKey, ttlSecondsFor } from "../cache/key";
 import { cacheUrl } from "../cache/store";
+import { throttleUpstream } from "../obs/ratelimit";
 import { proxyJson } from "./forward";
 
 // Source of truth: metadata-relay/lib/metadata_relay/music/client.ex and
@@ -69,7 +70,7 @@ function registerMusicSearch(app: Hono<{ Bindings: Env }>): void {
     const upstreamQuery = new URLSearchParams({ query, fmt: "json" });
     const upstream = `${MUSICBRAINZ_BASE}/${encodeURIComponent(type)}?${upstreamQuery.toString()}`;
 
-    return proxyJson(c.env, upstream, cacheKey, {
+    return proxyJson(c, upstream, cacheKey, {
       headers: MUSICBRAINZ_HEADERS,
     });
   });
@@ -121,7 +122,7 @@ function registerMbDetailRoutes(app: Hono<{ Bindings: Env }>): void {
       });
       const upstream = `${MUSICBRAINZ_BASE}/${route.resource}/${encodeURIComponent(id)}?${upstreamQuery.toString()}`;
 
-      return proxyJson(c.env, upstream, cacheKey, {
+      return proxyJson(c, upstream, cacheKey, {
         headers: MUSICBRAINZ_HEADERS,
       });
     });
@@ -164,6 +165,9 @@ function registerCoverArt(app: Hono<{ Bindings: Env }>): void {
       res.headers.set("x-relay-cache", "HIT");
       return res;
     }
+
+    const throttled = await throttleUpstream(c, "PROXY_LIMITER");
+    if (throttled) return throttled;
 
     let upstream: Response;
     try {
@@ -229,7 +233,7 @@ function registerOpenLibraryIsbn(app: Hono<{ Bindings: Env }>): void {
     });
     const upstream = `${OPENLIBRARY_BASE}/api/books?${upstreamQuery.toString()}`;
 
-    return proxyJson(c.env, upstream, cacheKey, {
+    return proxyJson(c, upstream, cacheKey, {
       headers: OPENLIBRARY_HEADERS,
     });
   });
@@ -243,7 +247,7 @@ function registerOpenLibrarySearch(app: Hono<{ Bindings: Env }>): void {
     const cacheKey = cacheKeyFor(url);
     const upstream = `${OPENLIBRARY_BASE}/search.json?${url.searchParams.toString()}`;
 
-    return proxyJson(c.env, upstream, cacheKey, {
+    return proxyJson(c, upstream, cacheKey, {
       headers: OPENLIBRARY_HEADERS,
     });
   });
@@ -259,7 +263,7 @@ function registerOpenLibraryWorks(app: Hono<{ Bindings: Env }>): void {
     const cacheKey = cacheKeyFor(url);
     const upstream = `${OPENLIBRARY_BASE}/works/${encodeURIComponent(id)}.json`;
 
-    return proxyJson(c.env, upstream, cacheKey, {
+    return proxyJson(c, upstream, cacheKey, {
       headers: OPENLIBRARY_HEADERS,
     });
   });
@@ -272,7 +276,7 @@ function registerOpenLibraryAuthors(app: Hono<{ Bindings: Env }>): void {
     const cacheKey = cacheKeyFor(url);
     const upstream = `${OPENLIBRARY_BASE}/authors/${encodeURIComponent(id)}.json`;
 
-    return proxyJson(c.env, upstream, cacheKey, {
+    return proxyJson(c, upstream, cacheKey, {
       headers: OPENLIBRARY_HEADERS,
     });
   });

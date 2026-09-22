@@ -61,19 +61,16 @@ Things an operator who knew the Elixir relay would not expect:
   tag namespaces are deliberately distinct — a Worker fix must not require
   cutting an Elixir release, and vice versa. `git log` on `relay-worker/` is
   the staging release history; `git tag -l 'relay-worker-v*'` is production's.
-- **A bulk metadata refresh can now consume rate-limit budget it never used
-  to.** `src/obs/ratelimit.ts`'s proxy limiter used to check the budget
-  *after* running the request, specifically so it could look at
-  `x-relay-cache` and skip charging a cache hit. That shape ran the real
-  upstream `fetch()` before the check could ever stop it — a final review
-  found a throttled request still made its real TMDB/TVDB/SubDL/MusicBrainz/
-  OpenLibrary call every time, which defeats the limiter's actual purpose
-  (protecting upstream quota, worst for SubDL's shared 2000/day key). The fix
-  moves the check ahead of the request, which means it now also charges cache
-  hits: a "refresh every show's metadata" pass that used to be served
-  entirely from cache, for free, can now spend rate-limit budget on hits it
-  didn't touch before. Accepted deliberately as the stricter, fail-closed
-  direction — see the comment above `rateLimitMiddleware` in that file.
+- **The proxy rate limit is on, per client IP, and counts only upstream
+  calls.** The Elixir relay ships its `ProxyRateLimit` plug disabled. Here
+  `src/obs/ratelimit.ts` charges a budget after a cache miss and before the
+  upstream `fetch()`, so a cache hit is free and a throttled request never
+  reaches the provider. Metadata (TMDB, TVDB, MusicBrainz, Cover Art Archive,
+  OpenLibrary) gets 5000 calls/min; SubDL gets its own 300/min, because its
+  key has one 2000/day allowance for every install. An earlier revision
+  charged every request, hits included, at 300/min; shadowing production
+  showed it would have refused 32% of TVDB traffic, mostly library scans
+  running at 900-2,500 requests/min.
 
 ## Bindings
 
@@ -102,7 +99,8 @@ route itself regressed.
 | `FEEDBACK_FROM` / `FEEDBACK_TO` | var | `wrangler.jsonc` | Sender/recipient for feedback notification emails |
 | `CACHE_KV` | KV namespace | `wrangler kv namespace create CACHE_KV` | TVDB JWT cache and the SubDL search response cache. Everything else caches in the Cache API only |
 | `DB` | D1 database | `wrangler d1 create mydia-relay` | Pairing claims, crash reports/occurrences, feedback submissions, the two rate-limit bucket tables |
-| `PROXY_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Shared per-edge-IP budget across the metadata/music/openlibrary/subtitle proxy routes |
+| `PROXY_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Per-client-IP budget of upstream calls (cache misses only) for the TMDB/TVDB/music/openlibrary routes, 5000/min |
+| `SUBTITLE_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | The same for SubDL search and download, 300/min, kept apart for SubDL's shared 2000/day key |
 | `PAIRING_CREATE_LIMITER` / `PAIRING_READ_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Remote-access pairing claim creation/lookup |
 | `CRASH_INGEST_LIMITER` / `FEEDBACK_INGEST_LIMITER` | Rate Limiting binding | `wrangler.jsonc` (`ratelimits`) | Atomic, D1-free burst guards in front of crash ingest's and feedback ingest's D1-backed hourly budgets — see those files' comments for why the D1 accounting alone isn't safe under concurrency |
 | Cron Trigger `0 * * * *` | scheduled | `wrangler.jsonc` (`triggers.crons`) | Hourly sweep (`src/obs/sweep.ts`): evicts stale `feedback_rate_limits` and `ingest_buckets` rows and expired `pairing_claims` |
@@ -127,8 +125,8 @@ there is nothing to create for them in the dashboard, unlike `CACHE_KV` and
 "a string containing a positive integer that uniquely defines this rate
 limiting namespace within your Cloudflare account", and two bindings sharing
 an id — "even across different Workers on the same account" — share the same
-counters for a given key. Production therefore uses `1001`-`1005` and staging
-uses `2001`-`2005`: reusing production's ids would let a staging smoke test
+counters for a given key. Production therefore uses `1001`-`1006` and staging
+uses `2001`-`2006`: reusing production's ids would let a staging smoke test
 spend production's budget.
 
 **Requires wrangler >= 4.36.0.** The `ratelimits` config key was silently

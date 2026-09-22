@@ -1,6 +1,8 @@
+import type { Context } from "hono";
 import type { Env } from "../env";
 import { cacheGet, cachePut } from "../cache/store";
 import { ttlSecondsForResponse } from "../cache/key";
+import { throttleUpstream } from "../obs/ratelimit";
 
 // No allowlist, deliberately. TMDB handlers forward caller params straight
 // through, which is the only reason append_to_response works for credits,
@@ -39,12 +41,19 @@ export function pathSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
+// Fetch options, or a function that builds them only once the request is
+// going upstream. TVDB passes a function, so a cache hit or a throttled
+// request never waits on (or fails with) a TVDB login. The function may
+// return a Response instead, which is sent as is.
+export type UpstreamInit = RequestInit | (() => Promise<RequestInit | Response>);
+
 export async function proxyJson(
-  env: Env,
+  c: Context<{ Bindings: Env }>,
   upstreamUrl: string,
   cacheKey: string,
-  init?: RequestInit,
+  init?: UpstreamInit,
 ): Promise<Response> {
+  const env = c.env;
   const hit = await cacheGet(env, cacheKey);
   if (hit) {
     // A Response read back from the Cache API has immutable headers, so
@@ -56,7 +65,14 @@ export async function proxyJson(
     return res;
   }
 
-  const upstream = await fetch(upstreamUrl, init);
+  // Only a miss spends upstream quota, so only a miss is charged.
+  const throttled = await throttleUpstream(c, "PROXY_LIMITER");
+  if (throttled) return throttled;
+
+  const options = typeof init === "function" ? await init() : init;
+  if (options instanceof Response) return options;
+
+  const upstream = await fetch(upstreamUrl, options);
   const body = await upstream.text();
   const ok = upstream.status >= 200 && upstream.status < 300;
 

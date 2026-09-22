@@ -55,7 +55,7 @@ export function registerTmdbRoutes(app: Hono<{ Bindings: Env }>): void {
       const cacheKey = buildKey("GET", url.pathname, callerQuery.toString());
 
       const upstream = `${TMDB_BASE}${toUpstream(c.req.param())}?${params}`;
-      return proxyJson(c.env, upstream, cacheKey);
+      return proxyJson(c, upstream, cacheKey);
     });
   }
 }

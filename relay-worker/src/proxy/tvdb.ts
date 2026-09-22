@@ -98,13 +98,6 @@ export function registerTvdbRoutes(app: Hono<{ Bindings: Env }>): void {
         return c.json({ error: "TVDB not configured" }, 503);
       }
 
-      let token: string;
-      try {
-        token = await getTvdbToken(c.env);
-      } catch {
-        return c.json({ error: "TVDB authentication failed" }, 502);
-      }
-
       const url = new URL(c.req.url);
       const cacheKey = buildKey(
         "GET",
@@ -117,8 +110,15 @@ export function registerTvdbRoutes(app: Hono<{ Bindings: Env }>): void {
         : "";
       const upstream = `${TVDB_BASE}${upstreamPath}${query ? `?${query}` : ""}`;
 
-      return proxyJson(c.env, upstream, cacheKey, {
-        headers: { authorization: `Bearer ${token}` },
+      // The token is fetched only on the way upstream, so a cached response
+      // is still served while TVDB login is failing.
+      return proxyJson(c, upstream, cacheKey, async () => {
+        try {
+          const token = await getTvdbToken(c.env);
+          return { headers: { authorization: `Bearer ${token}` } };
+        } catch {
+          return c.json({ error: "TVDB authentication failed" }, 502);
+        }
       });
     });
   }

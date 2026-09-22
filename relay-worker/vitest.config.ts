@@ -81,10 +81,11 @@ export default defineConfig({
                 ADMIN_ACCESS_HOSTNAME: "mydia-relay-staging.someacct.workers.dev",
                 TEST_MIGRATIONS: migrations,
               },
-              // Overrides wrangler.jsonc's PROXY_LIMITER (300/60s) for tests only.
-              // These entries take precedence over the ones the `wrangler` block
-              // above loads, so production is untouched -- the deployed Worker
-              // still gets 300/60s from wrangler.jsonc.
+              // Overrides wrangler.jsonc's PROXY_LIMITER (5000/60s) and
+              // SUBTITLE_LIMITER (300/60s) for tests only. These entries take
+              // precedence over the ones the `wrangler` block above loads, so
+              // production is untouched -- the deployed Worker still gets its
+              // numbers from wrangler.jsonc.
               //
               // The production number is unreachable in a test. Nothing in
               // Miniflare can spend the budget except real requests, so proving a
@@ -102,11 +103,11 @@ export default defineConfig({
               // A loop that takes ~50ms instead of several seconds is far less
               // likely to span one at all.
               //
-              // ONLY PROXY_LIMITER's limit differs from wrangler.jsonc. The other
-              // four are repeated here at their exact production values, not
+              // ONLY the two upstream limiters differ from wrangler.jsonc. The
+              // other four are repeated here at their exact production values, not
               // because they need overriding, but because this key may replace the
               // wrangler-derived set rather than merge into it -- listing all five
-              // is correct either way, and omitting four of them would silently
+              // is correct either way, and omitting any of them would silently
               // delete those bindings if it replaces.
               //
               // Do not "tidy" the other four to round numbers. Tests depend on
@@ -114,16 +115,18 @@ export default defineConfig({
               // counts that follow directly from the 10/10s burst guards, and the
               // pairing suite deliberately exhausts the 10/min create budget.
               // Changing one of those is a test-expectation change, not a config
-              // tweak. PROXY_LIMITER is the only one no test asserts a count
-              // against -- every loop that spends it stops at the first 429.
+              // tweak. The two upstream limiters are the only ones no test asserts
+              // a count against -- every loop that spends them stops at the
+              // first 429.
               //
               // `namespace_id` is required here as of the miniflare that
               // @cloudflare/vitest-pool-workers 0.22.0 bundles; the older
-              // miniflare defaulted it. The ids are the top level's 1001-1005,
+              // miniflare defaulted it. The ids are the top level's 1001-1006,
               // matching the values the four untouched limiters already claim
               // to carry.
               ratelimits: {
                 PROXY_LIMITER: { namespace_id: "1001", simple: { limit: 25, period: 60 } },
+                SUBTITLE_LIMITER: { namespace_id: "1006", simple: { limit: 25, period: 60 } },
                 PAIRING_CREATE_LIMITER: { namespace_id: "1002", simple: { limit: 10, period: 60 } },
                 PAIRING_READ_LIMITER: { namespace_id: "1003", simple: { limit: 30, period: 60 } },
                 CRASH_INGEST_LIMITER: { namespace_id: "1004", simple: { limit: 10, period: 10 } },

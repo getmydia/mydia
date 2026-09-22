@@ -28,7 +28,10 @@ export interface Env {
   // Bindings
   CACHE_KV: KVNamespace;
   DB: D1Database;
+  // Upstream-call budgets, charged only on a cache miss. See
+  // src/obs/ratelimit.ts for why SubDL has one of its own.
   PROXY_LIMITER: RateLimit;
+  SUBTITLE_LIMITER: RateLimit;
   PAIRING_CREATE_LIMITER: RateLimit;
   PAIRING_READ_LIMITER: RateLimit;
   // Burst guards in front of the two D1-backed hourly budgets (crash ingest,

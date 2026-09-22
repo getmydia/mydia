@@ -227,4 +227,34 @@ describe("TVDB routes", () => {
       error: "TVDB authentication failed",
     });
   });
+
+  // A cached response costs TVDB nothing, so it must not need a token: the
+  // token is fetched only after the cache missed. Before that, a login outage
+  // turned every cache hit into a 502.
+  it("serves a cached response with no token anywhere, so a login outage cannot fail a hit", async () => {
+    resetTvdbTokenMemo();
+    await env.CACHE_KV.put(
+      "tvdb:jwt",
+      JSON.stringify({
+        token: "test-token",
+        exp: Math.floor(Date.now() / 1000) + 20 * 86400,
+      }),
+    );
+    fetchMock
+      .get("https://api4.thetvdb.com")
+      .intercept({ method: "GET", path: (p) => p.startsWith("/v4/series/424242") })
+      .reply(200, { data: { id: 424242 } });
+
+    const first = await SELF.fetch("https://relay.mydia.dev/tvdb/series/424242");
+    expect(first.headers.get("x-relay-cache")).toBe("MISS");
+
+    // No token in KV or the memo, and no login interceptor: a login attempt
+    // would throw and answer 502.
+    await env.CACHE_KV.delete("tvdb:jwt");
+    resetTvdbTokenMemo();
+
+    const hit = await SELF.fetch("https://relay.mydia.dev/tvdb/series/424242");
+    expect(hit.status).toBe(200);
+    expect(hit.headers.get("x-relay-cache")).toBe("HIT");
+  });
 });
