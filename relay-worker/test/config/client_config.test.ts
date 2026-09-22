@@ -25,6 +25,11 @@ describe("GET /client-config", () => {
     // Kept in step by hand with metadata-relay/lib/metadata_relay/client_config.ex.
     // test/contract/routes.json diffs the two live services as well.
     expect(RELAY_URLS).toContain("https://cae1-1.relay.mydia.dev");
+    expect(RELAY_URLS).toContain("https://cae1-2.relay.mydia.dev");
+  });
+
+  it("carries no duplicates", () => {
+    expect(new Set(RELAY_URLS).size).toBe(RELAY_URLS.length);
   });
 
   it("only lists https URLs with a host", () => {

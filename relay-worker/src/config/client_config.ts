@@ -12,7 +12,10 @@ import type { Env } from "../env";
 //
 // Clients append iroh's own public relays underneath these, so this list
 // carries only mydia's own.
-export const RELAY_URLS = ["https://cae1-1.relay.mydia.dev"] as const;
+export const RELAY_URLS = [
+  "https://cae1-1.relay.mydia.dev",
+  "https://cae1-2.relay.mydia.dev",
+] as const;
 
 // One hour at the edge, a day of serving stale while revalidating, a week of
 // serving stale if the origin is failing. A relay move is a planned change, so

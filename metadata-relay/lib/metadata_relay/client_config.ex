@@ -20,7 +20,7 @@ defmodule MetadataRelay.ClientConfig do
   the same shape as the `pairing/v2` fallback in the player's relay client.
   """
 
-  @relay_urls ["https://cae1-1.relay.mydia.dev"]
+  @relay_urls ["https://cae1-1.relay.mydia.dev", "https://cae1-2.relay.mydia.dev"]
 
   @doc """
   The iroh relays mydia operates, in preference order.

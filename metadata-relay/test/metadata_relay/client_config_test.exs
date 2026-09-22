@@ -14,6 +14,13 @@ defmodule MetadataRelay.ClientConfigTest do
 
       assert is_list(urls)
       assert "https://cae1-1.relay.mydia.dev" in urls
+      assert "https://cae1-2.relay.mydia.dev" in urls
+    end
+
+    test "carries no duplicates" do
+      urls = ClientConfig.relay_urls()
+
+      assert urls == Enum.uniq(urls)
     end
 
     test "every entry is an https URL with a host" do
