@@ -60,6 +60,55 @@ defmodule MetadataRelay.PlayerLogs do
     )
   end
 
+  @spec get_device(String.t()) :: Device.t() | nil
+  def get_device(device_id) when is_binary(device_id), do: Repo.get(Device, device_id)
+
+  @spec get_report(String.t()) :: Report.t() | nil
+  def get_report(code) when is_binary(code), do: Repo.get(Report, code)
+
+  @doc "Devices whose name matches exactly, ignoring case, most recently seen first."
+  @spec find_devices_by_name(String.t()) :: [Device.t()]
+  def find_devices_by_name(name) do
+    lowered = String.downcase(name)
+
+    Repo.all(
+      from(d in Device,
+        where: fragment("lower(?)", d.name) == ^lowered,
+        order_by: [desc: d.last_seen_at]
+      )
+    )
+  end
+
+  @doc "A device by ID, or by a name only one device carries."
+  @spec resolve_device(String.t()) ::
+          {:ok, Device.t()} | {:error, :not_found | {:ambiguous, [Device.t()]}}
+  def resolve_device(value) do
+    by_id =
+      case Ecto.UUID.cast(value) do
+        {:ok, id} -> Repo.get(Device, id)
+        :error -> nil
+      end
+
+    case by_id || find_devices_by_name(value) do
+      %Device{} = device -> {:ok, device}
+      [] -> {:error, :not_found}
+      [device] -> {:ok, device}
+      devices -> {:error, {:ambiguous, devices}}
+    end
+  end
+
+  @doc "A device's chunks that can hold records between `since_ms` and `until_ms`."
+  @spec chunks_for_device(String.t(), integer(), integer() | nil) :: [Chunk.t()]
+  def chunks_for_device(device_id, since_ms, until_ms) do
+    Chunk
+    |> where([c], c.device_id == ^device_id and c.last_t >= ^since_ms)
+    |> then(fn query ->
+      if until_ms, do: where(query, [c], c.first_t <= ^until_ms), else: query
+    end)
+    |> order_by([c], asc: c.first_t, asc: c.id)
+    |> Repo.all()
+  end
+
   @spec new_report_code() :: String.t()
   def new_report_code do
     suffix =
