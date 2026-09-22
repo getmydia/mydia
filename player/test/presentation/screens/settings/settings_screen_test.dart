@@ -537,7 +537,7 @@ void main() {
   testWidgets('connection details navigates to diagnostics', (tester) async {
     await _pump(tester);
 
-    await tester.tap(find.text('Connection details'));
+    await tester.tap(find.text('Diagnostics'));
     await tester.pumpAndSettle();
 
     expect(find.text('diagnostics stub'), findsOneWidget);
@@ -600,7 +600,7 @@ void main() {
       await _pump(tester, settings: null, fail: true);
 
       expect(find.text('Paired devices'), findsOneWidget);
-      expect(find.text('Connection details'), findsOneWidget);
+      expect(find.text('Diagnostics'), findsOneWidget);
     });
 
     testWidgets('playback controls are disabled and offer a retry',

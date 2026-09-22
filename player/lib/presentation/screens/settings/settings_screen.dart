@@ -262,7 +262,7 @@ class _ManageSection extends ConsumerWidget {
         ),
         SettingsRow.navigation(
           icon: Icons.lan_outlined,
-          title: 'Connection details',
+          title: 'Diagnostics',
           subtitle: connection.label,
           subtitleDotColor: connectionToneColor(connection.tone),
           onTap: () => context.push('/settings/diagnostics'),
