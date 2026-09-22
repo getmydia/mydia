@@ -416,6 +416,20 @@ where
     }
 }
 
+/// The layer that turns `tracing` events into `Event::Log` on the newest
+/// host's event channel.
+///
+/// `init_tracing` installs it itself when the process has no subscriber yet,
+/// which is the NIF's case. A process that installs its own subscriber first,
+/// as the Flutter player does in `init_app`, must add this layer to it, or its
+/// hosts never produce `Event::Log`.
+pub fn event_log_layer<S>() -> impl Layer<S>
+where
+    S: tracing::Subscriber,
+{
+    ElixirLogLayer
+}
+
 /// Visitor to extract the message field from a tracing event
 struct MessageVisitor<'a>(&'a mut String);
 

@@ -1,0 +1,83 @@
+<MetadataRelayWeb.Layouts.app flash={@flash}>
+  <section id="logs-dashboard" class="space-y-6">
+    <header class="space-y-2">
+      <div class="badge badge-primary badge-lg">Maintainer dashboard</div>
+      <h1 class="text-4xl font-semibold tracking-tight">Player logs</h1>
+      <p class="text-base leading-7 text-base-content/70">
+        Devices that shared their logs, and reports sent with a code. Every line is also available as plain text at
+        <code>/logs/raw</code>, which <code>./dev relay logs</code> reads.
+      </p>
+    </header>
+
+    <section class="card border border-base-300 bg-base-100 shadow-sm">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">Devices</h2>
+        <p :if={@devices == []} id="logs-devices-empty" class="text-sm text-base-content/60">
+          No player has sent logs yet.
+        </p>
+        <div :if={@devices != []} class="overflow-x-auto">
+          <table id="logs-devices" class="table">
+            <thead>
+              <tr>
+                <th>Device</th>
+                <th>Platform</th>
+                <th>Version</th>
+                <th>Last seen</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={device <- @devices} id={"log-device-#{device.device_id}"} class="hover">
+                <td>
+                  <.link navigate={"/logs/devices/#{device.device_id}"} class="link link-hover font-medium">
+                    {device.name || "Unnamed device"}
+                  </.link>
+                  <div class="font-mono text-xs text-base-content/50">{device.device_id}</div>
+                </td>
+                <td>{device.platform}</td>
+                <td>{device.app_version}</td>
+                <td>{format_time(device.last_seen_at)}</td>
+                <td>
+                  <span :if={MapSet.member?(@active, device.device_id)} class="badge badge-success">
+                    Streaming
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card border border-base-300 bg-base-100 shadow-sm">
+      <div class="card-body gap-4">
+        <h2 class="card-title text-lg">Reports</h2>
+        <p :if={@reports == []} id="logs-reports-empty" class="text-sm text-base-content/60">
+          No report has been sent yet.
+        </p>
+        <div :if={@reports != []} class="overflow-x-auto">
+          <table id="logs-reports" class="table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Device</th>
+                <th>Note</th>
+                <th>Sent</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={report <- @reports} id={"log-report-#{report.code}"} class="hover">
+                <td>
+                  <a href={"/logs/raw?code=#{report.code}"} class="link link-hover font-mono">{report.code}</a>
+                </td>
+                <td>{Map.get(@device_names, report.device_id) || report.device_id}</td>
+                <td class="max-w-md whitespace-pre-wrap">{report.note}</td>
+                <td>{format_time(report.inserted_at)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </section>
+</MetadataRelayWeb.Layouts.app>

@@ -14,7 +14,14 @@ defmodule MetadataRelay.Router do
   alias MetadataRelay.Pairing.Handler, as: PairingHandler
 
   plug(Plug.Logger)
-  plug(Plug.Parsers, parsers: [:urlencoded, :json], json_decoder: Jason)
+  # application/x-ndjson passes through unread: POST /player-logs reads its
+  # own gzipped body (MetadataRelay.PlayerLogs.Handler).
+  plug(Plug.Parsers,
+    parsers: [:urlencoded, :json],
+    pass: ["application/x-ndjson"],
+    json_decoder: Jason
+  )
+
   plug(MetadataRelay.Plug.Cache)
   # After the cache: a cache hit halts the connection above and never
   # reaches here, so this only ever throttles genuine cache misses (see
@@ -265,6 +272,11 @@ defmodule MetadataRelay.Router do
   # Feedback Ingestion
   post "/feedback" do
     handle_feedback(conn)
+  end
+
+  # Player log ingestion. See MetadataRelay.PlayerLogs.Handler.
+  post "/player-logs" do
+    MetadataRelay.PlayerLogs.Handler.call(conn)
   end
 
   # Subtitle Search

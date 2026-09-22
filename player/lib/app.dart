@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/auth/auth_status.dart';
+import 'core/diagnostics/diagnostics_provider.dart';
 import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/theme/app_theme.dart';
@@ -166,6 +167,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         .read(remoteTargetControllerProvider)
         .intents
         .listen(_handleRemoteIntent);
+    // Applies the Diagnostics choice for the app's lifetime, so continuous log
+    // upload runs without the Diagnostics screen being open.
+    ref.listenManual(diagnosticsProvider, (_, __) {}, fireImmediately: true);
     // Initialize P2P services
     Future.microtask(() async {
       try {
@@ -427,6 +431,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _ambientLifecycle.handle(state);
+    // Send what is waiting before the OS suspends the app.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      final uploader = ref.read(logUploaderProvider);
+      if (uploader != null) unawaited(uploader.flushNow());
+    }
     if (applyAppLifecycleState(_resumeGate, state, DateTime.now())) {
       // Live screens refetch now; dormant ones become cold for their next
       // mount. Fire-and-forget: a lifecycle callback cannot await, so any

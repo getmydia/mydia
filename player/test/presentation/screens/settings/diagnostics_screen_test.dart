@@ -9,6 +9,7 @@ import 'package:player/core/player/fullscreen/fullscreen_mode.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report_signal.dart';
 import 'package:player/presentation/screens/settings/diagnostics_screen.dart';
+import 'package:player/presentation/screens/settings/widgets/diagnostics_sharing_section.dart';
 
 import '../../../test_utils/toast_harness.dart';
 
@@ -236,5 +237,19 @@ void main() {
         expect(written.single, contains('$label: $value'));
       }
     });
+  });
+
+  testWidgets('hides the sharing section with the inert crash reporter',
+      (tester) async {
+    await _pump(
+      tester,
+      status: const P2pStatus(
+        isInitialized: true,
+        isRelayConnected: false,
+        connectedPeersCount: 0,
+      ),
+    );
+
+    expect(find.byType(DiagnosticsSharingSection), findsNothing);
   });
 }

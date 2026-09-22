@@ -44,6 +44,45 @@ if config_env() != :test do
     database: db_path,
     pool_size: 5
 
+  # Player log batches live beside the database, on the same volume (/data
+  # in production). An unreadable PLAYER_LOGS_MAX_BYTES falls back to the
+  # default rather than raising: a crash at boot would take the TMDB/TVDB
+  # proxy down for every install.
+  player_logs_max_bytes =
+    case normalize_env.("PLAYER_LOGS_MAX_BYTES") do
+      nil ->
+        2_147_483_648
+
+      value ->
+        case Integer.parse(value) do
+          {bytes, ""} when bytes > 0 -> bytes
+          _ -> 2_147_483_648
+        end
+    end
+
+  # Per-address daily budget for kind: "report" uploads only (shared across
+  # every device behind that address -- see
+  # MetadataRelay.PlayerLogs.ReportBudget). An unreadable value falls back to
+  # the default for the same reason PLAYER_LOGS_MAX_BYTES does: a crash at
+  # boot would take the TMDB/TVDB proxy down for every install.
+  player_logs_report_budget_bytes =
+    case normalize_env.("PLAYER_LOGS_REPORT_BUDGET_BYTES") do
+      nil ->
+        268_435_456
+
+      value ->
+        case Integer.parse(value) do
+          {bytes, ""} when bytes > 0 -> bytes
+          _ -> 268_435_456
+        end
+    end
+
+  config :metadata_relay, :player_logs,
+    dir: normalize_env.("PLAYER_LOGS_DIR") || Path.join(Path.dirname(db_path), "player_logs"),
+    max_bytes: player_logs_max_bytes,
+    report_budget_bytes: player_logs_report_budget_bytes,
+    sweep_interval_ms: 3_600_000
+
   # Phoenix endpoint port configuration (serves both API and dashboard)
   port = String.to_integer(System.get_env("PORT") || "4001")
 

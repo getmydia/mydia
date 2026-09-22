@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
+import '../../../core/crash_reporting/crash_reporter_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/fullscreen/fullscreen_report.dart';
 import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
@@ -11,15 +12,17 @@ import '../../../core/theme/colors.dart';
 import '../../../core/update/update_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/toast/toaster.dart';
+import 'widgets/diagnostics_sharing_section.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
 
-/// Read-only internals.
+/// Internals, and what this device shares with the developers.
 ///
-/// These used to sit inline on the settings screen, where a relay URL and a
-/// peer count read as things you could act on. Nothing here is actionable
-/// except the copy button, which exists so a bug report can carry the whole
-/// picture without a screenshot.
+/// The transport, peer and playback sections used to sit inline on the
+/// settings screen, where a relay URL and a peer count read as things you
+/// could act on. They stay read-only; the copy button exists so a bug report
+/// can carry the whole picture without a screenshot. The sharing section at
+/// the top is the one place the crash and log choices live.
 ///
 /// The Playback section is here for the same reason and answers a question the
 /// device itself cannot otherwise be asked: on iOS Safari the fullscreen button
@@ -45,6 +48,12 @@ class DiagnosticsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
+          // Hidden where nothing would be sent: web builds, and the inert
+          // reporter whole-app tests run with. See CrashReporter.isAvailable.
+          if (ref.watch(crashReporterProvider).isAvailable) ...[
+            const DiagnosticsSharingSection(),
+            const SizedBox(height: 18),
+          ],
           SettingsSection(
             label: 'Transport',
             children: [

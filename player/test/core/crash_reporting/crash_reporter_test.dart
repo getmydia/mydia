@@ -29,7 +29,6 @@ class _Harness {
     FakeAsync async, {
     bool consent = true,
     Future<bool> Function()? loadConsent,
-    Future<void> Function(bool enabled)? saveConsent,
     Future<CrashAppContext> Function()? loadAppContext,
     List<int> statuses = const [201],
     bool isAvailable = true,
@@ -45,7 +44,6 @@ class _Harness {
       }),
       endpoint: Uri.parse('https://relay.test/crashes/report'),
       loadConsent: loadConsent ?? () async => consent,
-      saveConsent: saveConsent ?? (enabled) async => saved.add(enabled),
       loadAppContext: loadAppContext ?? () async => _context,
       isAvailable: isAvailable,
       now: () => DateTime.utc(2026, 9, 10, 12).add(async.elapsed),
@@ -55,7 +53,6 @@ class _Harness {
 
   late final CrashReporter reporter;
   final requests = <Map<String, Object?>>[];
-  final saved = <bool>[];
   final presented = <FlutterErrorDetails>[];
 
   Map<Object?, Object?> metadataOf(int index) =>
@@ -140,40 +137,30 @@ void main() {
       });
     });
 
-    test('setEnabled stores the choice and applies it to the next report', () {
+    test('applyConsent applies to the next report', () {
       fakeAsync((async) {
         final h = _Harness(async, consent: false);
 
-        h.reporter.setEnabled(true);
-        async.flushMicrotasks();
+        h.reporter.applyConsent(true);
         h.reporter.report(StateError('x'), _at('a.dart', 1),
             capture: CrashCapture.zone);
         async.flushMicrotasks();
 
-        expect(h.saved, [true]);
         expect(h.requests, hasLength(1));
       });
     });
 
-    test('setEnabled keeps the old choice when storing fails', () {
+    test('the latest applied choice wins', () {
       fakeAsync((async) {
-        final h = _Harness(
-          async,
-          consent: false,
-          saveConsent: (_) async => throw Exception('keyring refused'),
-        );
+        final h = _Harness(async, consent: false);
 
-        Object? thrown;
-        h.reporter.setEnabled(true).catchError((Object e) {
-          thrown = e;
-        });
-        async.flushMicrotasks();
-        bool? enabled;
-        h.reporter.isEnabled().then((value) => enabled = value);
+        h.reporter.applyConsent(true);
+        h.reporter.applyConsent(false);
+        h.reporter.report(StateError('x'), _at('a.dart', 1),
+            capture: CrashCapture.zone);
         async.flushMicrotasks();
 
-        expect(thrown, isNotNull);
-        expect(enabled, isFalse);
+        expect(h.requests, isEmpty);
       });
     });
 
@@ -185,39 +172,12 @@ void main() {
         h.reporter.report(StateError('x'), _at('a.dart', 1),
             capture: CrashCapture.zone);
         async.flushMicrotasks();
-        h.reporter.setEnabled(false);
+        h.reporter.applyConsent(false);
         async.flushMicrotasks();
         // The stored value from before the opt-out arrives late.
         read.complete(true);
         async.flushMicrotasks();
         h.reporter.report(StateError('x'), _at('b.dart', 1),
-            capture: CrashCapture.zone);
-        async.flushMicrotasks();
-
-        expect(h.requests, isEmpty);
-      });
-    });
-
-    test('the later of two overlapping choices wins', () {
-      fakeAsync((async) {
-        final saves = <Completer<void>>[];
-        final h = _Harness(
-          async,
-          consent: false,
-          saveConsent: (_) {
-            final save = Completer<void>();
-            saves.add(save);
-            return save.future;
-          },
-        );
-
-        h.reporter.setEnabled(true);
-        h.reporter.setEnabled(false);
-        async.flushMicrotasks();
-        saves[1].complete();
-        saves[0].complete();
-        async.flushMicrotasks();
-        h.reporter.report(StateError('x'), _at('a.dart', 1),
             capture: CrashCapture.zone);
         async.flushMicrotasks();
 

@@ -18,7 +18,6 @@ class SettingsService {
   static const _defaultQualityKey = 'default_quality';
   static const _autoSkipSegmentsKey = 'auto_skip_segments';
   static const _librarySortKeyPrefix = 'library_sort_';
-  static const _crashReportingEnabledKey = 'crash_reporting_enabled';
   static const _calendarViewModeKey = 'calendar_view_mode';
   static const _statsOverlayEnabledKey = 'stats_overlay_enabled';
   static const _updateTrackKey = 'update_track';
@@ -48,26 +47,11 @@ class SettingsService {
     await _storage.write(_autoSkipSegmentsKey, enabled.toString());
   }
 
-  /// Whether crash reports are sent to the Mydia developers.
-  ///
-  /// Off by default, matching the server's own opt-in. A device-level choice
-  /// rather than an account preference, so [clearSettings] leaves it alone.
-  Future<bool> getCrashReportingEnabled() async {
-    final value = await _storage.read(_crashReportingEnabledKey);
-    return value == 'true';
-  }
-
-  /// Set whether crash reports are sent to the Mydia developers.
-  Future<void> setCrashReportingEnabled(bool enabled) async {
-    await _storage.write(_crashReportingEnabledKey, enabled.toString());
-  }
-
   /// Whether the playback stats panel is drawn over the video.
   ///
-  /// Off by default. A device-level choice like
-  /// [getCrashReportingEnabled], so [clearSettings] leaves it alone: a
-  /// viewer who turned the panel on does not expect signing out of one
-  /// server to turn it off.
+  /// Off by default. A device-level choice, so [clearSettings] leaves it
+  /// alone: a viewer who turned the panel on does not expect signing out of
+  /// one server to turn it off.
   Future<bool> getStatsOverlayEnabled() async {
     final value = await _storage.read(_statsOverlayEnabledKey);
     return value == 'true';
@@ -122,8 +106,9 @@ class SettingsService {
   /// Clear all settings.
   ///
   /// Deletes an explicit list of keys, not everything in storage. Device-level
-  /// choices are deliberately left out of that list: [_updateTrackKey] and
-  /// [_crashReportingEnabledKey] both survive a clear for that reason.
+  /// choices are deliberately left out of that list: [_updateTrackKey]
+  /// survives a clear for that reason, as does the Diagnostics
+  /// choice in `DiagnosticsSettings`.
   Future<void> clearSettings() async {
     await Future.wait([
       _storage.delete(_defaultQualityKey),

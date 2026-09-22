@@ -8,6 +8,7 @@ import 'package:player/core/p2p/p2p_keystore.dart';
 import 'package:player/core/p2p/p2p_range_stream.dart';
 import 'package:player/native/lib.dart';
 
+import '../logging/log_sink.dart';
 import 'relay_list.dart';
 
 /// The iroh relay compiled into this build.
@@ -475,6 +476,13 @@ class P2pService {
 
       // Start Event Stream
       _eventSubscription = _host!.eventStream().listen((event) {
+        // A Rust log line forwarded by the p2p layer. Recorded directly, not
+        // printed: the Rust side already writes it to the console.
+        if (event.startsWith(rustLogEventPrefix)) {
+          LogSink.instance
+              ?.recordRustEvent(event.substring(rustLogEventPrefix.length));
+          return;
+        }
         debugPrint('[P2P] Event: $event');
 
         if (event.startsWith('connected:')) {
