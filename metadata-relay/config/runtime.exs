@@ -31,6 +31,12 @@ if config_env() != :test do
   config :metadata_relay,
     proxy_rate_limit_enabled: normalize_env.("RELAY_PROXY_RATE_LIMIT") in ~w(1 true yes on)
 
+  # The iroh relays served at /client-config, comma-separated. Unset or
+  # invalid serves the built-in list, and MetadataRelay.ClientConfig logs which
+  # at boot. Validated there rather than raised on here: a crash at boot would
+  # take the TMDB/TVDB proxy down for every install.
+  config :metadata_relay, client_config_relays: normalize_env.("CLIENT_CONFIG_RELAYS")
+
   # Database configuration (all environments except test)
   db_path = System.get_env("SQLITE_DB_PATH") || "./metadata_relay.db"
 

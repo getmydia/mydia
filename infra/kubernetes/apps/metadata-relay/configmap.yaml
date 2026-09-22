@@ -26,3 +26,8 @@ data:
   SMTP_HOST: "smtp.resend.com"
   SMTP_PORT: "587"
   SMTP_USERNAME: "resend"
+
+  # Iroh relays served at /client-config, comma-separated. Unset serves the
+  # built-in list in MetadataRelay.ClientConfig. Read at boot; see the
+  # README's "Changing the relay list".
+  # CLIENT_CONFIG_RELAYS: "https://cae1-1.relay.mydia.dev"

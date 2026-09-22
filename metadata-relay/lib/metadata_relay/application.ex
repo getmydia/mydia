@@ -13,6 +13,7 @@ defmodule MetadataRelay.Application do
     Application.put_env(:metadata_relay, :cache_adapter, cache_adapter)
 
     log_subtitle_support()
+    MetadataRelay.ClientConfig.log_config()
 
     # Build children list
     children =

@@ -166,6 +166,6 @@ them with the same four precedence levels:
 - `player/lib/core/p2p/relay_list.dart` for the player
 
 Both read `GET /client-config` from the metadata relay at boot, so a relay can
-be moved by deploying the metadata relay rather than shipping a new server
-image and player build. Change one of those two files and you almost certainly
-need to change the other.
+be added or moved by changing the metadata relay's configuration rather than
+shipping a new server image and player build. Change one of those two files
+and you almost certainly need to change the other.

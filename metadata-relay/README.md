@@ -146,6 +146,28 @@ The service is configured entirely via environment variables for maximum flexibi
 | `SMTP_PORT`       | No       | `587`              | SMTP relay port                                                                                                         |
 | `SMTP_USERNAME`   | No       | -                  | SMTP username. SMTP auth is enabled when both username and password are present                                          |
 | `SMTP_PASSWORD`   | No       | -                  | SMTP password. SMTP auth is enabled when both username and password are present                                          |
+| `CLIENT_CONFIG_RELAYS` | No     | `https://cae1-1.relay.mydia.dev` | Comma-separated iroh relay URLs served at `/client-config`. Each must be `https` with a host; an invalid value is ignored and logged at boot. See "Changing the relay list" |
+
+### Changing the relay list
+
+`GET /client-config` tells installs which iroh relays mydia operates. On
+`relay.mydia.dev` the relay-worker answers it from KV
+(`relay-worker/README.md`, "Changing the relay list"). This service's copy
+comes from `CLIENT_CONFIG_RELAYS` and should carry the same list, or the
+cutover contract diff reports `/client-config` as a mismatch.
+
+It is read at boot, so a change is a ConfigMap patch and a restart:
+
+```bash
+kubectl -n metadata-relay patch configmap metadata-relay-config --type merge \
+  -p '{"data":{"CLIENT_CONFIG_RELAYS":"https://cae1-1.relay.mydia.dev,https://cae1-2.relay.mydia.dev"}}'
+kubectl -n metadata-relay rollout restart deploy/metadata-relay
+kubectl -n metadata-relay logs deploy/metadata-relay | grep CLIENT_CONFIG_RELAYS
+curl -sS https://relay.mydia.dev/client-config   # only reaches this service while client_config routes to origin
+```
+
+Keep it in the ConfigMap, not `metadata-relay-secrets`: `infra/deploy`
+rebuilds that secret from scratch and drops keys it does not write.
 
 ### Cache Configuration
 
