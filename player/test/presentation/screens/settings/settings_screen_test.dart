@@ -649,23 +649,16 @@ void main() {
     });
   });
 
-  testWidgets('hides the crash-reporting row when the reporter cannot send',
-      (tester) async {
-    // The default, inert reporter: what web builds and whole-app tests get.
-    await _pump(tester);
-
-    expect(find.byKey(const Key('crash-reporting-switch')), findsNothing);
-  });
-
-  testWidgets('shows the crash-reporting row when the reporter can send',
-      (tester) async {
+  testWidgets(
+      'has no crash-reporting switch of its own, even when the '
+      'reporter can send', (tester) async {
+    // The choice lives on the Diagnostics screen now.
     await _pump(
       tester,
       crashReporter: CrashReporter(
         client: MockClient((_) async => http.Response('{}', 201)),
         endpoint: Uri.parse('https://relay.test/crashes/report'),
         loadConsent: () async => false,
-        saveConsent: (_) async {},
         loadAppContext: () async => const CrashAppContext(
           version: '',
           buildNumber: '',
@@ -676,7 +669,7 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const Key('crash-reporting-switch')), findsOneWidget);
+    expect(find.byKey(const Key('crash-reporting-switch')), findsNothing);
   });
 
   testWidgets('scrolls its version footer clear of the dock', (tester) async {
