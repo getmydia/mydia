@@ -400,9 +400,15 @@ Then production:
 npx wrangler kv key put --env production --binding CACHE_KV --remote \
   client-config:relays '["https://cae1-1.relay.mydia.dev","https://cae1-2.relay.mydia.dev"]'
 npx wrangler kv key get --env production --binding CACHE_KV --remote client-config:relays
-curl -sS -D - https://relay.mydia.dev/client-config | grep -iE 'x-relay-list-source|relays'
-# expect: x-relay-list-source: kv, and the list you wrote
+curl -sS -D - https://relay.mydia.dev/client-config | grep -iE 'x-relay-backend|x-relay-list-source|relays'
+# expect: x-relay-backend: worker, x-relay-list-source: kv, and the list you wrote
 ```
+
+`relay.mydia.dev` is what installs call, so check it rather than a workers.dev
+hostname. `x-relay-backend: origin` means the `client_config` group is routed
+to the Elixir relay, so installs are getting its `CLIENT_CONFIG_RELAYS`, not
+this key. Either set that to the same list or move the group to `worker` (see
+"Changing modes").
 
 The value must be a non-empty array of distinct `https://` URLs with a host,
 the same rule installs apply. One bad entry rejects the whole value: the
