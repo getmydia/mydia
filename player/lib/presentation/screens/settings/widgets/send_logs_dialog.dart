@@ -12,6 +12,11 @@ Future<void> showSendLogsDialog(
 }) =>
     showDialog<void>(
       context: context,
+      // A tap outside must not drop an in-flight upload: the code the relay
+      // hands back would be lost, and the user's next move would be to send
+      // the same logs again. See the PopScope in build() for the back-press
+      // equivalent.
+      barrierDismissible: false,
       builder: (_) => SendLogsDialog(send: send),
     );
 
@@ -71,78 +76,84 @@ class _SendLogsDialogState extends State<SendLogsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Send logs'),
-      content: switch (_phase) {
-        _Phase.editing => TextField(
-            key: const Key('diagnostics-send-logs-note'),
-            controller: _note,
-            maxLength: 2000,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'What went wrong? (optional)',
+    return PopScope(
+      // Only while sending: once the code or the error is on screen, Done,
+      // Close and Retry are how this closes, and a back press should work
+      // like any other dialog.
+      canPop: _phase != _Phase.sending,
+      child: AlertDialog(
+        title: const Text('Send logs'),
+        content: switch (_phase) {
+          _Phase.editing => TextField(
+              key: const Key('diagnostics-send-logs-note'),
+              controller: _note,
+              maxLength: 2000,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'What went wrong? (optional)',
+              ),
             ),
-          ),
-        _Phase.sending => const SizedBox(
-            height: 48,
-            child: Center(child: CircularProgressIndicator()),
-          ),
-        _Phase.sent => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Share this code with the Mydia developers:'),
-              const SizedBox(height: 8),
-              SelectableText(
-                _code!,
-                key: const Key('diagnostics-report-code'),
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.5,
+          _Phase.sending => const SizedBox(
+              height: 48,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          _Phase.sent => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Share this code with the Mydia developers:'),
+                const SizedBox(height: 8),
+                SelectableText(
+                  _code!,
+                  key: const Key('diagnostics-report-code'),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.5,
+                  ),
                 ),
+              ],
+            ),
+          _Phase.failed =>
+            Text(_error!, key: const Key('diagnostics-report-error')),
+        },
+        actions: switch (_phase) {
+          _Phase.editing => [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                key: const Key('diagnostics-send-logs-confirm'),
+                onPressed: _send,
+                child: const Text('Send'),
               ),
             ],
-          ),
-        _Phase.failed =>
-          Text(_error!, key: const Key('diagnostics-report-error')),
-      },
-      actions: switch (_phase) {
-        _Phase.editing => [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              key: const Key('diagnostics-send-logs-confirm'),
-              onPressed: _send,
-              child: const Text('Send'),
-            ),
-          ],
-        _Phase.sending => const <Widget>[],
-        _Phase.sent => [
-            TextButton(
-              key: const Key('diagnostics-report-copy'),
-              onPressed: _copy,
-              child: const Text('Copy'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
-            ),
-          ],
-        _Phase.failed => [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-            FilledButton(
-              key: const Key('diagnostics-report-retry'),
-              onPressed: _send,
-              child: const Text('Retry'),
-            ),
-          ],
-      },
+          _Phase.sending => const <Widget>[],
+          _Phase.sent => [
+              TextButton(
+                key: const Key('diagnostics-report-copy'),
+                onPressed: _copy,
+                child: const Text('Copy'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Done'),
+              ),
+            ],
+          _Phase.failed => [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+              FilledButton(
+                key: const Key('diagnostics-report-retry'),
+                onPressed: _send,
+                child: const Text('Retry'),
+              ),
+            ],
+        },
+      ),
     );
   }
 }

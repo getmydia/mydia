@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +33,20 @@ class _FakeDiagnostics extends DiagnosticsController {
 
   @override
   Future<String> sendReport({String? note}) => onSend!(note);
+}
+
+/// A controller whose `build()` never completes, so the section stays in the
+/// no-value state for the whole test.
+class _PendingDiagnostics extends DiagnosticsController {
+  final selected = <DiagnosticsChoice>[];
+
+  @override
+  Future<DiagnosticsState> build() => Completer<DiagnosticsState>().future;
+
+  @override
+  Future<void> select(DiagnosticsChoice choice) async {
+    selected.add(choice);
+  }
 }
 
 LogUploader _uploader() => LogUploader(
@@ -179,6 +195,58 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('LOG-7K2QX9'), findsOneWidget);
+  });
+
+  testWidgets('a back press cannot drop an in-flight upload', (tester) async {
+    final completer = Completer<String>();
+    await _pump(tester, onSend: (_) => completer.future);
+
+    await tester.tap(find.byKey(const Key('diagnostics-send-logs')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('diagnostics-send-logs-confirm')));
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+
+    expect(find.text('Send logs'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    completer.complete('LOG-7K2QX9');
+    await tester.pumpAndSettle();
+
+    expect(find.text('LOG-7K2QX9'), findsOneWidget);
+  });
+
+  testWidgets(
+      'while the choice is still loading nothing is selected and taps do '
+      'nothing', (tester) async {
+    final pending = _PendingDiagnostics();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          diagnosticsProvider.overrideWith(() => pending),
+          logUploaderProvider.overrideWithValue(_uploader()),
+        ],
+        child: MaterialApp(
+          builder: toastLayerBuilder,
+          home: const Scaffold(
+            body: SingleChildScrollView(child: DiagnosticsSharingSection()),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.check_circle), findsNothing);
+    expect(find.byKey(const Key('diagnostics-send-logs')), findsNothing);
+
+    await tester.tap(_choice(DiagnosticsChoice.crashes));
+    await tester.pump();
+
+    expect(pending.selected, isEmpty);
   });
 
   test('untilLabel', () {

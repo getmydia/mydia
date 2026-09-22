@@ -25,7 +25,10 @@ class DiagnosticsSharingSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(diagnosticsProvider).value ?? DiagnosticsState.off;
+    // Read once: while this is null the choice has not loaded yet, and this
+    // screen's whole job is telling the user what they are sharing, so
+    // nothing here may show or accept a guess in the meantime.
+    final state = ref.watch(diagnosticsProvider).value;
     final canShareLogs = ref.watch(logUploaderProvider) != null;
     final choices =
         DiagnosticsChoice.values.where((c) => canShareLogs || !c.sharesLogs);
@@ -41,11 +44,13 @@ class DiagnosticsSharingSection extends ConsumerWidget {
               for (final choice in choices)
                 _ChoiceOption(
                   choice: choice,
-                  selected: choice == state.choice,
-                  detail: choice == state.choice
+                  selected: state != null && choice == state.choice,
+                  detail: state != null && choice == state.choice
                       ? untilLabel(state.logsUntil)
                       : null,
-                  onTap: () => _select(context, ref, choice),
+                  onTap: state == null
+                      ? null
+                      : () => _select(context, ref, choice),
                 ),
               const SizedBox(height: 10),
               const Text(
@@ -59,7 +64,7 @@ class DiagnosticsSharingSection extends ConsumerWidget {
             ],
           ),
         ),
-        if (canShareLogs)
+        if (canShareLogs && state != null)
           SettingsRow.action(
             key: const Key('diagnostics-send-logs'),
             icon: Icons.upload_file_outlined,
@@ -126,7 +131,7 @@ class _ChoiceOption extends StatelessWidget {
   final DiagnosticsChoice choice;
   final bool selected;
   final String? detail;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
