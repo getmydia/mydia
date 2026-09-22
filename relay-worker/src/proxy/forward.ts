@@ -1,6 +1,8 @@
+import type { Context } from "hono";
 import type { Env } from "../env";
 import { cacheGet, cachePut } from "../cache/store";
 import { ttlSecondsForResponse } from "../cache/key";
+import { throttleUpstream } from "../obs/ratelimit";
 
 // No allowlist, deliberately. TMDB handlers forward caller params straight
 // through, which is the only reason append_to_response works for credits,
@@ -40,11 +42,12 @@ export function pathSegment(value: string): string {
 }
 
 export async function proxyJson(
-  env: Env,
+  c: Context<{ Bindings: Env }>,
   upstreamUrl: string,
   cacheKey: string,
   init?: RequestInit,
 ): Promise<Response> {
+  const env = c.env;
   const hit = await cacheGet(env, cacheKey);
   if (hit) {
     // A Response read back from the Cache API has immutable headers, so
@@ -55,6 +58,10 @@ export async function proxyJson(
     res.headers.set("x-relay-cache", "HIT");
     return res;
   }
+
+  // Only a miss spends upstream quota, so only a miss is charged.
+  const throttled = await throttleUpstream(c, "PROXY_LIMITER");
+  if (throttled) return throttled;
 
   const upstream = await fetch(upstreamUrl, init);
   const body = await upstream.text();

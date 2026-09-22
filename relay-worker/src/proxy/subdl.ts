@@ -6,6 +6,7 @@ import {
   EMPTY_SUBTITLE_TTL_SECONDS,
 } from "../cache/key";
 import { cacheGet, cachePut } from "../cache/store";
+import { throttleUpstream } from "../obs/ratelimit";
 import { encodeFileId, decodeFileId, extractSubtitle } from "../archive/zip";
 
 const SEARCH_URL = "https://api.subdl.com/api/v1/subtitles";
@@ -318,6 +319,9 @@ export function registerSubdlRoutes(app: Hono<{ Bindings: Env }>): void {
     const hit = await cacheGet(c.env, cacheKey, { kv: true });
     if (hit) return hit;
 
+    const throttled = await throttleUpstream(c, "SUBTITLE_LIMITER");
+    if (throttled) return throttled;
+
     const query = new URLSearchParams();
     query.set("api_key", apiKey);
     query.set("languages", buildLanguages(body.languages));
@@ -411,6 +415,9 @@ export function registerSubdlRoutes(app: Hono<{ Bindings: Env }>): void {
   app.get("/api/v1/subtitles/download/:id", async (c) => {
     const path = decodeFileId(c.req.param("id"));
     if (!path) return c.json({ error: "Invalid subtitle id" }, 400);
+
+    const throttled = await throttleUpstream(c, "SUBTITLE_LIMITER");
+    if (throttled) return throttled;
 
     const upstream = await fetch(`${DOWNLOAD_HOST}${path}`);
 

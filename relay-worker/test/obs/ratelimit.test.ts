@@ -1,7 +1,6 @@
 import { env, SELF, applyD1Migrations } from "cloudflare:test";
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { serviceFromPath } from "../../src/obs/log";
-import { isExemptFromProxyLimit } from "../../src/obs/ratelimit";
 import { fetchMock } from "../support/fetch-mock";
 
 describe("serviceFromPath", () => {
@@ -20,10 +19,11 @@ describe("serviceFromPath", () => {
   });
 });
 
-// PROXY_LIMITER is limit: 25, period: 60 UNDER TEST, set by
-// vitest.config.ts's miniflare.ratelimits override. Production is 300/60s
-// (wrangler.jsonc) and is untouched by that override -- this constant must
-// track the TEST value, since it is what the loops below actually spend.
+// PROXY_LIMITER and SUBTITLE_LIMITER are limit: 25, period: 60 UNDER TEST,
+// set by vitest.config.ts's miniflare.ratelimits override. Production is
+// 5000/60s and 300/60s (wrangler.jsonc) and is untouched by that override --
+// this constant must track the TEST value, since it is what the loops below
+// actually spend.
 //
 // Why the test value is not the production one: nothing in Miniflare can
 // spend a rate-limit budget except real requests, so proving a 429 costs
@@ -117,14 +117,12 @@ describe("rate limiting", () => {
     // hang: bumping the timeout is enough (see the isolated per-test timing
     // versus the full-file timing checked while writing this test).
     //
-    // Hono composes middleware as an onion: whichever of rateLimitMiddleware
-    // and the logging middleware is registered SECOND runs as the INNER
-    // layer, closer to the route. If the logging middleware is inner, its
-    // `await next()` returns -- and it reads c.res.status -- before control
-    // unwinds back out to rateLimitMiddleware, which only then overwrites
-    // c.res with the 429. That logs the route's pre-throttle status instead
-    // of what the client actually received. Spying on console.log (rather
-    // than matching a substring) and parsing the JSON line guards against a
+    // The limiter used to be a middleware that swapped in its 429 after the
+    // logging middleware could already have read c.res.status, which logged
+    // the route's pre-throttle status. The 429 is now the handler's own
+    // response, but this still guards the log line against any future
+    // wrapper that replaces c.res late. Spying on console.log (rather than
+    // matching a substring) and parsing the JSON line guards against a
     // regression that happens to still contain "429" somewhere.
     const logSpy = vi.spyOn(console, "log");
 
@@ -174,7 +172,7 @@ describe("rate limiting", () => {
     expect(res.status).not.toBe(429);
   });
 
-  // Final-review CRITICAL: the middleware used to call `await next()` --
+  // Final-review CRITICAL: an early middleware called `await next()` --
   // running the real handler and its real upstream fetch() -- BEFORE
   // checking the limiter, only swapping in a 429 afterward. That shape
   // cannot prevent the thing this limiter exists to prevent: probed at 320
@@ -194,15 +192,15 @@ describe("rate limiting", () => {
   // specific test -- calling it here would assert the wrong direction.
   //
   // Exhausts the budget by calling env.PROXY_LIMITER directly, with the same
-  // key the middleware itself derives, rather than looping real HTTP
-  // requests through the Worker -- the latter would need up to
+  // key throttleUpstream derives, rather than looping real HTTP requests
+  // through the Worker -- the latter would need up to
   // PROXY_LIMIT_ITERATION_CAP real, unmocked upstream fetch attempts (each
-  // one hitting the exact "check runs after next()" hole this test exists to
-  // close, pre-fix) just to reach the interesting part of this test, which
-  // both defeats the point and reintroduces this file's own documented
-  // wall-clock flake risk for no reason -- this test only needs the budget
-  // to already read as spent, not to reach that state through the route.
-  it("performs NO upstream fetch for a request the limiter throttles, because the check now runs before next()", async () => {
+  // one hitting the exact "check runs after the fetch" hole this test exists
+  // to close) just to reach the interesting part of this test, which both
+  // defeats the point and reintroduces this file's own documented wall-clock
+  // flake risk for no reason -- this test only needs the budget to already
+  // read as spent, not to reach that state through the route.
+  it("performs NO upstream fetch for a request the limiter throttles, because the budget is charged before the fetch", async () => {
     const ip = "203.0.113.30";
 
     for (let i = 0; i < PROXY_LIMIT; i++) {
@@ -228,64 +226,86 @@ describe("rate limiting", () => {
     expect(throttled.status).toBe(429);
     expect(upstreamFetchAttempted).toBe(false);
   });
-});
 
-// Regression coverage for the maintainer dashboards' move from bare /errors
-// and /feedback to /admin/errors and /admin/feedback: isExemptFromProxyLimit
-// has to be updated in lockstep with any dashboard path change, or dashboard
-// reads silently start counting against the shared 300/min proxy budget
-// meant to protect upstream provider quota. Deliberately a direct unit test
-// of the pure predicate, not an integration test driving ~300+ real
-// SELF.fetch() calls to approach PROXY_LIMITER's actual threshold: an
-// earlier version of this test did exactly that (320 iterations against
-// /admin/errors), and empirically made the wall-clock-dependent flake this
-// file's other tests already document (see PROXY_LIMIT_ITERATION_CAP's
-// comment above) measurably worse -- 2 of 2 runs with that loop present
-// failed on an unrelated heavy-loop test in this same file, versus 0 of 3
-// immediately before/after with it removed. Testing the decision function
-// directly gets equivalent coverage of the actual regression (a path falling
-// out of the exempt list) in microseconds, with no shared mutable rate-limit
-// state and no wall-clock dependency at all.
-describe("isExemptFromProxyLimit", () => {
-  it("exempts both maintainer dashboards under /admin/*", () => {
-    expect(isExemptFromProxyLimit("/admin/errors")).toBe(true);
-    expect(isExemptFromProxyLimit("/admin/errors/somefingerprint")).toBe(true);
-    expect(isExemptFromProxyLimit("/admin/feedback")).toBe(true);
-    expect(isExemptFromProxyLimit("/admin/feedback/some-id/state")).toBe(true);
+  // What shadowing production traffic caught: charging every request, hits
+  // included, would have refused a third of the TVDB requests the Elixir
+  // relay served, most of them from library scans. A hit spends no upstream
+  // quota, so it is served even with the budget spent, and only the miss
+  // after it is refused. Each URL here is unique to this test so no other
+  // test's cache entry can answer for it.
+  it("serves a cache hit with the budget spent, and refuses only the miss", async () => {
+    const ip = "203.0.113.40";
+    const cached = "https://relay.mydia.dev/tmdb/genre/movie?language=xx-hit";
+
+    fetchMock
+      .get("https://api.themoviedb.org")
+      .intercept({
+        method: "GET",
+        path: (p) => p.startsWith("/3/genre/movie/list") && p.includes("language=xx-hit"),
+      })
+      .reply(200, { genres: [] });
+
+    const first = await SELF.fetch(cached, { headers: { "cf-connecting-ip": ip } });
+    expect(first.status).toBe(200);
+    expect(first.headers.get("x-relay-cache")).toBe("MISS");
+
+    for (let i = 0; i < PROXY_LIMIT; i++) {
+      await env.PROXY_LIMITER.limit({ key: `proxy:${ip}` });
+    }
+
+    const hit = await SELF.fetch(cached, { headers: { "cf-connecting-ip": ip } });
+    expect(hit.status).toBe(200);
+    expect(hit.headers.get("x-relay-cache")).toBe("HIT");
+
+    const miss = await SELF.fetch(
+      "https://relay.mydia.dev/tmdb/genre/movie?language=xx-miss",
+      { headers: { "cf-connecting-ip": ip } },
+    );
+    expect(miss.status).toBe(429);
   });
 
-  it("exempts the public feedback ingest path, but not by prefix collision with /admin/feedback", () => {
-    expect(isExemptFromProxyLimit("/feedback")).toBe(true);
-    // A prefix check on "/feedback" must never accidentally match
-    // "/admin/feedback" -- confirmed here by the fact that /admin/feedback
-    // is exempt via the SEPARATE "/admin/" prefix in the test above, not
-    // this one; this test only asserts the bare ingest path itself.
-  });
+  // SubDL has a budget of its own. A metadata scan that spends PROXY_LIMITER
+  // must not lock the same install out of subtitles, and SubDL's shared key
+  // must not be spendable at the metadata rate.
+  it("charges SubDL against SUBTITLE_LIMITER, not PROXY_LIMITER", async () => {
+    const scanner = "203.0.113.50";
+    for (let i = 0; i < PROXY_LIMIT; i++) {
+      await env.PROXY_LIMITER.limit({ key: `proxy:${scanner}` });
+    }
 
-  it("exempts pairing and crash ingest", () => {
-    expect(isExemptFromProxyLimit("/pairing/claim")).toBe(true);
-    expect(isExemptFromProxyLimit("/crashes/report")).toBe(true);
-  });
+    fetchMock
+      .get("https://dl.subdl.com")
+      .intercept({ method: "GET", path: "/subtitle/budget.zip" })
+      .reply(404, "");
+    const allowedId = btoa("/subtitle/budget.zip").replace(/=+$/, "");
+    const allowed = await SELF.fetch(
+      `https://relay.mydia.dev/api/v1/subtitles/download/${allowedId}`,
+      { headers: { "cf-connecting-ip": scanner } },
+    );
+    expect(allowed.status).toBe(404);
 
-  it("exempts /health and /stats exactly, not by prefix", () => {
-    expect(isExemptFromProxyLimit("/health")).toBe(true);
-    expect(isExemptFromProxyLimit("/stats")).toBe(true);
-    // /health and /stats are EXACT matches (a Set), not prefixes -- a path
-    // that merely starts with one must still be charged against the budget.
-    expect(isExemptFromProxyLimit("/healthcheck")).toBe(false);
-  });
+    const flooder = "203.0.113.51";
+    for (let i = 0; i < PROXY_LIMIT; i++) {
+      await env.SUBTITLE_LIMITER.limit({ key: `proxy:${flooder}` });
+    }
 
-  it("does not exempt real proxy/metadata routes", () => {
-    expect(isExemptFromProxyLimit("/tmdb/genre/movie")).toBe(false);
-    expect(isExemptFromProxyLimit("/tvdb/search")).toBe(false);
-    expect(isExemptFromProxyLimit("/music/search")).toBe(false);
-    expect(isExemptFromProxyLimit("/api/v1/subtitles/search")).toBe(false);
-  });
-
-  // The literal regression this whole test exists to catch: before the
-  // dashboards moved, this list read "/errors" (bare), which is what a
-  // revert -- accidental or otherwise -- would reintroduce.
-  it("does not exempt the old, pre-move dashboard paths", () => {
-    expect(isExemptFromProxyLimit("/errors")).toBe(false);
+    let upstreamFetchAttempted = false;
+    fetchMock
+      .get("https://dl.subdl.com")
+      .intercept({
+        method: "GET",
+        path: (p) => {
+          upstreamFetchAttempted = true;
+          return p === "/subtitle/budget2.zip";
+        },
+      })
+      .reply(404, "");
+    const throttledId = btoa("/subtitle/budget2.zip").replace(/=+$/, "");
+    const throttled = await SELF.fetch(
+      `https://relay.mydia.dev/api/v1/subtitles/download/${throttledId}`,
+      { headers: { "cf-connecting-ip": flooder } },
+    );
+    expect(throttled.status).toBe(429);
+    expect(upstreamFetchAttempted).toBe(false);
   });
 });

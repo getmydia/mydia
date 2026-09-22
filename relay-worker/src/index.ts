@@ -12,35 +12,22 @@ import { registerFeedbackRoutes } from "./feedback/ingest";
 import { registerFeedbackDashboard } from "./dashboards/feedback";
 import { registerClientConfigRoutes } from "./config/client_config";
 import { adminHostnameBlocked } from "./dashboards/hostname-guard";
-import { rateLimitMiddleware } from "./obs/ratelimit";
 import { logRequest } from "./obs/log";
 import { runScheduledSweep } from "./obs/sweep";
 import { routeRequest } from "./routing/router";
 
 export const app = new Hono<{ Bindings: Env }>();
 
-// Both registered before every route (including /health and /stats below) so
-// the EXEMPT set inside rateLimitMiddleware is what actually protects those
-// routes, not an accident of Hono's registration-order middleware
-// composition -- app.use() only wraps routes registered after it, so a
-// health-check route defined ahead of this would otherwise never reach
-// either middleware at all.
-//
-// Order between the two matters, and it is the OPPOSITE of what it looks
-// like it should be: Hono composes middleware as an onion, so whichever is
-// registered SECOND runs as the INNER layer, closer to the route. The
-// logging middleware must be outermost (registered first) so its
-// `await next()` only returns once rateLimitMiddleware has had its own turn
-// to replace c.res with a 429 -- otherwise the log line records the route's
-// pre-throttle status (e.g. a plain 200/404) instead of what the client
-// actually received.
+// Registered before every route, because app.use() only wraps routes
+// registered after it. The upstream rate limits are not middleware: each
+// proxy handler charges its budget after a cache miss (src/obs/ratelimit.ts),
+// and a throttled request's 429 is simply that handler's response, so this
+// logs it like any other.
 app.use("*", async (c, next) => {
   await next();
   const cache = c.res.headers.get("x-relay-cache") === "HIT" ? "HIT" : "MISS";
   logRequest(new URL(c.req.url).pathname, c.res.status, cache);
 });
-
-app.use("*", rateLimitMiddleware());
 
 app.get("/health", (c) =>
   c.json({

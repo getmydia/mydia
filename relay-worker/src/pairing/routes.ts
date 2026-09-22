@@ -132,7 +132,7 @@ function notFoundError(): ErrorBody {
 
 // Exact parity with router.ex's send_rate_limited/2: {"error": "rate_limited",
 // "message": "Too many requests. Please try again later.", "retry_after": N}.
-// This is deliberately NOT ratelimit.ts's rateLimitMiddleware body (which
+// This is deliberately NOT ratelimit.ts's throttleUpstream body (which
 // mirrors the separate ProxyRateLimit plug's differently-cased "Too many
 // requests" error string and has no retry_after field) -- pairing uses the
 // router's own helper in the Elixir, not the proxy plug.

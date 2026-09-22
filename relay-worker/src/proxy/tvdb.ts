@@ -117,7 +117,7 @@ export function registerTvdbRoutes(app: Hono<{ Bindings: Env }>): void {
         : "";
       const upstream = `${TVDB_BASE}${upstreamPath}${query ? `?${query}` : ""}`;
 
-      return proxyJson(c.env, upstream, cacheKey, {
+      return proxyJson(c, upstream, cacheKey, {
         headers: { authorization: `Bearer ${token}` },
       });
     });
