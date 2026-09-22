@@ -260,9 +260,11 @@ defmodule Mydia.Downloads.Blacklists do
 
   Each search result is expected to expose `:indexer`, and `:guid` or the
   `:title` and `:size` that `release_guid/1` falls back to. Results with no
-  indexer are kept (no blacklist key to compare). Rejected
-  rows are logged at `:info` along with the supplied `log_context` keyword
-  list so callers can attach episode/movie ids for traceability.
+  indexer have no blacklist key to compare. A result whose `:download_url` is
+  a magnet is also dropped when its infohash is banned under any indexer.
+  Rejected rows are logged at `:info` with `matched_by: :key | :info_hash` and
+  the supplied `log_context` keyword list, so callers can attach episode/movie
+  ids for traceability.
 
   ## Examples
 
@@ -271,29 +273,40 @@ defmodule Mydia.Downloads.Blacklists do
   """
   @spec reject_blacklisted([map()], Keyword.t()) :: [map()]
   def reject_blacklisted(results, log_context \\ []) when is_list(results) do
-    blacklisted = batch_blacklisted(results)
+    keyed =
+      Enum.map(results, fn result ->
+        {result, blacklist_key(result), info_hash_from_url(Map.get(result, :download_url))}
+      end)
 
-    Enum.filter(results, fn result ->
-      pair = blacklist_key(result)
+    banned_keys = keyed |> Enum.map(&elem(&1, 1)) |> batch_blacklisted()
+    banned_hashes = keyed |> Enum.map(&elem(&1, 2)) |> active_info_hashes()
 
-      if pair && MapSet.member?(blacklisted, pair) do
-        Logger.info(
-          "Rejected blacklisted release",
-          [indexer: result.indexer, guid: elem(pair, 1), title: Map.get(result, :title)] ++
-            log_context
-        )
+    keyed
+    |> Enum.filter(fn {result, key, hash} ->
+      case match_ban(key, hash, banned_keys, banned_hashes) do
+        nil ->
+          true
 
-        false
-      else
-        true
+        matched_by ->
+          Logger.info(
+            "Rejected blacklisted release",
+            [
+              indexer: Map.get(result, :indexer),
+              guid: key && elem(key, 1),
+              title: Map.get(result, :title),
+              matched_by: matched_by
+            ] ++ log_context
+          )
+
+          false
       end
     end)
+    |> Enum.map(&elem(&1, 0))
   end
 
-  defp batch_blacklisted(results) do
+  defp batch_blacklisted(keys) do
     pairs =
-      results
-      |> Enum.map(&blacklist_key/1)
+      keys
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
@@ -327,6 +340,33 @@ defmodule Mydia.Downloads.Blacklists do
         Repo.all(query)
         |> MapSet.new()
         |> MapSet.intersection(candidate)
+    end
+  end
+
+  defp active_info_hashes(hashes) do
+    case hashes |> Enum.reject(&is_nil/1) |> Enum.uniq() do
+      [] ->
+        MapSet.new()
+
+      hashes ->
+        now = DateTime.utc_now()
+
+        from(b in ReleaseBlacklist,
+          where: b.info_hash in ^hashes,
+          where: is_nil(b.expires_at) or b.expires_at > ^now,
+          distinct: true,
+          select: b.info_hash
+        )
+        |> Repo.all()
+        |> MapSet.new()
+    end
+  end
+
+  defp match_ban(key, hash, banned_keys, banned_hashes) do
+    cond do
+      key && MapSet.member?(banned_keys, key) -> :key
+      hash && MapSet.member?(banned_hashes, hash) -> :info_hash
+      true -> nil
     end
   end
 

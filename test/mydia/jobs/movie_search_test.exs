@@ -392,6 +392,40 @@ defmodule Mydia.Jobs.MovieSearchTest do
       # No download was initiated for the blacklisted release.
       assert Mydia.Downloads.list_downloads() == []
     end
+
+    test "filters out a magnet result whose torrent is banned under another indexer", %{
+      bypass: bypass
+    } do
+      hash = "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          Map.merge(
+            IndexerMock.movie_result(%{
+              title: "Fictional Harbor Lights",
+              year: 2021,
+              seeders: 100
+            }),
+            %{magnet_url: "magnet:?xt=urn:btih:#{hash}&dn=Fictional.Harbor.Lights"}
+          )
+        ]
+      )
+
+      {:ok, _} =
+        Mydia.Downloads.Blacklists.add("bitmagnet", hash, "Fictional Harbor Lights", "stalled",
+          info_hash: hash
+        )
+
+      movie = media_item_fixture(%{type: "movie", title: "Fictional Harbor Lights", year: 2021})
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "specific",
+                 "media_item_id" => movie.id
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
   end
 
   describe "default quality profile fallback" do

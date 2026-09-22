@@ -295,6 +295,52 @@ defmodule Mydia.Downloads.BlacklistsTest do
 
       assert [^result] = Blacklists.reject_blacklisted([result])
     end
+
+    test "drops a magnet result whose infohash is banned under another indexer" do
+      hash = "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+      {:ok, _} = Blacklists.add("bitmagnet", hash, "T", "rejected_by_user", info_hash: hash)
+
+      result =
+        search_result(%{
+          indexer: "BitSearch",
+          guid: "unrelated-guid",
+          download_url: "magnet:?xt=urn:btih:#{String.upcase(hash)}&dn=x"
+        })
+
+      assert [] = Blacklists.reject_blacklisted([result])
+    end
+
+    test "matches a base32 btih against the hex infohash" do
+      hash = "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+      base32 = hash |> Base.decode16!(case: :lower) |> Base.encode32()
+      {:ok, _} = Blacklists.add("bitmagnet", hash, "T", "rejected_by_user", info_hash: hash)
+
+      result =
+        search_result(%{
+          indexer: "BitSearch",
+          guid: "unrelated-guid",
+          download_url: "magnet:?xt=urn:btih:#{base32}"
+        })
+
+      assert [] = Blacklists.reject_blacklisted([result])
+    end
+
+    test "keeps a magnet result whose infohash ban has expired" do
+      hash = "3b245504cf5f11bbdbe1201cea6a6bf45aee1bc0"
+      past = DateTime.add(DateTime.utc_now(), -3600, :second)
+
+      {:ok, _} =
+        Blacklists.add("bitmagnet", hash, "T", "stalled", expires_at: past, info_hash: hash)
+
+      result =
+        search_result(%{
+          indexer: "BitSearch",
+          guid: "unrelated-guid",
+          download_url: "magnet:?xt=urn:btih:#{hash}"
+        })
+
+      assert [^result] = Blacklists.reject_blacklisted([result])
+    end
   end
 
   describe "release_guid/1" do
