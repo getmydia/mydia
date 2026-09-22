@@ -20,6 +20,13 @@ config :metadata_relay, MetadataRelay.Feedback.Notifier,
 
 config :metadata_relay, MetadataRelay.Mailer, adapter: Swoosh.Adapters.Local
 
+# Player log uploads. Batches are gzipped files under `dir`; SQLite holds
+# only the index. See MetadataRelay.PlayerLogs.
+config :metadata_relay, :player_logs,
+  dir: "./player_logs",
+  max_bytes: 2_147_483_648,
+  sweep_interval_ms: 3_600_000
+
 config :swoosh, :api_client, false
 
 # Configure Phoenix endpoint for ErrorTracker dashboard

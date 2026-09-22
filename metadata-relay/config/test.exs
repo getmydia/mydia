@@ -24,3 +24,10 @@ config :metadata_relay, MetadataRelay.Feedback.Notifier,
   dashboard_url: "https://relay.example.com"
 
 config :metadata_relay, MetadataRelay.Mailer, adapter: Swoosh.Adapters.Test
+
+# Tests point `dir` at a tmp directory of their own (PlayerLogsHelpers) and
+# call PlayerLogs.sweep/1 directly, so the hourly sweeper never runs.
+config :metadata_relay, :player_logs,
+  dir: Path.join(System.tmp_dir!(), "metadata_relay_player_logs_test"),
+  max_bytes: 2_147_483_648,
+  sweep_interval_ms: nil

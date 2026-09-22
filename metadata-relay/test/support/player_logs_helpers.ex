@@ -86,4 +86,28 @@ defmodule MetadataRelay.PlayerLogsHelpers do
 
     %Batch{meta: meta, records: records, size: Keyword.get(opts, :size, 1_000), dropped: 0}
   end
+
+  @doc """
+  Points `player_logs.dir` at a fresh tmp directory for this test, and puts
+  the old config back afterwards. Returns the directory, which does not exist
+  until something is written.
+  """
+  def use_tmp_logs_dir do
+    dir = Path.join(System.tmp_dir!(), "player_logs_#{System.unique_integer([:positive])}")
+    put_logs_config(:dir, dir)
+    ExUnit.Callbacks.on_exit(fn -> File.rm_rf(dir) end)
+    dir
+  end
+
+  @doc "Overrides one `player_logs` config key for this test."
+  def put_logs_config(key, value) do
+    previous = Application.fetch_env!(:metadata_relay, :player_logs)
+    Application.put_env(:metadata_relay, :player_logs, Keyword.put(previous, key, value))
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Application.put_env(:metadata_relay, :player_logs, previous)
+    end)
+
+    :ok
+  end
 end
