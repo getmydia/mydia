@@ -105,5 +105,6 @@ defmodule MetadataRelay.PlayerLogsTest do
 
     assert {:error, {:storage, _reason}} = PlayerLogs.ingest(batch())
     assert Repo.all(Chunk) == []
+    assert Repo.get(Device, device_id()) == nil
   end
 end

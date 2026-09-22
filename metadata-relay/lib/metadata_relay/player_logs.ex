@@ -31,16 +31,23 @@ defmodule MetadataRelay.PlayerLogs do
           | {:error, {:storage, term()}}
 
   @doc """
-  Stores one decoded batch: charges the device's daily quota, resolves or
-  creates its report, writes the file, indexes it, then applies the disk cap.
+  Stores one decoded batch: checks the device's daily quota, resolves or
+  creates its report, writes the file, indexes it, records the usage against
+  the quota, then applies the disk cap.
+
+  The quota check and the quota write are deliberately separate steps. A
+  device is only charged once the file is written and indexed, so a storage
+  failure never burns part of a device's daily allowance for bytes that were
+  never actually stored.
   """
   @spec ingest(Batch.t(), DateTime.t()) :: ingest_result()
   def ingest(%Batch{meta: meta} = batch, now \\ DateTime.utc_now()) do
     now = DateTime.truncate(now, :second)
 
-    with :ok <- charge_quota(meta, batch.size, now),
+    with {:ok, used} <- check_quota(meta, batch.size, now),
          {:ok, code} <- resolve_report(meta, now),
-         {:ok, _chunk} <- store_chunk(batch, code, now) do
+         {:ok, _chunk} <- store_chunk(batch, code, now),
+         :ok <- record_usage(meta, batch.size, used, now) do
       enforce_cap()
       {:ok, if(code, do: {:report, code}, else: :stream)}
     end
@@ -70,35 +77,45 @@ defmodule MetadataRelay.PlayerLogs do
   @doc false
   def config(key), do: Application.fetch_env!(:metadata_relay, :player_logs) |> Keyword.get(key)
 
-  defp charge_quota(%Meta{} = meta, size, now) do
+  defp check_quota(%Meta{} = meta, size, now) do
+    today = DateTime.to_date(now)
+
+    used =
+      case Repo.get(Device, meta.device_id) do
+        %Device{bytes_day: ^today, bytes_today: bytes_today} -> bytes_today
+        _ -> 0
+      end
+
+    if used + size > @daily_quota_bytes do
+      {:error, {:quota_exceeded, seconds_until_midnight(now)}}
+    else
+      {:ok, used}
+    end
+  end
+
+  defp record_usage(%Meta{} = meta, size, used, now) do
     today = DateTime.to_date(now)
 
     device =
       Repo.get(Device, meta.device_id) || %Device{device_id: meta.device_id, first_seen_at: now}
 
-    used = if device.bytes_day == today, do: device.bytes_today, else: 0
+    described =
+      %{
+        name: meta.device_name,
+        platform: meta.platform,
+        os_version: meta.os_version,
+        app_version: meta.app_version
+      }
+      |> Map.reject(fn {_field, value} -> is_nil(value) end)
 
-    if used + size > @daily_quota_bytes do
-      {:error, {:quota_exceeded, seconds_until_midnight(now)}}
-    else
-      described =
-        %{
-          name: meta.device_name,
-          platform: meta.platform,
-          os_version: meta.os_version,
-          app_version: meta.app_version
-        }
-        |> Map.reject(fn {_field, value} -> is_nil(value) end)
-
-      device
-      |> Ecto.Changeset.change(
-        Map.merge(described, %{last_seen_at: now, bytes_today: used + size, bytes_day: today})
-      )
-      |> Repo.insert_or_update()
-      |> case do
-        {:ok, _device} -> :ok
-        {:error, changeset} -> {:error, {:storage, changeset}}
-      end
+    device
+    |> Ecto.Changeset.change(
+      Map.merge(described, %{last_seen_at: now, bytes_today: used + size, bytes_day: today})
+    )
+    |> Repo.insert_or_update()
+    |> case do
+      {:ok, _device} -> :ok
+      {:error, changeset} -> {:error, {:storage, changeset}}
     end
   end
 
