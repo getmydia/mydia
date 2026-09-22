@@ -139,6 +139,32 @@ void main() {
     expect(console.single, startsWith('[LogSink] Dropped a record'));
   });
 
+  test(
+      'a message far longer than the limit is stored truncated, and a '
+      'secret placed beyond the pre-cut cannot appear', () {
+    final sink =
+        LogSink(sessionId: 's', now: () => now, console: (_, {wrapWidth}) {});
+    final store = MemoryLogStore();
+    sink.attach(store);
+
+    // Filler alone already exceeds the pre-redaction cut
+    // (LogRecord.maxMessageChars * 2), so the secret that follows it sits
+    // entirely beyond that cut and is dropped before redactLogMessage ever
+    // sees it.
+    final filler = 'a' * (LogRecord.maxMessageChars * 2 + 1000);
+    const secret = 'token=sk_live_should_never_appear';
+
+    sink.recordLine('[Huge] $filler $secret');
+
+    final record = store.records.single;
+    expect(
+      record.message.length,
+      LogRecord.maxMessageChars + LogRecord.truncationMarker.length,
+    );
+    expect(record.message, endsWith(LogRecord.truncationMarker));
+    expect(record.message, isNot(contains('sk_live_should_never_appear')));
+  });
+
   test('new session IDs are 8 hex characters and differ', () {
     final a = LogSink.newSessionId();
     final b = LogSink.newSessionId();

@@ -50,4 +50,29 @@ void main() {
       test(line, () => expect(redactLogMessage(line), line));
     }
   });
+
+  // A normal userinfo URL is already covered by the 'removes' case
+  // 'Connecting to https://admin:hunter2@nas.local:8443/api' above; no
+  // separate case is added here to avoid duplicating it.
+
+  test(
+      'guards against quadratic scanning: a huge line with a scheme but no '
+      '@ to anchor on redacts quickly', () {
+    // 200k+ characters after "https://" with no "@" anywhere: the shape
+    // that made the old unbounded _userinfo pattern backtrack over the
+    // whole remainder of the line looking for an "@" that never comes.
+    final pathological = 'https://${'x' * 200000}';
+
+    final stopwatch = Stopwatch()..start();
+    final result = redactLogMessage(pathological);
+    stopwatch.stop();
+
+    expect(result, pathological);
+    expect(
+      stopwatch.elapsed,
+      lessThan(const Duration(seconds: 2)),
+      reason: 'redactLogMessage took ${stopwatch.elapsed}, which suggests '
+          'quadratic scanning has regressed',
+    );
+  });
 }

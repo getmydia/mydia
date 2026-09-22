@@ -30,9 +30,21 @@ final _quotedCredential = RegExp(
   caseSensitive: false,
 );
 
-// user:pass@ in a URL's authority.
-final _userinfo =
-    RegExp(r'''([a-zA-Z][a-zA-Z0-9+.\-]*://)[^\s/?#@:"']+:[^\s/?#@"']*@''');
+// user:pass@ in a URL's authority. Every variable-length part -- the scheme
+// suffix, the user and the password -- is bounded (real schemes, usernames
+// and passwords are all short) rather than left open with `+`/`*`: on a
+// line with no `@` at all, an unbounded quantifier backtracks character by
+// character over the rest of the line looking for one that never comes,
+// which is quadratic in the line's length. That happens for the scheme
+// suffix just as it does for the user/password parts -- a long run of plain
+// letters (a base64 blob, a hex hash) after "https:" matches
+// `[a-zA-Z0-9+.\-]*` too, so without a bound on it the engine retries the
+// same doomed backtrack starting at every letter in the run. Bounding all
+// three gives up after a fixed amount of work per attempted match instead
+// of scanning to the end of the line.
+final _userinfo = RegExp(
+  r'''([a-zA-Z][a-zA-Z0-9+.\-]{0,31}://)[^\s/?#@:"']{1,128}:[^\s/?#@"']{0,128}@''',
+);
 
 // The value of a credential-bearing query parameter.
 final _credentialParam = RegExp(

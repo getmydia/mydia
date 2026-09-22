@@ -40,6 +40,22 @@ class LogSink {
   static const maxPending = 5000;
   static const _stackFrames = 20;
 
+  /// How much of a message [_add] hands to [redactLogMessage] before the
+  /// final [LogRecord.truncate].
+  ///
+  /// Twice [LogRecord.maxMessageChars], not exactly [LogRecord.maxMessageChars]:
+  /// redaction can lengthen a message (a short secret becomes `[REDACTED]`),
+  /// and cutting at exactly the limit can slice a secret in half, leaving an
+  /// unmatched fragment of it in plain text right at the truncation boundary
+  /// where [LogRecord.truncate] would otherwise have removed the whole thing.
+  /// Cutting at twice the limit instead guarantees that any secret whose
+  /// start survives into the final, truncated output also has its entire
+  /// span included in this pre-cut, so [redactLogMessage] sees it whole and
+  /// redacts it whole; a secret fragment beyond that is discarded by
+  /// [LogRecord.truncate] a moment later and can never reach the stored
+  /// record either way.
+  static const _preRedactChars = LogRecord.maxMessageChars * 2;
+
   final String sessionId;
   final DateTime Function() _now;
   final DebugPrintCallback _console;
@@ -131,11 +147,14 @@ class LogSink {
     required LogLevel level,
     LogSource source = LogSource.dart,
   }) {
+    final preCut = message.length > _preRedactChars
+        ? message.substring(0, _preRedactChars)
+        : message;
     final record = LogRecord(
       time: _now().toUtc(),
       level: level,
       tag: tag,
-      message: LogRecord.truncate(redactLogMessage(message)),
+      message: LogRecord.truncate(redactLogMessage(preCut)),
       sessionId: sessionId,
       source: source,
     );
