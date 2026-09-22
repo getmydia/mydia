@@ -570,19 +570,10 @@ defmodule Mydia.Indexers.CardigannTemplateTest do
   end
 
   # AC #6 & #7: Logging tests
+  #
+  # The parse-error info log is tested in cardigann_template_logging_test.exs,
+  # which can raise the Logger level because it is not async.
   describe "logging" do
-    test "logs info on parse error" do
-      context = %{}
-
-      log =
-        capture_log([level: :info], fn ->
-          CardigannTemplate.render("{{ .incomplete", context)
-        end)
-
-      # The error is returned but also logged at info level
-      assert log =~ "Template parse failed" or log =~ "parse error" or log == ""
-    end
-
     test "logs debug for field resolution on missing field" do
       context = %{}
 

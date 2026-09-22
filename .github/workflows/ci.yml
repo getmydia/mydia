@@ -66,11 +66,16 @@ jobs:
       - name: Install devenv
         run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
 
+      # patches/** is in the deps and build keys because `mix deps.get`
+      # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it
+      # patched. Without it a pre-patch deps/ cache is restored and re-patched
+      # on every run, and a pre-patch _build keeps the unpatched Exqlite NIF,
+      # which test/mydia/repo/exqlite_patch_test.exs then fails on.
       - name: Cache dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: deps
-          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
           restore-keys: |
             ${{ runner.os }}-deps-devenv-
 
@@ -92,9 +97,9 @@ jobs:
           # newly added export the whole module fails to load, and every caller
           # reports "module Mydia.P2p is not available" rather than anything
           # pointing at the cache.
-          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
           restore-keys: |
-            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
+            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
 
       # Materialize the devenv toolchain with a retry BEFORE the test step. Nix
       # evaluation can transiently fail with "path '…/test-timeout.patch' is not
@@ -379,11 +384,16 @@ jobs:
       - name: Install devenv
         run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
 
+      # patches/** is in the deps and build keys because `mix deps.get`
+      # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it
+      # patched. Without it a pre-patch deps/ cache is restored and re-patched
+      # on every run, and a pre-patch _build keeps the unpatched Exqlite NIF,
+      # which test/mydia/repo/exqlite_patch_test.exs then fails on.
       - name: Cache dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: deps
-          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
           restore-keys: |
             ${{ runner.os }}-deps-devenv-
 
@@ -401,9 +411,9 @@ jobs:
             priv/native
           # See the `test` job: the native hash must gate the restore too, or a
           # stale NIF comes back and the module fails to load.
-          key: ${{ runner.os }}-build-v2-devenv-postgres-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          key: ${{ runner.os }}-build-v2-devenv-postgres-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
           restore-keys: |
-            ${{ runner.os }}-build-v2-devenv-postgres-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
+            ${{ runner.os }}-build-v2-devenv-postgres-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
 
       # See the `test` job for why the environment is warmed (with retry) before
       # the test step — guards against transient Nix substitution failures.
@@ -468,11 +478,16 @@ jobs:
       - name: Install devenv
         run: nix profile install github:NixOS/nixpkgs/567a49d1913ce81ac6e9582e3553dd90a955875f#devenv
 
+      # patches/** is in the deps and build keys because `mix deps.get`
+      # patches deps/ in place (deps.patch in mix.exs) and rebuilds what it
+      # patched. Without it a pre-patch deps/ cache is restored and re-patched
+      # on every run, and a pre-patch _build keeps the unpatched Exqlite NIF,
+      # which test/mydia/repo/exqlite_patch_test.exs then fails on.
       - name: Cache dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: deps
-          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-deps-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}
           restore-keys: |
             ${{ runner.os }}-deps-devenv-
 
@@ -494,9 +509,9 @@ jobs:
           # newly added export the whole module fails to load, and every caller
           # reports "module Mydia.P2p is not available" rather than anything
           # pointing at the cache.
-          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
+          key: ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-${{ hashFiles('lib/**/*.ex', 'test/**/*.exs') }}
           restore-keys: |
-            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
+            ${{ runner.os }}-build-v2-devenv-${{ hashFiles('**/mix.lock', 'patches/**') }}-${{ hashFiles('native/**/*.rs', 'native/**/Cargo.toml', 'native/**/Cargo.lock', 'rust-toolchain.toml') }}-
 
       # See the `test` job for why the environment is warmed (with retry) before
       # the test step — guards against transient Nix substitution failures (this

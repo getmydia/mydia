@@ -10,9 +10,10 @@
 # Used two ways:
 #   * The Dockerfile calls assert_patched!/0 against the NIF it just built,
 #     failing the build unless the patch works.
-#   * test/mydia/repo/exqlite_destructor_canary_test.exs runs measure/1 in a
-#     child VM against the unpatched NIF that dev and CI use, asserting
-#     upstream still stalls.
+#   * test/mydia/repo/exqlite_patch_test.exs runs measure/1 in a child VM
+#     against the NIF the test run uses, failing unless it is the patched
+#     one. Run against a freshly bumped, unpatched release, it also says
+#     whether upstream still needs the patch.
 
 defmodule ExqliteDestructorProbe do
   alias Exqlite.Sqlite3

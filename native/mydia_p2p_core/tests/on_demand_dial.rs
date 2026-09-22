@@ -37,10 +37,16 @@ async fn wait_for_ready(host: &Host) -> String {
 /// relay and publishes a pkarr record, so it is reachable by node ID within
 /// seconds. CI proved that the hard way, resolving one through discovery and
 /// connecting to it over the relay while this test was asserting it could not
-/// be reached. Fixed bytes keep it deterministic; nothing ever answers for
-/// this key.
+/// be reached.
+///
+/// The key is random per call, not fixed. It used to be `[7u8; 32]`, the
+/// same bytes a test in `src/lib.rs` gave a live `Host`, and `cargo test` runs
+/// that test seconds before this file. Twice on 2026-09-21 the dial resolved
+/// through discovery to that host and connected, so "a black-holed peer
+/// should not connect" failed. Any fixed key is shared with every other run
+/// using the public relay at the same moment.
 fn unreachable_node_id() -> String {
-    iroh::SecretKey::from_bytes(&[7u8; 32]).public().to_string()
+    iroh::SecretKey::generate().public().to_string()
 }
 
 /// The EndpointAddr JSON a roster entry produces: a node ID and nothing else.
@@ -256,7 +262,10 @@ async fn a_send_to_an_unreachable_peer_reports_the_dial_failure_body() {
     // dial fails. A made-up node ID would not do: it fails at key parsing
     // with `invalid node ID:` and never dials at all.
     let error = sender
-        .send_request(unreachable_node_id(), MydiaRequest::Custom(b"probe".to_vec()))
+        .send_request(
+            unreachable_node_id(),
+            MydiaRequest::Custom(b"probe".to_vec()),
+        )
         .await
         .expect_err("an unreachable peer cannot answer");
 

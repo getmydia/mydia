@@ -377,9 +377,40 @@ under a different pid is this bug, not load.
 Note its `on_exit` deletes rows through another `unboxed_run`, so a failed run
 can leave real rows behind in the shared SQLite test database.
 
+**It still fails, SQLite only, with a different signature, and that one is
+not a test bug.** Ten times between 2026-09-02 and 2026-09-19:
+
+```text
+** (EXIT from #PID<...>) an exception was raised:
+    ** (Exqlite.Error) database is locked
+BEGIN IMMEDIATE TRANSACTION
+    lib/mydia/library/candidate_promotion.ex:36: ...commit_group/4
+```
+
+thirty seconds (`busy_timeout`) after the test starts. The second task's
+`BEGIN IMMEDIATE` gives up because the first task, which holds the write lock,
+stops making progress, and the log shows the first task finishing its
+promotion a few milliseconds *after* the second one fails. That is the
+Exqlite statement-destructor stall `patches/exqlite/` fixes: a connection
+busy-waiting for the write lock holds its mutex for the whole wait, and any
+process that drops one of that connection's statements (a GC, or Ecto's
+query cache replacing an entry) blocks on that mutex until the wait gives up.
+When the blocked process is the lock holder, nothing moves for thirty seconds.
+Reproduced deterministically on one scheduler (`+S 1:1`): a lock holder that
+queries and garbage-collects while another connection busy-waits stalls for
+the rest of `busy_timeout`, and does not once the patch is applied.
+
+**Fixed 2026-09-21 by building the patched Exqlite in dev and CI too.** Until
+then only the Docker image had it. `mix deps.get` now applies
+`patches/exqlite/`, and `test/mydia/repo/exqlite_patch_test.exs` fails any run
+on the unpatched NIF. If this signature comes back, check that test first.
+
 **`Mydia.Library.FileIngestTest`, "a losing promotion failure cannot resurrect
-the winner's deleted candidate"** (`file_ingest_test.exs:178`). **Fixed
-2026-09-01, same day, and it was a timeout budget, not load.** Fails as
+the winner's deleted candidate"** (`file_ingest_test.exs:178`). **Deleted
+2026-09-03 (`198529583`).** The `90_000` budget below did not fix it: it went
+on failing with the same `database is locked` from `BEGIN IMMEDIATE` as
+`CandidatePromotionTest` above, the destructor stall rather than a budget.
+The history, kept because the budget reasoning still holds: fails as
 `** (exit) exited in: Task.await(...)` at `assert {:promoted, [_]} =
 Task.await(winner, @ownership_await)`, SQLite job only.
 
@@ -446,8 +477,22 @@ anything making the search short-circuit leaves the row behind, and the log carr
 `Req.TransportError connection refused` warnings around it. SQLite green on
 identical code.
 
-**`Indexers.CardigannTemplateTest`**, "logging logs info on parse error". Caught on
-a PR whose diff was entirely under `player/`.
+**`Indexers.CardigannTemplateTest`**, "logging logs info on parse error". **Fixed
+2026-09-21.** 18 failures in a month. The code under test logs at `:info`, the
+suite runs at `:warning`, so the call never emitted and the test accepted
+`log == ""`. The only way to fail was `capture_log` catching another module's
+warning, which on the PostgreSQL job it did. It now lives in
+`cardigann_template_logging_test.exs`, not async, with the level raised and
+the message asserted.
+
+**Capture and subscription pollution in general.** `capture_log`, the
+`"events:all"` PubSub topic and `:telemetry` handlers all see every process in
+the VM. In an async module on the PostgreSQL job, a bare "this did not happen"
+assertion over any of them fails whenever a concurrent module does the same
+thing. Scope the assertion to the test's own ids or process. Fixed that way on
+2026-09-21: `Jobs.SubtitleResyncTest` (refute only lines naming its own media
+file), `Playback.DismissalTest` (match its own actor and resource), and
+`Playback.OnDeckQueryCountTest` (count only queries from the test process).
 
 **`Accounts.ChangelogPreferenceTest`**, racing concurrent first-mount insert; exits
 on `Task.await_many(tasks, 2_000)` timeout. The assertion budgets 2 seconds for two
@@ -455,7 +500,10 @@ racing tasks, not enough on a loaded runner, though the file runs in 0.1s locall
 The proper fix is raising the timeout.
 
 **`Playback.OnDeckTest`**, "the query count does not grow with the number of
-engaged shows". Do not use inverted numbers as the tell. It first appeared as 9 for
+engaged shows". **Fixed 2026-09-21** (now `OnDeckQueryCountTest`): moving it to
+a sync module was not enough, since a process outliving an earlier test can
+still query mid-measurement (7 against 8 on 2026-09-14), so the handler counts
+only the test process's own queries. Do not use inverted numbers as the tell. It first appeared as 9 for
 3 shows and 6 for 15, which no regression produces, but recurred as 8 for 3 and 12
 for 15, which reads exactly like a genuine N+1. Triage by what the diff touches
 instead. The counter picks up other modules' queries, so it is Postgres cross-test
@@ -463,7 +511,9 @@ pollution; the proper fix is scoping the telemetry counter to the test's own rep
 checkouts.
 
 **`Playback.DismissalTest`**, "dismiss_from_on_deck/3 emits no event, where an
-unwatch would", seen 2026-08-23 on PR #541. Sibling of `Playback.OnDeckTest` and
+unwatch would". **Fixed 2026-09-21**, 13 failures in a month, master included:
+`refute_receive` matched any `playback.unwatched` on the global events topic,
+including other modules'. First seen 2026-08-23 on PR #541. Sibling of `Playback.OnDeckTest` and
 behaves the same way: 1 failure out of 8792, with `Ecto.StaleEntryError` and
 `Postgrex.Protocol ... disconnected` noise in the same log. The PR's diff was four
 files, all under `player/`, zero Elixir, and the same job had passed on the
@@ -537,11 +587,35 @@ in a row on `Test` are not automatically a real failure; compare the signatures.
 
 **`Streaming.AudioTrackSelectorTest`**, where all five `resolved_languages/2` tests
 fail together, each asserting a list and getting `[]`, or `nil` from
-`Enum.find_index`. `resolved_languages/2` returns `[]` on exactly one branch, when
-`configured()` reports `prefer_default_audio_track == true`. `configured()` reads
-process-global `Mydia.Config.get()`, so a concurrently scheduled module that sets
-that config flips this module's answer wholesale, which is why all five go at once.
-Confirmed flaky on PR #488, a player-only Dart diff with zero Elixir.
+`Enum.find_index`. **Fixed 2026-09-21.** `configured()` reads process-global
+`Mydia.Config.get()`, and the culprit was `setup_runtime_config/1` in
+`media_import_test.exs` and `download_monitor_test.exs`, both async, which
+installed a `Mydia.Config.Schema` literal naming only eight sections. Every
+other section, `:streaming` included, was `nil` while it was installed, so
+`configured()` fell through to its `{[], false}` fallback. The DownloadMonitor
+helper now starts from `Mydia.Config.Schema.defaults()` in a sync module, and
+`media_import_test.exs` no longer writes the global at all: its only callers
+were two placeholder tests that asserted nothing. The same leak explains a one-off
+`BadMapError` on `.streaming` in the since-deleted
+`MediaItemAudioLanguagesTest`. Confirmed flaky on PR #488, a player-only Dart
+diff with zero Elixir.
+
+**`Jobs.DownloadMonitorTest`**, "does NOT mark downloads missing when their
+client is unreachable", `assert is_nil(updated.error_message)`. **Fixed
+2026-09-21.** Same helper, other half: another async module's
+`setup_runtime_config([])` replaced the client list mid-poll, the download
+looked orphaned, and the monitor recorded "no longer configured in Mydia".
+The module is no longer async, matching the other DownloadMonitor test files.
+
+**`Streaming.DeviceProfileTest`**, "from_map/1 never creates atoms from input
+keys", `atom_count` off by one. **Fixed 2026-09-21.** The count is VM-wide, so
+any concurrent atom broke it. It now checks the one input key is still not an
+atom.
+
+**`Jobs.MetadataRefreshTest`**, the two `run_all/1` pass-isolation tests,
+counting 4 attempts for 3 items. **Fixed 2026-09-21** by counting the test's
+own items. `run_all/1` walks every monitored item in the table, and one this
+test never created was visible; where it came from was not established.
 
 ### SQLite job
 
@@ -561,12 +635,33 @@ purely to dodge this error class. `SQLiteWriteContentionTest` is extra exposed,
 with 8 writers against a tmp database with a deliberately short
 `busy_timeout: 2_000`.
 
+Suspect the Exqlite destructor stall (see `CandidatePromotionTest` above) for
+any `Database busy` or `database is locked` that arrives a full
+`busy_timeout` after the statement started: that shape means the lock holder
+stopped, not that the writers were too many. Single occurrences of exactly
+that on ordinary sandboxed inserts: `Config.BootstrapTest` (2026-09-10) and
+`Settings.QualityProfilesTest` (2026-09-15).
+
+**`Repo.SQLiteWriteContentionTest`**, "IMMEDIATE transactions do not", 22
+failures in a month on both jobs, five or six writers at once reporting
+`database is locked`. **Fixed 2026-09-21.** Every failing transaction had
+waited out the full two seconds, and in the failing rounds a lock holder's
+own statements stalled until the waiters gave up. So the IMMEDIATE arm now
+asserts what IMMEDIATE actually guarantees, that no failure arrives before
+`busy_timeout` has elapsed. Pointing the DEFERRED arm's mode at it fails with
+fast `Database busy`, so it still catches a regression. Its schema is now
+created over one raw connection before the pool starts, because eight
+connections opening a brand-new file under load also failed setup with
+`no such table: counter`.
+
 **`Plugins.SingleFlightTest`**, "acquire/release lets a second waiter in", exits in
 `GenServer.stop/3` with `(EXIT) no process`.
 
 **`Jobs.DownloadMonitorTest`**, "pre-completion content rejection". Failed 3 of 4
 runs, always the same 3 tests, always with the download classified "missing", but
-the sub-symptom varied. Extracting the failing run's ExUnit seed and re-running
+the sub-symptom varied. "Missing" is what the runtime-config clobbering fixed
+on 2026-09-21 produces (see the Postgres entry for this module), so this may
+be the same leak. Extracting the failing run's ExUnit seed and re-running
 locally reproduced it once, then failed to reproduce on an identical second run
 with the identical seed, proving genuine timing sensitivity rather than ordering.
 Do not repeat that investigation.
@@ -589,6 +684,21 @@ failing when re-run alone, which normally rules out flakiness; the cause was loa
 average 43 from a concurrent agent plus `./dev mix compile --force`. Check `uptime`
 before concluding a `render_async` failure is real, and trust the CI job over a
 loaded local box.
+
+## Rust (`native/mydia_p2p_core`)
+
+**`an_unreachable_dial_does_not_block_other_commands`**
+(`tests/on_demand_dial.rs`), `a black-holed peer should not connect`.
+**Fixed 2026-09-21**, twice that day on a docs diff and a fastlane bump. The
+"unreachable" node ID came from the fixed key `[7u8; 32]`, and
+`a_stale_connection_closing_does_not_report_a_live_peer_as_gone` in
+`src/lib.rs`, which `cargo test` runs seconds earlier, gave a live `Host` those
+same bytes. These hosts use the public relay and discovery, so the dial found
+it and connected. Test keys that touch the network are now random per run: a
+fixed one is shared with every CI job and local run online at that moment.
+The `src/lib.rs` test itself timed out on its first dial once (2026-09-13); it
+now also waits for the first client before starting the second under the same
+key.
 
 ## relay-worker (vitest-pool-workers)
 

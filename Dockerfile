@@ -175,14 +175,11 @@ COPY patches/ueberauth_oidcc_request.ex ./deps/ueberauth_oidcc/lib/ueberauth_oid
 # Patch Exqlite so dropping a prepared statement never blocks a BEAM scheduler
 # while its connection busy-waits. Unpatched, SQLite lock contention can freeze
 # the whole VM for the full busy_timeout; the patch header has the details.
-# The patch is written against Exqlite 0.40.0 only, so a version bump stops the
-# build here. Whoever bumps it runs
-# test/mydia/repo/exqlite_destructor_canary_test.exs: if it fails, upstream
-# fixed the bug and patches/exqlite goes; if it passes, rebase the patch.
+# `mix deps.patch` is the step every `mix deps.get` runs in dev and CI. It
+# skipped in the deps.get layer above, which has no patches/ yet. It stops the
+# build on any Exqlite version but the one the patch targets.
 COPY patches/exqlite ./patches/exqlite
-RUN grep -qF '{<<"version">>,<<"0.40.0">>}.' deps/exqlite/hex_metadata.config || \
-      { echo "deps/exqlite is not 0.40.0: rebase or retire patches/exqlite" >&2; exit 1; } && \
-    patch -p1 -d deps/exqlite -i /app/patches/exqlite/statement-destructor-never-blocks.patch
+RUN mix deps.patch
 
 # Compile dependencies
 # Cache cargo registry for Rust NIF compilation (mydia_p2p_core)

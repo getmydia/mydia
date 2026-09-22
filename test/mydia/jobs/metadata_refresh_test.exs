@@ -56,19 +56,27 @@ defmodule Mydia.Jobs.MetadataRefreshTest do
     end
   end
 
+  # run_all/1 walks every monitored item in the database, and on the
+  # PostgreSQL job that has included one these tests never created (CI counted
+  # 4 attempts for 3 items). So they count their own items, or compare the
+  # event with what the pass actually visited, rather than assume the table
+  # holds exactly what they inserted.
   describe "run_all/1 - pass isolation" do
     test "one raising item does not abort the pass" do
-      for n <- 1..3 do
-        media_item_fixture(%{type: "movie", title: "Item #{n}", year: 2024})
-      end
+      ids =
+        MapSet.new(1..3, fn n ->
+          media_item_fixture(%{type: "movie", title: "Item #{n}", year: 2024}).id
+        end)
 
       attempted = :counters.new(1, [])
 
-      raise_on_second = fn _media_item ->
-        :counters.add(attempted, 1, 1)
+      raise_on_second = fn media_item ->
+        if MapSet.member?(ids, media_item.id) do
+          :counters.add(attempted, 1, 1)
 
-        if :counters.get(attempted, 1) == 2 do
-          raise "boom"
+          if :counters.get(attempted, 1) == 2 do
+            raise "boom"
+          end
         end
 
         {:error, :relay_unavailable}
@@ -85,13 +93,22 @@ defmodule Mydia.Jobs.MetadataRefreshTest do
         media_item_fixture(%{type: "movie", title: "Item #{n}", year: 2024})
       end
 
-      assert :ok = MetadataRefresh.run_all(fn _item -> {:error, :relay_unavailable} end)
+      visited = :counters.new(1, [])
+
+      assert :ok =
+               MetadataRefresh.run_all(fn _item ->
+                 :counters.add(visited, 1, 1)
+                 {:error, :relay_unavailable}
+               end)
+
+      total = :counters.get(visited, 1)
+      assert total >= 3
 
       assert [event] = Events.list_events(category: "system", type: "job.failed")
       assert event.metadata["job_name"] == "metadata_refresh"
-      assert event.metadata["total"] == 3
+      assert event.metadata["total"] == total
       assert event.metadata["succeeded"] == 0
-      assert event.metadata["failed"] == 3
+      assert event.metadata["failed"] == total
     end
 
     test "emits no event when every item succeeds" do

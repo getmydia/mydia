@@ -118,9 +118,13 @@ defmodule Mydia.Streaming.DeviceProfileTest do
     end
 
     test "never creates atoms from input keys" do
-      before = :erlang.system_info(:atom_count)
-      DeviceProfile.from_map(%{"totallyNewKeyName#{System.unique_integer([:positive])}" => ["x"]})
-      assert :erlang.system_info(:atom_count) == before
+      # Checks this key rather than comparing :erlang.system_info(:atom_count)
+      # before and after. The count is VM-wide, so any concurrent test minting
+      # an atom of its own failed that version by one.
+      key = "totallyNewKeyName#{System.unique_integer([:positive])}"
+      DeviceProfile.from_map(%{key => ["x"]})
+
+      assert_raise ArgumentError, fn -> String.to_existing_atom(key) end
     end
   end
 

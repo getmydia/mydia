@@ -68,7 +68,12 @@ defmodule Mydia.Jobs.SubtitleResyncTest do
           assert :ok = SubtitleResync.perform(job)
         end)
 
-      refute log =~ "unloaded library_path association"
+      # capture_log sees every process, and on the PostgreSQL job concurrent
+      # modules log this same warning for their own files. Only a line naming
+      # this media file counts.
+      refute log
+             |> String.split("\n")
+             |> Enum.any?(&(&1 =~ "unloaded library_path association" and &1 =~ media_file.id))
     end
   end
 end

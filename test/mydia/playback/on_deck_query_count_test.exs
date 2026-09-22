@@ -11,9 +11,15 @@ defmodule Mydia.Playback.OnDeckQueryCountTest do
   #     expected a constant query count, got 12 for 3 shows and 10 for 15
   #
   # ExUnit runs async modules concurrently and sync modules on their own, so
-  # `async: false` is what makes the counter measure only this test. It has to
+  # `async: false` keeps other test modules from running meanwhile. It has to
   # be a separate module because the flag is per-module, and the other OnDeck
   # tests have no reason to give up their concurrency.
+  #
+  # That was not enough on its own: the PostgreSQL job still failed with one
+  # stray query on either side (7 against 8), because a process outliving an
+  # earlier test can still query during the measurement. The handler therefore counts only queries issued
+  # by the test process itself. Telemetry handlers run in the emitting
+  # process, and OnDeck.list/2 queries from its caller.
   use Mydia.DataCase, async: false
 
   alias Mydia.AccountsFixtures
@@ -72,7 +78,8 @@ defmodule Mydia.Playback.OnDeckQueryCountTest do
         parent = self()
 
         handler = fn _event, _measurements, _metadata, _config ->
-          send(parent, {ref, :query})
+          # See the module comment.
+          if self() == parent, do: send(parent, {ref, :query})
         end
 
         :telemetry.attach(

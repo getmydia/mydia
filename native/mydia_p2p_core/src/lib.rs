@@ -3210,9 +3210,18 @@ mod tests {
     ///
     /// Two clients share one secret key here, which is what makes both
     /// connections land under a single `peer_id` on the server.
+    ///
+    /// The key is random per run. It used to be the fixed `[7u8; 32]`, and
+    /// these hosts register with the public relay and publish to discovery,
+    /// so every concurrent CI job and local run claimed the same node ID.
+    /// `tests/on_demand_dial.rs` also used those bytes for a peer that must be
+    /// unreachable, and twice connected to one of these clients instead. The
+    /// second client also waits until the first is connected, so two hosts
+    /// under one identity never race to register with the relay while the
+    /// first dial is in flight (it timed out once, 2026-09-13).
     #[tokio::test(flavor = "multi_thread")]
     async fn a_stale_connection_closing_does_not_report_a_live_peer_as_gone() {
-        let shared_key = [7u8; 32];
+        let shared_key = iroh::SecretKey::generate().to_bytes();
         let client_config = || HostConfig {
             keypair_bytes: Some(shared_key),
             ..test_config()
@@ -3220,17 +3229,11 @@ mod tests {
 
         let (server, _server_id) = Host::new(test_config());
         let (client_one, client_id) = Host::new(client_config());
-        let (client_two, client_two_id) = Host::new(client_config());
-        assert_eq!(
-            client_id, client_two_id,
-            "both clients must present the same node id for this to exercise \
-             two connections under one peer_id"
-        );
         spawn_event_drain(&client_one);
-        spawn_event_drain(&client_two);
         let disconnects = spawn_disconnect_counter(&server, client_id.clone());
 
         let server_addr = wait_for_addr(&server).await;
+        wait_for_addr(&client_one).await;
         client_one
             .dial(server_addr.clone())
             .await
@@ -3241,6 +3244,17 @@ mod tests {
             "the server to observe the first connection",
         )
         .await;
+
+        // The second client under the shared key starts only now, once the
+        // first is connected, rather than racing it to the relay.
+        let (client_two, client_two_id) = Host::new(client_config());
+        assert_eq!(
+            client_id, client_two_id,
+            "both clients must present the same node id for this to exercise \
+             two connections under one peer_id"
+        );
+        spawn_event_drain(&client_two);
+        wait_for_addr(&client_two).await;
 
         client_two
             .dial(server_addr)
@@ -3304,7 +3318,8 @@ mod tests {
     /// now holds every live connection per peer instead of only the newest.
     #[tokio::test(flavor = "multi_thread")]
     async fn the_newest_connection_closing_does_not_report_a_live_peer_as_gone() {
-        let shared_key = [11u8; 32];
+        // Random per run for the reason given on the test above.
+        let shared_key = iroh::SecretKey::generate().to_bytes();
         let client_config = || HostConfig {
             keypair_bytes: Some(shared_key),
             ..test_config()
@@ -3312,16 +3327,27 @@ mod tests {
 
         let (server, _server_id) = Host::new(test_config());
         let (client_one, client_id) = Host::new(client_config());
-        let (client_two, _) = Host::new(client_config());
         spawn_event_drain(&client_one);
-        spawn_event_drain(&client_two);
         let disconnects = spawn_disconnect_counter(&server, client_id.clone());
 
         let server_addr = wait_for_addr(&server).await;
+        wait_for_addr(&client_one).await;
         client_one
             .dial(server_addr.clone())
             .await
             .expect("first dial should succeed");
+        wait_until(
+            || async { server.get_network_stats().await.connected_peers == 1 },
+            std::time::Duration::from_secs(10),
+            "the server to observe the first connection",
+        )
+        .await;
+
+        // As in the test above, the second client under the shared key starts
+        // only once the first is connected.
+        let (client_two, _) = Host::new(client_config());
+        spawn_event_drain(&client_two);
+        wait_for_addr(&client_two).await;
         client_two
             .dial(server_addr)
             .await
