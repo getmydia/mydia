@@ -17,6 +17,7 @@ defmodule Mydia.Library.ItemFolders do
   """
 
   import Ecto.Query
+  require Logger
 
   alias Mydia.Library.Dirs
   alias Mydia.Library.ImportCandidate
@@ -89,6 +90,57 @@ defmodule Mydia.Library.ItemFolders do
       row_paths = Enum.map(rows, fn {_kind, rel} -> Path.join(folder.library_path.path, rel) end)
       skip = MapSet.new(ignore_paths(ignore) ++ row_paths)
       rows ++ disk_blockers(folder, skip, @blocker_limit - length(rows))
+    end
+  end
+
+  @doc """
+  Removes `folder` if `blockers/2` finds nothing in it. Call it only after the
+  item's rows and files are gone: anything left under the folder then belongs
+  to something else.
+
+  Returns `{:removed, path}`; `{:kept, path, {:blocked, blockers}}`, leaving
+  the folder exactly as it is; `{:kept, path, {:error, posix}}` when
+  `File.rm_rf/1` stopped partway; or `:absent` when the folder or its library
+  root does not exist. An unmounted share must never read as a delete.
+  """
+  @spec finish(Folder.t()) ::
+          {:removed, String.t()}
+          | {:kept, String.t(), {:blocked, [blocker()]} | {:error, File.posix()}}
+          | :absent
+  def finish(%Folder{} = folder) do
+    if File.dir?(folder.library_path.path) and File.dir?(folder.absolute) do
+      case blockers(folder) do
+        [] ->
+          remove(folder)
+
+        blockers ->
+          Logger.info("Kept item folder: it holds other media",
+            path: folder.absolute,
+            blockers: inspect(blockers)
+          )
+
+          {:kept, folder.absolute, {:blocked, blockers}}
+      end
+    else
+      :absent
+    end
+  end
+
+  defp remove(%Folder{} = folder) do
+    case File.rm_rf(folder.absolute) do
+      {:ok, _removed} ->
+        Logger.info("Removed item folder", path: folder.absolute)
+        Dirs.prune_empty(Path.dirname(folder.absolute), folder.library_path.path)
+        {:removed, folder.absolute}
+
+      {:error, reason, failed_at} ->
+        Logger.error("Failed to remove item folder",
+          path: folder.absolute,
+          failed_at: failed_at,
+          reason: inspect(reason)
+        )
+
+        {:kept, folder.absolute, {:error, reason}}
     end
   end
 

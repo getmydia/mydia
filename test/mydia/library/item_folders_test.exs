@@ -250,4 +250,69 @@ defmodule Mydia.Library.ItemFoldersTest do
       assert length(ItemFolders.blockers(ctx.folder, ignore: [ctx.own])) == 5
     end
   end
+
+  describe "finish/1" do
+    test "removes a folder holding nothing media-like, and prunes its emptied parent",
+         %{root: root, lp: lp} do
+      dir = Path.join(root, "Collection A/Harbor Lights (2011)")
+      File.mkdir_p!(Path.join(dir, "Sample"))
+      File.write!(Path.join(dir, "poster.jpg"), "art")
+      File.write!(Path.join(dir, "Sample/harbor-sample.mkv"), "x")
+
+      [folder] = ItemFolders.folders_for([file(lp, "Collection A/Harbor Lights (2011)/hl.mkv")])
+
+      assert ItemFolders.finish(folder) == {:removed, dir}
+      refute File.exists?(Path.join(root, "Collection A"))
+      assert File.dir?(root)
+    end
+
+    test "leaves a blocked folder exactly as it is", %{root: root, lp: lp} do
+      dir = Path.join(root, "Shared Reels")
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "Reel Two.mkv"), "video")
+      File.write!(Path.join(dir, "poster.jpg"), "art")
+
+      [folder] = ItemFolders.folders_for([file(lp, "Shared Reels/Reel One.mkv")])
+
+      assert {:kept, ^dir, {:blocked, [{:video, "Shared Reels/Reel Two.mkv"}]}} =
+               ItemFolders.finish(folder)
+
+      assert File.exists?(Path.join(dir, "poster.jpg"))
+    end
+
+    test "reports a folder rm_rf could not finish removing", %{root: root, lp: lp} do
+      dir = Path.join(root, "Locked Reel")
+      locked = Path.join(dir, "Locked")
+      File.mkdir_p!(locked)
+      File.write!(Path.join(locked, "notes.txt"), "x")
+      File.chmod!(locked, 0o555)
+      on_exit(fn -> File.chmod(locked, 0o755) end)
+
+      [folder] = ItemFolders.folders_for([file(lp, "Locked Reel/Locked Reel.mkv")])
+
+      # rm_rf reports the rmdir of the non-empty folder (ENOTEMPTY reads as :eexist), not the file it could not unlink.
+      assert {:kept, ^dir, {:error, :eexist}} = ItemFolders.finish(folder)
+    end
+
+    test "a folder that does not exist is absent, not removed", %{lp: lp} do
+      [folder] = ItemFolders.folders_for([file(lp, "Gone Reel/Gone Reel.mkv")])
+
+      assert ItemFolders.finish(folder) == :absent
+    end
+
+    test "a library root that does not exist is absent", %{tmp_dir: tmp} do
+      unmounted = %Mydia.Settings.LibraryPath{
+        id: Ecto.UUID.generate(),
+        path: Path.join(tmp, "unmounted")
+      }
+
+      folder = %Folder{
+        library_path: unmounted,
+        relative: "Gone Reel",
+        absolute: Path.join(tmp, "unmounted/Gone Reel")
+      }
+
+      assert ItemFolders.finish(folder) == :absent
+    end
+  end
 end
