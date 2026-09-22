@@ -25,6 +25,7 @@ defmodule Mydia.Library.ItemFolders do
   alias Mydia.Library.PathAnchor
   alias Mydia.Library.SampleDetector
   alias Mydia.Library.Scanner
+  alias Mydia.Library.TrashStore
   alias Mydia.LibrarySearch.Tokenizer
   alias Mydia.Repo
   alias Mydia.Settings
@@ -147,18 +148,20 @@ defmodule Mydia.Library.ItemFolders do
     end
   end
 
-  defp visit(_path, ".mydia-trash", acc, _skip, _limit), do: acc
-
   defp visit(path, name, acc, skip, limit) do
-    case File.lstat(path) do
-      {:ok, %File.Stat{type: :directory}} ->
-        walk(path, acc, skip, limit)
+    if name == TrashStore.dir_name() do
+      acc
+    else
+      case File.lstat(path) do
+        {:ok, %File.Stat{type: :directory}} ->
+          walk(path, acc, skip, limit)
 
-      {:ok, %File.Stat{type: :regular}} ->
-        if foreign_video?(path, name, skip), do: [{:video, path} | acc], else: acc
+        {:ok, %File.Stat{type: :regular}} ->
+          if foreign_video?(path, name, skip), do: [{:video, path} | acc], else: acc
 
-      _symlink_or_other ->
-        acc
+        _symlink_or_other ->
+          acc
+      end
     end
   end
 
