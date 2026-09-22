@@ -146,7 +146,7 @@ input AddTvShowInput {
 input RemoveMediaItemInput {
   id: ID!
 
-  "Also delete the item's files from disk, and its folder when nothing else lives in it"
+  "Also delete the item's files from disk, and its folder with everything still in it (artwork, NFOs, subtitles) when the folder holds no other media"
   deleteFiles: Boolean
 }
 

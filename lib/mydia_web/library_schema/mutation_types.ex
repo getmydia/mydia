@@ -36,7 +36,7 @@ defmodule MydiaWeb.LibrarySchema.MutationTypes do
     field :delete_files, :boolean,
       default_value: false,
       description:
-        "Also delete the item's files from disk, and its folder when nothing else lives in it"
+        "Also delete the item's files from disk, and its folder with everything still in it (artwork, NFOs, subtitles) when the folder holds no other media"
   end
 
   object :library_mutations do
