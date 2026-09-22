@@ -11,6 +11,7 @@ defmodule Mydia.Downloads.Queue do
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
   alias Mydia.Downloads.Priority
+  alias Mydia.Downloads.StallDetector
   alias Mydia.Downloads.Structs.DownloadMetadata
   alias Mydia.Downloads.Structs.ExternalTorrent
   alias Mydia.Downloads.TorrentHash
@@ -119,6 +120,8 @@ defmodule Mydia.Downloads.Queue do
          :ok <-
            Client.remove_download(adapter, client_map_config, download.download_client_id, opts),
          {:ok, _deleted} <- History.delete_download(download) do
+      blacklist_if_stalled(download)
+
       # Track event
       actor_type = Keyword.get(opts, :actor_type, :user)
       actor_id = Keyword.get(opts, :actor_id, "unknown")
@@ -198,6 +201,24 @@ defmodule Mydia.Downloads.Queue do
         )
 
         :ok
+    end
+  end
+
+  @doc """
+  Blacklists the release when `download` is stalled right now (see
+  `StallDetector.soft_stalled?/1`), and does nothing otherwise.
+
+  A cancel is a plain stop, except on a stalled download: the operator has
+  looked at a torrent that is not moving and given up on it, the same judgement
+  as a reject, so the release stays out of later searches for the default TTL.
+  No replacement search is queued. That stays Reject's job.
+  """
+  @spec blacklist_if_stalled(Download.t()) :: :ok
+  def blacklist_if_stalled(%Download{} = download) do
+    if StallDetector.soft_stalled?(download) do
+      blacklist_release(download, failure_reason: "cancelled_stalled")
+    else
+      :ok
     end
   end
 

@@ -1137,7 +1137,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
 
         case Downloads.request_removal(download, kind, opts) do
           {:ok, _pending} ->
-            {:noreply, load_downloads(socket)}
+            {:noreply, socket |> removal_flash(kind, download) |> load_downloads()}
 
           {:error, :not_found} ->
             {:noreply, download_vanished(socket)}
@@ -1162,6 +1162,23 @@ defmodule MydiaWeb.DownloadsLive.Index do
       {:unauthorized, socket} -> {:noreply, socket}
     end
   end
+
+  # A cancel on a stalled download also blacklists the release (see
+  # Mydia.Downloads.Queue.blacklist_if_stalled/1), so the operator is told.
+  defp removal_flash(socket, "cancel", download) do
+    if StallDetector.soft_stalled?(download) do
+      put_flash(
+        socket,
+        :info,
+        "Cancelling. This release was stalled, so Mydia won't grab it again for " <>
+          "#{Blacklists.default_ttl_days()} days."
+      )
+    else
+      socket
+    end
+  end
+
+  defp removal_flash(socket, _kind, _download), do: socket
 
   defp maybe_add_opt(opts, _key, nil), do: opts
   defp maybe_add_opt(opts, key, value), do: Keyword.put(opts, key, value)
@@ -1736,8 +1753,7 @@ defmodule MydiaWeb.DownloadsLive.Index do
   # cleared while the download is observed downloading, so it can linger on a row
   # that has since moved on.
   defp soft_stalled?(download) do
-    download.status == "downloading" and
-      not is_nil(download.stalled_since) and is_nil(download.import_failed_at)
+    download.status == "downloading" and StallDetector.soft_stalled?(download)
   end
 
   # Seconds since this download last moved a byte. Falls back to stalled_since

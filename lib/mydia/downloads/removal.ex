@@ -44,14 +44,22 @@ defmodule Mydia.Downloads.Removal do
   `{:error, :removal_in_progress}` when the job for an earlier request has given
   up but not yet finished.
 
+  A `"cancel"` on a download that is stalled right now also blacklists the
+  release; see `Mydia.Downloads.Queue.blacklist_if_stalled/1`.
+
   ## Options
     - `:delete_files` - passed to the adapter; defaults to `false`
   """
   @spec request(Download.t(), String.t(), keyword()) ::
           {:ok, Download.t()} | {:ok, :already_pending} | {:error, term()}
   def request(%Download{id: id}, kind, opts \\ []) when kind in @kinds do
-    request_locked(id, kind, Keyword.get(opts, :delete_files, false), fn _download -> :ok end)
+    request_locked(id, kind, Keyword.get(opts, :delete_files, false), before_mark(kind))
   end
+
+  # Cancelling a stalled download also blacklists the release. Decided on the
+  # row read under the lock, so the ban matches the state the removal acts on.
+  defp before_mark("cancel"), do: &Queue.blacklist_if_stalled/1
+  defp before_mark(_kind), do: fn _download -> :ok end
 
   defp request_locked(id, kind, delete_files, before_mark) do
     Repo.transaction(fn ->

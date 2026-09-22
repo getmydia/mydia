@@ -242,6 +242,57 @@ defmodule Mydia.Downloads.RemovalTest do
     end
   end
 
+  describe "cancelling a stalled download" do
+    defp stalled_download(attrs \\ %{}) do
+      media_item = media_item_fixture(%{type: "movie"})
+
+      download_fixture(
+        Map.merge(
+          %{
+            media_item_id: media_item.id,
+            indexer: "fictional-indexer",
+            metadata: %{"guid" => "fictional-stalled-guid"},
+            stalled_since: DateTime.utc_now()
+          },
+          attrs
+        )
+      )
+    end
+
+    test "blacklists the release for the default TTL and queues no search" do
+      download = stalled_download()
+
+      assert {:ok, %Download{}} = Downloads.request_removal(download, "cancel")
+
+      row =
+        Repo.get_by!(ReleaseBlacklist,
+          indexer: "fictional-indexer",
+          guid: "fictional-stalled-guid"
+        )
+
+      assert row.failure_reason == "cancelled_stalled"
+      expected_expiry = DateTime.add(DateTime.utc_now(), Blacklists.default_ttl_days(), :day)
+      assert abs(DateTime.diff(row.expires_at, expected_expiry, :second)) < 60
+      refute_enqueued(worker: Mydia.Jobs.MovieSearch)
+    end
+
+    test "a healthy download is cancelled without a ban" do
+      download = stalled_download(%{stalled_since: nil})
+
+      assert {:ok, %Download{}} = Downloads.request_removal(download, "cancel")
+
+      refute Blacklists.blacklisted?("fictional-indexer", "fictional-stalled-guid")
+    end
+
+    test "clearing a stalled download writes no ban" do
+      download = stalled_download()
+
+      assert {:ok, %Download{}} = Downloads.request_removal(download, "clear")
+
+      refute Blacklists.blacklisted?("fictional-indexer", "fictional-stalled-guid")
+    end
+  end
+
   describe "request_clear_all_completed/1" do
     test "requests a clear for each imported row not already pending" do
       imported = download_fixture(%{imported_at: now()})

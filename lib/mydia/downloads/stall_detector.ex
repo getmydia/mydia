@@ -155,6 +155,21 @@ defmodule Mydia.Downloads.StallDetector do
   end
 
   @doc """
+  Whether a download is soft-stalled right now: `stalled_since` is set, and
+  it has neither failed its import nor completed.
+
+  Takes the `%Download{}` schema or an `EnrichedDownload` row. A torrent that
+  finished between two polls keeps a stale `stalled_since` (it is only cleared
+  while the download is observed downloading), which is what `completed_at`
+  rules out.
+  """
+  @spec soft_stalled?(map()) :: boolean()
+  def soft_stalled?(%{stalled_since: %DateTime{}, import_failed_at: nil, completed_at: nil}),
+    do: true
+
+  def soft_stalled?(_download), do: false
+
+  @doc """
   Build the standardised soft-stall error message. The Downloads LiveView matches
   on the leading `"stalled"` substring to surface the badge.
   """

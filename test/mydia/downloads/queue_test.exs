@@ -501,6 +501,61 @@ defmodule Mydia.Downloads.QueueTest do
     end
   end
 
+  describe "cancel_download/2 on a stalled download" do
+    setup do
+      original =
+        case Registry.get_adapter(:qbittorrent) do
+          {:ok, adapter} -> adapter
+          {:error, _} -> nil
+        end
+
+      Registry.register(:qbittorrent, CaptureAdapter)
+      Application.put_env(:mydia, :queue_capture_pid, self())
+
+      on_exit(fn ->
+        Application.delete_env(:mydia, :queue_capture_pid)
+        if original, do: Registry.register(:qbittorrent, original)
+      end)
+
+      config =
+        download_client_config_fixture(%{
+          name: "capture-client",
+          type: "qbittorrent",
+          enabled: true
+        })
+
+      %{config: config}
+    end
+
+    test "blacklists the release once the client has removed it", %{config: config} do
+      download =
+        download_fixture(%{
+          download_client: config.name,
+          indexer: "1337x",
+          metadata: %{"guid" => "stalled-cancel-guid"},
+          stalled_since: DateTime.utc_now()
+        })
+
+      assert {:ok, _} = Queue.cancel_download(download)
+
+      row = Repo.get_by!(ReleaseBlacklist, indexer: "1337x", guid: "stalled-cancel-guid")
+      assert row.failure_reason == "cancelled_stalled"
+    end
+
+    test "leaves a healthy download's release alone", %{config: config} do
+      download =
+        download_fixture(%{
+          download_client: config.name,
+          indexer: "1337x",
+          metadata: %{"guid" => "healthy-cancel-guid"}
+        })
+
+      assert {:ok, _} = Queue.cancel_download(download)
+
+      refute Repo.get_by(ReleaseBlacklist, indexer: "1337x", guid: "healthy-cancel-guid")
+    end
+  end
+
   describe "rematch_imported_download/3" do
     setup do
       library = library_path_fixture(%{type: "movies", monitored: true})

@@ -134,6 +134,22 @@ defmodule Mydia.Downloads.Blacklists do
   end
 
   @doc """
+  The configured default ban length in days
+  (`release_blacklist_default_ttl_days`, 30 when unset).
+  """
+  @spec default_ttl_days() :: pos_integer()
+  def default_ttl_days do
+    case Application.get_env(:mydia, :runtime_config) do
+      %{downloads: %{release_blacklist_default_ttl_days: days}}
+      when is_integer(days) and days > 0 ->
+        days
+
+      _ ->
+        @default_ttl_days
+    end
+  end
+
+  @doc """
   Returns `true` when an active blacklist row exists for `(indexer, guid)`.
 
   A row is "active" when:
@@ -378,17 +394,6 @@ defmodule Mydia.Downloads.Blacklists do
       :error ->
         days = Keyword.get(opts, :ttl_days) || default_ttl_days()
         DateTime.add(now, days * 24 * 60 * 60, :second)
-    end
-  end
-
-  defp default_ttl_days do
-    case Application.get_env(:mydia, :runtime_config) do
-      %{downloads: %{release_blacklist_default_ttl_days: days}}
-      when is_integer(days) and days > 0 ->
-        days
-
-      _ ->
-        @default_ttl_days
     end
   end
 end
