@@ -30,4 +30,5 @@ config :metadata_relay, MetadataRelay.Mailer, adapter: Swoosh.Adapters.Test
 config :metadata_relay, :player_logs,
   dir: Path.join(System.tmp_dir!(), "metadata_relay_player_logs_test"),
   max_bytes: 2_147_483_648,
+  report_budget_bytes: 268_435_456,
   sweep_interval_ms: nil

@@ -10,7 +10,10 @@ defmodule MetadataRelay.PlayerLogs.Ingest do
   hostile body cannot expand without bound. Nothing from the body becomes an
   atom: strings are length-capped before they reach a struct, and each record
   is re-encoded from its validated fields, so what is stored is always well
-  formed.
+  formed. The one place this reads the clock is bounding each record's `t`
+  against decode time, rejecting an epoch millisecond before 2000-01-01 or
+  more than a day in the future, so a bogus value can't poison ordering,
+  session summaries, or `--since` filters.
   """
 
   alias MetadataRelay.PlayerLogs.{Batch, Meta, Record}
@@ -24,6 +27,13 @@ defmodule MetadataRelay.PlayerLogs.Ingest do
   # for a stream that keeps answering :continue with nothing.
   @max_inflate_steps 20_000
   @code_pattern ~r/\ALOG-[0-9A-HJKMNP-TV-Z]{6}\z/
+  # A record's `t` is client-supplied and otherwise unchecked: a bogus value
+  # (negative, zero, or a year-30000 typo) poisons ordering, session
+  # summaries and --since filters. Bound it to a sane epoch-millisecond
+  # range instead: not before 2000-01-01, and not more than a day past
+  # decode time (players can be somewhat clock-skewed, but not by years).
+  @min_t_ms DateTime.to_unix(~U[2000-01-01 00:00:00Z], :millisecond)
+  @max_future_ms 86_400_000
 
   @spec decode(binary(), pos_integer()) ::
           {:ok, Batch.t()} | {:error, :too_large | :invalid_gzip | :invalid_meta | :no_records}
@@ -31,7 +41,7 @@ defmodule MetadataRelay.PlayerLogs.Ingest do
     with {:ok, text} <- gunzip(body, max_decompressed),
          [meta_line | record_lines] <- non_empty_lines(text),
          {:ok, meta} <- decode_meta(meta_line) do
-      {records, dropped} = decode_records(record_lines)
+      {records, dropped} = decode_records(record_lines, System.os_time(:millisecond))
 
       if records == [] do
         {:error, :no_records}
@@ -129,10 +139,10 @@ defmodule MetadataRelay.PlayerLogs.Ingest do
 
   defp report_code(_), do: :error
 
-  defp decode_records(lines) do
+  defp decode_records(lines, now_ms) do
     {records, dropped} =
       Enum.reduce(lines, {[], 0}, fn line, {acc, dropped} ->
-        case decode_record(line) do
+        case decode_record(line, now_ms) do
           {:ok, record} -> {[record | acc], dropped}
           :error -> {acc, dropped + 1}
         end
@@ -141,9 +151,10 @@ defmodule MetadataRelay.PlayerLogs.Ingest do
     {Enum.reverse(records), dropped}
   end
 
-  defp decode_record(line) do
+  defp decode_record(line, now_ms) do
     with {:ok, %{"t" => t, "l" => level, "msg" => msg} = map}
-         when is_integer(t) and level in @levels and is_binary(msg) <- Jason.decode(line) do
+         when is_integer(t) and level in @levels and is_binary(msg) <- Jason.decode(line),
+         true <- valid_t?(t, now_ms) do
       sid = capped(map["sid"], 32)
 
       fields = %{
@@ -160,6 +171,8 @@ defmodule MetadataRelay.PlayerLogs.Ingest do
       _ -> :error
     end
   end
+
+  defp valid_t?(t, now_ms), do: t >= @min_t_ms and t <= now_ms + @max_future_ms
 
   defp truncate(msg) do
     if String.length(msg) > @max_msg_chars do

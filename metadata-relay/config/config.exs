@@ -25,6 +25,9 @@ config :metadata_relay, MetadataRelay.Mailer, adapter: Swoosh.Adapters.Local
 config :metadata_relay, :player_logs,
   dir: "./player_logs",
   max_bytes: 2_147_483_648,
+  # Per-address daily budget for kind: "report" uploads only, shared across
+  # every device behind that address. See MetadataRelay.PlayerLogs.ReportBudget.
+  report_budget_bytes: 268_435_456,
   sweep_interval_ms: 3_600_000
 
 config :swoosh, :api_client, false

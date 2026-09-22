@@ -28,7 +28,7 @@ mix format
 
 Environment variables: `PORT` (default 4001), `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` (required in production for `/errors` and `/feedback` dashboards, and rejected if blank), `TMDB_API_KEY`, `TVDB_API_KEY`, `SUBDL_API_KEY`, `REDIS_URL` (optional).
 
-Player logs: `PLAYER_LOGS_DIR` (default `player_logs/` beside the SQLite file) and `PLAYER_LOGS_MAX_BYTES` (default 2 GiB). See `MetadataRelay.PlayerLogs` and the README's "Player Log Ingestion".
+Player logs: `PLAYER_LOGS_DIR` (default `player_logs/` beside the SQLite file), `PLAYER_LOGS_MAX_BYTES` (default 2 GiB), and `PLAYER_LOGS_REPORT_BUDGET_BYTES` (default 256 MiB, a daily per-address budget that applies only to `kind: "report"` uploads -- see `MetadataRelay.PlayerLogs.ReportBudget`). See `MetadataRelay.PlayerLogs` and the README's "Player Log Ingestion".
 
 Two more, both about how the relay identifies a caller for rate limiting:
 

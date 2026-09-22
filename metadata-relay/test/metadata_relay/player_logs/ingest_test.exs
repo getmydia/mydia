@@ -34,6 +34,18 @@ defmodule MetadataRelay.PlayerLogs.IngestTest do
     assert {:ok, %Batch{records: [_], dropped: 4}} = Ingest.decode(gz_body(lines), @limit)
   end
 
+  test "drops records whose t is outside the sane epoch millisecond range" do
+    min_t_ms = DateTime.to_unix(~U[2000-01-01 00:00:00Z], :millisecond)
+    too_old = record_map(%{"t" => min_t_ms - 1})
+    at_lower_bound = record_map(%{"t" => min_t_ms})
+    too_far_future = record_map(%{"t" => System.os_time(:millisecond) + 2 * 86_400_000})
+
+    lines = [meta_map(), too_old, at_lower_bound, too_far_future]
+
+    assert {:ok, %Batch{records: [kept], dropped: 2}} = Ingest.decode(gz_body(lines), @limit)
+    assert kept.t == min_t_ms
+  end
+
   test "fills in defaults and caps long fields" do
     raw =
       record_map(%{

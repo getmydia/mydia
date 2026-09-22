@@ -107,4 +107,53 @@ defmodule MetadataRelay.PlayerLogsTest do
     assert Repo.all(Chunk) == []
     assert Repo.get(Device, device_id()) == nil
   end
+
+  describe "concurrent usage charges" do
+    # A large enough batch that store_chunk's real file I/O and gzip work
+    # (between check_quota's read and record_usage's write) gives both
+    # concurrent ingest/2 calls room to interleave.
+    defp wide_records(count), do: for(i <- 1..count, do: record_map(%{"t" => 1_000 + i}))
+
+    defp ingest_concurrently(id, records, size) do
+      parent = self()
+
+      Task.async(fn ->
+        Ecto.Adapters.SQL.Sandbox.allow(Repo, parent, self())
+        PlayerLogs.ingest(batch(meta: [device_id: id], records: records, size: size))
+      end)
+    end
+
+    test "two concurrent uploads from the same device both count against bytes_today" do
+      records = wide_records(2_000)
+
+      [task_a, task_b] = [
+        ingest_concurrently(device_id(), records, 300_000),
+        ingest_concurrently(device_id(), records, 300_000)
+      ]
+
+      assert {:ok, :stream} = Task.await(task_a, 10_000)
+      assert {:ok, :stream} = Task.await(task_b, 10_000)
+
+      device = Repo.get!(Device, device_id())
+
+      assert device.bytes_today == 600_000,
+             "a charge computed from a stale `used` read must add, not overwrite: got #{device.bytes_today}"
+    end
+
+    test "two concurrent first uploads from a brand new device do not raise" do
+      id = Ecto.UUID.generate()
+      records = wide_records(2_000)
+
+      [task_a, task_b] = [
+        ingest_concurrently(id, records, 1_000),
+        ingest_concurrently(id, records, 1_000)
+      ]
+
+      assert {:ok, :stream} = Task.await(task_a, 10_000)
+      assert {:ok, :stream} = Task.await(task_b, 10_000)
+
+      device = Repo.get!(Device, id)
+      assert device.bytes_today == 2_000
+    end
+  end
 end

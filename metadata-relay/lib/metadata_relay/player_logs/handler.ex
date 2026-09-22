@@ -8,12 +8,29 @@ defmodule MetadataRelay.PlayerLogs.Handler do
     3. decompression, bounded at 8 MB, and validation
        (`MetadataRelay.PlayerLogs.Ingest`);
     4. the per-device rate limit, now that the device is known;
-    5. the daily quota and storage (`MetadataRelay.PlayerLogs.ingest/1`).
+    5. for a report batch only, the per-address daily report budget
+       (`MetadataRelay.PlayerLogs.ReportBudget`);
+    6. the daily per-device quota and storage
+       (`MetadataRelay.PlayerLogs.ingest/1`).
 
-  The address limit is deliberately loose: behind Cloudflare the resolvable
-  client address can be an edge shared by many installs (see
-  `RELAY_PROXY_RATE_LIMIT` in `metadata-relay/CLAUDE.md`). The device limit is
-  the one that bites.
+  The address rate limit (step 1) is deliberately loose across *all*
+  traffic: behind Cloudflare the resolvable client address can be an edge
+  shared by many installs (see `RELAY_PROXY_RATE_LIMIT` in
+  `metadata-relay/CLAUDE.md`), so a tight all-traffic address budget would
+  throttle unrelated installs behind the same edge. `device_id` is
+  client-controlled, though, so it alone can't carry the daily-quota half of
+  that defense (rotate it and the per-device quota resets with it). Reports
+  close that gap without the shared-edge problem: `ReportBudget` charges a
+  budget per address, but *only* for `kind: "report"` batches, since a
+  report is a deliberate, infrequent "Send logs now" upload of a few MB even
+  from a shared edge (see its moduledoc). Stream batches keep only the loose
+  step-1 limit; a device-rotating stream flood degrades stream retention
+  (streams are evicted first by `MetadataRelay.PlayerLogs.enforce_cap/0`)
+  but can't touch the report store.
+
+  The report budget is checked here, right before storage, and charged only
+  after `PlayerLogs.ingest/1` reports success -- the same split the daily
+  device quota uses, so a batch that fails to store never bills the address.
   """
 
   import Plug.Conn
@@ -21,7 +38,7 @@ defmodule MetadataRelay.PlayerLogs.Handler do
   require Logger
 
   alias MetadataRelay.{ClientIp, Metrics, PlayerLogs, RateLimiter}
-  alias MetadataRelay.PlayerLogs.Ingest
+  alias MetadataRelay.PlayerLogs.{Batch, Ingest, Meta, ReportBudget}
 
   @max_compressed_bytes 1_048_576
   @max_decompressed_bytes 8 * 1_048_576
@@ -31,17 +48,36 @@ defmodule MetadataRelay.PlayerLogs.Handler do
 
   @spec call(Plug.Conn.t()) :: Plug.Conn.t()
   def call(conn) do
-    with :ok <- limit("player_logs:ip:#{ClientIp.resolve(conn)}", @ip_limit),
+    address = ClientIp.resolve(conn)
+    now = DateTime.utc_now()
+
+    with :ok <- limit("player_logs:ip:#{address}", @ip_limit),
          {:ok, body, conn} <- read_limited(conn),
          {:ok, batch} <- Ingest.decode(body, @max_decompressed_bytes),
          :ok <- limit("player_logs:device:#{batch.meta.device_id}", @device_limit),
+         :ok <- check_report_budget(batch, address, now),
          {:ok, result} <- PlayerLogs.ingest(batch) do
       Metrics.inc("metadata_relay_player_logs_batches_total", kind: batch.meta.kind)
+      charge_report_budget(batch, address, now)
       respond(conn, result)
     else
       {:error, reason} -> reject(conn, reason)
     end
   end
+
+  defp check_report_budget(%Batch{meta: %Meta{kind: "report"}} = batch, address, now) do
+    case ReportBudget.check(address, batch.size, now) do
+      :ok -> :ok
+      {:error, seconds} -> {:error, {:report_budget_exceeded, seconds}}
+    end
+  end
+
+  defp check_report_budget(%Batch{}, _address, _now), do: :ok
+
+  defp charge_report_budget(%Batch{meta: %Meta{kind: "report"}} = batch, address, now),
+    do: ReportBudget.charge(address, batch.size, now)
+
+  defp charge_report_budget(%Batch{}, _address, _now), do: :ok
 
   defp limit(key, max) do
     case RateLimiter.check_rate_limit(key, limit: max, window_ms: @window_ms) do
@@ -78,6 +114,9 @@ defmodule MetadataRelay.PlayerLogs.Handler do
   defp describe(:rate_limited), do: {429, "Too many requests", [{"retry-after", "60"}]}
 
   defp describe({:quota_exceeded, seconds}),
+    do: {429, "Daily log quota reached", [{"retry-after", Integer.to_string(seconds)}]}
+
+  defp describe({:report_budget_exceeded, seconds}),
     do: {429, "Daily log quota reached", [{"retry-after", Integer.to_string(seconds)}]}
 
   defp describe(:too_large), do: {413, "Body too large", []}

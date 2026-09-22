@@ -141,7 +141,7 @@ defmodule MetadataRelay.PlayerLogs.SweepTest do
     assert Repo.all(Chunk) == []
   end
 
-  test "expired report chunks are deleted in batches, keeping the report row until they are gone" do
+  test "expired report chunks past the per-batch cap are all deleted in a single sweep" do
     {:ok, {:report, code}} = PlayerLogs.ingest(batch(meta: [kind: "report"]))
     insert_extra_chunks(code, @sweep_batch + 10)
     Repo.update_all(from(r in Report, where: r.code == ^code), set: [inserted_at: days_ago(91)])
@@ -151,17 +151,39 @@ defmodule MetadataRelay.PlayerLogs.SweepTest do
 
     :ok = PlayerLogs.sweep()
 
-    remaining_after_first =
-      Repo.aggregate(from(c in Chunk, where: c.report_code == ^code), :count)
+    # A single hourly sweep now drains every batch of a report's expired
+    # chunks in a loop (bounded by the drain ceiling, not the per-fetch
+    # @sweep_batch cap), so nothing is left for a second sweep to finish.
+    assert PlayerLogs.chunks_for_report(code) == []
+    assert Repo.get(Report, code) == nil
+  end
 
-    assert remaining_after_first > 0
-    assert remaining_after_first < total_before
-    assert Repo.get(Report, code) != nil, "the report row survives while chunks remain"
+  test "expired stream chunks past the per-batch cap are all deleted in a single sweep" do
+    count = @sweep_batch + 50
+    old = days_ago(15)
+
+    entries =
+      for i <- 1..count do
+        %{
+          device_id: device_id(),
+          kind: "stream",
+          path: "stream/#{device_id()}/extra-#{i}.ndjson.gz",
+          first_t: 0,
+          last_t: 0,
+          line_count: 1,
+          bytes: 10,
+          sessions: "[]",
+          report_code: nil,
+          inserted_at: old
+        }
+      end
+
+    Repo.insert_all(Chunk, entries)
+    assert Repo.aggregate(from(c in Chunk, where: c.kind == "stream"), :count) == count
 
     :ok = PlayerLogs.sweep()
 
-    assert PlayerLogs.chunks_for_report(code) == []
-    assert Repo.get(Report, code) == nil
+    assert Repo.aggregate(from(c in Chunk, where: c.kind == "stream"), :count) == 0
   end
 
   test "orphan removal is capped per sweep, converging to zero across repeated sweeps" do

@@ -4,7 +4,7 @@ defmodule MetadataRelay.PlayerLogs.HandlerTest do
   import MetadataRelay.PlayerLogsHelpers
 
   alias MetadataRelay.{RateLimiter, Repo, Router}
-  alias MetadataRelay.PlayerLogs.{Chunk, Device}
+  alias MetadataRelay.PlayerLogs.{Chunk, Device, ReportBudget}
 
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)
@@ -14,7 +14,13 @@ defmodule MetadataRelay.PlayerLogs.HandlerTest do
       _pid -> :ok
     end
 
+    case GenServer.whereis(ReportBudget) do
+      nil -> start_supervised!(ReportBudget)
+      _pid -> :ok
+    end
+
     :ets.delete_all_objects(:rate_limiter)
+    :ets.delete_all_objects(:player_logs_report_budget)
     use_tmp_logs_dir()
     :ok
   end
@@ -28,6 +34,20 @@ defmodule MetadataRelay.PlayerLogs.HandlerTest do
 
   defp exhaust(key, limit) do
     for _ <- 1..limit, do: RateLimiter.check_rate_limit(key, limit: limit, window_ms: 60_000)
+  end
+
+  # The exact decompressed byte count the handler will charge for `lines`,
+  # mirroring what `gz_body/1` compresses (and `Ingest.decode/2` measures),
+  # so budget tests can set an exact boundary instead of guessing a round
+  # number.
+  defp decompressed_size(lines) do
+    lines
+    |> Enum.map_join("\n", fn
+      line when is_binary(line) -> line
+      map -> Jason.encode!(map)
+    end)
+    |> Kernel.<>("\n")
+    |> byte_size()
   end
 
   test "a stream batch is stored and answered with 204" do
@@ -101,5 +121,59 @@ defmodule MetadataRelay.PlayerLogs.HandlerTest do
     assert conn.status == 429
     assert [seconds] = Plug.Conn.get_resp_header(conn, "retry-after")
     assert String.to_integer(seconds) in 1..86_400
+  end
+
+  test "a report over the per-address daily budget is rejected with 429 and Retry-After" do
+    lines = [meta_map(%{"kind" => "report"}), record_map()]
+    put_logs_config(:report_budget_bytes, decompressed_size(lines) - 1)
+
+    conn = post_logs(gz_body(lines))
+
+    assert conn.status == 429
+    assert [seconds] = Plug.Conn.get_resp_header(conn, "retry-after")
+    assert String.to_integer(seconds) in 1..86_400
+  end
+
+  test "the report budget is shared across devices behind the same address" do
+    lines = [meta_map(%{"kind" => "report"}), record_map()]
+    put_logs_config(:report_budget_bytes, decompressed_size(lines) + 10)
+
+    first = post_logs(gz_body(lines))
+    assert first.status == 201
+
+    other_device_lines = [
+      meta_map(%{"kind" => "report", "device_id" => Ecto.UUID.generate()}),
+      record_map()
+    ]
+
+    second = post_logs(gz_body(other_device_lines))
+
+    assert second.status == 429
+    assert [seconds] = Plug.Conn.get_resp_header(second, "retry-after")
+    assert String.to_integer(seconds) in 1..86_400
+  end
+
+  test "stream batches are not limited by the report budget" do
+    put_logs_config(:report_budget_bytes, 0)
+
+    conn = post_logs(gz_body([meta_map(), record_map()]))
+
+    assert conn.status == 204
+  end
+
+  test "a batch that fails validation is not charged against the report budget" do
+    bad_lines = [meta_map(%{"kind" => "report", "report" => "LOG-000000"}), record_map()]
+    good_lines = [meta_map(%{"kind" => "report"}), record_map()]
+    bad_size = decompressed_size(bad_lines)
+    good_size = decompressed_size(good_lines)
+    # Big enough for either batch alone, too small for both: if the failed
+    # first batch were wrongly charged, the second (valid) batch would tip
+    # the address over budget and get 429 instead of 201.
+    put_logs_config(:report_budget_bytes, max(bad_size, good_size) + 5)
+
+    assert post_logs(gz_body(bad_lines)).status == 400
+
+    conn = post_logs(gz_body(good_lines))
+    assert conn.status == 201
   end
 end

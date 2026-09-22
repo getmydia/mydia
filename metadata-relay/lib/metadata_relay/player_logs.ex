@@ -16,6 +16,8 @@ defmodule MetadataRelay.PlayerLogs do
 
   import Ecto.Query
 
+  require Logger
+
   alias MetadataRelay.PlayerLogs.{Batch, Chunk, Device, Meta, Report, SessionSummary, Store}
   alias MetadataRelay.Repo
 
@@ -28,6 +30,11 @@ defmodule MetadataRelay.PlayerLogs do
   @orphan_age_seconds 3_600
   @sweep_batch 500
   @evict_batch 200
+  # A drain loop stops here even if a batch keeps coming back full, so one
+  # pathological sweep (a stream of devices with far more than @sweep_batch
+  # expired chunks between them) cannot run forever. 200 * @sweep_batch is
+  # 100k chunks per sweep; anything past that finishes on the next hourly run.
+  @drain_ceiling 200
 
   @type ingest_result ::
           {:ok, :stream}
@@ -44,16 +51,18 @@ defmodule MetadataRelay.PlayerLogs do
   The quota check and the quota write are deliberately separate steps. A
   device is only charged once the file is written and indexed, so a storage
   failure never burns part of a device's daily allowance for bytes that were
-  never actually stored.
+  never actually stored. The write itself is a single atomic upsert (see
+  `record_usage/3`), so two concurrent uploads from the same device both
+  count rather than one clobbering the other.
   """
   @spec ingest(Batch.t(), DateTime.t()) :: ingest_result()
   def ingest(%Batch{meta: meta} = batch, now \\ DateTime.utc_now()) do
     now = DateTime.truncate(now, :second)
 
-    with {:ok, used} <- check_quota(meta, batch.size, now),
+    with :ok <- check_quota(meta, batch.size, now),
          {:ok, code} <- resolve_report(meta, now),
          {:ok, _chunk} <- store_chunk(batch, code, now),
-         :ok <- record_usage(meta, batch.size, used, now) do
+         :ok <- record_usage(meta, batch.size, now) do
       enforce_cap()
       {:ok, if(code, do: {:report, code}, else: :stream)}
     end
@@ -178,13 +187,15 @@ defmodule MetadataRelay.PlayerLogs do
   """
   @spec sweep(DateTime.t()) :: :ok
   def sweep(now \\ DateTime.utc_now()) do
-    from(c in Chunk,
-      where: c.kind == "stream" and c.inserted_at < ^ago(now, @stream_retention_seconds),
-      order_by: c.id,
-      limit: @sweep_batch
-    )
-    |> Repo.all()
-    |> delete_chunks()
+    drain_batches("expired stream chunks", fn ->
+      Repo.all(
+        from(c in Chunk,
+          where: c.kind == "stream" and c.inserted_at < ^ago(now, @stream_retention_seconds),
+          order_by: c.id,
+          limit: @sweep_batch
+        )
+      )
+    end)
 
     expire_reports(now)
     delete_idle_devices(now)
@@ -225,6 +236,33 @@ defmodule MetadataRelay.PlayerLogs do
     :ok
   end
 
+  # Fetches and deletes one bounded batch at a time (`fetch` must return at
+  # most @sweep_batch rows, ordered so a repeat fetch after a delete makes
+  # progress) until a batch comes back short, so no single sweep issues an
+  # unbounded delete. @drain_ceiling stops a pathological case from running
+  # forever; the rest finishes on the next hourly sweep.
+  defp drain_batches(label, fetch, iteration \\ 1)
+
+  defp drain_batches(label, _fetch, iteration) when iteration > @drain_ceiling do
+    Logger.warning(
+      "[PlayerLogs] #{label}: hit the #{@drain_ceiling}-batch drain ceiling, " <>
+        "continuing on the next sweep"
+    )
+
+    :ok
+  end
+
+  defp drain_batches(label, fetch, iteration) do
+    batch = fetch.()
+    delete_chunks(batch)
+
+    if length(batch) == @sweep_batch do
+      drain_batches(label, fetch, iteration + 1)
+    else
+      :ok
+    end
+  end
+
   defp expire_reports(now) do
     codes =
       Repo.all(
@@ -236,10 +274,9 @@ defmodule MetadataRelay.PlayerLogs do
       )
 
     if codes != [] do
-      chunks =
+      drain_batches("expired report chunks", fn ->
         Repo.all(from(c in Chunk, where: c.report_code in ^codes, limit: @sweep_batch))
-
-      delete_chunks(chunks)
+      end)
 
       remaining_codes =
         Repo.all(
@@ -325,37 +362,74 @@ defmodule MetadataRelay.PlayerLogs do
     if used + size > @daily_quota_bytes do
       {:error, {:quota_exceeded, seconds_until_midnight(now)}}
     else
-      {:ok, used}
+      :ok
     end
   end
 
-  defp record_usage(%Meta{} = meta, size, used, now) do
+  # Charges `size` bytes to the device's daily usage as one atomic upsert:
+  # `bytes_today` becomes `bytes_today + size` when `bytes_day` is already
+  # today, or resets to `size` otherwise. Doing the add in SQL (rather than
+  # reading `bytes_today` in Elixir and writing `read_value + size` back, as
+  # `check_quota/3` does for its cheap pre-check) means two concurrent
+  # uploads from the same device both count, instead of the second silently
+  # overwriting the first's charge. It also means two concurrent first
+  # uploads from a brand new device both land as one insert and one update
+  # (`conflict_target: :device_id`) rather than the second raising on the
+  # primary key.
+  #
+  # The description fields (name, platform, os_version, app_version) update
+  # as before: a field left blank in this batch's meta does not clobber
+  # whatever the device already has on file. `first_seen_at` is only ever
+  # set by the initial insert.
+  defp record_usage(%Meta{} = meta, size, now) do
     today = DateTime.to_date(now)
 
-    device =
-      Repo.get(Device, meta.device_id) || %Device{device_id: meta.device_id, first_seen_at: now}
+    device = %Device{
+      device_id: meta.device_id,
+      name: meta.device_name,
+      platform: meta.platform,
+      os_version: meta.os_version,
+      app_version: meta.app_version,
+      first_seen_at: now,
+      last_seen_at: now,
+      bytes_today: size,
+      bytes_day: today
+    }
 
-    described =
-      %{
-        name: meta.device_name,
-        platform: meta.platform,
-        os_version: meta.os_version,
-        app_version: meta.app_version
-      }
-      |> Map.reject(fn {_field, value} -> is_nil(value) end)
+    on_conflict =
+      from(d in Device,
+        update: [
+          set: [
+            name: fragment("COALESCE(?, ?)", ^meta.device_name, d.name),
+            platform: fragment("COALESCE(?, ?)", ^meta.platform, d.platform),
+            os_version: fragment("COALESCE(?, ?)", ^meta.os_version, d.os_version),
+            app_version: fragment("COALESCE(?, ?)", ^meta.app_version, d.app_version),
+            last_seen_at: ^now,
+            bytes_day: ^today,
+            bytes_today:
+              fragment(
+                "CASE WHEN ? = ? THEN ? + ? ELSE ? END",
+                d.bytes_day,
+                ^today,
+                d.bytes_today,
+                ^size,
+                ^size
+              )
+          ]
+        ]
+      )
 
     device
-    |> Ecto.Changeset.change(
-      Map.merge(described, %{last_seen_at: now, bytes_today: used + size, bytes_day: today})
-    )
-    |> Repo.insert_or_update()
+    |> Repo.insert(on_conflict: on_conflict, conflict_target: :device_id)
     |> case do
       {:ok, _device} -> :ok
       {:error, changeset} -> {:error, {:storage, changeset}}
     end
   end
 
-  defp seconds_until_midnight(now) do
+  @doc false
+  @spec seconds_until_midnight(DateTime.t()) :: pos_integer()
+  def seconds_until_midnight(now) do
     midnight = DateTime.new!(Date.add(DateTime.to_date(now), 1), ~T[00:00:00], "Etc/UTC")
     max(DateTime.diff(midnight, now), 1)
   end
