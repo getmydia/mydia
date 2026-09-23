@@ -100,7 +100,7 @@ final class AppMenu: NSObject {
 
   private func insertGoMenu(_ mainMenu: NSMenu) {
     let go = NSMenu(title: "Go")
-    go.addItem(navItem("Home", route: "/", key: "h", modifiers: [.command, .shift]))
+    go.addItem(navItem("Home", route: "/", key: "H"))
     go.addItem(navItem("Movies", route: "/movies", key: "1"))
     go.addItem(navItem("TV Shows", route: "/shows", key: "2"))
     go.addItem(navItem("Search", route: "/search", key: "f"))
