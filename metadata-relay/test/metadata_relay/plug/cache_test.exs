@@ -12,6 +12,9 @@ defmodule MetadataRelay.Plug.CacheTest do
 
   @opts Router.init([])
 
+  # /tmdb/movies/:id is a details route: 30 days.
+  @details_ttl_s 30 * 24 * 60 * 60
+
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(MetadataRelay.Repo)
 
@@ -113,6 +116,15 @@ defmodule MetadataRelay.Plug.CacheTest do
     |> Plug.Test.conn("/crashes/report", Jason.encode!(body))
     |> put_req_header("content-type", "application/json")
     |> Router.call(@opts)
+  end
+
+  defp cache_control(conn),
+    do: conn |> Plug.Conn.get_resp_header("cache-control") |> List.first() || ""
+
+  defp tmdb_ok(body \\ %{"id" => 550, "title" => "Harbor Lights"}) do
+    TMDBHelpers.set_tmdb_adapter(fn request ->
+      {request, Req.Response.new(status: 200, body: body)}
+    end)
   end
 
   describe "POST /api/v1/subtitles/search" do
@@ -266,6 +278,19 @@ defmodule MetadataRelay.Plug.CacheTest do
     end
   end
 
+  describe "GET /api/v1/subtitles/download-url/:id" do
+    test "is excluded from the cache, like the download route it points to" do
+      id = MetadataRelay.SubDL.FileId.encode("/subtitle/1-2.zip")
+      path = "/api/v1/subtitles/download-url/#{id}"
+
+      conn = Router.call(Plug.Test.conn(:get, path), @opts)
+
+      assert conn.status == 200
+      refute cache_control(conn) =~ "public"
+      assert entry_ttl_ms("GET:#{path}:") == nil
+    end
+  end
+
   describe "GET episode data" do
     test "a season still settling is cached for six hours, a settled one keeps the season TTL" do
       TMDBHelpers.set_tmdb_adapter(fn request ->
@@ -297,6 +322,90 @@ defmodule MetadataRelay.Plug.CacheTest do
 
       assert Router.call(Plug.Test.conn(:get, "/tmdb/tv/shows/9001/1"), @opts).status == 200
       assert entry_ttl_ms("GET:/tmdb/tv/shows/9001/1:") > :timer.hours(24)
+    end
+  end
+
+  describe "cache-control on GET routes" do
+    test "a miss and the following hit are public with the route's TTL" do
+      tmdb_ok()
+
+      miss = Router.call(Plug.Test.conn(:get, "/tmdb/movies/550"), @opts)
+      hit = Router.call(Plug.Test.conn(:get, "/tmdb/movies/550"), @opts)
+
+      expected =
+        "public, max-age=#{@details_ttl_s}, stale-while-revalidate=86400, stale-if-error=604800"
+
+      assert cache_control(miss) == expected
+
+      assert cache_control(hit) =~
+               ~r/^public, max-age=\d+, stale-while-revalidate=86400, stale-if-error=604800$/
+
+      [_, hit_max_age] = Regex.run(~r/max-age=(\d+)/, cache_control(hit))
+      assert String.to_integer(hit_max_age) in (@details_ttl_s - 5)..@details_ttl_s
+    end
+
+    test "a hit on an aged entry advertises only its remaining lifetime" do
+      MetadataRelay.Cache.put(
+        "GET:/tmdb/movies/551:",
+        %{
+          status: 200,
+          headers: [{"content-type", "application/json"}],
+          body: "{}",
+          ttl_ms: :timer.hours(1),
+          stored_at_ms: System.system_time(:millisecond) - :timer.minutes(10)
+        },
+        ttl: :timer.hours(1)
+      )
+
+      conn = Router.call(Plug.Test.conn(:get, "/tmdb/movies/551"), @opts)
+      [_, max_age] = Regex.run(~r/max-age=(\d+)/, cache_control(conn))
+
+      assert String.to_integer(max_age) in 2995..3000
+    end
+
+    test "an entry written before this change is capped at an hour" do
+      MetadataRelay.Cache.put("GET:/tmdb/movies/552:", %{
+        status: 200,
+        headers: [{"content-type", "application/json"}],
+        body: "{}"
+      })
+
+      conn = Router.call(Plug.Test.conn(:get, "/tmdb/movies/552"), @opts)
+
+      assert cache_control(conn) =~ "max-age=3600,"
+    end
+
+    test "a settling season advertises the six-hour settling TTL" do
+      tmdb_ok(%{
+        "episodes" => [
+          %{"episode_number" => 8, "air_date" => "2099-01-01", "name" => "Episode 8"}
+        ]
+      })
+
+      conn = Router.call(Plug.Test.conn(:get, "/tmdb/tv/shows/9002/2"), @opts)
+
+      assert cache_control(conn) =~ "max-age=21600,"
+    end
+
+    test "an upstream error is never public" do
+      TMDBHelpers.set_tmdb_adapter(fn request ->
+        {request, Req.Response.new(status: 404, body: %{"status_message" => "not found"})}
+      end)
+
+      conn = Router.call(Plug.Test.conn(:get, "/tmdb/movies/553"), @opts)
+
+      assert conn.status == 404
+      refute cache_control(conn) =~ "public"
+    end
+
+    test "the cached subtitle search POST is never public, on miss or hit" do
+      counting_subdl_stub()
+
+      miss = search(Jason.encode!(%{imdb_id: "0133093"}))
+      hit = search(Jason.encode!(%{imdb_id: "0133093"}))
+
+      refute cache_control(miss) =~ "public"
+      refute cache_control(hit) =~ "public"
     end
   end
 end

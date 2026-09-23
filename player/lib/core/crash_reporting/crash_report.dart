@@ -32,7 +32,8 @@ class CrashAppContext {
   final String environment;
 }
 
-/// One stack frame, in the `{function, file, line}` shape both relays parse.
+/// One stack frame, in the `{function, file, line}` shape the relay
+/// (`metadata-relay/`) parses.
 class CrashFrame {
   const CrashFrame({
     required this.function,
@@ -52,19 +53,20 @@ class CrashFrame {
       {'function': function, 'file': file, 'line': line};
 }
 
-/// Most frames sent, matching relay-worker's `MAX_STACK_FRAMES`.
+/// Most frames sent. This is the player's own cap; the relay enforces no
+/// frame-count limit of its own.
 const int kMaxCrashFrames = 64;
 
 const _appPackage = 'package:player/';
 
-/// Parses [stack] into frames the relays can group on.
+/// Parses [stack] into frames the relay can group on.
 ///
 /// Frames without a line number (the VM's `...` fold, anything unparseable)
-/// are dropped, because both relays discard an entry missing `line`. The
+/// are dropped, because the relay discards an entry missing `line` too. The
 /// leading run of frames outside the player's own package is dropped too:
-/// both relays fingerprint on frame 0, and a Flutter framework frame there
-/// would merge unrelated crashes into one group. A trace with no player frame
-/// at all is kept whole.
+/// the relay's ErrorTracker grouping fingerprints on frame 0, and a Flutter
+/// framework frame there would merge unrelated crashes into one group. A
+/// trace with no player frame at all is kept whole.
 List<CrashFrame> parseCrashFrames(StackTrace? stack) {
   if (stack == null) return const [];
 
@@ -144,7 +146,7 @@ class CrashReport {
         'platform': context.platform,
         'os_version': context.osVersion,
         'build_number': context.buildNumber,
-        // Repeats the top frame, as the server does: both relays build a
+        // Repeats the top frame, as the server does: the relay builds a
         // frame from these when `stacktrace` is empty.
         if (top != null) ...top.toJson(),
       },

@@ -74,8 +74,19 @@ defmodule MetadataRelay.Cache do
   - Default: 30 days
   """
   def put(key, value, opts \\ []) do
-    ttl = determine_ttl(key, opts)
-    adapter().put(key, value, ttl)
+    adapter().put(key, value, ttl_for(key, opts))
+  end
+
+  @doc """
+  The TTL, in milliseconds, that `put/3` stores `key` with given the same
+  `opts`: the `:ttl` option when present, the path-based TTL otherwise.
+  """
+  @spec ttl_for(String.t(), keyword()) :: pos_integer()
+  def ttl_for(key, opts \\ []) do
+    case Keyword.get(opts, :ttl) do
+      nil -> auto_ttl(key)
+      ttl -> ttl
+    end
   end
 
   @doc """
@@ -105,13 +116,6 @@ defmodule MetadataRelay.Cache do
     case Application.get_env(:metadata_relay, :cache_adapter) do
       MetadataRelay.Cache.Redis -> MetadataRelay.Cache.Redis
       _ -> MetadataRelay.Cache.InMemory
-    end
-  end
-
-  defp determine_ttl(key, opts) do
-    case Keyword.get(opts, :ttl) do
-      nil -> auto_ttl(key)
-      ttl -> ttl
     end
   end
 

@@ -71,5 +71,16 @@ defmodule MetadataRelay.ClientConfigEnvTest do
       assert %{"p2p" => %{"relays" => relays}} = Jason.decode!(conn.resp_body)
       assert relays == ClientConfig.default_relay_urls()
     end
+
+    test "is public for an hour" do
+      configure(nil)
+
+      conn = MetadataRelay.Router.call(Plug.Test.conn(:get, "/client-config"), [])
+
+      assert conn.status == 200
+
+      assert get_resp_header(conn, "cache-control") ==
+               ["public, max-age=3600, stale-while-revalidate=86400, stale-if-error=604800"]
+    end
   end
 end

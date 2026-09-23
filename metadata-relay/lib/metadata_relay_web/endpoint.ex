@@ -21,6 +21,10 @@ defmodule MetadataRelayWeb.Endpoint do
     only: ~w(css js assets fonts images favicon.ico robots.txt)
   )
 
+  # After Plug.Static on purpose: static assets keep Plug.Static's own
+  # cache headers. See the moduledoc for why this is endpoint-wide.
+  plug(MetadataRelayWeb.Plug.PrivateByDefault)
+
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
   if code_reloading? do
