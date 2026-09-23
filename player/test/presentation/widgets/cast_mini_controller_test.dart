@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
@@ -19,8 +20,12 @@ import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
+import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/core/playback/local_playback_state.dart';
+import 'package:player/presentation/widgets/app_shell.dart';
+import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
+import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
@@ -164,6 +169,11 @@ _ManagerHarness _buildMydiaManagerHarness() {
 
   final manager = CastSessionManager(
     backend: backend,
+    // The harness's only backend doubles as the Mydia one too:
+    // `CastBackendRegistry.forProtocol` no longer falls back to the primary
+    // backend for a Mydia device, so `_mydiaDevice` below needs one wired up
+    // even though this harness has no separate Chromecast/DLNA fake.
+    mydiaBackend: backend,
     store: InMemoryCastSessionStore(),
     progressService: ProgressService(client),
     resolverFactory: () => CastRouteResolver(
@@ -212,6 +222,15 @@ FlutterPlaybackSnapshot _snapshot({
         nextPrevious: false,
       ),
       sequence: BigInt.one,
+    );
+
+AmbientTarget _ambient(String nodeId, String title) => AmbientTarget(
+      device: CastDevice(
+        id: nodeId,
+        name: nodeId,
+        protocol: CastProtocolKind.mydia,
+      ),
+      snapshot: _snapshot(title: title),
     );
 
 /// Like [_pump], but backs `castSessionManagerProvider` with a real manager
@@ -322,7 +341,8 @@ void main() {
               'renders as an error box instead');
     });
 
-    testWidgets('keeps the bar full-width against the bottom edge',
+    testWidgets(
+        'keeps the bar full-width and floating clear of the bottom edge',
         (tester) async {
       await _pumpLayer(tester, target: _device);
 
@@ -330,7 +350,10 @@ void main() {
       final layer = tester.getRect(find.byType(CastBarLayer));
 
       expect(bar.width, layer.width);
-      expect(bar.bottom, layer.bottom);
+      // With no dock reporting into DockExtents (this harness mounts no
+      // AppShell), the bar floats 12 above the window edge rather than
+      // sitting flush against it. See CastBarLayer's own dartdoc.
+      expect(bar.bottom, layer.bottom - 12);
     });
 
     testWidgets('does not swallow taps meant for the screen below',
@@ -402,7 +425,8 @@ void main() {
     container.read(castTargetProvider.notifier).set(_device);
     await tester.pump();
 
-    expect(find.text('${_device.name} — not connected'), findsOneWidget);
+    expect(find.text(_device.name), findsOneWidget);
+    expect(find.text('Not connected'), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-scrubber')), findsNothing);
@@ -425,7 +449,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(castTargetProvider), isNull);
-    expect(find.textContaining('not connected'), findsNothing);
+    expect(find.text('Not connected'), findsNothing);
   });
 
   testWidgets(
@@ -592,7 +616,8 @@ void main() {
       ),
     );
 
-    expect(find.text('${_device.name} — not connected'), findsOneWidget);
+    expect(find.text(_device.name), findsOneWidget);
+    expect(find.text('Not connected'), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
     expect(find.byKey(const Key('cast-stale-reconnect')), findsNothing,
@@ -672,6 +697,34 @@ void main() {
 
       expect(harness.backend.connectAttempts, [_device],
           reason: 'gutting _reconnectIdle\'s body would leave this empty');
+    });
+
+    testWidgets(
+        'the offline reconnect button says so in Mydia terms, not LAN '
+        'firewall terms, when the reconnect fails', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+      mydiaBackend.failNextConnect(CastFailureKind.unreachable);
+
+      final container = await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+      );
+
+      container.read(castTargetProvider.notifier).set(_mydiaDevice);
+      await tester.pump();
+
+      expect(
+          find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cast-bar-offline-reconnect')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('Could not reach the device'), findsOneWidget);
+      expect(find.textContaining('firewall'), findsNothing);
     });
 
     testWidgets(
@@ -1207,6 +1260,298 @@ void main() {
       );
 
       expect(find.text('Silo - S02E01'), findsOneWidget);
+    });
+
+    testWidgets(
+        'a View that cannot reach the player says so in Mydia terms, not '
+        'LAN firewall terms', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+      mydiaBackend.failNextConnect(CastFailureKind.unreachable);
+
+      final ambientTarget = AmbientTarget(
+        device: const CastDevice(
+          id: 'node-tv',
+          name: 'node-tv',
+          protocol: CastProtocolKind.mydia,
+        ),
+        snapshot: _snapshot(title: 'The Lantern Keepers'),
+      );
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+        extraOverrides: [
+          ambientPlayingProvider
+              .overrideWith((ref) => Stream.value([ambientTarget])),
+          remoteDeviceNamesProvider
+              .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+        ],
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-open')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('Could not reach the device'), findsOneWidget);
+      expect(find.textContaining('firewall'), findsNothing);
+    });
+
+    testWidgets('the close button hides the banner', (tester) async {
+      await _pump(tester, extraOverrides: [
+        ambientPlayingProvider.overrideWith((ref) =>
+            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+      ]);
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
+    });
+
+    testWidgets('comes back when that player moves on to something else',
+        (tester) async {
+      final playing = StreamController<List<AmbientTarget>>();
+      addTearDown(playing.close);
+      await _pump(tester, extraOverrides: [
+        ambientPlayingProvider.overrideWith((ref) => playing.stream),
+      ]);
+      playing.add([_ambient('node-tv', 'The Lantern Keepers')]);
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
+      await tester.pump();
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
+
+      playing.add([_ambient('node-tv', 'Harbour of Glass')]);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsOneWidget);
+    });
+
+    testWidgets('a dismissed player does not hide a different one',
+        (tester) async {
+      final playing = StreamController<List<AmbientTarget>>();
+      addTearDown(playing.close);
+      await _pump(tester, extraOverrides: [
+        ambientPlayingProvider.overrideWith((ref) => playing.stream),
+      ]);
+      playing.add([_ambient('node-tv', 'The Lantern Keepers')]);
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
+      await tester.pump();
+
+      playing.add([
+        _ambient('node-tv', 'The Lantern Keepers'),
+        _ambient('node-den', 'Harbour of Glass'),
+      ]);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('node-den'), findsOneWidget,
+          reason: 'the second player is shown once the first is dismissed');
+    });
+  });
+
+  group('cast bar chrome', () {
+    Future<void> expectPill(WidgetTester tester, Key key) async {
+      expect(
+        find.ancestor(of: find.byKey(key), matching: find.byType(CastPill)),
+        findsOneWidget,
+        reason: '$key must render inside the glass pill',
+      );
+    }
+
+    testWidgets('idle, connecting and offline rows are pills', (tester) async {
+      await _pump(tester,
+          session: const CastSession(
+              device: _device, playbackState: CastPlaybackState.idle));
+      await expectPill(tester, const Key('cast-bar-idle-clear'));
+
+      await _pump(tester,
+          session: const CastSession(
+              device: _device,
+              playbackState: CastPlaybackState.idle,
+              connectionState: CastConnectionState.connecting));
+      await expectPill(tester, const Key('cast-bar-connecting-cancel'));
+
+      await _pump(tester,
+          session: const CastSession(
+              device: _device,
+              playbackState: CastPlaybackState.idle,
+              connectionState: CastConnectionState.lost));
+      await expectPill(tester, const Key('cast-bar-offline-reconnect'));
+    });
+
+    testWidgets('playing and stale rows are pills', (tester) async {
+      await _pump(tester,
+          session: _session(duration: const Duration(minutes: 40)));
+      await expectPill(tester, const Key('cast-bar-play-pause'));
+      expect(find.text('Casting to ${_device.name}'), findsOneWidget);
+
+      await _pump(tester,
+          session:
+              _session(duration: const Duration(minutes: 40), isStale: true));
+      await expectPill(tester, const Key('cast-stale-reconnect'));
+    });
+
+    testWidgets('the ambient row shows the title and where it plays',
+        (tester) async {
+      await _pump(tester, extraOverrides: [
+        ambientPlayingProvider.overrideWith((ref) =>
+            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+        remoteDeviceNamesProvider
+            .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+      ]);
+      await tester.pump();
+      await tester.pump();
+
+      await expectPill(tester, const Key('cast-bar-ambient-open'));
+      expect(find.text('The Lantern Keepers'), findsOneWidget);
+      expect(find.text('Playing on Living Room'), findsOneWidget);
+    });
+  });
+
+  group('cast bar placement', () {
+    const dockKey = Key('placement-dock');
+
+    // A real phone width (390, iPhone-mini class) overflows BottomNav's Row
+    // here: `flutter test` does not load the app's own `Inter` font (a
+    // long-documented Flutter gotcha; nothing loads it without a
+    // `flutter_test_config.dart` calling something like `loadAppFonts()`,
+    // which this repo has none of), so every label measures under whatever
+    // fallback font the test binding substitutes, and that fallback is wide
+    // enough that the row needs ~512px of content width against 390's ~350
+    // available. Reproduced against a bare, unmodified `BottomNav` with none
+    // of this task's changes involved, so it is a pre-existing test-harness
+    // artifact, not a regression from floating the bar. Widened just enough
+    // to clear it while staying a narrow, portrait, "phone" viewport (well
+    // under `Breakpoints.tablet`'s 900).
+    const phoneSize = Size(700, 844);
+
+    Future<void> pumpShell(
+      WidgetTester tester, {
+      required Size size,
+      required bool withDock,
+      required ValueSetter<double> onInset,
+    }) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+        authStateProvider.overrideWith(() =>
+            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider.overrideWith((ref) =>
+            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          builder: (context, child) => CastBarLayer(child: child!),
+          home: Scaffold(
+            extendBody: true,
+            bottomNavigationBar: withDock
+                ? AppShell.dockChrome(
+                    drawerOpen: false,
+                    child: KeyedSubtree(
+                      key: dockKey,
+                      child: BottomNav(location: '/', onNavigate: (_) {}),
+                    ),
+                  )
+                : null,
+            body: Builder(builder: (context) {
+              onInset(DockInsets.bottomOf(context));
+              return const SizedBox.expand();
+            }),
+          ),
+        ),
+      ));
+      // Stream delivery, then the post-frame height reports, then the
+      // rebuild they trigger.
+      for (var i = 0; i < 4; i++) {
+        await tester.pump();
+      }
+    }
+
+    testWidgets('floats above the dock on a phone', (tester) async {
+      late double inset;
+      await pumpShell(tester,
+          size: phoneSize, withDock: true, onInset: (v) => inset = v);
+
+      final bar = tester.getRect(find.byType(CastPill));
+      final dock = tester.getRect(find.byKey(dockKey));
+      expect(bar.bottom, lessThanOrEqualTo(dock.top),
+          reason: 'the bar must not cover the dock');
+      expect(inset, greaterThanOrEqualTo(dock.height + bar.height),
+          reason: 'scrollables must clear both the dock and the bar');
+    });
+
+    testWidgets('releases the reserved room once dismissed', (tester) async {
+      late double inset;
+      await pumpShell(tester,
+          size: phoneSize, withDock: true, onInset: (v) => inset = v);
+      final withBar = inset;
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
+      for (var i = 0; i < 3; i++) {
+        await tester.pump();
+      }
+
+      expect(inset, lessThan(withBar));
+    });
+
+    testWidgets('sits at the window bottom when there is no dock',
+        (tester) async {
+      await pumpShell(tester,
+          size: const Size(1400, 900), withDock: false, onInset: (_) {});
+
+      final bar = tester.getRect(find.byType(CastPill));
+      expect(bar.bottom, closeTo(900 - 12, 1));
+    });
+
+    testWidgets(
+        'stops floating at dock height once a route covers the dock, and '
+        'resumes once popped', (tester) async {
+      await pumpShell(tester, size: phoneSize, withDock: true, onInset: (_) {});
+
+      // A route pushed on top of the shell (the immersive player, in
+      // production) keeps the dock mounted underneath but no longer current.
+      // `CastBarLayer` sits above this Navigator entirely, so the ambient bar
+      // stays visible; only the dock's own reported height should drop.
+      final navigator = Navigator.of(tester.element(find.byKey(dockKey)));
+      navigator.push(MaterialPageRoute(
+        builder: (_) => const Scaffold(body: SizedBox.expand()),
+      ));
+      await tester.pumpAndSettle();
+
+      final coveredBar = tester.getRect(find.byType(CastPill));
+      expect(coveredBar.bottom, closeTo(phoneSize.height - 12, 2),
+          reason: 'the dock is covered, so the bar must fall back to '
+              'floating clear of the window edge rather than hovering at '
+              'the now-invisible dock\'s height');
+
+      navigator.pop();
+      await tester.pumpAndSettle();
+
+      final bar = tester.getRect(find.byType(CastPill));
+      final dock = tester.getRect(find.byKey(dockKey));
+      expect(bar.bottom, lessThanOrEqualTo(dock.top),
+          reason: 'popping the covering route must restore the bar above '
+              'the dock');
     });
   });
 }

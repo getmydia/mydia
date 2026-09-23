@@ -16,6 +16,7 @@ import '../../core/layout/breakpoints.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
 import 'cast_actions.dart';
+import 'cast_bar/dock_extents.dart';
 import 'compatibility_banner.dart';
 import 'nav/bottom_nav.dart';
 import 'nav/desktop_sidebar.dart';
@@ -150,6 +151,9 @@ class AppShell extends ConsumerStatefulWidget {
   /// 200ms sits just inside Flutter's drawer settle duration (246ms), so the
   /// dock is gone before the drawer finishes arriving.
   ///
+  /// Also reports the dock's height to `DockExtents` so the floating cast bar
+  /// can sit above it instead of painting over it.
+  ///
   /// Public and `@visibleForTesting` for the reason [castOverlay] and
   /// [contentGutter] are: a test can exercise the exact widget the shell
   /// builds, instead of a mirror that silently drifts from the real call site
@@ -159,12 +163,21 @@ class AppShell extends ConsumerStatefulWidget {
     required bool drawerOpen,
     required Widget child,
   }) =>
-      IgnorePointer(
-        ignoring: drawerOpen,
-        child: AnimatedOpacity(
-          opacity: drawerOpen ? 0 : 1,
-          duration: const Duration(milliseconds: 200),
-          child: child,
+      Builder(
+        builder: (context) => ReportedHeight(
+          onHeight: DockExtents.reporterOf(context)?.onDock,
+          // A route pushed over the shell (the immersive player) keeps the
+          // shell mounted underneath; the bar must not keep floating at dock
+          // height over a screen that has no dock.
+          active: ModalRoute.of(context)?.isCurrent ?? true,
+          child: IgnorePointer(
+            ignoring: drawerOpen,
+            child: AnimatedOpacity(
+              opacity: drawerOpen ? 0 : 1,
+              duration: const Duration(milliseconds: 200),
+              child: child,
+            ),
+          ),
         ),
       );
 

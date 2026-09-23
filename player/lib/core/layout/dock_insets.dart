@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../presentation/widgets/cast_bar/dock_extents.dart';
 import 'breakpoints.dart';
 
 /// Bottom clearance for content that scrolls under the floating mobile dock.
@@ -38,9 +39,20 @@ abstract final class DockInsets {
   /// same predicate `AppShell` uses to pick its own desktop or mobile branch,
   /// read off the window-sized ambient `MediaQuery`, so a screen can never
   /// disagree with the shell about which layout it is in.
-  static double bottomOf(BuildContext context) => Breakpoints.isDesktop(context)
-      ? desktopGap
-      : MediaQuery.paddingOf(context).bottom + dockGap;
+  ///
+  /// Also adds the floating cast bar's own clearance when it is showing, so
+  /// content never lands under it either.
+  static double bottomOf(BuildContext context) =>
+      (Breakpoints.isDesktop(context)
+          ? desktopGap
+          : MediaQuery.paddingOf(context).bottom + dockGap) +
+      _castBarClearance(context);
+
+  /// The floating cast bar's height plus its gap, while it is showing.
+  static double _castBarClearance(BuildContext context) {
+    final bar = DockExtents.maybeOf(context)?.castBar ?? 0;
+    return bar > 0 ? bar + DockExtents.gap : 0;
+  }
 }
 
 /// A box-shaped gap reserving [DockInsets.bottomOf].
