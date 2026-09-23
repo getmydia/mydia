@@ -31,13 +31,21 @@ void main() {
     // before `_initializePlayer` even runs — this test only needs that
     // listener and the P2P connection state, nothing about the streaming
     // candidates or progress queries this scenario never reaches.
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    //
+    // The pre-play queries now fire concurrently (see `runIsolated`), so an
+    // ordered `StubLink.responses` list can no longer script them -- dispatch
+    // on the operation instead.
+    final link = StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      return streamingCandidatesResponse(duration: 5400);
+    });
 
     final container = buildPlayerScreenContainer(
       link: link,

@@ -62,13 +62,22 @@ void main() {
     mockPathProviderDocumentsDirectory();
     final castManager = CapturingCastSessionManager();
     final container = buildPlayerScreenContainer(
-      link: StubLink.responses([
-        movieDetailResponse(),
-        movieSegmentsResponse(),
-        subtitleTrackSettingsResponse(),
-        subtitlePreferenceResponse(),
-        streamingCandidatesResponse(duration: 5400),
-      ]),
+      // The pre-play queries now fire concurrently (see `runIsolated`), so an
+      // ordered `StubLink.responses` list can no longer script them --
+      // dispatch on the operation instead.
+      link: StubLink((request, index) {
+        if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+        if (isOperation(request, 'MovieSegments')) {
+          return movieSegmentsResponse();
+        }
+        if (isOperation(request, 'SubtitleTrackSettings')) {
+          return subtitleTrackSettingsResponse();
+        }
+        if (isOperation(request, 'MovieSubtitlePreference')) {
+          return subtitlePreferenceResponse();
+        }
+        return streamingCandidatesResponse(duration: 5400);
+      }),
       connectionState:
           const conn.ConnectionState(type: conn.ConnectionType.direct),
       castManager: castManager,

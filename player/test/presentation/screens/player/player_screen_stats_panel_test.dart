@@ -364,13 +364,10 @@ void main() {
   // hands `createPlayer` a closure over a single `fake` shared for the
   // whole test, so the player `_initializePlayer` constructs afterwards
   // would reuse that already-closed instance and throw on its first
-  // `open()`. `StubLink`'s handler here is also positional
-  // (`index == 0..3`), scripted for exactly one startup sequence; a
-  // restart repeats the same four queries and would fall through to the
-  // catch-all `updateMovieProgress` response instead. Covering the restart
-  // needs a `createPlayer` that mints a fresh fake per call and a
-  // `StubLink` that answers by operation name instead of position, the way
-  // `player_screen_cast_skip_segments_test.dart`'s `_link` does -- real
-  // harness changes, not a two-line addition, so left for a follow-up
-  // rather than bent to fit here.
+  // `open()`. `StubLink`'s handler above now answers by operation name
+  // (the pre-play queries fire concurrently, see `runIsolated`), so a
+  // restart repeating the same four queries is no longer the blocker it
+  // once was; covering the restart still needs a `createPlayer` that mints
+  // a fresh fake per call -- a real harness change, not a two-line
+  // addition, so left for a follow-up rather than bent to fit here.
 }

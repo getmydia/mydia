@@ -111,12 +111,21 @@ FocusNode _playerSurfaceNode(WidgetTester tester) => tester
 Future<void> _mountPlayingScreen(WidgetTester tester) async {
   final fake = _FakePlatformPlayer();
   final container = buildPlayerScreenContainer(
+    // The pre-play queries now fire concurrently (see `runIsolated`), so an
+    // index-keyed dispatch can no longer script them -- dispatch on the
+    // operation instead.
     link: StubLink((request, index) {
-      if (index == 0) return movieDetailResponse(positionSeconds: 0);
-      if (index == 1) return movieSegmentsResponse();
-      if (index == 2) return subtitleTrackSettingsResponse();
-      if (index == 3) return subtitlePreferenceResponse();
-      if (index == 4) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(positionSeconds: 0);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      if (isOperation(request, 'StreamingCandidates')) {
         return streamingCandidatesResponse(directPlay: true, duration: 5400);
       }
       final variables = request.variables;

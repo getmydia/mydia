@@ -33,13 +33,23 @@ void main() {
     // Direct play, and 12s in — below `kMinResumeThresholdSeconds` — so no
     // resume dialog to answer and no HLS session mutation to stub for the
     // local fallback.
-    final link = StubLink.responses([
-      movieDetailResponse(positionSeconds: 12),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400, directPlay: true),
-    ]);
+    //
+    // The pre-play queries now fire concurrently (see `runIsolated`), so an
+    // ordered `StubLink.responses` list can no longer script them -- dispatch
+    // on the operation instead.
+    final link = StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(positionSeconds: 12);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      return streamingCandidatesResponse(duration: 5400, directPlay: true);
+    });
 
     final container = buildPlayerScreenContainer(
       link: link,
