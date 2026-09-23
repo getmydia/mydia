@@ -8,7 +8,7 @@
     "phoenix_live_view": "file:../deps/phoenix_live_view"
   },
   "devDependencies": {
-    "daisyui": "^5.7.37",
+    "daisyui": "^5.7.38",
     "tailwindcss": "^4.3.3"
   }
 }
