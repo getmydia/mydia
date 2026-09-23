@@ -161,15 +161,20 @@ SubtitleTrack? preferenceTarget({
 ///    playback, and each revision reaches this path. Without the flag, a
 ///    revision landing after a viewer pick would stomp it.
 ///  - [hasTracks]: there is nothing to match against yet.
+///  - [awaitingPlayerTracks]: native direct play whose open has not passed
+///    mpv's probe yet. The list on screen is still the server's fallback,
+///    and a match there fetches from the server a stream mpv is about to
+///    offer, and usually show, on its own.
 bool shouldApplySubtitlePreference({
   required bool viewerChose,
   required bool switchInFlight,
   required bool intentPending,
   required bool alreadyApplied,
   required bool hasTracks,
+  required bool awaitingPlayerTracks,
 }) {
   if (viewerChose || switchInFlight || intentPending) return false;
-  if (alreadyApplied || !hasTracks) return false;
+  if (alreadyApplied || !hasTracks || awaitingPlayerTracks) return false;
   return true;
 }
 

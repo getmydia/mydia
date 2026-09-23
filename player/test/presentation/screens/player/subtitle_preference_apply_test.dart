@@ -157,6 +157,72 @@ class _ProbedPlayer extends PlatformPlayer {
   }
 }
 
+/// A player whose `open` publishes an empty track list first, as mpv does
+/// before its probe has read the container, and publishes the probed list
+/// only on [probe].
+///
+/// That empty revision is the window this file's startup tests are about:
+/// with nothing from mpv yet, `resolveSubtitleTracks` falls back to the
+/// server's list, and a preference applied then fetches from the server a
+/// track mpv is about to show on its own.
+class _SlowProbePlayer extends _ProbedPlayer {
+  _SlowProbePlayer({required this.mpvSubtitles});
+
+  final List<SubtitleTrack> mpvSubtitles;
+
+  @override
+  Future<void> open(Playable playable, {bool play = true}) async {
+    opened = true;
+    state = state.copyWith(
+      duration: const Duration(seconds: 90),
+      position: Duration.zero,
+      playing: false,
+    );
+    durationController.add(state.duration);
+    positionController.add(state.position);
+    playingController.add(false);
+    state = state.copyWith(tracks: const Tracks());
+    tracksController.add(state.tracks);
+  }
+
+  void probe() {
+    state = state.copyWith(tracks: probedTracks(subtitle: mpvSubtitles));
+    tracksController.add(state.tracks);
+  }
+}
+
+/// The server's view of a file whose English subtitle is an embedded
+/// stream, which is the case the startup fetch used to hit.
+Map<String, dynamic> _embeddedEnglishFile() => mediaFileWithSubtitle(
+      trackId: '3',
+      language: 'eng',
+      title: 'English',
+      url: null,
+      embedded: true,
+    );
+
+/// Mounts the screen without waiting for the open to settle, so a test can
+/// act between `open()` and mpv's probe.
+Future<void> _mount(
+  WidgetTester tester,
+  StubLink link,
+  _ProbedPlayer player,
+) async {
+  final container = buildPlayerScreenContainer(
+    link: link,
+    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    castManager: CapturingCastSessionManager(),
+    proxyService: TrackingLocalProxyService(),
+  );
+  addTearDown(container.dispose);
+  await pumpPlayerScreen(
+    tester,
+    container,
+    createPlayer: () => Player(platformPlayer: player),
+  );
+  await pumpUntil(tester, () => player.opened);
+}
+
 /// A [StubLink] whose next subtitle-body fetch can be held open, so a test can
 /// land a track-list revision inside that window.
 ///
@@ -190,7 +256,10 @@ class _GateableStubLink extends StubLink {
 /// The scripted responses a direct-play movie load consumes, with
 /// [preferredSubtitle] answered by the standalone preference query rather than
 /// by the detail response.
-_GateableStubLink _link({Map<String, dynamic>? preferredSubtitle}) {
+_GateableStubLink _link({
+  Map<String, dynamic>? preferredSubtitle,
+  Map<String, dynamic>? file,
+}) {
   return _GateableStubLink((request, index) {
     if (_carries(request, documentNodeQuerySubtitleContent)) {
       return {
@@ -199,7 +268,7 @@ _GateableStubLink _link({Map<String, dynamic>? preferredSubtitle}) {
       };
     }
     if (_carries(request, documentNodeQueryMovieDetail)) {
-      return movieDetailResponse(files: [mediaFileWithSubtitle()]);
+      return movieDetailResponse(files: [file ?? mediaFileWithSubtitle()]);
     }
     if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
       return subtitlePreferenceResponse(
@@ -578,5 +647,56 @@ void main() {
     expect(player.selectedSubtitleTracks, hasLength(1),
         reason: 'a revision that arrives as the selection is landing must not '
             'make that selection be sent to the player twice');
+  });
+
+  testWidgets(
+      'in direct play the preference waits for mpv and selects its own track',
+      (tester) async {
+    final player = _SlowProbePlayer(
+      mpvSubtitles: const [SubtitleTrack('1', 'English', 'eng')],
+    );
+    final link = _link(
+      preferredSubtitle:
+          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      file: _embeddedEnglishFile(),
+    );
+
+    await _mount(tester, link, player);
+    // The empty revision has landed and the server list is on screen as the
+    // fallback. Give any apply it could trigger every chance to run.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(_subtitleContentRequests(link), 0,
+        reason: 'nothing may be fetched against the fallback list while mpv '
+            'is still probing');
+
+    player.probe();
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(_subtitleContentRequests(link), 0,
+        reason: 'mpv carries the stream itself, so the server must not be '
+            'asked to extract it');
+    expect(player.selectedSubtitleTracks.single.id, '1',
+        reason: "the preference lands on mpv's own English track");
+  });
+
+  testWidgets(
+      'if mpv never reports tracks, the preference fetches from the server',
+      (tester) async {
+    final player = _SlowProbePlayer(mpvSubtitles: const []);
+    final link = _link(
+      preferredSubtitle:
+          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      file: _embeddedEnglishFile(),
+    );
+
+    await _mount(tester, link, player);
+    // Past `awaitRealTracks`' 3 s cap in `_openPlayerAndStart`.
+    await tester.pump(const Duration(seconds: 4));
+    await pumpUntil(tester, () => _subtitleContentRequests(link) > 0);
+
+    expect(_subtitleContentRequests(link), 1,
+        reason: "with no mpv list the server's copy is the only one there is");
   });
 }

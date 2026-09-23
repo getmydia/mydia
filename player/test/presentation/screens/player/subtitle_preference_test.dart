@@ -176,13 +176,14 @@ void main() {
           intentPending: false,
           alreadyApplied: false,
           hasTracks: true,
+          awaitingPlayerTracks: false,
         ),
         isTrue,
       );
     });
 
     test(
-        'never over a viewer pick, a switch, a carried intent, a repeat, or no tracks',
+        'never over a viewer pick, a switch, a carried intent, a repeat, no tracks, or before mpv has probed',
         () {
       for (final blocked in [
         () => shouldApplySubtitlePreference(
@@ -190,31 +191,43 @@ void main() {
             switchInFlight: false,
             intentPending: false,
             alreadyApplied: false,
-            hasTracks: true),
+            hasTracks: true,
+            awaitingPlayerTracks: false),
         () => shouldApplySubtitlePreference(
             viewerChose: false,
             switchInFlight: true,
             intentPending: false,
             alreadyApplied: false,
-            hasTracks: true),
+            hasTracks: true,
+            awaitingPlayerTracks: false),
         () => shouldApplySubtitlePreference(
             viewerChose: false,
             switchInFlight: false,
             intentPending: true,
             alreadyApplied: false,
-            hasTracks: true),
+            hasTracks: true,
+            awaitingPlayerTracks: false),
         () => shouldApplySubtitlePreference(
             viewerChose: false,
             switchInFlight: false,
             intentPending: false,
             alreadyApplied: true,
-            hasTracks: true),
+            hasTracks: true,
+            awaitingPlayerTracks: false),
         () => shouldApplySubtitlePreference(
             viewerChose: false,
             switchInFlight: false,
             intentPending: false,
             alreadyApplied: false,
-            hasTracks: false),
+            hasTracks: false,
+            awaitingPlayerTracks: false),
+        () => shouldApplySubtitlePreference(
+            viewerChose: false,
+            switchInFlight: false,
+            intentPending: false,
+            alreadyApplied: false,
+            hasTracks: true,
+            awaitingPlayerTracks: true),
       ]) {
         expect(blocked(), isFalse);
       }
