@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'core/app_menu/app_menu_channel.dart';
+import 'core/app_menu/now_playing.dart';
 import 'core/auth/auth_status.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
 import 'core/layout/tv_canvas.dart';
@@ -159,6 +161,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   late final DecorationLayoutSource _decorationLayout =
       DecorationLayoutSource();
 
+  /// The macOS menu bar and Dock menu's commands. Null off macOS.
+  AppMenuCommands? _appMenu;
+
   @override
   void initState() {
     super.initState();
@@ -167,6 +172,17 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         .read(remoteTargetControllerProvider)
         .intents
         .listen(_handleRemoteIntent);
+    if (appMenuSupported) {
+      final router = ref.read(appRouterProvider);
+      _appMenu = AppMenuCommands(
+        go: router.go,
+        back: () {
+          if (router.canPop()) router.pop();
+        },
+        remote: ref.read(remoteTargetControllerProvider),
+        nowPlaying: () => ref.read(nowPlayingPublisherProvider).current,
+      )..attach();
+    }
     // Applies the Diagnostics choice for the app's lifetime, so continuous log
     // upload runs without the Diagnostics screen being open.
     ref.listenManual(diagnosticsProvider, (_, __) {}, fireImmediately: true);
@@ -347,6 +363,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _appMenu?.detach();
     _decorationLayout.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _remoteIntentsSubscription?.cancel();
