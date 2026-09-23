@@ -1709,7 +1709,11 @@ async fn accept_inbound(
     let mut accepting = match incoming.accept() {
         Ok(accepting) => accepting,
         Err(e) => {
-            tracing::warn!("Connection failed after {}ms: {}", started.elapsed().as_millis(), e);
+            tracing::warn!(
+                "Failed to accept connection after {}ms: {}",
+                started.elapsed().as_millis(),
+                e
+            );
             return;
         }
     };
@@ -1718,7 +1722,11 @@ async fn accept_inbound(
     let alpn = match accepting.alpn().await {
         Ok(alpn) => alpn,
         Err(e) => {
-            tracing::warn!("Connection failed after {}ms: {}", started.elapsed().as_millis(), e);
+            tracing::warn!(
+                "Failed to get ALPN after {}ms: {}",
+                started.elapsed().as_millis(),
+                e
+            );
             return;
         }
     };
@@ -1732,7 +1740,11 @@ async fn accept_inbound(
     let conn = match accepting.await {
         Ok(conn) => conn,
         Err(e) => {
-            tracing::warn!("Connection failed after {}ms: {}", started.elapsed().as_millis(), e);
+            tracing::warn!(
+                "Connection failed after {}ms: {}",
+                started.elapsed().as_millis(),
+                e
+            );
             return;
         }
     };
