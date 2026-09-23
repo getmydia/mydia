@@ -1775,7 +1775,7 @@ class CastSessionManager {
   /// clears the stored session rather than leaving a phantom in the UI, with
   /// one exception: a stored Mydia device with no Mydia backend yet (P2P
   /// still starting) leaves the stored session alone and returns false, so a
-  /// later launch — or a later call once the host is up — can still restore
+  /// later launch (or a later call once the host is up) can still restore
   /// it.
   ///
   /// The receiver is asked what it is playing *before* anything connects to

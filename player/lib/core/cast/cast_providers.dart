@@ -61,7 +61,7 @@ final castBackendProvider = Provider<CastBackend>((ref) {
 /// here and the backend this provider hands out is refreshed.
 ///
 /// `castSessionManagerProvider` below reads this provider through a resolver
-/// it calls on every connect, not once at construction — so a rebuild here,
+/// it calls on every connect, not once at construction. A rebuild here,
 /// whether the first-run timing gap closing or a later relay-URL reset,
 /// reaches the manager on the next connect attempt without needing
 /// `castSessionManagerProvider` itself to be invalidated (which would tear
