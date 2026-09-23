@@ -20,9 +20,12 @@ import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
+import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/core/playback/local_playback_state.dart';
+import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
+import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
@@ -338,7 +341,8 @@ void main() {
               'renders as an error box instead');
     });
 
-    testWidgets('keeps the bar full-width against the bottom edge',
+    testWidgets(
+        'keeps the bar full-width and floating clear of the bottom edge',
         (tester) async {
       await _pumpLayer(tester, target: _device);
 
@@ -346,7 +350,10 @@ void main() {
       final layer = tester.getRect(find.byType(CastBarLayer));
 
       expect(bar.width, layer.width);
-      expect(bar.bottom, layer.bottom);
+      // With no dock reporting into DockExtents (this harness mounts no
+      // AppShell), the bar floats 12 above the window edge rather than
+      // sitting flush against it — see CastBarLayer's own dartdoc.
+      expect(bar.bottom, layer.bottom - 12);
     });
 
     testWidgets('does not swallow taps meant for the screen below',
@@ -1380,6 +1387,112 @@ void main() {
       await expectPill(tester, const Key('cast-bar-ambient-open'));
       expect(find.text('The Lantern Keepers'), findsOneWidget);
       expect(find.text('Playing on Living Room'), findsOneWidget);
+    });
+  });
+
+  group('cast bar placement', () {
+    const dockKey = Key('placement-dock');
+
+    // A real phone width (390, iPhone-mini class) overflows BottomNav's Row
+    // here: `flutter test` does not load the app's own `Inter` font (a
+    // long-documented Flutter gotcha — nothing loads it without a
+    // `flutter_test_config.dart` calling something like `loadAppFonts()`,
+    // which this repo has none of), so every label measures under whatever
+    // fallback font the test binding substitutes, and that fallback is wide
+    // enough that the row needs ~512px of content width against 390's ~350
+    // available. Reproduced against a bare, unmodified `BottomNav` with none
+    // of this task's changes involved, so it is a pre-existing test-harness
+    // artifact, not a regression from floating the bar. Widened just enough
+    // to clear it while staying a narrow, portrait, "phone" viewport (well
+    // under `Breakpoints.tablet`'s 900).
+    const phoneSize = Size(700, 844);
+
+    Future<void> pumpShell(
+      WidgetTester tester, {
+      required Size size,
+      required bool withDock,
+      required ValueSetter<double> onInset,
+    }) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+        authStateProvider.overrideWith(() =>
+            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider.overrideWith((ref) =>
+            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          builder: (context, child) => CastBarLayer(child: child!),
+          home: Scaffold(
+            extendBody: true,
+            bottomNavigationBar: withDock
+                ? AppShell.dockChrome(
+                    drawerOpen: false,
+                    child: KeyedSubtree(
+                      key: dockKey,
+                      child: BottomNav(location: '/', onNavigate: (_) {}),
+                    ),
+                  )
+                : null,
+            body: Builder(builder: (context) {
+              onInset(DockInsets.bottomOf(context));
+              return const SizedBox.expand();
+            }),
+          ),
+        ),
+      ));
+      // Stream delivery, then the post-frame height reports, then the
+      // rebuild they trigger.
+      for (var i = 0; i < 4; i++) {
+        await tester.pump();
+      }
+    }
+
+    testWidgets('floats above the dock on a phone', (tester) async {
+      late double inset;
+      await pumpShell(tester,
+          size: phoneSize, withDock: true, onInset: (v) => inset = v);
+
+      final bar = tester.getRect(find.byType(CastPill));
+      final dock = tester.getRect(find.byKey(dockKey));
+      expect(bar.bottom, lessThanOrEqualTo(dock.top),
+          reason: 'the bar must not cover the dock');
+      expect(inset, greaterThanOrEqualTo(dock.height + bar.height),
+          reason: 'scrollables must clear both the dock and the bar');
+    });
+
+    testWidgets('releases the reserved room once dismissed', (tester) async {
+      late double inset;
+      await pumpShell(tester,
+          size: phoneSize, withDock: true, onInset: (v) => inset = v);
+      final withBar = inset;
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
+      for (var i = 0; i < 3; i++) {
+        await tester.pump();
+      }
+
+      expect(inset, lessThan(withBar));
+    });
+
+    testWidgets('sits at the window bottom when there is no dock',
+        (tester) async {
+      await pumpShell(tester,
+          size: const Size(1400, 900), withDock: false, onInset: (_) {});
+
+      final bar = tester.getRect(find.byType(CastPill));
+      expect(bar.bottom, closeTo(900 - 12, 1));
     });
   });
 }

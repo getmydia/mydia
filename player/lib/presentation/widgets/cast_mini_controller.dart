@@ -22,6 +22,7 @@ import '../screens/movie/movie_detail_controller.dart';
 import 'cast_actions.dart';
 import 'cast_bar/cast_bar_parts.dart';
 import 'cast_bar/cast_pill.dart';
+import 'cast_bar/dock_extents.dart';
 import 'cast_subtitle_sheet.dart';
 import 'toast/toast_obstruction.dart';
 import 'toast/toaster.dart';
@@ -39,27 +40,68 @@ import 'toast/toaster.dart';
 /// The layer is full-screen rather than a strip pinned to the bottom so
 /// tooltips have somewhere to lay out; an Overlay only as tall as the bar
 /// clamps them back on top of it.
-class CastBarLayer extends StatelessWidget {
+///
+/// Also owns the [DockExtents] both the bar and `AppShell`'s dock report
+/// their heights into: the bar sits above the dock rather than painting over
+/// it, and floats at the window edge when there is no dock at all.
+class CastBarLayer extends StatefulWidget {
   const CastBarLayer({super.key, required this.child});
 
   final Widget child;
 
   @override
+  State<CastBarLayer> createState() => _CastBarLayerState();
+}
+
+class _CastBarLayerState extends State<CastBarLayer> {
+  double _dock = 0;
+  double _castBar = 0;
+
+  void _setDock(double height) {
+    if (!mounted || height == _dock) return;
+    setState(() => _dock = height);
+  }
+
+  void _setCastBar(double height) {
+    if (!mounted || height == _castBar) return;
+    setState(() => _castBar = height);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        child,
-        // Neither the Overlay nor the Align hit-tests its own empty space, so
-        // everything outside the bar still reaches `child` below.
-        Positioned.fill(
-          child: Overlay.wrap(
-            child: const Align(
-              alignment: Alignment.bottomCenter,
-              child: CastMiniController(),
+    final hasDock = _dock > 0;
+    return DockExtents(
+      dock: _dock,
+      castBar: _castBar,
+      onDock: _setDock,
+      onCastBar: _setCastBar,
+      child: Stack(
+        children: [
+          widget.child,
+          // Neither the Overlay nor the Align hit-tests its own empty space,
+          // so everything outside the bar still reaches `child` below.
+          Positioned.fill(
+            child: Overlay.wrap(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  // Above the dock when there is one. The dock's height
+                  // already includes the home indicator inset, so the bar
+                  // drops its own SafeArea bottom in that case.
+                  padding: EdgeInsets.only(
+                    bottom: hasDock ? _dock + DockExtents.gap : 12,
+                  ),
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeBottom: hasDock,
+                    child: const CastMiniController(),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -89,8 +131,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   /// tick and the bar becomes impossible to scrub.
   double? _dragFraction;
 
-  @override
-  Widget build(BuildContext context) {
+  Widget? _buildContent() {
     final capabilities = ref.watch(castCapabilitiesProvider);
     // `capabilities` describes only Chromecast/DLNA platform entitlement.
     // A Mydia target needs none of that — it is reached over the
@@ -104,7 +145,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     // which would make both the ambient "Playing on X" banner and the
     // pull-to-local button unreachable there.
     final hasMydia = ref.watch(mydiaCastBackendProvider) != null;
-    if (!capabilities.any && !hasMydia) return const SizedBox.shrink();
+    if (!capabilities.any && !hasMydia) return null;
 
     // Gate on authentication before touching anything else in the cast stack.
     // `isCastingProvider` reaches `castSessionManagerProvider`, whose body
@@ -116,7 +157,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     // escapes as an unhandled async error. There is also nothing to show: you
     // cannot be casting before you have a server.
     final auth = ref.watch(authStateProvider);
-    if (auth.value != AuthStatus.authenticated) return const SizedBox.shrink();
+    if (auth.value != AuthStatus.authenticated) return null;
 
     final session = ref.watch(castSessionProvider).value;
     final target = ref.watch(castTargetProvider);
@@ -124,7 +165,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
     final Widget? content;
     if (session == null) {
-      if (isLocalPlaying) return const SizedBox.shrink();
+      if (isLocalPlaying) return null;
       // A remembered device with no session at all: a connect that failed.
       // With neither, there is nothing of this device's own to show — which
       // is exactly when an ambient banner about a *different* paired player
@@ -146,10 +187,20 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       content = _buildPlaying(session);
     }
 
-    if (content == null) return const SizedBox.shrink();
-    return ToastObstruction(
-      edge: ToastEdge.bottom,
-      child: SafeArea(top: false, child: content),
+    return content;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final content = _buildContent();
+    return ReportedHeight(
+      onHeight: DockExtents.reporterOf(context)?.onCastBar,
+      child: content == null
+          ? const SizedBox.shrink()
+          : ToastObstruction(
+              edge: ToastEdge.bottom,
+              child: SafeArea(top: false, child: content),
+            ),
     );
   }
 
