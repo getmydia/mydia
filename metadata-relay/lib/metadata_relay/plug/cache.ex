@@ -63,6 +63,11 @@ defmodule MetadataRelay.Plug.Cache do
   @stale_while_revalidate_s 86_400
   @stale_if_error_s 604_800
 
+  # An entry written before `:ttl_ms` existed has no recorded age, so there is
+  # no remaining lifetime to compute -- only this ceiling on what it may
+  # advertise.
+  @legacy_max_ttl_ms :timer.hours(1)
+
   @behaviour Plug
 
   @impl true
@@ -227,14 +232,18 @@ defmodule MetadataRelay.Plug.Cache do
     |> halt()
   end
 
-  # An entry written before `:ttl_ms` existed has no age to subtract from, so
-  # it advertises the route's full TTL: at worst the edge keeps it that much
-  # longer than the relay would, once.
   defp remaining_ttl_ms(%{ttl_ms: ttl_ms, stored_at_ms: stored_at_ms}, _cache_key) do
     max(ttl_ms - (System.system_time(:millisecond) - stored_at_ms), 0)
   end
 
-  defp remaining_ttl_ms(_legacy_entry, cache_key), do: Cache.ttl_for(cache_key)
+  # An entry written before `ttl_ms` existed has an unknown age, so it
+  # advertises at most an hour rather than the route's full TTL. When that
+  # hour lapses Cloudflare revalidates against the relay, which answers from
+  # its own cache cheaply, so the edge can overshoot the relay's own expiry by
+  # at most an hour instead of a full route TTL.
+  defp remaining_ttl_ms(_legacy_entry, cache_key) do
+    min(Cache.ttl_for(cache_key), @legacy_max_ttl_ms)
+  end
 
   # Only GETs are shared at the edge. The cached subtitle search is a POST,
   # which Cloudflare does not cache anyway, and it is left to the private

@@ -118,7 +118,8 @@ defmodule MetadataRelay.Plug.CacheTest do
     |> Router.call(@opts)
   end
 
-  defp cache_control(conn), do: conn |> Plug.Conn.get_resp_header("cache-control") |> List.first()
+  defp cache_control(conn),
+    do: conn |> Plug.Conn.get_resp_header("cache-control") |> List.first() || ""
 
   defp tmdb_ok(body \\ %{"id" => 550, "title" => "Harbor Lights"}) do
     TMDBHelpers.set_tmdb_adapter(fn request ->
@@ -362,7 +363,7 @@ defmodule MetadataRelay.Plug.CacheTest do
       assert String.to_integer(max_age) in 2995..3000
     end
 
-    test "an entry written before this change falls back to the route's full TTL" do
+    test "an entry written before this change is capped at an hour" do
       MetadataRelay.Cache.put("GET:/tmdb/movies/552:", %{
         status: 200,
         headers: [{"content-type", "application/json"}],
@@ -371,7 +372,7 @@ defmodule MetadataRelay.Plug.CacheTest do
 
       conn = Router.call(Plug.Test.conn(:get, "/tmdb/movies/552"), @opts)
 
-      assert cache_control(conn) =~ "max-age=#{@details_ttl_s},"
+      assert cache_control(conn) =~ "max-age=3600,"
     end
 
     test "a settling season advertises the six-hour settling TTL" do
