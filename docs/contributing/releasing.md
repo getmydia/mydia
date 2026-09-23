@@ -330,7 +330,7 @@ One-time operator actions. The release job fails without them.
    `FLATPAK_GPG_KEY_ID` (the fingerprint), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`
    and `R2_SECRET_ACCESS_KEY`.
 6. Commit `player/flatpak/flatpak-signing-key.pub.asc`. The public half is not
-   a secret, and `make-flatpakrepo.sh` embeds it in both repo files.
+   a secret, and `make-flatpakrepo.sh` embeds it in every repo file.
 
 The existing `CLOUDFLARE_API_TOKEN` is a Pages deploy token and cannot do S3
 auth against R2.
@@ -523,7 +523,7 @@ gh workflow run player-ondemand.yml --repo getmydia/mydia -f dry_run=true
 | `build_macos` | boolean | `false` | Build macOS (signed & notarized DMG). |
 | `build_windows` | boolean | `false` | Build Windows (Inno Setup installer). |
 | `build_linux` | boolean | `false` | Build Linux (`.tar.gz` bundle). |
-| `build_flatpak` | boolean | `false` | Build the Linux Flatpak and publish it to the `mydia-dev` channel (skipped on `dry_run`). |
+| `build_flatpak` | boolean | `false` | Build the Linux Flatpak and publish it to the `mydia-dev` channel. On `dry_run` it builds and rehearses signing but publishes nothing. |
 | `upload_to_stores` | boolean | `true` | Upload iOS build to TestFlight (internal testers). |
 | `version_override` | string | `""` | Custom version string (e.g. `0.14.0-dev.42`). If empty, auto-derived. |
 | `dry_run` | boolean | `false` | Build and sign without uploading to TestFlight. |
