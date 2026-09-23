@@ -172,12 +172,83 @@ void main() {
     );
   });
 
+  test('Flatpak offers all three tracks', () {
+    final backend = FlatpakUpdateBackend(
+      portal: _NoopPortal(),
+      releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'stable',
+    );
+    addTearDown(backend.dispose);
+
+    expect(
+      backend.availableTracks,
+      {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev},
+    );
+  });
+
+  test('Flatpak selecting dev names the dev remote and branch', () async {
+    final backend = FlatpakUpdateBackend(
+      portal: _NoopPortal(),
+      releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'stable',
+    );
+    addTearDown(backend.dispose);
+
+    final outcome =
+        await backend.selectTrack(UpdateTrack.dev) as TrackSwitchDeferred;
+
+    expect(
+      outcome.instructions.split('\n').where((l) => l.startsWith('flatpak ')),
+      [
+        'flatpak remote-add --if-not-exists --from mydia-dev '
+            'https://flatpak.mydia.dev/mydia-dev.flatpakrepo',
+        'flatpak install mydia-dev dev.mydia.player//dev',
+        'flatpak uninstall dev.mydia.player//stable',
+      ],
+    );
+    expect(
+      outcome.url,
+      'https://docs.mydia.dev/latest/using/how-to/install-player-linux/#dev',
+    );
+  });
+
+  test('Flatpak leaving dev for beta uninstalls the dev branch', () async {
+    final backend = FlatpakUpdateBackend(
+      portal: _NoopPortal(),
+      releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'dev',
+    );
+    addTearDown(backend.dispose);
+
+    final outcome =
+        await backend.selectTrack(UpdateTrack.beta) as TrackSwitchDeferred;
+
+    expect(
+      outcome.instructions.split('\n').last,
+      'flatpak uninstall dev.mydia.player//dev',
+    );
+  });
+
+  test('Flatpak selecting dev while on dev changes nothing', () async {
+    final backend = FlatpakUpdateBackend(
+      portal: _NoopPortal(),
+      releaseNotesUrl: 'https://example.invalid/releases',
+      branch: 'dev',
+    );
+    addTearDown(backend.dispose);
+
+    expect(
+      await backend.selectTrack(UpdateTrack.dev),
+      isA<TrackSwitchApplied>(),
+    );
+  });
+
   group('Flatpak with an unknown installed branch', () {
     // currentTrack reads these as beta, which is fine for a label. A command
     // built on that guess would skip the switch to beta, or uninstall a beta
     // branch that may not exist.
     for (final installed in <String?>['nightly', null]) {
-      for (final track in [UpdateTrack.beta, UpdateTrack.stable]) {
+      for (final track in UpdateTrack.values) {
         test(
             'branch $installed, choosing ${track.wireName}, installs without '
             'uninstalling', () async {
@@ -268,6 +339,17 @@ void main() {
       addTearDown(backend.dispose);
 
       expect(backend.currentTrack, UpdateTrack.beta);
+    });
+
+    test('the dev branch reports dev', () {
+      final backend = FlatpakUpdateBackend(
+        portal: _NoopPortal(),
+        releaseNotesUrl: 'https://example.invalid/releases',
+        branch: 'dev',
+      );
+      addTearDown(backend.dispose);
+
+      expect(backend.currentTrack, UpdateTrack.dev);
     });
   });
 

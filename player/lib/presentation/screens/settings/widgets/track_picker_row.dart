@@ -9,9 +9,8 @@ import '../../../../core/update/update_track.dart';
 /// Lets the viewer choose which release cadence this installation follows.
 ///
 /// One tappable option per track in [availableTracks], so a platform that has
-/// never published a track (macOS has no dev builds, Flatpak has no dev
-/// branch) simply never offers it rather than offering a choice that resolves
-/// to nothing.
+/// never published a track (macOS has no dev builds) simply never offers it
+/// rather than offering a choice that resolves to nothing.
 ///
 /// Selecting a lower track never downgrades anything: the installed build
 /// stays until the chosen track publishes something newer. That is stated in

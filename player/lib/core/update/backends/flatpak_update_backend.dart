@@ -92,28 +92,26 @@ class FlatpakUpdateBackend implements UpdateBackend {
 
   @override
   Set<UpdateTrack> get availableTracks =>
-      const {UpdateTrack.stable, UpdateTrack.beta};
+      const {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev};
 
   @override
   UpdateTrack get currentTrack =>
       // The installed branch is the track. Nothing inside the sandbox can
       // change it, so this reports rather than decides. Mirrors
       // flatpakReleaseNotesUrl in available_update.dart: only the literal
-      // 'stable' branch is stable, so an unrecognized or missing branch
-      // (FlatpakEnvironment.branch is null on some real installs) reads as
-      // beta rather than claiming the most conservative channel for an
-      // installation whose channel this cannot actually identify. Keep the
-      // two resolutions in sync.
-      _branch == 'stable' ? UpdateTrack.stable : UpdateTrack.beta;
+      // 'stable' and 'dev' branches are recognised, so an unrecognized or
+      // missing branch (FlatpakEnvironment.branch is null on some real
+      // installs) reads as beta rather than claiming the most conservative
+      // channel for an installation whose channel this cannot actually
+      // identify. Keep the two resolutions in sync.
+      switch (_branch) {
+        'stable' => UpdateTrack.stable,
+        'dev' => UpdateTrack.dev,
+        _ => UpdateTrack.beta,
+      };
 
   @override
   Future<TrackSwitchOutcome> selectTrack(UpdateTrack track) async {
-    if (track == UpdateTrack.dev) {
-      return const TrackSwitchUnsupported(
-        'Dev builds are not published as a Flatpak.',
-      );
-    }
-
     // Only a branch actually read from the install counts here. currentTrack
     // reads an unknown or missing branch as beta, which is fine for a label
     // but not for a command: it would skip a real switch to beta, or
@@ -121,15 +119,19 @@ class FlatpakUpdateBackend implements UpdateBackend {
     final installed = switch (_branch) {
       'stable' => UpdateTrack.stable,
       'beta' => UpdateTrack.beta,
+      'dev' => UpdateTrack.dev,
       _ => null,
     };
     // Nothing to switch, and instructions here would tell the user to
     // uninstall a branch they do not have.
     if (track == installed) return const TrackSwitchApplied();
 
-    final (remote, branch) = track == UpdateTrack.beta
-        ? ('mydia-beta', 'beta')
-        : ('mydia', 'stable');
+    final remote = switch (track) {
+      UpdateTrack.stable => 'mydia',
+      UpdateTrack.beta => 'mydia-beta',
+      UpdateTrack.dev => 'mydia-dev',
+    };
+    final branch = track.wireName;
     // The remote may never have been added: a stable install knows nothing of
     // mydia-beta. Installing a branch makes it current, so the old one goes
     // last, and uninstalling it keeps the user's data in ~/.var/app.
@@ -143,8 +145,8 @@ class FlatpakUpdateBackend implements UpdateBackend {
     return TrackSwitchDeferred(
       instructions: 'Flatpak branches are changed outside the app. Run:\n\n'
           '${commands.join('\n')}',
-      url:
-          'https://docs.mydia.dev/latest/using/how-to/install-player-linux/#beta',
+      url: 'https://docs.mydia.dev/latest/using/how-to/install-player-linux/'
+          '${track == UpdateTrack.stable ? '' : '#${track.wireName}'}',
     );
   }
 
