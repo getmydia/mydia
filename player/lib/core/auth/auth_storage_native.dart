@@ -68,6 +68,18 @@ class NativeAuthStorage implements AuthStorage {
   static final Map<String, Future<String?>> _inflight =
       <String, Future<String?>>{};
 
+  /// Bumped by every write, delete, and deleteAll.
+  ///
+  /// A read that was still in flight when one of those landed captures the
+  /// generation before calling the backend; if it has moved on by the time
+  /// the backend answers, that answer is stale and must not be written into
+  /// [_readCache]. `deleteAll` in particular clears [_readCache] outright, so
+  /// a plain "is the key still absent from the cache" check would let a
+  /// stale in-flight answer repopulate it as if the key had never been
+  /// deleted. The generation check catches that even though the key is gone
+  /// from the map, not just tombstoned in it.
+  static int _generation = 0;
+
   /// Whether any write has failed to reach the platform keyring in this
   /// process.
   ///
@@ -86,6 +98,7 @@ class NativeAuthStorage implements AuthStorage {
     _degraded = false;
     _readCache.clear();
     _inflight.clear();
+    _generation = 0;
   }
 
   /// Runs [operation] against secure storage, degrading to an in-memory map
@@ -137,9 +150,12 @@ class NativeAuthStorage implements AuthStorage {
 
   /// Caches only a read the backend actually answered. A failed read falls
   /// back to null for this call, as before, and the next read tries again.
-  /// Skips the cache write if a write or delete landed while it was in
-  /// flight: the overlay or the cached null from `delete` is newer.
+  /// Skips the cache write if a write, delete, or deleteAll landed while it
+  /// was in flight: the overlay, the cached null from `delete`, or the
+  /// cleared cache from `deleteAll` is newer than this backend answer, which
+  /// [_generation] having moved on reveals.
   Future<String?> _readBackend(String key) async {
+    final generation = _generation;
     var answered = false;
     final value = await _withFallback<String?>(() async {
       final v = await _backend.read(key);
@@ -147,8 +163,8 @@ class NativeAuthStorage implements AuthStorage {
       return v;
     }, () => null);
     if (answered &&
-        !_memoryStorage.containsKey(key) &&
-        !_readCache.containsKey(key)) {
+        generation == _generation &&
+        !_memoryStorage.containsKey(key)) {
       _readCache[key] = value;
     }
     return value;
@@ -160,6 +176,7 @@ class NativeAuthStorage implements AuthStorage {
     // staler than the backend. A write-on-failure-only overlay would let an
     // old fallback value shadow a later successful write.
     _memoryStorage[key] = value;
+    _generation++;
 
     await _withFallback<void>(
       () => _backend.write(key, value),
@@ -172,6 +189,7 @@ class NativeAuthStorage implements AuthStorage {
   Future<void> delete(String key) async {
     _memoryStorage.remove(key);
     _readCache[key] = null;
+    _generation++;
 
     await _withFallback<void>(() => _backend.delete(key), () {});
   }
@@ -180,6 +198,7 @@ class NativeAuthStorage implements AuthStorage {
   Future<void> deleteAll() async {
     _memoryStorage.clear();
     _readCache.clear();
+    _generation++;
 
     await _withFallback<void>(_backend.deleteAll, () {});
   }
