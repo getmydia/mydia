@@ -121,6 +121,16 @@ does for seeks, so the switch is on record before the rebuffer it causes;
 Before both rules, opening such a file and picking its English subtitles was
 two stalls, and a fallback for "your connection".
 
+Fonts are the other reason a direct-play open is slow. Matroska stores
+attachments before the first cluster and mpv reads them in full while
+opening, although nothing here uses them (libass is off; see "Who draws
+subtitles"). Measured 2026-09-23 on two web-dl anime episodes with 22 and 24
+TTF attachments: the first cluster sat at 27 MB and 47 MB, and reading that
+far over p2p at 100-200 Mbps was about 2 s of a 3.0-3.7 s time to first
+frame. Rewriting the Attachments element into a same-length EBML Void, on
+the server or in the local proxy, would let mpv skip it; that was considered
+and not done.
+
 This kind of switch logs its own line, not the `Plan:` line above:
 `[PlayerScreen] Falling back to <plan>: <reason> at <n>s (<detail>)`.
 `<plan>` is the fallback's own `describe()` (always ends
@@ -389,6 +399,25 @@ that matches no track, or a revision arriving before there is a player, leaves
 chance. It is set before the await rather than after, because media_kit
 revises its track list several times per playback and a revision landing
 mid-apply would otherwise race the first one.
+
+In native direct play the apply also waits for the open to get past mpv's
+probe (`awaitRealTracks`, capped at 3 s). Before that the list on screen is
+the server's fallback, and a match there used to fetch from the server a
+stream mpv was about to show by itself: measured 2026-09-23, an 8-10 s
+server-side extraction with "Loading subtitle..." up over subtitles already
+on screen, then a duplicate `sub-add` and a rebuffer. The match is made on
+the server's tracks, which carry the flags, and translated to mpv's own
+track by stream index (`preferenceTarget`, `nativeTwinOf`); a sidecar is
+selected as itself. The progress toast only appears when a selection
+actually has to fetch something. `[PlayerScreen] Subtitle preference
+applied: <name> via mpv|server` says which path ran. The same wait applies
+after a source switch on the same player: `_attachSource`'s native branch
+starts its own `awaitRealTracks` without awaiting it, so the switch itself
+returns immediately while the wait settles in the background. An
+open-scoped epoch (`_tracksSettleEpoch`, closed by `_beginTracksSettle` and
+reopened by `_settleTracks`) makes sure only the latest open's wait can mark
+the gate settled, so a slow wait left over from a switch a newer one
+superseded cannot settle the newer file's still-unprobed list.
 
 The match is ranked, not filtered. Language has to agree first —
 `subtitlePreferenceLanguageEquals`, which folds ISO 639-2/B against /T because
