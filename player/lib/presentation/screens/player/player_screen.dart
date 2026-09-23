@@ -2445,11 +2445,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Wait for mpv to probe the media before reading tracks, capped so a
     // source that never reports any still starts. Used to be a fixed 500 ms.
+    // media_kit 1.2.6's web backend never reports a track with a real id --
+    // `WebPlayer` only ever adds a bare `Tracks()`, in `stop()` -- so web
+    // would otherwise burn the full cap on every open and every source
+    // switch (`isSourceSwitch` only ever happens on web). Keep web at
+    // exactly its old 500 ms instead.
     final tracksReady = await awaitRealTracks(
       current: player.state.tracks,
       updates: player.stream.tracks,
+      timeout: kIsWeb
+          ? const Duration(milliseconds: 500)
+          : const Duration(seconds: 3),
     );
-    if (!tracksReady) {
+    if (!tracksReady && !kIsWeb) {
+      // Timing out on web is the expected path, not worth logging every time.
       debugPrint(
           '[PlayerScreen] No tracks reported before the cap; continuing');
     }

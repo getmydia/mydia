@@ -52,6 +52,7 @@ import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 
+import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
@@ -62,24 +63,6 @@ const _trackTitle = 'English (Signs & Songs)';
 /// The mpv-native track the fake player publishes, whose only identity is
 /// what media_kit exposes: a title, a language, and an id of its own.
 const _mpvSubtitleTrack = SubtitleTrack('1', 'Japanese', 'jpn');
-
-/// What mpv reports once it has probed a file: the `auto`/`no` pseudo-tracks,
-/// one real video/audio track, and the subtitle track above. `awaitRealTracks`
-/// (see `tracks_ready.dart`) only looks at video/audio, so without the first
-/// two this fake never reads as probed and every open waits out its timeout.
-const _probedTracks = Tracks(
-  video: [
-    VideoTrack('auto', null, null),
-    VideoTrack('no', null, null),
-    VideoTrack('1', null, null),
-  ],
-  audio: [
-    AudioTrack('auto', null, null),
-    AudioTrack('no', null, null),
-    AudioTrack('1', null, 'eng'),
-  ],
-  subtitle: [_mpvSubtitleTrack],
-);
 
 /// Whether [request] carries the document [node].
 ///
@@ -142,7 +125,9 @@ class _ProbedPlayer extends PlatformPlayer {
     positionController.add(state.position);
     playingController.add(false);
     // What mpv publishes as soon as it has probed the file.
-    state = state.copyWith(tracks: _probedTracks);
+    state = state.copyWith(
+      tracks: probedTracks(subtitle: const [_mpvSubtitleTrack]),
+    );
     tracksController.add(state.tracks);
   }
 

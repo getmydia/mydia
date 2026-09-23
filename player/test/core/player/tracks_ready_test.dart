@@ -53,4 +53,17 @@ void main() {
       expect(result, isFalse);
     });
   });
+
+  test('cancels the subscription on the stream after a timeout', () {
+    fakeAsync((async) {
+      final controller = StreamController<Tracks>();
+      awaitRealTracks(
+        current: const Tracks(),
+        updates: controller.stream,
+        timeout: const Duration(seconds: 3),
+      );
+      async.elapse(const Duration(seconds: 3));
+      expect(controller.hasListener, isFalse);
+    });
+  });
 }
