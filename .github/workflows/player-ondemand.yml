@@ -276,9 +276,13 @@ jobs:
       contents: read
       actions: read
     uses: ./.github/workflows/deploy-flatpak.yml
+    # No `ref`: the publish scripts come from the ref this workflow was
+    # dispatched from, not from the build target. The target can be any
+    # branch, while this job holds the signing key and R2 credentials and
+    # make-flatpakrepo.sh rewrites the stable and beta repo files as well.
+    # The staged repo itself still comes from the target via the artifact.
     with:
       channel: dev
-      ref: ${{ needs.prepare.outputs.sha }}
     secrets: inherit
 
   appcast:
