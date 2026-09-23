@@ -279,4 +279,81 @@ void main() {
       }
     });
   });
+
+  group('preferenceTarget', () {
+    // The server's list: flags known. Stream indices 4 and 5 are both
+    // English; only 5 is SDH.
+    final serverTracks = [
+      const SubtitleTrack(
+          id: '4', language: 'eng', title: 'Full', embedded: true),
+      const SubtitleTrack(
+        id: '5',
+        language: 'eng',
+        title: 'SDH',
+        embedded: true,
+        hearingImpaired: true,
+      ),
+      const SubtitleTrack(id: 'side-1', language: 'fre', title: 'Fan subs'),
+    ];
+    // mpv's list: no flags, `mk_` ids, plus the sidecar the builder keeps.
+    final directPlay = [
+      track('mk_1', 'eng'),
+      track('mk_2', 'eng'),
+      serverTracks[2],
+    ];
+    const indices = {'1': 4, '2': 5};
+
+    test('an SDH preference lands on the SDH stream by index', () {
+      final target = preferenceTarget(
+        pref: const PreferTrack(language: 'eng', hearingImpaired: true),
+        serverTracks: serverTracks,
+        tracks: directPlay,
+        streamIndexByMpvId: indices,
+      );
+      expect(target?.id, 'mk_2');
+    });
+
+    test('a sidecar match is selected as itself', () {
+      final target = preferenceTarget(
+        pref: const PreferTrack(language: 'fre'),
+        serverTracks: serverTracks,
+        tracks: directPlay,
+        streamIndexByMpvId: indices,
+      );
+      expect(target?.id, 'side-1');
+    });
+
+    test('with no indices it falls back to matching the list on screen', () {
+      final target = preferenceTarget(
+        pref: const PreferTrack(language: 'eng', hearingImpaired: true),
+        serverTracks: serverTracks,
+        tracks: directPlay,
+        streamIndexByMpvId: const {},
+      );
+      expect(target?.id, startsWith('mk_'),
+          reason: 'never the server embedded track, which is not on screen');
+    });
+
+    test('streaming: the server track itself is on screen', () {
+      final target = preferenceTarget(
+        pref: const PreferTrack(language: 'eng', hearingImpaired: true),
+        serverTracks: serverTracks,
+        tracks: serverTracks,
+        streamIndexByMpvId: const {},
+      );
+      expect(target?.id, '5');
+    });
+
+    test('no language match anywhere is null', () {
+      expect(
+        preferenceTarget(
+          pref: const PreferTrack(language: 'jpn'),
+          serverTracks: serverTracks,
+          tracks: directPlay,
+          streamIndexByMpvId: indices,
+        ),
+        isNull,
+      );
+    });
+  });
 }
