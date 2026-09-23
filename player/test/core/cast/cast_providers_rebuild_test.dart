@@ -52,6 +52,16 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
       peerConnectionType: P2pConnectionType.relay,
     );
   }
+
+  /// The node becoming ready: the identity is unchanged, only the address it
+  /// can be reached at arrives.
+  void publishAddr(String nodeId, String nodeAddr) {
+    state = const P2pStatus.initial().copyWith(
+      isInitialized: true,
+      nodeId: nodeId,
+      nodeAddr: nodeAddr,
+    );
+  }
 }
 
 Map<String, dynamic> _device(String id, String nodeId,
@@ -138,6 +148,32 @@ void main() {
         reason: 'the same host and identity must keep the same backend, or '
             'the live session it is holding is disposed underneath it',
       );
+    });
+
+    test('the node address arriving does not swap the backend', () async {
+      final statusNotifier = _FakeP2pStatusNotifier();
+
+      final container = ProviderContainer(overrides: [
+        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+        graphqlClientProvider.overrideWith(
+          (ref) => stubClient(StubLink.responses([
+            <String, dynamic>{'__typename': 'Query'},
+          ])),
+        ),
+      ]);
+      addTearDown(container.dispose);
+
+      expect(container.read(mydiaCastBackendProvider), isNull);
+      statusNotifier.publish('a' * 64);
+      final before = container.read(mydiaCastBackendProvider);
+      expect(before, isNotNull);
+
+      statusNotifier.publishAddr('a' * 64, '{"id":"${'a' * 64}","addrs":[]}');
+
+      expect(
+          identical(container.read(mydiaCastBackendProvider), before), isTrue,
+          reason: 'the provider never reads nodeAddr');
     });
   });
 
@@ -242,6 +278,34 @@ void main() {
       expect(targets, isNotNull);
 
       expect(await targets!.rosterSource(), ['b' * 64]);
+    });
+
+    test('the node address arriving does not rebuild ambient targets',
+        () async {
+      // Each rebuild is a new AmbientTargets and a fresh sweep, which is one
+      // more OnlineDevices query on every launch.
+      final statusNotifier = _FakeP2pStatusNotifier();
+
+      final container = ProviderContainer(overrides: [
+        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+        graphqlClientProvider.overrideWith(
+          (ref) => stubClient(StubLink.responses([
+            <String, dynamic>{'__typename': 'Query'},
+          ])),
+        ),
+      ]);
+      addTearDown(container.dispose);
+
+      expect(container.read(ambientTargetsProvider), isNull);
+      statusNotifier.publish('a' * 64);
+      final before = container.read(ambientTargetsProvider);
+      expect(before, isNotNull);
+
+      statusNotifier.publishAddr('a' * 64, '{"id":"${'a' * 64}","addrs":[]}');
+
+      expect(identical(container.read(ambientTargetsProvider), before), isTrue,
+          reason: 'the provider never reads nodeAddr');
     });
   });
 }

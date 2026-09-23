@@ -87,8 +87,10 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
   // watching the whole record disposed the backend that had just sent
   // `Hello`: `connect` returned at its own `if (_disposed) return`, polling
   // never started, and an adopted session sat at a zero duration forever.
+  // `nodeAddr` is left out too: neither provider reads it, and it arrives
+  // after `nodeId` on every launch, which rebuilt both for nothing.
   final identity = ref.watch(p2pStatusNotifierProvider.select(
-    (status) => (status.isInitialized, status.nodeId, status.nodeAddr),
+    (status) => (status.isInitialized, status.nodeId),
   ));
   final host = p2pService.host;
   final selfNodeId = identity.$2;
@@ -144,8 +146,10 @@ final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
   // above. Narrowing matters more here, if anything: ambient awareness holds
   // a live connection per target, so each sweep's own connection moved the
   // full status record and disposed the `AmbientTargets` that opened it.
+  // `nodeAddr` is left out too: neither provider reads it, and it arrives
+  // after `nodeId` on every launch, which rebuilt both for nothing.
   final identity = ref.watch(p2pStatusNotifierProvider.select(
-    (status) => (status.isInitialized, status.nodeId, status.nodeAddr),
+    (status) => (status.isInitialized, status.nodeId),
   ));
   final host = p2pService.host;
   final selfNodeId = identity.$2;

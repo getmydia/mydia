@@ -136,6 +136,18 @@ class NodeRegistrationService {
     Object? clientScope,
   }) {
     if (_disposed) return;
+
+    // The driver calls this on every p2p status emit, and a launch emits a
+    // dozen (relay up, ready, each peer connect and upgrade) that change none
+    // of these. Bumping the generation for them made an in-flight
+    // registration discard its own confirmation and send it again.
+    if (controllable == _controllable &&
+        nodeId == _desiredNodeId &&
+        clientReady == _clientReady &&
+        identical(clientScope, _clientScope)) {
+      return;
+    }
+
     if (!identical(clientScope, _clientScope)) {
       _clientScope = clientScope;
       _registeredNodeId = null;
@@ -213,6 +225,7 @@ class NodeRegistrationService {
       if (generation != _generation) return true;
 
       attempt += 1;
+      final scope = _clientScope;
       _emit(RegistrationInFlight(nodeId, attempt));
 
       var confirmed = false;
@@ -224,13 +237,28 @@ class NodeRegistrationService {
         reason = 'could not reach the server';
       }
 
-      if (generation != _generation) return true;
+      if (_disposed) return false;
 
-      if (confirmed) {
+      // A confirmation only counts when node id, client scope, controllable
+      // and clientReady are ALL still what the caller wants. Recording
+      // _registeredNodeId on a partial match (say, opted out mid-attempt)
+      // would make the next opt-in's fast path (`_registeredNodeId ==
+      // nodeId` below) skip re-registering forever, even though the server
+      // was never told while this device actually wanted it -- so record
+      // nothing on a partial match and let the next opt-in pay for one more
+      // register call instead. Falls through to the generation check below
+      // when it doesn't match, same as a failure would.
+      if (confirmed &&
+          nodeId == _desiredNodeId &&
+          identical(scope, _clientScope) &&
+          _controllable &&
+          _clientReady) {
         _registeredNodeId = nodeId;
         _emit(RegistrationSucceeded(nodeId, _now()));
-        return false;
+        return generation != _generation;
       }
+
+      if (generation != _generation) return true;
 
       final wait = _backoff[min(attempt - 1, _backoff.length - 1)];
       _emit(RegistrationFailed(reason, attempt, _now().add(wait)));

@@ -123,5 +123,63 @@ defmodule Mydia.Playback.OnDeckQueryCountTest do
 
       assert large <= 9, "expected at most 9 queries, got #{large}"
     end
+
+    test "loads files only for the episode the rail returns", ctx do
+      {_show, episodes} = show_with_episodes(30, "Lantern Harbor")
+      chosen = Enum.at(episodes, 2)
+
+      for episode <- Enum.take(episodes, 2), do: watch(ctx.user, episode, ago(300))
+
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [episode_id: chosen.id],
+          %{position_seconds: 900, duration_seconds: 2400, last_watched_at: ago(100)}
+        )
+
+      ref = make_ref()
+      parent = self()
+
+      :telemetry.attach(
+        "on-deck-file-rows-#{inspect(ref)}",
+        [:mydia, :repo, :query],
+        fn _event, _measurements, metadata, _config ->
+          # See the module comment: only this process's queries count.
+          if self() == parent and metadata.source == "media_files" do
+            rows =
+              case metadata.result do
+                {:ok, %{num_rows: n}} -> n
+                _ -> 0
+              end
+
+            send(parent, {ref, rows})
+          end
+        end,
+        nil
+      )
+
+      [entry] = OnDeck.list(ctx.user.id, now: now())
+      :telemetry.detach("on-deck-file-rows-#{inspect(ref)}")
+
+      file_rows =
+        Stream.repeatedly(fn ->
+          receive do
+            {^ref, n} -> n
+          after
+            0 -> nil
+          end
+        end)
+        |> Enum.take_while(&(&1 != nil))
+        |> Enum.sum()
+
+      assert entry.episode.id == chosen.id
+      assert %Mydia.Media.Episode{} = entry.episode
+      assert [%{episode_id: episode_id}] = entry.files
+      assert episode_id == chosen.id
+      assert entry.files == entry.episode.media_files
+
+      assert file_rows == 1,
+             "expected file rows for the one returned episode only, loaded #{file_rows}"
+    end
   end
 end
